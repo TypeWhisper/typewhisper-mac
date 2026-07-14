@@ -227,7 +227,13 @@ final class ObsidianPlugin: NSObject, ActionPlugin, @unchecked Sendable {
             // Create new daily note
             var content = ""
             if _frontmatterEnabled {
-                content += buildFrontmatter(appName: appName, bundleId: bundleId, url: url, language: language)
+                let includeAppMeta = _dailyNoteFormat.contains("{{APP}}")
+                content += buildFrontmatter(
+                    appName: includeAppMeta ? appName : nil,
+                    bundleId: includeAppMeta ? bundleId : nil,
+                    url: includeAppMeta ? url : nil,
+                    language: language
+                )
                 content += "\n\n"
             }
             content += "## \(timeString)\n\n\(text)"
@@ -330,11 +336,15 @@ private struct ObsidianSettingsView: View {
                 Text("Vault", bundle: bundle)
                     .font(.headline)
 
-                if !detectedVaults.isEmpty {
+                if !detectedVaults.isEmpty || !vaultPath.isEmpty {
                     Picker(String(localized: "Detected Vaults", bundle: bundle), selection: $vaultPath) {
                         Text("Select vault...", bundle: bundle).tag("")
                         ForEach(detectedVaults) { vault in
                             Text(vault.name).tag(vault.path)
+                        }
+                        if !vaultPath.isEmpty && !detectedVaults.contains(where: { $0.path == vaultPath }) {
+                            let customName = (vaultPath as NSString).lastPathComponent
+                            Text(customName).tag(vaultPath)
                         }
                     }
                     .labelsHidden()

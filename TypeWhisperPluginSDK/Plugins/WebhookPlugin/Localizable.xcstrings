@@ -1,22 +1,6 @@
 {
   "sourceLanguage": "en",
   "strings": {
-    "Active for all transcriptions.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Aktiv für alle Transkriptionen."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "すべての文字起こしにアクティブ。"
-          }
-        }
-      }
-    },
     "Add a webhook to send transcription data to external services.": {
       "localizations": {
         "de": {
@@ -45,6 +29,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Webhookを追加"
+          }
+        }
+      }
+    },
+    "All transcriptions": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle Transkriptionen"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "すべての文字起こし"
           }
         }
       }
@@ -161,22 +161,6 @@
         }
       }
     },
-    "No profiles configured.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Keine Profile konfiguriert."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "構成されたプロファイルはありません。"
-          }
-        }
-      }
-    },
     "No Webhooks": {
       "localizations": {
         "de": {
@@ -193,34 +177,34 @@
         }
       }
     },
-    "Only active for selected profiles.": {
+    "No workflows configured.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Nur aktiv für ausgewählte Profile."
+            "value": "Keine Workflows konfiguriert."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "選択したプロファイルのみでアクティブ。"
+            "value": "ワークフローが設定されていません。"
           }
         }
       }
     },
-    "Profiles": {
+    "No longer available": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Profile"
+            "value": "Nicht mehr verfügbar"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "プロファイル"
+            "value": "利用できなくなりました"
           }
         }
       }
@@ -237,6 +221,86 @@
           "stringUnit": {
             "state": "translated",
             "value": "保存"
+          }
+        }
+      }
+    },
+    "Select at least one workflow.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wähle mindestens einen Workflow aus."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1つ以上のワークフローを選択してください。"
+          }
+        }
+      }
+    },
+    "Selected workflows": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ausgewählte Workflows"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選択したワークフロー"
+          }
+        }
+      }
+    },
+    "Send webhook for": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Webhook senden für"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Webhookの送信対象"
+          }
+        }
+      }
+    },
+    "The webhook is sent after every transcription, including transcriptions without a workflow.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Webhook wird nach jeder Transkription gesendet, auch wenn kein Workflow verwendet wird."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ワークフローを使用しない場合も含め、すべての文字起こし後にWebhookを送信します。"
+          }
+        }
+      }
+    },
+    "The webhook is sent only for the selected workflows.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Webhook wird nur für die ausgewählten Workflows gesendet."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選択したワークフローに対してのみWebhookを送信します。"
           }
         }
       }
@@ -269,6 +333,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "Webhook通知"
+          }
+        }
+      }
+    },
+    "Workflows": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Workflows"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ワークフロー"
+          }
+        }
+      }
+    },
+    "Workflows: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Workflows: %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ワークフロー：%@"
           }
         }
       }

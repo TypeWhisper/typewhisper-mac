@@ -548,12 +548,27 @@ final class DictionaryServiceTests: XCTestCase {
         let viewModel = DictionaryViewModel(dictionaryService: service)
         viewModel.filterTab = .corrections
         let correctionRows = viewModel.filteredEntryRows
+        let correctionListRowIDs = viewModel.filteredListRows.map(\.id)
 
         XCTAssertEqual(correctionRows.count, 121)
+        XCTAssertEqual(correctionListRowIDs.count, 121)
         XCTAssertTrue(correctionRows.allSatisfy { $0.type == .correction })
         XCTAssertEqual(correctionRows.first { $0.original == "empty-replacement" }?.replacementDisplayText, "\"\"")
 
         let correctionIDs = correctionRows.map(\.id)
+        let searchedOriginalID = try XCTUnwrap(
+            correctionRows.first { $0.original == "Wrong-042" }?.id
+        )
+        viewModel.searchQuery = "WRONG-042"
+        XCTAssertEqual(viewModel.filteredEntryRows.map(\.id), [searchedOriginalID])
+
+        viewModel.searchQuery = "correct-042"
+        XCTAssertEqual(viewModel.filteredEntryRows.map(\.id), [searchedOriginalID])
+
+        viewModel.searchQuery = ""
+        XCTAssertEqual(viewModel.filteredEntryRows.map(\.id), correctionIDs)
+        XCTAssertEqual(viewModel.filteredListRows.map(\.id), correctionListRowIDs)
+
         viewModel.filterTab = .all
         let allCorrectionIDs = viewModel.filteredEntryRows
             .filter { $0.type == .correction }
@@ -566,6 +581,227 @@ final class DictionaryServiceTests: XCTestCase {
         let autoLearnedRows = autoLearnedViewModel.filteredEntryRows
         XCTAssertEqual(autoLearnedRows.map(\.original), ["autolearned"])
         XCTAssertTrue(autoLearnedRows.allSatisfy { $0.source == .autoLearned })
+    }
+
+    @MainActor
+    func testDictionaryCorrectionGroupsUseExactNonEmptyReplacementAndPreserveAliasState() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.addEntry(
+            type: .correction,
+            original: "type wisper",
+            replacement: "TypeWhisper",
+            caseSensitive: true
+        )
+        service.addEntry(
+            type: .correction,
+            original: "type whisper",
+            replacement: "TypeWhisper"
+        )
+        service.addEntry(
+            type: .correction,
+            original: "typewhisper lower",
+            replacement: "typewhisper"
+        )
+        service.addEntry(
+            type: .correction,
+            original: "remove filler",
+            replacement: ""
+        )
+
+        let disabledAlias = try XCTUnwrap(service.entries.first { $0.original == "type whisper" })
+        service.setEntryEnabled(disabledAlias, enabled: false)
+
+        let viewModel = DictionaryViewModel(dictionaryService: service)
+        viewModel.filterTab = .corrections
+
+        let listRows = viewModel.filteredListRows
+        let groups = listRows.compactMap { listRow -> DictionaryCorrectionGroupRow? in
+            guard case .correctionGroup(let group) = listRow else { return nil }
+            return group
+        }
+        let standaloneRows = listRows.compactMap { listRow -> DictionaryEntryRow? in
+            guard case .entry(let row) = listRow else { return nil }
+            return row
+        }
+
+        XCTAssertEqual(groups.map(\.replacement), ["TypeWhisper", "typewhisper"])
+        XCTAssertNotEqual(groups[0].id, groups[1].id)
+        XCTAssertEqual(groups[0].aliases.map(\.original), ["type whisper", "type wisper"])
+        XCTAssertEqual(groups[0].aliases.map(\.isEnabled), [false, true])
+        XCTAssertEqual(groups[0].aliases.map(\.caseSensitive), [false, true])
+        XCTAssertEqual(groups[1].aliases.map(\.original), ["typewhisper lower"])
+        XCTAssertEqual(standaloneRows.map(\.original), ["remove filler"])
+        XCTAssertEqual(standaloneRows.first?.replacementDisplayText, "\"\"")
+    }
+
+    @MainActor
+    func testDictionaryCorrectionGroupSearchReturnsWholeGroupAndComposesWithFilters() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.addEntry(type: .term, original: "TypeWhisper")
+        service.addEntry(type: .correction, original: "type wisper", replacement: "TypeWhisper")
+        service.addEntry(type: .correction, original: "type whisper", replacement: "TypeWhisper")
+        service.learnCorrection(original: "taipwhisper", replacement: "TypeWhisper")
+
+        let viewModel = DictionaryViewModel(dictionaryService: service)
+        viewModel.filterTab = .all
+        viewModel.searchQuery = "typewhisper"
+        XCTAssertEqual(viewModel.filteredListRows.count, 2)
+        XCTAssertTrue(viewModel.filteredListRows.contains {
+            if case .entry(let row) = $0 { return row.type == .term }
+            return false
+        })
+
+        viewModel.filterTab = .corrections
+
+        viewModel.searchQuery = "TYPE WISPER"
+        guard case .correctionGroup(let aliasMatchGroup) = try XCTUnwrap(viewModel.filteredListRows.first) else {
+            return XCTFail("Expected a correction group for an alias match")
+        }
+        XCTAssertEqual(aliasMatchGroup.aliases.count, 3)
+
+        viewModel.searchQuery = "typewhisper"
+        guard case .correctionGroup(let replacementMatchGroup) = try XCTUnwrap(viewModel.filteredListRows.first) else {
+            return XCTFail("Expected a correction group for a replacement match")
+        }
+        XCTAssertEqual(replacementMatchGroup.aliases.count, 3)
+
+        viewModel.filterTab = .autoLearned
+        guard case .correctionGroup(let autoLearnedGroup) = try XCTUnwrap(viewModel.filteredListRows.first) else {
+            return XCTFail("Expected an auto-learned correction group")
+        }
+        XCTAssertEqual(autoLearnedGroup.aliases.map(\.original), ["taipwhisper"])
+        XCTAssertTrue(autoLearnedGroup.aliases.allSatisfy { $0.source == .autoLearned })
+
+        viewModel.filterTab = .terms
+        XCTAssertEqual(viewModel.filteredEntryRows.map(\.original), ["TypeWhisper"])
+        XCTAssertTrue(viewModel.filteredListRows.allSatisfy {
+            if case .entry = $0 { return true }
+            return false
+        })
+    }
+
+    @MainActor
+    func testAddingCorrectionAliasCreatesFlatEntryWithLockedReplacement() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.addEntry(type: .correction, original: "type wisper", replacement: "TypeWhisper")
+        let viewModel = DictionaryViewModel(dictionaryService: service)
+
+        viewModel.startCreatingCorrectionAlias(replacement: "TypeWhisper")
+        XCTAssertTrue(viewModel.isCreatingNew)
+        XCTAssertTrue(viewModel.isEditing)
+        XCTAssertEqual(viewModel.editType, .correction)
+        XCTAssertEqual(viewModel.lockedCorrectionReplacement, "TypeWhisper")
+
+        viewModel.editOriginal = "type whisper"
+        viewModel.editReplacement = "Changed outside the group"
+        viewModel.editCaseSensitive = true
+        viewModel.saveEditing()
+
+        let addedAlias = try XCTUnwrap(service.entries.first { $0.original == "type whisper" })
+        XCTAssertEqual(addedAlias.replacement, "TypeWhisper")
+        XCTAssertTrue(addedAlias.caseSensitive)
+        XCTAssertEqual(addedAlias.source, .manual)
+        XCTAssertNil(viewModel.lockedCorrectionReplacement)
+
+        let reloadedViewModel = DictionaryViewModel(dictionaryService: service)
+        reloadedViewModel.filterTab = .corrections
+        guard case .correctionGroup(let group) = try XCTUnwrap(reloadedViewModel.filteredListRows.first) else {
+            return XCTFail("Expected the added alias to remain a flat entry in one derived group")
+        }
+        XCTAssertEqual(group.aliases.map(\.original), ["type whisper", "type wisper"])
+        XCTAssertEqual(service.entries.filter { $0.type == .correction }.count, 2)
+    }
+
+    @MainActor
+    func testCorrectionGroupAliasActionsChangeOnlySelectedFlatEntry() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.addEntry(type: .correction, original: "type wisper", replacement: "TypeWhisper")
+        service.addEntry(type: .correction, original: "type whisper", replacement: "TypeWhisper")
+        let viewModel = DictionaryViewModel(dictionaryService: service)
+        viewModel.filterTab = .corrections
+
+        guard case .correctionGroup(let group) = try XCTUnwrap(viewModel.filteredListRows.first) else {
+            return XCTFail("Expected a correction group")
+        }
+        let selectedAlias = try XCTUnwrap(group.aliases.first { $0.original == "type wisper" })
+        let untouchedAlias = try XCTUnwrap(group.aliases.first { $0.original == "type whisper" })
+
+        viewModel.setEntryEnabled(id: selectedAlias.id, enabled: false)
+        XCTAssertFalse(try XCTUnwrap(service.entries.first { $0.id == selectedAlias.id }).isEnabled)
+        XCTAssertTrue(try XCTUnwrap(service.entries.first { $0.id == untouchedAlias.id }).isEnabled)
+
+        viewModel.startEditingEntry(id: selectedAlias.id)
+        viewModel.editOriginal = "typewhispr"
+        viewModel.saveEditing()
+        XCTAssertEqual(service.entries.first { $0.id == selectedAlias.id }?.original, "typewhispr")
+        XCTAssertEqual(service.entries.first { $0.id == untouchedAlias.id }?.original, "type whisper")
+
+        let refreshedViewModel = DictionaryViewModel(dictionaryService: service)
+        refreshedViewModel.deleteEntry(id: selectedAlias.id)
+        XCTAssertFalse(service.entries.contains { $0.id == selectedAlias.id })
+        XCTAssertTrue(service.entries.contains { $0.id == untouchedAlias.id })
+    }
+
+    @MainActor
+    func testDictionarySearchMatchesOriginalAndReplacementAndComposesWithFilters() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.addEntry(type: .term, original: "TypeWhisper")
+        service.addEntry(type: .term, original: "Podcast")
+        service.addEntry(type: .correction, original: "teh", replacement: "the")
+        service.learnCorrection(original: "langauge", replacement: "language")
+
+        let entriesBeforeSearch = service.entries.map {
+            ($0.id, $0.type, $0.original, $0.replacement, $0.source)
+        }
+        let viewModel = DictionaryViewModel(dictionaryService: service)
+
+        viewModel.searchQuery = "TYPEWHISPER"
+        XCTAssertEqual(viewModel.filteredEntryRows.map(\.original), ["TypeWhisper"])
+
+        viewModel.filterTab = .corrections
+        viewModel.searchQuery = "THE"
+        XCTAssertEqual(viewModel.filteredEntryRows.map(\.original), ["teh"])
+
+        viewModel.filterTab = .autoLearned
+        XCTAssertTrue(viewModel.filteredEntryRows.isEmpty)
+        viewModel.searchQuery = "LANGUAGE"
+        XCTAssertEqual(viewModel.filteredEntryRows.map(\.original), ["langauge"])
+
+        viewModel.filterTab = .terms
+        XCTAssertTrue(viewModel.filteredEntryRows.isEmpty)
+        viewModel.searchQuery = "   "
+        XCTAssertEqual(viewModel.filteredEntryRows.map(\.original), ["Podcast", "TypeWhisper"])
+        XCTAssertFalse(viewModel.hasActiveSearch)
+
+        viewModel.searchQuery = "podcast"
+        XCTAssertTrue(viewModel.hasActiveSearch)
+        viewModel.filterTab = .termPacks
+        XCTAssertEqual(viewModel.searchQuery, "podcast")
+        XCTAssertTrue(viewModel.filteredEntryRows.isEmpty)
+
+        viewModel.filterTab = .all
+        viewModel.searchQuery = ""
+        XCTAssertEqual(viewModel.filteredEntryRows.count, entriesBeforeSearch.count)
+        XCTAssertEqual(service.entries.map(\.id), entriesBeforeSearch.map { $0.0 })
+        XCTAssertEqual(service.entries.map(\.type), entriesBeforeSearch.map { $0.1 })
+        XCTAssertEqual(service.entries.map(\.original), entriesBeforeSearch.map { $0.2 })
+        XCTAssertEqual(service.entries.map(\.replacement), entriesBeforeSearch.map { $0.3 })
+        XCTAssertEqual(service.entries.map(\.source), entriesBeforeSearch.map { $0.4 })
     }
 
     @MainActor
@@ -672,6 +908,192 @@ final class DictionaryServiceTests: XCTestCase {
         XCTAssertEqual(service.entries.filter { $0.type == .term }.map(\.original), ["Cargo"])
         XCTAssertEqual(viewModel.activatedPackStates[v2.id]?.installedTerms, ["Cargo"])
         XCTAssertEqual(viewModel.activatedPackStates[v2.id]?.installedVersion, "1.1.0")
+    }
+
+    @MainActor
+    func testClearAutoLearnedResetRequiresConfirmationAndPreservesOtherEntries() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.addEntry(type: .term, original: "ManualTerm")
+        service.addEntry(type: .correction, original: "teh", replacement: "the")
+        service.learnCorrection(original: "recieve", replacement: "receive")
+        let viewModel = DictionaryViewModel(dictionaryService: service)
+
+        let summary = viewModel.resetRequest(for: .clearAutoLearnedCorrections)
+        XCTAssertEqual(summary.entryCount, 1)
+        XCTAssertEqual(summary.autoLearnedCorrectionCount, 1)
+        XCTAssertTrue(summary.canPerform)
+
+        let originalIDs = service.entries.map(\.id)
+        viewModel.requestReset(.clearAutoLearnedCorrections)
+        XCTAssertNotNil(viewModel.pendingResetRequest)
+        XCTAssertEqual(service.entries.map(\.id), originalIDs)
+
+        viewModel.cancelReset()
+        XCTAssertNil(viewModel.pendingResetRequest)
+        XCTAssertEqual(service.entries.map(\.id), originalIDs)
+
+        viewModel.requestReset(.clearAutoLearnedCorrections)
+        viewModel.confirmReset()
+
+        XCTAssertEqual(Set(service.entries.map(\.original)), ["ManualTerm", "teh"])
+        XCTAssertFalse(service.entries.contains { $0.source == .autoLearned })
+        XCTAssertNil(viewModel.pendingResetRequest)
+        XCTAssertFalse(viewModel.resetRequest(for: .clearAutoLearnedCorrections).canPerform)
+    }
+
+    @MainActor
+    func testResetCustomDictionaryPreservesActivePackEntriesSnapshotsAndExport() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let suiteName = "DictionaryResetCustom-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.addEntry(type: .term, original: "ManualTerm")
+        service.addEntry(type: .correction, original: "teh", replacement: "the")
+        service.learnCorrection(original: "recieve", replacement: "receive")
+        let viewModel = DictionaryViewModel(dictionaryService: service, defaults: defaults)
+        let pack = TermPack(
+            id: "reset-pack",
+            name: "Reset Pack",
+            description: "Reset test pack",
+            icon: "shippingbox",
+            terms: ["PackTerm"],
+            corrections: [TermPackCorrection(original: "pakc", replacement: "pack")],
+            version: "1.0.0",
+            author: "Tests",
+            localizedNames: nil,
+            localizedDescriptions: nil
+        )
+        viewModel.activatePack(pack)
+
+        let summary = viewModel.resetRequest(for: .resetCustomDictionary)
+        XCTAssertEqual(summary.termCount, 1)
+        XCTAssertEqual(summary.manualCorrectionCount, 1)
+        XCTAssertEqual(summary.autoLearnedCorrectionCount, 1)
+        XCTAssertEqual(summary.activePackCount, 1)
+
+        viewModel.requestReset(.resetCustomDictionary)
+        viewModel.confirmReset()
+
+        XCTAssertEqual(Set(service.entries.map(\.original)), ["PackTerm", "pakc"])
+        XCTAssertNotNil(viewModel.activatedPackStates[pack.id])
+
+        let persistedStatesData = try XCTUnwrap(
+            defaults.data(forKey: UserDefaultsKeys.activatedTermPackStates)
+        )
+        let persistedStates = try JSONDecoder().decode([ActivatedTermPackState].self, from: persistedStatesData)
+        XCTAssertEqual(persistedStates.map(\.packID), [pack.id])
+
+        let exported = DictionaryExporter.exportJSON(service.entries)
+        XCTAssertTrue(exported.contains("PackTerm"))
+        XCTAssertTrue(exported.contains("pakc"))
+        XCTAssertFalse(exported.contains("ManualTerm"))
+        XCTAssertFalse(exported.contains("recieve"))
+
+        let reloadedViewModel = DictionaryViewModel(dictionaryService: service, defaults: defaults)
+        XCTAssertNotNil(reloadedViewModel.activatedPackStates[pack.id])
+    }
+
+    @MainActor
+    func testDeactivateAllPacksRemovesOnlyTrackedEntriesAndPersistsEmptySnapshots() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let suiteName = "DictionaryDeactivatePacks-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.addEntry(type: .term, original: "ManualTerm")
+        service.addEntry(type: .correction, original: "teh", replacement: "the")
+        service.learnCorrection(original: "recieve", replacement: "receive")
+        let viewModel = DictionaryViewModel(dictionaryService: service, defaults: defaults)
+        let firstPack = TermPack(
+            id: "first-reset-pack",
+            name: "First Reset Pack",
+            description: "First reset test pack",
+            icon: "shippingbox",
+            terms: ["ManualTerm", "FirstPackTerm"],
+            corrections: [TermPackCorrection(original: "frist", replacement: "first")],
+            version: "1.0.0",
+            author: "Tests",
+            localizedNames: nil,
+            localizedDescriptions: nil
+        )
+        let secondPack = TermPack(
+            id: "second-reset-pack",
+            name: "Second Reset Pack",
+            description: "Second reset test pack",
+            icon: "shippingbox",
+            terms: ["SecondPackTerm"],
+            corrections: [],
+            version: "1.0.0",
+            author: "Tests",
+            localizedNames: nil,
+            localizedDescriptions: nil
+        )
+        viewModel.activatePack(firstPack)
+        viewModel.activatePack(secondPack)
+
+        let summary = viewModel.resetRequest(for: .deactivateAllTermPacks)
+        XCTAssertEqual(summary.activePackCount, 2)
+        XCTAssertEqual(summary.termCount, 2)
+        XCTAssertEqual(summary.correctionCount, 1)
+
+        viewModel.requestReset(.deactivateAllTermPacks)
+        viewModel.confirmReset()
+
+        XCTAssertEqual(Set(service.entries.map(\.original)), ["ManualTerm", "teh", "recieve"])
+        XCTAssertTrue(viewModel.activatedPackStates.isEmpty)
+        let persistedStatesData = try XCTUnwrap(
+            defaults.data(forKey: UserDefaultsKeys.activatedTermPackStates)
+        )
+        XCTAssertTrue(try JSONDecoder().decode([ActivatedTermPackState].self, from: persistedStatesData).isEmpty)
+        XCTAssertFalse(viewModel.resetRequest(for: .deactivateAllTermPacks).canPerform)
+        XCTAssertTrue(DictionaryExporter.exportJSON(service.entries).contains("recieve"))
+    }
+
+    @MainActor
+    func testResetActionsAreDisabledForEmptyCategoriesIncludingPackWithNoInstalledEntries() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        let viewModel = DictionaryViewModel(dictionaryService: service)
+
+        XCTAssertFalse(viewModel.resetRequest(for: .clearAutoLearnedCorrections).canPerform)
+        XCTAssertFalse(viewModel.resetRequest(for: .resetCustomDictionary).canPerform)
+        XCTAssertFalse(viewModel.resetRequest(for: .deactivateAllTermPacks).canPerform)
+        viewModel.requestReset(.clearAutoLearnedCorrections)
+        XCTAssertNil(viewModel.pendingResetRequest)
+
+        service.addEntry(type: .term, original: "ExistingTerm")
+        let pack = TermPack(
+            id: "duplicate-only-pack",
+            name: "Duplicate Only",
+            description: "Installs no entries",
+            icon: "shippingbox",
+            terms: ["ExistingTerm"],
+            corrections: [],
+            version: "1.0.0",
+            author: "Tests",
+            localizedNames: nil,
+            localizedDescriptions: nil
+        )
+        viewModel.activatePack(pack)
+
+        let packSummary = viewModel.resetRequest(for: .deactivateAllTermPacks)
+        XCTAssertTrue(packSummary.canPerform)
+        XCTAssertEqual(packSummary.activePackCount, 1)
+        XCTAssertEqual(packSummary.entryCount, 0)
+
+        viewModel.requestReset(.deactivateAllTermPacks)
+        viewModel.confirmReset()
+        XCTAssertEqual(service.entries.map(\.original), ["ExistingTerm"])
+        XCTAssertTrue(viewModel.activatedPackStates.isEmpty)
     }
 
     @MainActor

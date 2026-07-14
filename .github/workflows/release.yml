@@ -503,7 +503,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Generate and Deploy Sparkle Appcast
+      - name: Generate, Deploy, and Verify Sparkle Appcast
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -553,6 +553,19 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git commit -m "Update appcast for ${TAG}" || echo "No changes to commit"
           git push origin gh-pages
+
+          cd "$GITHUB_WORKSPACE"
+          python3 scripts/verify_appcast_publication.py \
+            --url "https://typewhisper.github.io/typewhisper-mac/appcast.xml" \
+            --version "$DISPLAY_VERSION" \
+            --build-version "$BUILD_NUMBER" \
+            --channel "$RELEASE_CHANNEL" \
+            --download-url "$DOWNLOAD_URL" \
+            --signature "$ED_SIGNATURE" \
+            --length "$ED_LENGTH" \
+            --maximum-cache-age-seconds 600 \
+            --timeout-seconds 900 \
+            --poll-interval-seconds 15
 
   trigger-website:
     if: "!contains(needs.prepare.outputs.tag, '-')"

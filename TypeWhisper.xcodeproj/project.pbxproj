@@ -147,6 +147,7 @@
 		AA00000000000000000030 /* AudioRecordingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000030 /* AudioRecordingService.swift */; };
 		AA00000000000000000031 /* HotkeyService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000031 /* HotkeyService.swift */; };
 		AA00000000000000000362 /* SecureInputDiagnostics.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000362 /* SecureInputDiagnostics.swift */; };
+		CC88800000000000000001 /* ClamshellStateProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = CC88800000000000000002 /* ClamshellStateProvider.swift */; };
 		AA00000000000000000361 /* ClipboardContentFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000361 /* ClipboardContentFormatter.swift */; };
 		AA00000000000000000032 /* TextInsertionService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000032 /* TextInsertionService.swift */; };
 		AA00000000000000000033 /* DictationViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000033 /* DictationViewModel.swift */; };
@@ -181,6 +182,8 @@
 		AA00000000000000000077 /* DictionaryEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000077 /* DictionaryEntry.swift */; };
 		AA00000000000000000078 /* TermPack.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000078 /* TermPack.swift */; };
 		AA00000000000000000079 /* DictionaryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000079 /* DictionaryService.swift */; };
+		A87000000000000000000001 /* DictionaryTrainingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B87000000000000000000001 /* DictionaryTrainingService.swift */; };
+		A87000000000000000000002 /* DictionaryTrainingServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B87000000000000000000002 /* DictionaryTrainingServiceTests.swift */; };
 		AA00000000000000000080 /* Snippet.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000080 /* Snippet.swift */; };
 		AA00000000000000000081 /* SnippetService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000081 /* SnippetService.swift */; };
 		C1F000000000000000000011 /* UserDataSyncIdentity.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F000000000000000000002 /* UserDataSyncIdentity.swift */; };
@@ -306,6 +309,7 @@
 			AA00000000000000000206 /* OverlayIndicatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000195 /* OverlayIndicatorView.swift */; };
 			AA00000000000000000207 /* IndicatorCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000196 /* IndicatorCoordinator.swift */; };
 			AA00000000000000000208 /* SharedIndicatorComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000197 /* SharedIndicatorComponents.swift */; };
+			4E5353420000000000000001 /* NativeSearchField.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4E5353460000000000000001 /* NativeSearchField.swift */; };
 			AA00000000000000000321 /* MinimalIndicatorView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000309 /* MinimalIndicatorView.swift */; };
 			AA00000000000000000322 /* MinimalIndicatorPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000310 /* MinimalIndicatorPanel.swift */; };
 			AA00000000000000000209 /* DeepgramPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000200 /* DeepgramPlugin.swift */; };
@@ -589,6 +593,7 @@
 		BB00000000000000000030 /* AudioRecordingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecordingService.swift; sourceTree = "<group>"; };
 		BB00000000000000000031 /* HotkeyService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyService.swift; sourceTree = "<group>"; };
 		BB00000000000000000362 /* SecureInputDiagnostics.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecureInputDiagnostics.swift; sourceTree = "<group>"; };
+		CC88800000000000000002 /* ClamshellStateProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClamshellStateProvider.swift; sourceTree = "<group>"; };
 		BB00000000000000000361 /* ClipboardContentFormatter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardContentFormatter.swift; sourceTree = "<group>"; };
 		BB00000000000000000032 /* TextInsertionService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextInsertionService.swift; sourceTree = "<group>"; };
 		BB00000000000000000033 /* DictationViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationViewModel.swift; sourceTree = "<group>"; };
@@ -637,6 +642,8 @@
 		BB00000000000000000077 /* DictionaryEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictionaryEntry.swift; sourceTree = "<group>"; };
 		BB00000000000000000078 /* TermPack.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TermPack.swift; sourceTree = "<group>"; };
 		BB00000000000000000079 /* DictionaryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictionaryService.swift; sourceTree = "<group>"; };
+		B87000000000000000000001 /* DictionaryTrainingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictionaryTrainingService.swift; sourceTree = "<group>"; };
+		B87000000000000000000002 /* DictionaryTrainingServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DictionaryTrainingServiceTests.swift; sourceTree = "<group>"; };
 		BB7080000000000000000002 /* TargetAppCorrectionLearningServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TargetAppCorrectionLearningServiceTests.swift; sourceTree = "<group>"; };
 		BB00000000000000000080 /* Snippet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Snippet.swift; sourceTree = "<group>"; };
 		BB00000000000000000081 /* SnippetService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnippetService.swift; sourceTree = "<group>"; };
@@ -759,6 +766,7 @@
 			BB00000000000000000195 /* OverlayIndicatorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverlayIndicatorView.swift; sourceTree = "<group>"; };
 			BB00000000000000000196 /* IndicatorCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IndicatorCoordinator.swift; sourceTree = "<group>"; };
 			BB00000000000000000197 /* SharedIndicatorComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SharedIndicatorComponents.swift; sourceTree = "<group>"; };
+			4E5353460000000000000001 /* NativeSearchField.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeSearchField.swift; sourceTree = "<group>"; };
 			BB00000000000000000198 /* OverlayIndicatorPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OverlayIndicatorPanel.swift; sourceTree = "<group>"; };
 			BB00000000000000000309 /* MinimalIndicatorView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinimalIndicatorView.swift; sourceTree = "<group>"; };
 			BB00000000000000000310 /* MinimalIndicatorPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MinimalIndicatorPanel.swift; sourceTree = "<group>"; };
@@ -1499,6 +1507,7 @@
 				BB00000000000000000220 /* AudioPlaybackService.swift */,
 				BB00000000000000000031 /* HotkeyService.swift */,
 				BB00000000000000000362 /* SecureInputDiagnostics.swift */,
+				CC88800000000000000002 /* ClamshellStateProvider.swift */,
 				BB00000000000000000196 /* IndicatorCoordinator.swift */,
 				BB00000000000000000361 /* ClipboardContentFormatter.swift */,
 				BB00000000000000000032 /* TextInsertionService.swift */,
@@ -1516,6 +1525,7 @@
 				BB00000000000000000074 /* AudioDuckingService.swift */,
 				BB00000000000000000273 /* MediaPlaybackService.swift */,
 				BB00000000000000000079 /* DictionaryService.swift */,
+				B87000000000000000000001 /* DictionaryTrainingService.swift */,
 				BB00000000000000000271 /* DictionaryExporter.swift */,
 				BB00000000000000000081 /* SnippetService.swift */,
 				C1F000000000000000000001 /* Sync */,
@@ -1614,6 +1624,7 @@
 				BB00000000000000000309 /* MinimalIndicatorView.swift */,
 				6C7D8E9F0A1B2C3D4E5F6071 /* FloatingPanelSpacePolicy.swift */,
 				BB00000000000000000197 /* SharedIndicatorComponents.swift */,
+				4E5353460000000000000001 /* NativeSearchField.swift */,
 				BB00000000000000000014 /* MenuBarView.swift */,
 				BB00000000000000000016 /* FileTranscriptionView.swift */,
 				533C00000000000000000003 /* DictationRecoveryView.swift */,
@@ -2289,6 +2300,7 @@
 					5A6500000000000000000001 /* ModelManagerLiveSessionModelOverrideTests.swift */,
 					AA8C1D4E5F60718293A4B5C6 /* DictationShortSpeechTests.swift */,
 				D63A42880A0BA4C84F36E873 /* DictionaryServiceTests.swift */,
+				B87000000000000000000002 /* DictionaryTrainingServiceTests.swift */,
 				BB7080000000000000000002 /* TargetAppCorrectionLearningServiceTests.swift */,
 				A8D4F2B6E1C3097B5F8A4E62 /* DictionaryExporterTests.swift */,
 				8E39448D561C47B16EEF4C6B /* HTTPRequestParserTests.swift */,
@@ -3802,6 +3814,7 @@
 					5A6500000000000000000002 /* ModelManagerLiveSessionModelOverrideTests.swift in Sources */,
 					BB8C1D4E5F60718293A4B5C6 /* DictationShortSpeechTests.swift in Sources */,
 				B4CC04DF94001FF7220789BC /* DictionaryServiceTests.swift in Sources */,
+				A87000000000000000000002 /* DictionaryTrainingServiceTests.swift in Sources */,
 				AA7080000000000000000002 /* TargetAppCorrectionLearningServiceTests.swift in Sources */,
 				C7A3E9F1D5B2084A6E9C3D71 /* DictionaryExporterTests.swift in Sources */,
 				F635B3F08018D57E0CB709BF /* HTTPRequestParserTests.swift in Sources */,
@@ -3894,6 +3907,7 @@
 				AA00000000000000000230 /* AudioPlaybackService.swift in Sources */,
 				AA00000000000000000031 /* HotkeyService.swift in Sources */,
 				AA00000000000000000362 /* SecureInputDiagnostics.swift in Sources */,
+				CC88800000000000000001 /* ClamshellStateProvider.swift in Sources */,
 				AA00000000000000000361 /* ClipboardContentFormatter.swift in Sources */,
 				AA00000000000000000032 /* TextInsertionService.swift in Sources */,
 				AA00000000000000000033 /* DictationViewModel.swift in Sources */,
@@ -3944,6 +3958,7 @@
 				AA00000000000000000077 /* DictionaryEntry.swift in Sources */,
 				AA00000000000000000078 /* TermPack.swift in Sources */,
 				AA00000000000000000079 /* DictionaryService.swift in Sources */,
+				A87000000000000000000001 /* DictionaryTrainingService.swift in Sources */,
 				AA00000000000000000080 /* Snippet.swift in Sources */,
 				AA00000000000000000081 /* SnippetService.swift in Sources */,
 				C1F000000000000000000011 /* UserDataSyncIdentity.swift in Sources */,
@@ -3992,6 +4007,7 @@
 					AA00000000000000000322 /* MinimalIndicatorPanel.swift in Sources */,
 					AA00000000000000000321 /* MinimalIndicatorView.swift in Sources */,
 					AA00000000000000000208 /* SharedIndicatorComponents.swift in Sources */,
+					4E5353420000000000000001 /* NativeSearchField.swift in Sources */,
 					AA00000000000000000126 /* PostProcessingPipeline.swift in Sources */,
 				AA00000000000000000127 /* PluginSettingsView.swift in Sources */,
 				AA00000000000000000152 /* AppConstants.swift in Sources */,

@@ -8,6 +8,28 @@ enum StartupSheetRoute: String, Identifiable {
     var id: String { rawValue }
 }
 
+enum InitialWindowPresentation: Equatable {
+    case setup
+    case none
+}
+
+enum InitialWindowPresentationPolicy {
+    static func presentation(
+        setupWizardRequired: Bool,
+        postUpdatePromptPending: Bool
+    ) -> InitialWindowPresentation {
+        switch (setupWizardRequired, postUpdatePromptPending) {
+        case (true, _):
+            return .setup
+        case (false, true):
+            // Keep background launches windowless; the prompt remains available in Settings.
+            return .none
+        case (false, false):
+            return .none
+        }
+    }
+}
+
 @MainActor
 final class PostUpdatePromptCoordinator {
     nonisolated(unsafe) static var shared: PostUpdatePromptCoordinator!
@@ -41,10 +63,6 @@ final class PostUpdatePromptCoordinator {
         }
 
         return acknowledgedReleaseFingerprint != currentReleaseFingerprint
-    }
-
-    var shouldAutoOpenSettingsOnLaunch: Bool {
-        shouldPresentPrompt
     }
 
     var activeSheetRoute: StartupSheetRoute? {

@@ -546,17 +546,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
             AudioRecorderViewModel.shared.toggleRecording()
         }
 
-        // Auto-open the standalone setup assistant while first-run setup is incomplete.
-        if HomeViewModel.shared.showSetupWizard {
+        let initialWindowPresentation = InitialWindowPresentationPolicy.presentation(
+            setupWizardRequired: HomeViewModel.shared.showSetupWizard,
+            postUpdatePromptPending: PostUpdatePromptCoordinator.shared.shouldPresentPrompt
+        )
+
+        // Auto-open only the standalone setup assistant while first-run setup is incomplete.
+        // Post-update prompts wait until the user opens Settings interactively.
+        if initialWindowPresentation == .setup {
             UserDefaults.standard.set(false, forKey: UserDefaultsKeys.setupWizardCompleted)
             HomeViewModel.shared.showSetupWizard = true
             NSApp.setActivationPolicy(.regular)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 self.openSetupWindow()
-            }
-        } else if PostUpdatePromptCoordinator.shared.shouldAutoOpenSettingsOnLaunch {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-                self.openSettingsWindow()
             }
         }
 

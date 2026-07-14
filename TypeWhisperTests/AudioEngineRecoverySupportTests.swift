@@ -1043,6 +1043,137 @@ final class AudioDeviceServiceCompatibilityTests: XCTestCase {
         XCTAssertFalse(selection.hasExplicitDeviceSelection)
     }
 
+    func testResolvedRecordingInputSelectionSkipsBuiltInMicWhenLidIsClosed() throws {
+        let builtInDeviceID = AudioDeviceID(1)
+        let usbDeviceID = AudioDeviceID(2)
+        UserDefaults.standard.set(
+            try JSONEncoder().encode([
+                AudioInputDevicePriorityItem(uid: "built-in", name: "MacBook Pro Microphone"),
+                AudioInputDevicePriorityItem(uid: "usb-input", name: "USB Mic")
+            ]),
+            forKey: UserDefaultsKeys.inputDevicePriorityList
+        )
+        let clamshellProvider = FakeClamshellStateProvider(lidClosed: true)
+        let service = AudioDeviceService(
+            initialInputDevices: [
+                AudioInputDevice(deviceID: builtInDeviceID, name: "MacBook Pro Microphone", uid: "built-in"),
+                AudioInputDevice(deviceID: usbDeviceID, name: "USB Mic", uid: "usb-input")
+            ],
+            monitorDeviceChanges: false,
+            probeCompatibilities: false,
+            transportResolver: FakeAudioDeviceTransportResolver(
+                transports: [
+                    builtInDeviceID: kAudioDeviceTransportTypeBuiltIn,
+                    usbDeviceID: kAudioDeviceTransportTypeUSB
+                ]
+            ),
+            clamshellStateProvider: clamshellProvider
+        )
+        service.audioDeviceIDResolverOverride = { uid in
+            switch uid {
+            case "built-in": return builtInDeviceID
+            case "usb-input": return usbDeviceID
+            default: return nil
+            }
+        }
+
+        let selection = service.resolvedRecordingInputSelection()
+
+        XCTAssertEqual(selection.deviceUID, "usb-input")
+        XCTAssertEqual(selection.deviceID, usbDeviceID)
+        XCTAssertEqual(selection.deviceName, "USB Mic")
+        XCTAssertTrue(selection.hasExplicitDeviceSelection)
+    }
+
+    func testResolvedRecordingInputSelectionUsesBuiltInMicWhenLidIsOpen() throws {
+        let builtInDeviceID = AudioDeviceID(1)
+        let usbDeviceID = AudioDeviceID(2)
+        UserDefaults.standard.set(
+            try JSONEncoder().encode([
+                AudioInputDevicePriorityItem(uid: "built-in", name: "MacBook Pro Microphone"),
+                AudioInputDevicePriorityItem(uid: "usb-input", name: "USB Mic")
+            ]),
+            forKey: UserDefaultsKeys.inputDevicePriorityList
+        )
+        let clamshellProvider = FakeClamshellStateProvider(lidClosed: false)
+        let service = AudioDeviceService(
+            initialInputDevices: [
+                AudioInputDevice(deviceID: builtInDeviceID, name: "MacBook Pro Microphone", uid: "built-in"),
+                AudioInputDevice(deviceID: usbDeviceID, name: "USB Mic", uid: "usb-input")
+            ],
+            monitorDeviceChanges: false,
+            probeCompatibilities: false,
+            transportResolver: FakeAudioDeviceTransportResolver(
+                transports: [
+                    builtInDeviceID: kAudioDeviceTransportTypeBuiltIn,
+                    usbDeviceID: kAudioDeviceTransportTypeUSB
+                ]
+            ),
+            clamshellStateProvider: clamshellProvider
+        )
+        service.audioDeviceIDResolverOverride = { uid in
+            switch uid {
+            case "built-in": return builtInDeviceID
+            case "usb-input": return usbDeviceID
+            default: return nil
+            }
+        }
+
+        let selection = service.resolvedRecordingInputSelection()
+
+        XCTAssertEqual(selection.deviceUID, "built-in")
+        XCTAssertEqual(selection.deviceID, builtInDeviceID)
+        XCTAssertEqual(selection.deviceName, "MacBook Pro Microphone")
+        XCTAssertTrue(selection.hasExplicitDeviceSelection)
+    }
+
+    func testResolvedRecordingInputSelectionFallsBackToSystemDefaultWhenAllSkippedInClamshell() throws {
+        let builtInDeviceID = AudioDeviceID(1)
+        UserDefaults.standard.set(
+            try JSONEncoder().encode([
+                AudioInputDevicePriorityItem(uid: "built-in", name: "MacBook Pro Microphone")
+            ]),
+            forKey: UserDefaultsKeys.inputDevicePriorityList
+        )
+        let clamshellProvider = FakeClamshellStateProvider(lidClosed: true)
+        let service = AudioDeviceService(
+            initialInputDevices: [
+                AudioInputDevice(deviceID: builtInDeviceID, name: "MacBook Pro Microphone", uid: "built-in")
+            ],
+            monitorDeviceChanges: false,
+            probeCompatibilities: false,
+            transportResolver: FakeAudioDeviceTransportResolver(
+                transports: [builtInDeviceID: kAudioDeviceTransportTypeBuiltIn]
+            ),
+            clamshellStateProvider: clamshellProvider
+        )
+        service.audioDeviceIDResolverOverride = { uid in
+            uid == "built-in" ? builtInDeviceID : nil
+        }
+
+        let selection = service.resolvedRecordingInputSelection()
+
+        XCTAssertNil(selection.deviceUID)
+        XCTAssertNil(selection.deviceID)
+        XCTAssertFalse(selection.hasExplicitDeviceSelection)
+    }
+
+    func testIOKitClamshellStateProviderReadsClamshellStateFromRootDomain() {
+        let registry = FakeIOKitRegistry(property: NSNumber(value: true))
+        let provider = IOKitClamshellStateProvider(registry: registry)
+
+        XCTAssertTrue(provider.isLidClosed())
+        XCTAssertEqual(registry.requestedServiceName, "IOPMrootDomain")
+        XCTAssertEqual(registry.requestedPropertyName, "AppleClamshellState")
+    }
+
+    func testIOKitClamshellStateProviderFallsBackToLidOpenWhenPropertyIsMissing() {
+        let registry = FakeIOKitRegistry(property: nil)
+        let provider = IOKitClamshellStateProvider(registry: registry)
+
+        XCTAssertFalse(provider.isLidClosed())
+    }
+
     func testPreviewRecoveryEngineSwap_replacesStoredEngineInstance() {
         let service = AudioDeviceService(
             initialInputDevices: [],
@@ -2728,5 +2859,33 @@ private final class FakeAudioOutputVolumeController: AudioOutputVolumeControllin
             deviceName: snapshot.deviceName,
             volume: volume
         )
+    }
+}
+
+private final class FakeClamshellStateProvider: ClamshellStateProviding, @unchecked Sendable {
+    private let lidClosed: Bool
+
+    init(lidClosed: Bool) {
+        self.lidClosed = lidClosed
+    }
+
+    func isLidClosed() -> Bool {
+        lidClosed
+    }
+}
+
+private final class FakeIOKitRegistry: IOKitRegistryQuerying, @unchecked Sendable {
+    let returnedProperty: Any?
+    private(set) var requestedServiceName: String?
+    private(set) var requestedPropertyName: String?
+
+    init(property: Any?) {
+        returnedProperty = property
+    }
+
+    func property(forServiceNamed serviceName: String, named propertyName: String) -> Any? {
+        requestedServiceName = serviceName
+        requestedPropertyName = propertyName
+        return returnedProperty
     }
 }

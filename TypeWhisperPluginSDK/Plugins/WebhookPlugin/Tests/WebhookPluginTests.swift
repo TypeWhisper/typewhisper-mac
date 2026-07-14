@@ -51,6 +51,159 @@ final class WebhookPluginTests: XCTestCase {
         )
     }
 
+    func testNewDraftIsNotPersistedUntilSaved() throws {
+        let host = try PluginTestHostServices()
+        let service = ExampleWebhookService(dataDirectory: host.pluginDataDirectory, host: host)
+        var draft = ExampleWebhookConfig()
+
+        XCTAssertTrue(service.webhooks.isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: configURL(for: host).path))
+
+        draft.name = "New Hook"
+        draft.url = "https://example.com/new"
+        service.saveWebhook(draft)
+
+        XCTAssertEqual(service.webhooks.map(\.id), [draft.id])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: configURL(for: host).path))
+    }
+
+    func testSaveWebhookUpdatesExistingWebhookWithoutDuplicatingIt() throws {
+        let host = try PluginTestHostServices()
+        let service = ExampleWebhookService(dataDirectory: host.pluginDataDirectory, host: host)
+        var webhook = ExampleWebhookConfig(name: "Original", url: "https://example.com/original")
+
+        service.saveWebhook(webhook)
+        webhook.name = "Updated"
+        webhook.url = "https://example.com/updated"
+        service.saveWebhook(webhook)
+
+        XCTAssertEqual(service.webhooks.count, 1)
+        XCTAssertEqual(service.webhooks.first?.id, webhook.id)
+        XCTAssertEqual(service.webhooks.first?.name, "Updated")
+        XCTAssertEqual(service.webhooks.first?.url, "https://example.com/updated")
+    }
+
+    func testWebhookEditorPresentationHandlesAddEditAndDismiss() throws {
+        var presentation = ExampleWebhookEditorPresentation()
+
+        XCTAssertNil(presentation.editingWebhook)
+
+        presentation.beginAddingWebhook()
+        XCTAssertTrue(try XCTUnwrap(presentation.editingWebhook).isUnmodifiedDefaultDraft)
+
+        presentation.dismissEditor()
+        XCTAssertNil(presentation.editingWebhook)
+
+        let existingWebhook = ExampleWebhookConfig(
+            name: "Existing Hook",
+            url: "https://example.com/existing"
+        )
+        presentation.beginEditingWebhook(existingWebhook)
+        XCTAssertEqual(presentation.editingWebhook?.id, existingWebhook.id)
+    }
+
+    func testEditorStateDerivesWorkflowScopeFromExistingConfiguration() {
+        let allTranscriptions = ExampleWebhookEditorState(webhook: ExampleWebhookConfig(
+            name: "All",
+            url: "https://example.com/all"
+        ))
+        let selectedWorkflows = ExampleWebhookEditorState(webhook: ExampleWebhookConfig(
+            name: "Selected",
+            url: "https://example.com/selected",
+            workflowFilter: ["Cleaned Text"]
+        ))
+
+        XCTAssertEqual(allTranscriptions.workflowScope, .allTranscriptions)
+        XCTAssertEqual(selectedWorkflows.workflowScope, .selectedWorkflows)
+        XCTAssertEqual(selectedWorkflows.webhook.workflowFilter, ["Cleaned Text"])
+    }
+
+    func testEditorStatePreservesSelectionWhileTogglingAndClearsItForAllOnSave() {
+        var state = ExampleWebhookEditorState(webhook: ExampleWebhookConfig(
+            name: "Selected",
+            url: "https://example.com/selected",
+            workflowFilter: ["Cleaned Text"]
+        ))
+
+        state.workflowScope = .allTranscriptions
+        XCTAssertEqual(state.webhook.workflowFilter, ["Cleaned Text"])
+        XCTAssertTrue(state.webhookForSaving.workflowFilter.isEmpty)
+
+        state.workflowScope = .selectedWorkflows
+        XCTAssertEqual(state.webhook.workflowFilter, ["Cleaned Text"])
+        XCTAssertEqual(state.webhookForSaving.workflowFilter, ["Cleaned Text"])
+    }
+
+    func testEditorStateRequiresAWorkflowWhenSelectedScopeIsActive() {
+        var state = ExampleWebhookEditorState(webhook: ExampleWebhookConfig(
+            name: "Selected",
+            url: "https://example.com/selected"
+        ))
+
+        state.workflowScope = .selectedWorkflows
+        XCTAssertFalse(state.canSave)
+
+        state.setWorkflow("Translation", isSelected: true)
+        XCTAssertTrue(state.canSave)
+        XCTAssertEqual(state.webhook.workflowFilter, ["Translation"])
+
+        state.setWorkflow("Translation", isSelected: false)
+        XCTAssertFalse(state.canSave)
+        XCTAssertTrue(state.webhook.workflowFilter.isEmpty)
+    }
+
+    func testEditorStateKeepsUnavailablePersistedWorkflowsVisibleForDeselection() {
+        var state = ExampleWebhookEditorState(webhook: ExampleWebhookConfig(
+            name: "Selected",
+            url: "https://example.com/selected",
+            workflowFilter: ["Deleted Workflow", "Translation"]
+        ))
+
+        XCTAssertEqual(
+            state.workflowsForSelection(availableWorkflows: ["Translation", "Cleaned Text"]),
+            ["Translation", "Cleaned Text", "Deleted Workflow"]
+        )
+
+        state.setWorkflow("Deleted Workflow", isSelected: false)
+        XCTAssertEqual(state.webhook.workflowFilter, ["Translation"])
+    }
+
+    func testWorkflowFilterKeepsLegacyProfileFilterStorageKey() throws {
+        let webhook = ExampleWebhookConfig(
+            name: "Compatible",
+            url: "https://example.com/compatible",
+            workflowFilter: ["Product Idea"]
+        )
+
+        let data = try JSONEncoder().encode(webhook)
+        let rawJSON = String(decoding: data, as: UTF8.self)
+        XCTAssertTrue(rawJSON.contains("\"profileFilter\""))
+        XCTAssertFalse(rawJSON.contains("\"workflowFilter\""))
+
+        let decoded = try JSONDecoder().decode(ExampleWebhookConfig.self, from: data)
+        XCTAssertEqual(decoded.workflowFilter, ["Product Idea"])
+    }
+
+    func testLoadRemovesOnlyUnmodifiedDefaultDrafts() throws {
+        let host = try PluginTestHostServices()
+        let emptyDraft = ExampleWebhookConfig()
+        let namedDraft = ExampleWebhookConfig(name: "Keep Me")
+        let configuredWebhook = ExampleWebhookConfig(
+            name: "Configured",
+            url: "https://example.com/configured"
+        )
+        let configData = try JSONEncoder().encode([emptyDraft, namedDraft, configuredWebhook])
+        try configData.write(to: configURL(for: host), options: .atomic)
+
+        let service = ExampleWebhookService(dataDirectory: host.pluginDataDirectory, host: host)
+
+        XCTAssertEqual(Set(service.webhooks.map(\.id)), Set([namedDraft.id, configuredWebhook.id]))
+
+        let storedData = try Data(contentsOf: configURL(for: host))
+        let persisted = try JSONDecoder().decode([ExampleWebhookConfig].self, from: storedData)
+        XCTAssertEqual(Set(persisted.map(\.id)), Set([namedDraft.id, configuredWebhook.id]))
+    }
+
     func testLoadMigratesLegacyPlaintextSensitiveHeaders() throws {
         let host = try PluginTestHostServices()
         let legacyWebhook = ExampleWebhookConfig(
@@ -188,6 +341,50 @@ final class WebhookPluginTests: XCTestCase {
         let request = try XCTUnwrap(sessionStore.sessions.first?.requestedRequests.first)
         XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer restored-token")
         XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/json")
+    }
+
+    func testSendHonorsAllAndSelectedWorkflowScopes() async throws {
+        let host = try PluginTestHostServices()
+        let service = ExampleWebhookService(dataDirectory: host.pluginDataDirectory, host: host)
+        var webhook = ExampleWebhookConfig(
+            name: "Scoped Hook",
+            url: "https://example.com/scoped"
+        )
+        service.saveWebhook(webhook)
+
+        let response = try XCTUnwrap(HTTPURLResponse(
+            url: URL(string: "https://example.com/scoped")!,
+            statusCode: 204,
+            httpVersion: nil,
+            headerFields: nil
+        ))
+        let sessionStore = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            sessionStore.makeSession(outcomes: [.success(Data(), response)])
+        }
+
+        await service.sendWebhooks(for: payload(ruleName: nil))
+        XCTAssertEqual(sessionStore.sessions.first?.requestedRequests.count, 1)
+
+        webhook.workflowFilter = ["Cleaned Text"]
+        service.updateWebhook(webhook)
+
+        await service.sendWebhooks(for: payload(ruleName: nil))
+        await service.sendWebhooks(for: payload(ruleName: "Translation"))
+        XCTAssertEqual(sessionStore.sessions.first?.requestedRequests.count, 1)
+
+        await service.sendWebhooks(for: payload(ruleName: "Cleaned Text"))
+        XCTAssertEqual(sessionStore.sessions.first?.requestedRequests.count, 2)
+    }
+
+    private func payload(ruleName: String?) -> TranscriptionCompletedPayload {
+        TranscriptionCompletedPayload(
+            rawText: "raw",
+            finalText: "final",
+            engineUsed: "test",
+            durationSeconds: 1,
+            ruleName: ruleName
+        )
     }
 
     private func configURL(for host: PluginTestHostServices) -> URL {

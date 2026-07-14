@@ -76,6 +76,11 @@ struct DiagnosticWorkflowInfo: Encodable, Equatable {
     let usesAppleTranslate: Bool
 }
 
+struct DiagnosticCorrectionLearningInfo: Encodable, Equatable, Sendable {
+    let enabled: Bool
+    let lastAttempt: TargetAppCorrectionLearningAttemptSnapshot?
+}
+
 enum PluginDiagnosticsSupport {
     static func appBundlePathKind(
         for bundleURL: URL,
@@ -422,6 +427,7 @@ private struct DiagnosticsReport: Encodable {
     let plugins: [PluginInfo]
     let skippedExternalBundles: [SkippedExternalBundleInfo]
     let workflows: DiagnosticWorkflowSnapshot
+    let correctionLearning: DiagnosticCorrectionLearningInfo
     let settings: SettingsSnapshot
     let lastIndicatorFullscreenSuppression: IndicatorFullscreenSuppressionDiagnostics?
     let counts: Counts
@@ -555,7 +561,7 @@ final class ErrorLogService: ObservableObject {
         }
 
         return DiagnosticsReport(
-            schemaVersion: 8,
+            schemaVersion: 9,
             exportedAt: Date(),
             app: .init(
                 version: AppConstants.appVersion,
@@ -620,6 +626,10 @@ final class ErrorLogService: ObservableObject {
             workflows: Self.workflowDiagnosticsSnapshot(
                 from: container.workflowService,
                 promptProcessingService: container.promptProcessingService
+            ),
+            correctionLearning: DiagnosticCorrectionLearningInfo(
+                enabled: defaults.bool(forKey: UserDefaultsKeys.targetAppCorrectionLearningEnabled),
+                lastAttempt: container.targetAppCorrectionLearningService.latestAttempt
             ),
             settings: .init(
                 bundledReleaseChannel: AppConstants.releaseChannel.rawValue,
