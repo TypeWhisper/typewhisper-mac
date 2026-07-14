@@ -121,6 +121,55 @@ final class ObsidianPluginTests: XCTestCase {
         XCTAssertTrue(content.contains("Second entry"))
     }
 
+    func testAutoExportDailyNoteOmitsAppMetadataWhenFormatDoesNotContainApp() async throws {
+        let vaultURL = try Self.makeTemporaryDirectory(prefix: "ObsidianVaultDailyNoApp")
+        defer { try? FileManager.default.removeItem(at: vaultURL) }
+
+        let eventBus = PluginTestEventBus()
+        let host = try PluginTestHostServices(
+            defaults: [
+                "vaultPath": vaultURL.path,
+                "dailyNoteEnabled": true,
+                "dailyNoteFormat": "{{DATE}}", // No {{APP}}
+                "frontmatterEnabled": true,
+                "autoExportEnabled": true,
+            ],
+            eventBus: eventBus
+        )
+        let plugin = ObsidianPlugin()
+        plugin.activate(host: host)
+
+        await eventBus.emit(
+            .transcriptionCompleted(
+                TranscriptionCompletedPayload(
+                    rawText: "First",
+                    finalText: "First entry",
+                    language: "it",
+                    engineUsed: "test",
+                    durationSeconds: 1,
+                    appName: "Brave Browser",
+                    bundleIdentifier: "com.brave.Browser",
+                    url: "https://example.com",
+                    ruleName: nil
+                )
+            )
+        )
+
+        let files = try FileManager.default.contentsOfDirectory(
+            at: vaultURL.appendingPathComponent("TypeWhisper", isDirectory: true),
+            includingPropertiesForKeys: nil
+        )
+        XCTAssertEqual(files.count, 1)
+
+        let content = try String(contentsOf: files[0], encoding: .utf8)
+        XCTAssertTrue(content.contains("---"))
+        XCTAssertFalse(content.contains("app: Brave Browser"))
+        XCTAssertFalse(content.contains("bundleId: com.brave.Browser"))
+        XCTAssertFalse(content.contains("url: https://example.com"))
+        XCTAssertTrue(content.contains("language: it"))
+        XCTAssertTrue(content.contains("First entry"))
+    }
+
     func testActionNameMatchesWorkflowInstructionTarget() {
         let plugin = ObsidianPlugin()
 

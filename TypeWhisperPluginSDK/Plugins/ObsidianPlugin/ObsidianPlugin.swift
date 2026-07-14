@@ -227,7 +227,13 @@ final class ObsidianPlugin: NSObject, ActionPlugin, @unchecked Sendable {
             // Create new daily note
             var content = ""
             if _frontmatterEnabled {
-                content += buildFrontmatter(appName: appName, bundleId: bundleId, url: url, language: language)
+                let includeAppMeta = _dailyNoteFormat.contains("{{APP}}")
+                content += buildFrontmatter(
+                    appName: includeAppMeta ? appName : nil,
+                    bundleId: includeAppMeta ? bundleId : nil,
+                    url: includeAppMeta ? url : nil,
+                    language: language
+                )
                 content += "\n\n"
             }
             content += "## \(timeString)\n\n\(text)"
