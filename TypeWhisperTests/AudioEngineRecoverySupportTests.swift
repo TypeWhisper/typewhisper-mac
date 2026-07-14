@@ -1158,10 +1158,20 @@ final class AudioDeviceServiceCompatibilityTests: XCTestCase {
         XCTAssertFalse(selection.hasExplicitDeviceSelection)
     }
 
-    func testIOKitClamshellStateProviderQueryDoesNotCrash() {
-        let provider = IOKitClamshellStateProvider()
-        let isClosed = provider.isLidClosed()
-        XCTAssertTrue(isClosed == true || isClosed == false)
+    func testIOKitClamshellStateProviderReadsClamshellStateFromRootDomain() {
+        let registry = FakeIOKitRegistry(property: NSNumber(value: true))
+        let provider = IOKitClamshellStateProvider(registry: registry)
+
+        XCTAssertTrue(provider.isLidClosed())
+        XCTAssertEqual(registry.requestedServiceName, "IOPMrootDomain")
+        XCTAssertEqual(registry.requestedPropertyName, "AppleClamshellState")
+    }
+
+    func testIOKitClamshellStateProviderFallsBackToLidOpenWhenPropertyIsMissing() {
+        let registry = FakeIOKitRegistry(property: nil)
+        let provider = IOKitClamshellStateProvider(registry: registry)
+
+        XCTAssertFalse(provider.isLidClosed())
     }
 
     func testPreviewRecoveryEngineSwap_replacesStoredEngineInstance() {
@@ -2861,5 +2871,21 @@ private final class FakeClamshellStateProvider: ClamshellStateProviding, @unchec
 
     func isLidClosed() -> Bool {
         lidClosed
+    }
+}
+
+private final class FakeIOKitRegistry: IOKitRegistryQuerying, @unchecked Sendable {
+    let returnedProperty: Any?
+    private(set) var requestedServiceName: String?
+    private(set) var requestedPropertyName: String?
+
+    init(property: Any?) {
+        returnedProperty = property
+    }
+
+    func property(forServiceNamed serviceName: String, named propertyName: String) -> Any? {
+        requestedServiceName = serviceName
+        requestedPropertyName = propertyName
+        return returnedProperty
     }
 }

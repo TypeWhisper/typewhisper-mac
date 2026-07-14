@@ -1136,11 +1136,11 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
 
     static func isInputDeviceAvailable(_ deviceID: AudioDeviceID) -> Bool {
         guard inputChannelCount(for: deviceID) > 0 else { return false }
-        
+
         if transportType(for: deviceID) == kAudioDeviceTransportTypeBuiltIn, IOKitClamshellStateProvider().isLidClosed() {
             return false
         }
-        
+
         return true
     }
 

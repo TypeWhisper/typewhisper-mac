@@ -20,25 +20,50 @@ protocol ClamshellStateProviding: AnyObject, Sendable {
 
 // MARK: - IOKit Implementation
 
-/// Production implementation that reads the clamshell state from IOKit's
-/// `IOPMrootDomain` service in the IORegistry.
-final class IOKitClamshellStateProvider: ClamshellStateProviding, @unchecked Sendable {
-    func isLidClosed() -> Bool {
+/// Boundary around the IORegistry calls used to obtain the clamshell state.
+///
+/// Keeping this small makes the production registry path testable without
+/// depending on the hardware state of the Mac running the tests.
+protocol IOKitRegistryQuerying: AnyObject, Sendable {
+    func property(forServiceNamed serviceName: String, named propertyName: String) -> Any?
+}
+
+final class IOKitRegistry: IOKitRegistryQuerying, @unchecked Sendable {
+    func property(forServiceNamed serviceName: String, named propertyName: String) -> Any? {
         let service = IOServiceGetMatchingService(
             kIOMainPortDefault,
-            IOServiceMatching("IOPMrootDomain")
+            IOServiceMatching(serviceName)
         )
         guard service != IO_OBJECT_NULL else {
-            return false
+            return nil
         }
         defer { IOObjectRelease(service) }
 
-        guard let property = IORegistryEntryCreateCFProperty(
+        return IORegistryEntryCreateCFProperty(
             service,
-            "AppleClamshellState" as CFString,
+            propertyName as CFString,
             kCFAllocatorDefault,
             0
-        )?.takeRetainedValue() else {
+        )?.takeRetainedValue()
+    }
+}
+
+/// Production implementation that reads the clamshell state from IOKit's
+/// `IOPMrootDomain` service in the IORegistry.
+final class IOKitClamshellStateProvider: ClamshellStateProviding, @unchecked Sendable {
+    private static let rootDomainServiceName = "IOPMrootDomain"
+    private static let clamshellStatePropertyName = "AppleClamshellState"
+    private let registry: IOKitRegistryQuerying
+
+    init(registry: IOKitRegistryQuerying = IOKitRegistry()) {
+        self.registry = registry
+    }
+
+    func isLidClosed() -> Bool {
+        guard let property = registry.property(
+            forServiceNamed: Self.rootDomainServiceName,
+            named: Self.clamshellStatePropertyName
+        ) else {
             return false
         }
 
