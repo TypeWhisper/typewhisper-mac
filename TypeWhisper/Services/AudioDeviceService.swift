@@ -273,6 +273,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
     private let bluetoothInputRouteStabilizer: BluetoothInputRouteStabilizing
     private let selectionEngineValidator: AudioInputSelectionEngineValidating
     private let inputCaptureFactory: AudioInputCaptureFactory
+    private let clamshellStateProvider: ClamshellStateProviding
 
     var selectedDeviceID: AudioDeviceID? {
         guard let uid = selectedDeviceUID else { return nil }
@@ -403,7 +404,8 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         bluetoothInputRouteStabilizer: BluetoothInputRouteStabilizing = CoreAudioBluetoothInputRouteStabilizer(),
         selectionEngineValidator: AudioInputSelectionEngineValidating = AVAudioInputSelectionEngineValidator(),
         inputCaptureFactory: AudioInputCaptureFactory = CoreAudioHALInputCaptureFactory(),
-        inputActivationGuard: AudioInputDeviceActivating = AudioInputDeviceActivationGuard()
+        inputActivationGuard: AudioInputDeviceActivating = AudioInputDeviceActivationGuard(),
+        clamshellStateProvider: ClamshellStateProviding = IOKitClamshellStateProvider()
     ) {
         self.outputVolumeGuard = outputVolumeGuard
         self.transportResolver = transportResolver
@@ -411,6 +413,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         self.selectionEngineValidator = selectionEngineValidator
         self.inputCaptureFactory = inputCaptureFactory
         self.inputActivationGuard = inputActivationGuard
+        self.clamshellStateProvider = clamshellStateProvider
         previewNotificationQueue.underlyingQueue = previewRecoveryQueue
         isInitializingSelection = true
         selectedDeviceUID = UserDefaults.standard.string(forKey: UserDefaultsKeys.selectedInputDeviceUID)
@@ -512,9 +515,23 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
             candidateUIDs = [selectedDeviceUID]
         }
 
+        let lidClosed = clamshellStateProvider.isLidClosed()
+
         for uid in candidateUIDs {
             guard let device = inputDevices.first(where: { $0.uid == uid }) else { continue }
             guard let deviceID = resolvedAudioDeviceID(for: device) else { continue }
+
+            // When the MacBook lid is closed, the built-in microphone is
+            // physically disconnected by Apple Silicon / T2 hardware security,
+            // but CoreAudio still reports it as available. Skip it so failover
+            // proceeds to the next candidate in the priority list. See #888.
+            if lidClosed,
+               let transport = transportType(for: deviceID),
+               Self.isBuiltInTransportType(transport) {
+                logger.info("Skipping built-in microphone \(device.name, privacy: .public) because lid is closed (clamshell mode)")
+                continue
+            }
+
             let usesBluetoothTransport = transportType(for: deviceID)
                 .map(Self.isBluetoothTransportType) ?? false
             return ResolvedRecordingInputSelection(
@@ -1418,6 +1435,10 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
     static func isBluetoothTransportType(_ transportType: UInt32) -> Bool {
         transportType == kAudioDeviceTransportTypeBluetooth
             || transportType == kAudioDeviceTransportTypeBluetoothLE
+    }
+
+    static func isBuiltInTransportType(_ transportType: UInt32) -> Bool {
+        transportType == kAudioDeviceTransportTypeBuiltIn
     }
 
     fileprivate static func transportType(for deviceID: AudioDeviceID) -> UInt32? {
