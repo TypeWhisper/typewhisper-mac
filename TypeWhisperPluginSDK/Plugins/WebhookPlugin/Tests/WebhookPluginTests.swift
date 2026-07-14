@@ -152,6 +152,22 @@ final class WebhookPluginTests: XCTestCase {
         XCTAssertTrue(state.webhook.workflowFilter.isEmpty)
     }
 
+    func testEditorStateKeepsUnavailablePersistedWorkflowsVisibleForDeselection() {
+        var state = ExampleWebhookEditorState(webhook: ExampleWebhookConfig(
+            name: "Selected",
+            url: "https://example.com/selected",
+            workflowFilter: ["Deleted Workflow", "Translation"]
+        ))
+
+        XCTAssertEqual(
+            state.workflowsForSelection(availableWorkflows: ["Translation", "Cleaned Text"]),
+            ["Translation", "Cleaned Text", "Deleted Workflow"]
+        )
+
+        state.setWorkflow("Deleted Workflow", isSelected: false)
+        XCTAssertEqual(state.webhook.workflowFilter, ["Translation"])
+    }
+
     func testWorkflowFilterKeepsLegacyProfileFilterStorageKey() throws {
         let webhook = ExampleWebhookConfig(
             name: "Compatible",

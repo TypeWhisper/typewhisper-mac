@@ -193,6 +193,22 @@
         }
       }
     },
+    "No longer available": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht mehr verfügbar"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "利用できなくなりました"
+          }
+        }
+      }
+    },
     "Save": {
       "localizations": {
         "de": {
