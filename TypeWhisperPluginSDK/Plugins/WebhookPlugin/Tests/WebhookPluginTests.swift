@@ -83,6 +83,25 @@ final class WebhookPluginTests: XCTestCase {
         XCTAssertEqual(service.webhooks.first?.url, "https://example.com/updated")
     }
 
+    func testWebhookEditorPresentationHandlesAddEditAndDismiss() throws {
+        var presentation = ExampleWebhookEditorPresentation()
+
+        XCTAssertNil(presentation.editingWebhook)
+
+        presentation.beginAddingWebhook()
+        XCTAssertTrue(try XCTUnwrap(presentation.editingWebhook).isUnmodifiedDefaultDraft)
+
+        presentation.dismissEditor()
+        XCTAssertNil(presentation.editingWebhook)
+
+        let existingWebhook = ExampleWebhookConfig(
+            name: "Existing Hook",
+            url: "https://example.com/existing"
+        )
+        presentation.beginEditingWebhook(existingWebhook)
+        XCTAssertEqual(presentation.editingWebhook?.id, existingWebhook.id)
+    }
+
     func testLoadRemovesOnlyUnmodifiedDefaultDrafts() throws {
         let host = try PluginTestHostServices()
         let emptyDraft = ExampleWebhookConfig()
