@@ -692,4 +692,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
     nonisolated func allowedChannels(for updater: SPUUpdater) -> Set<String> {
         AppConstants.effectiveUpdateChannel.sparkleChannels
     }
+
+    nonisolated func updater(_ updater: SPUUpdater, feedURLRequest originalRequest: URLRequest) -> URLRequest {
+        var request = originalRequest
+        request.cachePolicy = .reloadIgnoringLocalCacheData
+        request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
+        request.setValue("no-cache", forHTTPHeaderField: "Pragma")
+        return request
+    }
 }
