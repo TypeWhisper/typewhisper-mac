@@ -336,11 +336,15 @@ private struct ObsidianSettingsView: View {
                 Text("Vault", bundle: bundle)
                     .font(.headline)
 
-                if !detectedVaults.isEmpty {
+                if !detectedVaults.isEmpty || !vaultPath.isEmpty {
                     Picker(String(localized: "Detected Vaults", bundle: bundle), selection: $vaultPath) {
                         Text("Select vault...", bundle: bundle).tag("")
                         ForEach(detectedVaults) { vault in
                             Text(vault.name).tag(vault.path)
+                        }
+                        if !vaultPath.isEmpty && !detectedVaults.contains(where: { $0.path == vaultPath }) {
+                            let customName = (vaultPath as NSString).lastPathComponent
+                            Text(customName).tag(vaultPath)
                         }
                     }
                     .labelsHidden()
