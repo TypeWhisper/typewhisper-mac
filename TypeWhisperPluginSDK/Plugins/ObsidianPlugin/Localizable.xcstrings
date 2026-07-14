@@ -257,18 +257,18 @@
         }
       }
     },
-    "Placeholders: {{DATE}}, {{TIME}}, {{APP}}, {{LANG}}": {
+    "Placeholders: {{DATE}}, {{TIME}}, {{APP}}, {{LANGUAGE}}": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Platzhalter: {{DATE}}, {{TIME}}, {{APP}}, {{LANG}}"
+            "value": "Platzhalter: {{DATE}}, {{TIME}}, {{APP}}, {{LANGUAGE}}"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "プレースホルダー: {{DATE}}, {{TIME}}, {{APP}}, {{LANG}}"
+            "value": "プレースホルダー: {{DATE}}, {{TIME}}, {{APP}}, {{LANGUAGE}}"
           }
         }
       }

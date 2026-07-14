@@ -126,14 +126,19 @@ final class ObsidianPlugin: NSObject, ActionPlugin, @unchecked Sendable {
     private func resolveTemplate(_ template: String, appName: String?, language: String?, timeFormat: String = "HH-mm-ss") -> String {
         let now = Date()
         let dateFormatter = DateFormatter()
+        dateFormatter.calendar = Calendar(identifier: .gregorian)
+        dateFormatter.locale = Locale(identifier: "en_US_POSIX")
         dateFormatter.dateFormat = "yyyy-MM-dd"
         let timeFormatter = DateFormatter()
+        timeFormatter.calendar = Calendar(identifier: .gregorian)
+        timeFormatter.locale = Locale(identifier: "en_US_POSIX")
         timeFormatter.dateFormat = timeFormat
 
         var result = template
         result = result.replacingOccurrences(of: "{{DATE}}", with: dateFormatter.string(from: now))
         result = result.replacingOccurrences(of: "{{TIME}}", with: timeFormatter.string(from: now))
         result = result.replacingOccurrences(of: "{{APP}}", with: appName ?? "Unknown")
+        result = result.replacingOccurrences(of: "{{LANGUAGE}}", with: language ?? "unknown")
         result = result.replacingOccurrences(of: "{{LANG}}", with: language ?? "unknown")
         return result
     }
@@ -142,7 +147,6 @@ final class ObsidianPlugin: NSObject, ActionPlugin, @unchecked Sendable {
         var result = resolveTemplate(template, appName: appName, language: language, timeFormat: "HH:mm")
         result = result.replacingOccurrences(of: "{{TEXT}}", with: text)
         result = result.replacingOccurrences(of: "{{URL}}", with: url ?? "")
-        result = result.replacingOccurrences(of: "{{LANGUAGE}}", with: language ?? "unknown")
         return result
     }
 
@@ -347,6 +351,7 @@ private struct ObsidianSettingsView: View {
     @State private var dailyNoteEnabled: Bool = false
     @State private var dailyNoteFormat: String = "{{DATE}}"
     @State private var dailyNoteAppendTemplate: String = DailyNoteAppendPreset.timestamp.template
+    @State private var appendFormatSelection: String = DailyNoteAppendPreset.timestamp.template
     @State private var frontmatterEnabled: Bool = true
     @State private var tagsInput: String = "typewhisper"
     @State private var autoExportEnabled: Bool = false
@@ -431,7 +436,7 @@ private struct ObsidianSettingsView: View {
                         .foregroundStyle(.secondary)
                         .padding(.leading, 108)
 
-                    Text("Placeholders: {{DATE}}, {{TIME}}, {{APP}}, {{LANG}}", bundle: bundle)
+                    Text("Placeholders: {{DATE}}, {{TIME}}, {{APP}}, {{LANGUAGE}}", bundle: bundle)
                         .font(.caption)
                         .foregroundStyle(.tertiary)
                         .padding(.leading, 108)
@@ -472,13 +477,17 @@ private struct ObsidianSettingsView: View {
                             HStack {
                                 Text("Append format:", bundle: bundle)
                                     .frame(width: 100, alignment: .trailing)
-                                Picker("Append format:", selection: appendFormatPreset) {
+                                Picker("Append format:", selection: $appendFormatSelection) {
                                     Text("Timestamp section", bundle: bundle).tag(DailyNoteAppendPreset.timestamp.template)
                                     Text("Plain append", bundle: bundle).tag(DailyNoteAppendPreset.plain.template)
                                     Text("Bullet list", bundle: bundle).tag(DailyNoteAppendPreset.bullet.template)
-                                    Text("Custom", bundle: bundle).tag(dailyNoteAppendTemplate)
+                                    Text("Custom", bundle: bundle).tag(DailyNoteAppendPreset.customSelection)
                                 }
                                 .labelsHidden()
+                                .onChange(of: appendFormatSelection) { _, newValue in
+                                    guard newValue != DailyNoteAppendPreset.customSelection else { return }
+                                    dailyNoteAppendTemplate = newValue
+                                }
                             }
 
                             TextEditor(text: $dailyNoteAppendTemplate)
@@ -488,6 +497,7 @@ private struct ObsidianSettingsView: View {
                                 .onChange(of: dailyNoteAppendTemplate) { _, newValue in
                                     plugin._dailyNoteAppendTemplate = newValue
                                     plugin.saveSetting(newValue, forKey: "dailyNoteAppendTemplate")
+                                    appendFormatSelection = DailyNoteAppendPreset.selection(for: newValue)
                                 }
 
                             Text("Placeholders: {{TEXT}}, {{TIME}}, {{DATE}}, {{APP}}, {{LANGUAGE}}, {{URL}}", bundle: bundle)
@@ -591,6 +601,7 @@ private struct ObsidianSettingsView: View {
             dailyNoteEnabled = plugin._dailyNoteEnabled
             dailyNoteFormat = plugin._dailyNoteFormat
             dailyNoteAppendTemplate = plugin._dailyNoteAppendTemplate
+            appendFormatSelection = DailyNoteAppendPreset.selection(for: dailyNoteAppendTemplate)
             frontmatterEnabled = plugin._frontmatterEnabled
             tagsInput = plugin._frontmatterTags.joined(separator: ", ")
             autoExportEnabled = plugin._autoExportEnabled
@@ -601,8 +612,12 @@ private struct ObsidianSettingsView: View {
     private var previewFilename: String {
         let now = Date()
         let dateFormatter = DateFormatter()
+        dateFormatter.calendar = Calendar(identifier: .gregorian)
+        dateFormatter.locale = Locale(identifier: "en_US_POSIX")
         dateFormatter.dateFormat = "yyyy-MM-dd"
         let timeFormatter = DateFormatter()
+        timeFormatter.calendar = Calendar(identifier: .gregorian)
+        timeFormatter.locale = Locale(identifier: "en_US_POSIX")
         timeFormatter.dateFormat = "HH-mm-ss"
 
         let template = dailyNoteEnabled ? dailyNoteFormat : filenameTemplate
@@ -610,14 +625,8 @@ private struct ObsidianSettingsView: View {
             .replacingOccurrences(of: "{{DATE}}", with: dateFormatter.string(from: now))
             .replacingOccurrences(of: "{{TIME}}", with: timeFormatter.string(from: now))
             .replacingOccurrences(of: "{{APP}}", with: "Safari")
+            .replacingOccurrences(of: "{{LANGUAGE}}", with: "en")
             .replacingOccurrences(of: "{{LANG}}", with: "en")
-    }
-
-    private var appendFormatPreset: Binding<String> {
-        Binding(
-            get: { dailyNoteAppendTemplate },
-            set: { dailyNoteAppendTemplate = $0 }
-        )
     }
 
     private func selectVaultFolder() {
@@ -639,6 +648,16 @@ private enum DailyNoteAppendPreset {
     case timestamp
     case plain
     case bullet
+
+    static let customSelection = "custom"
+
+    static var templates: [String] {
+        [timestamp.template, plain.template, bullet.template]
+    }
+
+    static func selection(for template: String) -> String {
+        templates.contains(template) ? template : customSelection
+    }
 
     var template: String {
         switch self {
