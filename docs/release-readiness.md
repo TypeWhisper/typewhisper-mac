@@ -119,6 +119,23 @@ These surfaces remain part of `1.x`, but they are positioned as advanced or auto
 - Stable releases update Homebrew and the stable appcast entry
 - RC and daily releases update only their own Sparkle channels
 
+### Appcast publication gate
+
+- The canonical feed is `https://typewhisper.github.io/typewhisper-mac/appcast.xml`, published from the `gh-pages` branch.
+- GitHub Pages currently serves the feed with `Cache-Control: max-age=600`; clients may therefore see the previous appcast during that cache window.
+- After pushing `appcast.xml`, the release workflow polls the canonical URL without cache-busting query parameters for up to 900 seconds.
+- The release job succeeds only when the public feed advertises a cache lifetime of at most 600 seconds and contains the exact release version, build version, Sparkle channel, ZIP download URL, EdDSA signature, and archive length.
+- A timeout leaves the GitHub release visible but marks the release workflow as failed, so the appcast publication must be investigated before the release is considered complete.
+
+Inspect the effective public headers and feed with:
+
+```bash
+curl -fsS -D /tmp/typewhisper-appcast-headers.txt \
+  -o /tmp/typewhisper-appcast.xml \
+  https://typewhisper.github.io/typewhisper-mac/appcast.xml
+cat /tmp/typewhisper-appcast-headers.txt
+```
+
 ## Support and Diagnostics
 
 - Support requests should always include the JSON diagnostics export from the Error Log.
