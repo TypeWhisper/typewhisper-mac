@@ -460,7 +460,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
 
     func isInputDevicePriorityItemAvailable(_ item: AudioInputDevicePriorityItem) -> Bool {
         guard let device = inputDevices.first(where: { $0.uid == item.uid }) else { return false }
-        if Self.transportType(for: device.deviceID) == kAudioDeviceTransportTypeBuiltIn, Self.isClamshellMode() {
+        if transportType(for: device.deviceID) == kAudioDeviceTransportTypeBuiltIn, clamshellStateProvider.isLidClosed() {
             return false
         }
         return true
@@ -1137,23 +1137,14 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
     static func isInputDeviceAvailable(_ deviceID: AudioDeviceID) -> Bool {
         guard inputChannelCount(for: deviceID) > 0 else { return false }
         
-        if transportType(for: deviceID) == kAudioDeviceTransportTypeBuiltIn, isClamshellMode() {
+        if transportType(for: deviceID) == kAudioDeviceTransportTypeBuiltIn, IOKitClamshellStateProvider().isLidClosed() {
             return false
         }
         
         return true
     }
 
-    private static func isClamshellMode() -> Bool {
-        var displayCount: UInt32 = 0
-        CGGetActiveDisplayList(0, nil, &displayCount)
-        guard displayCount > 0 else { return false }
-        
-        var activeDisplays = [CGDirectDisplayID](repeating: 0, count: Int(displayCount))
-        CGGetActiveDisplayList(displayCount, &activeDisplays, &displayCount)
-        
-        return !activeDisplays.contains(where: { CGDisplayIsBuiltin($0) != 0 })
-    }
+
 
     private func listInputDevices() -> [AudioInputDevice] {
         Self.availableInputDevices()
