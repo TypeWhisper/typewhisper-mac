@@ -857,6 +857,23 @@ final class DockIconVisibilityTests: XCTestCase {
     }
 }
 
+@MainActor
+final class ManagedAppWindowRestorationTests: XCTestCase {
+    func testManagedWindowIsMarkedNonRestorable() {
+        let window = NSWindow(
+            contentRect: CGRect(x: 0, y: 0, width: 400, height: 300),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        window.isRestorable = true
+
+        ManagedAppWindowRestoration.disable(for: window)
+
+        XCTAssertFalse(window.isRestorable)
+    }
+}
+
 final class MenuBarGroupingTests: XCTestCase {
     func testMenuBarSectionsUseExpectedOrderAndLocalizedKeys() {
         XCTAssertEqual(
