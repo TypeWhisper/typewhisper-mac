@@ -209,6 +209,9 @@ final class DictationViewModel: ObservableObject {
     @Published var transcribeShortQuietClipsAggressively: Bool {
         didSet { Self.persistTranscribeShortQuietClipsAggressively(transcribeShortQuietClipsAggressively) }
     }
+    @Published var requireSecondEscapeToCancelRecording: Bool {
+        didSet { Self.persistRequireSecondEscapeToCancelRecording(requireSecondEscapeToCancelRecording) }
+    }
     @Published var microphoneBoostEnabled: Bool {
         didSet {
             Self.persistMicrophoneBoostEnabled(microphoneBoostEnabled)
@@ -485,6 +488,7 @@ final class DictationViewModel: ObservableObject {
         self.preserveClipboard = UserDefaults.standard.bool(forKey: UserDefaultsKeys.preserveClipboard)
         self.mediaPauseEnabled = UserDefaults.standard.bool(forKey: UserDefaultsKeys.mediaPauseEnabled)
         self.transcribeShortQuietClipsAggressively = Self.loadTranscribeShortQuietClipsAggressively()
+        self.requireSecondEscapeToCancelRecording = Self.loadRequireSecondEscapeToCancelRecording()
         self.microphoneBoostEnabled = Self.loadMicrophoneBoostEnabled()
         self.spokenFeedbackEnabled = UserDefaults.standard.bool(forKey: UserDefaultsKeys.spokenFeedbackEnabled)
         self.indicatorStyle = Self.loadIndicatorStyle()
@@ -597,6 +601,14 @@ final class DictationViewModel: ObservableObject {
 
     nonisolated static func persistTranscribeShortQuietClipsAggressively(_ enabled: Bool, defaults: UserDefaults = .standard) {
         defaults.set(enabled, forKey: UserDefaultsKeys.transcribeShortQuietClipsAggressively)
+    }
+
+    nonisolated static func loadRequireSecondEscapeToCancelRecording(defaults: UserDefaults = .standard) -> Bool {
+        defaults.object(forKey: UserDefaultsKeys.requireSecondEscapeToCancelRecording) as? Bool ?? true
+    }
+
+    nonisolated static func persistRequireSecondEscapeToCancelRecording(_ enabled: Bool, defaults: UserDefaults = .standard) {
+        defaults.set(enabled, forKey: UserDefaultsKeys.requireSecondEscapeToCancelRecording)
     }
 
     nonisolated static func loadMicrophoneBoostEnabled(defaults: UserDefaults = .standard) -> Bool {
@@ -934,6 +946,12 @@ final class DictationViewModel: ObservableObject {
 
     func handleCancelHotkey() {
         guard let target = cancelWarningTargetForCurrentState() else { return }
+
+        if target == .recording, !requireSecondEscapeToCancelRecording {
+            clearCancelWarning()
+            cancelCurrentOperation()
+            return
+        }
 
         if cancelWarningTarget == target {
             clearCancelWarning()

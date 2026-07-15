@@ -8588,6 +8588,22 @@
         }
       }
     },
+    "Require second Esc press to cancel recording": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zweites Drücken von Esc zum Abbrechen erforderlich"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "録音のキャンセルにEscキーを2回押す"
+          }
+        }
+      }
+    },
     "Press to start, press again to stop.": {
       "localizations": {
         "de": {
@@ -14320,6 +14336,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "無効にすると、インジケーターは録音状態のみを表示し、背景でのテキスト生成は継続されます。"
+          }
+        }
+      }
+    },
+    "When disabled, pressing Esc once immediately discards the active recording.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wenn deaktiviert, verwirft ein einmaliges Drücken von Esc die aktive Aufnahme sofort."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無効にすると、Escキーを1回押すだけで進行中の録音が直ちに破棄されます。"
           }
         }
       }

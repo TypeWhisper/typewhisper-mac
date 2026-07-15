@@ -41,6 +41,152 @@ enum DockIconVisibility {
     }
 }
 
+@MainActor
+enum ManagedAppWindowRestoration {
+    static func disable(for window: NSWindow) {
+        window.isRestorable = false
+    }
+}
+
+private final class ManagedAppWindowRestorationView: NSView {
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        guard let window else { return }
+        ManagedAppWindowRestoration.disable(for: window)
+    }
+}
+
+private struct ManagedAppWindowRestorationAccessor: NSViewRepresentable {
+    func makeNSView(context: Context) -> ManagedAppWindowRestorationView {
+        ManagedAppWindowRestorationView()
+    }
+
+    func updateNSView(_ nsView: ManagedAppWindowRestorationView, context: Context) {
+        guard let window = nsView.window else { return }
+        ManagedAppWindowRestoration.disable(for: window)
+    }
+}
+
+private extension View {
+    func disablesManagedAppWindowRestoration() -> some View {
+        background(ManagedAppWindowRestorationAccessor().frame(width: 0, height: 0))
+    }
+}
+
+struct SettingsManagedAppWindowScene: Scene {
+    let content: AnyView
+
+    var body: some Scene {
+        Window(String(localized: "Settings"), id: "settings") {
+            content
+                .disablesManagedAppWindowRestoration()
+        }
+        .windowResizability(.contentMinSize)
+        .defaultSize(width: 1050, height: 600)
+    }
+}
+
+struct SetupManagedAppWindowScene: Scene {
+    let content: AnyView
+
+    var body: some Scene {
+        Window(String(localized: "TypeWhisper Setup"), id: "setup") {
+            content
+                .disablesManagedAppWindowRestoration()
+        }
+        .windowStyle(.hiddenTitleBar)
+        .windowResizability(.contentSize)
+        .defaultSize(width: 820, height: 560)
+    }
+}
+
+struct HistoryManagedAppWindowScene: Scene {
+    let content: AnyView
+
+    var body: some Scene {
+        Window(String(localized: "History"), id: "history") {
+            content
+                .disablesManagedAppWindowRestoration()
+        }
+        .windowResizability(.contentMinSize)
+        .defaultSize(width: 900, height: 500)
+    }
+}
+
+struct ErrorLogManagedAppWindowScene: Scene {
+    let content: AnyView
+
+    var body: some Scene {
+        Window(String(localized: "Error Log"), id: "errors") {
+            content
+                .disablesManagedAppWindowRestoration()
+        }
+        .windowResizability(.contentMinSize)
+        .defaultSize(width: 500, height: 400)
+    }
+}
+
+@MainActor
+protocol ManagedAppWindowSceneConfiguration {
+    associatedtype SettingsScene: Scene
+    associatedtype SetupScene: Scene
+    associatedtype HistoryScene: Scene
+    associatedtype ErrorLogScene: Scene
+
+    static func settings(content: AnyView) -> SettingsScene
+    static func setup(content: AnyView) -> SetupScene
+    static func history(content: AnyView) -> HistoryScene
+    static func errorLog(content: AnyView) -> ErrorLogScene
+}
+
+enum LegacyManagedAppWindowSceneConfiguration: ManagedAppWindowSceneConfiguration {
+    static func settings(content: AnyView) -> some Scene {
+        SettingsManagedAppWindowScene(content: content)
+    }
+
+    static func setup(content: AnyView) -> some Scene {
+        SetupManagedAppWindowScene(content: content)
+    }
+
+    static func history(content: AnyView) -> some Scene {
+        HistoryManagedAppWindowScene(content: content)
+    }
+
+    static func errorLog(content: AnyView) -> some Scene {
+        ErrorLogManagedAppWindowScene(content: content)
+    }
+}
+
+@available(macOS 15.0, *)
+struct SuppressedManagedAppWindowScene<Content: Scene>: Scene {
+    let content: Content
+
+    var body: some Scene {
+        content
+            .defaultLaunchBehavior(.suppressed)
+            .restorationBehavior(.disabled)
+    }
+}
+
+@available(macOS 15.0, *)
+enum SuppressedManagedAppWindowSceneConfiguration: ManagedAppWindowSceneConfiguration {
+    static func settings(content: AnyView) -> some Scene {
+        SuppressedManagedAppWindowScene(content: SettingsManagedAppWindowScene(content: content))
+    }
+
+    static func setup(content: AnyView) -> some Scene {
+        SuppressedManagedAppWindowScene(content: SetupManagedAppWindowScene(content: content))
+    }
+
+    static func history(content: AnyView) -> some Scene {
+        SuppressedManagedAppWindowScene(content: HistoryManagedAppWindowScene(content: content))
+    }
+
+    static func errorLog(content: AnyView) -> some Scene {
+        SuppressedManagedAppWindowScene(content: ErrorLogManagedAppWindowScene(content: content))
+    }
+}
+
 enum MenuBarIconState {
     static func isRecordingActive(
         dictationState: DictationViewModel.State,
@@ -147,7 +293,7 @@ enum MenuBarLogoMarkImage {
     }
 }
 
-struct TypeWhisperApp: App {
+struct TypeWhisperApp<WindowConfiguration: ManagedAppWindowSceneConfiguration>: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @AppStorage(UserDefaultsKeys.showMenuBarIcon) private var showMenuBarIcon = true
     @State private var startupSheet: StartupSheetRoute?
@@ -179,34 +325,10 @@ struct TypeWhisperApp: App {
             }
         }
 
-        settingsScene
-
-        Window(String(localized: "TypeWhisper Setup"), id: "setup") {
-            setupContent
-        }
-        .windowStyle(.hiddenTitleBar)
-        .windowResizability(.contentSize)
-        .defaultSize(width: 820, height: 560)
-
-        Window(String(localized: "History"), id: "history") {
-            historyContent
-        }
-        .windowResizability(.contentMinSize)
-        .defaultSize(width: 900, height: 500)
-
-        Window(String(localized: "Error Log"), id: "errors") {
-            errorLogContent
-        }
-        .windowResizability(.contentMinSize)
-        .defaultSize(width: 500, height: 400)
-    }
-
-    private var settingsScene: some Scene {
-        Window(String(localized: "Settings"), id: "settings") {
-            settingsContent
-        }
-        .windowResizability(.contentMinSize)
-        .defaultSize(width: 1050, height: 600)
+        WindowConfiguration.settings(content: AnyView(settingsContent))
+        WindowConfiguration.setup(content: AnyView(setupContent))
+        WindowConfiguration.history(content: AnyView(historyContent))
+        WindowConfiguration.errorLog(content: AnyView(errorLogContent))
     }
 
     @ViewBuilder
