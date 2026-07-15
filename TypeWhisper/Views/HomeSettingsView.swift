@@ -5,6 +5,7 @@ struct HomeSettingsView: View {
     @ObservedObject private var viewModel = HomeViewModel.shared
     @ObservedObject private var dictation = DictationViewModel.shared
     @ObservedObject private var license = LicenseService.shared
+    @ObservedObject private var statistics = StatisticsViewModel.shared
     @AppStorage(UserDefaultsKeys.workUsagePromptDismissed) private var workUsagePromptDismissed = false
 
     var body: some View {
@@ -37,9 +38,9 @@ struct HomeSettingsView: View {
                         workUsageCard
                     }
 
-                    // Row 1: Getting Started or Statistics teaser
+                    // Row 1: Getting Started or Statistics summary
                     if viewModel.hasAnyTranscriptions {
-                        statisticsTeaserCard
+                        statisticsSummarySection
                     } else {
                         gettingStartedCard
                     }
@@ -77,37 +78,69 @@ struct HomeSettingsView: View {
         .frame(minWidth: 500, minHeight: 400)
     }
 
-    // MARK: - Statistics teaser
+    // MARK: - Statistics summary
 
-    private var statisticsTeaserCard: some View {
+    private var statisticsSummarySection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Button {
+                viewModel.navigateToStatistics = true
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "chart.bar.xaxis")
+                        .font(.subheadline)
+                        .foregroundStyle(.blue)
+                    Text(String(localized: "Your Activity"))
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                    Spacer()
+                    Text(String(localized: "View all statistics"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Image(systemName: "chevron.right")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(String(localized: "View your statistics"))
+
+            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4), spacing: 12) {
+                statisticsSummaryCard(
+                    title: String(localized: "Words"),
+                    value: "\(statistics.wordsCount)",
+                    systemImage: "text.word.spacing"
+                )
+                statisticsSummaryCard(
+                    title: String(localized: "Avg. WPM"),
+                    value: statistics.averageWPM,
+                    systemImage: "speedometer"
+                )
+                statisticsSummaryCard(
+                    title: String(localized: "Apps Used"),
+                    value: "\(statistics.appsUsed)",
+                    systemImage: "app.badge"
+                )
+                statisticsSummaryCard(
+                    title: String(localized: "Time Saved"),
+                    value: statistics.timeSaved,
+                    systemImage: "clock.badge.checkmark"
+                )
+            }
+        }
+        .padding()
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.quaternary.opacity(0.3))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private func statisticsSummaryCard(title: String, value: String, systemImage: String) -> some View {
         Button {
             viewModel.navigateToStatistics = true
         } label: {
-            HStack(spacing: 12) {
-                Image(systemName: "chart.bar.xaxis")
-                    .font(.title2)
-                    .foregroundStyle(.blue)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(String(localized: "View your statistics"))
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-                    Text(String(localized: "Streaks, top apps, models used, and activity by time of day."))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-            }
-            .padding()
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(.quaternary.opacity(0.3))
-            .clipShape(RoundedRectangle(cornerRadius: 8))
-            .contentShape(Rectangle())
+            StatisticsMetricCard(title: title, value: value, systemImage: systemImage)
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(String(localized: "View your statistics"))
     }
 
     private var workUsageCard: some View {

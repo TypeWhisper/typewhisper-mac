@@ -22833,6 +22833,22 @@
         }
       }
     },
+    "View all statistics": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle Statistiken ansehen"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "すべての統計を見る"
+          }
+        }
+      }
+    },
     "View your statistics": {
       "localizations": {
         "de": {
@@ -22845,6 +22861,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "統計を見る"
+          }
+        }
+      }
+    },
+    "Your Activity": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deine Aktivität"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "あなたのアクティビティ"
           }
         }
       }

@@ -478,7 +478,7 @@ private struct StatisticsStatCard: View {
     }
 }
 
-private struct StatisticsMetricCard: View {
+struct StatisticsMetricCard: View {
     let title: String
     let value: String
     let systemImage: String
