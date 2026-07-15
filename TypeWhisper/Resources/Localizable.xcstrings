@@ -3501,6 +3501,22 @@
         }
       }
     },
+    "Dictation": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diktat"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ディクテーション"
+          }
+        }
+      }
+    },
     "Dictated text will appear here.": {
       "localizations": {
         "de": {
