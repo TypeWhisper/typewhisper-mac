@@ -308,6 +308,7 @@ final class ServiceContainer: ObservableObject {
         modelManagerService.restoreProviderSelection()
         audioRecorderViewModel.reconcileSelectionWithAvailablePlugins()
         watchFolderViewModel.reconcileSelectionWithAvailablePlugins()
+        statisticsViewModel.refresh()
 
         // Validate LLM provider selection against loaded plugins
         promptProcessingService.validateSelectionAfterPluginLoad()

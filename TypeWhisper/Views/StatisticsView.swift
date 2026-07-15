@@ -53,21 +53,21 @@ struct StatisticsView: View {
 
     private func periodButton(_ period: TimePeriod) -> some View {
         let isSelected = viewModel.selectedTimePeriod == period
-        return Text(period.displayName)
-            .font(.caption)
-            .fontWeight(isSelected ? .semibold : .regular)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 4)
-            .background(isSelected ? Color.accentColor : Color.clear)
-            .foregroundStyle(isSelected ? .white : .secondary)
-            .clipShape(RoundedRectangle(cornerRadius: 5))
-            .contentShape(Rectangle())
-            .onTapGesture {
-                viewModel.selectedTimePeriod = period
-            }
-            .accessibilityAddTraits(.isButton)
-            .accessibilityLabel(period.displayName)
-            .accessibilityValue(isSelected ? String(localized: "Selected") : "")
+        return Button {
+            viewModel.selectedTimePeriod = period
+        } label: {
+            Text(period.displayName)
+                .font(.caption)
+                .fontWeight(isSelected ? .semibold : .regular)
+                .padding(.horizontal, 10)
+                .padding(.vertical, 4)
+                .background(isSelected ? Color.accentColor : Color.clear)
+                .foregroundStyle(isSelected ? .white : .secondary)
+                .clipShape(RoundedRectangle(cornerRadius: 5))
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(isSelected ? .isSelected : [])
+        .accessibilityLabel(period.displayName)
     }
 
     // MARK: - Overview
@@ -221,6 +221,10 @@ struct StatisticsView: View {
                                 .fill(heatmapCellColor(count: count))
                                 .frame(width: cellWidth, height: heatmapCellHeight)
                                 .help(heatmapCellTooltip(count: count))
+                                .accessibilityElement()
+                                .accessibilityLabel(
+                                    Text("\(weekdayLabels[weekday]), \(hour):00, \(heatmapCellTooltip(count: count))")
+                                )
                         }
                     }
                 }

@@ -85,16 +85,16 @@ final class StatisticsViewModel: ObservableObject {
 
     func refresh() {
         let now = Date()
-        let allDays = usageStatisticsService.days
+        let periodDays = daysInSelectedPeriod(now: now)
 
-        totalDaysActive = allDays.count
-        let streaks = computeStreaks(from: allDays, now: now)
+        totalDaysActive = periodDays.count
+        let streaks = computeStreaks(from: periodDays, now: now)
         currentStreak = streaks.current
         longestStreak = streaks.longest
+        totalTranscriptions = periodDays.reduce(0) { $0 + $1.transcriptionCount }
+        totalWords = periodDays.reduce(0) { $0 + $1.totalWords }
 
         let periodRecords = recordsInSelectedPeriod(now: now)
-        totalTranscriptions = periodRecords.count
-        totalWords = periodRecords.reduce(0) { $0 + $1.wordsCount }
         appUsageStats = computeAppStats(from: periodRecords)
         modelUsageStats = computeModelStats(from: periodRecords)
         hourlyActivity = computeHourlyActivity(from: periodRecords)
@@ -141,6 +141,16 @@ final class StatisticsViewModel: ObservableObject {
     }
 
     // MARK: - Period filtering
+
+    private func daysInSelectedPeriod(now: Date) -> [UsageStatisticsDaySnapshot] {
+        let allDays = usageStatisticsService.days
+        guard let periodLength = selectedTimePeriod.days else { return allDays }
+        let calendar = Calendar.current
+        guard let cutoff = calendar.date(byAdding: .day, value: -(periodLength - 1), to: calendar.startOfDay(for: now)) else {
+            return allDays
+        }
+        return allDays.filter { $0.day >= cutoff }
+    }
 
     private func recordsInSelectedPeriod(now: Date) -> [TranscriptionRecord] {
         guard let days = selectedTimePeriod.days else { return historyService.records }
