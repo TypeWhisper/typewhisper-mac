@@ -327,7 +327,7 @@ final class StatisticsViewModel: ObservableObject {
         }
 
         guard let bundleIdentifier else {
-            return localizedAppText("Unknown App", de: "Unbekannte App", ja: "不明なアプリ")
+            return String(localized: "Unknown App")
         }
         let lastComponent = bundleIdentifier.split(separator: ".").last.map(String.init) ?? bundleIdentifier
         return lastComponent.replacingOccurrences(of: "-", with: " ").capitalized
@@ -388,7 +388,7 @@ final class StatisticsViewModel: ObservableObject {
         switch engineUsed.lowercased() {
         case "whisper": return "Whisper"
         case "parakeet": return "Parakeet"
-        case "unknown": return localizedAppText("Unknown", de: "Unbekannt", ja: "不明")
+        case "unknown": return String(localized: "Unknown")
         default: return engineUsed.capitalized
         }
     }

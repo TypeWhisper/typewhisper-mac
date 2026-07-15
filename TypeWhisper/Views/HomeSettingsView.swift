@@ -88,16 +88,12 @@ struct HomeSettingsView: View {
                     .font(.title2)
                     .foregroundStyle(.blue)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(localizedAppText("View your statistics", de: "Deine Statistiken ansehen", ja: "統計を見る"))
+                    Text(String(localized: "View your statistics"))
                         .font(.headline)
                         .foregroundStyle(.primary)
-                    Text(localizedAppText(
-                        "Streaks, top apps, models used, and activity by time of day.",
-                        de: "Serien, Top-Apps, verwendete Modelle und Aktivität nach Tageszeit.",
-                        ja: "連続記録、よく使うアプリ、使用したモデル、時間帯別のアクティビティ。"
-                    ))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    Text(String(localized: "Streaks, top apps, models used, and activity by time of day."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
                 Spacer()
                 Image(systemName: "chevron.right")
@@ -111,7 +107,7 @@ struct HomeSettingsView: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .accessibilityLabel(localizedAppText("View your statistics", de: "Deine Statistiken ansehen", ja: "統計を見る"))
+        .accessibilityLabel(String(localized: "View your statistics"))
     }
 
     private var workUsageCard: some View {

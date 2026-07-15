@@ -11,7 +11,7 @@ struct StatisticsView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack {
-                Text(localizedAppText("Statistics", de: "Statistiken", ja: "統計"))
+                Text(String(localized: "Statistics"))
                     .font(.title2)
                     .fontWeight(.semibold)
                 Spacer()
@@ -81,24 +81,27 @@ struct StatisticsView: View {
     private var overviewGrid: some View {
         LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4), spacing: 12) {
             StatisticsStatCard(
-                title: localizedAppText("Days Active", de: "Aktive Tage", ja: "利用日数"),
+                title: String(localized: "Days Active"),
                 value: "\(viewModel.totalDaysActive)",
                 systemImage: "calendar"
             )
             StatisticsStatCard(
-                title: localizedAppText("Current Streak", de: "Aktuelle Serie", ja: "現在の連続日数"),
-                value: localizedAppText("\(viewModel.currentStreak)d", de: "\(viewModel.currentStreak)T", ja: "\(viewModel.currentStreak)日"),
-                systemImage: "flame"
+                title: String(localized: "Current Streak"),
+                value: String(localized: "\(viewModel.currentStreak)d"),
+                systemImage: "flame",
+                accessibilityValue: String.localizedStringWithFormat(String(localized: "%lld days"), viewModel.currentStreak)
             )
             StatisticsStatCard(
-                title: localizedAppText("Longest Streak", de: "Längste Serie", ja: "最長連続日数"),
-                value: localizedAppText("\(viewModel.longestStreak)d", de: "\(viewModel.longestStreak)T", ja: "\(viewModel.longestStreak)日"),
-                systemImage: "trophy"
+                title: String(localized: "Longest Streak"),
+                value: String(localized: "\(viewModel.longestStreak)d"),
+                systemImage: "trophy",
+                accessibilityValue: String.localizedStringWithFormat(String(localized: "%lld days"), viewModel.longestStreak)
             )
             StatisticsStatCard(
-                title: localizedAppText("Transcriptions", de: "Transkriptionen", ja: "文字起こし数"),
+                title: String(localized: "Transcriptions"),
                 value: "\(viewModel.totalTranscriptions)",
-                systemImage: "waveform"
+                systemImage: "waveform",
+                accessibilityValue: String.localizedStringWithFormat(String(localized: "%lld dictations"), viewModel.totalTranscriptions)
             )
         }
     }
@@ -218,10 +221,7 @@ struct StatisticsView: View {
             return Text(String(localized: "Activity chart, no words in this period."))
         }
         let peakDay = peak.date.formatted(.dateTime.month(.abbreviated).day())
-        return Text(
-            "\(String(localized: "Activity chart")), \(totalWords) \(String(localized: "words total")), " +
-            "\(String(localized: "peak")) \(peak.wordCount) \(String(localized: "words on")) \(peakDay)."
-        )
+        return Text(String(localized: "Activity chart, \(totalWords) words total, peak \(peak.wordCount) words on \(peakDay)."))
     }
 
     private var chartAxisStride: Int {
@@ -236,17 +236,13 @@ struct StatisticsView: View {
 
     private var appsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(localizedAppText("Top Apps", de: "Top Apps", ja: "よく使うアプリ"))
+            Text(String(localized: "Top Apps"))
                 .font(.headline)
 
             if viewModel.appUsageStats.isEmpty {
-                Text(localizedAppText(
-                    "No app usage data for this period.",
-                    de: "Keine App-Nutzungsdaten für diesen Zeitraum.",
-                    ja: "この期間のアプリ利用データはありません。"
-                ))
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, minHeight: 60)
+                Text(String(localized: "No app usage data for this period."))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, minHeight: 60)
             } else {
                 VStack(spacing: 10) {
                     ForEach(viewModel.appUsageStats) { stat in
@@ -271,6 +267,10 @@ struct StatisticsView: View {
                             }
                             .frame(height: 6)
                         }
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(
+                            Text("\(stat.displayName), \(String.localizedStringWithFormat(String(localized: "%lld dictations"), stat.count))")
+                        )
                     }
                 }
             }
@@ -285,29 +285,25 @@ struct StatisticsView: View {
 
     private var weekdayLabels: [String] {
         [
-            localizedAppText("Mon", de: "Mo", ja: "月"),
-            localizedAppText("Tue", de: "Di", ja: "火"),
-            localizedAppText("Wed", de: "Mi", ja: "水"),
-            localizedAppText("Thu", de: "Do", ja: "木"),
-            localizedAppText("Fri", de: "Fr", ja: "金"),
-            localizedAppText("Sat", de: "Sa", ja: "土"),
-            localizedAppText("Sun", de: "So", ja: "日")
+            String(localized: "Mon"),
+            String(localized: "Tue"),
+            String(localized: "Wed"),
+            String(localized: "Thu"),
+            String(localized: "Fri"),
+            String(localized: "Sat"),
+            String(localized: "Sun")
         ]
     }
 
     private var heatmapSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(localizedAppText("Usage by Time of Day", de: "Nutzung nach Tageszeit", ja: "時間帯別の利用状況"))
+            Text(String(localized: "Usage by Time of Day"))
                 .font(.headline)
 
             if viewModel.maxHourlyCount == 0 {
-                Text(localizedAppText(
-                    "No activity for this period.",
-                    de: "Keine Aktivität für diesen Zeitraum.",
-                    ja: "この期間のアクティビティはありません。"
-                ))
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, minHeight: 60)
+                Text(String(localized: "No activity for this period."))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, minHeight: 60)
             } else {
                 heatmapGrid
             }
@@ -377,28 +373,20 @@ struct StatisticsView: View {
     }
 
     private func heatmapCellTooltip(count: Int) -> String {
-        localizedAppText(
-            "\(count) dictations",
-            de: "\(count) Diktate",
-            ja: "\(count)件の文字起こし"
-        )
+        String.localizedStringWithFormat(String(localized: "%lld dictations"), count)
     }
 
     // MARK: - Models
 
     private var modelsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(localizedAppText("Models Used", de: "Verwendete Modelle", ja: "使用したモデル"))
+            Text(String(localized: "Models Used"))
                 .font(.headline)
 
             if viewModel.modelUsageStats.isEmpty {
-                Text(localizedAppText(
-                    "No transcription data for this period.",
-                    de: "Keine Transkriptionsdaten für diesen Zeitraum.",
-                    ja: "この期間の文字起こしデータはありません。"
-                ))
-                .foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, minHeight: 60)
+                Text(String(localized: "No transcription data for this period."))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, minHeight: 60)
             } else {
                 VStack(spacing: 10) {
                     ForEach(viewModel.modelUsageStats) { stat in
@@ -423,6 +411,10 @@ struct StatisticsView: View {
                             }
                             .frame(height: 6)
                         }
+                        .accessibilityElement(children: .ignore)
+                        .accessibilityLabel(
+                            Text("\(stat.label), \(String.localizedStringWithFormat(String(localized: "%lld dictations"), stat.count))")
+                        )
                     }
                 }
             }
@@ -442,14 +434,10 @@ struct StatisticsView: View {
                 .foregroundStyle(.blue)
                 .accessibilityHidden(true)
 
-            Text(localizedAppText(
-                "Your statistics will appear here after your first transcription.",
-                de: "Deine Statistiken erscheinen hier nach deiner ersten Transkription.",
-                ja: "最初の文字起こしの後、ここに統計が表示されます。"
-            ))
-            .font(.callout)
-            .foregroundStyle(.secondary)
-            .multilineTextAlignment(.center)
+            Text(String(localized: "Your statistics will appear here after your first transcription."))
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 24)
@@ -462,6 +450,8 @@ private struct StatisticsStatCard: View {
     let title: String
     let value: String
     let systemImage: String
+    /// Overrides `value` for VoiceOver, e.g. spelling out "3 days" instead of the compact "3d" badge text.
+    var accessibilityValue: String?
 
     var body: some View {
         VStack(spacing: 6) {
@@ -482,7 +472,7 @@ private struct StatisticsStatCard: View {
         .background(.quaternary.opacity(0.3))
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(Text("\(title), \(value)"))
+        .accessibilityLabel(Text("\(title), \(accessibilityValue ?? value)"))
     }
 }
 
