@@ -35,6 +35,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         let viewModel = FileTranscriptionViewModel(
             modelManager: ModelManagerService(),
             audioFileService: AudioFileService(),
+            dictionaryService: makeDictionaryService(),
             defaults: defaults
         )
 
@@ -56,6 +57,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         let viewModel = FileTranscriptionViewModel(
             modelManager: ModelManagerService(),
             audioFileService: AudioFileService(),
+            dictionaryService: makeDictionaryService(),
             defaults: defaults,
             audioSamplesLoader: { url, _, _ in
                 XCTAssertEqual(url, fileURL)
@@ -98,6 +100,70 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.files.first?.result?.text, "Recovered text")
     }
 
+    func testTranscribeAllAppliesDictionaryCorrectionsToTextAndSegmentsPreservingMetadata() async throws {
+        let defaults = try makeDefaults()
+        let fileURL = makeTemporaryFile(named: "corrected-transcript.wav")
+        let dictionaryService = makeDictionaryService()
+        dictionaryService.addEntry(type: .correction, original: "teh", replacement: "the")
+        dictionaryService.addEntry(type: .correction, original: "cross segment", replacement: "joined")
+
+        let viewModel = FileTranscriptionViewModel(
+            modelManager: ModelManagerService(),
+            audioFileService: AudioFileService(),
+            dictionaryService: dictionaryService,
+            defaults: defaults,
+            audioSamplesLoader: { _, _, _ in [0.1, -0.1] },
+            transcriptionRunner: { _, _, _, engineOverrideId, _, _, _, _ in
+                TranscriptionResult(
+                    text: "teh cross segment",
+                    detectedLanguage: "en",
+                    duration: 4.5,
+                    processingTime: 0.25,
+                    engineUsed: engineOverrideId ?? "default",
+                    segments: [
+                        TranscriptionSegment(
+                            text: "teh cross",
+                            start: 0.25,
+                            end: 2,
+                            speakerLabel: "Speaker 1",
+                            speakerConfidence: 0.9
+                        ),
+                        TranscriptionSegment(
+                            text: "segment",
+                            start: 2,
+                            end: 4.25,
+                            speakerLabel: "Speaker 2",
+                            speakerConfidence: 0.8
+                        )
+                    ]
+                )
+            },
+            engineReadinessChecker: { _ in true }
+        )
+
+        viewModel.addFiles([fileURL])
+        viewModel.selectedEngine = "whisper"
+        viewModel.transcribeAll()
+        try await waitForBatchToFinish(viewModel)
+
+        let result = try XCTUnwrap(viewModel.files.first?.result)
+        XCTAssertEqual(result.text, "the joined")
+        XCTAssertEqual(result.detectedLanguage, "en")
+        XCTAssertEqual(result.duration, 4.5)
+        XCTAssertEqual(result.processingTime, 0.25)
+        XCTAssertEqual(result.engineUsed, "whisper")
+        XCTAssertEqual(result.segments.map(\.text), ["the cross", "segment"])
+        XCTAssertEqual(result.segments.map(\.start), [0.25, 2])
+        XCTAssertEqual(result.segments.map(\.end), [2, 4.25])
+        XCTAssertEqual(result.segments.map(\.speakerLabel), ["Speaker 1", "Speaker 2"])
+        XCTAssertEqual(result.segments.map(\.speakerConfidence), [0.9, 0.8])
+        XCTAssertEqual(dictionaryService.corrections.map(\.usageCount), [1, 1])
+        XCTAssertEqual(
+            SubtitleExporter.exportContent(for: result, format: .vtt),
+            "WEBVTT\n\n1\n00:00:00.250 --> 00:00:02.000\nSpeaker 1: the cross\n\n2\n00:00:02.000 --> 00:00:04.250\nSpeaker 2: segment\n"
+        )
+    }
+
     func testTranscribeAllExposesLoadingProgressAndElapsedTime() async throws {
         let defaults = try makeDefaults()
         let fileURL = makeTemporaryFile(named: "long-video.mp4")
@@ -107,6 +173,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         let viewModel = FileTranscriptionViewModel(
             modelManager: ModelManagerService(),
             audioFileService: AudioFileService(),
+            dictionaryService: makeDictionaryService(),
             defaults: defaults,
             audioSamplesLoader: { url, onProgress, _ in
                 XCTAssertEqual(url, fileURL)
@@ -157,6 +224,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         let viewModel = FileTranscriptionViewModel(
             modelManager: ModelManagerService(),
             audioFileService: AudioFileService(),
+            dictionaryService: makeDictionaryService(),
             defaults: defaults,
             audioSamplesLoader: { _, _, isCancelled in
                 await started.open()
@@ -203,6 +271,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         let viewModel = FileTranscriptionViewModel(
             modelManager: ModelManagerService(),
             audioFileService: AudioFileService(),
+            dictionaryService: makeDictionaryService(),
             defaults: defaults,
             audioSamplesLoader: { _, _, _ in [0.1, -0.1] },
             transcriptionRunner: { _, _, _, engineOverrideId, _, onProgress, _, _ in
@@ -244,6 +313,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         let viewModel = FileTranscriptionViewModel(
             modelManager: ModelManagerService(),
             audioFileService: AudioFileService(),
+            dictionaryService: makeDictionaryService(),
             defaults: defaults,
             audioSamplesLoader: { _, _, _ in [0.1, -0.1] },
             transcriptionRunner: { _, _, _, engineOverrideId, _, _, onSourceProgress, _ in
@@ -294,6 +364,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         let viewModel = FileTranscriptionViewModel(
             modelManager: ModelManagerService(),
             audioFileService: AudioFileService(),
+            dictionaryService: makeDictionaryService(),
             defaults: defaults,
             subtitleFileSaver: { content, format, suggestedName in
                 savedContent = content
@@ -330,6 +401,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         let viewModel = FileTranscriptionViewModel(
             modelManager: ModelManagerService(),
             audioFileService: AudioFileService(),
+            dictionaryService: makeDictionaryService(),
             defaults: defaults,
             subtitleFileSaver: { _, _, _ in
                 XCTFail("Multi-file export should use the folder export path")
@@ -370,6 +442,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         let viewModel = FileTranscriptionViewModel(
             modelManager: ModelManagerService(),
             audioFileService: AudioFileService(),
+            dictionaryService: makeDictionaryService(),
             defaults: defaults,
             subtitleFileSaver: { content, _, _ in
                 savedContent = content
@@ -438,6 +511,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         let viewModel = FileTranscriptionViewModel(
             modelManager: ModelManagerService(),
             audioFileService: AudioFileService(),
+            dictionaryService: makeDictionaryService(),
             defaults: defaults,
             audioSamplesLoader: { _, onProgress, isCancelled in
                 while !isCancelled() {
@@ -658,6 +732,10 @@ final class FileTranscriptionViewModelTests: XCTestCase {
             defaults.removePersistentDomain(forName: name)
         }
         return defaults
+    }
+
+    private func makeDictionaryService() -> DictionaryService {
+        DictionaryService(appSupportDirectory: makeTemporaryDirectory())
     }
 
     private func makeTemporaryFile(named name: String) -> URL {

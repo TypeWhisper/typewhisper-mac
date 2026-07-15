@@ -114,6 +114,27 @@ final class DictionaryServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testBatchCorrectionsUpdateRelatedTextsAndCountEachCorrectionOnce() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.addEntry(type: .correction, original: "teh", replacement: "the")
+
+        XCTAssertEqual(
+            service.applyCorrections(to: ["teh TypeWhisper", "teh first segment", "unchanged"]),
+            ["the TypeWhisper", "the first segment", "unchanged"]
+        )
+        XCTAssertEqual(service.corrections.first?.usageCount, 1)
+
+        XCTAssertEqual(
+            service.applyCorrections(to: ["already correct", "still unchanged"]),
+            ["already correct", "still unchanged"]
+        )
+        XCTAssertEqual(service.corrections.first?.usageCount, 1)
+    }
+
+    @MainActor
     func testBatchLearningSkipsDuplicatesAndUndoDeletesOnlyMatchingCreatedEntries() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }

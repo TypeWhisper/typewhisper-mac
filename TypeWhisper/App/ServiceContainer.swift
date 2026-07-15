@@ -142,7 +142,8 @@ final class ServiceContainer: ObservableObject {
         // ViewModels (created before HTTP API so DictationViewModel is available)
         fileTranscriptionViewModel = FileTranscriptionViewModel(
             modelManager: modelManagerService,
-            audioFileService: audioFileService
+            audioFileService: audioFileService,
+            dictionaryService: dictionaryService
         )
         let recoveryViewModel = DictationRecoveryViewModel(
             audioRecordingService: audioRecordingService,

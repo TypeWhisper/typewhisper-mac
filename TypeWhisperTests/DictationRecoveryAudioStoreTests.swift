@@ -142,7 +142,8 @@ final class DictationRecoveryAudioStoreTests: XCTestCase {
         let modelManager = ModelManagerService()
         let fileTranscriptionViewModel = FileTranscriptionViewModel(
             modelManager: modelManager,
-            audioFileService: AudioFileService()
+            audioFileService: AudioFileService(),
+            dictionaryService: DictionaryService(appSupportDirectory: appSupportDirectory)
         )
         FileTranscriptionViewModel._shared = fileTranscriptionViewModel
         let navigationCoordinator = SettingsNavigationCoordinator()

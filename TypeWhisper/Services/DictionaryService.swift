@@ -573,16 +573,25 @@ final class DictionaryService: ObservableObject {
 
     /// Apply all enabled corrections to the given text
     func applyCorrections(to text: String) -> String {
-        var result = text
+        applyCorrections(to: [text]).first ?? text
+    }
+
+    /// Apply all enabled corrections to related text fields while counting each correction once.
+    func applyCorrections(to texts: [String]) -> [String] {
+        var results = texts
         var needsSave = false
 
         for correction in corrections {
             guard let replacement = correction.replacement else { continue }
 
-            let before = result
-            result = applyCorrection(correction, to: result, replacement: replacement)
+            var correctionWasApplied = false
+            for index in results.indices {
+                let before = results[index]
+                results[index] = applyCorrection(correction, to: before, replacement: replacement)
+                correctionWasApplied = correctionWasApplied || results[index] != before
+            }
 
-            if result != before {
+            if correctionWasApplied {
                 correction.usageCount += 1
                 needsSave = true
             }
@@ -596,7 +605,7 @@ final class DictionaryService: ObservableObject {
             }
         }
 
-        return result
+        return results
     }
 
     private func applyCorrection(_ correction: DictionaryEntry, to text: String, replacement: String) -> String {
