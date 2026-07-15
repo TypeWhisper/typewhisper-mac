@@ -200,6 +200,8 @@
 		AA00000000000000000089 /* error.wav in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000089 /* error.wav */; };
 		AA00000000000000000090 /* HomeViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000090 /* HomeViewModel.swift */; };
 		AA00000000000000000091 /* HomeSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000091 /* HomeSettingsView.swift */; };
+		B7A100000000000000000001 /* StatisticsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7A100000000000000000002 /* StatisticsViewModel.swift */; };
+		B7A100000000000000000003 /* StatisticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7A100000000000000000004 /* StatisticsView.swift */; };
 		AA00000000000000000092 /* SetupWizardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000092 /* SetupWizardView.swift */; };
 		AA00000000000000000093 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000093 /* main.swift */; };
 		AA00000000000000000094 /* AudioWaveformView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000094 /* AudioWaveformView.swift */; };
@@ -658,6 +660,8 @@
 		BB00000000000000000089 /* error.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = error.wav; sourceTree = "<group>"; };
 		BB00000000000000000090 /* HomeViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeViewModel.swift; sourceTree = "<group>"; };
 		BB00000000000000000091 /* HomeSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeSettingsView.swift; sourceTree = "<group>"; };
+		B7A100000000000000000002 /* StatisticsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatisticsViewModel.swift; sourceTree = "<group>"; };
+		B7A100000000000000000004 /* StatisticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatisticsView.swift; sourceTree = "<group>"; };
 		BB00000000000000000092 /* SetupWizardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupWizardView.swift; sourceTree = "<group>"; };
 		BB00000000000000000093 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		BB00000000000000000094 /* AudioWaveformView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioWaveformView.swift; sourceTree = "<group>"; };
@@ -1592,6 +1596,7 @@
 				BB00000000000000000082 /* DictionaryViewModel.swift */,
 				BB00000000000000000084 /* SnippetsViewModel.swift */,
 				BB00000000000000000090 /* HomeViewModel.swift */,
+				B7A100000000000000000002 /* StatisticsViewModel.swift */,
 				BB00000000000000000116 /* PromptActionsViewModel.swift */,
 				BB00000000000000000314 /* PromptWizardSupport.swift */,
 				BB00000000000000000171 /* DictationEnums.swift */,
@@ -1630,6 +1635,7 @@
 				BB00000000000000000083 /* DictionarySettingsView.swift */,
 				BB00000000000000000085 /* SnippetsSettingsView.swift */,
 				BB00000000000000000091 /* HomeSettingsView.swift */,
+				B7A100000000000000000004 /* StatisticsView.swift */,
 				BB00000000000000000092 /* SetupWizardView.swift */,
 				BB00000000000000000094 /* AudioWaveformView.swift */,
 				BB00000000000000000117 /* PromptActionsSettingsView.swift */,
@@ -3959,6 +3965,8 @@
 				AA00000000000000000086 /* SoundService.swift in Sources */,
 				AA00000000000000000090 /* HomeViewModel.swift in Sources */,
 				AA00000000000000000091 /* HomeSettingsView.swift in Sources */,
+				B7A100000000000000000001 /* StatisticsViewModel.swift in Sources */,
+				B7A100000000000000000003 /* StatisticsView.swift in Sources */,
 				AA00000000000000000092 /* SetupWizardView.swift in Sources */,
 				AA00000000000000000094 /* AudioWaveformView.swift in Sources */,
 				AA00000000000000000093 /* main.swift in Sources */,

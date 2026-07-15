@@ -4,7 +4,7 @@ import TypeWhisperPluginSDK
 
 enum SettingsTab: Hashable {
     case home, general, recording, hotkeys, recorder
-    case dictationRecovery, fileTranscription, history, dictionary, snippets, workflows, profiles, prompts, premium, integrations, advanced, license, about
+    case dictationRecovery, fileTranscription, history, statistics, dictionary, snippets, workflows, profiles, prompts, premium, integrations, advanced, license, about
 }
 
 private struct SettingsDestination: Identifiable, Hashable {
@@ -50,6 +50,12 @@ struct SettingsView: View {
             ),
             SettingsDestination(tab: .fileTranscription, title: String(localized: "File Transcription"), systemImage: "doc.text", badge: nil),
             SettingsDestination(tab: .history, title: String(localized: "History"), systemImage: "clock.arrow.circlepath", badge: nil),
+            SettingsDestination(
+                tab: .statistics,
+                title: localizedAppText("Statistics", de: "Statistiken", ja: "統計"),
+                systemImage: "chart.bar.xaxis",
+                badge: nil
+            ),
             SettingsDestination(tab: .dictionary, title: String(localized: "Dictionary"), systemImage: "book.closed", badge: nil),
             SettingsDestination(tab: .snippets, title: String(localized: "Snippets"), systemImage: "text.badge.plus", badge: nil),
             SettingsDestination(
@@ -155,6 +161,8 @@ struct SettingsView: View {
             FileTranscriptionView()
         case .history:
             HistoryView()
+        case .statistics:
+            StatisticsView()
         case .dictionary:
             DictionarySettingsView()
         case .snippets:
@@ -265,6 +273,7 @@ private func settingsDestinationSections(_ destinations: [SettingsDestination]) 
 
     var workspaceDestinations = [
         settingsDestination(destinations, .history),
+        settingsDestination(destinations, .statistics),
         settingsDestination(destinations, .dictionary),
         settingsDestination(destinations, .snippets),
         settingsDestination(destinations, .workflows),
