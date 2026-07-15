@@ -197,9 +197,29 @@ struct HomeSettingsView: View {
     // MARK: - Recent Transcriptions
 
     private var recentTranscriptionsSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(String(localized: "Recent Transcriptions"))
-                .font(.headline)
+        VStack(alignment: .leading, spacing: 12) {
+            Button {
+                viewModel.navigateToHistory = true
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.subheadline)
+                        .foregroundStyle(.blue)
+                    Text(String(localized: "Recent Transcriptions"))
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                    Spacer()
+                    Text(String(localized: "View all history"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Image(systemName: "chevron.right")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(String(localized: "View all history"))
 
             if viewModel.recentTranscriptions.isEmpty {
                 Text(String(localized: "Press \(primaryHotkeyLabel) in any app to get started."))
@@ -213,8 +233,9 @@ struct HomeSettingsView: View {
                         } label: {
                             HStack {
                                 VStack(alignment: .leading, spacing: 2) {
-                                    Text(record.preview)
+                                    Text(record.finalText)
                                         .lineLimit(1)
+                                        .truncationMode(.tail)
                                         .font(.body)
                                         .foregroundStyle(.primary)
                                     HStack(spacing: 4) {

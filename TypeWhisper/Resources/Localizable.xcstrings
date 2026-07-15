@@ -22833,6 +22833,22 @@
         }
       }
     },
+    "View all history": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gesamten Verlauf ansehen"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "すべての履歴を見る"
+          }
+        }
+      }
+    },
     "View all statistics": {
       "localizations": {
         "de": {
