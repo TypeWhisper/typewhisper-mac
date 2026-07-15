@@ -9,6 +9,8 @@ private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "typewhis
 
 @MainActor
 final class AudioRecorderViewModel: ObservableObject {
+    typealias AudioSamplesLoader = @MainActor (URL) async throws -> [Float]
+
     nonisolated(unsafe) static var _shared: AudioRecorderViewModel?
     static var shared: AudioRecorderViewModel {
         guard let instance = _shared else {
@@ -37,6 +39,7 @@ final class AudioRecorderViewModel: ObservableObject {
         case noSourceEnabled
         case alreadyRecording
         case finalizing
+        case retranscribing
         case notRecording
 
         var errorDescription: String? {
@@ -47,6 +50,8 @@ final class AudioRecorderViewModel: ObservableObject {
                 "Already recording"
             case .finalizing:
                 "Recorder is finalizing"
+            case .retranscribing:
+                "Recorder is transcribing an existing recording"
             case .notRecording:
                 "Not recording"
             }
@@ -166,6 +171,7 @@ final class AudioRecorderViewModel: ObservableObject {
     @Published var systemAudioWarningMessage: String?
     @Published var partialText: String = ""
     @Published var isTranscribing: Bool = false
+    @Published private(set) var retranscribingRecordingURL: URL?
 
     var activeEngineName: String? { resolvedEngine?.providerDisplayName }
     var activeModelName: String? {
@@ -199,7 +205,7 @@ final class AudioRecorderViewModel: ObservableObject {
     }
     var selectedLanguage: String? { languageSelection.requestedLanguage }
     var canToggleRecording: Bool {
-        Self.canToggleRecording(
+        retranscribingRecordingURL == nil && Self.canToggleRecording(
             state: state,
             micEnabled: micEnabled,
             systemAudioEnabled: systemAudioEnabled
@@ -210,6 +216,7 @@ final class AudioRecorderViewModel: ObservableObject {
     private let audioDeviceService: AudioDeviceService
     private let modelManager: ModelManagerService
     private let dictionaryService: DictionaryService
+    private let audioSamplesLoader: AudioSamplesLoader
     private let defaults: UserDefaults
     private let streamingHandler: StreamingHandler
     private let livePreviewStartObserver: (() -> Void)?
@@ -224,14 +231,19 @@ final class AudioRecorderViewModel: ObservableObject {
         recorderService: AudioRecorderService,
         modelManager: ModelManagerService,
         dictionaryService: DictionaryService,
+        audioFileService: AudioFileService = AudioFileService(),
         audioDeviceService: AudioDeviceService = AudioDeviceService(initialInputDevices: [], monitorDeviceChanges: false),
         defaults: UserDefaults = .standard,
+        audioSamplesLoader: AudioSamplesLoader? = nil,
         livePreviewStartObserver: (() -> Void)? = nil
     ) {
         self.recorderService = recorderService
         self.audioDeviceService = audioDeviceService
         self.modelManager = modelManager
         self.dictionaryService = dictionaryService
+        self.audioSamplesLoader = audioSamplesLoader ?? { [audioFileService] url in
+            try await audioFileService.loadAudioSamples(from: url)
+        }
         self.defaults = defaults
         self.livePreviewStartObserver = livePreviewStartObserver
         self.streamingHandler = StreamingHandler(
@@ -445,6 +457,10 @@ final class AudioRecorderViewModel: ObservableObject {
         systemAudioEnabled requestedSystemAudioEnabled: Bool,
         apiSessionID: UUID?
     ) async throws -> URL {
+        guard retranscribingRecordingURL == nil else {
+            throw RecorderAPIError.retranscribing
+        }
+
         switch state {
         case .idle:
             break
@@ -685,7 +701,58 @@ final class AudioRecorderViewModel: ObservableObject {
     }
 
     func transcribeRecording(_ item: RecordingItem) {
-        FileTranscriptionViewModel.shared.addFiles([item.url])
+        guard canTranscribeRecording(item) else { return }
+
+        let url = item.url
+        retranscribingRecordingURL = url
+        errorMessage = nil
+
+        Task { [weak self] in
+            guard let self else { return }
+            defer {
+                self.retranscribingRecordingURL = nil
+                self.loadRecordings()
+            }
+
+            let samples: [Float]
+            do {
+                samples = try await self.audioSamplesLoader(url)
+            } catch {
+                self.recordRetranscriptionFailure(
+                    phase: .preparingFinalAudio,
+                    error: error,
+                    for: url
+                )
+                return
+            }
+
+            self.reconcileSelectionWithAvailablePlugins()
+            let providerId = self.effectiveProviderId
+            let request = FinalTranscriptionRequest(
+                outputURL: url,
+                buffer: samples,
+                languageSelection: self.languageSelection,
+                task: self.selectedTask,
+                providerId: providerId,
+                modelOverrideId: self.selectedModel,
+                prompt: self.dictionaryService.getTermsForPrompt(providerId: providerId),
+                dictionaryTermHints: self.dictionaryService.getTermHints(providerId: providerId),
+                liveSessionResult: nil
+            )
+
+            _ = await self.runRetranscription(request)
+        }
+    }
+
+    func isRetranscribing(_ item: RecordingItem) -> Bool {
+        retranscribingRecordingURL?.standardizedFileURL == item.url.standardizedFileURL
+    }
+
+    func canTranscribeRecording(_ item: RecordingItem) -> Bool {
+        guard state == .idle, retranscribingRecordingURL == nil else { return false }
+        guard FileManager.default.fileExists(atPath: item.url.path) else { return false }
+        guard let engine = resolvedEngine else { return false }
+        return modelManager.canPrepareForTranscription(engine)
     }
 
     func openRecordingsFolder() {
@@ -824,16 +891,7 @@ final class AudioRecorderViewModel: ObservableObject {
         }
 
         // Fall back to transcribe if engine doesn't support translation
-        let effectiveTask: TranscriptionTask
-        if request.task == .translate,
-           let providerId = request.providerId,
-           let pluginManager = PluginManager.shared,
-           let plugin = pluginManager.transcriptionEngine(for: providerId),
-           !plugin.supportsTranslation {
-            effectiveTask = .transcribe
-        } else {
-            effectiveTask = request.task
-        }
+        let effectiveTask = resolvedTask(for: request)
 
         do {
             let result = if let liveSessionResult = request.liveSessionResult {
@@ -880,6 +938,84 @@ final class AudioRecorderViewModel: ObservableObject {
             errorMessage = recorderTranscriptionFailureAPISummary(recordedFailure)
             return .failed(recordedFailure)
         }
+    }
+
+    private func runRetranscription(_ request: FinalTranscriptionRequest) async -> FinalTranscriptionOutcome {
+        let effectiveTask = resolvedTask(for: request)
+
+        do {
+            let result = try await modelManager.transcribe(
+                audioSamples: request.buffer,
+                languageSelection: request.languageSelection,
+                task: effectiveTask,
+                engineOverrideId: request.providerId,
+                cloudModelOverride: request.modelOverrideId,
+                prompt: request.prompt,
+                dictionaryTermHints: request.dictionaryTermHints
+            )
+            let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !text.isEmpty else {
+                let failure = makeTranscriptionFailure(
+                    phase: .emptyResult,
+                    providerError: String(localized: "recorder.emptyFinalTranscriptionError"),
+                    request: request
+                )
+                let recordedFailure = saveTranscriptionFailure(failure, for: request.outputURL)
+                errorMessage = recorderTranscriptionFailureAPISummary(recordedFailure)
+                return .failed(recordedFailure)
+            }
+
+            return saveTranscriptOutcome(text, for: request.outputURL, request: request)
+        } catch {
+            recordRetranscriptionFailure(
+                phase: .finalTranscription,
+                error: error,
+                for: request.outputURL,
+                request: request
+            )
+            let failure = loadTranscriptionFailure(for: request.outputURL)
+                ?? transientTranscriptionFailures[transcriptionFailureKey(for: request.outputURL)]
+            if let failure {
+                return .failed(failure)
+            }
+            return .skipped
+        }
+    }
+
+    private func resolvedTask(for request: FinalTranscriptionRequest) -> TranscriptionTask {
+        guard request.task == .translate,
+              let providerId = request.providerId,
+              let plugin = PluginManager.shared?.transcriptionEngine(for: providerId),
+              !plugin.supportsTranslation else {
+            return request.task
+        }
+        return .transcribe
+    }
+
+    private func recordRetranscriptionFailure(
+        phase: RecordingTranscriptionFailure.Phase,
+        error: Error,
+        for audioURL: URL,
+        request: FinalTranscriptionRequest? = nil
+    ) {
+        let request = request ?? FinalTranscriptionRequest(
+            outputURL: audioURL,
+            buffer: [],
+            languageSelection: languageSelection,
+            task: selectedTask,
+            providerId: effectiveProviderId,
+            modelOverrideId: selectedModel,
+            prompt: nil,
+            dictionaryTermHints: [],
+            liveSessionResult: nil
+        )
+        let failure = makeTranscriptionFailure(
+            phase: phase,
+            providerError: error.localizedDescription,
+            request: request
+        )
+        let recordedFailure = saveTranscriptionFailure(failure, for: audioURL)
+        errorMessage = recorderTranscriptionFailureAPISummary(recordedFailure)
     }
 
     // MARK: - Transcript Sidecar

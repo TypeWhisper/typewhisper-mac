@@ -384,6 +384,7 @@ private struct RecordingRow: View {
     let item: AudioRecorderViewModel.RecordingItem
     @ObservedObject var viewModel: AudioRecorderViewModel
     @State private var showTranscript = false
+    @State private var showRetranscriptionConfirmation = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -423,13 +424,22 @@ private struct RecordingRow: View {
                         .help(String(localized: "recorder.showTranscript"))
                     }
 
-                    Button {
-                        viewModel.transcribeRecording(item)
-                    } label: {
-                        Image(systemName: "text.viewfinder")
+                    if viewModel.isRetranscribing(item) {
+                        ProgressView()
+                            .controlSize(.small)
+                            .help(String(localized: "recorder.retranscribing"))
+                    } else {
+                        Button {
+                            requestTranscription()
+                        } label: {
+                            Image(systemName: item.transcript == nil
+                                ? "text.viewfinder"
+                                : "arrow.triangle.2.circlepath")
+                        }
+                        .buttonStyle(.borderless)
+                        .help(transcriptionActionTitle)
+                        .disabled(!viewModel.canTranscribeRecording(item))
                     }
-                    .buttonStyle(.borderless)
-                    .help(String(localized: "recorder.transcribe"))
 
                     Button {
                         viewModel.revealInFinder(item)
@@ -438,6 +448,7 @@ private struct RecordingRow: View {
                     }
                     .buttonStyle(.borderless)
                     .help(String(localized: "recorder.revealInFinder"))
+                    .disabled(viewModel.isRetranscribing(item))
 
                     Button(role: .destructive) {
                         viewModel.deleteRecording(item)
@@ -446,10 +457,12 @@ private struct RecordingRow: View {
                     }
                     .buttonStyle(.borderless)
                     .help(String(localized: "recorder.delete"))
+                    .disabled(viewModel.isRetranscribing(item))
                 }
             }
 
-            if let failureSummary = viewModel.transcriptionFailureSummary(for: item) {
+            if !viewModel.isRetranscribing(item),
+               let failureSummary = viewModel.transcriptionFailureSummary(for: item) {
                 Label(failureSummary, systemImage: "exclamationmark.triangle.fill")
                     .font(.caption)
                     .foregroundStyle(.red)
@@ -485,16 +498,50 @@ private struct RecordingRow: View {
                 }
                 Divider()
             }
-            Button(String(localized: "recorder.transcribe")) {
-                viewModel.transcribeRecording(item)
+            Button(transcriptionActionTitle) {
+                requestTranscription()
             }
+            .disabled(!viewModel.canTranscribeRecording(item))
             Button(String(localized: "recorder.revealInFinder")) {
                 viewModel.revealInFinder(item)
             }
+            .disabled(viewModel.isRetranscribing(item))
             Divider()
             Button(String(localized: "recorder.delete"), role: .destructive) {
                 viewModel.deleteRecording(item)
             }
+            .disabled(viewModel.isRetranscribing(item))
+        }
+        .confirmationDialog(
+            String(localized: "recorder.retranscribeConfirmation.title"),
+            isPresented: $showRetranscriptionConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button(String(localized: "recorder.retranscribe"), role: .destructive) {
+                viewModel.transcribeRecording(item)
+            }
+            Button(String(localized: "Cancel"), role: .cancel) {}
+        } message: {
+            Text(
+                String(
+                    format: String(localized: "recorder.retranscribeConfirmation.message"),
+                    item.fileName
+                )
+            )
+        }
+    }
+
+    private var transcriptionActionTitle: String {
+        item.transcript == nil
+            ? String(localized: "recorder.transcribe")
+            : String(localized: "recorder.retranscribe")
+    }
+
+    private func requestTranscription() {
+        if item.transcript == nil {
+            viewModel.transcribeRecording(item)
+        } else {
+            showRetranscriptionConfirmation = true
         }
     }
 

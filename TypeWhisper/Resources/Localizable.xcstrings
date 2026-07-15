@@ -10094,6 +10094,94 @@
         }
       }
     },
+    "recorder.retranscribe": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erneut transkribieren"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Re-transcribe"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "再文字起こし"
+          }
+        }
+      }
+    },
+    "recorder.retranscribeConfirmation.message": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Aufnahme „%@“ hat bereits ein Transkript. Es wird erst ersetzt, wenn die erneute Transkription erfolgreich war."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“%@” already has a transcript. It will only be replaced after the new transcription succeeds."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「%@」にはすでに文字起こしがあります。新しい文字起こしが成功した場合にのみ置き換えられます。"
+          }
+        }
+      }
+    },
+    "recorder.retranscribeConfirmation.title": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vorhandenes Transkript ersetzen?"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Replace Existing Transcript?"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "既存の文字起こしを置き換えますか？"
+          }
+        }
+      }
+    },
+    "recorder.retranscribing": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erneute Transkription läuft …"
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Re-transcribing…"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "再文字起こし中…"
+          }
+        }
+      }
+    },
     "recorder.transcribe": {
       "localizations": {
         "de": {
