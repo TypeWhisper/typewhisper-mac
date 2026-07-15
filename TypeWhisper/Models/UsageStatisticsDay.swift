@@ -81,7 +81,26 @@ final class UsageStatisticsDay {
             appBundleIdentifiers = identifiers
         }
 
-        let appKey = UsageStatisticsKeys.appKey(bundleIdentifier: trimmedBundleIdentifier, appName: appName)
+        addDetailCounts(
+            appBundleIdentifier: trimmedBundleIdentifier,
+            appName: appName,
+            engineUsed: engineUsed,
+            modelUsed: modelUsed,
+            hour: hour
+        )
+    }
+
+    /// Updates only the per-app, per-model, and per-hour breakdowns, leaving the totals
+    /// untouched. Used to backfill these fields for installations whose totals were already
+    /// migrated from history before the breakdowns existed, without double-counting totals.
+    func addDetailCounts(
+        appBundleIdentifier: String?,
+        appName: String? = nil,
+        engineUsed: String? = nil,
+        modelUsed: String? = nil,
+        hour: Int? = nil
+    ) {
+        let appKey = UsageStatisticsKeys.appKey(bundleIdentifier: appBundleIdentifier, appName: appName)
         var apps = appCounts
         apps[appKey, default: 0] += 1
         appCounts = apps

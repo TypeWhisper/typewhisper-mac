@@ -71,6 +71,70 @@ final class UsageStatisticsServiceTests: XCTestCase {
         XCTAssertEqual(summary.words, 0)
     }
 
+    /// Installations that already completed the totals-only backfill (before app/model/hour
+    /// breakdowns existed) must have those breakdowns filled in from history on next launch,
+    /// without re-adding to the already-migrated totals.
+    @MainActor
+    func testDetailBreakdownsAreBackfilledForInstallationsThatAlreadyMigratedTotals() throws {
+        let directory = try TestSupport.makeTemporaryDirectory(prefix: "UsageStatisticsDetailBackfill")
+        defer { TestSupport.remove(directory) }
+
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+
+        let historyService = HistoryService(appSupportDirectory: directory)
+        historyService.clearAll()
+        historyService.addRecord(
+            rawText: "Alpha beta gamma",
+            finalText: "Alpha beta gamma",
+            appName: "Editor",
+            appBundleIdentifier: "com.example.editor",
+            durationSeconds: 30,
+            language: "en",
+            engineUsed: "parakeet",
+            modelUsed: "parakeet-fast"
+        )
+        let recordHour = calendar.component(.hour, from: historyService.records[0].timestamp)
+
+        do {
+            // Simulate a pre-existing installation: totals already backfilled from history
+            // (historyBackfillCompleted = true) but with no app/model/hour breakdowns, since
+            // those fields didn't exist yet.
+            let (_, context) = try SwiftDataStoreFactory.create(
+                for: [UsageStatisticsDay.self, UsageStatisticsMetadata.self],
+                storeName: "usage-statistics",
+                in: directory
+            )
+            let statisticsDay = UsageStatisticsDay(
+                day: today,
+                transcriptionCount: 1,
+                totalWords: 3,
+                totalDurationSeconds: 30,
+                appBundleIdentifiers: ["com.example.editor"]
+            )
+            context.insert(statisticsDay)
+            context.insert(UsageStatisticsMetadata(key: "historyBackfillCompleted", value: "true"))
+            try context.save()
+        }
+
+        let service = UsageStatisticsService(appSupportDirectory: directory, calendar: calendar)
+        service.backfillFromHistoryIfNeeded(historyService.records)
+
+        let summary = service.summary(from: today)
+        XCTAssertEqual(summary.transcriptionCount, 1, "Totals must not be double-counted by the detail backfill")
+        XCTAssertEqual(summary.words, 3, "Totals must not be double-counted by the detail backfill")
+
+        let snapshot = try XCTUnwrap(service.dailyWordCounts(days: 1).first)
+        XCTAssertEqual(snapshot.appCounts, [UsageStatisticsKeys.appKey(bundleIdentifier: "com.example.editor", appName: "Editor"): 1])
+        XCTAssertEqual(snapshot.modelCounts, [UsageStatisticsKeys.modelKey(engineUsed: "parakeet", modelUsed: "parakeet-fast"): 1])
+        XCTAssertEqual(snapshot.hourCounts[recordHour], 1)
+
+        // Running it again must stay idempotent.
+        service.backfillFromHistoryIfNeeded(historyService.records)
+        let secondSnapshot = try XCTUnwrap(service.dailyWordCounts(days: 1).first)
+        XCTAssertEqual(secondSnapshot.appCounts, [UsageStatisticsKeys.appKey(bundleIdentifier: "com.example.editor", appName: "Editor"): 1])
+    }
+
     @MainActor
     func testHomeAndWidgetUseUsageStatisticsWhileKeepingRecentHistory() throws {
         let directory = try TestSupport.makeTemporaryDirectory(prefix: "UsageStatisticsDashboard")

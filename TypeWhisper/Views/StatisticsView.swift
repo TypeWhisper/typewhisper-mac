@@ -72,6 +72,7 @@ struct StatisticsView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 5))
         }
         .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityLabel(period.displayName)
     }
@@ -157,8 +158,8 @@ struct StatisticsView: View {
                         )
                         .foregroundStyle(
                             hoveredDate != nil && Calendar.current.isDate(point.date, inSameDayAs: hoveredDate!)
-                                ? Color.blue
-                                : Color.blue.opacity(0.7)
+                                ? Color.accentColor
+                                : Color.accentColor.opacity(0.7)
                         )
                         .cornerRadius(4)
                     }
@@ -190,7 +191,7 @@ struct StatisticsView: View {
                     .overlay(alignment: .topLeading) {
                         if let hoveredDate, let point = viewModel.chartData.first(where: { Calendar.current.isDate($0.date, inSameDayAs: hoveredDate) }), point.wordCount > 0 {
                             VStack(spacing: 2) {
-                                Text("\(point.wordCount) \(String(localized: "words"))")
+                                Text(String.localizedStringWithFormat(String(localized: "%lld words"), point.wordCount))
                                     .font(.caption.bold())
                                     .monospacedDigit()
                                 Text(point.date.formatted(.dateTime.month(.abbreviated).day()))
@@ -407,7 +408,7 @@ struct StatisticsView: View {
                                     RoundedRectangle(cornerRadius: 3)
                                         .fill(.quaternary.opacity(0.5))
                                     RoundedRectangle(cornerRadius: 3)
-                                        .fill(Color.blue)
+                                        .fill(Color.accentColor)
                                         .frame(width: geometry.size.width * CGFloat(stat.percent / 100))
                                 }
                             }
@@ -433,7 +434,7 @@ struct StatisticsView: View {
         VStack(spacing: 12) {
             Image(systemName: "chart.bar.xaxis")
                 .font(.system(size: 36))
-                .foregroundStyle(.blue)
+                .foregroundStyle(Color.accentColor)
                 .accessibilityHidden(true)
 
             Text(String(localized: "Your statistics will appear here after your first transcription."))
@@ -459,7 +460,7 @@ private struct StatisticsStatCard: View {
         VStack(spacing: 6) {
             Image(systemName: systemImage)
                 .font(.title2)
-                .foregroundStyle(.blue)
+                .foregroundStyle(Color.accentColor)
                 .accessibilityHidden(true)
             Text(value)
                 .font(.title)
@@ -488,7 +489,7 @@ struct StatisticsMetricCard: View {
         VStack(spacing: 6) {
             Image(systemName: systemImage)
                 .font(.title2)
-                .foregroundStyle(.blue)
+                .foregroundStyle(Color.accentColor)
                 .accessibilityHidden(true)
             Text(value)
                 .font(.title)
@@ -505,8 +506,18 @@ struct StatisticsMetricCard: View {
         .padding(.vertical, 12)
         .background(.quaternary.opacity(0.3))
         .clipShape(RoundedRectangle(cornerRadius: 8))
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(Text("\(title), \(value)"))
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(trendAwareAccessibilityLabel)
+    }
+
+    private var trendAwareAccessibilityLabel: Text {
+        guard let trend else {
+            return Text("\(title), \(value)")
+        }
+        let displayPercent = Int(abs(trend))
+        return trend >= 0
+            ? Text("\(title), \(value), up \(displayPercent) percent")
+            : Text("\(title), \(value), down \(displayPercent) percent")
     }
 
     @ViewBuilder

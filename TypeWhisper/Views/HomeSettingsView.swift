@@ -88,7 +88,7 @@ struct HomeSettingsView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "chart.bar.xaxis")
                         .font(.subheadline)
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(Color.accentColor)
                     Text(String(localized: "Your Activity"))
                         .font(.headline)
                         .foregroundStyle(.primary)
@@ -103,7 +103,9 @@ struct HomeSettingsView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityElement(children: .ignore)
             .accessibilityLabel(String(localized: "View your statistics"))
+            .accessibilityAddTraits(.isButton)
 
             LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4), spacing: 12) {
                 statisticsSummaryCard(
@@ -141,6 +143,9 @@ struct HomeSettingsView: View {
             StatisticsMetricCard(title: title, value: value, systemImage: systemImage)
         }
         .buttonStyle(.plain)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("\(title), \(value)"))
+        .accessibilityAddTraits(.isButton)
     }
 
     private var workUsageCard: some View {
@@ -204,7 +209,7 @@ struct HomeSettingsView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "clock.arrow.circlepath")
                         .font(.subheadline)
-                        .foregroundStyle(.blue)
+                        .foregroundStyle(Color.accentColor)
                     Text(String(localized: "Recent Transcriptions"))
                         .font(.headline)
                         .foregroundStyle(.primary)
@@ -219,7 +224,9 @@ struct HomeSettingsView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
+            .accessibilityElement(children: .ignore)
             .accessibilityLabel(String(localized: "View all history"))
+            .accessibilityAddTraits(.isButton)
 
             if viewModel.recentTranscriptions.isEmpty {
                 Text(String(localized: "Press \(primaryHotkeyLabel) in any app to get started."))
@@ -291,7 +298,7 @@ struct HomeSettingsView: View {
         VStack(spacing: 12) {
             Image(systemName: "mic.badge.plus")
                 .font(.system(size: 36))
-                .foregroundStyle(.blue)
+                .foregroundStyle(Color.accentColor)
                 .accessibilityHidden(true)
 
             Text(String(localized: "Ready to start dictating?"))
@@ -304,7 +311,7 @@ struct HomeSettingsView: View {
                     .font(.body.weight(.medium))
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
-                    .background(RoundedRectangle(cornerRadius: 6).fill(.blue.opacity(0.1)))
+                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.accentColor.opacity(0.1)))
                 Text(String(localized: "in any app to begin."))
                     .foregroundStyle(.secondary)
             }

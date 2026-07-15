@@ -89,6 +89,11 @@ final class UsageStatisticsService: ObservableObject, UsageStatisticsRecording {
     @Published private(set) var days: [UsageStatisticsDaySnapshot] = []
 
     private static let historyBackfillCompletedKey = "historyBackfillCompleted"
+    /// Versioned separately from `historyBackfillCompletedKey` because it was introduced after
+    /// installations had already completed the totals-only backfill. Reusing the additive
+    /// `upsertDay` path for those installations would double-count their existing totals, so this
+    /// marker gates a detail-only backfill that updates just the app/model/hour breakdowns.
+    private static let detailBackfillCompletedKey = "detailBackfillCompleted"
 
     private let modelContainer: ModelContainer
     private let modelContext: ModelContext
@@ -155,7 +160,10 @@ final class UsageStatisticsService: ObservableObject, UsageStatisticsRecording {
     }
 
     func backfillFromHistoryIfNeeded(_ records: [TranscriptionRecord]) {
-        guard !historyBackfillCompleted else { return }
+        guard !historyBackfillCompleted else {
+            backfillDetailBreakdownsFromHistoryIfNeeded(records)
+            return
+        }
 
         do {
             for record in records {
@@ -178,10 +186,44 @@ final class UsageStatisticsService: ObservableObject, UsageStatisticsRecording {
                 )
             }
             try setHistoryBackfillCompleted(true)
+            // Totals and breakdowns were populated together above, so the detail-only pass has
+            // nothing left to do for this installation.
+            try setDetailBackfillCompleted(true)
             save()
             fetchDays()
         } catch {
             usageStatisticsLogger.error("Failed to backfill usage statistics: \(error.localizedDescription)")
+        }
+    }
+
+    /// Backfills only the app/model/hour breakdowns from history for installations that already
+    /// completed the totals-only backfill before these fields existed. Does not touch totals.
+    private func backfillDetailBreakdownsFromHistoryIfNeeded(_ records: [TranscriptionRecord]) {
+        guard !detailBackfillCompleted else { return }
+
+        do {
+            for record in records {
+                let wordsCount = record.wordsCount > 0
+                    ? record.wordsCount
+                    : record.finalText.split(separator: " ").count
+                guard wordsCount > 0,
+                      record.durationSeconds.isFinite,
+                      record.durationSeconds >= 0 else {
+                    continue
+                }
+                try addDetailBreakdown(
+                    timestamp: record.timestamp,
+                    appBundleIdentifier: record.appBundleIdentifier,
+                    appName: record.appName,
+                    engineUsed: record.engineUsed,
+                    modelUsed: record.modelUsed
+                )
+            }
+            try setDetailBackfillCompleted(true)
+            save()
+            fetchDays()
+        } catch {
+            usageStatisticsLogger.error("Failed to backfill usage statistics breakdowns: \(error.localizedDescription)")
         }
     }
 
@@ -241,6 +283,7 @@ final class UsageStatisticsService: ObservableObject, UsageStatisticsRecording {
                 modelContext.delete(day)
             }
             try setHistoryBackfillCompleted(true)
+            try setDetailBackfillCompleted(true)
             save()
             fetchDays()
         } catch {
@@ -255,6 +298,7 @@ final class UsageStatisticsService: ObservableObject, UsageStatisticsRecording {
                 modelContext.delete(day)
             }
             try setHistoryBackfillCompleted(false)
+            try setDetailBackfillCompleted(false)
             save()
             fetchDays()
             backfillFromHistoryIfNeeded(records)
@@ -271,6 +315,34 @@ final class UsageStatisticsService: ObservableObject, UsageStatisticsRecording {
             usageStatisticsLogger.error("Failed to read usage statistics metadata: \(error.localizedDescription)")
             return true
         }
+    }
+
+    private var detailBackfillCompleted: Bool {
+        do {
+            return try metadataValue(for: Self.detailBackfillCompletedKey) == "true"
+        } catch {
+            usageStatisticsLogger.error("Failed to read usage statistics metadata: \(error.localizedDescription)")
+            return true
+        }
+    }
+
+    private func addDetailBreakdown(
+        timestamp: Date,
+        appBundleIdentifier: String?,
+        appName: String?,
+        engineUsed: String?,
+        modelUsed: String?
+    ) throws {
+        let dayStart = calendar.startOfDay(for: timestamp)
+        guard let statisticsDay = try findDay(dayStart) else { return }
+        let trimmedBundleIdentifier = appBundleIdentifier?.trimmingCharacters(in: .whitespacesAndNewlines)
+        statisticsDay.addDetailCounts(
+            appBundleIdentifier: trimmedBundleIdentifier,
+            appName: appName,
+            engineUsed: engineUsed,
+            modelUsed: modelUsed,
+            hour: calendar.component(.hour, from: timestamp)
+        )
     }
 
     private func upsertDay(
@@ -348,12 +420,19 @@ final class UsageStatisticsService: ObservableObject, UsageStatisticsRecording {
     }
 
     private func setHistoryBackfillCompleted(_ completed: Bool) throws {
-        let value = completed ? "true" : "false"
+        try setMetadataValue(completed ? "true" : "false", for: Self.historyBackfillCompletedKey)
+    }
+
+    private func setDetailBackfillCompleted(_ completed: Bool) throws {
+        try setMetadataValue(completed ? "true" : "false", for: Self.detailBackfillCompletedKey)
+    }
+
+    private func setMetadataValue(_ value: String, for key: String) throws {
         if let existing = try modelContext.fetch(FetchDescriptor<UsageStatisticsMetadata>())
-            .first(where: { $0.key == Self.historyBackfillCompletedKey }) {
+            .first(where: { $0.key == key }) {
             existing.value = value
         } else {
-            modelContext.insert(UsageStatisticsMetadata(key: Self.historyBackfillCompletedKey, value: value))
+            modelContext.insert(UsageStatisticsMetadata(key: key, value: value))
         }
     }
 
