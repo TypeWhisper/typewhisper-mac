@@ -684,6 +684,8 @@ final class AudioRecorderViewModel: ObservableObject {
     }
 
     func deleteRecording(_ item: RecordingItem) {
+        guard !isRetranscribing(item) else { return }
+
         do {
             try FileManager.default.removeItem(at: item.url)
             // Also delete sidecar transcript

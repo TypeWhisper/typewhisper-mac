@@ -590,6 +590,10 @@ final class AudioRecorderViewModelTests: XCTestCase {
         viewModel.transcribeRecording(second)
         XCTAssertEqual(loadCount, 1)
 
+        viewModel.deleteRecording(first)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: first.url.path))
+        XCTAssertEqual(viewModel.recordings.count, 2)
+
         do {
             _ = try await viewModel.apiStartRecording(micEnabled: true, systemAudioEnabled: false)
             XCTFail("Expected recording start to be rejected while retranscribing")

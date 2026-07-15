@@ -427,7 +427,9 @@ private struct RecordingRow: View {
                     if viewModel.isRetranscribing(item) {
                         ProgressView()
                             .controlSize(.small)
-                            .help(String(localized: "recorder.retranscribing"))
+                            .help(item.transcript == nil
+                                ? String(localized: "recorder.transcribing")
+                                : String(localized: "recorder.retranscribing"))
                     } else {
                         Button {
                             requestTranscription()
