@@ -9,6 +9,9 @@ struct DictionarySettingsView: View {
     @ObservedObject private var viewModel = DictionaryViewModel.shared
     @ObservedObject private var termPackRegistryService: TermPackRegistryService
     @ObservedObject private var pluginManager: PluginManager
+    @ObservedObject private var trainingService = ServiceContainer.shared.dictionaryTrainingService
+    @State private var expandedCorrectionGroups = Set<String>()
+    @State private var isTrainingPresented = false
 
     init() {
         _termPackRegistryService = ObservedObject(wrappedValue: TermPackRegistryService.shared)
@@ -17,16 +20,15 @@ struct DictionarySettingsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            if viewModel.entries.isEmpty && viewModel.filterTab != .termPacks {
+            dictionaryHeader
+
+            if viewModel.filterTab == .termPacks {
+                termPacksView
+            } else if viewModel.entries.isEmpty {
                 emptyState
             } else {
-                dictionaryHeader
-
-                if viewModel.filterTab == .termPacks {
-                    termPacksView
-                } else {
-                    dictionaryEntriesView
-                }
+                dictionarySearchField
+                dictionaryEntriesView
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
@@ -34,6 +36,14 @@ struct DictionarySettingsView: View {
         .padding(.horizontal, 8)
         .sheet(isPresented: $viewModel.isEditing) {
             DictionaryEditorSheet(viewModel: viewModel)
+        }
+        .sheet(isPresented: $isTrainingPresented, onDismiss: {
+            Task { await trainingService.cancel() }
+        }) {
+            DictionaryTrainingSheet(
+                service: trainingService,
+                dismiss: { isTrainingPresented = false }
+            )
         }
         .alert(String(localized: "Error"), isPresented: Binding(
             get: { viewModel.error != nil },
@@ -50,6 +60,26 @@ struct DictionarySettingsView: View {
             Button(String(localized: "OK")) { viewModel.clearImportMessage() }
         } message: {
             Text(viewModel.importMessage ?? "")
+        }
+        .alert(
+            resetConfirmationTitle,
+            isPresented: Binding(
+                get: { viewModel.pendingResetRequest != nil },
+                set: { if !$0 { viewModel.cancelReset() } }
+            )
+        ) {
+            if let request = viewModel.pendingResetRequest {
+                Button(resetConfirmationButtonTitle(for: request.action), role: .destructive) {
+                    viewModel.confirmReset()
+                }
+            }
+            Button(String(localized: "Cancel"), role: .cancel) {
+                viewModel.cancelReset()
+            }
+        } message: {
+            if let request = viewModel.pendingResetRequest {
+                Text(resetConfirmationMessage(for: request))
+            }
         }
     }
 
@@ -68,6 +98,15 @@ struct DictionarySettingsView: View {
             Spacer()
 
             if viewModel.filterTab != .termPacks {
+                Button {
+                    trainingService.reset()
+                    isTrainingPresented = true
+                } label: {
+                    Label(
+                        localizedAppText("Train Word...", de: "Wort trainieren..."),
+                        systemImage: "mic.badge.plus"
+                    )
+                }
                 Button {
                     viewModel.startCreating(type: .correction)
                 } label: {
@@ -93,6 +132,12 @@ struct DictionarySettingsView: View {
                 } label: {
                     Label(String(localized: "Import..."), systemImage: "square.and.arrow.down")
                 }
+
+                Divider()
+
+                resetMenuButton(.clearAutoLearnedCorrections)
+                resetMenuButton(.resetCustomDictionary)
+                resetMenuButton(.deactivateAllTermPacks)
             } label: {
                 Image(systemName: "ellipsis.circle")
             }
@@ -103,6 +148,111 @@ struct DictionarySettingsView: View {
         .padding(.bottom, 4)
     }
 
+    @ViewBuilder
+    private func resetMenuButton(_ action: DictionaryResetAction) -> some View {
+        let request = viewModel.resetRequest(for: action)
+        Button(role: .destructive) {
+            viewModel.requestReset(action)
+        } label: {
+            Label(resetMenuTitle(for: action), systemImage: resetMenuIcon(for: action))
+        }
+        .disabled(!request.canPerform)
+    }
+
+    private func resetMenuTitle(for action: DictionaryResetAction) -> String {
+        switch action {
+        case .clearAutoLearnedCorrections:
+            return localizedAppText(
+                "Clear Auto-Learned Corrections...",
+                de: "Automatisch gelernte Korrekturen löschen..."
+            )
+        case .resetCustomDictionary:
+            return localizedAppText(
+                "Reset Custom Dictionary...",
+                de: "Eigenes Dictionary zurücksetzen..."
+            )
+        case .deactivateAllTermPacks:
+            return localizedAppText(
+                "Deactivate All Term Packs...",
+                de: "Alle Begriff-Pakete deaktivieren..."
+            )
+        }
+    }
+
+    private func resetMenuIcon(for action: DictionaryResetAction) -> String {
+        switch action {
+        case .clearAutoLearnedCorrections:
+            return "wand.and.stars"
+        case .resetCustomDictionary:
+            return "trash"
+        case .deactivateAllTermPacks:
+            return "shippingbox.and.arrow.backward"
+        }
+    }
+
+    private var resetConfirmationTitle: String {
+        guard let action = viewModel.pendingResetRequest?.action else { return "" }
+        switch action {
+        case .clearAutoLearnedCorrections:
+            return localizedAppText(
+                "Clear Auto-Learned Corrections?",
+                de: "Automatisch gelernte Korrekturen löschen?"
+            )
+        case .resetCustomDictionary:
+            return localizedAppText(
+                "Reset Custom Dictionary?",
+                de: "Eigenes Dictionary zurücksetzen?"
+            )
+        case .deactivateAllTermPacks:
+            return localizedAppText(
+                "Deactivate All Term Packs?",
+                de: "Alle Begriff-Pakete deaktivieren?"
+            )
+        }
+    }
+
+    private func resetConfirmationButtonTitle(for action: DictionaryResetAction) -> String {
+        switch action {
+        case .clearAutoLearnedCorrections:
+            return localizedAppText("Clear Corrections", de: "Korrekturen löschen")
+        case .resetCustomDictionary:
+            return localizedAppText("Reset Dictionary", de: "Dictionary zurücksetzen")
+        case .deactivateAllTermPacks:
+            return localizedAppText("Deactivate Packs", de: "Pakete deaktivieren")
+        }
+    }
+
+    private func resetConfirmationMessage(for request: DictionaryResetRequest) -> String {
+        switch request.action {
+        case .clearAutoLearnedCorrections:
+            return localizedAppText(
+                "This deletes \(request.autoLearnedCorrectionCount) auto-learned corrections. Manual entries and term packs remain unchanged. This cannot be undone.",
+                de: "Dadurch werden \(request.autoLearnedCorrectionCount) automatisch gelernte Korrekturen gelöscht. Manuelle Einträge und Begriff-Pakete bleiben unverändert. Dies kann nicht rückgängig gemacht werden."
+            )
+        case .resetCustomDictionary:
+            return localizedAppText(
+                "This deletes \(request.termCount) custom terms, \(request.manualCorrectionCount) manual corrections, and \(request.autoLearnedCorrectionCount) auto-learned corrections. \(request.activePackCount) active term packs and their entries remain unchanged. This cannot be undone.",
+                de: "Dadurch werden \(request.termCount) eigene Begriffe, \(request.manualCorrectionCount) manuelle Korrekturen und \(request.autoLearnedCorrectionCount) automatisch gelernte Korrekturen gelöscht. \(request.activePackCount) aktive Begriff-Pakete und deren Einträge bleiben unverändert. Dies kann nicht rückgängig gemacht werden."
+            )
+        case .deactivateAllTermPacks:
+            return localizedAppText(
+                "This deactivates \(request.activePackCount) term packs and removes \(request.termCount) pack terms and \(request.correctionCount) pack corrections. Custom and auto-learned entries remain unchanged.",
+                de: "Dadurch werden \(request.activePackCount) Begriff-Pakete deaktiviert sowie \(request.termCount) Paket-Begriffe und \(request.correctionCount) Paket-Korrekturen entfernt. Eigene und automatisch gelernte Einträge bleiben unverändert."
+            )
+        }
+    }
+
+    private var dictionarySearchField: some View {
+        NativeSearchField(
+            text: $viewModel.searchQuery,
+            placeholder: String(localized: "Search...")
+        )
+        .frame(maxWidth: .infinity)
+        .frame(height: 32)
+        .padding(.horizontal, 2)
+        .padding(.vertical, 6)
+    }
+
     private var dictionaryEntriesView: some View {
         ScrollView {
             LazyVStack(spacing: 8) {
@@ -110,29 +260,91 @@ struct DictionarySettingsView: View {
                     DictionaryEngineSupportSection(rows: engineSupportRows)
                 }
 
-                if viewModel.filteredEntryRows.isEmpty {
-                    VStack(spacing: 8) {
-                        Image(systemName: "line.3.horizontal.decrease.circle")
-                            .font(.system(size: 32))
-                            .foregroundStyle(.secondary)
-                        Text(String(localized: "No entries for this filter"))
-                            .foregroundStyle(.secondary)
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, 48)
+                if viewModel.filteredListRows.isEmpty {
+                    dictionaryEntriesEmptyState
                 } else {
-                    ForEach(viewModel.filteredEntryRows) { row in
-                        DictionaryCardView(
-                            row: row,
-                            setEntryEnabled: { viewModel.setEntryEnabled(id: row.id, enabled: $0) },
-                            editEntry: { viewModel.startEditingEntry(id: row.id) },
-                            deleteEntry: { viewModel.deleteEntry(id: row.id) }
-                        )
+                    ForEach(viewModel.filteredListRows) { listRow in
+                        dictionaryListRow(listRow)
                     }
                 }
             }
             .padding(.horizontal, 2)
         }
+    }
+
+    @ViewBuilder
+    private func dictionaryListRow(_ listRow: DictionaryListRow) -> some View {
+        switch listRow {
+        case .entry(let row):
+            DictionaryCardView(
+                row: row,
+                setEntryEnabled: { viewModel.setEntryEnabled(id: row.id, enabled: $0) },
+                editEntry: { viewModel.startEditingEntry(id: row.id) },
+                deleteEntry: { viewModel.deleteEntry(id: row.id) }
+            )
+
+        case .correctionGroup(let group):
+            if group.aliases.count == 1, let row = group.aliases.first {
+                DictionaryCardView(
+                    row: row,
+                    setEntryEnabled: { viewModel.setEntryEnabled(id: row.id, enabled: $0) },
+                    editEntry: { viewModel.startEditingEntry(id: row.id) },
+                    deleteEntry: { viewModel.deleteEntry(id: row.id) },
+                    addAlias: { viewModel.startCreatingCorrectionAlias(replacement: group.replacement) }
+                )
+            } else {
+                DictionaryCorrectionGroupCardView(
+                    group: group,
+                    isExpanded: correctionGroupExpansionBinding(for: group.replacement),
+                    setEntryEnabled: { id, enabled in
+                        viewModel.setEntryEnabled(id: id, enabled: enabled)
+                    },
+                    editEntry: { viewModel.startEditingEntry(id: $0) },
+                    deleteEntry: { viewModel.deleteEntry(id: $0) },
+                    addAlias: { viewModel.startCreatingCorrectionAlias(replacement: group.replacement) }
+                )
+            }
+        }
+    }
+
+    private func correctionGroupExpansionBinding(for replacement: String) -> Binding<Bool> {
+        Binding(
+            get: {
+                viewModel.hasActiveSearch || expandedCorrectionGroups.contains(replacement)
+            },
+            set: { isExpanded in
+                if isExpanded {
+                    expandedCorrectionGroups.insert(replacement)
+                } else {
+                    expandedCorrectionGroups.remove(replacement)
+                }
+            }
+        )
+    }
+
+    private var dictionaryEntriesEmptyState: some View {
+        VStack(spacing: 8) {
+            Image(systemName: viewModel.hasActiveSearch
+                ? "magnifyingglass"
+                : "line.3.horizontal.decrease.circle")
+                .font(.system(size: 32))
+                .foregroundStyle(.secondary)
+
+            if viewModel.hasActiveSearch {
+                Text(localizedAppText("No search results", de: "Keine Suchergebnisse"))
+                    .font(.headline)
+                Text(localizedAppText(
+                    "Try a different search term or filter.",
+                    de: "Versuche einen anderen Suchbegriff oder Filter."
+                ))
+                .font(.caption)
+            } else {
+                Text(String(localized: "No entries for this filter"))
+            }
+        }
+        .foregroundStyle(.secondary)
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 48)
     }
 
     private var emptyState: some View {
@@ -275,6 +487,399 @@ struct DictionarySettingsView: View {
                 )
             }
             .sorted { $0.engineName.localizedCaseInsensitiveCompare($1.engineName) == .orderedAscending }
+    }
+}
+
+private struct DictionaryTrainingSheet: View {
+    @ObservedObject var service: DictionaryTrainingService
+    let dismiss: () -> Void
+
+    var body: some View {
+        VStack(spacing: 0) {
+            trainingHeader
+            Divider()
+            stageContent
+            Divider()
+            trainingFooter
+        }
+        .frame(width: 700, height: 620)
+        .interactiveDismissDisabled(service.activeSampleID != nil)
+    }
+
+    private var trainingHeader: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Label(
+                    localizedAppText("Train a Word", de: "Wort trainieren"),
+                    systemImage: "waveform.and.mic"
+                )
+                .font(.title2.weight(.semibold))
+                Spacer()
+                Text(stageLabel)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            if let snapshot = service.engineSnapshot {
+                HStack(spacing: 16) {
+                    Label(snapshot.engineName, systemImage: "cpu")
+                    Label(snapshot.modelName, systemImage: "shippingbox")
+                    Label(languageLabel(snapshot.languageSelection), systemImage: "globe")
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+        }
+        .padding(20)
+    }
+
+    @ViewBuilder
+    private var stageContent: some View {
+        switch service.stage {
+        case .word:
+            wordStage
+        case .samples:
+            samplesStage
+        case .review:
+            reviewStage
+        case .summary:
+            summaryStage
+        }
+    }
+
+    private var wordStage: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            ContentUnavailableView(
+                localizedAppText("Choose the target word", de: "Zielwort auswählen"),
+                systemImage: "character.cursor.ibeam",
+                description: Text(localizedAppText(
+                    "TypeWhisper will record three editable example sentences and inspect only the raw transcription. Nothing is saved until you confirm the review.",
+                    de: "TypeWhisper nimmt drei editierbare Beispielsätze auf und prüft nur die rohe Transkription. Bis zur Bestätigung der Prüfung wird nichts gespeichert."
+                ))
+            )
+
+            TextField(
+                localizedAppText("Target word", de: "Zielwort"),
+                text: $service.canonicalWord
+            )
+            .textFieldStyle(.roundedBorder)
+            .font(.title3)
+
+            if let error = service.errorMessage {
+                errorLabel(error)
+            }
+            Spacer()
+        }
+        .padding(24)
+    }
+
+    private var samplesStage: some View {
+        ScrollView {
+            LazyVStack(spacing: 12) {
+                ForEach(service.samples) { sample in
+                    trainingSampleCard(sample)
+                }
+                if let error = service.errorMessage {
+                    errorLabel(error)
+                }
+            }
+            .padding(20)
+        }
+    }
+
+    private func trainingSampleCard(_ sample: DictionaryTrainingSample) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text(localizedAppText("Sample", de: "Beispiel") + " \(sampleNumber(sample.id))")
+                    .font(.headline)
+                Spacer()
+                sampleStateLabel(sample.state)
+            }
+
+            TextField(
+                localizedAppText("Example sentence", de: "Beispielsatz"),
+                text: Binding(
+                    get: { sample.sentence },
+                    set: { service.updateSentence(id: sample.id, sentence: $0) }
+                ),
+                axis: .vertical
+            )
+            .textFieldStyle(.roundedBorder)
+            .disabled(
+                sample.state == .preparing ||
+                    sample.state == .recording ||
+                    sample.state == .transcribing
+            )
+
+            if let transcript = sample.transcript {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(localizedAppText("Raw transcript", de: "Rohtranskript"))
+                        .font(.caption.weight(.semibold))
+                    Text(transcript)
+                        .textSelection(.enabled)
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+
+            HStack {
+                if sample.state == .recording {
+                    Button {
+                        Task { await service.stopRecordingAndTranscribe(sampleID: sample.id) }
+                    } label: {
+                        Label(localizedAppText("Stop", de: "Stopp"), systemImage: "stop.fill")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.red)
+                } else {
+                    Button {
+                        Task { await service.startRecording(sampleID: sample.id) }
+                    } label: {
+                        Label(
+                            sample.state == .completed
+                                ? localizedAppText("Record Again", de: "Erneut aufnehmen")
+                                : localizedAppText("Record", de: "Aufnehmen"),
+                            systemImage: "record.circle"
+                        )
+                    }
+                    .disabled(service.activeSampleID != nil || sample.state == .transcribing)
+                }
+
+                if case .failed = sample.state {
+                    Button(localizedAppText("Retry", de: "Wiederholen")) {
+                        service.retrySample(id: sample.id)
+                    }
+                    .disabled(service.activeSampleID != nil)
+                }
+                Spacer()
+            }
+        }
+        .padding(14)
+        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 10))
+        .overlay {
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(.separator, lineWidth: 1)
+        }
+    }
+
+    private var reviewStage: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 14) {
+                Text(localizedAppText(
+                    "Review the unique misrecognitions. Conflicts are never overwritten.",
+                    de: "Prüfe die eindeutigen Fehlerkennungen. Konflikte werden niemals überschrieben."
+                ))
+                .foregroundStyle(.secondary)
+
+                if service.candidates.isEmpty {
+                    ContentUnavailableView(
+                        localizedAppText("No correction candidates", de: "Keine Korrekturkandidaten"),
+                        systemImage: "checkmark.circle",
+                        description: Text(localizedAppText(
+                            "The target word can still be added as a dictionary term.",
+                            de: "Das Zielwort kann trotzdem als Dictionary-Begriff hinzugefügt werden."
+                        ))
+                    )
+                } else {
+                    ForEach(service.candidates) { candidate in
+                        candidateRow(candidate)
+                    }
+                }
+
+                if let error = service.errorMessage {
+                    errorLabel(error)
+                }
+            }
+            .padding(20)
+        }
+    }
+
+    private func candidateRow(_ candidate: DictionaryTrainingCandidate) -> some View {
+        HStack(spacing: 12) {
+            Toggle("", isOn: Binding(
+                get: { candidate.isSelected },
+                set: { service.setCandidateSelected(id: candidate.id, selected: $0) }
+            ))
+            .labelsHidden()
+            .accessibilityLabel(localizedAppText(
+                "Include \(candidate.original) as a correction",
+                de: "\(candidate.original) als Korrektur einschließen"
+            ))
+            .disabled(candidate.disposition != .available)
+
+            TextField(
+                localizedAppText("Misrecognition", de: "Fehlerkennung"),
+                text: Binding(
+                    get: { candidate.original },
+                    set: { service.updateCandidate(id: candidate.id, original: $0) }
+                )
+            )
+            .textFieldStyle(.roundedBorder)
+
+            Image(systemName: "arrow.right")
+                .foregroundStyle(.secondary)
+            Text(service.canonicalWord)
+                .fontWeight(.medium)
+                .frame(minWidth: 100, alignment: .leading)
+            candidateDispositionLabel(candidate.disposition)
+        }
+        .padding(12)
+        .background(.background.secondary, in: RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var summaryStage: some View {
+        VStack(spacing: 18) {
+            ContentUnavailableView(
+                localizedAppText("Training complete", de: "Training abgeschlossen"),
+                systemImage: "checkmark.circle.fill",
+                description: Text(summaryDescription)
+            )
+            if let snapshot = service.engineSnapshot {
+                Text(localizedAppText(
+                    "Candidates were produced by \(snapshot.engineName) / \(snapshot.modelName). Corrections remain global.",
+                    de: "Die Kandidaten wurden von \(snapshot.engineName) / \(snapshot.modelName) erzeugt. Korrekturen bleiben global."
+                ))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+            }
+        }
+        .padding(32)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private var trainingFooter: some View {
+        HStack {
+            if service.stage == .review {
+                Button(localizedAppText("Back", de: "Zurück")) {
+                    service.returnToSamples()
+                }
+            }
+
+            Spacer()
+
+            Button(service.stage == .summary
+                ? localizedAppText("Done", de: "Fertig")
+                : localizedAppText("Cancel", de: "Abbrechen")) {
+                Task {
+                    await service.cancel()
+                    dismiss()
+                }
+            }
+
+            switch service.stage {
+            case .word:
+                Button(localizedAppText("Continue", de: "Weiter")) {
+                    service.beginTraining()
+                }
+                .buttonStyle(.borderedProminent)
+            case .samples:
+                Button(localizedAppText("Review", de: "Prüfen")) {
+                    service.proceedToReview()
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled(!service.canProceedToReview)
+            case .review:
+                Button(localizedAppText("Add to Dictionary", de: "Zum Dictionary hinzufügen")) {
+                    service.confirm()
+                }
+                .buttonStyle(.borderedProminent)
+            case .summary:
+                EmptyView()
+            }
+        }
+        .padding(16)
+    }
+
+    private var stageLabel: String {
+        switch service.stage {
+        case .word: localizedAppText("1 of 4 · Word", de: "1 von 4 · Wort")
+        case .samples: localizedAppText("2 of 4 · Samples", de: "2 von 4 · Beispiele")
+        case .review: localizedAppText("3 of 4 · Review", de: "3 von 4 · Prüfung")
+        case .summary: localizedAppText("4 of 4 · Summary", de: "4 von 4 · Zusammenfassung")
+        }
+    }
+
+    private var summaryDescription: String {
+        guard let summary = service.summary else { return "" }
+        let termText = summary.addedTerm
+            ? localizedAppText("The target word was added as a term.", de: "Das Zielwort wurde als Begriff hinzugefügt.")
+            : localizedAppText("The target word already existed.", de: "Das Zielwort war bereits vorhanden.")
+        return termText + " " + localizedAppText(
+            "Added \(summary.addedCorrections.count) corrections, skipped \(summary.duplicateCorrections.count) duplicates and \(summary.conflictingCorrections.count) conflicts.",
+            de: "\(summary.addedCorrections.count) Korrekturen hinzugefügt, \(summary.duplicateCorrections.count) Duplikate und \(summary.conflictingCorrections.count) Konflikte übersprungen."
+        )
+    }
+
+    private func sampleNumber(_ id: UUID) -> Int {
+        (service.samples.firstIndex(where: { $0.id == id }) ?? 0) + 1
+    }
+
+    private func languageLabel(_ selection: LanguageSelection) -> String {
+        switch selection {
+        case .auto, .inheritGlobal:
+            return localizedAppText("Automatic language", de: "Automatische Sprache")
+        case .exact(let code):
+            return code
+        case .hints(let codes):
+            return codes.joined(separator: ", ")
+        }
+    }
+
+    @ViewBuilder
+    private func sampleStateLabel(_ state: DictionaryTrainingSampleState) -> some View {
+        switch state {
+        case .pending:
+            Label(localizedAppText("Ready", de: "Bereit"), systemImage: "circle")
+                .foregroundStyle(.secondary)
+        case .preparing:
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small)
+                Text(localizedAppText("Preparing", de: "Vorbereitung"))
+            }
+        case .recording:
+            Label(localizedAppText("Recording", de: "Aufnahme"), systemImage: "record.circle.fill")
+                .foregroundStyle(.red)
+        case .transcribing:
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.small)
+                Text(localizedAppText("Transcribing", de: "Transkription"))
+            }
+        case .completed:
+            Label(localizedAppText("Complete", de: "Fertig"), systemImage: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+        case .failed(let message):
+            Label(message, systemImage: "exclamationmark.triangle.fill")
+                .foregroundStyle(.red)
+                .lineLimit(2)
+        }
+    }
+
+    @ViewBuilder
+    private func candidateDispositionLabel(_ disposition: DictionaryTrainingCandidateDisposition) -> some View {
+        switch disposition {
+        case .available:
+            Label(localizedAppText("New", de: "Neu"), systemImage: "plus.circle")
+                .foregroundStyle(.green)
+        case .duplicate:
+            Label(localizedAppText("Duplicate", de: "Duplikat"), systemImage: "equal.circle")
+                .foregroundStyle(.secondary)
+        case .conflict(let replacement):
+            Label(
+                localizedAppText("Conflict: \(replacement)", de: "Konflikt: \(replacement)"),
+                systemImage: "exclamationmark.triangle"
+            )
+            .foregroundStyle(.orange)
+        case .invalid:
+            Label(localizedAppText("Invalid", de: "Ungültig"), systemImage: "xmark.circle")
+                .foregroundStyle(.red)
+        }
+    }
+
+    private func errorLabel(_ message: String) -> some View {
+        Label(message, systemImage: "exclamationmark.triangle.fill")
+            .foregroundStyle(.red)
+            .font(.callout)
     }
 }
 
@@ -534,6 +1139,7 @@ private struct DictionaryCardView: View {
     let setEntryEnabled: (Bool) -> Void
     let editEntry: () -> Void
     let deleteEntry: () -> Void
+    var addAlias: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: 10) {
@@ -586,6 +1192,17 @@ private struct DictionaryCardView: View {
 
             Spacer()
 
+            if let addAlias, row.type == .correction, !(row.replacement?.isEmpty ?? true) {
+                Button {
+                    addAlias()
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .buttonStyle(.borderless)
+                .help(localizedAppText("Add alias", de: "Variante hinzufügen"))
+                .accessibilityLabel(localizedAppText("Add alias", de: "Variante hinzufügen"))
+            }
+
             Toggle("", isOn: Binding(
                 get: { row.isEnabled },
                 set: { setEntryEnabled($0) }
@@ -610,6 +1227,155 @@ private struct DictionaryCardView: View {
             editEntry()
         }
         .accessibilityElement(children: .combine)
+        .contextMenu {
+            Button(String(localized: "Edit")) {
+                editEntry()
+            }
+            if let addAlias {
+                Button(localizedAppText("Add Alias", de: "Variante hinzufügen")) {
+                    addAlias()
+                }
+            }
+            Divider()
+            Button(String(localized: "Delete"), role: .destructive) {
+                deleteEntry()
+            }
+        }
+    }
+}
+
+private struct DictionaryCorrectionGroupCardView: View {
+    let group: DictionaryCorrectionGroupRow
+    @Binding var isExpanded: Bool
+    let setEntryEnabled: (UUID, Bool) -> Void
+    let editEntry: (UUID) -> Void
+    let deleteEntry: (UUID) -> Void
+    let addAlias: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            DisclosureGroup(isExpanded: $isExpanded) {
+                VStack(spacing: 0) {
+                    ForEach(Array(group.aliases.enumerated()), id: \.element.id) { index, alias in
+                        if index > 0 {
+                            Divider()
+                                .padding(.leading, 28)
+                        }
+
+                        DictionaryCorrectionAliasRow(
+                            row: alias,
+                            setEntryEnabled: { setEntryEnabled(alias.id, $0) },
+                            editEntry: { editEntry(alias.id) },
+                            deleteEntry: { deleteEntry(alias.id) }
+                        )
+                    }
+                }
+                .padding(.top, 8)
+            } label: {
+                HStack(spacing: 8) {
+                    Text(String(localized: "Correction"))
+                        .font(.caption)
+                        .fontWeight(.medium)
+                        .foregroundStyle(Color.orange)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.orange.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: 5))
+
+                    Text(group.replacementDisplayText)
+                        .font(.callout)
+                        .fontWeight(.semibold)
+                        .lineLimit(1)
+
+                    Text(localizedAppText(
+                        "\(group.aliases.count) variants",
+                        de: "\(group.aliases.count) Varianten"
+                    ))
+                    .font(.caption2)
+                    .foregroundStyle(.secondary)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.secondary.opacity(0.10))
+                    .clipShape(Capsule())
+                }
+            }
+
+            Button {
+                addAlias()
+            } label: {
+                Image(systemName: "plus")
+            }
+            .buttonStyle(.borderless)
+            .help(localizedAppText("Add alias", de: "Variante hinzufügen"))
+            .accessibilityLabel(localizedAppText("Add alias", de: "Variante hinzufügen"))
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(Color(NSColor.controlBackgroundColor))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
+        )
+        .contextMenu {
+            Button(localizedAppText("Add Alias", de: "Variante hinzufügen")) {
+                addAlias()
+            }
+        }
+    }
+}
+
+private struct DictionaryCorrectionAliasRow: View {
+    let row: DictionaryEntryRow
+    let setEntryEnabled: (Bool) -> Void
+    let editEntry: () -> Void
+    let deleteEntry: () -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "arrow.turn.down.right")
+                .font(.caption2)
+                .foregroundStyle(.tertiary)
+                .frame(width: 18)
+
+            Text(row.original)
+                .font(.callout)
+                .strikethrough()
+                .foregroundStyle(row.isEnabled ? .primary : .secondary)
+
+            if row.caseSensitive {
+                Text("Aa")
+                    .font(.caption2)
+                    .padding(.horizontal, 5)
+                    .padding(.vertical, 2)
+                    .background(Color.secondary.opacity(0.12))
+                    .foregroundStyle(.secondary)
+                    .clipShape(RoundedRectangle(cornerRadius: 3))
+            }
+
+            if row.source == .autoLearned {
+                DictionarySourceBadge()
+            }
+
+            Spacer()
+
+            Toggle("", isOn: Binding(
+                get: { row.isEnabled },
+                set: { setEntryEnabled($0) }
+            ))
+            .toggleStyle(.switch)
+            .labelsHidden()
+            .accessibilityLabel(String(localized: "Enable \(row.original)"))
+            .onTapGesture {}
+        }
+        .padding(.leading, 8)
+        .padding(.vertical, 6)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            editEntry()
+        }
         .contextMenu {
             Button(String(localized: "Edit")) {
                 editEntry()
@@ -666,12 +1432,24 @@ private struct DictionaryEditorSheet: View {
         case original, replacement
     }
 
+    private var title: String {
+        if viewModel.lockedCorrectionReplacement != nil {
+            return localizedAppText("Add Correction Alias", de: "Korrekturvariante hinzufügen")
+        }
+        if viewModel.isCreatingNew {
+            return viewModel.editType == .term
+                ? String(localized: "New Term")
+                : String(localized: "New Correction")
+        }
+        return viewModel.editType == .term
+            ? String(localized: "Edit Term")
+            : String(localized: "Edit Correction")
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             HStack {
-                Text(viewModel.isCreatingNew
-                     ? (viewModel.editType == .term ? String(localized: "New Term") : String(localized: "New Correction"))
-                     : (viewModel.editType == .term ? String(localized: "Edit Term") : String(localized: "Edit Correction")))
+                Text(title)
                     .font(.headline)
                 Spacer()
             }
@@ -711,6 +1489,16 @@ private struct DictionaryEditorSheet: View {
                                 TextField(String(localized: "e.g. Kubernetes"), text: $viewModel.editReplacement)
                                     .textFieldStyle(.roundedBorder)
                                     .focused($focusedField, equals: .replacement)
+                                    .disabled(viewModel.lockedCorrectionReplacement != nil)
+
+                                if viewModel.lockedCorrectionReplacement != nil {
+                                    Text(localizedAppText(
+                                        "The correct text is fixed by the selected group.",
+                                        de: "Der korrekte Text wird von der ausgewählten Gruppe vorgegeben."
+                                    ))
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                                }
                             }
                         }
 

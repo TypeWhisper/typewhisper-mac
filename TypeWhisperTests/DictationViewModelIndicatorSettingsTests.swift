@@ -114,6 +114,30 @@ final class DictationViewModelIndicatorSettingsTests: XCTestCase {
         XCTAssertTrue(DictationViewModel.loadTranscribeShortQuietClipsAggressively(defaults: defaults))
     }
 
+    func testRecordingCancelConfirmationDefaultsToEnabled() {
+        XCTAssertTrue(DictationViewModel.loadRequireSecondEscapeToCancelRecording(defaults: defaults))
+    }
+
+    func testRecordingCancelConfirmationPersistsWhenDisabled() {
+        DictationViewModel.persistRequireSecondEscapeToCancelRecording(false, defaults: defaults)
+
+        XCTAssertEqual(
+            defaults.object(forKey: UserDefaultsKeys.requireSecondEscapeToCancelRecording) as? Bool,
+            false
+        )
+        XCTAssertFalse(DictationViewModel.loadRequireSecondEscapeToCancelRecording(defaults: defaults))
+    }
+
+    func testRecordingCancelConfirmationPersistsWhenEnabled() {
+        DictationViewModel.persistRequireSecondEscapeToCancelRecording(true, defaults: defaults)
+
+        XCTAssertEqual(
+            defaults.object(forKey: UserDefaultsKeys.requireSecondEscapeToCancelRecording) as? Bool,
+            true
+        )
+        XCTAssertTrue(DictationViewModel.loadRequireSecondEscapeToCancelRecording(defaults: defaults))
+    }
+
     func testMicrophoneBoostDefaultsToDisabled() {
         XCTAssertFalse(DictationViewModel.loadMicrophoneBoostEnabled(defaults: defaults))
     }
@@ -830,6 +854,23 @@ final class DockIconVisibilityTests: XCTestCase {
                 hasInteractiveForegroundContent: true
             )
         )
+    }
+}
+
+@MainActor
+final class ManagedAppWindowRestorationTests: XCTestCase {
+    func testManagedWindowIsMarkedNonRestorable() {
+        let window = NSWindow(
+            contentRect: CGRect(x: 0, y: 0, width: 400, height: 300),
+            styleMask: [.titled],
+            backing: .buffered,
+            defer: false
+        )
+        window.isRestorable = true
+
+        ManagedAppWindowRestoration.disable(for: window)
+
+        XCTAssertFalse(window.isRestorable)
     }
 }
 

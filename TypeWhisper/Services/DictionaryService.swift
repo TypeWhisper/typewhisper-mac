@@ -32,6 +32,19 @@ struct LearnedDictionaryCorrection: Identifiable, Equatable, Sendable {
     let replacement: String
 }
 
+struct DictionaryCorrectionLearningResult: Equatable, Sendable {
+    let learnedCorrections: [LearnedDictionaryCorrection]
+    let duplicateCount: Int
+    let failed: Bool
+}
+
+struct DictionaryTrainingCommitResult: Equatable, Sendable {
+    let addedTerm: Bool
+    let addedCorrections: [String]
+    let duplicateCorrections: [String]
+    let conflictingCorrections: [String]
+}
+
 @MainActor
 final class DictionaryService: ObservableObject {
     private var modelContainer: ModelContainer?
@@ -44,6 +57,14 @@ final class DictionaryService: ObservableObject {
     @Published private(set) var correctionsCount: Int = 0
     @Published private(set) var enabledTermsCount: Int = 0
     @Published private(set) var enabledCorrectionsCount: Int = 0
+
+    #if DEBUG
+    private var trainingSaveOverride: (() throws -> Void)?
+
+    func setTrainingSaveOverrideForTesting(_ override: (() throws -> Void)?) {
+        trainingSaveOverride = override
+    }
+    #endif
 
     init(appSupportDirectory: URL = AppConstants.appSupportDirectory) {
         setupModelContainer(appSupportDirectory: appSupportDirectory)
@@ -317,7 +338,22 @@ final class DictionaryService: ObservableObject {
 
     /// Batch delete multiple entries
     func deleteEntries(_ entriesToDelete: [DictionaryEntry]) {
-        guard let context = modelContext, !entriesToDelete.isEmpty else { return }
+        do {
+            try deleteEntries(ids: Set(entriesToDelete.map(\.id)))
+        } catch {
+            logger.error("Failed to batch delete entries: \(error.localizedDescription)")
+        }
+    }
+
+    /// Batch delete entries by stable IDs and report persistence failures to the caller.
+    func deleteEntries(ids: Set<UUID>) throws {
+        guard !ids.isEmpty else { return }
+        guard let context = modelContext else {
+            throw DictionaryServiceMutationError.unavailable
+        }
+
+        let entriesToDelete = entries.filter { ids.contains($0.id) }
+        guard !entriesToDelete.isEmpty else { return }
 
         for entry in entriesToDelete {
             context.delete(entry)
@@ -327,7 +363,10 @@ final class DictionaryService: ObservableObject {
             try context.save()
             loadEntries()
         } catch {
+            context.rollback()
+            loadEntries()
             logger.error("Failed to batch delete entries: \(error.localizedDescription)")
+            throw DictionaryServiceMutationError.saveFailed(error)
         }
     }
 
@@ -534,16 +573,25 @@ final class DictionaryService: ObservableObject {
 
     /// Apply all enabled corrections to the given text
     func applyCorrections(to text: String) -> String {
-        var result = text
+        applyCorrections(to: [text]).first ?? text
+    }
+
+    /// Apply all enabled corrections to related text fields while counting each correction once.
+    func applyCorrections(to texts: [String]) -> [String] {
+        var results = texts
         var needsSave = false
 
         for correction in corrections {
             guard let replacement = correction.replacement else { continue }
 
-            let before = result
-            result = applyCorrection(correction, to: result, replacement: replacement)
+            var correctionWasApplied = false
+            for index in results.indices {
+                let before = results[index]
+                results[index] = applyCorrection(correction, to: before, replacement: replacement)
+                correctionWasApplied = correctionWasApplied || results[index] != before
+            }
 
-            if result != before {
+            if correctionWasApplied {
                 correction.usageCount += 1
                 needsSave = true
             }
@@ -557,7 +605,7 @@ final class DictionaryService: ObservableObject {
             }
         }
 
-        return result
+        return results
     }
 
     private func applyCorrection(_ correction: DictionaryEntry, to text: String, replacement: String) -> String {
@@ -734,7 +782,17 @@ final class DictionaryService: ObservableObject {
     /// Batch add corrections learned from user edits. Existing corrections are never overwritten.
     @discardableResult
     func learnCorrections(_ suggestions: [CorrectionSuggestion]) -> [LearnedDictionaryCorrection] {
-        guard let context = modelContext, !suggestions.isEmpty else { return [] }
+        learnCorrectionsWithResult(suggestions).learnedCorrections
+    }
+
+    /// Typed variant used by automatic learning to distinguish duplicates from storage failures.
+    func learnCorrectionsWithResult(_ suggestions: [CorrectionSuggestion]) -> DictionaryCorrectionLearningResult {
+        guard !suggestions.isEmpty else {
+            return DictionaryCorrectionLearningResult(learnedCorrections: [], duplicateCount: 0, failed: false)
+        }
+        guard let context = modelContext else {
+            return DictionaryCorrectionLearningResult(learnedCorrections: [], duplicateCount: 0, failed: true)
+        }
 
         var existingOriginals = Set(
             entries
@@ -743,6 +801,7 @@ final class DictionaryService: ObservableObject {
         )
         let now = Date()
         var learned: [LearnedDictionaryCorrection] = []
+        var duplicateCount = 0
 
         for suggestion in suggestions {
             let original = suggestion.original.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -750,8 +809,11 @@ final class DictionaryService: ObservableObject {
             let originalKey = original.lowercased()
 
             guard !original.isEmpty,
-                  originalKey != replacement.lowercased(),
-                  !existingOriginals.contains(originalKey) else {
+                  originalKey != replacement.lowercased() else {
+                continue
+            }
+            guard !existingOriginals.contains(originalKey) else {
+                duplicateCount += 1
                 continue
             }
 
@@ -773,15 +835,151 @@ final class DictionaryService: ObservableObject {
             ))
         }
 
-        guard !learned.isEmpty else { return [] }
+        guard !learned.isEmpty else {
+            return DictionaryCorrectionLearningResult(
+                learnedCorrections: [],
+                duplicateCount: duplicateCount,
+                failed: false
+            )
+        }
 
         do {
             try context.save()
             loadEntries()
-            return learned
+            return DictionaryCorrectionLearningResult(
+                learnedCorrections: learned,
+                duplicateCount: duplicateCount,
+                failed: false
+            )
         } catch {
+            context.rollback()
             logger.error("Failed to learn corrections: \(error.localizedDescription)")
-            return []
+            return DictionaryCorrectionLearningResult(
+                learnedCorrections: [],
+                duplicateCount: duplicateCount,
+                failed: true
+            )
+        }
+    }
+
+    /// Atomically adds a reviewed training term and its flat manual corrections.
+    /// Existing corrections are re-checked immediately before saving and are never overwritten.
+    func applyDictionaryTraining(
+        canonicalWord rawCanonicalWord: String,
+        approvedCandidates rawCandidates: [String]
+    ) throws -> DictionaryTrainingCommitResult {
+        guard let context = modelContext else {
+            throw DictionaryServiceMutationError.unavailable
+        }
+
+        let canonicalWord = rawCanonicalWord.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !canonicalWord.isEmpty else {
+            return DictionaryTrainingCommitResult(
+                addedTerm: false,
+                addedCorrections: [],
+                duplicateCorrections: [],
+                conflictingCorrections: []
+            )
+        }
+
+        let canonicalKey = canonicalWord.folding(
+            options: [.caseInsensitive, .diacriticInsensitive],
+            locale: .current
+        )
+        let termExists = entries.contains {
+            $0.type == .term &&
+                $0.original.folding(
+                    options: [.caseInsensitive, .diacriticInsensitive],
+                    locale: .current
+                ) == canonicalKey
+        }
+        let addedTerm = !termExists
+        let now = Date()
+
+        if addedTerm {
+            context.insert(DictionaryEntry(
+                type: .term,
+                original: canonicalWord,
+                source: .manual,
+                createdAt: now,
+                updatedAt: now
+            ))
+        }
+
+        let existingCorrections = entries.filter { $0.type == .correction }
+        var seenCandidateKeys = Set<String>()
+        var addedCorrections: [String] = []
+        var duplicateCorrections: [String] = []
+        var conflictingCorrections: [String] = []
+
+        for rawCandidate in rawCandidates {
+            let candidate = rawCandidate.trimmingCharacters(in: .whitespacesAndNewlines)
+            let candidateKey = candidate.folding(
+                options: [.caseInsensitive, .diacriticInsensitive],
+                locale: .current
+            )
+            guard !candidate.isEmpty,
+                  candidateKey != canonicalKey,
+                  seenCandidateKeys.insert(candidateKey).inserted else {
+                continue
+            }
+
+            if let existing = existingCorrections.first(where: {
+                $0.original.folding(
+                    options: [.caseInsensitive, .diacriticInsensitive],
+                    locale: .current
+                ) == candidateKey
+            }) {
+                let existingReplacementKey = (existing.replacement ?? "").folding(
+                    options: [.caseInsensitive, .diacriticInsensitive],
+                    locale: .current
+                )
+                if existingReplacementKey == canonicalKey {
+                    duplicateCorrections.append(candidate)
+                } else {
+                    conflictingCorrections.append(candidate)
+                }
+                continue
+            }
+
+            context.insert(DictionaryEntry(
+                type: .correction,
+                original: candidate,
+                replacement: canonicalWord,
+                caseSensitive: false,
+                source: .manual,
+                createdAt: now,
+                updatedAt: now
+            ))
+            addedCorrections.append(candidate)
+        }
+
+        guard addedTerm || !addedCorrections.isEmpty else {
+            return DictionaryTrainingCommitResult(
+                addedTerm: false,
+                addedCorrections: [],
+                duplicateCorrections: duplicateCorrections,
+                conflictingCorrections: conflictingCorrections
+            )
+        }
+
+        do {
+            #if DEBUG
+            try trainingSaveOverride?()
+            #endif
+            try context.save()
+            loadEntries()
+            return DictionaryTrainingCommitResult(
+                addedTerm: addedTerm,
+                addedCorrections: addedCorrections,
+                duplicateCorrections: duplicateCorrections,
+                conflictingCorrections: conflictingCorrections
+            )
+        } catch {
+            context.rollback()
+            loadEntries()
+            logger.error("Failed to apply dictionary training: \(error.localizedDescription)")
+            throw DictionaryServiceMutationError.saveFailed(error)
         }
     }
 

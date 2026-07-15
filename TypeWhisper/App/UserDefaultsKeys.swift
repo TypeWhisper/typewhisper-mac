@@ -18,6 +18,7 @@ enum UserDefaultsKeys {
     static let dictationHotkeysPaused = "dictationHotkeysPaused"
     static let transcribeShortQuietClipsAggressively = "transcribeShortQuietClipsAggressively"
     static let microphoneBoostEnabled = "microphoneBoostEnabled"
+    static let requireSecondEscapeToCancelRecording = "requireSecondEscapeToCancelRecording"
 
     // MARK: - Hotkey (JSON-encoded UnifiedHotkey per slot, legacy mirror for first binding)
     static let hybridHotkey = "hybridHotkey"
@@ -70,6 +71,7 @@ enum UserDefaultsKeys {
     static let termPackRegistryLastUpdateCheck = "termPackRegistryLastUpdateCheck"
     static let selectedIndustryPreset = "selectedIndustryPreset"
     static let targetAppCorrectionLearningEnabled = "targetAppCorrectionLearningEnabled"
+    static let targetAppCorrectionLearningLatestAttempt = "targetAppCorrectionLearningLatestAttempt"
 
     // MARK: - History
     static let historyEnabled = "historyEnabled"

@@ -525,6 +525,21 @@ final class CLISupportTests: XCTestCase {
         )
     }
 
+    func testMacCheckoutURLAddsPolarAttribution() throws {
+        let url = try XCTUnwrap(
+            AppConstants.Polar.appCheckoutURL(
+                baseURL: AppConstants.Polar.checkoutURLIndividual,
+                content: "settings_individual_monthly"
+            )
+        )
+        let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
+        let query = Dictionary(uniqueKeysWithValues: (components.queryItems ?? []).map { ($0.name, $0.value) })
+
+        XCTAssertEqual(query["utm_source"], "typewhisper_mac")
+        XCTAssertEqual(query["utm_medium"], "app")
+        XCTAssertEqual(query["utm_content"], "mac_settings_individual_monthly")
+    }
+
     @MainActor
     func testActivateAnyKeyRoutesCommercialBenefitIntoCommercialState() async throws {
         let (defaults, suiteName) = try makeIsolatedDefaults()
@@ -542,6 +557,14 @@ final class CLISupportTests: XCTestCase {
             dataTransport: { request in
                 switch request.url?.path {
                 case "/v1/customer-portal/license-keys/activate":
+                    let bodyData = try XCTUnwrap(request.httpBody)
+                    let requestBody = try XCTUnwrap(
+                        JSONSerialization.jsonObject(with: bodyData) as? [String: Any]
+                    )
+                    let metadata = try XCTUnwrap(requestBody["meta"] as? [String: String])
+                    XCTAssertEqual(metadata["platform"], "macos")
+                    XCTAssertEqual(metadata["app_version"], AppConstants.appVersion)
+                    XCTAssertNotNil(requestBody["label"] as? String)
                     let body = #"{"id":"activation-123"}"#
                     return (Data(body.utf8), Self.httpResponse(url: request.url!, statusCode: 200))
                 case "/v1/customer-portal/license-keys/validate":

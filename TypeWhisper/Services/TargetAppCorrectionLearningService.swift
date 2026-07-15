@@ -1,10 +1,60 @@
 import AppKit
+import Combine
 import Foundation
 
-enum TargetAppCorrectionCommitSignal: Equatable, Sendable {
+enum TargetAppCorrectionCommitSignal: String, Codable, Equatable, Sendable {
     case returnKey
+    case keypadEnterKey
     case tabKey
+    case focusChanged
     case activeApplicationChanged
+}
+
+enum TargetAppCorrectionLearningOutcome: String, Codable, Equatable, Sendable {
+    case learned
+    case unsupportedTextObservation
+    case noEdit
+    case ambiguousEdit
+    case noCommitBeforeTimeout
+    case duplicateCorrection
+    case cancelled
+    case failed
+}
+
+struct TargetAppCorrectionLearningAttemptSnapshot: Codable, Equatable, Sendable {
+    let outcome: TargetAppCorrectionLearningOutcome
+    let timestamp: Date
+    let commitSignal: TargetAppCorrectionCommitSignal?
+    let learnedCorrectionCount: Int
+}
+
+struct TargetAppCorrectionLearningResult: Equatable, Sendable {
+    let snapshot: TargetAppCorrectionLearningAttemptSnapshot
+    let learnedCorrections: [LearnedDictionaryCorrection]
+}
+
+private func targetAppCorrectionCommitSignal(forKeyCode keyCode: UInt16) -> TargetAppCorrectionCommitSignal? {
+    switch keyCode {
+    case 0x24:
+        return .returnKey
+    case 0x4C:
+        return .keypadEnterKey
+    case 0x30:
+        return .tabKey
+    default:
+        return nil
+    }
+}
+
+private func installGlobalTargetAppCorrectionKeyMonitor(
+    onCommit: @escaping @MainActor (TargetAppCorrectionCommitSignal) -> Void
+) -> Any? {
+    NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { event in
+        guard let signal = targetAppCorrectionCommitSignal(forKeyCode: event.keyCode) else { return }
+        Task { @MainActor in
+            onCommit(signal)
+        }
+    }
 }
 
 @MainActor
@@ -15,10 +65,6 @@ protocol TargetAppCorrectionCommitObserving: AnyObject {
 
 @MainActor
 final class TargetAppCorrectionCommitObserver: TargetAppCorrectionCommitObserving {
-    private static let returnKeyCode: UInt16 = 0x24
-    private static let keypadEnterKeyCode: UInt16 = 0x4C
-    private static let tabKeyCode: UInt16 = 0x30
-
     private let onCommit: @MainActor (TargetAppCorrectionCommitSignal) -> Void
     private var globalKeyMonitor: Any?
     private var localKeyMonitor: Any?
@@ -31,9 +77,7 @@ final class TargetAppCorrectionCommitObserver: TargetAppCorrectionCommitObservin
     func start() {
         stop()
 
-        globalKeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            self?.handleKeyEvent(event)
-        }
+        globalKeyMonitor = installGlobalTargetAppCorrectionKeyMonitor(onCommit: onCommit)
         localKeyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             self?.handleKeyEvent(event)
             return event
@@ -70,14 +114,7 @@ final class TargetAppCorrectionCommitObserver: TargetAppCorrectionCommitObservin
     }
 
     static func commitSignal(forKeyCode keyCode: UInt16) -> TargetAppCorrectionCommitSignal? {
-        switch keyCode {
-        case returnKeyCode, keypadEnterKeyCode:
-            return .returnKey
-        case tabKeyCode:
-            return .tabKey
-        default:
-            return nil
-        }
+        targetAppCorrectionCommitSignal(forKeyCode: keyCode)
     }
 }
 
@@ -154,15 +191,21 @@ private final class TargetAppCorrectionWakeCoordinator: @unchecked Sendable {
 }
 
 @MainActor
-final class TargetAppCorrectionLearningService {
+final class TargetAppCorrectionLearningService: ObservableObject {
     private static let defaultPollSchedule: [Duration] = (1...30).map { .seconds($0) }
 
     private let textInsertionService: TextInsertionService
     private let textDiffService: TextDiffService
-    private let dictionaryService: DictionaryService
+    private let learnCorrections: @MainActor ([CorrectionSuggestion]) -> DictionaryCorrectionLearningResult
     private let pollSchedule: [Duration]
     private let sleep: @MainActor (Duration) async -> Void
     private let makeCommitObserver: (@escaping @MainActor (TargetAppCorrectionCommitSignal) -> Void) -> TargetAppCorrectionCommitObserving
+    private let defaults: UserDefaults
+    private let shouldPersistLatestAttempt: Bool
+    private let now: @MainActor () -> Date
+    private var activeAttemptID: UUID?
+
+    @Published private(set) var latestAttempt: TargetAppCorrectionLearningAttemptSnapshot?
 
     init(
         textInsertionService: TextInsertionService,
@@ -174,22 +217,47 @@ final class TargetAppCorrectionLearningService {
         },
         makeCommitObserver: @escaping (@escaping @MainActor (TargetAppCorrectionCommitSignal) -> Void) -> TargetAppCorrectionCommitObserving = {
             TargetAppCorrectionCommitObserver(onCommit: $0)
-        }
+        },
+        learnCorrections: (@MainActor ([CorrectionSuggestion]) -> DictionaryCorrectionLearningResult)? = nil,
+        defaults: UserDefaults = .standard,
+        persistLatestAttempt: Bool = !AppConstants.isRunningTests,
+        now: @escaping @MainActor () -> Date = Date.init
     ) {
         self.textInsertionService = textInsertionService
         self.textDiffService = textDiffService
-        self.dictionaryService = dictionaryService
+        self.learnCorrections = learnCorrections ?? { suggestions in
+            dictionaryService.learnCorrectionsWithResult(suggestions)
+        }
         self.pollSchedule = pollSchedule ?? Self.defaultPollSchedule
         self.sleep = sleep
         self.makeCommitObserver = makeCommitObserver
+        self.defaults = defaults
+        self.shouldPersistLatestAttempt = persistLatestAttempt
+        self.now = now
+        self.latestAttempt = Self.loadLatestAttempt(from: defaults)
     }
 
     func trackInsertion(
         insertedText: String,
         baseline: TextInsertionService.FocusedTextObservation
-    ) async -> [LearnedDictionaryCorrection] {
+    ) async -> TargetAppCorrectionLearningResult {
+        let attemptID = UUID()
+        activeAttemptID = attemptID
         let insertedText = insertedText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !insertedText.isEmpty, !pollSchedule.isEmpty else { return [] }
+        guard !insertedText.isEmpty else {
+            return completeAttempt(
+                id: attemptID,
+                outcome: .unsupportedTextObservation,
+                commitSignal: nil
+            )
+        }
+        guard !pollSchedule.isEmpty else {
+            return completeAttempt(
+                id: attemptID,
+                outcome: .noCommitBeforeTimeout,
+                commitSignal: nil
+            )
+        }
 
         var commitSignal: TargetAppCorrectionCommitSignal?
         let wakeCoordinator = TargetAppCorrectionWakeCoordinator()
@@ -201,6 +269,7 @@ final class TargetAppCorrectionLearningService {
         defer { commitObserver.stop() }
 
         var latestSuggestions: [CorrectionSuggestion] = []
+        var latestNonConfidentOutcome: TargetAppCorrectionLearningOutcome = .unsupportedTextObservation
         var elapsed: Duration = .seconds(0)
         for pollOffset in pollSchedule {
             let waitDuration: Duration
@@ -217,14 +286,33 @@ final class TargetAppCorrectionLearningService {
                     await sleep(.seconds(0))
                 }
             }
-            guard !Task.isCancelled else { return [] }
+            guard !Task.isCancelled else {
+                return completeAttempt(
+                    id: attemptID,
+                    outcome: .cancelled,
+                    commitSignal: commitSignal
+                )
+            }
 
             guard let observation = textInsertionService.recaptureFocusedTextObservation(matching: baseline) else {
                 switch textInsertionService.focusedTextElementMatch(baseline) {
                 case .same, .unavailable:
-                    return []
+                    if let commitSignal {
+                        return completeCommittedAttempt(
+                            id: attemptID,
+                            suggestions: latestSuggestions,
+                            fallbackOutcome: latestNonConfidentOutcome,
+                            commitSignal: commitSignal
+                        )
+                    }
+                    continue
                 case .different:
-                    return dictionaryService.learnCorrections(latestSuggestions)
+                    return completeCommittedAttempt(
+                        id: attemptID,
+                        suggestions: latestSuggestions,
+                        fallbackOutcome: latestNonConfidentOutcome,
+                        commitSignal: commitSignal ?? .focusChanged
+                    )
                 }
             }
 
@@ -237,14 +325,100 @@ final class TargetAppCorrectionLearningService {
                 latestSuggestions = suggestions
             } else {
                 latestSuggestions = []
+                latestNonConfidentOutcome = observation.value == baseline.value ? .noEdit : .ambiguousEdit
             }
 
-            if commitSignal != nil {
-                return dictionaryService.learnCorrections(latestSuggestions)
+            if let commitSignal {
+                return completeCommittedAttempt(
+                    id: attemptID,
+                    suggestions: latestSuggestions,
+                    fallbackOutcome: latestNonConfidentOutcome,
+                    commitSignal: commitSignal
+                )
             }
         }
 
-        return []
+        if Task.isCancelled {
+            return completeAttempt(
+                id: attemptID,
+                outcome: .cancelled,
+                commitSignal: commitSignal
+            )
+        }
+        return completeAttempt(
+            id: attemptID,
+            outcome: .noCommitBeforeTimeout,
+            commitSignal: nil
+        )
+    }
+
+    private func completeCommittedAttempt(
+        id: UUID,
+        suggestions: [CorrectionSuggestion],
+        fallbackOutcome: TargetAppCorrectionLearningOutcome,
+        commitSignal: TargetAppCorrectionCommitSignal
+    ) -> TargetAppCorrectionLearningResult {
+        guard !suggestions.isEmpty else {
+            return completeAttempt(
+                id: id,
+                outcome: fallbackOutcome,
+                commitSignal: commitSignal
+            )
+        }
+
+        let dictionaryResult = learnCorrections(suggestions)
+        let outcome: TargetAppCorrectionLearningOutcome
+        if dictionaryResult.failed {
+            outcome = .failed
+        } else if !dictionaryResult.learnedCorrections.isEmpty {
+            outcome = .learned
+        } else if dictionaryResult.duplicateCount > 0 {
+            outcome = .duplicateCorrection
+        } else {
+            outcome = .failed
+        }
+        return completeAttempt(
+            id: id,
+            outcome: outcome,
+            commitSignal: commitSignal,
+            learnedCorrections: dictionaryResult.learnedCorrections
+        )
+    }
+
+    private func completeAttempt(
+        id: UUID,
+        outcome: TargetAppCorrectionLearningOutcome,
+        commitSignal: TargetAppCorrectionCommitSignal?,
+        learnedCorrections: [LearnedDictionaryCorrection] = []
+    ) -> TargetAppCorrectionLearningResult {
+        let snapshot = TargetAppCorrectionLearningAttemptSnapshot(
+            outcome: outcome,
+            timestamp: now(),
+            commitSignal: commitSignal,
+            learnedCorrectionCount: learnedCorrections.count
+        )
+        if activeAttemptID == id {
+            activeAttemptID = nil
+            latestAttempt = snapshot
+            persistLatestAttempt(snapshot)
+        }
+        return TargetAppCorrectionLearningResult(
+            snapshot: snapshot,
+            learnedCorrections: learnedCorrections
+        )
+    }
+
+    private func persistLatestAttempt(_ snapshot: TargetAppCorrectionLearningAttemptSnapshot) {
+        guard shouldPersistLatestAttempt else { return }
+        guard let data = try? JSONEncoder().encode(snapshot) else { return }
+        defaults.set(data, forKey: UserDefaultsKeys.targetAppCorrectionLearningLatestAttempt)
+    }
+
+    private static func loadLatestAttempt(from defaults: UserDefaults) -> TargetAppCorrectionLearningAttemptSnapshot? {
+        guard let data = defaults.data(forKey: UserDefaultsKeys.targetAppCorrectionLearningLatestAttempt) else {
+            return nil
+        }
+        return try? JSONDecoder().decode(TargetAppCorrectionLearningAttemptSnapshot.self, from: data)
     }
 
     func highConfidenceCorrectionSuggestions(

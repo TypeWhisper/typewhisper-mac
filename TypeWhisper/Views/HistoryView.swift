@@ -32,23 +32,14 @@ struct HistoryView: View {
     private var listPanel: some View {
         VStack(spacing: 0) {
             // Search
-            HStack {
-                Image(systemName: "magnifyingglass")
-                    .foregroundStyle(.secondary)
-                TextField(String(localized: "Search..."), text: $viewModel.searchQuery)
-                    .textFieldStyle(.plain)
-                if !viewModel.searchQuery.isEmpty {
-                    Button {
-                        viewModel.searchQuery = ""
-                    } label: {
-                        Image(systemName: "xmark.circle.fill")
-                            .foregroundStyle(.secondary)
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(String(localized: "Clear search"))
-                }
-            }
-            .padding(8)
+            NativeSearchField(
+                text: $viewModel.searchQuery,
+                placeholder: String(localized: "Search...")
+            )
+            .frame(maxWidth: .infinity)
+            .frame(height: 32)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
             .background(.bar)
 
             // Filter pickers

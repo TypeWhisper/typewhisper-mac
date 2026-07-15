@@ -688,6 +688,10 @@ final class LicenseService: ObservableObject {
             "key": key,
             "organization_id": AppConstants.Polar.organizationId,
             "label": deviceLabel,
+            "meta": [
+                "platform": "macos",
+                "app_version": AppConstants.appVersion,
+            ],
         ]
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 

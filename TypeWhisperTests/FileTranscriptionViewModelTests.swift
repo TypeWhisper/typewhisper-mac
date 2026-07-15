@@ -5,6 +5,57 @@ import XCTest
 
 @MainActor
 final class FileTranscriptionViewModelTests: XCTestCase {
+    func testEngineSwitchPreservesFullLanguageSelectionAndPersistence() throws {
+        let previousPluginManager = PluginManager.shared
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer {
+            PluginManager.shared = previousPluginManager
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        let soniox = FileTranscriptionLanguageSelectionPlugin(
+            providerId: "soniox",
+            providerDisplayName: "Soniox",
+            supportedLanguages: ["es", "en", "uk"]
+        )
+        let assemblyAI = FileTranscriptionLanguageSelectionPlugin(
+            providerId: "assemblyai",
+            providerDisplayName: "AssemblyAI",
+            supportedLanguages: ["es", "en"]
+        )
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = [
+            loadedPlugin(for: soniox, appSupportDirectory: appSupportDirectory),
+            loadedPlugin(for: assemblyAI, appSupportDirectory: appSupportDirectory),
+        ]
+
+        let defaults = try makeDefaults()
+        let viewModel = FileTranscriptionViewModel(
+            modelManager: ModelManagerService(),
+            audioFileService: AudioFileService(),
+            dictionaryService: makeDictionaryService(),
+            defaults: defaults
+        )
+        let fullSelection = LanguageSelection.hints(["es", "en", "uk"])
+
+        viewModel.selectedEngine = soniox.providerId
+        viewModel.languageSelection = fullSelection
+        viewModel.selectedEngine = assemblyAI.providerId
+
+        XCTAssertEqual(viewModel.languageSelection, fullSelection)
+        XCTAssertEqual(
+            LanguageSelection(
+                storedValue: defaults.string(forKey: UserDefaultsKeys.fileTranscriptionLanguage),
+                nilBehavior: .auto
+            ),
+            fullSelection
+        )
+
+        viewModel.selectedEngine = soniox.providerId
+
+        XCTAssertEqual(viewModel.languageSelection, fullSelection)
+    }
+
     func testFileTranscriptionCanStartWithPrepareableAppleSpeechCatalog() async throws {
         let previousPluginManager = PluginManager.shared
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
@@ -35,6 +86,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         let viewModel = FileTranscriptionViewModel(
             modelManager: ModelManagerService(),
             audioFileService: AudioFileService(),
+            dictionaryService: makeDictionaryService(),
             defaults: defaults
         )
 
@@ -56,6 +108,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         let viewModel = FileTranscriptionViewModel(
             modelManager: ModelManagerService(),
             audioFileService: AudioFileService(),
+            dictionaryService: makeDictionaryService(),
             defaults: defaults,
             audioSamplesLoader: { url, _, _ in
                 XCTAssertEqual(url, fileURL)
@@ -98,6 +151,70 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.files.first?.result?.text, "Recovered text")
     }
 
+    func testTranscribeAllAppliesDictionaryCorrectionsToTextAndSegmentsPreservingMetadata() async throws {
+        let defaults = try makeDefaults()
+        let fileURL = makeTemporaryFile(named: "corrected-transcript.wav")
+        let dictionaryService = makeDictionaryService()
+        dictionaryService.addEntry(type: .correction, original: "teh", replacement: "the")
+        dictionaryService.addEntry(type: .correction, original: "cross segment", replacement: "joined")
+
+        let viewModel = FileTranscriptionViewModel(
+            modelManager: ModelManagerService(),
+            audioFileService: AudioFileService(),
+            dictionaryService: dictionaryService,
+            defaults: defaults,
+            audioSamplesLoader: { _, _, _ in [0.1, -0.1] },
+            transcriptionRunner: { _, _, _, engineOverrideId, _, _, _, _ in
+                TranscriptionResult(
+                    text: "teh cross segment",
+                    detectedLanguage: "en",
+                    duration: 4.5,
+                    processingTime: 0.25,
+                    engineUsed: engineOverrideId ?? "default",
+                    segments: [
+                        TranscriptionSegment(
+                            text: "teh cross",
+                            start: 0.25,
+                            end: 2,
+                            speakerLabel: "Speaker 1",
+                            speakerConfidence: 0.9
+                        ),
+                        TranscriptionSegment(
+                            text: "segment",
+                            start: 2,
+                            end: 4.25,
+                            speakerLabel: "Speaker 2",
+                            speakerConfidence: 0.8
+                        )
+                    ]
+                )
+            },
+            engineReadinessChecker: { _ in true }
+        )
+
+        viewModel.addFiles([fileURL])
+        viewModel.selectedEngine = "whisper"
+        viewModel.transcribeAll()
+        try await waitForBatchToFinish(viewModel)
+
+        let result = try XCTUnwrap(viewModel.files.first?.result)
+        XCTAssertEqual(result.text, "the joined")
+        XCTAssertEqual(result.detectedLanguage, "en")
+        XCTAssertEqual(result.duration, 4.5)
+        XCTAssertEqual(result.processingTime, 0.25)
+        XCTAssertEqual(result.engineUsed, "whisper")
+        XCTAssertEqual(result.segments.map(\.text), ["the cross", "segment"])
+        XCTAssertEqual(result.segments.map(\.start), [0.25, 2])
+        XCTAssertEqual(result.segments.map(\.end), [2, 4.25])
+        XCTAssertEqual(result.segments.map(\.speakerLabel), ["Speaker 1", "Speaker 2"])
+        XCTAssertEqual(result.segments.map(\.speakerConfidence), [0.9, 0.8])
+        XCTAssertEqual(dictionaryService.corrections.map(\.usageCount), [1, 1])
+        XCTAssertEqual(
+            SubtitleExporter.exportContent(for: result, format: .vtt),
+            "WEBVTT\n\n1\n00:00:00.250 --> 00:00:02.000\nSpeaker 1: the cross\n\n2\n00:00:02.000 --> 00:00:04.250\nSpeaker 2: segment\n"
+        )
+    }
+
     func testTranscribeAllExposesLoadingProgressAndElapsedTime() async throws {
         let defaults = try makeDefaults()
         let fileURL = makeTemporaryFile(named: "long-video.mp4")
@@ -107,6 +224,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         let viewModel = FileTranscriptionViewModel(
             modelManager: ModelManagerService(),
             audioFileService: AudioFileService(),
+            dictionaryService: makeDictionaryService(),
             defaults: defaults,
             audioSamplesLoader: { url, onProgress, _ in
                 XCTAssertEqual(url, fileURL)
@@ -157,6 +275,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         let viewModel = FileTranscriptionViewModel(
             modelManager: ModelManagerService(),
             audioFileService: AudioFileService(),
+            dictionaryService: makeDictionaryService(),
             defaults: defaults,
             audioSamplesLoader: { _, _, isCancelled in
                 await started.open()
@@ -203,6 +322,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         let viewModel = FileTranscriptionViewModel(
             modelManager: ModelManagerService(),
             audioFileService: AudioFileService(),
+            dictionaryService: makeDictionaryService(),
             defaults: defaults,
             audioSamplesLoader: { _, _, _ in [0.1, -0.1] },
             transcriptionRunner: { _, _, _, engineOverrideId, _, onProgress, _, _ in
@@ -244,6 +364,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         let viewModel = FileTranscriptionViewModel(
             modelManager: ModelManagerService(),
             audioFileService: AudioFileService(),
+            dictionaryService: makeDictionaryService(),
             defaults: defaults,
             audioSamplesLoader: { _, _, _ in [0.1, -0.1] },
             transcriptionRunner: { _, _, _, engineOverrideId, _, _, onSourceProgress, _ in
@@ -294,6 +415,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         let viewModel = FileTranscriptionViewModel(
             modelManager: ModelManagerService(),
             audioFileService: AudioFileService(),
+            dictionaryService: makeDictionaryService(),
             defaults: defaults,
             subtitleFileSaver: { content, format, suggestedName in
                 savedContent = content
@@ -330,6 +452,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         let viewModel = FileTranscriptionViewModel(
             modelManager: ModelManagerService(),
             audioFileService: AudioFileService(),
+            dictionaryService: makeDictionaryService(),
             defaults: defaults,
             subtitleFileSaver: { _, _, _ in
                 XCTFail("Multi-file export should use the folder export path")
@@ -370,6 +493,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         let viewModel = FileTranscriptionViewModel(
             modelManager: ModelManagerService(),
             audioFileService: AudioFileService(),
+            dictionaryService: makeDictionaryService(),
             defaults: defaults,
             subtitleFileSaver: { content, _, _ in
                 savedContent = content
@@ -438,6 +562,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         let viewModel = FileTranscriptionViewModel(
             modelManager: ModelManagerService(),
             audioFileService: AudioFileService(),
+            dictionaryService: makeDictionaryService(),
             defaults: defaults,
             audioSamplesLoader: { _, onProgress, isCancelled in
                 while !isCancelled() {
@@ -660,6 +785,10 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         return defaults
     }
 
+    private func makeDictionaryService() -> DictionaryService {
+        DictionaryService(appSupportDirectory: makeTemporaryDirectory())
+    }
+
     private func makeTemporaryFile(named name: String) -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("FileTranscriptionViewModelTests-\(UUID().uuidString)", isDirectory: true)
@@ -740,6 +869,24 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         PluginManager.shared = pluginManager
     }
 
+    private func loadedPlugin(
+        for plugin: FileTranscriptionLanguageSelectionPlugin,
+        appSupportDirectory: URL
+    ) -> LoadedPlugin {
+        LoadedPlugin(
+            manifest: PluginManifest(
+                id: "com.typewhisper.mock.\(plugin.providerId)",
+                name: plugin.providerDisplayName,
+                version: "1.0.0",
+                principalClass: "FileTranscriptionLanguageSelectionPlugin"
+            ),
+            instance: plugin,
+            bundle: Bundle.main,
+            sourceURL: appSupportDirectory,
+            isEnabled: true
+        )
+    }
+
     private func waitForBatchToFinish(_ viewModel: FileTranscriptionViewModel) async throws {
         for _ in 0..<50 {
             if viewModel.batchState == .done {
@@ -794,6 +941,44 @@ private actor AsyncGate {
 }
 
 private struct UnknownTranscriptionError: Error {}
+
+private final class FileTranscriptionLanguageSelectionPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.mock.file-transcription-language-selection"
+    static let pluginName = "File Transcription Language Selection"
+
+    private(set) var providerId = "file-transcription-language-selection"
+    private(set) var providerDisplayName = "File Transcription Language Selection"
+    private(set) var supportedLanguages: [String] = []
+    let isConfigured = true
+    let transcriptionModels: [PluginModelInfo] = []
+    let selectedModelId: String? = nil
+    let supportsTranslation = false
+    let supportsStreaming = false
+
+    required override init() {
+        super.init()
+    }
+
+    convenience init(providerId: String, providerDisplayName: String, supportedLanguages: [String]) {
+        self.init()
+        self.providerId = providerId
+        self.providerDisplayName = providerDisplayName
+        self.supportedLanguages = supportedLanguages
+    }
+
+    func activate(host: HostServices) {}
+    func deactivate() {}
+    func selectModel(_ modelId: String) {}
+
+    func transcribe(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?
+    ) async throws -> PluginTranscriptionResult {
+        PluginTranscriptionResult(text: "transcribed", detectedLanguage: language)
+    }
+}
 
 private final class FileTranscriptionAppleSpeechCatalogPlugin: NSObject, TranscriptionModelCatalogProviding, @unchecked Sendable {
     static let pluginId = AppleSpeechModelSelection.manifestId

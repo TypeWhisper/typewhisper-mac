@@ -175,6 +175,13 @@ struct AdvancedSettingsView: View {
                     )
                 }
 
+                Toggle(isOn: $dictation.requireSecondEscapeToCancelRecording) {
+                    SettingsInfoLabel(
+                        title: String(localized: "Require second Esc press to cancel recording"),
+                        info: String(localized: "When disabled, pressing Esc once immediately discards the active recording.")
+                    )
+                }
+
                 Toggle(isOn: $dictation.microphoneBoostEnabled) {
                     SettingsInfoLabel(
                         title: localizedAppText("Whisper Mode (AGC)", de: "Whisper-Modus (AGC)"),

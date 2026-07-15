@@ -93,3 +93,4 @@
 - RC and daily tags must not update Homebrew or trigger stable website messaging
 - Verify DMG, ZIP, and the `release-candidate` appcast entry with `minimumSystemVersion` set to `14.0`
 - Verify Homebrew and the stable appcast update only at the final `1.6.0`
+- Confirm the release workflow's appcast publication gate observes the new version on the canonical GitHub Pages URL within 900 seconds

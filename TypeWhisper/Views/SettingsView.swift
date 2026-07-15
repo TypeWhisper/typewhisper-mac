@@ -3,7 +3,7 @@ import AppKit
 import TypeWhisperPluginSDK
 
 enum SettingsTab: Hashable {
-    case home, general, recording, hotkeys, recorder
+    case home, general, dictation, hotkeys, recorder
     case dictationRecovery, fileTranscription, history, statistics, dictionary, snippets, workflows, profiles, prompts, premium, integrations, advanced, license, about
 }
 
@@ -34,7 +34,7 @@ struct SettingsView: View {
         [
             SettingsDestination(tab: .home, title: String(localized: "Home"), systemImage: "house", badge: nil),
             SettingsDestination(tab: .general, title: String(localized: "General"), systemImage: "gear", badge: nil),
-            SettingsDestination(tab: .recording, title: String(localized: "Recording"), systemImage: "mic.fill", badge: nil),
+            SettingsDestination(tab: .dictation, title: String(localized: "Dictation"), systemImage: "mic.fill", badge: nil),
             SettingsDestination(tab: .hotkeys, title: String(localized: "Hotkeys"), systemImage: "keyboard", badge: nil),
             SettingsDestination(
                 tab: .recorder,
@@ -155,7 +155,7 @@ struct SettingsView: View {
             HomeSettingsView()
         case .general:
             GeneralSettingsView()
-        case .recording:
+        case .dictation:
             RecordingSettingsView()
         case .hotkeys:
             HotkeySettingsView()
@@ -266,7 +266,7 @@ private func settingsBadge(_ destinations: [SettingsDestination], _ tab: Setting
 private func settingsDestinationSections(_ destinations: [SettingsDestination]) -> [SettingsDestinationSection] {
     var coreDestinations = [
         settingsDestination(destinations, .general),
-        settingsDestination(destinations, .recording)
+        settingsDestination(destinations, .dictation)
     ]
     if let recoveryDestination = settingsDestinationIfAvailable(destinations, .dictationRecovery) {
         coreDestinations.append(recoveryDestination)

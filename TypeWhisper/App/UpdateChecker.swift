@@ -1,12 +1,12 @@
-@preconcurrency import Sparkle
+import Sparkle
 
-struct UpdateChecker: Sendable {
-    let canCheckForUpdates: @Sendable () -> Bool
-    let checkForUpdates: @Sendable () -> Void
-    let resetUpdateCycleAfterSettingsChange: @Sendable () -> Void
+@MainActor
+struct UpdateChecker {
+    let canCheckForUpdates: () -> Bool
+    let checkForUpdates: () -> Void
+    let resetUpdateCycleAfterSettingsChange: () -> Void
 
     static func sparkle(_ updater: SPUUpdater) -> UpdateChecker {
-        nonisolated(unsafe) let updater = updater
         return UpdateChecker(
             canCheckForUpdates: { updater.canCheckForUpdates },
             checkForUpdates: { updater.checkForUpdates() },
@@ -14,5 +14,5 @@ struct UpdateChecker: Sendable {
         )
     }
 
-    nonisolated(unsafe) static var shared: UpdateChecker?
+    static var shared: UpdateChecker?
 }

@@ -3,6 +3,67 @@ import XCTest
 
 @MainActor
 final class PostUpdatePromptCoordinatorTests: XCTestCase {
+    func testInitialWindowPolicyOpensSetupWhenRequired() {
+        XCTAssertEqual(
+            InitialWindowPresentationPolicy.presentation(
+                setupWizardRequired: true,
+                postUpdatePromptPending: false
+            ),
+            .setup
+        )
+        XCTAssertEqual(
+            InitialWindowPresentationPolicy.presentation(
+                setupWizardRequired: true,
+                postUpdatePromptPending: true
+            ),
+            .setup
+        )
+    }
+
+    func testInitialWindowPolicyKeepsCompletedSetupWindowlessWithPendingPrompt() {
+        XCTAssertEqual(
+            InitialWindowPresentationPolicy.presentation(
+                setupWizardRequired: false,
+                postUpdatePromptPending: true
+            ),
+            .none
+        )
+    }
+
+    func testInitialWindowPolicyKeepsCompletedSetupWindowlessWithoutPrompt() {
+        XCTAssertEqual(
+            InitialWindowPresentationPolicy.presentation(
+                setupWizardRequired: false,
+                postUpdatePromptPending: false
+            ),
+            .none
+        )
+    }
+
+    func testPendingPromptRemainsAvailableForInteractiveSettingsPresentation() throws {
+        let (defaults, suiteName) = try makeIsolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(true, forKey: UserDefaultsKeys.welcomeSheetShown)
+        defaults.set("1.2.9+99@stable", forKey: UserDefaultsKeys.lastSeenReleaseFingerprint)
+
+        let license = LicenseService(defaults: defaults)
+        let coordinator = PostUpdatePromptCoordinator(
+            defaults: defaults,
+            licenseService: license,
+            currentReleaseFingerprint: "1.3.0+123@stable"
+        )
+
+        XCTAssertEqual(
+            InitialWindowPresentationPolicy.presentation(
+                setupWizardRequired: false,
+                postUpdatePromptPending: coordinator.shouldPresentPrompt
+            ),
+            .none
+        )
+        XCTAssertEqual(coordinator.activeSheetRoute, .postUpdateLicensing)
+        XCTAssertNil(defaults.string(forKey: UserDefaultsKeys.lastAcknowledgedPostUpdatePromptRelease))
+    }
+
     func testMissingVersionMarkerAndPendingWelcomeSeedsCurrentReleaseWithoutPrompting() throws {
         let (defaults, suiteName) = try makeIsolatedDefaults()
         defer { defaults.removePersistentDomain(forName: suiteName) }

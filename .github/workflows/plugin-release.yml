@@ -167,23 +167,51 @@ jobs:
             -project TypeWhisper.xcodeproj \
             -scheme TypeWhisper
 
-      - name: Patch manifest version
+      - name: Validate release manifest
         run: |
           MANIFEST="TypeWhisperPluginSDK/Plugins/${TARGET}/manifest.json"
           if [ ! -f "$MANIFEST" ]; then
             echo "Missing manifest for ${TARGET}: $MANIFEST"
             exit 1
           fi
-          python3 -c "
+          export MANIFEST
+          python3 <<'PYEOF'
           import json
-          with open('$MANIFEST', 'r') as f:
-              m = json.load(f)
-          m['version'] = '$PLUGIN_VERSION'
-          with open('$MANIFEST', 'w') as f:
-              json.dump(m, f, indent=4)
-              f.write('\n')
-          "
-          echo "Patched $MANIFEST to version $PLUGIN_VERSION"
+          import os
+          import re
+
+          manifest_path = os.environ["MANIFEST"]
+          expected_version = os.environ["PLUGIN_VERSION"]
+
+          with open(manifest_path) as manifest_file:
+              manifest = json.load(manifest_file)
+
+          actual_version = manifest.get("version")
+          if actual_version != expected_version:
+              raise SystemExit(
+                  f"manifest version {actual_version!r} does not match release version {expected_version!r}"
+              )
+
+          min_host_version = manifest.get("minHostVersion")
+          if not isinstance(min_host_version, str) or not re.fullmatch(
+              r"[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?",
+              min_host_version,
+          ):
+              raise SystemExit(
+                  f"manifest minHostVersion {min_host_version!r} must be a semantic version"
+              )
+
+          sdk_compatibility_version = manifest.get("sdkCompatibilityVersion")
+          if not isinstance(sdk_compatibility_version, str) or not re.fullmatch(
+              r"v[1-9][0-9]*",
+              sdk_compatibility_version,
+          ):
+              raise SystemExit(
+                  "manifest sdkCompatibilityVersion "
+                  f"{sdk_compatibility_version!r} must use the format vN"
+              )
+          PYEOF
+          echo "Validated $MANIFEST for release $PLUGIN_VERSION"
           cat "$MANIFEST"
 
       - name: Build Plugin
