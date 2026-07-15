@@ -203,12 +203,25 @@ struct StatisticsView: View {
                     }
                 }
                 .frame(height: 200)
-                .accessibilityHidden(true)
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(chartAccessibilitySummary)
             }
         }
         .padding()
         .background(.quaternary.opacity(0.3))
         .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var chartAccessibilitySummary: Text {
+        let totalWords = viewModel.chartData.reduce(0) { $0 + $1.wordCount }
+        guard let peak = viewModel.chartData.max(by: { $0.wordCount < $1.wordCount }), peak.wordCount > 0 else {
+            return Text(String(localized: "Activity chart, no words in this period."))
+        }
+        let peakDay = peak.date.formatted(.dateTime.month(.abbreviated).day())
+        return Text(
+            "\(String(localized: "Activity chart")), \(totalWords) \(String(localized: "words total")), " +
+            "\(String(localized: "peak")) \(peak.wordCount) \(String(localized: "words on")) \(peakDay)."
+        )
     }
 
     private var chartAxisStride: Int {
