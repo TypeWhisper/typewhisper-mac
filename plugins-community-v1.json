@@ -1459,6 +1459,14 @@
       "detailsURL": "https://www.typewhisper.com/addons/obsidian/",
       "releases": [
         {
+          "version": "1.0.7",
+          "minHostVersion": "0.9.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 193460,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-obsidian-v1.0.7/ObsidianPlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
           "version": "1.0.6",
           "minHostVersion": "0.9.0",
           "sdkCompatibilityVersion": "v1",
