@@ -14,7 +14,10 @@ protocol UsageStatisticsRecording: AnyObject {
         timestamp: Date,
         wordsCount: Int,
         durationSeconds: Double,
-        appBundleIdentifier: String?
+        appBundleIdentifier: String?,
+        appName: String?,
+        engineUsed: String?,
+        modelUsed: String?
     )
 }
 
@@ -24,6 +27,35 @@ struct UsageStatisticsDaySnapshot: Equatable {
     let totalWords: Int
     let totalDurationSeconds: Double
     let appBundleIdentifiers: Set<String>
+    /// Per-app transcription counts keyed by `UsageStatisticsKeys.appKey`. Persisted so Top Apps
+    /// stays consistent with the streak/active-days data even when history retention purges or
+    /// disables the underlying `TranscriptionRecord`s.
+    let appCounts: [String: Int]
+    /// Per-model transcription counts keyed by `UsageStatisticsKeys.modelKey`.
+    let modelCounts: [String: Int]
+    /// Per-hour-of-day transcription counts (index 0...23). Combined with `day`'s weekday this
+    /// reconstructs the hourly heatmap without depending on history records.
+    let hourCounts: [Int]
+
+    init(
+        day: Date,
+        transcriptionCount: Int,
+        totalWords: Int,
+        totalDurationSeconds: Double,
+        appBundleIdentifiers: Set<String>,
+        appCounts: [String: Int] = [:],
+        modelCounts: [String: Int] = [:],
+        hourCounts: [Int] = Array(repeating: 0, count: 24)
+    ) {
+        self.day = day
+        self.transcriptionCount = transcriptionCount
+        self.totalWords = totalWords
+        self.totalDurationSeconds = totalDurationSeconds
+        self.appBundleIdentifiers = appBundleIdentifiers
+        self.appCounts = appCounts
+        self.modelCounts = modelCounts
+        self.hourCounts = hourCounts
+    }
 }
 
 struct UsageStatisticsSummary: Equatable {
@@ -91,7 +123,10 @@ final class UsageStatisticsService: ObservableObject, UsageStatisticsRecording {
         timestamp: Date = Date(),
         wordsCount: Int,
         durationSeconds: Double,
-        appBundleIdentifier: String?
+        appBundleIdentifier: String?,
+        appName: String? = nil,
+        engineUsed: String? = nil,
+        modelUsed: String? = nil
     ) {
         guard wordsCount > 0 else {
             usageStatisticsLogger.warning("Skipping usage statistics entry: empty word count")
@@ -107,7 +142,10 @@ final class UsageStatisticsService: ObservableObject, UsageStatisticsRecording {
                 timestamp: timestamp,
                 wordsCount: wordsCount,
                 durationSeconds: durationSeconds,
-                appBundleIdentifier: appBundleIdentifier
+                appBundleIdentifier: appBundleIdentifier,
+                appName: appName,
+                engineUsed: engineUsed,
+                modelUsed: modelUsed
             )
             save()
             fetchDays()
@@ -133,7 +171,10 @@ final class UsageStatisticsService: ObservableObject, UsageStatisticsRecording {
                     timestamp: record.timestamp,
                     wordsCount: wordsCount,
                     durationSeconds: record.durationSeconds,
-                    appBundleIdentifier: record.appBundleIdentifier
+                    appBundleIdentifier: record.appBundleIdentifier,
+                    appName: record.appName,
+                    engineUsed: record.engineUsed,
+                    modelUsed: record.modelUsed
                 )
             }
             try setHistoryBackfillCompleted(true)
@@ -236,7 +277,10 @@ final class UsageStatisticsService: ObservableObject, UsageStatisticsRecording {
         timestamp: Date,
         wordsCount: Int,
         durationSeconds: Double,
-        appBundleIdentifier: String?
+        appBundleIdentifier: String?,
+        appName: String? = nil,
+        engineUsed: String? = nil,
+        modelUsed: String? = nil
     ) throws {
         let dayStart = calendar.startOfDay(for: timestamp)
         let statisticsDay: UsageStatisticsDay
@@ -250,7 +294,11 @@ final class UsageStatisticsService: ObservableObject, UsageStatisticsRecording {
         statisticsDay.add(
             wordsCount: wordsCount,
             durationSeconds: durationSeconds,
-            appBundleIdentifier: appBundleIdentifier
+            appBundleIdentifier: appBundleIdentifier,
+            appName: appName,
+            engineUsed: engineUsed,
+            modelUsed: modelUsed,
+            hour: calendar.component(.hour, from: timestamp)
         )
     }
 
@@ -282,7 +330,10 @@ final class UsageStatisticsService: ObservableObject, UsageStatisticsRecording {
                     transcriptionCount: $0.transcriptionCount,
                     totalWords: $0.totalWords,
                     totalDurationSeconds: $0.totalDurationSeconds,
-                    appBundleIdentifiers: $0.appBundleIdentifiers
+                    appBundleIdentifiers: $0.appBundleIdentifiers,
+                    appCounts: $0.appCounts,
+                    modelCounts: $0.modelCounts,
+                    hourCounts: $0.hourCounts
                 )
             }
         } catch {

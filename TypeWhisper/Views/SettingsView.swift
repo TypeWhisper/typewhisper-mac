@@ -115,6 +115,12 @@ struct SettingsView: View {
                 homeViewModel.navigateToHistory = false
             }
         }
+        .onChange(of: homeViewModel.navigateToStatistics) { _, navigate in
+            if navigate {
+                selectedTab = .statistics
+                homeViewModel.navigateToStatistics = false
+            }
+        }
         .onChange(of: promptActionsViewModel.navigateToIntegrations) { _, navigate in
             if navigate {
                 selectedTab = .integrations

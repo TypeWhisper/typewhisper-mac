@@ -1637,7 +1637,10 @@ final class DictationViewModel: ObservableObject {
                     timestamp: completionTimestamp,
                     wordsCount: wordCount,
                     durationSeconds: audioDuration,
-                    appBundleIdentifier: activeApp.bundleId
+                    appBundleIdentifier: activeApp.bundleId,
+                    appName: activeApp.name,
+                    engineUsed: result.engineUsed,
+                    modelUsed: modelDisplayName
                 )
                 let detectedLang = result.detectedLanguage ?? language
                 let completedTranscription = DictationSessionTranscription(

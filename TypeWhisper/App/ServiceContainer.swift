@@ -235,7 +235,6 @@ final class ServiceContainer: ObservableObject {
             usageStatisticsService: usageStatisticsService
         )
         statisticsViewModel = StatisticsViewModel(
-            historyService: historyService,
             usageStatisticsService: usageStatisticsService
         )
         promptActionsViewModel = PromptActionsViewModel(

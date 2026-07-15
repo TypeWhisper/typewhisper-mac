@@ -102,15 +102,22 @@ final class UsageStatisticsServiceTests: XCTestCase {
             historyService: historyService,
             usageStatisticsService: usageStatisticsService
         )
-        homeViewModel.selectedTimePeriod = .week
         homeViewModel.refresh()
 
         XCTAssertTrue(homeViewModel.hasAnyTranscriptions)
-        XCTAssertEqual(homeViewModel.wordsCount, 120)
-        XCTAssertEqual(homeViewModel.averageWPM, "120")
-        XCTAssertEqual(homeViewModel.appsUsed, 1)
         XCTAssertEqual(homeViewModel.recentTranscriptions.count, 1)
         XCTAssertEqual(homeViewModel.recentTranscriptions.first?.finalText, "Retained history only")
+
+        // Words/WPM/apps-used metrics now live on StatisticsViewModel, which - unlike Home - is
+        // fed only by the persistent usage-statistics snapshots, not by (retention-dependent)
+        // history records.
+        let statisticsViewModel = StatisticsViewModel(usageStatisticsService: usageStatisticsService)
+        statisticsViewModel.selectedTimePeriod = .week
+        statisticsViewModel.refresh()
+
+        XCTAssertEqual(statisticsViewModel.wordsCount, 120)
+        XCTAssertEqual(statisticsViewModel.averageWPM, "120")
+        XCTAssertEqual(statisticsViewModel.appsUsed, 1)
 
         let widgetDataService = WidgetDataService(
             historyService: historyService,
@@ -123,6 +130,190 @@ final class UsageStatisticsServiceTests: XCTestCase {
         XCTAssertEqual(widgetData.stats.averageWPM, "120")
         XCTAssertEqual(widgetData.stats.appsUsed, 1)
         XCTAssertEqual(widgetData.recentHistory.first?.preview, "Retained history only")
+    }
+
+    /// Statistics (overview, Top Apps, Models Used, and the heatmap) must all be derived from the
+    /// same persistent `UsageStatisticsService` snapshots, so that "Clear Usage Statistics" wipes
+    /// every section together instead of leaving some populated from history.
+    @MainActor
+    func testClearingUsageStatisticsClearsAllStatisticsSections() throws {
+        let directory = try TestSupport.makeTemporaryDirectory(prefix: "UsageStatisticsClearAll")
+        defer { TestSupport.remove(directory) }
+
+        // `StatisticsViewModel.refresh()` always buckets against the real wall-clock `Date()`
+        // (via `Calendar.current`), so tests use timestamps relative to `Date()` rather than a
+        // fixed/injected calendar - matching how the view model is actually driven in the app.
+        let calendar = Calendar.current
+        let usageStatisticsService = UsageStatisticsService(appSupportDirectory: directory, calendar: calendar)
+        let today = calendar.date(byAdding: .hour, value: 9, to: calendar.startOfDay(for: Date()))!
+        let yesterday = calendar.date(byAdding: .day, value: -1, to: today)!
+
+        usageStatisticsService.recordTranscription(
+            timestamp: today,
+            wordsCount: 50,
+            durationSeconds: 30,
+            appBundleIdentifier: "com.example.editor",
+            appName: "Editor",
+            engineUsed: "parakeet",
+            modelUsed: "parakeet-fast"
+        )
+        usageStatisticsService.recordTranscription(
+            timestamp: yesterday,
+            wordsCount: 20,
+            durationSeconds: 15,
+            appBundleIdentifier: "com.example.mail",
+            appName: "Mail",
+            engineUsed: "whisper",
+            modelUsed: "small.en"
+        )
+
+        let viewModel = StatisticsViewModel(usageStatisticsService: usageStatisticsService)
+        viewModel.refresh()
+
+        XCTAssertTrue(viewModel.hasAnyData)
+        XCTAssertEqual(viewModel.totalDaysActive, 2)
+        XCTAssertEqual(viewModel.totalTranscriptions, 2)
+        XCTAssertFalse(viewModel.appUsageStats.isEmpty)
+        XCTAssertFalse(viewModel.modelUsageStats.isEmpty)
+        XCTAssertGreaterThan(viewModel.maxHourlyCount, 0)
+
+        usageStatisticsService.clearUsageStatistics()
+        viewModel.refresh()
+
+        XCTAssertFalse(viewModel.hasAnyData)
+        XCTAssertEqual(viewModel.totalDaysActive, 0)
+        XCTAssertEqual(viewModel.currentStreak, 0)
+        XCTAssertEqual(viewModel.longestStreak, 0)
+        XCTAssertEqual(viewModel.totalTranscriptions, 0)
+        XCTAssertTrue(viewModel.appUsageStats.isEmpty, "Clearing usage statistics must also clear Top Apps")
+        XCTAssertTrue(viewModel.modelUsageStats.isEmpty, "Clearing usage statistics must also clear Models Used")
+        XCTAssertEqual(viewModel.maxHourlyCount, 0, "Clearing usage statistics must also clear the heatmap")
+    }
+
+    /// Statistics must stay fully populated even when history is disabled or has a short
+    /// retention window, because the view model never reads `HistoryService` records - only the
+    /// persistent usage-statistics snapshots, which are unaffected by history retention/purging.
+    @MainActor
+    func testStatisticsSurviveHistoryBeingDisabledOrPurged() throws {
+        let directory = try TestSupport.makeTemporaryDirectory(prefix: "UsageStatisticsNoHistory")
+        defer { TestSupport.remove(directory) }
+
+        let calendar = Calendar.current
+        let usageStatisticsService = UsageStatisticsService(appSupportDirectory: directory, calendar: calendar)
+        let today = calendar.date(byAdding: .hour, value: 10, to: calendar.startOfDay(for: Date()))!
+
+        // Simulate history being disabled entirely: usage statistics are recorded (as they always
+        // are, independent of the history toggle), but no TranscriptionRecord is ever created.
+        usageStatisticsService.recordTranscription(
+            timestamp: today,
+            wordsCount: 100,
+            durationSeconds: 40,
+            appBundleIdentifier: "com.example.notes",
+            appName: "Notes",
+            engineUsed: "whisper",
+            modelUsed: "base.en"
+        )
+
+        let historyService = HistoryService(appSupportDirectory: directory)
+        historyService.clearAll() // history disabled/purged: zero retained records
+
+        let viewModel = StatisticsViewModel(usageStatisticsService: usageStatisticsService)
+        viewModel.refresh()
+
+        XCTAssertTrue(historyService.records.isEmpty)
+        XCTAssertTrue(viewModel.hasAnyData)
+        XCTAssertEqual(viewModel.totalTranscriptions, 1)
+        XCTAssertEqual(viewModel.totalDaysActive, 1)
+        XCTAssertEqual(viewModel.currentStreak, 1)
+        XCTAssertEqual(viewModel.appUsageStats.first?.count, 1)
+        XCTAssertEqual(viewModel.modelUsageStats.first?.count, 1)
+        XCTAssertEqual(viewModel.maxHourlyCount, 1)
+    }
+
+    /// Overview, Top Apps, Models Used, and the heatmap must agree on the same period filter.
+    @MainActor
+    func testPeriodFilteringIsConsistentAcrossAllSections() throws {
+        let directory = try TestSupport.makeTemporaryDirectory(prefix: "UsageStatisticsPeriodFilter")
+        defer { TestSupport.remove(directory) }
+
+        let calendar = Calendar.current
+        let usageStatisticsService = UsageStatisticsService(appSupportDirectory: directory, calendar: calendar)
+        let now = calendar.date(byAdding: .hour, value: 12, to: calendar.startOfDay(for: Date()))!
+
+        // Two transcriptions within the last week.
+        usageStatisticsService.recordTranscription(
+            timestamp: now,
+            wordsCount: 10,
+            durationSeconds: 5,
+            appBundleIdentifier: "com.example.editor",
+            appName: "Editor",
+            engineUsed: "parakeet",
+            modelUsed: nil
+        )
+        usageStatisticsService.recordTranscription(
+            timestamp: calendar.date(byAdding: .day, value: -2, to: now)!,
+            wordsCount: 10,
+            durationSeconds: 5,
+            appBundleIdentifier: "com.example.mail",
+            appName: "Mail",
+            engineUsed: "whisper",
+            modelUsed: nil
+        )
+        // One transcription older than a week but within a month.
+        usageStatisticsService.recordTranscription(
+            timestamp: calendar.date(byAdding: .day, value: -20, to: now)!,
+            wordsCount: 10,
+            durationSeconds: 5,
+            appBundleIdentifier: "com.example.notes",
+            appName: "Notes",
+            engineUsed: "whisper",
+            modelUsed: nil
+        )
+        // One transcription older than a month, only visible in "All Time".
+        usageStatisticsService.recordTranscription(
+            timestamp: calendar.date(byAdding: .day, value: -90, to: now)!,
+            wordsCount: 10,
+            durationSeconds: 5,
+            appBundleIdentifier: "com.example.old",
+            appName: "Old",
+            engineUsed: "whisper",
+            modelUsed: nil
+        )
+
+        let viewModel = StatisticsViewModel(usageStatisticsService: usageStatisticsService)
+
+        func totals() -> (transcriptions: Int, appCount: Int, modelCount: Int, hourlyCount: Int) {
+            (
+                viewModel.totalTranscriptions,
+                viewModel.appUsageStats.reduce(0) { $0 + $1.count },
+                viewModel.modelUsageStats.reduce(0) { $0 + $1.count },
+                viewModel.hourlyActivity.flatMap { $0 }.reduce(0, +)
+            )
+        }
+
+        viewModel.selectedTimePeriod = .week
+        viewModel.refresh()
+        var current = totals()
+        XCTAssertEqual(current.transcriptions, 2)
+        XCTAssertEqual(current.appCount, 2)
+        XCTAssertEqual(current.modelCount, 2)
+        XCTAssertEqual(current.hourlyCount, 2)
+
+        viewModel.selectedTimePeriod = .month
+        viewModel.refresh()
+        current = totals()
+        XCTAssertEqual(current.transcriptions, 3)
+        XCTAssertEqual(current.appCount, 3)
+        XCTAssertEqual(current.modelCount, 3)
+        XCTAssertEqual(current.hourlyCount, 3)
+
+        viewModel.selectedTimePeriod = .allTime
+        viewModel.refresh()
+        current = totals()
+        XCTAssertEqual(current.transcriptions, 4)
+        XCTAssertEqual(current.appCount, 4)
+        XCTAssertEqual(current.modelCount, 4)
+        XCTAssertEqual(current.hourlyCount, 4)
     }
 
     private static func utcCalendar() -> Calendar {

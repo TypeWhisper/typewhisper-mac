@@ -3,6 +3,34 @@ import Combine
 import Foundation
 import TypeWhisperPluginSDK
 
+enum TimePeriod: String, CaseIterable {
+    case week
+    case month
+    case allTime
+
+    var displayName: String {
+        switch self {
+        case .week: return String(localized: "Week")
+        case .month: return String(localized: "Month")
+        case .allTime: return String(localized: "All Time")
+        }
+    }
+
+    var days: Int? {
+        switch self {
+        case .week: return 7
+        case .month: return 30
+        case .allTime: return nil
+        }
+    }
+}
+
+struct ActivityDataPoint: Identifiable {
+    let id = UUID()
+    let date: Date
+    let wordCount: Int
+}
+
 struct AppUsageStat: Identifiable {
     let id: String
     let bundleIdentifier: String?
@@ -39,17 +67,34 @@ final class StatisticsViewModel: ObservableObject {
     @Published var hourlyActivity: [[Int]] = Array(repeating: Array(repeating: 0, count: 24), count: 7)
     @Published var hasAnyData: Bool = false
 
+    // Formerly on HomeViewModel; moved here so the period picker, overview metrics, and activity
+    // chart all live in one place per the Statistics-tab consolidation.
+    @Published var wordsCount: Int = 0
+    @Published var averageWPM: String = "—"
+    @Published var appsUsed: Int = 0
+    @Published var timeSaved: String = "—"
+    @Published var chartData: [ActivityDataPoint] = []
+    @Published var wordsTrend: Double?
+    @Published var wpmTrend: Double?
+    @Published var appsTrend: Double?
+    @Published var timeSavedTrend: Double?
+
     var maxHourlyCount: Int { hourlyActivity.flatMap { $0 }.max() ?? 0 }
 
-    private let historyService: HistoryService
+    // Statistics are intentionally derived only from `UsageStatisticsService`'s persistent daily
+    // snapshots, never from `HistoryService` records. History is subject to retention limits, can
+    // be disabled, and can be cleared independently of usage statistics, which would otherwise
+    // make Top Apps/Models/heatmap inconsistent with the (retention-independent) overview cards.
+    // Clearing usage statistics now clears everything shown here in one step, and every section
+    // survives history being disabled, purged, or cleared - see UsageStatisticsDay for the
+    // persisted per-app/model/hour aggregates this view model reads.
     private let usageStatisticsService: UsageStatisticsService
     private var cancellables = Set<AnyCancellable>()
     private var refreshWorkItem: DispatchWorkItem?
 
     private var appDisplayNameCache: [String: String] = [:]
 
-    init(historyService: HistoryService, usageStatisticsService: UsageStatisticsService) {
-        self.historyService = historyService
+    init(usageStatisticsService: UsageStatisticsService) {
         self.usageStatisticsService = usageStatisticsService
 
         setupBindings()
@@ -57,11 +102,6 @@ final class StatisticsViewModel: ObservableObject {
     }
 
     private func setupBindings() {
-        historyService.$records
-            .dropFirst()
-            .sink { [weak self] _ in self?.scheduleRefresh() }
-            .store(in: &cancellables)
-
         usageStatisticsService.$days
             .dropFirst()
             .sink { [weak self] _ in self?.scheduleRefresh() }
@@ -94,12 +134,99 @@ final class StatisticsViewModel: ObservableObject {
         totalTranscriptions = periodDays.reduce(0) { $0 + $1.transcriptionCount }
         totalWords = periodDays.reduce(0) { $0 + $1.totalWords }
 
-        let periodRecords = recordsInSelectedPeriod(now: now)
-        appUsageStats = computeAppStats(from: periodRecords)
-        modelUsageStats = computeModelStats(from: periodRecords)
-        hourlyActivity = computeHourlyActivity(from: periodRecords)
+        appUsageStats = computeAppStats(from: periodDays)
+        modelUsageStats = computeModelStats(from: periodDays)
+        hourlyActivity = computeHourlyActivity(from: periodDays)
 
-        hasAnyData = usageStatisticsService.hasAnyStatistics || !historyService.records.isEmpty
+        hasAnyData = usageStatisticsService.hasAnyStatistics
+
+        // Word/WPM/apps/time-saved metrics and the activity chart, ported from the former
+        // HomeViewModel dashboard.
+        let stats = computeStats(for: currentSummary(now: now))
+        wordsCount = stats.words
+        averageWPM = stats.wpm
+        appsUsed = stats.apps
+        timeSaved = stats.timeSaved
+
+        if let days = selectedTimePeriod.days {
+            let prevStats = computeStats(for: usageStatisticsService.previousPeriodSummary(days: days, endingAt: now))
+            wordsTrend = Self.trendPercent(current: Double(stats.words), previous: Double(prevStats.words))
+            appsTrend = Self.trendPercent(current: Double(stats.apps), previous: Double(prevStats.apps))
+            wpmTrend = Self.trendPercent(current: stats.rawWPM, previous: prevStats.rawWPM)
+            timeSavedTrend = Self.trendPercent(current: stats.rawSavedMinutes, previous: prevStats.rawSavedMinutes)
+        } else {
+            wordsTrend = nil
+            wpmTrend = nil
+            appsTrend = nil
+            timeSavedTrend = nil
+        }
+
+        chartData = buildChartData(now: now)
+    }
+
+    // MARK: - Words / WPM / apps / time-saved metrics
+
+    private struct PeriodStats {
+        let words: Int
+        let wpm: String
+        let rawWPM: Double
+        let apps: Int
+        let timeSaved: String
+        let rawSavedMinutes: Double
+    }
+
+    private func currentSummary(now: Date) -> UsageStatisticsSummary {
+        guard let days = selectedTimePeriod.days else {
+            return usageStatisticsService.summary(from: nil, to: now)
+        }
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: now)
+        guard let startDay = calendar.date(byAdding: .day, value: -(days - 1), to: today),
+              let endDay = calendar.date(byAdding: .day, value: 1, to: today) else {
+            return .empty
+        }
+        return usageStatisticsService.summary(startDay: startDay, endDayExclusive: endDay)
+    }
+
+    private func computeStats(for summary: UsageStatisticsSummary) -> PeriodStats {
+        let words = summary.words
+        let rawWPM: Double
+        let wpm: String
+        if summary.rawWPM > 0 {
+            rawWPM = summary.rawWPM
+            wpm = "\(Int(rawWPM))"
+        } else {
+            rawWPM = 0
+            wpm = "—"
+        }
+
+        let apps = summary.appCount
+
+        let rawSavedMinutes = summary.rawSavedMinutes
+        let timeSaved: String
+        if rawSavedMinutes > 0 {
+            let mins = Int(rawSavedMinutes)
+            if mins >= 60 {
+                timeSaved = String(localized: "\(mins / 60)h \(mins % 60)m")
+            } else {
+                timeSaved = String(localized: "\(mins)m")
+            }
+        } else {
+            timeSaved = "—"
+        }
+
+        return PeriodStats(words: words, wpm: wpm, rawWPM: rawWPM, apps: apps, timeSaved: timeSaved, rawSavedMinutes: rawSavedMinutes)
+    }
+
+    nonisolated static func trendPercent(current: Double, previous: Double) -> Double? {
+        guard previous > 0 else { return nil }
+        return ((current - previous) / previous) * 100
+    }
+
+    private func buildChartData(now: Date) -> [ActivityDataPoint] {
+        usageStatisticsService
+            .dailyWordCounts(days: selectedTimePeriod.days, endingAt: now)
+            .map { ActivityDataPoint(date: $0.day, wordCount: $0.totalWords) }
     }
 
     // MARK: - Streaks
@@ -152,33 +279,27 @@ final class StatisticsViewModel: ObservableObject {
         return allDays.filter { $0.day >= cutoff }
     }
 
-    private func recordsInSelectedPeriod(now: Date) -> [TranscriptionRecord] {
-        guard let days = selectedTimePeriod.days else { return historyService.records }
-        let calendar = Calendar.current
-        guard let cutoff = calendar.date(byAdding: .day, value: -(days - 1), to: calendar.startOfDay(for: now)) else {
-            return historyService.records
-        }
-        return historyService.records.filter { $0.timestamp >= cutoff }
-    }
-
     // MARK: - App breakdown
 
-    private func computeAppStats(from records: [TranscriptionRecord]) -> [AppUsageStat] {
-        guard !records.isEmpty else { return [] }
-        let total = records.count
-        let grouped = Dictionary(grouping: records) { record in
-            record.appBundleIdentifier ?? record.appName ?? "unknown"
+    private func computeAppStats(from days: [UsageStatisticsDaySnapshot]) -> [AppUsageStat] {
+        var merged: [String: Int] = [:]
+        for day in days {
+            for (key, count) in day.appCounts {
+                merged[key, default: 0] += count
+            }
         }
+        guard !merged.isEmpty else { return [] }
+        let total = merged.values.reduce(0, +)
 
-        return grouped.map { key, recs -> AppUsageStat in
-            let bundleIdentifier = recs.first?.appBundleIdentifier
-            let name = resolveAppDisplayName(bundleIdentifier: bundleIdentifier, fallbackName: recs.first?.appName)
+        return merged.map { key, count -> AppUsageStat in
+            let (bundleIdentifier, fallbackName) = UsageStatisticsKeys.parseAppKey(key)
+            let name = resolveAppDisplayName(bundleIdentifier: bundleIdentifier, fallbackName: fallbackName)
             return AppUsageStat(
                 id: key,
                 bundleIdentifier: bundleIdentifier,
                 displayName: name,
-                count: recs.count,
-                percent: Double(recs.count) / Double(total) * 100
+                count: count,
+                percent: Double(count) / Double(total) * 100
             )
         }
         .sorted { $0.count > $1.count }
@@ -215,34 +336,46 @@ final class StatisticsViewModel: ObservableObject {
     // MARK: - Hourly activity heatmap
 
     /// Grid indexed [weekday][hour], weekday 0 = Monday ... 6 = Sunday.
-    private func computeHourlyActivity(from records: [TranscriptionRecord]) -> [[Int]] {
+    private func computeHourlyActivity(from days: [UsageStatisticsDaySnapshot]) -> [[Int]] {
         var grid = Array(repeating: Array(repeating: 0, count: 24), count: 7)
         let calendar = Calendar.current
-        for record in records {
-            let weekdayRaw = calendar.component(.weekday, from: record.timestamp) // 1 = Sunday ... 7 = Saturday
+        for day in days {
+            let weekdayRaw = calendar.component(.weekday, from: day.day) // 1 = Sunday ... 7 = Saturday
             let mondayFirstIndex = (weekdayRaw + 5) % 7
-            let hour = calendar.component(.hour, from: record.timestamp)
-            grid[mondayFirstIndex][hour] += 1
+            for hour in 0..<min(24, day.hourCounts.count) {
+                grid[mondayFirstIndex][hour] += day.hourCounts[hour]
+            }
         }
         return grid
     }
 
     // MARK: - Model breakdown
 
-    private func computeModelStats(from records: [TranscriptionRecord]) -> [ModelUsageStat] {
-        guard !records.isEmpty else { return [] }
-        let total = records.count
-        let grouped = Dictionary(grouping: records) { modelLabel(for: $0) }
+    private func computeModelStats(from days: [UsageStatisticsDaySnapshot]) -> [ModelUsageStat] {
+        var merged: [String: Int] = [:]
+        for day in days {
+            for (key, count) in day.modelCounts {
+                merged[key, default: 0] += count
+            }
+        }
+        guard !merged.isEmpty else { return [] }
+        let total = merged.values.reduce(0, +)
 
-        return grouped.map { label, recs in
-            ModelUsageStat(id: label, label: label, count: recs.count, percent: Double(recs.count) / Double(total) * 100)
+        let grouped = Dictionary(grouping: merged.keys) { key -> String in
+            let (engineUsed, modelUsed) = UsageStatisticsKeys.parseModelKey(key)
+            return modelLabel(engineUsed: engineUsed, modelUsed: modelUsed)
+        }
+
+        return grouped.map { label, keys in
+            let count = keys.reduce(0) { $0 + (merged[$1] ?? 0) }
+            return ModelUsageStat(id: label, label: label, count: count, percent: Double(count) / Double(total) * 100)
         }
         .sorted { $0.count > $1.count }
     }
 
-    private func modelLabel(for record: TranscriptionRecord) -> String {
-        let engineName = engineDisplayName(record.engineUsed)
-        if let modelUsed = record.modelUsed, !modelUsed.isEmpty, modelUsed != engineName {
+    private func modelLabel(engineUsed: String, modelUsed: String?) -> String {
+        let engineName = engineDisplayName(engineUsed)
+        if let modelUsed, !modelUsed.isEmpty, modelUsed != engineName {
             return "\(engineName) – \(modelUsed)"
         }
         return engineName

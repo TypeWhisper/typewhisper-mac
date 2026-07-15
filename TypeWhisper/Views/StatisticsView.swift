@@ -1,8 +1,12 @@
 import AppKit
 import SwiftUI
+import Charts
 
 struct StatisticsView: View {
     @ObservedObject private var viewModel = StatisticsViewModel.shared
+
+    @State private var hoveredDate: Date?
+    @State private var hoverLocation: CGPoint = .zero
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -21,6 +25,8 @@ struct StatisticsView: View {
                 VStack(alignment: .leading, spacing: 16) {
                     if viewModel.hasAnyData {
                         overviewGrid
+                        metricsGrid
+                        chartSection
                         HStack(alignment: .top, spacing: 16) {
                             appsSection
                             modelsSection
@@ -94,6 +100,122 @@ struct StatisticsView: View {
                 value: "\(viewModel.totalTranscriptions)",
                 systemImage: "waveform"
             )
+        }
+    }
+
+    // MARK: - Words / WPM / apps / time-saved metrics
+
+    private var metricsGrid: some View {
+        LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4), spacing: 12) {
+            StatisticsMetricCard(
+                title: String(localized: "Words"),
+                value: "\(viewModel.wordsCount)",
+                systemImage: "text.word.spacing",
+                trend: viewModel.wordsTrend
+            )
+            StatisticsMetricCard(
+                title: String(localized: "Avg. WPM"),
+                value: viewModel.averageWPM,
+                systemImage: "speedometer",
+                trend: viewModel.wpmTrend
+            )
+            StatisticsMetricCard(
+                title: String(localized: "Apps Used"),
+                value: "\(viewModel.appsUsed)",
+                systemImage: "app.badge",
+                trend: viewModel.appsTrend
+            )
+            StatisticsMetricCard(
+                title: String(localized: "Time Saved"),
+                value: viewModel.timeSaved,
+                systemImage: "clock.badge.checkmark",
+                trend: viewModel.timeSavedTrend
+            )
+        }
+    }
+
+    // MARK: - Activity chart
+
+    private var chartSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(String(localized: "Activity"))
+                .font(.headline)
+
+            if viewModel.chartData.isEmpty || viewModel.chartData.allSatisfy({ $0.wordCount == 0 }) {
+                Text(String(localized: "No activity in this period."))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, minHeight: 200)
+            } else {
+                ZStack(alignment: .top) {
+                    Chart(viewModel.chartData) { point in
+                        BarMark(
+                            x: .value(String(localized: "Date"), point.date, unit: .day),
+                            y: .value(String(localized: "Words"), point.wordCount)
+                        )
+                        .foregroundStyle(
+                            hoveredDate != nil && Calendar.current.isDate(point.date, inSameDayAs: hoveredDate!)
+                                ? Color.blue
+                                : Color.blue.opacity(0.7)
+                        )
+                        .cornerRadius(4)
+                    }
+                    .chartXAxis {
+                        AxisMarks(values: .stride(by: .day, count: chartAxisStride)) { _ in
+                            AxisGridLine()
+                            AxisValueLabel(format: .dateTime.month(.abbreviated).day())
+                        }
+                    }
+                    .chartOverlay { proxy in
+                        GeometryReader { _ in
+                            Rectangle()
+                                .fill(.clear)
+                                .contentShape(Rectangle())
+                                .onContinuousHover { phase in
+                                    switch phase {
+                                    case .active(let location):
+                                        hoverLocation = location
+                                        if let date: Date = proxy.value(atX: location.x) {
+                                            hoveredDate = Calendar.current.startOfDay(for: date)
+                                        }
+                                    case .ended:
+                                        hoveredDate = nil
+                                    }
+                                }
+                        }
+                    }
+                    .id(viewModel.selectedTimePeriod)
+                    .overlay(alignment: .topLeading) {
+                        if let hoveredDate, let point = viewModel.chartData.first(where: { Calendar.current.isDate($0.date, inSameDayAs: hoveredDate) }), point.wordCount > 0 {
+                            VStack(spacing: 2) {
+                                Text("\(point.wordCount) \(String(localized: "words"))")
+                                    .font(.caption.bold())
+                                    .monospacedDigit()
+                                Text(point.date.formatted(.dateTime.month(.abbreviated).day()))
+                                    .font(.caption2)
+                                    .foregroundStyle(.secondary)
+                            }
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 6))
+                            .offset(x: max(0, hoverLocation.x - 30), y: max(0, hoverLocation.y - 50))
+                            .allowsHitTesting(false)
+                        }
+                    }
+                }
+                .frame(height: 200)
+                .accessibilityHidden(true)
+            }
+        }
+        .padding()
+        .background(.quaternary.opacity(0.3))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+    }
+
+    private var chartAxisStride: Int {
+        switch viewModel.selectedTimePeriod {
+        case .week: return 1
+        case .month: return 5
+        case .allTime: return 7
         }
     }
 
@@ -348,5 +470,51 @@ private struct StatisticsStatCard: View {
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .accessibilityElement(children: .combine)
         .accessibilityLabel(Text("\(title), \(value)"))
+    }
+}
+
+private struct StatisticsMetricCard: View {
+    let title: String
+    let value: String
+    let systemImage: String
+    var trend: Double?
+
+    var body: some View {
+        VStack(spacing: 6) {
+            Image(systemName: systemImage)
+                .font(.title2)
+                .foregroundStyle(.blue)
+                .accessibilityHidden(true)
+            Text(value)
+                .font(.title)
+                .fontWeight(.bold)
+                .monospacedDigit()
+            if let trend {
+                trendLabel(trend)
+            }
+            Text(title)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 12)
+        .background(.quaternary.opacity(0.3))
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(Text("\(title), \(value)"))
+    }
+
+    @ViewBuilder
+    private func trendLabel(_ percent: Double) -> some View {
+        let isPositive = percent >= 0
+        let displayPercent = Int(abs(percent))
+        HStack(spacing: 2) {
+            Image(systemName: isPositive ? "arrow.up.right" : "arrow.down.right")
+                .font(.caption2)
+            Text("\(displayPercent)%")
+                .font(.caption2)
+                .monospacedDigit()
+        }
+        .foregroundStyle(isPositive ? .green : .red)
     }
 }

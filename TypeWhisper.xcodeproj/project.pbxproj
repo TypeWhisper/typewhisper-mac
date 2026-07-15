@@ -108,6 +108,7 @@
 			6A9D1EE0C163693B1A798779 /* HistoryServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F476E4F05313F6BF4E696A5 /* HistoryServiceTests.swift */; };
 		AA8390000000000000000001 /* UsageStatisticsDay.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB8390000000000000000001 /* UsageStatisticsDay.swift */; };
 		AA8390000000000000000002 /* UsageStatisticsMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB8390000000000000000002 /* UsageStatisticsMetadata.swift */; };
+		3EB9E72F54D54A6288ACC2C1 /* UsageStatisticsKeys.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91F0023647194EC3A838E6B1 /* UsageStatisticsKeys.swift */; };
 		AA8390000000000000000003 /* UsageStatisticsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB8390000000000000000003 /* UsageStatisticsService.swift */; };
 		AA8390000000000000000004 /* UsageStatisticsServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB8390000000000000000004 /* UsageStatisticsServiceTests.swift */; };
 		A91F00000000000000000001 /* SelectionPalettePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B91F00000000000000000001 /* SelectionPalettePanel.swift */; };
@@ -621,6 +622,7 @@
 		BB00000000000000000060 /* TranscriptionRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionRecord.swift; sourceTree = "<group>"; };
 		BB8390000000000000000001 /* UsageStatisticsDay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageStatisticsDay.swift; sourceTree = "<group>"; };
 		BB8390000000000000000002 /* UsageStatisticsMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageStatisticsMetadata.swift; sourceTree = "<group>"; };
+		91F0023647194EC3A838E6B1 /* UsageStatisticsKeys.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageStatisticsKeys.swift; sourceTree = "<group>"; };
 		BB00000000000000000061 /* HistoryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryService.swift; sourceTree = "<group>"; };
 		BB8390000000000000000003 /* UsageStatisticsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageStatisticsService.swift; sourceTree = "<group>"; };
 		BB00000000000000000062 /* TextDiffService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextDiffService.swift; sourceTree = "<group>"; };
@@ -1475,6 +1477,7 @@
 				BB00000000000000000060 /* TranscriptionRecord.swift */,
 				BB8390000000000000000001 /* UsageStatisticsDay.swift */,
 				BB8390000000000000000002 /* UsageStatisticsMetadata.swift */,
+				91F0023647194EC3A838E6B1 /* UsageStatisticsKeys.swift */,
 				BB00000000000000000065 /* Profile.swift */,
 				BB00000000000000000356 /* Workflow.swift */,
 				BB00000000000000000077 /* DictionaryEntry.swift */,
@@ -3928,6 +3931,7 @@
 				AA00000000000000000060 /* TranscriptionRecord.swift in Sources */,
 				AA8390000000000000000001 /* UsageStatisticsDay.swift in Sources */,
 				AA8390000000000000000002 /* UsageStatisticsMetadata.swift in Sources */,
+				3EB9E72F54D54A6288ACC2C1 /* UsageStatisticsKeys.swift in Sources */,
 				AA00000000000000000332 /* DictationRuntimeContext.swift in Sources */,
 				AA00000000000000000061 /* HistoryService.swift in Sources */,
 				AA8390000000000000000003 /* UsageStatisticsService.swift in Sources */,
