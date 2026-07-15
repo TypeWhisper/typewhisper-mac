@@ -33,6 +33,22 @@
         }
       }
     },
+    "Append format:": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anhangsformat:"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "追記形式:"
+          }
+        }
+      }
+    },
     "Auto-Export": {
       "localizations": {
         "de": {
@@ -113,6 +129,38 @@
         }
       }
     },
+    "Bullet list": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aufzählung"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "箇条書き"
+          }
+        }
+      }
+    },
+    "Custom": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Benutzerdefiniert"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "カスタム"
+          }
+        }
+      }
+    },
     "Daily Note Mode": {
       "localizations": {
         "de": {
@@ -177,6 +225,22 @@
         }
       }
     },
+    "Plain append": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einfach anhängen"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "そのまま追記"
+          }
+        }
+      }
+    },
     "No vault selected": {
       "localizations": {
         "de": {
@@ -193,18 +257,34 @@
         }
       }
     },
-    "Placeholders: {{DATE}}, {{TIME}}, {{APP}}, {{LANG}}": {
+    "Placeholders: {{DATE}}, {{TIME}}, {{APP}}, {{LANGUAGE}}": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Platzhalter: {{DATE}}, {{TIME}}, {{APP}}, {{LANG}}"
+            "value": "Platzhalter: {{DATE}}, {{TIME}}, {{APP}}, {{LANGUAGE}}"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "プレースホルダー: {{DATE}}, {{TIME}}, {{APP}}, {{LANG}}"
+            "value": "プレースホルダー: {{DATE}}, {{TIME}}, {{APP}}, {{LANGUAGE}}"
+          }
+        }
+      }
+    },
+    "Placeholders: {{TEXT}}, {{TIME}}, {{DATE}}, {{APP}}, {{LANGUAGE}}, {{URL}}": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Platzhalter: {{TEXT}}, {{TIME}}, {{DATE}}, {{APP}}, {{LANGUAGE}}, {{URL}}"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "プレースホルダー: {{TEXT}}, {{TIME}}, {{DATE}}, {{APP}}, {{LANGUAGE}}, {{URL}}"
           }
         }
       }
@@ -301,6 +381,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "タグ:"
+          }
+        }
+      }
+    },
+    "Timestamp section": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zeitstempelabschnitt"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "時刻付きセクション"
           }
         }
       }

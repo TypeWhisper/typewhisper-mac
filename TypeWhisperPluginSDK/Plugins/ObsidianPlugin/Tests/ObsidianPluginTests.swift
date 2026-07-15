@@ -119,6 +119,47 @@ final class ObsidianPluginTests: XCTestCase {
         let content = try String(contentsOf: files[0], encoding: .utf8)
         XCTAssertTrue(content.contains("First entry"))
         XCTAssertTrue(content.contains("Second entry"))
+        XCTAssertTrue(content.contains("---\n\n## "), "The default timestamp-section format should remain unchanged.")
+        XCTAssertNotNil(
+            content.range(of: #"## \d{2}:\d{2}"#, options: .regularExpression),
+            "The default timestamp should retain the legacy HH:mm format."
+        )
+    }
+
+    func testDailyNoteUsesCustomAppendTemplate() async throws {
+        let vaultURL = try Self.makeTemporaryDirectory(prefix: "ObsidianVaultCustomAppend")
+        defer { try? FileManager.default.removeItem(at: vaultURL) }
+
+        let host = try PluginTestHostServices(defaults: [
+            "vaultPath": vaultURL.path,
+            "dailyNoteEnabled": true,
+            "dailyNoteAppendTemplate": "- {{TEXT}} ({{APP}} / {{LANGUAGE}} / {{URL}})",
+            "frontmatterEnabled": false,
+        ])
+        let plugin = ObsidianPlugin()
+        plugin.activate(host: host)
+
+        for text in ["First note", "Second note"] {
+            let result = try await plugin.execute(
+                input: text,
+                context: ActionContext(
+                    appName: "Notes",
+                    url: "https://example.com",
+                    language: "en",
+                    originalText: text
+                )
+            )
+            XCTAssertTrue(result.success)
+        }
+
+        let files = try FileManager.default.contentsOfDirectory(
+            at: vaultURL.appendingPathComponent("TypeWhisper", isDirectory: true),
+            includingPropertiesForKeys: nil
+        )
+        XCTAssertEqual(files.count, 1)
+
+        let content = try String(contentsOf: files[0], encoding: .utf8)
+        XCTAssertEqual(content, "- First note (Notes / en / https://example.com)\n\n- Second note (Notes / en / https://example.com)")
     }
 
     func testAutoExportDailyNoteOmitsAppMetadataWhenFormatDoesNotContainApp() async throws {
