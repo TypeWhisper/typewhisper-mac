@@ -1112,18 +1112,64 @@
         }
       }
     },
-    "Activity chart, %lld words total, peak %lld words on %@.": {
+    "Activity chart, %@ total, peak %@ on %@.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Aktivitätsdiagramm, %lld Wörter insgesamt, Höchstwert %lld Wörter am %@."
+            "value": "Aktivitätsdiagramm, %1$@ insgesamt, Höchstwert %2$@ am %3$@."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "アクティビティチャート、合計%1$lld語、%3$@に最大%2$lld語。"
+            "value": "アクティビティチャート、合計%1$@、%3$@に最大%2$@。"
+          }
+        }
+      }
+    },
+    "%lld words": {
+      "localizations": {
+        "de": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld Wort"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld Wörter"
+                }
+              }
+            }
+          }
+        },
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld word"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld words"
+                }
+              }
+            }
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld語"
           }
         }
       }
@@ -13045,7 +13091,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Top Apps"
+            "value": "Top-Apps"
           }
         },
         "ja": {

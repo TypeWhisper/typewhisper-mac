@@ -221,7 +221,9 @@ struct StatisticsView: View {
             return Text(String(localized: "Activity chart, no words in this period."))
         }
         let peakDay = peak.date.formatted(.dateTime.month(.abbreviated).day())
-        return Text(String(localized: "Activity chart, \(totalWords) words total, peak \(peak.wordCount) words on \(peakDay)."))
+        let totalWordsPhrase = String.localizedStringWithFormat(String(localized: "%lld words"), totalWords)
+        let peakWordsPhrase = String.localizedStringWithFormat(String(localized: "%lld words"), peak.wordCount)
+        return Text(String(localized: "Activity chart, \(totalWordsPhrase) total, peak \(peakWordsPhrase) on \(peakDay)."))
     }
 
     private var chartAxisStride: Int {
