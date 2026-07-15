@@ -101,7 +101,6 @@ final class FileTranscriptionViewModel: ObservableObject {
             defaults.set(selectedEngine, forKey: UserDefaultsKeys.fileTranscriptionEngine)
             guard isInitialized, oldValue != selectedEngine else { return }
             selectedModel = nil
-            normalizeLanguageSelectionForResolvedEngine()
         }
     }
     @Published var selectedModel: String? {
@@ -533,15 +532,6 @@ final class FileTranscriptionViewModel: ObservableObject {
            pluginManager.transcriptionEngine(for: selectedEngine) == nil {
             self.selectedEngine = nil
             selectedModel = nil
-        }
-        normalizeLanguageSelectionForResolvedEngine()
-    }
-
-    private func normalizeLanguageSelectionForResolvedEngine() {
-        guard let engine = resolvedEngine else { return }
-        let normalized = languageSelection.normalizedForSupportedLanguages(engine.supportedLanguages)
-        if normalized != languageSelection {
-            languageSelection = normalized
         }
     }
 

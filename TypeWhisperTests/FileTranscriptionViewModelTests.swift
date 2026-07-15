@@ -5,6 +5,57 @@ import XCTest
 
 @MainActor
 final class FileTranscriptionViewModelTests: XCTestCase {
+    func testEngineSwitchPreservesFullLanguageSelectionAndPersistence() throws {
+        let previousPluginManager = PluginManager.shared
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer {
+            PluginManager.shared = previousPluginManager
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        let soniox = FileTranscriptionLanguageSelectionPlugin(
+            providerId: "soniox",
+            providerDisplayName: "Soniox",
+            supportedLanguages: ["es", "en", "uk"]
+        )
+        let assemblyAI = FileTranscriptionLanguageSelectionPlugin(
+            providerId: "assemblyai",
+            providerDisplayName: "AssemblyAI",
+            supportedLanguages: ["es", "en"]
+        )
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = [
+            loadedPlugin(for: soniox, appSupportDirectory: appSupportDirectory),
+            loadedPlugin(for: assemblyAI, appSupportDirectory: appSupportDirectory),
+        ]
+
+        let defaults = try makeDefaults()
+        let viewModel = FileTranscriptionViewModel(
+            modelManager: ModelManagerService(),
+            audioFileService: AudioFileService(),
+            dictionaryService: makeDictionaryService(),
+            defaults: defaults
+        )
+        let fullSelection = LanguageSelection.hints(["es", "en", "uk"])
+
+        viewModel.selectedEngine = soniox.providerId
+        viewModel.languageSelection = fullSelection
+        viewModel.selectedEngine = assemblyAI.providerId
+
+        XCTAssertEqual(viewModel.languageSelection, fullSelection)
+        XCTAssertEqual(
+            LanguageSelection(
+                storedValue: defaults.string(forKey: UserDefaultsKeys.fileTranscriptionLanguage),
+                nilBehavior: .auto
+            ),
+            fullSelection
+        )
+
+        viewModel.selectedEngine = soniox.providerId
+
+        XCTAssertEqual(viewModel.languageSelection, fullSelection)
+    }
+
     func testFileTranscriptionCanStartWithPrepareableAppleSpeechCatalog() async throws {
         let previousPluginManager = PluginManager.shared
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
@@ -818,6 +869,24 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         PluginManager.shared = pluginManager
     }
 
+    private func loadedPlugin(
+        for plugin: FileTranscriptionLanguageSelectionPlugin,
+        appSupportDirectory: URL
+    ) -> LoadedPlugin {
+        LoadedPlugin(
+            manifest: PluginManifest(
+                id: "com.typewhisper.mock.\(plugin.providerId)",
+                name: plugin.providerDisplayName,
+                version: "1.0.0",
+                principalClass: "FileTranscriptionLanguageSelectionPlugin"
+            ),
+            instance: plugin,
+            bundle: Bundle.main,
+            sourceURL: appSupportDirectory,
+            isEnabled: true
+        )
+    }
+
     private func waitForBatchToFinish(_ viewModel: FileTranscriptionViewModel) async throws {
         for _ in 0..<50 {
             if viewModel.batchState == .done {
@@ -872,6 +941,44 @@ private actor AsyncGate {
 }
 
 private struct UnknownTranscriptionError: Error {}
+
+private final class FileTranscriptionLanguageSelectionPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.mock.file-transcription-language-selection"
+    static let pluginName = "File Transcription Language Selection"
+
+    private(set) var providerId = "file-transcription-language-selection"
+    private(set) var providerDisplayName = "File Transcription Language Selection"
+    private(set) var supportedLanguages: [String] = []
+    let isConfigured = true
+    let transcriptionModels: [PluginModelInfo] = []
+    let selectedModelId: String? = nil
+    let supportsTranslation = false
+    let supportsStreaming = false
+
+    required override init() {
+        super.init()
+    }
+
+    convenience init(providerId: String, providerDisplayName: String, supportedLanguages: [String]) {
+        self.init()
+        self.providerId = providerId
+        self.providerDisplayName = providerDisplayName
+        self.supportedLanguages = supportedLanguages
+    }
+
+    func activate(host: HostServices) {}
+    func deactivate() {}
+    func selectModel(_ modelId: String) {}
+
+    func transcribe(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?
+    ) async throws -> PluginTranscriptionResult {
+        PluginTranscriptionResult(text: "transcribed", detectedLanguage: language)
+    }
+}
 
 private final class FileTranscriptionAppleSpeechCatalogPlugin: NSObject, TranscriptionModelCatalogProviding, @unchecked Sendable {
     static let pluginId = AppleSpeechModelSelection.manifestId
