@@ -72,7 +72,7 @@ struct StatisticsView: View {
                 .clipShape(RoundedRectangle(cornerRadius: 5))
         }
         .buttonStyle(.plain)
-        .accessibilityElement(children: .ignore)
+        .accessibilityElement(children: .combine)
         .accessibilityAddTraits(isSelected ? .isSelected : [])
         .accessibilityLabel(period.displayName)
     }
@@ -207,7 +207,8 @@ struct StatisticsView: View {
                     }
                 }
                 .frame(height: 200)
-                .accessibilityElement(children: .ignore)
+                .accessibilityElement(children: .combine)
+                .accessibilityAddTraits(.isStaticText)
                 .accessibilityLabel(chartAccessibilitySummary)
             }
         }
@@ -270,7 +271,7 @@ struct StatisticsView: View {
                             }
                             .frame(height: 6)
                         }
-                        .accessibilityElement(children: .ignore)
+                        .accessibilityElement(children: .combine)
                         .accessibilityLabel(
                             Text("\(stat.displayName), \(String.localizedStringWithFormat(String(localized: "%lld dictations"), stat.count))")
                         )
@@ -355,7 +356,8 @@ struct StatisticsView: View {
                                 .fill(heatmapCellColor(count: count))
                                 .frame(width: cellWidth, height: heatmapCellHeight)
                                 .help(heatmapCellTooltip(count: count))
-                                .accessibilityElement()
+                                .accessibilityElement(children: .combine)
+                                .accessibilityAddTraits(.isStaticText)
                                 .accessibilityLabel(
                                     Text("\(weekdayLabels[weekday]), \(hour):00, \(heatmapCellTooltip(count: count))")
                                 )
@@ -414,7 +416,7 @@ struct StatisticsView: View {
                             }
                             .frame(height: 6)
                         }
-                        .accessibilityElement(children: .ignore)
+                        .accessibilityElement(children: .combine)
                         .accessibilityLabel(
                             Text("\(stat.label), \(String.localizedStringWithFormat(String(localized: "%lld dictations"), stat.count))")
                         )
@@ -506,7 +508,7 @@ struct StatisticsMetricCard: View {
         .padding(.vertical, 12)
         .background(.quaternary.opacity(0.3))
         .clipShape(RoundedRectangle(cornerRadius: 8))
-        .accessibilityElement(children: .ignore)
+        .accessibilityElement(children: .combine)
         .accessibilityLabel(trendAwareAccessibilityLabel)
     }
 
@@ -515,9 +517,10 @@ struct StatisticsMetricCard: View {
             return Text("\(title), \(value)")
         }
         let displayPercent = Int(abs(trend))
-        return trend >= 0
-            ? Text("\(title), \(value), up \(displayPercent) percent")
-            : Text("\(title), \(value), down \(displayPercent) percent")
+        let trendPhrase = trend >= 0
+            ? String.localizedStringWithFormat(String(localized: "up %lld percent"), displayPercent)
+            : String.localizedStringWithFormat(String(localized: "down %lld percent"), displayPercent)
+        return Text("\(title), \(value), \(trendPhrase)")
     }
 
     @ViewBuilder

@@ -103,7 +103,7 @@ struct HomeSettingsView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityElement(children: .ignore)
+            .accessibilityElement(children: .combine)
             .accessibilityLabel(String(localized: "View your statistics"))
             .accessibilityAddTraits(.isButton)
 
@@ -143,7 +143,7 @@ struct HomeSettingsView: View {
             StatisticsMetricCard(title: title, value: value, systemImage: systemImage)
         }
         .buttonStyle(.plain)
-        .accessibilityElement(children: .ignore)
+        .accessibilityElement(children: .combine)
         .accessibilityLabel(Text("\(title), \(value)"))
         .accessibilityAddTraits(.isButton)
     }
@@ -224,7 +224,7 @@ struct HomeSettingsView: View {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .accessibilityElement(children: .ignore)
+            .accessibilityElement(children: .combine)
             .accessibilityLabel(String(localized: "View all history"))
             .accessibilityAddTraits(.isButton)
 
