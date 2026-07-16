@@ -275,6 +275,14 @@ private struct SettingsSplitView: NSViewControllerRepresentable {
         context.coordinator.sidebarItem = sidebarItem
         context.coordinator.sidebarHostingController = sidebarHostingController
         context.coordinator.detailHostingController = detailHostingController
+        context.coordinator.isSidebarVisible = $isSidebarVisible
+        // The user can collapse the sidebar natively — dragging the divider past
+        // its minimum thickness, or double-clicking it — without going through
+        // our toolbar button at all. Without this observer, isSidebarVisible
+        // never learns about it, so the button's next click just re-asserts the
+        // (already collapsed) state as a no-op, requiring a second click to
+        // actually reopen it.
+        context.coordinator.observeCollapseState(of: sidebarItem)
 
         return splitViewController
     }
@@ -289,6 +297,7 @@ private struct SettingsSplitView: NSViewControllerRepresentable {
             detail(selectedTab)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         )
+        context.coordinator.isSidebarVisible = $isSidebarVisible
 
         guard let sidebarItem = context.coordinator.sidebarItem else { return }
         let shouldBeCollapsed = !isSidebarVisible
@@ -307,6 +316,18 @@ private struct SettingsSplitView: NSViewControllerRepresentable {
         var sidebarItem: NSSplitViewItem?
         var sidebarHostingController: NSHostingController<SettingsSidebarContent>?
         var detailHostingController: NSHostingController<AnyView>?
+        var isSidebarVisible: Binding<Bool>?
+        private var collapseObservation: NSKeyValueObservation?
+
+        func observeCollapseState(of sidebarItem: NSSplitViewItem) {
+            collapseObservation = sidebarItem.observe(\.isCollapsed, options: [.new]) { [weak self] _, change in
+                guard let self, let isCollapsed = change.newValue else { return }
+                let shouldBeVisible = !isCollapsed
+                if self.isSidebarVisible?.wrappedValue != shouldBeVisible {
+                    self.isSidebarVisible?.wrappedValue = shouldBeVisible
+                }
+            }
+        }
     }
 }
 
