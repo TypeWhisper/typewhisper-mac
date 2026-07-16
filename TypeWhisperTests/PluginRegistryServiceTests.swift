@@ -594,6 +594,246 @@ final class PluginRegistryServiceTests: XCTestCase {
         XCTAssertFalse(registeredPlugin.isRuntimeLoaded)
     }
 
+    @MainActor
+    func testReplacingBundledFallbackRemovesStaleBundleAndKeepsPluginData() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginBoundaryReplacement")
+        let incomingDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginBoundaryReplacementIncoming")
+        let cacheDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginBoundaryReplacementCache")
+        let pluginId = "com.typewhisper.boundary-replacement"
+        defer {
+            TestSupport.remove(appSupportDirectory)
+            TestSupport.remove(incomingDirectory)
+            TestSupport.remove(cacheDirectory)
+            UserDefaults.standard.removeObject(forKey: "plugin.\(pluginId).enabled")
+        }
+
+        let previousPluginManager = PluginManager.shared
+        let pluginManager = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared = pluginManager
+        defer { PluginManager.shared = previousPluginManager }
+
+        let staleBundleURL = pluginManager.pluginsDirectory
+            .appendingPathComponent("LegacyBoundaryPlugin.bundle", isDirectory: true)
+        try Self.makePluginBundle(
+            at: staleBundleURL,
+            pluginId: pluginId,
+            pluginName: "Boundary Plugin",
+            version: "1.0.0"
+        )
+        try pluginManager.loadPlugin(at: staleBundleURL)
+        XCTAssertNotNil(pluginManager.incompatibleExternalBundle(for: pluginId))
+
+        let builtInURL = (Bundle.main.builtInPlugInsURL
+            ?? URL(fileURLWithPath: "/Applications/TypeWhisper.app/Contents/PlugIns", isDirectory: true))
+            .appendingPathComponent("BoundaryPlugin.bundle", isDirectory: true)
+        pluginManager.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: pluginId,
+                    name: "Boundary Plugin",
+                    version: "1.0.1",
+                    sdkCompatibilityVersion: PluginSDKCompatibility.currentVersion,
+                    principalClass: "RuntimeUpdatePlugin"
+                ),
+                instance: MockRuntimeUpdatePlugin(),
+                bundle: Bundle.main,
+                sourceURL: builtInURL,
+                isEnabled: true
+            ),
+        ]
+
+        let pluginDataDirectory = appSupportDirectory
+            .appendingPathComponent("PluginData", isDirectory: true)
+            .appendingPathComponent(pluginId, isDirectory: true)
+        try FileManager.default.createDirectory(at: pluginDataDirectory, withIntermediateDirectories: true)
+        let sentinelURL = pluginDataDirectory.appendingPathComponent("settings-sentinel")
+        try Data("keep plugin data".utf8).write(to: sentinelURL)
+
+        let incomingBundleURL = incomingDirectory
+            .appendingPathComponent("BoundaryPlugin.bundle", isDirectory: true)
+        try Self.makePluginBundle(
+            at: incomingBundleURL,
+            pluginId: pluginId,
+            pluginName: "Boundary Plugin",
+            version: "1.0.2",
+            sdkCompatibilityVersion: PluginSDKCompatibility.currentVersion
+        )
+        let service = PluginRegistryService(
+            registryBaseURL: URL(string: "https://example.com")!,
+            cacheDirectory: cacheDirectory,
+            fetchData: { _ in throw URLError(.badServerResponse) }
+        )
+
+        let manifest = try await service.installFromFile(incomingBundleURL)
+
+        let installedBundleURL = pluginManager.pluginsDirectory
+            .appendingPathComponent("BoundaryPlugin.bundle", isDirectory: true)
+        XCTAssertEqual(manifest.version, "1.0.2")
+        XCTAssertEqual(service.installStates[pluginId], .restartRequired)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: installedBundleURL.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: staleBundleURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: sentinelURL.path))
+        XCTAssertNil(pluginManager.incompatibleExternalBundle(for: pluginId))
+
+        let registeredPlugin = try XCTUnwrap(pluginManager.loadedPlugins.first { $0.id == pluginId })
+        XCTAssertEqual(
+            URL(fileURLWithPath: registeredPlugin.sourceURL.path).standardizedFileURL,
+            URL(fileURLWithPath: installedBundleURL.path).standardizedFileURL
+        )
+        XCTAssertFalse(registeredPlugin.isRuntimeLoaded)
+    }
+
+    @MainActor
+    func testRemovingIncompatibleBundleDeletesDataAndKeepsBundledFallbackLoaded() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginIncompatibleRemoval")
+        let cacheDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginIncompatibleRemovalCache")
+        let pluginId = "com.typewhisper.incompatible-removal"
+        let enabledKey = "plugin.\(pluginId).enabled"
+        defer {
+            TestSupport.remove(appSupportDirectory)
+            TestSupport.remove(cacheDirectory)
+            UserDefaults.standard.removeObject(forKey: enabledKey)
+        }
+
+        let previousPluginManager = PluginManager.shared
+        let pluginManager = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared = pluginManager
+        defer { PluginManager.shared = previousPluginManager }
+
+        let incompatibleBundleURL = pluginManager.pluginsDirectory
+            .appendingPathComponent("IncompatiblePlugin.bundle", isDirectory: true)
+        try Self.makePluginBundle(
+            at: incompatibleBundleURL,
+            pluginId: pluginId,
+            pluginName: "Incompatible Plugin",
+            version: "1.0.0"
+        )
+        try pluginManager.loadPlugin(at: incompatibleBundleURL)
+        let incompatibleBundle = try XCTUnwrap(pluginManager.incompatibleExternalBundle(for: pluginId))
+
+        let fallback = LoadedPlugin(
+            manifest: PluginManifest(
+                id: pluginId,
+                name: "Incompatible Plugin",
+                version: "1.0.1",
+                sdkCompatibilityVersion: PluginSDKCompatibility.currentVersion,
+                principalClass: "RuntimeUpdatePlugin"
+            ),
+            instance: MockRuntimeUpdatePlugin(),
+            bundle: Bundle.main,
+            sourceURL: (Bundle.main.builtInPlugInsURL
+                ?? URL(fileURLWithPath: "/Applications/TypeWhisper.app/Contents/PlugIns", isDirectory: true))
+                .appendingPathComponent("IncompatiblePlugin.bundle", isDirectory: true),
+            isEnabled: true
+        )
+        pluginManager.loadedPlugins = [fallback]
+
+        let pluginDataDirectory = appSupportDirectory
+            .appendingPathComponent("PluginData", isDirectory: true)
+            .appendingPathComponent(pluginId, isDirectory: true)
+        try FileManager.default.createDirectory(at: pluginDataDirectory, withIntermediateDirectories: true)
+        try Data("delete plugin data".utf8)
+            .write(to: pluginDataDirectory.appendingPathComponent("data-sentinel"))
+        UserDefaults.standard.set(true, forKey: enabledKey)
+
+        let service = PluginRegistryService(
+            registryBaseURL: URL(string: "https://example.com")!,
+            cacheDirectory: cacheDirectory,
+            fetchData: { _ in throw URLError(.badServerResponse) }
+        )
+        try service.removeIncompatibleExternalBundle(incompatibleBundle)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: incompatibleBundleURL.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: pluginDataDirectory.path))
+        XCTAssertNil(UserDefaults.standard.object(forKey: enabledKey))
+        XCTAssertNil(pluginManager.incompatibleExternalBundle(for: pluginId))
+        XCTAssertEqual(pluginManager.loadedPlugins.count, 1)
+        XCTAssertEqual(pluginManager.loadedPlugins.first?.sourceURL, fallback.sourceURL)
+        XCTAssertTrue(pluginManager.loadedPlugins.first?.isRuntimeLoaded == true)
+    }
+
+    @MainActor
+    func testRemovingIncompatibleBundleRejectsLocationsOutsideManagedPluginsFolder() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginIncompatiblePathGuard")
+        let externalDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginIncompatiblePathGuardExternal")
+        let cacheDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginIncompatiblePathGuardCache")
+        defer {
+            TestSupport.remove(appSupportDirectory)
+            TestSupport.remove(externalDirectory)
+            TestSupport.remove(cacheDirectory)
+        }
+
+        let previousPluginManager = PluginManager.shared
+        let pluginManager = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared = pluginManager
+        defer { PluginManager.shared = previousPluginManager }
+
+        let externalBundleURL = externalDirectory
+            .appendingPathComponent("ExternalIncompatiblePlugin.bundle", isDirectory: true)
+        try Self.makePluginBundle(
+            at: externalBundleURL,
+            pluginId: "com.typewhisper.external-incompatible",
+            pluginName: "External Incompatible Plugin",
+            version: "1.0.0"
+        )
+        try pluginManager.loadPlugin(at: externalBundleURL)
+        let incompatibleBundle = try XCTUnwrap(
+            pluginManager.incompatibleExternalBundle(for: "com.typewhisper.external-incompatible")
+        )
+
+        let service = PluginRegistryService(
+            registryBaseURL: URL(string: "https://example.com")!,
+            cacheDirectory: cacheDirectory,
+            fetchData: { _ in throw URLError(.badServerResponse) }
+        )
+
+        XCTAssertThrowsError(try service.removeIncompatibleExternalBundle(incompatibleBundle)) { error in
+            guard case IncompatiblePluginBundleRemovalError.invalidBundleLocation = error else {
+                return XCTFail("Expected invalid bundle location error, got \(error)")
+            }
+        }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: externalBundleURL.path))
+        XCTAssertEqual(pluginManager.incompatibleExternalBundle(for: incompatibleBundle.pluginId), incompatibleBundle)
+    }
+
+    @MainActor
+    func testRemovingIncompatibleBundleKeepsDiagnosticWhenBundleDeletionFails() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginIncompatibleDeletionFailure")
+        let cacheDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginIncompatibleDeletionFailureCache")
+        defer {
+            TestSupport.remove(appSupportDirectory)
+            TestSupport.remove(cacheDirectory)
+        }
+
+        let previousPluginManager = PluginManager.shared
+        let pluginManager = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared = pluginManager
+        defer { PluginManager.shared = previousPluginManager }
+
+        let incompatibleBundleURL = pluginManager.pluginsDirectory
+            .appendingPathComponent("DeletionFailurePlugin.bundle", isDirectory: true)
+        try Self.makePluginBundle(
+            at: incompatibleBundleURL,
+            pluginId: "com.typewhisper.deletion-failure",
+            pluginName: "Deletion Failure Plugin",
+            version: "1.0.0"
+        )
+        try pluginManager.loadPlugin(at: incompatibleBundleURL)
+        let incompatibleBundle = try XCTUnwrap(
+            pluginManager.incompatibleExternalBundle(for: "com.typewhisper.deletion-failure")
+        )
+        try FileManager.default.removeItem(at: incompatibleBundleURL)
+
+        let service = PluginRegistryService(
+            registryBaseURL: URL(string: "https://example.com")!,
+            cacheDirectory: cacheDirectory,
+            fetchData: { _ in throw URLError(.badServerResponse) }
+        )
+
+        XCTAssertThrowsError(try service.removeIncompatibleExternalBundle(incompatibleBundle))
+        XCTAssertEqual(pluginManager.incompatibleExternalBundle(for: incompatibleBundle.pluginId), incompatibleBundle)
+    }
+
     func testMalformedPluginEntryIsSkippedInsteadOfFailingEntireRegistry() throws {
         // A single bad entry (wrong type on a required field) must not empty
         // the marketplace: the decoder reports the error and keeps the rest.
@@ -1129,7 +1369,8 @@ final class PluginRegistryServiceTests: XCTestCase {
         at bundleURL: URL,
         pluginId: String,
         pluginName: String,
-        version: String
+        version: String,
+        sdkCompatibilityVersion: String? = nil
     ) throws {
         let contentsURL = bundleURL.appendingPathComponent("Contents", isDirectory: true)
         let resourcesURL = contentsURL.appendingPathComponent("Resources", isDirectory: true)
@@ -1153,6 +1394,7 @@ final class PluginRegistryServiceTests: XCTestCase {
             id: pluginId,
             name: pluginName,
             version: version,
+            sdkCompatibilityVersion: sdkCompatibilityVersion,
             principalClass: "RuntimeUpdatePlugin"
         )
         try JSONEncoder()

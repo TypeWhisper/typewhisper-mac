@@ -172,8 +172,10 @@ struct PluginSettingsView: View {
     @State private var pluginToUninstall: LoadedPlugin?
     @State private var pendingBoundaryUpgradePlugin: RegistryPlugin?
     @State private var pendingBoundaryUpgradeNotice: ExternalBundleNotice?
+    @State private var incompatibleBundleToRemove: IncompatibleExternalBundle?
     @State private var installFromFileError: String?
     @State private var uninstallError: String?
+    @State private var incompatibleBundleRemovalError: String?
     @State private var includeCommunityPlugins = true
     @State private var selectedCapabilityFilters: Set<PluginCategory> = []
     @State private var searchText = ""
@@ -248,6 +250,28 @@ struct PluginSettingsView: View {
         } message: { plugin in
             Text(boundaryUpgradeMessage(for: plugin, notice: pendingBoundaryUpgradeNotice))
         }
+        .alert(
+            String(localized: "Remove Incompatible Plugin Bundle"),
+            isPresented: .init(
+                get: { incompatibleBundleToRemove != nil },
+                set: { if !$0 { incompatibleBundleToRemove = nil } }
+            ),
+            presenting: incompatibleBundleToRemove
+        ) { bundle in
+            Button(String(localized: "Remove"), role: .destructive) {
+                incompatibleBundleToRemove = nil
+                do {
+                    try registryService.removeIncompatibleExternalBundle(bundle)
+                } catch {
+                    incompatibleBundleRemovalError = error.localizedDescription
+                }
+            }
+            Button(String(localized: "Cancel"), role: .cancel) {
+                incompatibleBundleToRemove = nil
+            }
+        } message: { bundle in
+            Text(String(localized: "Remove \(bundle.pluginName)? This will delete the incompatible plugin bundle, its stored data, and its credentials."))
+        }
         .alert(String(localized: "Install Failed"), isPresented: .init(
             get: { installFromFileError != nil },
             set: { if !$0 { installFromFileError = nil } }
@@ -265,6 +289,16 @@ struct PluginSettingsView: View {
             Button(String(localized: "OK")) { uninstallError = nil }
         } message: {
             if let error = uninstallError {
+                Text(error)
+            }
+        }
+        .alert(String(localized: "Could Not Remove Plugin Bundle"), isPresented: .init(
+            get: { incompatibleBundleRemovalError != nil },
+            set: { if !$0 { incompatibleBundleRemovalError = nil } }
+        )) {
+            Button(String(localized: "OK")) { incompatibleBundleRemovalError = nil }
+        } message: {
+            if let error = incompatibleBundleRemovalError {
                 Text(error)
             }
         }
@@ -562,7 +596,7 @@ struct PluginSettingsView: View {
                                 startInstall(registryPlugin)
                             }
                         },
-                        onRepair: {
+                        onReplace: {
                             if let registryPlugin = registryService.registry.first(where: { $0.id == plugin.id }) {
                                 startInstall(registryPlugin)
                             }
@@ -579,8 +613,13 @@ struct PluginSettingsView: View {
             }
 
             if !pluginManager.incompatibleExternalBundles.isEmpty {
-                ForEach(pluginManager.incompatibleExternalBundles.values.sorted { $0.pluginName < $1.pluginName }, id: \.pluginId) { bundle in
-                    IncompatibleBundleRow(bundle: bundle)
+                ForEach(pluginManager.incompatibleExternalBundles.values.sorted { $0.pluginName < $1.pluginName }, id: \.bundleURL) { bundle in
+                    IncompatibleBundleRow(
+                        bundle: bundle,
+                        onRemove: {
+                            incompatibleBundleToRemove = bundle
+                        }
+                    )
                         .background {
                             integrationGroupedSurface(cornerRadius: 14)
                         }
@@ -1505,7 +1544,7 @@ private struct InstalledPluginRow: View {
     let hosting: PluginHosting
     let registryPlugin: RegistryPlugin?
     let onUpdate: () -> Void
-    let onRepair: () -> Void
+    let onReplace: () -> Void
     let onUninstall: () -> Void
     @State private var pluginActivity: PluginSettingsActivity?
     @State private var modelsExpanded = false
@@ -1621,23 +1660,11 @@ private struct InstalledPluginRow: View {
                                 }
                             }
 
-                            if detailsURL != nil || homepageURL != nil {
+                            if (detailsURL != nil || homepageURL != nil) && !plugin.isBundled {
                                 Divider()
                             }
 
-                            if canRepairInstallation {
-                                Button {
-                                    onRepair()
-                                } label: {
-                                    Label(localizedAppText("Repair Installation", de: "Installation reparieren"), systemImage: "arrow.down.app")
-                                }
-                            }
-
                             if !plugin.isBundled {
-                                if canRepairInstallation {
-                                    Divider()
-                                }
-
                                 Button(role: .destructive) {
                                     onUninstall()
                                 } label: {
@@ -1731,6 +1758,15 @@ private struct InstalledPluginRow: View {
     private var pluginActions: some View {
         if let state = installState {
             PluginInstallStateView(state: state, name: plugin.manifest.name)
+        } else if canReplaceIncompatibleExternalBundle {
+            Button {
+                onReplace()
+            } label: {
+                Label(String(localized: "Replace with Marketplace Version"), systemImage: "arrow.down.app")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .accessibilityLabel(String(localized: "Replace \(plugin.manifest.name) with the Marketplace version"))
         } else if case .updateAvailable = installInfo {
             Button {
                 onUpdate()
@@ -1745,9 +1781,8 @@ private struct InstalledPluginRow: View {
         }
     }
 
-    private var canRepairInstallation: Bool {
-        PluginRegistryService.canRepairInstalledPlugin(
-            isBundled: plugin.isBundled,
+    private var canReplaceIncompatibleExternalBundle: Bool {
+        PluginRegistryService.canReplaceIncompatibleExternalBundle(
             registryPlugin: registryPlugin,
             installInfo: installInfo,
             installState: installState,
@@ -1779,7 +1814,7 @@ private struct InstalledPluginRow: View {
     }
 
     private var hasOverflowActions: Bool {
-        detailsURL != nil || homepageURL != nil || canRepairInstallation || !plugin.isBundled
+        detailsURL != nil || homepageURL != nil || !plugin.isBundled
     }
 
     private var restartRequired: Bool {
@@ -1980,6 +2015,7 @@ private struct AvailablePluginRow: View {
 
 private struct IncompatibleBundleRow: View {
     let bundle: IncompatibleExternalBundle
+    let onRemove: () -> Void
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
@@ -2004,6 +2040,17 @@ private struct IncompatibleBundleRow: View {
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
             }
+
+            Spacer(minLength: 12)
+
+            Button(role: .destructive) {
+                onRemove()
+            } label: {
+                Label(String(localized: "Remove"), systemImage: "trash")
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .accessibilityLabel(String(localized: "Remove incompatible bundle for \(bundle.pluginName)"))
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
