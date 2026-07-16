@@ -19,6 +19,12 @@ struct AdvancedSettingsView: View {
     @State private var showDiagnosticsExportError = false
     @State private var diagnosticsExportErrorMessage = ""
 
+    @State private var showBackupError = false
+    @State private var backupErrorMessage = ""
+    @State private var showBackupImportResult = false
+    @State private var backupImportResultMessage = ""
+    @State private var isImportingBackup = false
+
     @AppStorage(UserDefaultsKeys.historyEnabled) private var historyEnabled: Bool = true
     @AppStorage(UserDefaultsKeys.historyRetentionDays) private var historyRetentionDays: Int = 0
     @AppStorage(UserDefaultsKeys.saveAudioWithHistory) private var saveAudioWithHistory: Bool = false
@@ -40,6 +46,45 @@ struct AdvancedSettingsView: View {
                     SettingsInfoButton(text: localizedAppText(
                         "Creates a JSON support report with app, system, permission, plugin, settings and audio device diagnostics.",
                         de: "Erstellt einen JSON-Supportbericht mit App-, System-, Berechtigungs-, Plugin-, Einstellungs- und Audiogeräte-Diagnose."
+                    ))
+                }
+            }
+
+            // MARK: - Backup & Restore
+            Section(localizedAppText("Backup & Restore", de: "Sicherung & Wiederherstellung")) {
+                HStack {
+                    Button {
+                        performBackupExport()
+                    } label: {
+                        Label(
+                            localizedAppText("Export Settings…", de: "Einstellungen exportieren…"),
+                            systemImage: "square.and.arrow.up"
+                        )
+                    }
+                    .disabled(isImportingBackup)
+
+                    Button {
+                        isImportingBackup = true
+                        Task {
+                            await performBackupImport()
+                            isImportingBackup = false
+                        }
+                    } label: {
+                        Label(
+                            localizedAppText("Import Settings…", de: "Einstellungen importieren…"),
+                            systemImage: "square.and.arrow.down"
+                        )
+                    }
+                    .disabled(isImportingBackup)
+
+                    if isImportingBackup {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+
+                    SettingsInfoButton(text: localizedAppText(
+                        "Exports workflows, dictionary entries, snippets, profiles, prompt actions, hotkey bindings, and installed community plugins to a single file you can import on another Mac. Reinstalled plugins fetch whatever version is currently latest in the marketplace, and installing them requires network access. Provider API keys, history, and general preferences are not included.",
+                        de: "Exportiert Workflows, Wörterbucheinträge, Snippets, Profile, Prompt-Aktionen, Hotkey-Zuordnungen und installierte Community-Plugins in eine Datei, die du auf einem anderen Mac importieren kannst. Wiederhergestellte Plugins laden die jeweils aktuelle Marketplace-Version, das Installieren erfordert eine Internetverbindung. Anbieter-API-Schlüssel, Verlauf und allgemeine Einstellungen sind nicht enthalten."
                     ))
                 }
             }
@@ -458,6 +503,16 @@ struct AdvancedSettingsView: View {
         } message: {
             Text(diagnosticsExportErrorMessage)
         }
+        .alert(localizedAppText("Backup Failed", de: "Sicherung fehlgeschlagen"), isPresented: $showBackupError) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(backupErrorMessage)
+        }
+        .alert(localizedAppText("Import Complete", de: "Import abgeschlossen"), isPresented: $showBackupImportResult) {
+            Button("OK", role: .cancel) {}
+        } message: {
+            Text(backupImportResultMessage)
+        }
     }
 
     // MARK: - Examples
@@ -540,6 +595,65 @@ struct AdvancedSettingsView: View {
             .string(from: Date())
             .replacingOccurrences(of: ":", with: "-")
         return "typewhisper-diagnostics-\(timestamp).json"
+    }
+
+    // MARK: - Backup & Restore
+
+    private func performBackupExport() {
+        guard let url = SettingsBackupExporter.presentSavePanel() else { return }
+        let container = ServiceContainer.shared
+        let backup = SettingsBackupExporter.buildBackup(
+            workflowService: container.workflowService,
+            dictionaryService: container.dictionaryService,
+            snippetService: container.snippetService,
+            profileService: container.profileService,
+            promptActionService: container.promptActionService,
+            pluginManager: container.pluginManager
+        )
+        do {
+            try SettingsBackupExporter.saveToFile(backup, to: url)
+        } catch {
+            backupErrorMessage = error.localizedDescription
+            showBackupError = true
+        }
+    }
+
+    private func performBackupImport() async {
+        guard let url = SettingsBackupExporter.presentOpenPanel() else { return }
+        do {
+            let data = try Data(contentsOf: url)
+            let backup = try SettingsBackupExporter.parse(data)
+
+            let container = ServiceContainer.shared
+            let result = await SettingsBackupExporter.importBackup(
+                backup,
+                workflowService: container.workflowService,
+                dictionaryService: container.dictionaryService,
+                snippetService: container.snippetService,
+                profileService: container.profileService,
+                promptActionService: container.promptActionService,
+                pluginManager: container.pluginManager,
+                pluginRegistryService: container.pluginRegistryService
+            )
+
+            backupImportResultMessage = backupImportSummary(result)
+            showBackupImportResult = true
+        } catch {
+            backupErrorMessage = error.localizedDescription
+            showBackupError = true
+        }
+    }
+
+    private func backupImportSummary(_ result: SettingsBackupExporter.ImportResult) -> String {
+        var lines: [String] = []
+        lines.append(String(format: String(localized: "Workflows: %d imported"), result.workflowsImported))
+        lines.append(String(format: String(localized: "Dictionary: %d imported, %d skipped (already present)"), result.dictionaryImported, result.dictionarySkipped))
+        lines.append(String(format: String(localized: "Snippets: %d imported, %d skipped (already present)"), result.snippetsImported, result.snippetsSkipped))
+        lines.append(String(format: String(localized: "Prompt Actions: %d imported"), result.promptActionsImported))
+        lines.append(String(format: String(localized: "Profiles: %d imported"), result.profilesImported))
+        lines.append(String(format: String(localized: "Hotkeys: %d applied, %d skipped (already bound)"), result.hotkeysApplied, result.hotkeysSkipped))
+        lines.append(String(format: String(localized: "Plugins: %d installed, %d skipped (already installed or unavailable)"), result.pluginsInstalled, result.pluginsSkipped))
+        return lines.joined(separator: "\n")
     }
 
     // MARK: - CLI Installation

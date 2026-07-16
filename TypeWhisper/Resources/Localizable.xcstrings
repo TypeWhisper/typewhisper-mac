@@ -22982,6 +22982,136 @@
           }
         }
       }
+    },
+    "Backup & Restore": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sicherung & Wiederherstellung"
+          }
+        }
+      }
+    },
+    "Export Settings…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einstellungen exportieren…"
+          }
+        }
+      }
+    },
+    "Import Settings…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einstellungen importieren…"
+          }
+        }
+      }
+    },
+    "Backup Failed": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sicherung fehlgeschlagen"
+          }
+        }
+      }
+    },
+    "The file is not a valid TypeWhisper settings backup.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Datei ist keine gültige TypeWhisper-Einstellungssicherung."
+          }
+        }
+      }
+    },
+    "Workflows: %d imported": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Workflows: %d importiert"
+          }
+        }
+      }
+    },
+    "Dictionary: %d imported, %d skipped (already present)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wörterbuch: %d importiert, %d übersprungen (bereits vorhanden)"
+          }
+        }
+      }
+    },
+    "Snippets: %d imported, %d skipped (already present)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Snippets: %d importiert, %d übersprungen (bereits vorhanden)"
+          }
+        }
+      }
+    },
+    "Prompt Actions: %d imported": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prompt-Aktionen: %d importiert"
+          }
+        }
+      }
+    },
+    "Profiles: %d imported": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Profile: %d importiert"
+          }
+        }
+      }
+    },
+    "Hotkeys: %d applied, %d skipped (already bound)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hotkeys: %d angewendet, %d übersprungen (bereits belegt)"
+          }
+        }
+      }
+    },
+    "Exports workflows, dictionary entries, snippets, profiles, prompt actions, hotkey bindings, and installed community plugins to a single file you can import on another Mac. Reinstalled plugins fetch whatever version is currently latest in the marketplace, and installing them requires network access. Provider API keys, history, and general preferences are not included.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exportiert Workflows, Wörterbucheinträge, Snippets, Profile, Prompt-Aktionen, Hotkey-Zuordnungen und installierte Community-Plugins in eine Datei, die du auf einem anderen Mac importieren kannst. Wiederhergestellte Plugins laden die jeweils aktuelle Marketplace-Version, das Installieren erfordert eine Internetverbindung. Anbieter-API-Schlüssel, Verlauf und allgemeine Einstellungen sind nicht enthalten."
+          }
+        }
+      }
+    },
+    "Plugins: %d installed, %d skipped (already installed or unavailable)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Plugins: %d installiert, %d übersprungen (bereits installiert oder nicht verfügbar)"
+          }
+        }
+      }
     }
   },
   "version": "1.1"

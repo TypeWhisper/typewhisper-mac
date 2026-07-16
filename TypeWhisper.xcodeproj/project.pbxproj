@@ -425,11 +425,13 @@
 		AA00000000000000000281 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000269 /* Localizable.xcstrings */; };
 		AA00000000000000000282 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000039 /* TypeWhisperPluginSDK */; };
 		AA00000000000000000283 /* DictionaryExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000271 /* DictionaryExporter.swift */; };
+		E8F50D027F7C4DFC85654843 /* SettingsBackupExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D819323529246BCB5504526 /* SettingsBackupExporter.swift */; };
 		AA00000000000000000284 /* TermPackRegistryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000272 /* TermPackRegistryService.swift */; };
 		AA00000000000000000285 /* MediaPlaybackService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000273 /* MediaPlaybackService.swift */; };
 		AA00000000000000000286 /* MediaRemoteAdapter in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000040 /* MediaRemoteAdapter */; };
 		AA00000000000000000287 /* MediaRemoteAdapter in Embed Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000040 /* MediaRemoteAdapter */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		C7A3E9F1D5B2084A6E9C3D71 /* DictionaryExporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A8D4F2B6E1C3097B5F8A4E62 /* DictionaryExporterTests.swift */; };
+		FFA878CD7D794D1A914AF13B /* SettingsBackupExporterTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74A67CF217C54409A6A3F738 /* SettingsBackupExporterTests.swift */; };
 		AA00000000000000000288 /* OpenRouterPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000274 /* OpenRouterPlugin.swift */; };
 		AA00000000000000000289 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000275 /* manifest.json */; };
 		AA00000000000000000290 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000276 /* Localizable.xcstrings */; };
@@ -939,9 +941,11 @@
 		BB00000000000000000265 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		BB00000000000000000266 /* ElevenLabsPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ElevenLabsPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB00000000000000000271 /* DictionaryExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictionaryExporter.swift; sourceTree = "<group>"; };
+		8D819323529246BCB5504526 /* SettingsBackupExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsBackupExporter.swift; sourceTree = "<group>"; };
 		BB00000000000000000272 /* TermPackRegistryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TermPackRegistryService.swift; sourceTree = "<group>"; };
 		BB00000000000000000273 /* MediaPlaybackService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaPlaybackService.swift; sourceTree = "<group>"; };
 		A8D4F2B6E1C3097B5F8A4E62 /* DictionaryExporterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DictionaryExporterTests.swift; sourceTree = "<group>"; };
+		74A67CF217C54409A6A3F738 /* SettingsBackupExporterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SettingsBackupExporterTests.swift; sourceTree = "<group>"; };
 		BB00000000000000000278 /* SonioxPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SonioxPlugin.swift; sourceTree = "<group>"; };
 		BB00000000000000000279 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		BB00000000000000000280 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
@@ -1534,6 +1538,7 @@
 				BB00000000000000000079 /* DictionaryService.swift */,
 				B87000000000000000000001 /* DictionaryTrainingService.swift */,
 				BB00000000000000000271 /* DictionaryExporter.swift */,
+				8D819323529246BCB5504526 /* SettingsBackupExporter.swift */,
 				BB00000000000000000081 /* SnippetService.swift */,
 				C1F000000000000000000001 /* Sync */,
 				BB00000000000000000086 /* SoundService.swift */,
@@ -2312,6 +2317,7 @@
 				B87000000000000000000002 /* DictionaryTrainingServiceTests.swift */,
 				BB7080000000000000000002 /* TargetAppCorrectionLearningServiceTests.swift */,
 				A8D4F2B6E1C3097B5F8A4E62 /* DictionaryExporterTests.swift */,
+				74A67CF217C54409A6A3F738 /* SettingsBackupExporterTests.swift */,
 				8E39448D561C47B16EEF4C6B /* HTTPRequestParserTests.swift */,
 				3F476E4F05313F6BF4E696A5 /* HistoryServiceTests.swift */,
 				BB8390000000000000000004 /* UsageStatisticsServiceTests.swift */,
@@ -3826,6 +3832,7 @@
 				A87000000000000000000002 /* DictionaryTrainingServiceTests.swift in Sources */,
 				AA7080000000000000000002 /* TargetAppCorrectionLearningServiceTests.swift in Sources */,
 				C7A3E9F1D5B2084A6E9C3D71 /* DictionaryExporterTests.swift in Sources */,
+				FFA878CD7D794D1A914AF13B /* SettingsBackupExporterTests.swift in Sources */,
 				F635B3F08018D57E0CB709BF /* HTTPRequestParserTests.swift in Sources */,
 				6A9D1EE0C163693B1A798779 /* HistoryServiceTests.swift in Sources */,
 				AA8390000000000000000004 /* UsageStatisticsServiceTests.swift in Sources */,
@@ -3939,6 +3946,7 @@
 				AA00000000000000000153 /* HistoryExporter.swift in Sources */,
 				A91F00000000000000000002 /* RecentTranscriptionStore.swift in Sources */,
 				AA00000000000000000283 /* DictionaryExporter.swift in Sources */,
+				E8F50D027F7C4DFC85654843 /* SettingsBackupExporter.swift in Sources */,
 				AA00000000000000000284 /* TermPackRegistryService.swift in Sources */,
 				AA00000000000000000051 /* GeneralSettingsView.swift in Sources */,
 				A40800000000000000000001 /* LanguageSelectionEditor.swift in Sources */,
