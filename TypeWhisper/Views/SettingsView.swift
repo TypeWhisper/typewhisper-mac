@@ -284,6 +284,16 @@ private struct SettingsSidebarSearchField: View {
                 text: $text
             )
             .textFieldStyle(.plain)
+
+            if !text.isEmpty {
+                Button(action: { text = "" }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help(localizedAppText("Clear Search", de: "Suche löschen"))
+                .accessibilityLabel(localizedAppText("Clear Search", de: "Suche löschen"))
+            }
         }
         .padding(6)
         .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .controlBackgroundColor)))
