@@ -51,6 +51,11 @@ enum AppConstants {
         }
     }
 
+    struct PreviewRelease: Equatable {
+        let tag: String
+        let url: URL
+    }
+
     nonisolated(unsafe) static var testAppSupportDirectoryOverride: URL?
 
     static let appSupportDirectoryName: String = {
@@ -85,6 +90,9 @@ enum AppConstants {
 
     static let appVersion: String = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0.0"
     static let buildVersion: String = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "0"
+    private static let githubReleaseTagsURL = URL(
+        string: "https://github.com/TypeWhisper/typewhisper-mac/releases/tag"
+    )!
     static let currentReleaseFingerprint: String = {
         let channel = bundledReleaseChannel()
         return "\(appVersion)+\(buildVersion)@\(channel.rawValue)"
@@ -95,6 +103,28 @@ enum AppConstants {
             return .stable
         }
         return channel
+    }
+
+    static func bundledPreviewRelease(
+        infoDictionary: [String: Any]? = Bundle.main.infoDictionary
+    ) -> PreviewRelease? {
+        let channel = bundledReleaseChannel(infoDictionary: infoDictionary)
+        guard channel == .daily || channel == .releaseCandidate,
+              let rawTag = infoDictionary?["TypeWhisperReleaseTag"] as? String else {
+            return nil
+        }
+
+        let tag = rawTag.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !tag.isEmpty else { return nil }
+
+        return PreviewRelease(
+            tag: tag,
+            url: githubReleaseTagsURL.appendingPathComponent(tag)
+        )
+    }
+
+    static var previewRelease: PreviewRelease? {
+        bundledPreviewRelease()
     }
 
     static func selectedUpdateChannel(

@@ -41,6 +41,13 @@ struct AboutSettingsView: View {
                     Text("Version \(version) (\(build))\(channelSuffix)")
                         .foregroundStyle(.secondary)
 
+                    if let previewRelease = AppConstants.previewRelease {
+                        Link(destination: previewRelease.url) {
+                            Text("Release \(previewRelease.tag)")
+                        }
+                        .font(.caption)
+                    }
+
                     Text(String(localized: "Fast, private speech-to-text for your Mac. Transcribe with local or cloud engines, process text with AI prompts, and insert directly into any app."))
                         .multilineTextAlignment(.center)
                         .foregroundStyle(.secondary)
