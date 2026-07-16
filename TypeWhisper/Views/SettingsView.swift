@@ -201,8 +201,12 @@ private struct SettingsModernShell: View {
 
     @State private var sidebarSearchText = ""
     @State private var isSidebarVisible = true
+    @State private var sidebarWidth: CGFloat = 270
+    @State private var dragStartWidth: CGFloat?
+    @FocusState private var isSearchFieldFocused: Bool
 
-    private let sidebarWidth: CGFloat = 270
+    private let minSidebarWidth: CGFloat = 240
+    private let maxSidebarWidth: CGFloat = 320
 
     private var filteredSections: [SettingsDestinationSection] {
         let query = sidebarSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -228,7 +232,7 @@ private struct SettingsModernShell: View {
             // built-in collapse instead animates the List's actual layout width,
             // which reflows text every frame and produces a visible glitch.
             VStack(spacing: 0) {
-                SettingsSidebarSearchField(text: $sidebarSearchText)
+                SettingsSidebarSearchField(text: $sidebarSearchText, isFocused: $isSearchFieldFocused)
 
                 List(selection: $selectedTab) {
                     ForEach(filteredSections) { section in
@@ -249,17 +253,55 @@ private struct SettingsModernShell: View {
             .frame(width: sidebarWidth)
             .frame(width: isSidebarVisible ? sidebarWidth : 0, alignment: .leading)
             .clipped()
+            // Collapsing only zeroes the outer frame and clips rendering; the search
+            // field, clear button, and list stay mounted underneath. Without this,
+            // keyboard focus and VoiceOver navigation can still reach controls that
+            // are invisible to sighted users.
+            .disabled(!isSidebarVisible)
+            .accessibilityHidden(!isSidebarVisible)
+            .allowsHitTesting(isSidebarVisible)
 
-            // Conditionally inserting/removing the divider pops it in and out
-            // instantly, out of sync with the sidebar's width animation. Fading its
-            // opacity instead keeps it in step with the same transition.
+            // Always mounted (never inserted/removed via if/else) so its opacity
+            // fades in step with the sidebar's width animation instead of popping
+            // in/out instantly. The resize handle only reacts while visible.
             Divider()
                 .opacity(isSidebarVisible ? 1 : 0)
+                .overlay(
+                    Rectangle()
+                        .fill(Color.clear)
+                        .frame(width: 8)
+                        .contentShape(Rectangle())
+                        .onHover { hovering in
+                            guard isSidebarVisible else { return }
+                            if hovering {
+                                NSCursor.resizeLeftRight.push()
+                            } else {
+                                NSCursor.pop()
+                            }
+                        }
+                        .gesture(
+                            DragGesture()
+                                .onChanged { value in
+                                    guard isSidebarVisible else { return }
+                                    let base = dragStartWidth ?? sidebarWidth
+                                    dragStartWidth = base
+                                    sidebarWidth = min(max(base + value.translation.width, minSidebarWidth), maxSidebarWidth)
+                                }
+                                .onEnded { _ in
+                                    dragStartWidth = nil
+                                }
+                        )
+                )
 
             detail(selectedTab)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
         .animation(.easeInOut(duration: 0.22), value: isSidebarVisible)
+        .onChange(of: isSidebarVisible) { _, visible in
+            if !visible {
+                isSearchFieldFocused = false
+            }
+        }
         .toolbar {
             ToolbarItem(placement: .navigation) {
                 Button(action: { isSidebarVisible.toggle() }) {
@@ -274,6 +316,7 @@ private struct SettingsModernShell: View {
 
 private struct SettingsSidebarSearchField: View {
     @Binding var text: String
+    var isFocused: FocusState<Bool>.Binding
 
     var body: some View {
         HStack(spacing: 6) {
@@ -284,6 +327,7 @@ private struct SettingsSidebarSearchField: View {
                 text: $text
             )
             .textFieldStyle(.plain)
+            .focused(isFocused)
 
             if !text.isEmpty {
                 Button(action: { text = "" }) {
