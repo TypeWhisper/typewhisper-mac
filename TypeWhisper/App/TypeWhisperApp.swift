@@ -728,6 +728,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
             name: NSWindow.willCloseNotification,
             object: nil
         )
+
+        Task { await ServiceContainer.shared.cloudFolderSyncController.syncNow() }
+    }
+
+    func applicationDidBecomeActive(_ notification: Notification) {
+        guard !AppConstants.isRunningTests else { return }
+        Task { await ServiceContainer.shared.cloudFolderSyncController.syncNow() }
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {

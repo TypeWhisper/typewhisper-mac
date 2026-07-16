@@ -65,6 +65,25 @@ private final class InMemoryUserDataSyncStore: UserDataSyncStore, @unchecked Sen
 }
 
 final class CloudFolderSyncTests: XCTestCase {
+    func testCrossPlatformGoldenFixturesDecode() throws {
+        let upsert: CloudFolderSyncOperation = try Self.decodeFixture("upsert-dictionary-v1")
+        XCTAssertEqual(upsert.dictionary?.source, .autoLearned)
+
+        let deletion: CloudFolderSyncOperation = try Self.decodeFixture("delete-snippet-v1")
+        XCTAssertEqual(deletion.kind, .delete)
+        XCTAssertEqual(deletion.deviceId, "fixture-iphone")
+
+        let device: CloudFolderSyncDeviceRecord = try Self.decodeFixture("device-v1")
+        XCTAssertEqual(device.platform, "macOS")
+
+        let legacy: CloudFolderSyncOperation = try Self.decodeFixture("upsert-snippet-legacy-v1")
+        XCTAssertEqual(legacy.snippet?.tags, [])
+
+        let unknown: CloudFolderSyncOperation = try Self.decodeFixture("unknown-schema")
+        XCTAssertEqual(unknown.schemaVersion, 2)
+        XCTAssertTrue(CloudFolderSyncEngine.winningOperations(from: [unknown]).isEmpty)
+    }
+
     @MainActor
     func testDeterministicItemIDsUseNaturalKeys() {
         XCTAssertEqual(
@@ -216,6 +235,7 @@ final class CloudFolderSyncTests: XCTestCase {
         )
 
         XCTAssertEqual(result.mutationsApplied, 0)
+        XCTAssertEqual(result.diagnostics.map(\.kind), [.malformedOperation])
     }
 
     @MainActor
@@ -630,4 +650,25 @@ final class CloudFolderSyncTests: XCTestCase {
             options: [.skipsHiddenFiles]
         )) ?? []
     }
+
+    private static func decodeFixture<T: Decodable>(_ name: String) throws -> T {
+        let fixtureURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .appendingPathComponent("Fixtures/PremiumSync/\(name).json")
+        return try fixtureDecoder.decode(T.self, from: Data(contentsOf: fixtureURL))
+    }
+
+    private static let fixtureDecoder: JSONDecoder = {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let value = try decoder.singleValueContainer().decode(String.self)
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+            guard let date = formatter.date(from: value) else {
+                throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: value))
+            }
+            return date
+        }
+        return decoder
+    }()
 }

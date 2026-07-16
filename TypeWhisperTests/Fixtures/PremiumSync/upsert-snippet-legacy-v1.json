@@ -1,0 +1,17 @@
+{
+  "collection" : "snippets",
+  "deviceId" : "fixture-mac",
+  "itemId" : "snippet:;hello",
+  "kind" : "upsert",
+  "operationId" : "fixture-upsert-snippet-legacy",
+  "schemaVersion" : 1,
+  "snippet" : {
+    "caseSensitive" : false,
+    "createdAt" : "2026-07-16T09:00:00.000Z",
+    "isEnabled" : true,
+    "replacement" : "Hello!",
+    "trigger" : ";hello",
+    "updatedAt" : "2026-07-16T09:00:00.000Z"
+  },
+  "updatedAt" : "2026-07-16T09:00:00.000Z"
+}

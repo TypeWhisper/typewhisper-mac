@@ -61,6 +61,13 @@ struct CloudFolderSyncResult: Equatable, Sendable {
     let operationsWritten: Int
     let mutationsApplied: Int
     let syncedAt: Date
+    let diagnostics: [CloudFolderSyncDiagnostic]
+}
+
+struct CloudFolderSyncDiagnostic: Equatable, Sendable {
+    enum Kind: String, Sendable { case unreadableFile, malformedOperation, unsupportedSchema }
+    let kind: Kind
+    let fileName: String
 }
 
 struct CloudFolderSyncManifest: Codable, Equatable, Sendable {
@@ -164,7 +171,7 @@ enum CloudFolderSyncError: LocalizedError {
         case .missingStore:
             String(localized: "TypeWhisper user data is unavailable.")
         case .notEntitled:
-            String(localized: "Cloud Folder Sync requires an active Commercial license.")
+            String(localized: "Cloud Folder Sync requires an active Premium entitlement.")
         }
     }
 }
@@ -212,7 +219,8 @@ enum CloudFolderSyncEngine {
         try write(localOperations, to: deviceOperationsURL, now: now)
         pruneExpiredTombstones(in: deviceOperationsURL, now: now)
 
-        let operations = readOperations(from: operationsURL)
+        let readResult = readOperations(from: operationsURL)
+        let operations = readResult.operations
         let winners = winningOperations(from: operations)
         let mutations = makeMutations(
             from: winners,
@@ -236,7 +244,8 @@ enum CloudFolderSyncEngine {
             operationsRead: operations.count,
             operationsWritten: localOperations.count,
             mutationsApplied: mutations.count,
-            syncedAt: now
+            syncedAt: now,
+            diagnostics: readResult.diagnostics
         )
     }
 
@@ -444,31 +453,46 @@ enum CloudFolderSyncEngine {
         }
     }
 
-    private static func readOperations(from operationsURL: URL) -> [CloudFolderSyncOperation] {
+    private static func readOperations(
+        from operationsURL: URL
+    ) -> (operations: [CloudFolderSyncOperation], diagnostics: [CloudFolderSyncDiagnostic]) {
         guard let deviceDirectories = try? FileManager.default.contentsOfDirectory(
             at: operationsURL,
             includingPropertiesForKeys: [.isDirectoryKey],
             options: [.skipsHiddenFiles]
         ) else {
-            return []
+            return ([], [])
         }
 
-        return deviceDirectories.flatMap { deviceDirectory -> [CloudFolderSyncOperation] in
+        var operations: [CloudFolderSyncOperation] = []
+        var diagnostics: [CloudFolderSyncDiagnostic] = []
+        for deviceDirectory in deviceDirectories {
             guard (try? deviceDirectory.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true,
                   let files = try? FileManager.default.contentsOfDirectory(
                     at: deviceDirectory,
                     includingPropertiesForKeys: nil,
                     options: [.skipsHiddenFiles]
                   ) else {
-                return []
+                continue
             }
 
-            return files.compactMap { file in
-                guard file.pathExtension == "json",
-                      let data = try? Data(contentsOf: file) else { return nil }
-                return try? decoder.decode(CloudFolderSyncOperation.self, from: data)
+            for file in files where file.pathExtension == "json" {
+                guard let data = try? Data(contentsOf: file) else {
+                    diagnostics.append(.init(kind: .unreadableFile, fileName: file.lastPathComponent))
+                    continue
+                }
+                guard let operation = try? decoder.decode(CloudFolderSyncOperation.self, from: data) else {
+                    diagnostics.append(.init(kind: .malformedOperation, fileName: file.lastPathComponent))
+                    continue
+                }
+                guard operation.schemaVersion == 1 else {
+                    diagnostics.append(.init(kind: .unsupportedSchema, fileName: file.lastPathComponent))
+                    continue
+                }
+                operations.append(operation)
             }
         }
+        return (operations, diagnostics)
     }
 
     private static func pruneExpiredTombstones(in deviceOperationsURL: URL, now: Date) {

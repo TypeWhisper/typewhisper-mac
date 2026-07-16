@@ -4632,6 +4632,7 @@
 				INFOPLIST_KEY_CFBundleDisplayName = "TypeWhisper Dev";
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_LSUIElement = YES;
+				ICLOUD_CONTAINER_ID = iCloud.com.typewhisper.sync.dev;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -4661,6 +4662,7 @@
 				INFOPLIST_FILE = TypeWhisper/Resources/Info.plist;
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_LSUIElement = YES;
+				ICLOUD_CONTAINER_ID = iCloud.com.typewhisper.sync;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",

@@ -1,35 +1,124 @@
+import AuthenticationServices
+import CryptoKit
 import SwiftUI
 
 @MainActor
 struct PremiumSettingsView: View {
     @ObservedObject private var license: LicenseService
     @ObservedObject private var syncController: CloudFolderSyncController
+    @ObservedObject private var premiumAccount: PremiumAccountService
     @ObservedObject private var correctionLearningService: TargetAppCorrectionLearningService
     @AppStorage(UserDefaultsKeys.targetAppCorrectionLearningEnabled) private var targetAppCorrectionLearningEnabled = false
+    @State private var appleNonceHash: String?
+    @State private var confirmingAccountDeletion = false
 
     private let settingsNavigation: SettingsNavigationCoordinator
 
     init(
         licenseService: LicenseService = LicenseService.shared,
         syncController: CloudFolderSyncController = ServiceContainer.shared.cloudFolderSyncController,
+        premiumAccount: PremiumAccountService = ServiceContainer.shared.premiumAccountService,
         correctionLearningService: TargetAppCorrectionLearningService = ServiceContainer.shared.targetAppCorrectionLearningService,
         settingsNavigation: SettingsNavigationCoordinator = .shared
     ) {
         self.license = licenseService
         self.syncController = syncController
+        self.premiumAccount = premiumAccount
         self.correctionLearningService = correctionLearningService
         self.settingsNavigation = settingsNavigation
     }
 
     var body: some View {
         ScrollView {
-            if license.hasCommercialLicense {
+            premiumAccountCard
+
+            if license.hasCommercialLicense || premiumAccount.hasPremiumEntitlement {
                 premiumControlCenter
             } else {
                 lockedPremiumLanding
             }
         }
         .frame(minWidth: 560, minHeight: 360, alignment: .topLeading)
+        .alert(String(localized: "Delete TypeWhisper Account?"), isPresented: $confirmingAccountDeletion) {
+            Button(String(localized: "Delete Account"), role: .destructive) {
+                Task { await premiumAccount.deleteAccount() }
+            }
+            Button(String(localized: "Cancel"), role: .cancel) {}
+        } message: {
+            Text(String(localized: "This removes the account and entitlement link. Local entries and private cloud files are not deleted."))
+        }
+    }
+
+    private var premiumAccountCard: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Label(String(localized: "Cross-device Premium Account"), systemImage: "person.crop.circle")
+                    .font(.headline)
+                Spacer()
+                if premiumAccount.hasPremiumEntitlement {
+                    Label(String(localized: "Premium active"), systemImage: "checkmark.seal.fill")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.green)
+                }
+            }
+
+            if premiumAccount.isSignedIn {
+                Text(String(localized: "Your Apple account keeps Polar and App Store entitlements available on Mac and iPhone."))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                HStack {
+                    Button(String(localized: "Sign Out")) { premiumAccount.signOut() }
+                    Button(String(localized: "Delete Account"), role: .destructive) { confirmingAccountDeletion = true }
+                }
+            } else {
+                SignInWithAppleButton(.signIn) { request in
+                    request.requestedScopes = [.fullName, .email]
+                    let nonceHash = SHA256.hash(data: Data(UUID().uuidString.utf8))
+                        .map { String(format: "%02x", $0) }
+                        .joined()
+                    appleNonceHash = nonceHash
+                    request.nonce = nonceHash
+                } onCompletion: { result in
+                    switch result {
+                    case .success(let authorization):
+                        guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
+                              let tokenData = credential.identityToken,
+                              let identityToken = String(data: tokenData, encoding: .utf8),
+                              let nonceHash = appleNonceHash else { return }
+                        appleNonceHash = nil
+                        let authorizationCode = credential.authorizationCode.flatMap { String(data: $0, encoding: .utf8) }
+                        Task {
+                            await premiumAccount.signIn(
+                                identityToken: identityToken,
+                                authorizationCode: authorizationCode,
+                                nonceHash: nonceHash,
+                                polarLicenseKey: license.commercialLicenseKeyForAccountLink
+                            )
+                        }
+                    case .failure(let error):
+                        appleNonceHash = nil
+                        premiumAccount.errorMessage = error.localizedDescription
+                    }
+                }
+                .signInWithAppleButtonStyle(.whiteOutline)
+                .frame(width: 240, height: 38)
+
+                Text(String(localized: "Sync data stays in your selected cloud location and never passes through the TypeWhisper account service."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            if let errorMessage = premiumAccount.errorMessage {
+                Label(errorMessage, systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: 760, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.055)))
+        .padding(.horizontal, 22)
+        .padding(.top, 22)
     }
 
     private var featureColumns: [GridItem] {
@@ -277,7 +366,9 @@ struct PremiumSettingsView: View {
                 Text(String(localized: "Premium Control Center"))
                     .font(.title2.weight(.semibold))
 
-                Text(String(localized: "Commercial license active. Manage correction learning and sync from one place."))
+                Text(license.hasCommercialLicense
+                     ? String(localized: "Commercial license active. Manage correction learning and sync from one place.")
+                     : String(localized: "Premium account active. Manage cross-device sync from one place."))
                     .font(.callout)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
@@ -510,7 +601,7 @@ struct PremiumSettingsView: View {
             return String(localized: "Syncing")
         }
 
-        if syncController.selectedFolderURL == nil {
+        if !syncController.isConfigured {
             return String(localized: "Not set up")
         }
 
@@ -525,9 +616,9 @@ struct PremiumSettingsView: View {
     }
 
     private var cloudSyncDetailText: String {
-        syncController.selectedFolderURL == nil
-            ? String(localized: "No folder selected")
-            : String(localized: "Folder selected")
+        syncController.isConfigured
+            ? syncController.mode.displayName
+            : String(localized: "Sync is off")
     }
 
     private var cloudSyncStatusColor: Color {
@@ -535,7 +626,7 @@ struct PremiumSettingsView: View {
             return .blue
         }
 
-        if syncController.selectedFolderURL == nil {
+        if !syncController.isConfigured {
             return .secondary
         }
 
