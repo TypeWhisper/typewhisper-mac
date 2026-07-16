@@ -1382,6 +1382,8 @@ final class ModelManagerService: ObservableObject {
                 from: plugin.modelCatalog,
                 localeIdentifier: $0,
                 languageCode: $0,
+                preferredModelId: plugin.selectedModelId,
+                fallbackLocaleIdentifier: Locale.current.identifier,
                 fallbackToFirst: false
             )
         }

@@ -382,6 +382,8 @@ final class SpeechAnalyzerPlugin: NSObject, LiveTranscriptionCapablePlugin, Tran
             fromModelIds: cachedModels.map(\.id),
             localeIdentifier: languageCode,
             languageCode: languageCode,
+            preferredModelId: selectedModelId,
+            fallbackLocaleIdentifier: Locale.current.identifier,
             fallbackToFirst: false
         ) else {
             return nil

@@ -69,6 +69,37 @@ final class ModelManagerAppleSpeechModelSelectionTests: XCTestCase {
         XCTAssertEqual(plugin.selectedModelId, "speechanalyzer-de_DE")
     }
 
+    func testGenericLanguageKeepsMatchingConfiguredRegionalAppleSpeechModelAcrossDictations() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let plugin = MockAppleSpeechTranscriptionPlugin(
+            availableModels: [
+                PluginModelInfo(id: "speechanalyzer-en_AU", displayName: "English (Australia)"),
+                PluginModelInfo(id: "speechanalyzer-en_US", displayName: "English (United States)")
+            ]
+        )
+        plugin.selectModel("speechanalyzer-en_US")
+        let modelManager = installAppleSpeechPlugin(plugin, appSupportDirectory: appSupportDirectory)
+
+        let firstResult = try await modelManager.transcribe(
+            audioSamples: [Float](repeating: 0, count: 16_000),
+            languageSelection: .exact("en"),
+            task: .transcribe
+        )
+        let secondResult = try await modelManager.transcribe(
+            audioSamples: [Float](repeating: 0, count: 16_000),
+            languageSelection: .exact("en"),
+            task: .transcribe
+        )
+
+        XCTAssertEqual(firstResult.text, "transcribed with speechanalyzer-en_US")
+        XCTAssertEqual(secondResult.text, "transcribed with speechanalyzer-en_US")
+        XCTAssertEqual(plugin.requestedLanguagePreparations, ["en", "en"])
+        XCTAssertEqual(plugin.transcribedModelIds, ["speechanalyzer-en_US", "speechanalyzer-en_US"])
+        XCTAssertEqual(plugin.selectedModelId, "speechanalyzer-en_US")
+    }
+
     func testExactUnsupportedLanguageDoesNotUseConfiguredAppleSpeechModel() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
@@ -254,6 +285,8 @@ private final class MockAppleSpeechTranscriptionPlugin: NSObject, TranscriptionM
                 from: availableModels,
                 localeIdentifier: language,
                 languageCode: language,
+                preferredModelId: selectedModelId,
+                fallbackLocaleIdentifier: Locale.current.identifier,
                 fallbackToFirst: false
             )
         } else if let currentModelId {
