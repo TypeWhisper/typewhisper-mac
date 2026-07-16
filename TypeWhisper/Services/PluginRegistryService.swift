@@ -487,6 +487,7 @@ final class PluginRegistryService: ObservableObject {
     private let userDefaults: UserDefaults
     private let infoDictionary: [String: Any]?
     private let fetchData: (URLRequest) async throws -> (Data, URLResponse)
+    private let deleteCredentials: (String) throws -> Void
     private let cacheDirectory: URL
     private static let lastUpdateCheckKey = "pluginRegistryLastUpdateCheck"
     private static let lastHostFingerprintCheckKey = "pluginRegistryLastHostFingerprintCheck"
@@ -561,6 +562,9 @@ final class PluginRegistryService: ObservableObject {
         cacheDuration: TimeInterval = 300,
         userDefaults: UserDefaults = .standard,
         infoDictionary: [String: Any]? = Bundle.main.infoDictionary,
+        deleteCredentials: @escaping (String) throws -> Void = { prefix in
+            try KeychainService.deleteAll(withServicePrefix: prefix)
+        },
         fetchData: @escaping (URLRequest) async throws -> (Data, URLResponse) = { request in
             try await URLSession.shared.data(for: request)
         }
@@ -570,6 +574,7 @@ final class PluginRegistryService: ObservableObject {
         self.cacheDuration = cacheDuration
         self.userDefaults = userDefaults
         self.infoDictionary = infoDictionary
+        self.deleteCredentials = deleteCredentials
         self.fetchData = fetchData
 
         try? FileManager.default.createDirectory(at: cacheDirectory, withIntermediateDirectories: true)
@@ -857,7 +862,7 @@ final class PluginRegistryService: ObservableObject {
                 .appendingPathComponent(pluginId, isDirectory: true)
             try? FileManager.default.removeItem(at: dataDir)
             do {
-                try KeychainService.deleteAll(withServicePrefix: "\(pluginId).")
+                try deleteCredentials("\(pluginId).")
             } catch {
                 logger.error("Keychain cleanup failed for \(pluginId): \(error.localizedDescription)")
                 keychainError = error

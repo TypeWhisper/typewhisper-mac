@@ -618,10 +618,25 @@ final class PluginRegistryServiceTests: XCTestCase {
             at: staleBundleURL,
             pluginId: pluginId,
             pluginName: "Boundary Plugin",
-            version: "1.0.0"
+            version: "1.0.0",
+            sdkCompatibilityVersion: nil
         )
         try pluginManager.loadPlugin(at: staleBundleURL)
-        XCTAssertNotNil(pluginManager.incompatibleExternalBundle(for: pluginId))
+
+        let additionalStaleBundleURL = pluginManager.pluginsDirectory
+            .appendingPathComponent("OlderBoundaryPlugin.bundle", isDirectory: true)
+        try Self.makePluginBundle(
+            at: additionalStaleBundleURL,
+            pluginId: pluginId,
+            pluginName: "Boundary Plugin",
+            version: "0.9.0",
+            sdkCompatibilityVersion: nil
+        )
+        try pluginManager.loadPlugin(at: additionalStaleBundleURL)
+        XCTAssertEqual(
+            pluginManager.incompatibleExternalBundle(for: pluginId)?.bundleURL,
+            additionalStaleBundleURL
+        )
 
         let builtInURL = (Bundle.main.builtInPlugInsURL
             ?? URL(fileURLWithPath: "/Applications/TypeWhisper.app/Contents/PlugIns", isDirectory: true))
@@ -648,6 +663,8 @@ final class PluginRegistryServiceTests: XCTestCase {
         try FileManager.default.createDirectory(at: pluginDataDirectory, withIntermediateDirectories: true)
         let sentinelURL = pluginDataDirectory.appendingPathComponent("settings-sentinel")
         try Data("keep plugin data".utf8).write(to: sentinelURL)
+        let credentialService = "\(pluginId).api-key"
+        var credentials = [credentialService: "keep credential"]
 
         let incomingBundleURL = incomingDirectory
             .appendingPathComponent("BoundaryPlugin.bundle", isDirectory: true)
@@ -661,6 +678,11 @@ final class PluginRegistryServiceTests: XCTestCase {
         let service = PluginRegistryService(
             registryBaseURL: URL(string: "https://example.com")!,
             cacheDirectory: cacheDirectory,
+            deleteCredentials: { prefix in
+                for service in credentials.keys.filter({ $0.hasPrefix(prefix) }) {
+                    credentials.removeValue(forKey: service)
+                }
+            },
             fetchData: { _ in throw URLError(.badServerResponse) }
         )
 
@@ -672,7 +694,9 @@ final class PluginRegistryServiceTests: XCTestCase {
         XCTAssertEqual(service.installStates[pluginId], .restartRequired)
         XCTAssertTrue(FileManager.default.fileExists(atPath: installedBundleURL.path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: staleBundleURL.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: additionalStaleBundleURL.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: sentinelURL.path))
+        XCTAssertEqual(credentials[credentialService], "keep credential")
         XCTAssertNil(pluginManager.incompatibleExternalBundle(for: pluginId))
 
         let registeredPlugin = try XCTUnwrap(pluginManager.loadedPlugins.first { $0.id == pluginId })
@@ -706,7 +730,8 @@ final class PluginRegistryServiceTests: XCTestCase {
             at: incompatibleBundleURL,
             pluginId: pluginId,
             pluginName: "Incompatible Plugin",
-            version: "1.0.0"
+            version: "1.0.0",
+            sdkCompatibilityVersion: nil
         )
         try pluginManager.loadPlugin(at: incompatibleBundleURL)
         let incompatibleBundle = try XCTUnwrap(pluginManager.incompatibleExternalBundle(for: pluginId))
@@ -735,10 +760,21 @@ final class PluginRegistryServiceTests: XCTestCase {
         try Data("delete plugin data".utf8)
             .write(to: pluginDataDirectory.appendingPathComponent("data-sentinel"))
         UserDefaults.standard.set(true, forKey: enabledKey)
+        let credentialService = "\(pluginId).api-key"
+        let unrelatedCredentialService = "com.typewhisper.other-plugin.api-key"
+        var credentials = [
+            credentialService: "delete credential",
+            unrelatedCredentialService: "keep unrelated credential",
+        ]
 
         let service = PluginRegistryService(
             registryBaseURL: URL(string: "https://example.com")!,
             cacheDirectory: cacheDirectory,
+            deleteCredentials: { prefix in
+                for service in credentials.keys.filter({ $0.hasPrefix(prefix) }) {
+                    credentials.removeValue(forKey: service)
+                }
+            },
             fetchData: { _ in throw URLError(.badServerResponse) }
         )
         try service.removeIncompatibleExternalBundle(incompatibleBundle)
@@ -746,6 +782,8 @@ final class PluginRegistryServiceTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: incompatibleBundleURL.path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: pluginDataDirectory.path))
         XCTAssertNil(UserDefaults.standard.object(forKey: enabledKey))
+        XCTAssertNil(credentials[credentialService])
+        XCTAssertEqual(credentials[unrelatedCredentialService], "keep unrelated credential")
         XCTAssertNil(pluginManager.incompatibleExternalBundle(for: pluginId))
         XCTAssertEqual(pluginManager.loadedPlugins.count, 1)
         XCTAssertEqual(pluginManager.loadedPlugins.first?.sourceURL, fallback.sourceURL)
@@ -774,7 +812,8 @@ final class PluginRegistryServiceTests: XCTestCase {
             at: externalBundleURL,
             pluginId: "com.typewhisper.external-incompatible",
             pluginName: "External Incompatible Plugin",
-            version: "1.0.0"
+            version: "1.0.0",
+            sdkCompatibilityVersion: nil
         )
         try pluginManager.loadPlugin(at: externalBundleURL)
         let incompatibleBundle = try XCTUnwrap(
@@ -816,7 +855,8 @@ final class PluginRegistryServiceTests: XCTestCase {
             at: incompatibleBundleURL,
             pluginId: "com.typewhisper.deletion-failure",
             pluginName: "Deletion Failure Plugin",
-            version: "1.0.0"
+            version: "1.0.0",
+            sdkCompatibilityVersion: nil
         )
         try pluginManager.loadPlugin(at: incompatibleBundleURL)
         let incompatibleBundle = try XCTUnwrap(
@@ -1370,7 +1410,7 @@ final class PluginRegistryServiceTests: XCTestCase {
         pluginId: String,
         pluginName: String,
         version: String,
-        sdkCompatibilityVersion: String? = nil
+        sdkCompatibilityVersion: String? = PluginSDKCompatibility.currentVersion
     ) throws {
         let contentsURL = bundleURL.appendingPathComponent("Contents", isDirectory: true)
         let resourcesURL = contentsURL.appendingPathComponent("Resources", isDirectory: true)
