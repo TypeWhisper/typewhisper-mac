@@ -953,7 +953,9 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
             }
         } else if let finalURL = completedURL {
             do {
-                try finalizeOutputFile(stoppedRecording)
+                try await Task.detached(priority: .userInitiated) {
+                    try self.finalizeOutputFile(stoppedRecording)
+                }.value
             } catch {
                 logger.error("Failed to finalize recording: \(error.localizedDescription)")
                 cleanupTempFile(finalURL)

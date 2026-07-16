@@ -735,7 +735,8 @@ final class AudioRecorderViewModelTests: XCTestCase {
         let rightChannel = try XCTUnwrap(outputBuffer.floatChannelData?[1])
         XCTAssertEqual(leftChannel[0], 0.3, accuracy: 0.01)
         XCTAssertEqual(rightChannel[0], 0.3, accuracy: 0.01)
-        for boundary in [8_192, 16_384] {
+        let chunkSize = Int(AudioRecorderService.finalizationChunkFrameCount)
+        for boundary in [chunkSize, chunkSize * 2] {
             XCTAssertEqual(leftChannel[boundary - 1], leftChannel[boundary], accuracy: 0.002)
             XCTAssertEqual(rightChannel[boundary - 1], rightChannel[boundary], accuracy: 0.002)
             XCTAssertLessThan(leftChannel[boundary], 0.23)

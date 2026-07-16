@@ -533,6 +533,7 @@ final class AudioRecorderViewModel: ObservableObject {
 
     private func stopRecording(apiSessionID: UUID?) {
         let recordingDuration = duration
+        let shouldTranscribe = transcriptionEnabled
 
         // Flip out of `.recording` immediately so the recording timer/widget disappears
         // the instant Stop is pressed, instead of staying up while audio finalization
@@ -541,7 +542,7 @@ final class AudioRecorderViewModel: ObservableObject {
 
         Task {
             let stoppedRecording = await recorderService.stopCapture(
-                includeTranscriptionSamples: transcriptionEnabled
+                includeTranscriptionSamples: shouldTranscribe
             )
             async let liveSessionResultTask = streamingHandler.finish(
                 finalSamples: stoppedRecording.transcriptionSamples
@@ -550,7 +551,7 @@ final class AudioRecorderViewModel: ObservableObject {
             let (liveSessionResult, url) = await (liveSessionResultTask, finalizedURLTask)
 
             let finalTranscriptionRequest: FinalTranscriptionRequest?
-            if transcriptionEnabled, let url {
+            if shouldTranscribe, let url {
                 reconcileSelectionWithAvailablePlugins()
                 let providerId = effectiveProviderId
                 let dictionaryPrompt = dictionaryService.getTermsForPrompt(providerId: providerId)
