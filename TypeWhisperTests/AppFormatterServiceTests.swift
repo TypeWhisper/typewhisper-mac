@@ -10,6 +10,61 @@ final class AppFormatterServiceTests: XCTestCase {
         XCTAssertEqual(channel, .releaseCandidate)
     }
 
+    func testBundledPreviewReleaseUsesDailyTagAndURL() throws {
+        let release = try XCTUnwrap(AppConstants.bundledPreviewRelease(
+            infoDictionary: [
+                "TypeWhisperReleaseChannel": AppConstants.ReleaseChannel.daily.rawValue,
+                "TypeWhisperReleaseTag": "v1.6.0-daily.20260716",
+            ]
+        ))
+
+        XCTAssertEqual(release.tag, "v1.6.0-daily.20260716")
+        XCTAssertEqual(
+            release.url.absoluteString,
+            "https://github.com/TypeWhisper/typewhisper-mac/releases/tag/v1.6.0-daily.20260716"
+        )
+    }
+
+    func testBundledPreviewReleaseUsesReleaseCandidateTagAndURL() throws {
+        let release = try XCTUnwrap(AppConstants.bundledPreviewRelease(
+            infoDictionary: [
+                "TypeWhisperReleaseChannel": AppConstants.ReleaseChannel.releaseCandidate.rawValue,
+                "TypeWhisperReleaseTag": "v1.6.0-rc1",
+            ]
+        ))
+
+        XCTAssertEqual(release.tag, "v1.6.0-rc1")
+        XCTAssertEqual(
+            release.url.absoluteString,
+            "https://github.com/TypeWhisper/typewhisper-mac/releases/tag/v1.6.0-rc1"
+        )
+    }
+
+    func testBundledPreviewReleaseIsHiddenForStableBuild() {
+        let release = AppConstants.bundledPreviewRelease(
+            infoDictionary: [
+                "TypeWhisperReleaseChannel": AppConstants.ReleaseChannel.stable.rawValue,
+                "TypeWhisperReleaseTag": "v1.6.0",
+            ]
+        )
+
+        XCTAssertNil(release)
+    }
+
+    func testBundledPreviewReleaseIgnoresMissingOrBlankTag() {
+        XCTAssertNil(AppConstants.bundledPreviewRelease(
+            infoDictionary: [
+                "TypeWhisperReleaseChannel": AppConstants.ReleaseChannel.daily.rawValue,
+            ]
+        ))
+        XCTAssertNil(AppConstants.bundledPreviewRelease(
+            infoDictionary: [
+                "TypeWhisperReleaseChannel": AppConstants.ReleaseChannel.daily.rawValue,
+                "TypeWhisperReleaseTag": " \n ",
+            ]
+        ))
+    }
+
     func testSelectedUpdateChannelUsesStoredOverride() {
         let defaults = UserDefaults(suiteName: #function)!
         defaults.removePersistentDomain(forName: #function)

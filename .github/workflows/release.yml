@@ -249,10 +249,11 @@ jobs:
       - name: Check Release Binary Instrumentation
         run: bash scripts/check_release_binary_instrumentation.sh build/Build/Products/Release/TypeWhisper.app/Contents/MacOS/typewhisper-cli
 
-      - name: Configure Release Channel
+      - name: Configure Release Metadata
         run: |
           APP_INFO_PLIST="build/Build/Products/Release/TypeWhisper.app/Contents/Info.plist"
           /usr/libexec/PlistBuddy -c "Set :TypeWhisperReleaseChannel ${RELEASE_CHANNEL}" "$APP_INFO_PLIST"
+          /usr/libexec/PlistBuddy -c "Set :TypeWhisperReleaseTag ${RELEASE_TAG}" "$APP_INFO_PLIST"
 
       - name: Sign App (Developer ID)
         env:

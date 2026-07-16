@@ -10854,6 +10854,22 @@
         }
       }
     },
+    "Release %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Release %1$@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "リリース %@"
+          }
+        }
+      }
+    },
     "Release Candidate": {
       "localizations": {
         "de": {

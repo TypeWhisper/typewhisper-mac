@@ -54,6 +54,8 @@
 	<string>OdAMiN136Ckglxnq4FeLagPjcrZiASYGaeUWBkK6tuc=</string>
 	<key>TypeWhisperReleaseChannel</key>
 	<string>stable</string>
+	<key>TypeWhisperReleaseTag</key>
+	<string></string>
 	<key>TypeWhisperDiscordClaimBaseURL</key>
 	<string>https://community.typewhisper.com</string>
 	<key>AppGroupIdentifier</key>
