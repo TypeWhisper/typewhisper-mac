@@ -201,15 +201,119 @@ private struct SettingsModernShell: View {
 
     @State private var sidebarSearchText = ""
     @State private var isSidebarVisible = true
-    @State private var sidebarWidth: CGFloat = 270
-    @State private var previewWidth: CGFloat?
-    @State private var dragStartWidth: CGFloat?
-    @State private var isResizeHandleHovering = false
-    @FocusState private var isSearchFieldFocused: Bool
 
-    private let minSidebarWidth: CGFloat = 240
-    private let maxSidebarWidth: CGFloat = 320
-    private let resizeStep: CGFloat = 20
+    var body: some View {
+        SettingsSplitView(
+            selectedTab: $selectedTab,
+            sidebarSearchText: $sidebarSearchText,
+            sections: sections,
+            isSidebarVisible: $isSidebarVisible,
+            detail: detail
+        )
+        .toolbar {
+            ToolbarItem(placement: .navigation) {
+                Button(action: { isSidebarVisible.toggle() }) {
+                    Image(systemName: "sidebar.leading")
+                }
+                .help(localizedAppText("Toggle Sidebar", de: "Seitenleiste ein-/ausblenden"))
+                .accessibilityLabel(localizedAppText("Toggle Sidebar", de: "Seitenleiste ein-/ausblenden"))
+            }
+        }
+    }
+}
+
+// Bridges to a native AppKit NSSplitViewController rather than SwiftUI's
+// NavigationSplitView or a hand-rolled HStack. Three prior pure-SwiftUI attempts
+// each fixed one property at the cost of another:
+//   - NavigationSplitView: resize is fluid (native), but its built-in collapse
+//     animation reflows row labels frame-by-frame — a visible glitch on this
+//     macOS version.
+//   - Custom HStack + zero-duration toggle: fixed the glitch, but the divider
+//     and sidebar content could pop out of sync with each other.
+//   - Custom HStack + live @GestureState width: fixed the sync issue, but
+//     SwiftUI's List (backed by NSTableView) can't relayout at pointer-tracking
+//     speed, so rows visibly lag behind the resizing frame during a live drag.
+// NSSplitViewController is the actual mechanism Finder/Mail/Notes use for their
+// sidebars — it owns both resize and collapse natively, so neither is fighting
+// a SwiftUI layout pass, and VoiceOver/keyboard resize support comes for free.
+@available(macOS 15, *)
+private struct SettingsSplitView: NSViewControllerRepresentable {
+    @Binding var selectedTab: SettingsTab
+    @Binding var sidebarSearchText: String
+    let sections: [SettingsDestinationSection]
+    @Binding var isSidebarVisible: Bool
+    let detail: (SettingsTab) -> AnyView
+
+    func makeNSViewController(context: Context) -> NSSplitViewController {
+        let splitViewController = NSSplitViewController()
+        splitViewController.splitView.dividerStyle = .thin
+
+        let sidebarHostingController = NSHostingController(
+            rootView: SettingsSidebarContent(
+                selectedTab: $selectedTab,
+                sidebarSearchText: $sidebarSearchText,
+                sections: sections
+            )
+        )
+        let sidebarItem = NSSplitViewItem(sidebarWithViewController: sidebarHostingController)
+        sidebarItem.minimumThickness = 240
+        sidebarItem.maximumThickness = 320
+        sidebarItem.canCollapse = true
+        sidebarItem.isCollapsed = !isSidebarVisible
+
+        let detailHostingController = NSHostingController(
+            rootView: AnyView(
+                detail(selectedTab)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            )
+        )
+        let detailItem = NSSplitViewItem(viewController: detailHostingController)
+
+        splitViewController.addSplitViewItem(sidebarItem)
+        splitViewController.addSplitViewItem(detailItem)
+
+        context.coordinator.sidebarItem = sidebarItem
+        context.coordinator.sidebarHostingController = sidebarHostingController
+        context.coordinator.detailHostingController = detailHostingController
+
+        return splitViewController
+    }
+
+    func updateNSViewController(_ splitViewController: NSSplitViewController, context: Context) {
+        context.coordinator.sidebarHostingController?.rootView = SettingsSidebarContent(
+            selectedTab: $selectedTab,
+            sidebarSearchText: $sidebarSearchText,
+            sections: sections
+        )
+        context.coordinator.detailHostingController?.rootView = AnyView(
+            detail(selectedTab)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        )
+
+        guard let sidebarItem = context.coordinator.sidebarItem else { return }
+        let shouldBeCollapsed = !isSidebarVisible
+        guard sidebarItem.isCollapsed != shouldBeCollapsed else { return }
+
+        NSAnimationContext.runAnimationGroup { animationContext in
+            animationContext.duration = 0.2
+            animationContext.allowsImplicitAnimation = true
+            sidebarItem.animator().isCollapsed = shouldBeCollapsed
+        }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    final class Coordinator {
+        var sidebarItem: NSSplitViewItem?
+        var sidebarHostingController: NSHostingController<SettingsSidebarContent>?
+        var detailHostingController: NSHostingController<AnyView>?
+    }
+}
+
+private struct SettingsSidebarContent: View {
+    @Binding var selectedTab: SettingsTab
+    @Binding var sidebarSearchText: String
+    let sections: [SettingsDestinationSection]
 
     private var filteredSections: [SettingsDestinationSection] {
         let query = sidebarSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -228,167 +332,30 @@ private struct SettingsModernShell: View {
     }
 
     var body: some View {
-        HStack(spacing: 0) {
-            // Collapsing removes the sidebar from the view tree entirely (rather than
-            // zeroing/clipping a frame while it stays mounted), so a hidden sidebar is
-            // automatically unreachable by keyboard focus, VoiceOver, and hit-testing —
-            // no manual .disabled/.accessibilityHidden bookkeeping needed. The slide
-            // transition uses an offset transform rather than animating width, so row
-            // labels never reflow/truncate mid-toggle the way NavigationSplitView's
-            // built-in width-based collapse animation does.
-            if isSidebarVisible {
-                // Grouped so the sidebar and its resize handle slide out together as
-                // one rigid unit. Giving them separate .transition() instances left the
-                // handle behind mid-collapse: .move only offsets a view's rendering
-                // without changing siblings' HStack layout math, so once the sidebar's
-                // slot was removed from layout the handle's position snapped instantly
-                // to its new (sidebar-less) spot while its own opacity fade was still
-                // playing — a stray line hanging over the detail pane for the last
-                // fraction of the animation.
-                HStack(spacing: 0) {
-                    VStack(spacing: 0) {
-                        SettingsSidebarSearchField(text: $sidebarSearchText, isFocused: $isSearchFieldFocused)
+        VStack(spacing: 0) {
+            SettingsSidebarSearchField(text: $sidebarSearchText)
 
-                        List(selection: $selectedTab) {
-                            ForEach(filteredSections) { section in
-                                Section {
-                                    ForEach(section.destinations) { destination in
-                                        SettingsSidebarRow(destination: destination)
-                                            .tag(destination.tab)
-                                    }
-                                }
-                            }
+            List(selection: $selectedTab) {
+                ForEach(filteredSections) { section in
+                    Section {
+                        ForEach(section.destinations) { destination in
+                            SettingsSidebarRow(destination: destination)
+                                .tag(destination.tab)
                         }
-                        .listStyle(.sidebar)
-                        // Changing the section/row count via search filtering can leave stale,
-                        // blank space behind from SwiftUI's incremental List diffing. Keying the
-                        // List on the query forces a clean rebuild instead of a partial diff.
-                        .id(sidebarSearchText)
                     }
-                    // sidebarWidth only ever changes on drag release (see
-                    // SettingsSidebarResizeHandle), not on every pointer-move frame, so
-                    // the List doesn't relayout continuously during a drag — relaying
-                    // out its native NSScroller-backed rows on every frame was the
-                    // source of the resize lag. A thin guide line tracks the pointer
-                    // instead; the real resize commits once when the drag ends.
-                    .frame(width: sidebarWidth)
-
-                    SettingsSidebarResizeHandle(
-                        committedWidth: sidebarWidth,
-                        sidebarWidth: $sidebarWidth,
-                        previewWidth: $previewWidth,
-                        dragStartWidth: $dragStartWidth,
-                        isHovering: $isResizeHandleHovering,
-                        minWidth: minSidebarWidth,
-                        maxWidth: maxSidebarWidth,
-                        step: resizeStep
-                    )
                 }
-                .transition(.move(edge: .leading))
             }
-
-            detail(selectedTab)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .listStyle(.sidebar)
+            // Changing the section/row count via search filtering can leave stale,
+            // blank space behind from SwiftUI's incremental List diffing. Keying the
+            // List on the query forces a clean rebuild instead of a partial diff.
+            .id(sidebarSearchText)
         }
-        .animation(.easeInOut(duration: 0.22), value: isSidebarVisible)
-        .toolbar {
-            ToolbarItem(placement: .navigation) {
-                Button(action: { isSidebarVisible.toggle() }) {
-                    Image(systemName: "sidebar.leading")
-                }
-                .help(localizedAppText("Toggle Sidebar", de: "Seitenleiste ein-/ausblenden"))
-                .accessibilityLabel(localizedAppText("Toggle Sidebar", de: "Seitenleiste ein-/ausblenden"))
-            }
-        }
-    }
-}
-
-private struct SettingsSidebarResizeHandle: View {
-    let committedWidth: CGFloat
-    @Binding var sidebarWidth: CGFloat
-    @Binding var previewWidth: CGFloat?
-    @Binding var dragStartWidth: CGFloat?
-    @Binding var isHovering: Bool
-    let minWidth: CGFloat
-    let maxWidth: CGFloat
-    let step: CGFloat
-
-    var body: some View {
-        Divider()
-            .overlay(
-                Rectangle()
-                    .fill(Color.clear)
-                    .frame(width: 8)
-                    .contentShape(Rectangle())
-                    .onHover { hovering in
-                        isHovering = hovering
-                        if hovering {
-                            NSCursor.resizeLeftRight.push()
-                        } else {
-                            NSCursor.pop()
-                        }
-                    }
-                    // Pop the cursor unconditionally if this view disappears (e.g. the
-                    // sidebar collapses) while still hovered — onHover's "false" event
-                    // does not reliably fire when the view is removed from the tree
-                    // mid-hover, which would otherwise leave the resize cursor stuck.
-                    .onDisappear {
-                        if isHovering {
-                            NSCursor.pop()
-                            isHovering = false
-                        }
-                        previewWidth = nil
-                        dragStartWidth = nil
-                    }
-                    .gesture(
-                        DragGesture()
-                            .onChanged { value in
-                                let base = dragStartWidth ?? committedWidth
-                                dragStartWidth = base
-                                previewWidth = min(max(base + value.translation.width, minWidth), maxWidth)
-                            }
-                            .onEnded { _ in
-                                if let previewWidth {
-                                    sidebarWidth = previewWidth
-                                }
-                                previewWidth = nil
-                                dragStartWidth = nil
-                            }
-                    )
-                    .accessibilityElement()
-                    .accessibilityLabel(localizedAppText("Sidebar Width", de: "Seitenleistenbreite"))
-                    .accessibilityValue("\(Int(sidebarWidth)) pt")
-                    .accessibilityAdjustableAction { direction in
-                        switch direction {
-                        case .increment:
-                            sidebarWidth = min(sidebarWidth + step, maxWidth)
-                        case .decrement:
-                            sidebarWidth = max(sidebarWidth - step, minWidth)
-                        @unknown default:
-                            break
-                        }
-                    }
-            )
-            // Cheap: a single thin rectangle offset from the divider's actual
-            // position, not a relayout of anything. Gives live feedback about where
-            // the sidebar would land without touching the List during the drag.
-            // Always mounted (never conditionally inserted/removed) so it fades out
-            // in step with the drag ending instead of vanishing instantly — same
-            // reasoning as the sidebar's own opacity-faded divider.
-            .overlay(alignment: .leading) {
-                Rectangle()
-                    .fill(Color.accentColor)
-                    .frame(width: 2)
-                    .offset(x: (previewWidth ?? committedWidth) - committedWidth)
-                    .opacity(previewWidth == nil ? 0 : 1)
-                    .animation(.easeOut(duration: 0.15), value: previewWidth == nil)
-            }
     }
 }
 
 private struct SettingsSidebarSearchField: View {
     @Binding var text: String
-    var isFocused: FocusState<Bool>.Binding
 
     var body: some View {
         HStack(spacing: 6) {
@@ -399,7 +366,6 @@ private struct SettingsSidebarSearchField: View {
                 text: $text
             )
             .textFieldStyle(.plain)
-            .focused(isFocused)
 
             if !text.isEmpty {
                 Button(action: { text = "" }) {
