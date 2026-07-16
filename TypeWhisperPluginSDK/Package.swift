@@ -241,6 +241,16 @@ let package = Package(
             ]
         ),
         .target(
+            name: "ElevenLabsPlugin",
+            dependencies: ["TypeWhisperPluginSDK"],
+            path: "Plugins/ElevenLabsPlugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("Localizable.xcstrings"),
+                .process("manifest.json"),
+            ]
+        ),
+        .target(
             name: "Reson8Plugin",
             dependencies: ["TypeWhisperPluginSDK"],
             path: "Plugins/Reson8Plugin",
@@ -489,6 +499,15 @@ let package = Package(
                 "AssemblyAIPlugin",
             ],
             path: "Plugins/AssemblyAIPlugin/Tests"
+        ),
+        .testTarget(
+            name: "ElevenLabsPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "ElevenLabsPlugin",
+            ],
+            path: "Plugins/ElevenLabsPlugin/Tests"
         ),
         .testTarget(
             name: "Reson8PluginTests",
