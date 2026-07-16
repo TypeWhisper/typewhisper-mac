@@ -563,6 +563,17 @@ private struct RecordDetailView: View {
                 }
                 .help(String(localized: "Delete"))
                 .accessibilityLabel(String(localized: "Delete"))
+
+                Divider()
+                    .frame(height: 14)
+
+                Button {
+                    viewModel.selectRecord(nil)
+                } label: {
+                    Image(systemName: "xmark")
+                }
+                .help(String(localized: "Close"))
+                .accessibilityLabel(String(localized: "Close"))
             }
         }
         .buttonStyle(.borderless)
