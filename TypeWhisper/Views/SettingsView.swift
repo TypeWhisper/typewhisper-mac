@@ -319,12 +319,19 @@ private struct SettingsSplitView: NSViewControllerRepresentable {
         var isSidebarVisible: Binding<Bool>?
         private var collapseObservation: NSKeyValueObservation?
 
+        // Captures the binding itself rather than `self` — `Coordinator` is a
+        // plain (non-Sendable) class, and KVO's changeHandler is `@Sendable`, so
+        // capturing `self` (even weakly) to reach `self.isSidebarVisible` trips
+        // Swift 6 strict concurrency checking. The binding's identity is stable
+        // for the representable's lifetime, so a snapshot at observation time
+        // stays valid.
         func observeCollapseState(of sidebarItem: NSSplitViewItem) {
-            collapseObservation = sidebarItem.observe(\.isCollapsed, options: [.new]) { [weak self] _, change in
-                guard let self, let isCollapsed = change.newValue else { return }
+            let isSidebarVisible = isSidebarVisible
+            collapseObservation = sidebarItem.observe(\.isCollapsed, options: [.new]) { _, change in
+                guard let isCollapsed = change.newValue else { return }
                 let shouldBeVisible = !isCollapsed
-                if self.isSidebarVisible?.wrappedValue != shouldBeVisible {
-                    self.isSidebarVisible?.wrappedValue = shouldBeVisible
+                if isSidebarVisible?.wrappedValue != shouldBeVisible {
+                    isSidebarVisible?.wrappedValue = shouldBeVisible
                 }
             }
         }
