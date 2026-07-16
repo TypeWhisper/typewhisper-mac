@@ -432,6 +432,52 @@
         }
       }
     },
+    "%lld days": {
+      "localizations": {
+        "de": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld Tag"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld Tage"
+                }
+              }
+            }
+          }
+        },
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld day"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld days"
+                }
+              }
+            }
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld日"
+          }
+        }
+      }
+    },
     "%lld days ago": {
       "localizations": {
         "de": {
@@ -444,6 +490,52 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld日前"
+          }
+        }
+      }
+    },
+    "%lld dictations": {
+      "localizations": {
+        "de": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld Diktat"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld Diktate"
+                }
+              }
+            }
+          }
+        },
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld dictation"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld dictations"
+                }
+              }
+            }
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld件の文字起こし"
           }
         }
       }
@@ -604,6 +696,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "%lld%%"
+          }
+        }
+      }
+    },
+    "%lldd": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lldT"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld日"
           }
         }
       }
@@ -1000,6 +1108,84 @@
           "stringUnit": {
             "state": "translated",
             "value": "アクティビティ"
+          }
+        }
+      }
+    },
+    "Activity chart, %@ total, peak %@ on %@.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktivitätsdiagramm, %1$@ insgesamt, Höchstwert %2$@ am %3$@."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アクティビティチャート、合計%1$@、%3$@に最大%2$@。"
+          }
+        }
+      }
+    },
+    "%lld words": {
+      "localizations": {
+        "de": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld Wort"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld Wörter"
+                }
+              }
+            }
+          }
+        },
+        "en": {
+          "variations": {
+            "plural": {
+              "one": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld word"
+                }
+              },
+              "other": {
+                "stringUnit": {
+                  "state": "translated",
+                  "value": "%lld words"
+                }
+              }
+            }
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld語"
+          }
+        }
+      }
+    },
+    "Activity chart, no words in this period.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktivitätsdiagramm, keine Wörter in diesem Zeitraum."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アクティビティチャート、この期間の単語はありません。"
           }
         }
       }
@@ -3140,6 +3326,22 @@
         }
       }
     },
+    "Current Streak": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktuelle Serie"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "現在の連続日数"
+          }
+        }
+      }
+    },
     "Daily": {
       "localizations": {
         "de": {
@@ -3217,6 +3419,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "日付"
+          }
+        }
+      }
+    },
+    "Days Active": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktive Tage"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "利用日数"
           }
         }
       }
@@ -4745,6 +4963,22 @@
         }
       }
     },
+    "Fri": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fr"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "金"
+          }
+        }
+      }
+    },
     "from %@ %@": {
       "localizations": {
         "de": {
@@ -6160,6 +6394,22 @@
         }
       }
     },
+    "Longest Streak": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Längste Serie"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最長連続日数"
+          }
+        }
+      }
+    },
     "M4A": {
       "localizations": {
         "de": {
@@ -6612,6 +6862,38 @@
         }
       }
     },
+    "Models Used": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verwendete Modelle"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用したモデル"
+          }
+        }
+      }
+    },
+    "Mon": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mo"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "月"
+          }
+        }
+      }
+    },
     "Month": {
       "localizations": {
         "de": {
@@ -6922,6 +7204,22 @@
         }
       }
     },
+    "No activity for this period.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Aktivität für diesen Zeitraum."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この期間のアクティビティはありません。"
+          }
+        }
+      }
+    },
     "No activity in this period.": {
       "localizations": {
         "de": {
@@ -6934,6 +7232,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "この期間内に活動がありません。"
+          }
+        }
+      }
+    },
+    "No app usage data for this period.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine App-Nutzungsdaten für diesen Zeitraum."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この期間のアプリ利用データはありません。"
           }
         }
       }
@@ -7290,6 +7604,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "認識された言語がありません"
+          }
+        }
+      }
+    },
+    "No transcription data for this period.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Transkriptionsdaten für diesen Zeitraum."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "この期間の文字起こしデータはありません。"
           }
         }
       }
@@ -10899,6 +11229,22 @@
         }
       }
     },
+    "Sat": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sa"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "土"
+          }
+        }
+      }
+    },
     "Save": {
       "localizations": {
         "de": {
@@ -11734,6 +12080,22 @@
         }
       }
     },
+    "Statistics": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Statistiken"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "統計"
+          }
+        }
+      }
+    },
     "Step %lld of %lld": {
       "localizations": {
         "de": {
@@ -11788,6 +12150,22 @@
         }
       }
     },
+    "Streaks, top apps, models used, and activity by time of day.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Serien, Top-Apps, verwendete Modelle und Aktivität nach Tageszeit."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "連続記録、よく使うアプリ、使用したモデル、時間帯別のアクティビティ。"
+          }
+        }
+      }
+    },
     "Streaming text": {
       "comment": "An accessibility label for the streaming text view. It describes the content of the view.",
       "isCommentAutoGenerated": true,
@@ -11836,6 +12214,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "サブドメインは自動的に含まれます。例: \"google.com\" は \"docs.google.com\" もマッチします。"
+          }
+        }
+      }
+    },
+    "Sun": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "So"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "日"
           }
         }
       }
@@ -12547,6 +12941,22 @@
         }
       }
     },
+    "Thu": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Do"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "木"
+          }
+        }
+      }
+    },
     "Time": {
       "localizations": {
         "de": {
@@ -12672,6 +13082,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "上"
+          }
+        }
+      }
+    },
+    "Top Apps": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Top-Apps"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "よく使うアプリ"
           }
         }
       }
@@ -12944,6 +13370,22 @@
         }
       }
     },
+    "Transcriptions": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkriptionen"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文字起こし数"
+          }
+        }
+      }
+    },
     "Transcriptions shorter than this are skipped for memory extraction.": {
       "localizations": {
         "de": {
@@ -13090,6 +13532,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "試してみる"
+          }
+        }
+      }
+    },
+    "Tue": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Di"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "火"
           }
         }
       }
@@ -13340,6 +13798,38 @@
           "stringUnit": {
             "state": "translated",
             "value": "プラグインをアンインストール"
+          }
+        }
+      }
+    },
+    "Unknown": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unbekannt"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "不明"
+          }
+        }
+      }
+    },
+    "Unknown App": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unbekannte App"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "不明なアプリ"
           }
         }
       }
@@ -22317,12 +22807,156 @@
         }
       }
     },
+    "Usage by Time of Day": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nutzung nach Tageszeit"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "時間帯別の利用状況"
+          }
+        }
+      }
+    },
     "Use Global Fallback List": {
       "localizations": {
         "ja": {
           "stringUnit": {
             "state": "translated",
             "value": "グローバルフォールバックリストを使用"
+          }
+        }
+      }
+    },
+    "View all history": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gesamten Verlauf ansehen"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "すべての履歴を見る"
+          }
+        }
+      }
+    },
+    "View all statistics": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle Statistiken ansehen"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "すべての統計を見る"
+          }
+        }
+      }
+    },
+    "View your statistics": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deine Statistiken ansehen"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "統計を見る"
+          }
+        }
+      }
+    },
+    "Your Activity": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deine Aktivität"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "あなたのアクティビティ"
+          }
+        }
+      }
+    },
+    "Wed": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mi"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "水"
+          }
+        }
+      }
+    },
+    "Your statistics will appear here after your first transcription.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deine Statistiken erscheinen hier nach deiner ersten Transkription."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最初の文字起こしの後、ここに統計が表示されます。"
+          }
+        }
+      }
+    },
+    "up %lld percent": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Prozent mehr"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld パーセント増加"
+          }
+        }
+      }
+    },
+    "down %lld percent": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Prozent weniger"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld パーセント減少"
           }
         }
       }

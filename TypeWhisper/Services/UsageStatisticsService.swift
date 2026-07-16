@@ -14,7 +14,10 @@ protocol UsageStatisticsRecording: AnyObject {
         timestamp: Date,
         wordsCount: Int,
         durationSeconds: Double,
-        appBundleIdentifier: String?
+        appBundleIdentifier: String?,
+        appName: String?,
+        engineUsed: String?,
+        modelUsed: String?
     )
 }
 
@@ -24,6 +27,35 @@ struct UsageStatisticsDaySnapshot: Equatable {
     let totalWords: Int
     let totalDurationSeconds: Double
     let appBundleIdentifiers: Set<String>
+    /// Per-app transcription counts keyed by `UsageStatisticsKeys.appKey`. Persisted so Top Apps
+    /// stays consistent with the streak/active-days data even when history retention purges or
+    /// disables the underlying `TranscriptionRecord`s.
+    let appCounts: [String: Int]
+    /// Per-model transcription counts keyed by `UsageStatisticsKeys.modelKey`.
+    let modelCounts: [String: Int]
+    /// Per-hour-of-day transcription counts (index 0...23). Combined with `day`'s weekday this
+    /// reconstructs the hourly heatmap without depending on history records.
+    let hourCounts: [Int]
+
+    init(
+        day: Date,
+        transcriptionCount: Int,
+        totalWords: Int,
+        totalDurationSeconds: Double,
+        appBundleIdentifiers: Set<String>,
+        appCounts: [String: Int] = [:],
+        modelCounts: [String: Int] = [:],
+        hourCounts: [Int] = Array(repeating: 0, count: 24)
+    ) {
+        self.day = day
+        self.transcriptionCount = transcriptionCount
+        self.totalWords = totalWords
+        self.totalDurationSeconds = totalDurationSeconds
+        self.appBundleIdentifiers = appBundleIdentifiers
+        self.appCounts = appCounts
+        self.modelCounts = modelCounts
+        self.hourCounts = hourCounts
+    }
 }
 
 struct UsageStatisticsSummary: Equatable {
@@ -57,6 +89,11 @@ final class UsageStatisticsService: ObservableObject, UsageStatisticsRecording {
     @Published private(set) var days: [UsageStatisticsDaySnapshot] = []
 
     private static let historyBackfillCompletedKey = "historyBackfillCompleted"
+    /// Versioned separately from `historyBackfillCompletedKey` because it was introduced after
+    /// installations had already completed the totals-only backfill. Reusing the additive
+    /// `upsertDay` path for those installations would double-count their existing totals, so this
+    /// marker gates a detail-only backfill that updates just the app/model/hour breakdowns.
+    private static let detailBackfillCompletedKey = "detailBackfillCompleted"
 
     private let modelContainer: ModelContainer
     private let modelContext: ModelContext
@@ -91,7 +128,10 @@ final class UsageStatisticsService: ObservableObject, UsageStatisticsRecording {
         timestamp: Date = Date(),
         wordsCount: Int,
         durationSeconds: Double,
-        appBundleIdentifier: String?
+        appBundleIdentifier: String?,
+        appName: String? = nil,
+        engineUsed: String? = nil,
+        modelUsed: String? = nil
     ) {
         guard wordsCount > 0 else {
             usageStatisticsLogger.warning("Skipping usage statistics entry: empty word count")
@@ -107,7 +147,10 @@ final class UsageStatisticsService: ObservableObject, UsageStatisticsRecording {
                 timestamp: timestamp,
                 wordsCount: wordsCount,
                 durationSeconds: durationSeconds,
-                appBundleIdentifier: appBundleIdentifier
+                appBundleIdentifier: appBundleIdentifier,
+                appName: appName,
+                engineUsed: engineUsed,
+                modelUsed: modelUsed
             )
             save()
             fetchDays()
@@ -117,7 +160,10 @@ final class UsageStatisticsService: ObservableObject, UsageStatisticsRecording {
     }
 
     func backfillFromHistoryIfNeeded(_ records: [TranscriptionRecord]) {
-        guard !historyBackfillCompleted else { return }
+        guard !historyBackfillCompleted else {
+            backfillDetailBreakdownsFromHistoryIfNeeded(records)
+            return
+        }
 
         do {
             for record in records {
@@ -133,14 +179,51 @@ final class UsageStatisticsService: ObservableObject, UsageStatisticsRecording {
                     timestamp: record.timestamp,
                     wordsCount: wordsCount,
                     durationSeconds: record.durationSeconds,
-                    appBundleIdentifier: record.appBundleIdentifier
+                    appBundleIdentifier: record.appBundleIdentifier,
+                    appName: record.appName,
+                    engineUsed: record.engineUsed,
+                    modelUsed: record.modelUsed
                 )
             }
             try setHistoryBackfillCompleted(true)
+            // Totals and breakdowns were populated together above, so the detail-only pass has
+            // nothing left to do for this installation.
+            try setDetailBackfillCompleted(true)
             save()
             fetchDays()
         } catch {
             usageStatisticsLogger.error("Failed to backfill usage statistics: \(error.localizedDescription)")
+        }
+    }
+
+    /// Backfills only the app/model/hour breakdowns from history for installations that already
+    /// completed the totals-only backfill before these fields existed. Does not touch totals.
+    private func backfillDetailBreakdownsFromHistoryIfNeeded(_ records: [TranscriptionRecord]) {
+        guard !detailBackfillCompleted else { return }
+
+        do {
+            for record in records {
+                let wordsCount = record.wordsCount > 0
+                    ? record.wordsCount
+                    : record.finalText.split(separator: " ").count
+                guard wordsCount > 0,
+                      record.durationSeconds.isFinite,
+                      record.durationSeconds >= 0 else {
+                    continue
+                }
+                try addDetailBreakdown(
+                    timestamp: record.timestamp,
+                    appBundleIdentifier: record.appBundleIdentifier,
+                    appName: record.appName,
+                    engineUsed: record.engineUsed,
+                    modelUsed: record.modelUsed
+                )
+            }
+            try setDetailBackfillCompleted(true)
+            save()
+            fetchDays()
+        } catch {
+            usageStatisticsLogger.error("Failed to backfill usage statistics breakdowns: \(error.localizedDescription)")
         }
     }
 
@@ -200,6 +283,7 @@ final class UsageStatisticsService: ObservableObject, UsageStatisticsRecording {
                 modelContext.delete(day)
             }
             try setHistoryBackfillCompleted(true)
+            try setDetailBackfillCompleted(true)
             save()
             fetchDays()
         } catch {
@@ -214,6 +298,7 @@ final class UsageStatisticsService: ObservableObject, UsageStatisticsRecording {
                 modelContext.delete(day)
             }
             try setHistoryBackfillCompleted(false)
+            try setDetailBackfillCompleted(false)
             save()
             fetchDays()
             backfillFromHistoryIfNeeded(records)
@@ -232,11 +317,42 @@ final class UsageStatisticsService: ObservableObject, UsageStatisticsRecording {
         }
     }
 
+    private var detailBackfillCompleted: Bool {
+        do {
+            return try metadataValue(for: Self.detailBackfillCompletedKey) == "true"
+        } catch {
+            usageStatisticsLogger.error("Failed to read usage statistics metadata: \(error.localizedDescription)")
+            return true
+        }
+    }
+
+    private func addDetailBreakdown(
+        timestamp: Date,
+        appBundleIdentifier: String?,
+        appName: String?,
+        engineUsed: String?,
+        modelUsed: String?
+    ) throws {
+        let dayStart = calendar.startOfDay(for: timestamp)
+        guard let statisticsDay = try findDay(dayStart) else { return }
+        let trimmedBundleIdentifier = appBundleIdentifier?.trimmingCharacters(in: .whitespacesAndNewlines)
+        statisticsDay.addDetailCounts(
+            appBundleIdentifier: trimmedBundleIdentifier,
+            appName: appName,
+            engineUsed: engineUsed,
+            modelUsed: modelUsed,
+            hour: calendar.component(.hour, from: timestamp)
+        )
+    }
+
     private func upsertDay(
         timestamp: Date,
         wordsCount: Int,
         durationSeconds: Double,
-        appBundleIdentifier: String?
+        appBundleIdentifier: String?,
+        appName: String? = nil,
+        engineUsed: String? = nil,
+        modelUsed: String? = nil
     ) throws {
         let dayStart = calendar.startOfDay(for: timestamp)
         let statisticsDay: UsageStatisticsDay
@@ -250,7 +366,11 @@ final class UsageStatisticsService: ObservableObject, UsageStatisticsRecording {
         statisticsDay.add(
             wordsCount: wordsCount,
             durationSeconds: durationSeconds,
-            appBundleIdentifier: appBundleIdentifier
+            appBundleIdentifier: appBundleIdentifier,
+            appName: appName,
+            engineUsed: engineUsed,
+            modelUsed: modelUsed,
+            hour: calendar.component(.hour, from: timestamp)
         )
     }
 
@@ -282,7 +402,10 @@ final class UsageStatisticsService: ObservableObject, UsageStatisticsRecording {
                     transcriptionCount: $0.transcriptionCount,
                     totalWords: $0.totalWords,
                     totalDurationSeconds: $0.totalDurationSeconds,
-                    appBundleIdentifiers: $0.appBundleIdentifiers
+                    appBundleIdentifiers: $0.appBundleIdentifiers,
+                    appCounts: $0.appCounts,
+                    modelCounts: $0.modelCounts,
+                    hourCounts: $0.hourCounts
                 )
             }
         } catch {
@@ -297,12 +420,19 @@ final class UsageStatisticsService: ObservableObject, UsageStatisticsRecording {
     }
 
     private func setHistoryBackfillCompleted(_ completed: Bool) throws {
-        let value = completed ? "true" : "false"
+        try setMetadataValue(completed ? "true" : "false", for: Self.historyBackfillCompletedKey)
+    }
+
+    private func setDetailBackfillCompleted(_ completed: Bool) throws {
+        try setMetadataValue(completed ? "true" : "false", for: Self.detailBackfillCompletedKey)
+    }
+
+    private func setMetadataValue(_ value: String, for key: String) throws {
         if let existing = try modelContext.fetch(FetchDescriptor<UsageStatisticsMetadata>())
-            .first(where: { $0.key == Self.historyBackfillCompletedKey }) {
+            .first(where: { $0.key == key }) {
             existing.value = value
         } else {
-            modelContext.insert(UsageStatisticsMetadata(key: Self.historyBackfillCompletedKey, value: value))
+            modelContext.insert(UsageStatisticsMetadata(key: key, value: value))
         }
     }
 

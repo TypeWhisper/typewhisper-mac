@@ -108,6 +108,7 @@
 			6A9D1EE0C163693B1A798779 /* HistoryServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F476E4F05313F6BF4E696A5 /* HistoryServiceTests.swift */; };
 		AA8390000000000000000001 /* UsageStatisticsDay.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB8390000000000000000001 /* UsageStatisticsDay.swift */; };
 		AA8390000000000000000002 /* UsageStatisticsMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB8390000000000000000002 /* UsageStatisticsMetadata.swift */; };
+		3EB9E72F54D54A6288ACC2C1 /* UsageStatisticsKeys.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91F0023647194EC3A838E6B1 /* UsageStatisticsKeys.swift */; };
 		AA8390000000000000000003 /* UsageStatisticsService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB8390000000000000000003 /* UsageStatisticsService.swift */; };
 		AA8390000000000000000004 /* UsageStatisticsServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB8390000000000000000004 /* UsageStatisticsServiceTests.swift */; };
 		A91F00000000000000000001 /* SelectionPalettePanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B91F00000000000000000001 /* SelectionPalettePanel.swift */; };
@@ -203,6 +204,8 @@
 		AA00000000000000000089 /* error.wav in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000089 /* error.wav */; };
 		AA00000000000000000090 /* HomeViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000090 /* HomeViewModel.swift */; };
 		AA00000000000000000091 /* HomeSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000091 /* HomeSettingsView.swift */; };
+		B7A100000000000000000001 /* StatisticsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7A100000000000000000002 /* StatisticsViewModel.swift */; };
+		B7A100000000000000000003 /* StatisticsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B7A100000000000000000004 /* StatisticsView.swift */; };
 		AA00000000000000000092 /* SetupWizardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000092 /* SetupWizardView.swift */; };
 		AA00000000000000000093 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000093 /* main.swift */; };
 		AA00000000000000000094 /* AudioWaveformView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000094 /* AudioWaveformView.swift */; };
@@ -624,6 +627,7 @@
 		BB00000000000000000060 /* TranscriptionRecord.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionRecord.swift; sourceTree = "<group>"; };
 		BB8390000000000000000001 /* UsageStatisticsDay.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageStatisticsDay.swift; sourceTree = "<group>"; };
 		BB8390000000000000000002 /* UsageStatisticsMetadata.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageStatisticsMetadata.swift; sourceTree = "<group>"; };
+		91F0023647194EC3A838E6B1 /* UsageStatisticsKeys.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageStatisticsKeys.swift; sourceTree = "<group>"; };
 		BB00000000000000000061 /* HistoryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryService.swift; sourceTree = "<group>"; };
 		BB8390000000000000000003 /* UsageStatisticsService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UsageStatisticsService.swift; sourceTree = "<group>"; };
 		BB00000000000000000062 /* TextDiffService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextDiffService.swift; sourceTree = "<group>"; };
@@ -665,6 +669,8 @@
 		BB00000000000000000089 /* error.wav */ = {isa = PBXFileReference; lastKnownFileType = audio.wav; path = error.wav; sourceTree = "<group>"; };
 		BB00000000000000000090 /* HomeViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeViewModel.swift; sourceTree = "<group>"; };
 		BB00000000000000000091 /* HomeSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeSettingsView.swift; sourceTree = "<group>"; };
+		B7A100000000000000000002 /* StatisticsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatisticsViewModel.swift; sourceTree = "<group>"; };
+		B7A100000000000000000004 /* StatisticsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatisticsView.swift; sourceTree = "<group>"; };
 		BB00000000000000000092 /* SetupWizardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SetupWizardView.swift; sourceTree = "<group>"; };
 		BB00000000000000000093 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
 		BB00000000000000000094 /* AudioWaveformView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioWaveformView.swift; sourceTree = "<group>"; };
@@ -1479,6 +1485,7 @@
 				BB00000000000000000060 /* TranscriptionRecord.swift */,
 				BB8390000000000000000001 /* UsageStatisticsDay.swift */,
 				BB8390000000000000000002 /* UsageStatisticsMetadata.swift */,
+				91F0023647194EC3A838E6B1 /* UsageStatisticsKeys.swift */,
 				BB00000000000000000065 /* Profile.swift */,
 				BB00000000000000000356 /* Workflow.swift */,
 				BB00000000000000000077 /* DictionaryEntry.swift */,
@@ -1602,6 +1609,7 @@
 				BB00000000000000000082 /* DictionaryViewModel.swift */,
 				BB00000000000000000084 /* SnippetsViewModel.swift */,
 				BB00000000000000000090 /* HomeViewModel.swift */,
+				B7A100000000000000000002 /* StatisticsViewModel.swift */,
 				BB00000000000000000116 /* PromptActionsViewModel.swift */,
 				BB00000000000000000314 /* PromptWizardSupport.swift */,
 				BB00000000000000000171 /* DictationEnums.swift */,
@@ -1641,6 +1649,7 @@
 				BB00000000000000000083 /* DictionarySettingsView.swift */,
 				BB00000000000000000085 /* SnippetsSettingsView.swift */,
 				BB00000000000000000091 /* HomeSettingsView.swift */,
+				B7A100000000000000000004 /* StatisticsView.swift */,
 				BB00000000000000000092 /* SetupWizardView.swift */,
 				BB00000000000000000094 /* AudioWaveformView.swift */,
 				BB00000000000000000117 /* PromptActionsSettingsView.swift */,
@@ -3936,6 +3945,7 @@
 				AA00000000000000000060 /* TranscriptionRecord.swift in Sources */,
 				AA8390000000000000000001 /* UsageStatisticsDay.swift in Sources */,
 				AA8390000000000000000002 /* UsageStatisticsMetadata.swift in Sources */,
+				3EB9E72F54D54A6288ACC2C1 /* UsageStatisticsKeys.swift in Sources */,
 				AA00000000000000000332 /* DictationRuntimeContext.swift in Sources */,
 				AA00000000000000000061 /* HistoryService.swift in Sources */,
 				AA8390000000000000000003 /* UsageStatisticsService.swift in Sources */,
@@ -3974,6 +3984,8 @@
 				AA00000000000000000086 /* SoundService.swift in Sources */,
 				AA00000000000000000090 /* HomeViewModel.swift in Sources */,
 				AA00000000000000000091 /* HomeSettingsView.swift in Sources */,
+				B7A100000000000000000001 /* StatisticsViewModel.swift in Sources */,
+				B7A100000000000000000003 /* StatisticsView.swift in Sources */,
 				AA00000000000000000092 /* SetupWizardView.swift in Sources */,
 				AA00000000000000000094 /* AudioWaveformView.swift in Sources */,
 				AA00000000000000000093 /* main.swift in Sources */,

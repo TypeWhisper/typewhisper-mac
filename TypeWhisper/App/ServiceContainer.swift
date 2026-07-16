@@ -62,6 +62,7 @@ final class ServiceContainer: ObservableObject {
     let dictionaryViewModel: DictionaryViewModel
     let snippetsViewModel: SnippetsViewModel
     let homeViewModel: HomeViewModel
+    let statisticsViewModel: StatisticsViewModel
     let promptActionsViewModel: PromptActionsViewModel
     let audioRecorderViewModel: AudioRecorderViewModel
     let watchFolderViewModel: WatchFolderViewModel
@@ -242,6 +243,9 @@ final class ServiceContainer: ObservableObject {
             historyService: historyService,
             usageStatisticsService: usageStatisticsService
         )
+        statisticsViewModel = StatisticsViewModel(
+            usageStatisticsService: usageStatisticsService
+        )
         promptActionsViewModel = PromptActionsViewModel(
             promptActionService: promptActionService,
             promptProcessingService: promptProcessingService,
@@ -263,6 +267,7 @@ final class ServiceContainer: ObservableObject {
         DictionaryViewModel._shared = dictionaryViewModel
         SnippetsViewModel._shared = snippetsViewModel
         HomeViewModel._shared = homeViewModel
+        StatisticsViewModel._shared = statisticsViewModel
         PromptActionsViewModel._shared = promptActionsViewModel
         AudioRecorderViewModel._shared = audioRecorderViewModel
         WatchFolderViewModel._shared = watchFolderViewModel
@@ -311,6 +316,7 @@ final class ServiceContainer: ObservableObject {
         modelManagerService.restoreProviderSelection()
         audioRecorderViewModel.reconcileSelectionWithAvailablePlugins()
         watchFolderViewModel.reconcileSelectionWithAvailablePlugins()
+        statisticsViewModel.refresh()
 
         // Validate LLM provider selection against loaded plugins
         promptProcessingService.validateSelectionAfterPluginLoad()
