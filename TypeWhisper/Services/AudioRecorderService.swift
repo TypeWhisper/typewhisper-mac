@@ -1188,7 +1188,14 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
 
     // MARK: - Audio Mixing
 
-    private func mixAudioFiles(micURL: URL, systemURL: URL, outputURL: URL) throws {
+    private func mixAudioFiles(
+        micURL: URL,
+        systemURL: URL,
+        outputURL: URL,
+        trackMode: TrackMode,
+        micDuckingMode: MicDuckingMode,
+        outputFormat: OutputFormat
+    ) throws {
         let micFile = try AVAudioFile(forReading: micURL)
         let sysFile = try AVAudioFile(forReading: systemURL)
 
@@ -1461,18 +1468,32 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
     // MARK: - Helpers
 
     private func finalizeOutputFile(finalURL: URL, micURL: URL?, sysURL: URL?) async throws {
+        // Snapshot the current configuration before handing off to the detached task:
+        // these are plain mutable properties on this @unchecked Sendable class, and the
+        // UI can still be running concurrently while this background work is in flight.
+        let trackMode = trackMode
+        let micDuckingMode = micDuckingMode
+        let outputFormat = outputFormat
+
         try await Task.detached(priority: .userInitiated) { [self] in
             if let micURL, let sysURL {
-                try mixAudioFiles(micURL: micURL, systemURL: sysURL, outputURL: finalURL)
+                try mixAudioFiles(
+                    micURL: micURL,
+                    systemURL: sysURL,
+                    outputURL: finalURL,
+                    trackMode: trackMode,
+                    micDuckingMode: micDuckingMode,
+                    outputFormat: outputFormat
+                )
             } else if let micURL {
-                try copyOrConvert(from: micURL, to: finalURL)
+                try copyOrConvert(from: micURL, to: finalURL, outputFormat: outputFormat)
             } else if let sysURL {
-                try copyOrConvert(from: sysURL, to: finalURL)
+                try copyOrConvert(from: sysURL, to: finalURL, outputFormat: outputFormat)
             }
         }.value
     }
 
-    private func copyOrConvert(from sourceURL: URL, to destinationURL: URL) throws {
+    private func copyOrConvert(from sourceURL: URL, to destinationURL: URL, outputFormat: OutputFormat) throws {
         switch outputFormat {
         case .wav:
             try FileManager.default.copyItem(at: sourceURL, to: destinationURL)
