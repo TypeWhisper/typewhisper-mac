@@ -540,8 +540,14 @@ final class AudioRecorderViewModel: ObservableObject {
         state = .finalizing
 
         Task {
-            let liveSessionResult = await streamingHandler.finish()
-            let url = await recorderService.stopRecording()
+            let stoppedRecording = await recorderService.stopCapture(
+                includeTranscriptionSamples: transcriptionEnabled
+            )
+            async let liveSessionResultTask = streamingHandler.finish(
+                finalSamples: stoppedRecording.transcriptionSamples
+            )
+            async let finalizedURLTask = recorderService.finalizeRecording(stoppedRecording)
+            let (liveSessionResult, url) = await (liveSessionResultTask, finalizedURLTask)
 
             let finalTranscriptionRequest: FinalTranscriptionRequest?
             if transcriptionEnabled, let url {
@@ -551,7 +557,7 @@ final class AudioRecorderViewModel: ObservableObject {
                 let dictionaryTermHints = dictionaryService.getTermHints(providerId: providerId)
                 finalTranscriptionRequest = FinalTranscriptionRequest(
                     outputURL: url,
-                    buffer: recorderService.getCurrentBuffer(),
+                    buffer: stoppedRecording.transcriptionSamples,
                     languageSelection: languageSelection,
                     task: selectedTask,
                     providerId: providerId,

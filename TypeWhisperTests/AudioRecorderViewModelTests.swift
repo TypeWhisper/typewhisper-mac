@@ -1,7 +1,31 @@
 import AudioToolbox
+import AVFoundation
 import XCTest
 import TypeWhisperPluginSDK
 @testable import TypeWhisper
+
+private actor RecorderStopFinalizationGate {
+    private var continuation: CheckedContinuation<URL?, any Error>?
+    private var started = false
+    private var outputURL: URL?
+
+    func wait(outputURL: URL) async throws -> URL? {
+        started = true
+        self.outputURL = outputURL
+        return try await withCheckedThrowingContinuation { continuation in
+            self.continuation = continuation
+        }
+    }
+
+    func hasStarted() -> Bool {
+        started
+    }
+
+    func resume() {
+        continuation?.resume(returning: outputURL)
+        continuation = nil
+    }
+}
 
 @MainActor
 final class AudioRecorderViewModelTests: XCTestCase {
@@ -621,6 +645,138 @@ final class AudioRecorderViewModelTests: XCTestCase {
         }
     }
 
+    func testRecorderStopEntersFinalizingBeforeAudioFinalizationCompletes() async throws {
+        try preserveStandardDefaults()
+        let defaults = try makeDefaults()
+        let recordingsDirectory = makeTemporaryDirectory()
+        let recorderService = AudioRecorderService()
+        recorderService.recordingsDirectoryOverride = recordingsDirectory
+        recorderService.startRecordingOverride = { _, _, _, outputURL, _ in
+            try Data("placeholder".utf8).write(to: outputURL)
+            return outputURL
+        }
+        let gate = RecorderStopFinalizationGate()
+        recorderService.stopRecordingOverride = { outputURL in
+            try await gate.wait(outputURL: outputURL)
+        }
+
+        let viewModel = makeViewModel(defaults: defaults, recorderService: recorderService)
+        viewModel.transcriptionEnabled = false
+        _ = try await viewModel.apiStartRecording(micEnabled: true, systemAudioEnabled: false)
+
+        viewModel.stopRecording()
+
+        XCTAssertEqual(viewModel.state, .finalizing)
+        XCTAssertFalse(viewModel.canToggleRecording)
+        for _ in 0..<100 where !(await gate.hasStarted()) {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let finalizationStarted = await gate.hasStarted()
+        XCTAssertTrue(finalizationStarted)
+
+        await gate.resume()
+        for _ in 0..<100 where viewModel.state != .idle {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertEqual(viewModel.state, .idle)
+    }
+
+    func testRecorderFinalizationStreamsMixedAudioAcrossChunkBoundaries() async throws {
+        let directory = makeTemporaryDirectory()
+        let micURL = directory.appendingPathComponent("mic.wav")
+        let systemURL = directory.appendingPathComponent("system.wav")
+        let outputURL = directory.appendingPathComponent("mixed.wav")
+        let outputFrameCount = Int(AudioRecorderService.finalizationChunkFrameCount) * 3 + 137
+        let micFrameCount = Int(
+            (Double(outputFrameCount) * 44_100 / 48_000).rounded(.up)
+        )
+
+        try writePCMFile(
+            at: micURL,
+            frameCount: micFrameCount,
+            sampleRate: 44_100,
+            channelCount: 1,
+            sample: 0.1
+        )
+        try writePCMFile(
+            at: systemURL,
+            frameCount: outputFrameCount,
+            sampleRate: 48_000,
+            channelCount: 2,
+            sample: 0.2
+        )
+
+        let recorderService = AudioRecorderService()
+        let resultURL = await recorderService.finalizeRecording(.init(
+            finalOutputURL: outputURL,
+            micTempURL: micURL,
+            systemTempURL: systemURL,
+            outputFormat: .wav,
+            trackMode: .mixed,
+            micDuckingMode: .aggressive,
+            transcriptionSamples: [],
+            usesFinalizationOverride: false
+        ))
+
+        XCTAssertEqual(resultURL, outputURL)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: micURL.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: systemURL.path))
+
+        let outputFile = try AVAudioFile(forReading: outputURL)
+        XCTAssertLessThanOrEqual(abs(Int(outputFile.length) - outputFrameCount), 1)
+        guard let outputBuffer = AVAudioPCMBuffer(
+            pcmFormat: outputFile.processingFormat,
+            frameCapacity: AVAudioFrameCount(outputFile.length)
+        ) else {
+            return XCTFail("Could not allocate mixed-audio verification buffer")
+        }
+        try outputFile.read(into: outputBuffer)
+        let leftChannel = try XCTUnwrap(outputBuffer.floatChannelData?[0])
+        let rightChannel = try XCTUnwrap(outputBuffer.floatChannelData?[1])
+        XCTAssertEqual(leftChannel[0], 0.3, accuracy: 0.01)
+        XCTAssertEqual(rightChannel[0], 0.3, accuracy: 0.01)
+        for boundary in [8_192, 16_384] {
+            XCTAssertEqual(leftChannel[boundary - 1], leftChannel[boundary], accuracy: 0.002)
+            XCTAssertEqual(rightChannel[boundary - 1], rightChannel[boundary], accuracy: 0.002)
+            XCTAssertLessThan(leftChannel[boundary], 0.23)
+            XCTAssertLessThan(rightChannel[boundary], 0.23)
+        }
+        XCTAssertEqual(leftChannel[outputFrameCount - 1], 0.218, accuracy: 0.002)
+        XCTAssertEqual(rightChannel[outputFrameCount - 1], 0.218, accuracy: 0.002)
+    }
+
+    func testRecorderFinalizationStreamsSingleSourceM4AConversion() async throws {
+        let directory = makeTemporaryDirectory()
+        let sourceURL = directory.appendingPathComponent("mic.wav")
+        let outputURL = directory.appendingPathComponent("recording.m4a")
+        let frameCount = Int(AudioRecorderService.finalizationChunkFrameCount) * 3 + 137
+        try writePCMFile(
+            at: sourceURL,
+            frameCount: frameCount,
+            sampleRate: 48_000,
+            channelCount: 2,
+            sample: 0.1
+        )
+
+        let recorderService = AudioRecorderService()
+        let resultURL = await recorderService.finalizeRecording(.init(
+            finalOutputURL: outputURL,
+            micTempURL: sourceURL,
+            systemTempURL: nil,
+            outputFormat: .m4a,
+            trackMode: .mixed,
+            micDuckingMode: .off,
+            transcriptionSamples: [],
+            usesFinalizationOverride: false
+        ))
+
+        XCTAssertEqual(resultURL, outputURL)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: sourceURL.path))
+        let outputFile = try AVAudioFile(forReading: outputURL)
+        let outputDuration = Double(outputFile.length) / outputFile.processingFormat.sampleRate
+        XCTAssertEqual(outputDuration, Double(frameCount) / 48_000, accuracy: 0.05)
+    }
+
     private func makeViewModel(
         defaults: UserDefaults,
         modelManager: ModelManagerService = ModelManagerService(),
@@ -645,6 +801,41 @@ final class AudioRecorderViewModelTests: XCTestCase {
             audioSamplesLoader: audioSamplesLoader,
             livePreviewStartObserver: livePreviewStartObserver
         )
+    }
+
+    private func writePCMFile(
+        at url: URL,
+        frameCount: Int,
+        sampleRate: Double,
+        channelCount: AVAudioChannelCount,
+        sample: Float
+    ) throws {
+        guard let format = AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: sampleRate,
+            channels: channelCount,
+            interleaved: false
+        ), let buffer = AVAudioPCMBuffer(
+            pcmFormat: format,
+            frameCapacity: AVAudioFrameCount(frameCount)
+        ) else {
+            return XCTFail("Could not allocate recorder finalization fixture")
+        }
+        buffer.frameLength = AVAudioFrameCount(frameCount)
+        for channel in 0..<Int(channelCount) {
+            buffer.floatChannelData?[channel].update(repeating: sample, count: frameCount)
+        }
+
+        let settings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatLinearPCM,
+            AVSampleRateKey: sampleRate,
+            AVNumberOfChannelsKey: channelCount,
+            AVLinearPCMBitDepthKey: 32,
+            AVLinearPCMIsFloatKey: true,
+            AVLinearPCMIsBigEndianKey: false,
+        ]
+        let file = try AVAudioFile(forWriting: url, settings: settings)
+        try file.write(from: buffer)
     }
 
     private func makeFinalTranscriptionViewModel(
