@@ -207,7 +207,7 @@ struct StatisticsView: View {
                     }
                 }
                 .frame(height: 200)
-                .accessibilityElement(children: .combine)
+                .accessibilityElement(children: .ignore)
                 .accessibilityAddTraits(.isStaticText)
                 .accessibilityLabel(chartAccessibilitySummary)
             }

@@ -52,7 +52,7 @@ struct SettingsView: View {
             SettingsDestination(tab: .history, title: String(localized: "History"), systemImage: "clock.arrow.circlepath", badge: nil),
             SettingsDestination(
                 tab: .statistics,
-                title: localizedAppText("Statistics", de: "Statistiken", ja: "統計"),
+                title: String(localized: "Statistics"),
                 systemImage: "chart.bar.xaxis",
                 badge: nil
             ),
