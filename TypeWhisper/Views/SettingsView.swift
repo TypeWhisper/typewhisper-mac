@@ -200,6 +200,9 @@ private struct SettingsModernShell: View {
     let detail: (SettingsTab) -> AnyView
 
     @State private var sidebarSearchText = ""
+    @State private var isSidebarVisible = true
+
+    private let sidebarWidth: CGFloat = 270
 
     private var filteredSections: [SettingsDestinationSection] {
         let query = sidebarSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -218,28 +221,73 @@ private struct SettingsModernShell: View {
     }
 
     var body: some View {
-        NavigationSplitView {
-            List(selection: $selectedTab) {
-                ForEach(filteredSections) { section in
-                    Section {
-                        ForEach(section.destinations) { destination in
-                            SettingsSidebarRow(destination: destination)
-                                .tag(destination.tab)
+        HStack(spacing: 0) {
+            // The sidebar's own intrinsic width never changes, so row labels never
+            // reflow/truncate mid-toggle; only the outer frame's width animates,
+            // clipping the fixed-width content like a mask. NavigationSplitView's
+            // built-in collapse instead animates the List's actual layout width,
+            // which reflows text every frame and produces a visible glitch.
+            VStack(spacing: 0) {
+                SettingsSidebarSearchField(text: $sidebarSearchText)
+
+                List(selection: $selectedTab) {
+                    ForEach(filteredSections) { section in
+                        Section {
+                            ForEach(section.destinations) { destination in
+                                SettingsSidebarRow(destination: destination)
+                                    .tag(destination.tab)
+                            }
                         }
                     }
                 }
+                .listStyle(.sidebar)
+                // Changing the section/row count via search filtering can leave stale,
+                // blank space behind from SwiftUI's incremental List diffing. Keying the
+                // List on the query forces a clean rebuild instead of a partial diff.
+                .id(sidebarSearchText)
             }
-            .listStyle(.sidebar)
-            .searchable(
-                text: $sidebarSearchText,
-                placement: .sidebar,
-                prompt: Text(localizedAppText("Search Settings", de: "Einstellungen durchsuchen"))
-            )
-            .navigationSplitViewColumnWidth(min: 240, ideal: 270, max: 320)
-        } detail: {
+            .frame(width: sidebarWidth)
+            .frame(width: isSidebarVisible ? sidebarWidth : 0, alignment: .leading)
+            .clipped()
+
+            // Conditionally inserting/removing the divider pops it in and out
+            // instantly, out of sync with the sidebar's width animation. Fading its
+            // opacity instead keeps it in step with the same transition.
+            Divider()
+                .opacity(isSidebarVisible ? 1 : 0)
+
             detail(selectedTab)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
+        .animation(.easeInOut(duration: 0.22), value: isSidebarVisible)
+        .toolbar {
+            ToolbarItem(placement: .navigation) {
+                Button(action: { isSidebarVisible.toggle() }) {
+                    Image(systemName: "sidebar.leading")
+                }
+                .help(localizedAppText("Toggle Sidebar", de: "Seitenleiste ein-/ausblenden"))
+                .accessibilityLabel(localizedAppText("Toggle Sidebar", de: "Seitenleiste ein-/ausblenden"))
+            }
+        }
+    }
+}
+
+private struct SettingsSidebarSearchField: View {
+    @Binding var text: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            TextField(
+                localizedAppText("Search Settings", de: "Einstellungen durchsuchen"),
+                text: $text
+            )
+            .textFieldStyle(.plain)
+        }
+        .padding(6)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .controlBackgroundColor)))
+        .padding(EdgeInsets(top: 8, leading: 8, bottom: 4, trailing: 8))
     }
 }
 
