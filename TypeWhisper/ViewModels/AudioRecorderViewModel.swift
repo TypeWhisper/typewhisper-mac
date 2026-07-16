@@ -534,6 +534,11 @@ final class AudioRecorderViewModel: ObservableObject {
     private func stopRecording(apiSessionID: UUID?) {
         let recordingDuration = duration
 
+        // Flip out of `.recording` immediately so the recording timer/widget disappears
+        // the instant Stop is pressed, instead of staying up while audio finalization
+        // and transcription run (which can take a while for long recordings).
+        state = .finalizing
+
         Task {
             let liveSessionResult = await streamingHandler.finish()
             let url = await recorderService.stopRecording()
@@ -555,7 +560,6 @@ final class AudioRecorderViewModel: ObservableObject {
                     dictionaryTermHints: dictionaryTermHints,
                     liveSessionResult: liveSessionResult
                 )
-                state = .finalizing
                 if let apiSessionID {
                     markRecorderAPISessionFinalizing(id: apiSessionID, outputURL: url)
                 }

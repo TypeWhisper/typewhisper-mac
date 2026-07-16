@@ -766,17 +766,16 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
 
         var completedURL = finalOutputURL
 
-        // Mix or copy to final output
+        // Mix or copy to final output. This is CPU/memory-heavy for long recordings
+        // (whole-file buffers, per-sample loops), so it runs off the calling actor to
+        // avoid freezing the UI when stopRecording() is awaited from the main actor.
         if let finalURL = completedURL {
             do {
-                if micEnabled && systemAudioEnabled,
-                   let micURL = micTempURL, let sysURL = systemTempURL {
-                    try mixAudioFiles(micURL: micURL, systemURL: sysURL, outputURL: finalURL)
-                } else if micEnabled, let micURL = micTempURL {
-                    try copyOrConvert(from: micURL, to: finalURL)
-                } else if systemAudioEnabled, let sysURL = systemTempURL {
-                    try copyOrConvert(from: sysURL, to: finalURL)
-                }
+                try await finalizeOutputFile(
+                    finalURL: finalURL,
+                    micURL: micEnabled ? micTempURL : nil,
+                    sysURL: systemAudioEnabled ? systemTempURL : nil
+                )
             } catch {
                 logger.error("Failed to finalize recording: \(error.localizedDescription)")
                 cleanupTempFile(finalURL)
@@ -1460,6 +1459,18 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
     }
 
     // MARK: - Helpers
+
+    private func finalizeOutputFile(finalURL: URL, micURL: URL?, sysURL: URL?) async throws {
+        try await Task.detached(priority: .userInitiated) { [self] in
+            if let micURL, let sysURL {
+                try mixAudioFiles(micURL: micURL, systemURL: sysURL, outputURL: finalURL)
+            } else if let micURL {
+                try copyOrConvert(from: micURL, to: finalURL)
+            } else if let sysURL {
+                try copyOrConvert(from: sysURL, to: finalURL)
+            }
+        }.value
+    }
 
     private func copyOrConvert(from sourceURL: URL, to destinationURL: URL) throws {
         switch outputFormat {
