@@ -23093,22 +23093,32 @@
         }
       }
     },
-    "Exports workflows, dictionary entries, snippets, profiles, prompt actions, hotkey bindings, and installed community plugins to a single file you can import on another Mac. Reinstalled plugins fetch whatever version is currently latest in the marketplace, and installing them requires network access. Provider API keys, history, and general preferences are not included.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Exportiert Workflows, Wörterbucheinträge, Snippets, Profile, Prompt-Aktionen, Hotkey-Zuordnungen und installierte Community-Plugins in eine Datei, die du auf einem anderen Mac importieren kannst. Wiederhergestellte Plugins laden die jeweils aktuelle Marketplace-Version, das Installieren erfordert eine Internetverbindung. Anbieter-API-Schlüssel, Verlauf und allgemeine Einstellungen sind nicht enthalten."
-          }
-        }
-      }
-    },
     "Plugins: %d installed, %d skipped (already installed or unavailable)": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Plugins: %d installiert, %d übersprungen (bereits installiert oder nicht verfügbar)"
+          }
+        }
+      }
+    },
+    "Exports workflows, dictionary entries, snippets, profiles, prompt actions, hotkey bindings, installed community plugins, and transcription history (text only, no saved audio) to a single file you can import on another Mac. Reinstalled plugins fetch whatever version is currently latest in the marketplace, and installing them requires network access. Provider API keys and general preferences are not included.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exportiert Workflows, Wörterbucheinträge, Snippets, Profile, Prompt-Aktionen, Hotkey-Zuordnungen, installierte Community-Plugins und den Transkriptionsverlauf (nur Text, keine gespeicherten Audioaufnahmen) in eine Datei, die du auf einem anderen Mac importieren kannst. Wiederhergestellte Plugins laden die jeweils aktuelle Marketplace-Version, das Installieren erfordert eine Internetverbindung. Anbieter-API-Schlüssel und allgemeine Einstellungen sind nicht enthalten."
+          }
+        }
+      }
+    },
+    "History: %d imported": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verlauf: %d importiert"
           }
         }
       }

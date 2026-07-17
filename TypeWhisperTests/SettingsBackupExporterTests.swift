@@ -22,6 +22,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         let promptActionService: PromptActionService
         let pluginManager: PluginManager
         let pluginRegistryService: PluginRegistryService
+        let historyService: HistoryService
         let userDefaults: UserDefaults
         let suiteName: String
     }
@@ -43,6 +44,7 @@ final class SettingsBackupExporterTests: XCTestCase {
                 userDefaults: userDefaults,
                 fetchData: { _ in throw URLError(.notConnectedToInternet) }
             ),
+            historyService: HistoryService(appSupportDirectory: dir),
             userDefaults: userDefaults,
             suiteName: suiteName
         )
@@ -82,6 +84,7 @@ final class SettingsBackupExporterTests: XCTestCase {
             profileService: fixture.profileService,
             promptActionService: fixture.promptActionService,
             pluginManager: fixture.pluginManager,
+            historyService: fixture.historyService,
             userDefaults: fixture.userDefaults
         )
 
@@ -105,6 +108,7 @@ final class SettingsBackupExporterTests: XCTestCase {
             profileService: fixture.profileService,
             promptActionService: fixture.promptActionService,
             pluginManager: fixture.pluginManager,
+            historyService: fixture.historyService,
             userDefaults: fixture.userDefaults
         )
 
@@ -135,6 +139,7 @@ final class SettingsBackupExporterTests: XCTestCase {
             profileService: source.profileService,
             promptActionService: source.promptActionService,
             pluginManager: source.pluginManager,
+            historyService: source.historyService,
             userDefaults: source.userDefaults
         )
 
@@ -153,6 +158,7 @@ final class SettingsBackupExporterTests: XCTestCase {
             promptActionService: destination.promptActionService,
             pluginManager: destination.pluginManager,
             pluginRegistryService: destination.pluginRegistryService,
+            historyService: destination.historyService,
             userDefaults: destination.userDefaults
         )
 
@@ -181,6 +187,7 @@ final class SettingsBackupExporterTests: XCTestCase {
             profileService: source.profileService,
             promptActionService: source.promptActionService,
             pluginManager: source.pluginManager,
+            historyService: source.historyService,
             userDefaults: source.userDefaults
         )
 
@@ -196,6 +203,7 @@ final class SettingsBackupExporterTests: XCTestCase {
             promptActionService: destination.promptActionService,
             pluginManager: destination.pluginManager,
             pluginRegistryService: destination.pluginRegistryService,
+            historyService: destination.historyService,
             userDefaults: destination.userDefaults
         )
 
@@ -222,6 +230,7 @@ final class SettingsBackupExporterTests: XCTestCase {
             profileService: source.profileService,
             promptActionService: source.promptActionService,
             pluginManager: source.pluginManager,
+            historyService: source.historyService,
             userDefaults: source.userDefaults
         )
         XCTAssertEqual(backup.hotkeys[UserDefaultsKeys.toggleHotkeys]?.first, hotkey)
@@ -237,6 +246,7 @@ final class SettingsBackupExporterTests: XCTestCase {
             promptActionService: destinationEmpty.promptActionService,
             pluginManager: destinationEmpty.pluginManager,
             pluginRegistryService: destinationEmpty.pluginRegistryService,
+            historyService: destinationEmpty.historyService,
             userDefaults: destinationEmpty.userDefaults
         )
         XCTAssertEqual(emptyResult.hotkeysApplied, 1)
@@ -261,6 +271,7 @@ final class SettingsBackupExporterTests: XCTestCase {
             promptActionService: destinationOccupied.promptActionService,
             pluginManager: destinationOccupied.pluginManager,
             pluginRegistryService: destinationOccupied.pluginRegistryService,
+            historyService: destinationOccupied.historyService,
             userDefaults: destinationOccupied.userDefaults
         )
         XCTAssertEqual(occupiedResult.hotkeysApplied, 0)
@@ -285,6 +296,7 @@ final class SettingsBackupExporterTests: XCTestCase {
             profileService: source.profileService,
             promptActionService: source.promptActionService,
             pluginManager: source.pluginManager,
+            historyService: source.historyService,
             userDefaults: source.userDefaults
         )
         XCTAssertEqual(backup.plugins.count, 1)
@@ -302,6 +314,7 @@ final class SettingsBackupExporterTests: XCTestCase {
             promptActionService: destination.promptActionService,
             pluginManager: destination.pluginManager,
             pluginRegistryService: destination.pluginRegistryService,
+            historyService: destination.historyService,
             userDefaults: destination.userDefaults
         )
 
@@ -324,6 +337,7 @@ final class SettingsBackupExporterTests: XCTestCase {
             profileService: source.profileService,
             promptActionService: source.promptActionService,
             pluginManager: source.pluginManager,
+            historyService: source.historyService,
             userDefaults: source.userDefaults
         )
 
@@ -342,10 +356,68 @@ final class SettingsBackupExporterTests: XCTestCase {
             promptActionService: destination.promptActionService,
             pluginManager: destination.pluginManager,
             pluginRegistryService: destination.pluginRegistryService,
+            historyService: destination.historyService,
             userDefaults: destination.userDefaults
         )
 
         XCTAssertEqual(result.pluginsInstalled, 0)
         XCTAssertEqual(result.pluginsSkipped, 1)
+    }
+
+    func testHistoryRoundTripPreservesTimestampAndExcludesAudio() async throws {
+        let source = try makeFixture()
+        defer { teardown(source) }
+
+        let originalTimestamp = Date(timeIntervalSince1970: 1_700_000_000)
+        source.historyService.addRecord(
+            timestamp: originalTimestamp,
+            rawText: "helo world",
+            finalText: "Hello, world.",
+            appName: "Notes",
+            appBundleIdentifier: "com.apple.Notes",
+            durationSeconds: 3.5,
+            language: "en",
+            engineUsed: "whisperkit",
+            audioSamples: [0.1, 0.2, 0.3],
+            pipelineSteps: ["dictionary", "formatting"]
+        )
+
+        let backup = SettingsBackupExporter.buildBackup(
+            workflowService: source.workflowService,
+            dictionaryService: source.dictionaryService,
+            snippetService: source.snippetService,
+            profileService: source.profileService,
+            promptActionService: source.promptActionService,
+            pluginManager: source.pluginManager,
+            historyService: source.historyService,
+            userDefaults: source.userDefaults
+        )
+
+        XCTAssertEqual(backup.history.count, 1)
+        let entry = try XCTUnwrap(backup.history.first)
+        XCTAssertEqual(entry.finalText, "Hello, world.")
+        XCTAssertEqual(entry.pipelineSteps, ["dictionary", "formatting"])
+
+        let destination = try makeFixture()
+        defer { teardown(destination) }
+
+        let result = await SettingsBackupExporter.importBackup(
+            backup,
+            workflowService: destination.workflowService,
+            dictionaryService: destination.dictionaryService,
+            snippetService: destination.snippetService,
+            profileService: destination.profileService,
+            promptActionService: destination.promptActionService,
+            pluginManager: destination.pluginManager,
+            pluginRegistryService: destination.pluginRegistryService,
+            historyService: destination.historyService,
+            userDefaults: destination.userDefaults
+        )
+
+        XCTAssertEqual(result.historyImported, 1)
+        let importedRecord = try XCTUnwrap(destination.historyService.records.first)
+        XCTAssertEqual(importedRecord.finalText, "Hello, world.")
+        XCTAssertEqual(importedRecord.timestamp.timeIntervalSince1970, originalTimestamp.timeIntervalSince1970, accuracy: 0.001)
+        XCTAssertNil(importedRecord.audioFileName)
     }
 }

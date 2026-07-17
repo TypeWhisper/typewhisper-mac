@@ -3,15 +3,21 @@ import Foundation
 import UniformTypeIdentifiers
 
 /// Exports/imports a single JSON backup of user configuration (workflows,
-/// dictionary, snippets, profiles, prompt actions, hotkeys, and installed
-/// community plugins) so it can be migrated to another Mac.
+/// dictionary, snippets, profiles, prompt actions, hotkeys, installed
+/// community plugins, and transcription history) so it can be migrated to
+/// another Mac.
 ///
-/// Deliberately out of scope: provider API keys, transcription history, usage
-/// statistics, and general `UserDefaults` preferences (indicator style, sound
-/// toggles, selected microphone/model, etc.) — API keys must be re-entered on
-/// the new Mac, and the rest is either per-machine or low value to migrate.
-/// See `TypeWhisper/App/UserDefaultsKeys.swift` for the full preferences
-/// surface if that scope ever expands.
+/// History is exported as text/metadata only — saved audio recordings
+/// (`TranscriptionRecord.audioFileName`) are never included, since they can
+/// be large (~1MB/30s) and would require a very different file format than
+/// plain JSON.
+///
+/// Deliberately out of scope: provider API keys, usage statistics, and
+/// general `UserDefaults` preferences (indicator style, sound toggles,
+/// selected microphone/model, etc.) — API keys must be re-entered on the new
+/// Mac, and the rest is either per-machine or low value to migrate. See
+/// `TypeWhisper/App/UserDefaultsKeys.swift` for the full preferences surface
+/// if that scope ever expands.
 @MainActor
 enum SettingsBackupExporter {
     static let schemaVersion = 1
@@ -109,6 +115,21 @@ enum SettingsBackupExporter {
         let wasEnabled: Bool
     }
 
+    /// Text/metadata only — never includes the saved audio recording, if any.
+    struct HistoryEntryDTO: Codable {
+        let timestamp: Date
+        let rawText: String
+        let finalText: String
+        let appName: String?
+        let appBundleIdentifier: String?
+        let appURL: String?
+        let durationSeconds: Double
+        let language: String?
+        let engineUsed: String
+        let modelUsed: String?
+        let pipelineSteps: [String]
+    }
+
     struct SettingsBackup: Codable {
         let schemaVersion: Int
         let exportedAt: Date
@@ -120,6 +141,7 @@ enum SettingsBackupExporter {
         let profiles: [ProfileDTO]
         let hotkeys: [String: [UnifiedHotkey]]
         let plugins: [PluginDTO]
+        let history: [HistoryEntryDTO]
     }
 
     struct ImportResult {
@@ -134,6 +156,7 @@ enum SettingsBackupExporter {
         var hotkeysSkipped = 0
         var pluginsInstalled = 0
         var pluginsSkipped = 0
+        var historyImported = 0
     }
 
     enum ImportError: LocalizedError {
@@ -156,6 +179,7 @@ enum SettingsBackupExporter {
         profileService: ProfileService,
         promptActionService: PromptActionService,
         pluginManager: PluginManager,
+        historyService: HistoryService,
         userDefaults: UserDefaults = .standard
     ) -> SettingsBackup {
         let workflows = workflowService.workflows.map { workflow in
@@ -253,6 +277,22 @@ enum SettingsBackupExporter {
                 )
             }
 
+        let history = historyService.records.map { record in
+            HistoryEntryDTO(
+                timestamp: record.timestamp,
+                rawText: record.rawText,
+                finalText: record.finalText,
+                appName: record.appName,
+                appBundleIdentifier: record.appBundleIdentifier,
+                appURL: record.appURL,
+                durationSeconds: record.durationSeconds,
+                language: record.language,
+                engineUsed: record.engineUsed,
+                modelUsed: record.modelUsed,
+                pipelineSteps: record.pipelineStepList
+            )
+        }
+
         return SettingsBackup(
             schemaVersion: schemaVersion,
             exportedAt: Date(),
@@ -263,7 +303,8 @@ enum SettingsBackupExporter {
             promptActions: promptActions,
             profiles: profiles,
             hotkeys: hotkeys,
-            plugins: plugins
+            plugins: plugins,
+            history: history
         )
     }
 
@@ -300,6 +341,7 @@ enum SettingsBackupExporter {
         promptActionService: PromptActionService,
         pluginManager: PluginManager,
         pluginRegistryService: PluginRegistryService,
+        historyService: HistoryService,
         userDefaults: UserDefaults = .standard
     ) async -> ImportResult {
         var result = ImportResult()
@@ -424,6 +466,24 @@ enum SettingsBackupExporter {
                 result.pluginsInstalled += 1
             }
         }
+
+        let beforeHistoryCount = historyService.records.count
+        for entry in backup.history {
+            historyService.addRecord(
+                timestamp: entry.timestamp,
+                rawText: entry.rawText,
+                finalText: entry.finalText,
+                appName: entry.appName,
+                appBundleIdentifier: entry.appBundleIdentifier,
+                appURL: entry.appURL,
+                durationSeconds: entry.durationSeconds,
+                language: entry.language,
+                engineUsed: entry.engineUsed,
+                modelUsed: entry.modelUsed,
+                pipelineSteps: entry.pipelineSteps
+            )
+        }
+        result.historyImported = historyService.records.count - beforeHistoryCount
 
         return result
     }

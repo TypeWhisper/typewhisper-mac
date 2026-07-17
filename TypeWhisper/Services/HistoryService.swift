@@ -42,6 +42,7 @@ final class HistoryService: ObservableObject {
 
     func addRecord(
         id: UUID = UUID(),
+        timestamp: Date = Date(),
         rawText: String,
         finalText: String,
         appName: String?,
@@ -82,6 +83,7 @@ final class HistoryService: ObservableObject {
 
         let record = TranscriptionRecord(
             id: recordId,
+            timestamp: timestamp,
             rawText: sanitizedRaw,
             finalText: sanitizedFinal,
             appName: appName.flatMap { let s = Self.sanitize($0); return s.isEmpty ? nil : s },
