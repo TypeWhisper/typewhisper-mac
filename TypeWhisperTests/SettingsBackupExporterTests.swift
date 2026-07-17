@@ -496,4 +496,84 @@ final class SettingsBackupExporterTests: XCTestCase {
         XCTAssertEqual(destination.userDefaults.string(forKey: UserDefaultsKeys.indicatorStyle), "overlay")
         XCTAssertNil(destination.userDefaults.string(forKey: UserDefaultsKeys.fileTranscriptionEngine))
     }
+
+    func testCategoryCountsReflectBackupContents() throws {
+        let source = try makeFixture()
+        defer { teardown(source) }
+
+        source.workflowService.addWorkflow(name: "Cleanup", template: .cleanedText, trigger: .app("com.apple.mail"))
+        source.dictionaryService.addEntry(type: .term, original: "Kubernetes")
+        source.userDefaults.set(AppConstants.ReleaseChannel.daily.rawValue, forKey: UserDefaultsKeys.updateChannel)
+        source.userDefaults.set("de", forKey: UserDefaultsKeys.selectedLanguage)
+
+        let backup = SettingsBackupExporter.buildBackup(
+            workflowService: source.workflowService,
+            dictionaryService: source.dictionaryService,
+            snippetService: source.snippetService,
+            profileService: source.profileService,
+            promptActionService: source.promptActionService,
+            pluginManager: source.pluginManager,
+            historyService: source.historyService,
+            userDefaults: source.userDefaults
+        )
+
+        XCTAssertEqual(SettingsBackupExporter.Category.count(.workflows, in: backup), 1)
+        XCTAssertEqual(SettingsBackupExporter.Category.count(.dictionary, in: backup), 1)
+        XCTAssertEqual(SettingsBackupExporter.Category.count(.snippets, in: backup), 0)
+        XCTAssertEqual(SettingsBackupExporter.Category.count(.updateChannel, in: backup), 1)
+        // At least selectedLanguage; some UserDefaults suites in this environment
+        // also surface a non-nil dockIconBehaviorWhenMenuBarHidden by default (see
+        // testUpdateChannelAndPreferencesRoundTrip), so this isn't pinned to 1.
+        XCTAssertGreaterThanOrEqual(SettingsBackupExporter.Category.count(.preferences, in: backup), 1)
+        XCTAssertEqual(SettingsBackupExporter.Category.count(.history, in: backup), 0)
+    }
+
+    func testFilteredOnlyImportsSelectedCategories() async throws {
+        let source = try makeFixture()
+        defer { teardown(source) }
+
+        source.workflowService.addWorkflow(name: "Cleanup", template: .cleanedText, trigger: .app("com.apple.mail"))
+        source.dictionaryService.addEntry(type: .term, original: "Kubernetes")
+        source.snippetService.addSnippet(trigger: ";sig", replacement: "Best, Alex")
+        source.userDefaults.set(AppConstants.ReleaseChannel.daily.rawValue, forKey: UserDefaultsKeys.updateChannel)
+
+        let backup = SettingsBackupExporter.buildBackup(
+            workflowService: source.workflowService,
+            dictionaryService: source.dictionaryService,
+            snippetService: source.snippetService,
+            profileService: source.profileService,
+            promptActionService: source.promptActionService,
+            pluginManager: source.pluginManager,
+            historyService: source.historyService,
+            userDefaults: source.userDefaults
+        )
+
+        let filtered = SettingsBackupExporter.filtered(backup, to: [.workflows])
+        XCTAssertEqual(filtered.workflows.count, 1)
+        XCTAssertEqual(filtered.dictionaryEntries.count, 0)
+        XCTAssertEqual(filtered.snippets.count, 0)
+        XCTAssertNil(filtered.updateChannel)
+
+        let destination = try makeFixture()
+        defer { teardown(destination) }
+
+        let result = await SettingsBackupExporter.importBackup(
+            filtered,
+            workflowService: destination.workflowService,
+            dictionaryService: destination.dictionaryService,
+            snippetService: destination.snippetService,
+            profileService: destination.profileService,
+            promptActionService: destination.promptActionService,
+            pluginManager: destination.pluginManager,
+            pluginRegistryService: destination.pluginRegistryService,
+            historyService: destination.historyService,
+            usageStatisticsService: destination.usageStatisticsService,
+            userDefaults: destination.userDefaults
+        )
+
+        XCTAssertEqual(result.workflowsImported, 1)
+        XCTAssertEqual(result.dictionaryImported, 0)
+        XCTAssertEqual(result.snippetsImported, 0)
+        XCTAssertFalse(result.updateChannelApplied)
+    }
 }

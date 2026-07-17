@@ -23238,6 +23238,146 @@
           }
         }
       }
+    },
+    "Preferences": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einstellungen"
+          }
+        }
+      }
+    },
+    "Prompt Actions": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prompt-Aktionen"
+          }
+        }
+      }
+    },
+    "Custom workflow triggers, templates, and output rules.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Benutzerdefinierte Workflow-Trigger, Vorlagen und Ausgaberegeln."
+          }
+        }
+      }
+    },
+    "Recognition corrections and replacement terms.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erkennungskorrekturen und Ersetzungsbegriffe."
+          }
+        }
+      }
+    },
+    "Trigger-to-text expansion shortcuts.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Trigger-zu-Text-Erweiterungs-Shortcuts."
+          }
+        }
+      }
+    },
+    "Per-app / per-URL settings profiles.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "App- bzw. URL-spezifische Einstellungsprofile."
+          }
+        }
+      }
+    },
+    "Custom AI prompt actions. Built-in presets are never exported.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Benutzerdefinierte KI-Prompt-Aktionen. Integrierte Voreinstellungen werden nie exportiert."
+          }
+        }
+      }
+    },
+    "Global keyboard shortcuts. Only fills empty slots on import — never overwrites existing bindings.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Globale Tastenkombinationen. Beim Import werden nur leere Plätze befüllt — bestehende Zuordnungen werden nie überschrieben."
+          }
+        }
+      }
+    },
+    "Transcription history text and metadata. Saved audio is never included.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkriptionsverlauf-Text und Metadaten. Gespeicherte Audioaufnahmen sind nie enthalten."
+          }
+        }
+      }
+    },
+    "Portable preferences from the General, Dictation, Dictation Recovery, File Transcription, and Recorder tabs.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Portable Einstellungen aus den Tabs Allgemein, Diktat, Diktat-Wiederherstellung, Dateitranskription und Recorder."
+          }
+        }
+      }
+    },
+    "Select All": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle auswählen"
+          }
+        }
+      }
+    },
+    "Select None": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine auswählen"
+          }
+        }
+      }
+    },
+    "%d of %d categories selected": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%d von %d Kategorien ausgewählt"
+          }
+        }
+      }
+    },
+    "Include %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ einschließen"
+          }
+        }
+      }
     }
   },
   "version": "1.1"

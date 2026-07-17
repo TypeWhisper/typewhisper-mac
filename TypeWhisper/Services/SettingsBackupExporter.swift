@@ -186,6 +186,57 @@ enum SettingsBackupExporter {
         let recorderLivePreviewEnabled: Bool?
         let recorderMicDuckingMode: String?
         let recorderTrackMode: String?
+
+        static let empty = PreferencesDTO(
+            selectedLanguage: nil, selectedTask: nil, translationEnabled: nil, translationTargetLanguage: nil,
+            showMenuBarIcon: nil, dockIconBehaviorWhenMenuBarHidden: nil,
+            audioDuckingEnabled: nil, audioDuckingLevel: nil, soundFeedbackEnabled: nil, soundRecordingStarted: nil,
+            soundTranscriptionSuccess: nil, soundError: nil, indicatorStyle: nil, indicatorTranscriptPreviewEnabled: nil,
+            indicatorTranscriptPreviewFontSizeOffset: nil, preserveClipboard: nil, mediaPauseEnabled: nil,
+            transcribeShortQuietClipsAggressively: nil, microphoneBoostEnabled: nil, requireSecondEscapeToCancelRecording: nil,
+            dictationRecoveryLanguage: nil, dictationRecoveryAutomaticFallbackEnabled: nil,
+            fileTranscriptionLanguage: nil,
+            recorderMicEnabled: nil, recorderSystemAudioEnabled: nil, recorderOutputFormat: nil,
+            recorderTranscriptionEnabled: nil, recorderLivePreviewEnabled: nil, recorderMicDuckingMode: nil, recorderTrackMode: nil
+        )
+
+        /// Number of non-nil fields, used to show a count in the category
+        /// selection sheets. Listed explicitly (rather than via `Mirror`) to
+        /// keep the count trivially auditable against the field list above.
+        var nonNilCount: Int {
+            var count = 0
+            if selectedLanguage != nil { count += 1 }
+            if selectedTask != nil { count += 1 }
+            if translationEnabled != nil { count += 1 }
+            if translationTargetLanguage != nil { count += 1 }
+            if showMenuBarIcon != nil { count += 1 }
+            if dockIconBehaviorWhenMenuBarHidden != nil { count += 1 }
+            if audioDuckingEnabled != nil { count += 1 }
+            if audioDuckingLevel != nil { count += 1 }
+            if soundFeedbackEnabled != nil { count += 1 }
+            if soundRecordingStarted != nil { count += 1 }
+            if soundTranscriptionSuccess != nil { count += 1 }
+            if soundError != nil { count += 1 }
+            if indicatorStyle != nil { count += 1 }
+            if indicatorTranscriptPreviewEnabled != nil { count += 1 }
+            if indicatorTranscriptPreviewFontSizeOffset != nil { count += 1 }
+            if preserveClipboard != nil { count += 1 }
+            if mediaPauseEnabled != nil { count += 1 }
+            if transcribeShortQuietClipsAggressively != nil { count += 1 }
+            if microphoneBoostEnabled != nil { count += 1 }
+            if requireSecondEscapeToCancelRecording != nil { count += 1 }
+            if dictationRecoveryLanguage != nil { count += 1 }
+            if dictationRecoveryAutomaticFallbackEnabled != nil { count += 1 }
+            if fileTranscriptionLanguage != nil { count += 1 }
+            if recorderMicEnabled != nil { count += 1 }
+            if recorderSystemAudioEnabled != nil { count += 1 }
+            if recorderOutputFormat != nil { count += 1 }
+            if recorderTranscriptionEnabled != nil { count += 1 }
+            if recorderLivePreviewEnabled != nil { count += 1 }
+            if recorderMicDuckingMode != nil { count += 1 }
+            if recorderTrackMode != nil { count += 1 }
+            return count
+        }
     }
 
     struct SettingsBackup: Codable {
@@ -232,6 +283,103 @@ enum SettingsBackupExporter {
                 return String(localized: "The file is not a valid TypeWhisper settings backup.")
             }
         }
+    }
+
+    // MARK: - Categories
+
+    /// One row in the export/import category-selection sheets. Cases are
+    /// ordered to match the display order in those sheets.
+    enum Category: String, CaseIterable, Identifiable, Hashable {
+        case workflows, dictionary, snippets, profiles, promptActions, hotkeys, plugins, history, updateChannel, preferences
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .workflows: return String(localized: "Workflows")
+            case .dictionary: return String(localized: "Dictionary")
+            case .snippets: return String(localized: "Snippets")
+            case .profiles: return String(localized: "Profiles")
+            case .promptActions: return String(localized: "Prompt Actions")
+            case .hotkeys: return String(localized: "Hotkeys")
+            case .plugins: return String(localized: "Plugins")
+            case .history: return String(localized: "History")
+            case .updateChannel: return localizedAppText("Update Channel", de: "Update-Kanal")
+            case .preferences: return String(localized: "Preferences")
+            }
+        }
+
+        var icon: String {
+            switch self {
+            case .workflows: return "bolt.fill"
+            case .dictionary: return "character.book.closed.fill"
+            case .snippets: return "text.badge.plus"
+            case .profiles: return "person.crop.circle.fill"
+            case .promptActions: return "sparkles"
+            case .hotkeys: return "keyboard.fill"
+            case .plugins: return "puzzlepiece.extension.fill"
+            case .history: return "clock.arrow.circlepath"
+            case .updateChannel: return "arrow.triangle.2.circlepath"
+            case .preferences: return "slider.horizontal.3"
+            }
+        }
+
+        var infoText: String {
+            switch self {
+            case .workflows: return String(localized: "Custom workflow triggers, templates, and output rules.")
+            case .dictionary: return String(localized: "Recognition corrections and replacement terms.")
+            case .snippets: return String(localized: "Trigger-to-text expansion shortcuts.")
+            case .profiles: return String(localized: "Per-app / per-URL settings profiles.")
+            case .promptActions: return String(localized: "Custom AI prompt actions. Built-in presets are never exported.")
+            case .hotkeys: return String(localized: "Global keyboard shortcuts. Only fills empty slots on import — never overwrites existing bindings.")
+            case .plugins: return localizedAppText(
+                    "Installed community plugins. Reinstalling requires network access and fetches the latest marketplace version.",
+                    de: "Installierte Community-Plugins. Die Neuinstallation erfordert eine Internetverbindung und lädt die aktuelle Marketplace-Version."
+                )
+            case .history: return String(localized: "Transcription history text and metadata. Saved audio is never included.")
+            case .updateChannel: return localizedAppText(
+                    "The selected Sparkle update channel (e.g. stable or beta).",
+                    de: "Der ausgewählte Sparkle-Update-Kanal (z. B. stabil oder Beta)."
+                )
+            case .preferences: return String(localized: "Portable preferences from the General, Dictation, Dictation Recovery, File Transcription, and Recorder tabs.")
+            }
+        }
+
+        static func count(_ category: Category, in backup: SettingsBackup) -> Int {
+            switch category {
+            case .workflows: return backup.workflows.count
+            case .dictionary: return backup.dictionaryEntries.count
+            case .snippets: return backup.snippets.count
+            case .profiles: return backup.profiles.count
+            case .promptActions: return backup.promptActions.count
+            case .hotkeys: return backup.hotkeys.values.reduce(0) { $0 + $1.count }
+            case .plugins: return backup.plugins.count
+            case .history: return backup.history.count
+            case .updateChannel: return backup.updateChannel != nil ? 1 : 0
+            case .preferences: return backup.preferences.nonNilCount
+            }
+        }
+    }
+
+    /// Returns a copy of `backup` with every category not in `categories`
+    /// emptied out, so `importBackup`/`saveToFile` only see the data the user
+    /// chose to include.
+    static func filtered(_ backup: SettingsBackup, to categories: Set<Category>) -> SettingsBackup {
+        SettingsBackup(
+            schemaVersion: backup.schemaVersion,
+            exportedAt: backup.exportedAt,
+            appVersion: backup.appVersion,
+            workflows: categories.contains(.workflows) ? backup.workflows : [],
+            dictionaryEntries: categories.contains(.dictionary) ? backup.dictionaryEntries : [],
+            snippets: categories.contains(.snippets) ? backup.snippets : [],
+            promptActions: categories.contains(.promptActions) ? backup.promptActions : [],
+            profiles: categories.contains(.profiles) ? backup.profiles : [],
+            hotkeys: categories.contains(.hotkeys) ? backup.hotkeys : [:],
+            plugins: categories.contains(.plugins) ? backup.plugins : [],
+            history: categories.contains(.history) ? backup.history : [],
+            updateChannel: categories.contains(.updateChannel) ? backup.updateChannel : nil,
+            preferences: categories.contains(.preferences) ? backup.preferences : .empty
+        )
     }
 
     // MARK: - Export

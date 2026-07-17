@@ -426,6 +426,7 @@
 		AA00000000000000000282 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000039 /* TypeWhisperPluginSDK */; };
 		AA00000000000000000283 /* DictionaryExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000271 /* DictionaryExporter.swift */; };
 		E8F50D027F7C4DFC85654843 /* SettingsBackupExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D819323529246BCB5504526 /* SettingsBackupExporter.swift */; };
+		FD820ED0B906A3726F67AE2B /* BackupRestoreSheets.swift in Sources */ = {isa = PBXBuildFile; fileRef = 80D4B3EC073903070769CBC4 /* BackupRestoreSheets.swift */; };
 		AA00000000000000000284 /* TermPackRegistryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000272 /* TermPackRegistryService.swift */; };
 		AA00000000000000000285 /* MediaPlaybackService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000273 /* MediaPlaybackService.swift */; };
 		AA00000000000000000286 /* MediaRemoteAdapter in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000040 /* MediaRemoteAdapter */; };
@@ -942,6 +943,7 @@
 		BB00000000000000000266 /* ElevenLabsPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ElevenLabsPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB00000000000000000271 /* DictionaryExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictionaryExporter.swift; sourceTree = "<group>"; };
 		8D819323529246BCB5504526 /* SettingsBackupExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsBackupExporter.swift; sourceTree = "<group>"; };
+		80D4B3EC073903070769CBC4 /* BackupRestoreSheets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackupRestoreSheets.swift; sourceTree = "<group>"; };
 		BB00000000000000000272 /* TermPackRegistryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TermPackRegistryService.swift; sourceTree = "<group>"; };
 		BB00000000000000000273 /* MediaPlaybackService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaPlaybackService.swift; sourceTree = "<group>"; };
 		A8D4F2B6E1C3097B5F8A4E62 /* DictionaryExporterTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DictionaryExporterTests.swift; sourceTree = "<group>"; };
@@ -1645,6 +1647,7 @@
 				C1F000000000000000000008 /* PremiumSettingsView.swift */,
 				BB00000000000000000359 /* WorkflowsSettingsView.swift */,
 				BB00000000000000000046 /* AdvancedSettingsView.swift */,
+				80D4B3EC073903070769CBC4 /* BackupRestoreSheets.swift */,
 				BB00000000000000000051 /* GeneralSettingsView.swift */,
 				BB00000000000000000340 /* SpokenPunctuationSettingsSection.swift */,
 				B40800000000000000000001 /* LanguageSelectionEditor.swift */,
@@ -3947,6 +3950,7 @@
 				A91F00000000000000000002 /* RecentTranscriptionStore.swift in Sources */,
 				AA00000000000000000283 /* DictionaryExporter.swift in Sources */,
 				E8F50D027F7C4DFC85654843 /* SettingsBackupExporter.swift in Sources */,
+				FD820ED0B906A3726F67AE2B /* BackupRestoreSheets.swift in Sources */,
 				AA00000000000000000284 /* TermPackRegistryService.swift in Sources */,
 				AA00000000000000000051 /* GeneralSettingsView.swift in Sources */,
 				A40800000000000000000001 /* LanguageSelectionEditor.swift in Sources */,

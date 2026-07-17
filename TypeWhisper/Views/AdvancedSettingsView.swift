@@ -24,6 +24,9 @@ struct AdvancedSettingsView: View {
     @State private var showBackupImportResult = false
     @State private var backupImportResultMessage = ""
     @State private var isImportingBackup = false
+    @State private var showExportSheet = false
+    @State private var exportBackupDraft: SettingsBackupExporter.SettingsBackup?
+    @State private var showImportSheet = false
 
     @AppStorage(UserDefaultsKeys.historyEnabled) private var historyEnabled: Bool = true
     @AppStorage(UserDefaultsKeys.historyRetentionDays) private var historyRetentionDays: Int = 0
@@ -54,7 +57,7 @@ struct AdvancedSettingsView: View {
             Section(localizedAppText("Backup & Restore", de: "Sicherung & Wiederherstellung")) {
                 HStack {
                     Button {
-                        performBackupExport()
+                        beginExport()
                     } label: {
                         Label(
                             localizedAppText("Export Settings…", de: "Einstellungen exportieren…"),
@@ -64,11 +67,7 @@ struct AdvancedSettingsView: View {
                     .disabled(isImportingBackup)
 
                     Button {
-                        isImportingBackup = true
-                        Task {
-                            await performBackupImport()
-                            isImportingBackup = false
-                        }
+                        showImportSheet = true
                     } label: {
                         Label(
                             localizedAppText("Import Settings…", de: "Einstellungen importieren…"),
@@ -513,6 +512,22 @@ struct AdvancedSettingsView: View {
         } message: {
             Text(backupImportResultMessage)
         }
+        .sheet(isPresented: $showExportSheet) {
+            if let exportBackupDraft {
+                BackupExportSheet(backup: exportBackupDraft) { categories in
+                    performBackupExport(exportBackupDraft, categories: categories)
+                }
+            }
+        }
+        .sheet(isPresented: $showImportSheet) {
+            BackupImportSheet { backup, categories in
+                isImportingBackup = true
+                Task {
+                    await performBackupImport(backup, categories: categories)
+                    isImportingBackup = false
+                }
+            }
+        }
     }
 
     // MARK: - Examples
@@ -599,10 +614,13 @@ struct AdvancedSettingsView: View {
 
     // MARK: - Backup & Restore
 
-    private func performBackupExport() {
-        guard let url = SettingsBackupExporter.presentSavePanel() else { return }
+    /// Builds a snapshot of the current live state and opens the category
+    /// selection sheet. The backup is built eagerly (rather than in the
+    /// sheet's `onExport` callback) so the sheet can show per-category counts
+    /// right away.
+    private func beginExport() {
         let container = ServiceContainer.shared
-        let backup = SettingsBackupExporter.buildBackup(
+        exportBackupDraft = SettingsBackupExporter.buildBackup(
             workflowService: container.workflowService,
             dictionaryService: container.dictionaryService,
             snippetService: container.snippetService,
@@ -611,40 +629,36 @@ struct AdvancedSettingsView: View {
             pluginManager: container.pluginManager,
             historyService: container.historyService
         )
+        showExportSheet = true
+    }
+
+    private func performBackupExport(_ backup: SettingsBackupExporter.SettingsBackup, categories: Set<SettingsBackupExporter.Category>) {
+        guard let url = SettingsBackupExporter.presentSavePanel() else { return }
         do {
-            try SettingsBackupExporter.saveToFile(backup, to: url)
+            try SettingsBackupExporter.saveToFile(SettingsBackupExporter.filtered(backup, to: categories), to: url)
         } catch {
             backupErrorMessage = error.localizedDescription
             showBackupError = true
         }
     }
 
-    private func performBackupImport() async {
-        guard let url = SettingsBackupExporter.presentOpenPanel() else { return }
-        do {
-            let data = try Data(contentsOf: url)
-            let backup = try SettingsBackupExporter.parse(data)
+    private func performBackupImport(_ backup: SettingsBackupExporter.SettingsBackup, categories: Set<SettingsBackupExporter.Category>) async {
+        let container = ServiceContainer.shared
+        let result = await SettingsBackupExporter.importBackup(
+            SettingsBackupExporter.filtered(backup, to: categories),
+            workflowService: container.workflowService,
+            dictionaryService: container.dictionaryService,
+            snippetService: container.snippetService,
+            profileService: container.profileService,
+            promptActionService: container.promptActionService,
+            pluginManager: container.pluginManager,
+            pluginRegistryService: container.pluginRegistryService,
+            historyService: container.historyService,
+            usageStatisticsService: container.usageStatisticsService
+        )
 
-            let container = ServiceContainer.shared
-            let result = await SettingsBackupExporter.importBackup(
-                backup,
-                workflowService: container.workflowService,
-                dictionaryService: container.dictionaryService,
-                snippetService: container.snippetService,
-                profileService: container.profileService,
-                promptActionService: container.promptActionService,
-                pluginManager: container.pluginManager,
-                pluginRegistryService: container.pluginRegistryService,
-                historyService: container.historyService,
-                usageStatisticsService: container.usageStatisticsService
-            )
-
-            backupImportResultMessage = backupImportSummary(result)
-            showBackupImportResult = true
-        } catch {
-            backupErrorMessage = error.localizedDescription
-            showBackupError = true
-        }
+        backupImportResultMessage = backupImportSummary(result)
+        showBackupImportResult = true
     }
 
     private func backupImportSummary(_ result: SettingsBackupExporter.ImportResult) -> String {
