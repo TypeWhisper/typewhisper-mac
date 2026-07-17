@@ -612,6 +612,19 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
     @Published private(set) var micLevel: Float = 0
     @Published private(set) var systemLevel: Float = 0
     @Published private(set) var systemAudioWarningMessage: String?
+
+    /// Caps how often `micLevel`/`systemLevel` are actually published while
+    /// recording. Audio buffers can arrive tens of times per second (mic
+    /// taps) or even faster (system audio via ScreenCaptureKit, OS-paced),
+    /// and each unthrottled `@Published` write triggers a SwiftUI re-render
+    /// plus a Core Animation commit in every indicator view observing this
+    /// service. Left unthrottled, that flood of main-run-loop work starves
+    /// the queue used to deliver discrete `NSEvent.scrollWheel` ticks,
+    /// making menus/lists feel laggy under mouse-wheel scrolling while
+    /// recording (scrollbar-thumb dragging is unaffected, since AppKit just
+    /// re-samples the mouse position on each pass of its own tracking loop
+    /// instead of draining a backlog of discrete events).
+    private let micLevelThrottle = LevelPublishThrottle()
     var recordingsDirectoryOverride: URL?
     var startRecordingOverride: ((
         _ micEnabled: Bool,
@@ -1092,8 +1105,10 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
                 let samples = UnsafeBufferPointer(start: channelData, count: Int(writeBuffer.frameLength))
                 let rms = sqrt(samples.reduce(0) { $0 + $1 * $1 } / Float(samples.count))
                 let level = min(1.0, rms * 5)
-                DispatchQueue.main.async {
-                    self.micLevel = level
+                if self.micLevelThrottle.shouldPublish() {
+                    DispatchQueue.main.async {
+                        self.micLevel = level
+                    }
                 }
             }
 
@@ -1183,8 +1198,10 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
                 let samples = UnsafeBufferPointer(start: channelData, count: Int(writeBuffer.frameLength))
                 let rms = sqrt(samples.reduce(0) { $0 + $1 * $1 } / Float(max(samples.count, 1)))
                 let level = min(1.0, rms * 5)
-                DispatchQueue.main.async {
-                    self.micLevel = level
+                if self.micLevelThrottle.shouldPublish() {
+                    DispatchQueue.main.async {
+                        self.micLevel = level
+                    }
                 }
             }
 
@@ -1788,15 +1805,44 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
 
 private final class SystemLevelSetter: @unchecked Sendable {
     private weak var service: AudioRecorderService?
+    private let throttle = LevelPublishThrottle()
 
     init(service: AudioRecorderService) {
         self.service = service
     }
 
     func setLevel(_ level: Float) {
+        guard throttle.shouldPublish() else { return }
         DispatchQueue.main.async { [weak service] in
             service?.updateSystemLevel(level)
         }
+    }
+}
+
+// MARK: - Level Publish Throttle
+
+/// Caps a value stream to at most one publish per `minInterval`, dropping
+/// (not queueing) intermediate values — appropriate for a UI level meter
+/// where only the latest reading matters. Thread-safe so it can be checked
+/// from the background audio/capture callback queues that produce levels.
+private final class LevelPublishThrottle: @unchecked Sendable {
+    private let minInterval: TimeInterval
+    private let lock = NSLock()
+    private var lastPublish: TimeInterval = 0
+
+    /// Defaults to ~30 Hz — smooth enough for a level meter while staying
+    /// well clear of the main-run-loop contention that unthrottled
+    /// buffer-rate publishing causes (see `micLevelThrottle` for details).
+    init(minInterval: TimeInterval = 1.0 / 30.0) {
+        self.minInterval = minInterval
+    }
+
+    func shouldPublish(now: TimeInterval = CFAbsoluteTimeGetCurrent()) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard now - lastPublish >= minInterval else { return false }
+        lastPublish = now
+        return true
     }
 }
 
