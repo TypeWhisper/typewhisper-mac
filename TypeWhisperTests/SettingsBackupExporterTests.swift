@@ -523,8 +523,10 @@ final class SettingsBackupExporterTests: XCTestCase {
         XCTAssertEqual(SettingsBackupExporter.Category.count(.workflows, in: backup), 1)
         XCTAssertEqual(SettingsBackupExporter.Category.count(.dictionary, in: backup), 1)
         XCTAssertEqual(SettingsBackupExporter.Category.count(.snippets, in: backup), 0)
-        XCTAssertEqual(SettingsBackupExporter.Category.count(.updateChannel, in: backup), 1)
-        // At least selectedLanguage; some UserDefaults suites in this environment
+        // The update channel is folded into the Preferences category rather than
+        // being its own selectable entry, so it contributes to the preferences count.
+        XCTAssertEqual(backup.updateChannel, AppConstants.ReleaseChannel.daily.rawValue)
+        // At least selectedLanguage + the update channel; some UserDefaults suites in this environment
         // also surface a non-nil dockIconBehaviorWhenMenuBarHidden by default (see
         // testUpdateChannelAndPreferencesRoundTrip), so this isn't pinned to 1.
         XCTAssertGreaterThanOrEqual(SettingsBackupExporter.Category.count(.preferences, in: backup), 1)

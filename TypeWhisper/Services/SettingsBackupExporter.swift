@@ -297,7 +297,7 @@ enum SettingsBackupExporter {
     /// One row in the export/import category-selection sheets. Cases are
     /// ordered to match the display order in those sheets.
     enum Category: String, CaseIterable, Identifiable, Hashable {
-        case workflows, dictionary, snippets, profiles, promptActions, hotkeys, plugins, history, updateChannel, preferences
+        case workflows, dictionary, snippets, profiles, promptActions, hotkeys, plugins, history, preferences
 
         var id: String { rawValue }
 
@@ -311,7 +311,6 @@ enum SettingsBackupExporter {
             case .hotkeys: return String(localized: "Hotkeys")
             case .plugins: return String(localized: "Plugins")
             case .history: return String(localized: "History")
-            case .updateChannel: return localizedAppText("Update Channel", de: "Update-Kanal")
             case .preferences: return String(localized: "Preferences")
             }
         }
@@ -326,7 +325,6 @@ enum SettingsBackupExporter {
             case .hotkeys: return "keyboard.fill"
             case .plugins: return "puzzlepiece.extension.fill"
             case .history: return "clock.arrow.circlepath"
-            case .updateChannel: return "arrow.triangle.2.circlepath"
             case .preferences: return "slider.horizontal.3"
             }
         }
@@ -344,11 +342,7 @@ enum SettingsBackupExporter {
                     de: "Installierte Community-Plugins. Die Neuinstallation erfordert eine Internetverbindung und lädt die aktuelle Marketplace-Version."
                 )
             case .history: return String(localized: "Transcription history text and metadata. Saved audio is never included.")
-            case .updateChannel: return localizedAppText(
-                    "The selected Sparkle update channel (e.g. stable or beta).",
-                    de: "Der ausgewählte Sparkle-Update-Kanal (z. B. stabil oder Beta)."
-                )
-            case .preferences: return String(localized: "Portable preferences from the General, Dictation, Dictation Recovery, File Transcription, and Recorder tabs.")
+            case .preferences: return String(localized: "Portable preferences from the General, Dictation, Dictation Recovery, File Transcription, and Recorder tabs, plus the selected update channel.")
             }
         }
 
@@ -362,8 +356,7 @@ enum SettingsBackupExporter {
             case .hotkeys: return backup.hotkeys.values.reduce(0) { $0 + $1.count }
             case .plugins: return backup.plugins.count
             case .history: return backup.history.count
-            case .updateChannel: return backup.updateChannel != nil ? 1 : 0
-            case .preferences: return backup.preferences.nonNilCount
+            case .preferences: return backup.preferences.nonNilCount + (backup.updateChannel != nil ? 1 : 0)
             }
         }
     }
@@ -411,7 +404,7 @@ enum SettingsBackupExporter {
             hotkeys: categories.contains(.hotkeys) ? backup.hotkeys : [:],
             plugins: plugins,
             history: categories.contains(.history) ? backup.history : [],
-            updateChannel: categories.contains(.updateChannel) ? backup.updateChannel : nil,
+            updateChannel: categories.contains(.preferences) ? backup.updateChannel : nil,
             preferences: categories.contains(.preferences) ? backup.preferences : .empty
         )
     }
