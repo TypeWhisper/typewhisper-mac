@@ -120,7 +120,12 @@ struct OverlayIndicatorView: View {
         .preferredColorScheme(.dark)
         .animation(.easeInOut(duration: 0.3), value: textExpanded)
         .animation(.easeInOut(duration: 0.2), value: presentation.state)
-        .animation(.linear(duration: 0.025), value: presentation.audioLevel)
+        // Matches the ~30 Hz (33ms) level-publish throttle shared by both
+        // audio level sources (AudioRecordingService's dictation pipeline and
+        // AudioRecorderService's Recorder tab) — a shorter duration here
+        // finishes each segment before the next value lands, producing a
+        // tiny stutter instead of a continuous glide.
+        .animation(.linear(duration: 0.033), value: presentation.audioLevel)
         .onChange(of: presentation.partialText) {
             expandTranscriptPreviewIfNeeded()
         }

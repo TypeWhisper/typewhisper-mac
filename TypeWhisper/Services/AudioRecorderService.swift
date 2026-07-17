@@ -1105,10 +1105,8 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
                 let samples = UnsafeBufferPointer(start: channelData, count: Int(writeBuffer.frameLength))
                 let rms = sqrt(samples.reduce(0) { $0 + $1 * $1 } / Float(samples.count))
                 let level = min(1.0, rms * 5)
-                if self.micLevelThrottle.shouldPublish() {
-                    DispatchQueue.main.async {
-                        self.micLevel = level
-                    }
+                self.micLevelThrottle.publish(level) { [weak self] level in
+                    self?.micLevel = level
                 }
             }
 
@@ -1198,10 +1196,8 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
                 let samples = UnsafeBufferPointer(start: channelData, count: Int(writeBuffer.frameLength))
                 let rms = sqrt(samples.reduce(0) { $0 + $1 * $1 } / Float(max(samples.count, 1)))
                 let level = min(1.0, rms * 5)
-                if self.micLevelThrottle.shouldPublish() {
-                    DispatchQueue.main.async {
-                        self.micLevel = level
-                    }
+                self.micLevelThrottle.publish(level) { [weak self] level in
+                    self?.micLevel = level
                 }
             }
 
@@ -1812,8 +1808,7 @@ private final class SystemLevelSetter: @unchecked Sendable {
     }
 
     func setLevel(_ level: Float) {
-        guard throttle.shouldPublish() else { return }
-        DispatchQueue.main.async { [weak service] in
+        throttle.publish(level) { [weak service] level in
             service?.updateSystemLevel(level)
         }
     }
@@ -1821,28 +1816,81 @@ private final class SystemLevelSetter: @unchecked Sendable {
 
 // MARK: - Level Publish Throttle
 
-/// Caps a value stream to at most one publish per `minInterval`, dropping
-/// (not queueing) intermediate values — appropriate for a UI level meter
-/// where only the latest reading matters. Thread-safe so it can be checked
-/// from the background audio/capture callback queues that produce levels.
+/// Caps a value stream to at most one publish per `minInterval` — appropriate
+/// for a UI level meter, where only the latest reading matters. Unlike a
+/// naive throttle, a value that arrives inside the window is never silently
+/// lost: it's held as `pending` and flushed once the window closes, so the
+/// meter can't get stuck showing a stale reading if buffers happen to stop
+/// arriving right after a drop. Thread-safe so it can be called from the
+/// background audio/capture callback queues that produce levels.
+///
+/// Mirrors the equivalent `publishAudioLevel`/`flushPendingAudioLevelUpdate`
+/// pattern already used at the same ~30 Hz cadence for the dictation audio
+/// pipeline in `AudioRecordingService.swift`. Not shared into one type since
+/// the two host services have unrelated lifecycles and this fix intentionally
+/// stays scoped to the Recorder path that was reported laggy — worth
+/// extracting if a third caller shows up.
 private final class LevelPublishThrottle: @unchecked Sendable {
-    private let minInterval: TimeInterval
+    private let minIntervalNanoseconds: UInt64
     private let lock = NSLock()
-    private var lastPublish: TimeInterval = 0
+    private var lastPublishUptimeNanoseconds: UInt64 = 0
+    private var pendingValue: Float?
 
     /// Defaults to ~30 Hz — smooth enough for a level meter while staying
     /// well clear of the main-run-loop contention that unthrottled
     /// buffer-rate publishing causes (see `micLevelThrottle` for details).
     init(minInterval: TimeInterval = 1.0 / 30.0) {
-        self.minInterval = minInterval
+        self.minIntervalNanoseconds = UInt64(minInterval * 1_000_000_000)
     }
 
-    func shouldPublish(now: TimeInterval = CFAbsoluteTimeGetCurrent()) -> Bool {
+    /// Publishes `value` on the main queue via `deliver`, immediately if
+    /// outside the throttle window, or after the remainder of the window
+    /// elapses otherwise. Uses `DispatchTime.uptimeNanoseconds` (monotonic)
+    /// rather than wall-clock time, since a wall-clock adjustment (NTP sync,
+    /// manual clock change, DST) moving backward mid-recording would
+    /// otherwise make the elapsed-time check permanently fail and freeze the
+    /// meter until wall-clock time caught back up.
+    func publish(_ value: Float, deliver: @escaping @Sendable (Float) -> Void) {
+        let now = DispatchTime.now().uptimeNanoseconds
+        var publishImmediately = false
+        var flushDelayNanoseconds: UInt64?
+
         lock.lock()
-        defer { lock.unlock() }
-        guard now - lastPublish >= minInterval else { return false }
-        lastPublish = now
-        return true
+        let elapsed = now &- lastPublishUptimeNanoseconds
+        if lastPublishUptimeNanoseconds == 0 || elapsed >= minIntervalNanoseconds {
+            lastPublishUptimeNanoseconds = now
+            pendingValue = nil
+            publishImmediately = true
+        } else {
+            let alreadyScheduled = pendingValue != nil
+            pendingValue = value
+            if !alreadyScheduled {
+                flushDelayNanoseconds = minIntervalNanoseconds - elapsed
+            }
+        }
+        lock.unlock()
+
+        if publishImmediately {
+            DispatchQueue.main.async { deliver(value) }
+        }
+        if let flushDelayNanoseconds {
+            DispatchQueue.main.asyncAfter(deadline: .now() + .nanoseconds(Int(flushDelayNanoseconds))) { [weak self] in
+                self?.flushPending(deliver: deliver)
+            }
+        }
+    }
+
+    private func flushPending(deliver: @Sendable (Float) -> Void) {
+        lock.lock()
+        let value = pendingValue
+        pendingValue = nil
+        if value != nil {
+            lastPublishUptimeNanoseconds = DispatchTime.now().uptimeNanoseconds
+        }
+        lock.unlock()
+
+        guard let value else { return }
+        deliver(value)
     }
 }
 
