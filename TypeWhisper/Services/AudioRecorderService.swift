@@ -1854,6 +1854,7 @@ private final class LevelPublishThrottle: @unchecked Sendable {
     private let lock = NSLock()
     private var lastPublishUptimeNanoseconds: UInt64 = 0
     private var pendingValue: Float?
+    private var scheduledWork: DispatchWorkItem?
 
     /// Defaults to ~30 Hz — smooth enough for a level meter while staying
     /// well clear of the main-run-loop contention that unthrottled
@@ -1862,70 +1863,82 @@ private final class LevelPublishThrottle: @unchecked Sendable {
         self.minIntervalNanoseconds = UInt64(minInterval * 1_000_000_000)
     }
 
-    /// Publishes `value` on the main queue via `deliver`, immediately if
-    /// outside the throttle window, or after the remainder of the window
-    /// elapses otherwise. Uses `DispatchTime.uptimeNanoseconds` (monotonic)
-    /// rather than wall-clock time, since a wall-clock adjustment (NTP sync,
-    /// manual clock change, DST) moving backward mid-recording would
-    /// otherwise make the elapsed-time check permanently fail and freeze the
-    /// meter until wall-clock time caught back up.
+    /// Publishes `value` on the main queue via `deliver`. At most one
+    /// delivery is ever scheduled on the main queue at a time: if one is
+    /// already pending (immediate or delayed), this call just replaces the
+    /// value it will eventually carry instead of scheduling a second one.
+    ///
+    /// A prior version scheduled an "immediate" `.async` block and a delayed
+    /// `.asyncAfter` flush as two independent main-queue submissions, and
+    /// stamped `lastPublishUptimeNanoseconds` at decision time rather than
+    /// actual delivery time. Under main-queue congestion past a throttle
+    /// window, later `publish()` calls could see enough elapsed time to take
+    /// the "immediate" path again — enqueuing their own block — while an
+    /// older delayed flush was still sitting in the queue; GCD gives no
+    /// ordering guarantee between two independently-submitted blocks once
+    /// both are eligible to run, so they could execute in either order and
+    /// deliver values out of sequence (e.g. inputs 1,2,3,4 arriving as
+    /// 1,4,3). Coalescing to a single scheduled work item removes the
+    /// second submission entirely, so there's nothing left to reorder.
     func publish(_ value: Float, deliver: @escaping @Sendable (Float) -> Void) {
-        var publishImmediately = false
-        var flushDelayNanoseconds: UInt64?
-
         lock.lock()
+        pendingValue = value
+        guard scheduledWork == nil else {
+            lock.unlock()
+            return
+        }
+
         // Sampled under the lock, not before it: if `now` were captured
-        // first, a concurrent `flushPending` could advance
+        // first, a concurrent delivery could advance
         // `lastPublishUptimeNanoseconds` past this (now-stale) `now` while
         // this call was waiting on the lock, making the unsigned subtraction
         // below underflow/wrap to a huge value and slip an extra publish
         // through inside the throttle window.
         let now = DispatchTime.now().uptimeNanoseconds
         let elapsed = now &- lastPublishUptimeNanoseconds
-        if lastPublishUptimeNanoseconds == 0 || elapsed >= minIntervalNanoseconds {
-            lastPublishUptimeNanoseconds = now
-            pendingValue = nil
-            publishImmediately = true
-        } else {
-            let alreadyScheduled = pendingValue != nil
-            pendingValue = value
-            if !alreadyScheduled {
-                flushDelayNanoseconds = minIntervalNanoseconds - elapsed
-            }
+        let delayNanoseconds = (lastPublishUptimeNanoseconds == 0 || elapsed >= minIntervalNanoseconds)
+            ? 0
+            : minIntervalNanoseconds - elapsed
+
+        let work = DispatchWorkItem { [weak self] in
+            self?.deliverPending(deliver: deliver)
         }
+        scheduledWork = work
         lock.unlock()
 
-        if publishImmediately {
-            DispatchQueue.main.async { deliver(value) }
-        }
-        if let flushDelayNanoseconds {
-            DispatchQueue.main.asyncAfter(deadline: .now() + .nanoseconds(Int(flushDelayNanoseconds))) { [weak self] in
-                self?.flushPending(deliver: deliver)
-            }
+        if delayNanoseconds == 0 {
+            DispatchQueue.main.async(execute: work)
+        } else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + .nanoseconds(Int(delayNanoseconds)), execute: work)
         }
     }
 
-    private func flushPending(deliver: @Sendable (Float) -> Void) {
+    private func deliverPending(deliver: @Sendable (Float) -> Void) {
         lock.lock()
         let value = pendingValue
         pendingValue = nil
-        if value != nil {
-            lastPublishUptimeNanoseconds = DispatchTime.now().uptimeNanoseconds
-        }
+        scheduledWork = nil
+        // Stamped at actual delivery time, not when the work item was
+        // scheduled — the whole point of coalescing is that those two
+        // moments can now be far apart under main-queue congestion.
+        lastPublishUptimeNanoseconds = DispatchTime.now().uptimeNanoseconds
         lock.unlock()
 
         guard let value else { return }
         deliver(value)
     }
 
-    /// Clears any pending value and rearms the throttle to publish
-    /// immediately next time. Call this when a recording session ends and
-    /// its level is explicitly reset to 0 — without it, a flush already
-    /// scheduled from a value received just before the stop would otherwise
-    /// still fire afterward and restore a stale nonzero reading.
+    /// Clears any pending value, cancels an already-scheduled delivery so it
+    /// can't fire, and rearms the throttle to publish immediately next time.
+    /// Call this when a recording session ends and its level is explicitly
+    /// reset to 0 — without it, a delivery already scheduled from a value
+    /// received just before the stop would otherwise still fire afterward
+    /// and restore a stale nonzero reading.
     func reset() {
         lock.lock()
         pendingValue = nil
+        scheduledWork?.cancel()
+        scheduledWork = nil
         lastPublishUptimeNanoseconds = 0
         lock.unlock()
     }
