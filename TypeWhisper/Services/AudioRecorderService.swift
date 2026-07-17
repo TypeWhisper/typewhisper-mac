@@ -646,6 +646,7 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
     private let micFileLock = OSAllocatedUnfairLock<AVAudioFile?>(initialState: nil)
     private var scStream: SCStream?
     private var streamOutput: SystemAudioStreamOutput?
+    private var systemLevelSetter: SystemLevelSetter?
     private let sysFileLock = OSAllocatedUnfairLock<AVAudioFile?>(initialState: nil)
     private var durationTimer: Timer?
     private var startTime: Date?
@@ -931,6 +932,13 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         systemTempURL = nil
         finalOutputURL = nil
         startTime = nil
+
+        // Must happen before the reset below: an already-scheduled flush
+        // from a value received just before this stop would otherwise still
+        // land afterward and restore a stale nonzero reading.
+        micLevelThrottle.reset()
+        systemLevelSetter?.reset()
+        systemLevelSetter = nil
 
         DispatchQueue.main.async {
             self.isRecording = false
@@ -1344,6 +1352,7 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         let output = SystemAudioStreamOutput()
         output.fileLock = sysFileLock
         let levelSetter = SystemLevelSetter(service: self)
+        systemLevelSetter = levelSetter
         output.levelCallback = { level in
             levelSetter.setLevel(level)
         }
@@ -1788,6 +1797,11 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         finalOutputURL = nil
         transcriptionBufferLock.withLock { $0.reset() }
 
+        // See the matching comment in stopCapture().
+        micLevelThrottle.reset()
+        systemLevelSetter?.reset()
+        systemLevelSetter = nil
+
         DispatchQueue.main.async {
             self.isRecording = false
             self.duration = 0
@@ -1811,6 +1825,11 @@ private final class SystemLevelSetter: @unchecked Sendable {
         throttle.publish(level) { [weak service] level in
             service?.updateSystemLevel(level)
         }
+    }
+
+    /// See `LevelPublishThrottle.reset()`.
+    func reset() {
+        throttle.reset()
     }
 }
 
@@ -1851,11 +1870,17 @@ private final class LevelPublishThrottle: @unchecked Sendable {
     /// otherwise make the elapsed-time check permanently fail and freeze the
     /// meter until wall-clock time caught back up.
     func publish(_ value: Float, deliver: @escaping @Sendable (Float) -> Void) {
-        let now = DispatchTime.now().uptimeNanoseconds
         var publishImmediately = false
         var flushDelayNanoseconds: UInt64?
 
         lock.lock()
+        // Sampled under the lock, not before it: if `now` were captured
+        // first, a concurrent `flushPending` could advance
+        // `lastPublishUptimeNanoseconds` past this (now-stale) `now` while
+        // this call was waiting on the lock, making the unsigned subtraction
+        // below underflow/wrap to a huge value and slip an extra publish
+        // through inside the throttle window.
+        let now = DispatchTime.now().uptimeNanoseconds
         let elapsed = now &- lastPublishUptimeNanoseconds
         if lastPublishUptimeNanoseconds == 0 || elapsed >= minIntervalNanoseconds {
             lastPublishUptimeNanoseconds = now
@@ -1891,6 +1916,18 @@ private final class LevelPublishThrottle: @unchecked Sendable {
 
         guard let value else { return }
         deliver(value)
+    }
+
+    /// Clears any pending value and rearms the throttle to publish
+    /// immediately next time. Call this when a recording session ends and
+    /// its level is explicitly reset to 0 — without it, a flush already
+    /// scheduled from a value received just before the stop would otherwise
+    /// still fire afterward and restore a stale nonzero reading.
+    func reset() {
+        lock.lock()
+        pendingValue = nil
+        lastPublishUptimeNanoseconds = 0
+        lock.unlock()
     }
 }
 
