@@ -90,7 +90,8 @@ final class AssemblyAIPlugin: NSObject, StructuredTranscriptionEnginePlugin, Dic
     }
 
     var supportsTranslation: Bool { false }
-    var supportsStreaming: Bool { true }
+    // AssemblyAI's streaming API does not return the speaker metadata preserved by the structured REST path.
+    var supportsStreaming: Bool { !_speakerDiarizationEnabled }
     var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
     var dictionaryTermsBudget: DictionaryTermsBudget { Self.dictionaryTermsBudget(for: _selectedModelId) }
     var isSpeakerDiarizationEnabled: Bool { _speakerDiarizationEnabled }

@@ -16,12 +16,22 @@ final class AssemblyAIPluginTests: XCTestCase {
         plugin.activate(host: host)
 
         XCTAssertFalse(plugin.isSpeakerDiarizationEnabled)
+        XCTAssertTrue(plugin.supportsStreaming)
 
         plugin.setSpeakerDiarizationEnabled(true)
 
         XCTAssertTrue(plugin.isSpeakerDiarizationEnabled)
+        XCTAssertFalse(plugin.supportsStreaming)
         XCTAssertEqual(host.userDefault(forKey: AssemblyAIPlugin.speakerDiarizationEnabledKey) as? Bool, true)
         XCTAssertEqual(host.capabilitiesChangedCount, 1)
+
+        plugin.setSpeakerDiarizationEnabled(true)
+        XCTAssertEqual(host.capabilitiesChangedCount, 1)
+
+        let reloadedPlugin = AssemblyAIPlugin()
+        reloadedPlugin.activate(host: host)
+        XCTAssertTrue(reloadedPlugin.isSpeakerDiarizationEnabled)
+        XCTAssertFalse(reloadedPlugin.supportsStreaming)
     }
 
     func testSubmitBodyIncludesSpeakerLabelsOnlyWhenEnabled() {
@@ -94,6 +104,66 @@ final class AssemblyAIPluginTests: XCTestCase {
         XCTAssertEqual(result.text, "plain transcript")
         XCTAssertEqual(result.detectedLanguage, "de")
         XCTAssertTrue(result.segments.isEmpty)
+    }
+
+    func testDiarizationRESTTranscriptionPreservesMultipleSpeakers() async throws {
+        let host = try PluginTestHostServices(secrets: ["api-key": "assembly-key"])
+        let plugin = AssemblyAIPlugin()
+        plugin.activate(host: host)
+        plugin.setSpeakerDiarizationEnabled(true)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"upload_url":"https://cdn.example.test/audio.m4a"}"#.utf8),
+                    Self.httpResponse(url: "https://api.assemblyai.com/v2/upload", statusCode: 200)
+                ),
+                .success(
+                    Data(#"{"id":"transcript_diarized"}"#.utf8),
+                    Self.httpResponse(url: "https://api.assemblyai.com/v2/transcript", statusCode: 200)
+                ),
+                .success(
+                    Data(
+                        #"""
+                        {
+                          "status": "completed",
+                          "text": "fallback text",
+                          "language_code": "en",
+                          "utterances": [
+                            {"speaker":"A","text":"Hello","start":0,"end":900,"confidence":0.97},
+                            {"speaker":"B","text":"Hi","start":900,"end":1500,"confidence":0.91}
+                          ]
+                        }
+                        """#.utf8
+                    ),
+                    Self.httpResponse(
+                        url: "https://api.assemblyai.com/v2/transcript/transcript_diarized",
+                        statusCode: 200
+                    )
+                ),
+            ])
+        }
+
+        let samples = [Float](repeating: 0.1, count: 16_000)
+        let audio = AudioData(samples: samples, wavData: PluginWavEncoder.encode(samples), duration: 1.0)
+        let result = try await plugin.transcribeStructured(
+            audio: audio,
+            language: "en",
+            translate: false,
+            prompt: "TypeWhisper"
+        )
+
+        XCTAssertFalse(plugin.supportsStreaming)
+        XCTAssertEqual(result.text, "Speaker A: Hello\nSpeaker B: Hi")
+        XCTAssertEqual(result.segments.map(\.speakerLabel), ["Speaker A", "Speaker B"])
+        XCTAssertEqual(result.segments.map(\.speakerConfidence), [0.97, 0.91])
+
+        let requests = try XCTUnwrap(store.sessions.first?.requestedRequests)
+        let submitBody = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: try XCTUnwrap(requests[1].httpBody)) as? [String: Any]
+        )
+        XCTAssertEqual(submitBody["speaker_labels"] as? Bool, true)
     }
 
     func testRESTTranscriptionUploadsCompressedM4A() async throws {
