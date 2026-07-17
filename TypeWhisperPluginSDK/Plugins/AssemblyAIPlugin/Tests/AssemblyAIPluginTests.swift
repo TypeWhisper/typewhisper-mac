@@ -16,12 +16,22 @@ final class AssemblyAIPluginTests: XCTestCase {
         plugin.activate(host: host)
 
         XCTAssertFalse(plugin.isSpeakerDiarizationEnabled)
+        XCTAssertTrue(plugin.supportsStreaming)
 
         plugin.setSpeakerDiarizationEnabled(true)
 
         XCTAssertTrue(plugin.isSpeakerDiarizationEnabled)
+        XCTAssertFalse(plugin.supportsStreaming)
         XCTAssertEqual(host.userDefault(forKey: AssemblyAIPlugin.speakerDiarizationEnabledKey) as? Bool, true)
         XCTAssertEqual(host.capabilitiesChangedCount, 1)
+
+        plugin.setSpeakerDiarizationEnabled(true)
+        XCTAssertEqual(host.capabilitiesChangedCount, 1)
+
+        let reloadedPlugin = AssemblyAIPlugin()
+        reloadedPlugin.activate(host: host)
+        XCTAssertTrue(reloadedPlugin.isSpeakerDiarizationEnabled)
+        XCTAssertFalse(reloadedPlugin.supportsStreaming)
     }
 
     func testSubmitBodyIncludesSpeakerLabelsOnlyWhenEnabled() {
