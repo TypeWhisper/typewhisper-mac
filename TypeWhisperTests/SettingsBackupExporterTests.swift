@@ -420,4 +420,65 @@ final class SettingsBackupExporterTests: XCTestCase {
         XCTAssertEqual(importedRecord.timestamp.timeIntervalSince1970, originalTimestamp.timeIntervalSince1970, accuracy: 0.001)
         XCTAssertNil(importedRecord.audioFileName)
     }
+
+    func testUpdateChannelAndPreferencesRoundTrip() async throws {
+        let source = try makeFixture()
+        defer { teardown(source) }
+
+        source.userDefaults.set(AppConstants.ReleaseChannel.daily.rawValue, forKey: UserDefaultsKeys.updateChannel)
+        source.userDefaults.set("de", forKey: UserDefaultsKeys.selectedLanguage)
+        source.userDefaults.set(true, forKey: UserDefaultsKeys.translationEnabled)
+        source.userDefaults.set(false, forKey: UserDefaultsKeys.showMenuBarIcon)
+        source.userDefaults.set(0.35, forKey: UserDefaultsKeys.audioDuckingLevel)
+        source.userDefaults.set(3, forKey: UserDefaultsKeys.indicatorTranscriptPreviewFontSizeOffset)
+        source.userDefaults.set("overlay", forKey: UserDefaultsKeys.indicatorStyle)
+        source.userDefaults.set(true, forKey: UserDefaultsKeys.recorderSystemAudioEnabled)
+        // Deliberately excluded: engine/model selections must not be exported.
+        source.userDefaults.set("com.typewhisper.some-engine", forKey: UserDefaultsKeys.fileTranscriptionEngine)
+
+        let backup = SettingsBackupExporter.buildBackup(
+            workflowService: source.workflowService,
+            dictionaryService: source.dictionaryService,
+            snippetService: source.snippetService,
+            profileService: source.profileService,
+            promptActionService: source.promptActionService,
+            pluginManager: source.pluginManager,
+            historyService: source.historyService,
+            userDefaults: source.userDefaults
+        )
+
+        XCTAssertEqual(backup.updateChannel, AppConstants.ReleaseChannel.daily.rawValue)
+        XCTAssertEqual(backup.preferences.selectedLanguage, "de")
+        XCTAssertEqual(backup.preferences.translationEnabled, true)
+        XCTAssertEqual(backup.preferences.showMenuBarIcon, false)
+        XCTAssertEqual(backup.preferences.audioDuckingLevel, 0.35)
+        XCTAssertEqual(backup.preferences.indicatorTranscriptPreviewFontSizeOffset, 3)
+        XCTAssertEqual(backup.preferences.indicatorStyle, "overlay")
+        XCTAssertEqual(backup.preferences.recorderSystemAudioEnabled, true)
+
+        let destination = try makeFixture()
+        defer { teardown(destination) }
+
+        let result = await SettingsBackupExporter.importBackup(
+            backup,
+            workflowService: destination.workflowService,
+            dictionaryService: destination.dictionaryService,
+            snippetService: destination.snippetService,
+            profileService: destination.profileService,
+            promptActionService: destination.promptActionService,
+            pluginManager: destination.pluginManager,
+            pluginRegistryService: destination.pluginRegistryService,
+            historyService: destination.historyService,
+            userDefaults: destination.userDefaults
+        )
+
+        XCTAssertTrue(result.updateChannelApplied)
+        XCTAssertGreaterThanOrEqual(result.preferencesApplied, 7)
+        XCTAssertEqual(destination.userDefaults.string(forKey: UserDefaultsKeys.updateChannel), AppConstants.ReleaseChannel.daily.rawValue)
+        XCTAssertEqual(destination.userDefaults.string(forKey: UserDefaultsKeys.selectedLanguage), "de")
+        XCTAssertEqual(destination.userDefaults.bool(forKey: UserDefaultsKeys.translationEnabled), true)
+        XCTAssertEqual(destination.userDefaults.bool(forKey: UserDefaultsKeys.showMenuBarIcon), false)
+        XCTAssertEqual(destination.userDefaults.string(forKey: UserDefaultsKeys.indicatorStyle), "overlay")
+        XCTAssertNil(destination.userDefaults.string(forKey: UserDefaultsKeys.fileTranscriptionEngine))
+    }
 }

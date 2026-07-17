@@ -4,18 +4,24 @@ import UniformTypeIdentifiers
 
 /// Exports/imports a single JSON backup of user configuration (workflows,
 /// dictionary, snippets, profiles, prompt actions, hotkeys, installed
-/// community plugins, and transcription history) so it can be migrated to
-/// another Mac.
+/// community plugins, transcription history, the update channel, and a
+/// handful of General-tab preferences) so it can be migrated to another Mac.
 ///
 /// History is exported as text/metadata only — saved audio recordings
 /// (`TranscriptionRecord.audioFileName`) are never included, since they can
 /// be large (~1MB/30s) and would require a very different file format than
 /// plain JSON.
 ///
-/// Deliberately out of scope: provider API keys, usage statistics, and
-/// general `UserDefaults` preferences (indicator style, sound toggles,
-/// selected microphone/model, etc.) — API keys must be re-entered on the new
-/// Mac, and the rest is either per-machine or low value to migrate. See
+/// "Launch at Login" is deliberately excluded from General preferences: it's
+/// an `SMAppService` login-item registration, not a plain `UserDefaults`
+/// value, so it can't be migrated by copying data — it must be re-enabled on
+/// each Mac.
+///
+/// Deliberately out of scope: provider API keys, license/activation state,
+/// usage statistics, and machine-specific preferences (selected
+/// microphone/model, indicator style, sound toggles, etc.) — API keys and
+/// the license must be re-entered/re-activated on the new Mac, and the rest
+/// is either per-machine or low value to migrate. See
 /// `TypeWhisper/App/UserDefaultsKeys.swift` for the full preferences surface
 /// if that scope ever expands.
 @MainActor
@@ -130,6 +136,58 @@ enum SettingsBackupExporter {
         let pipelineSteps: [String]
     }
 
+    /// Simple, portable preferences from the General, Dictation, Dictation
+    /// Recovery, File Transcription, and Recorder settings tabs.
+    ///
+    /// Deliberately excludes:
+    /// - Engine/model selections (`dictationRecoveryEngine`/`Model`,
+    ///   `fileTranscriptionEngine`/`Model`, `recorderTranscriptionEngine`/
+    ///   `Model`) — these can reference a plugin or local model that isn't
+    ///   installed on the destination Mac.
+    /// - "Launch at Login" (an `SMAppService` registration, not portable data).
+    /// - The app UI language (changing it also requires setting the special
+    ///   `"AppleLanguages"` default and prompting a restart, which isn't
+    ///   something an import should trigger unprompted).
+    /// - Hardware-specific settings (selected microphone, audio device
+    ///   priority) and transient/live state (e.g. `dictationHotkeysPaused`).
+    struct PreferencesDTO: Codable {
+        // General
+        let selectedLanguage: String?
+        let selectedTask: String?
+        let translationEnabled: Bool?
+        let translationTargetLanguage: String?
+        let showMenuBarIcon: Bool?
+        let dockIconBehaviorWhenMenuBarHidden: String?
+        // Dictation
+        let audioDuckingEnabled: Bool?
+        let audioDuckingLevel: Double?
+        let soundFeedbackEnabled: Bool?
+        let soundRecordingStarted: Bool?
+        let soundTranscriptionSuccess: Bool?
+        let soundError: Bool?
+        let indicatorStyle: String?
+        let indicatorTranscriptPreviewEnabled: Bool?
+        let indicatorTranscriptPreviewFontSizeOffset: Int?
+        let preserveClipboard: Bool?
+        let mediaPauseEnabled: Bool?
+        let transcribeShortQuietClipsAggressively: Bool?
+        let microphoneBoostEnabled: Bool?
+        let requireSecondEscapeToCancelRecording: Bool?
+        // Dictation Recovery
+        let dictationRecoveryLanguage: String?
+        let dictationRecoveryAutomaticFallbackEnabled: Bool?
+        // File Transcription
+        let fileTranscriptionLanguage: String?
+        // Recorder
+        let recorderMicEnabled: Bool?
+        let recorderSystemAudioEnabled: Bool?
+        let recorderOutputFormat: String?
+        let recorderTranscriptionEnabled: Bool?
+        let recorderLivePreviewEnabled: Bool?
+        let recorderMicDuckingMode: String?
+        let recorderTrackMode: String?
+    }
+
     struct SettingsBackup: Codable {
         let schemaVersion: Int
         let exportedAt: Date
@@ -142,6 +200,10 @@ enum SettingsBackupExporter {
         let hotkeys: [String: [UnifiedHotkey]]
         let plugins: [PluginDTO]
         let history: [HistoryEntryDTO]
+        /// Raw `ReleaseChannel` value (see `AppConstants.ReleaseChannel`), if the
+        /// user has explicitly picked one (`UserDefaultsKeys.updateChannel`).
+        let updateChannel: String?
+        let preferences: PreferencesDTO
     }
 
     struct ImportResult {
@@ -157,6 +219,8 @@ enum SettingsBackupExporter {
         var pluginsInstalled = 0
         var pluginsSkipped = 0
         var historyImported = 0
+        var updateChannelApplied = false
+        var preferencesApplied = 0
     }
 
     enum ImportError: LocalizedError {
@@ -304,7 +368,40 @@ enum SettingsBackupExporter {
             profiles: profiles,
             hotkeys: hotkeys,
             plugins: plugins,
-            history: history
+            history: history,
+            updateChannel: userDefaults.string(forKey: UserDefaultsKeys.updateChannel),
+            preferences: PreferencesDTO(
+                selectedLanguage: userDefaults.string(forKey: UserDefaultsKeys.selectedLanguage),
+                selectedTask: userDefaults.string(forKey: UserDefaultsKeys.selectedTask),
+                translationEnabled: userDefaults.object(forKey: UserDefaultsKeys.translationEnabled) as? Bool,
+                translationTargetLanguage: userDefaults.string(forKey: UserDefaultsKeys.translationTargetLanguage),
+                showMenuBarIcon: userDefaults.object(forKey: UserDefaultsKeys.showMenuBarIcon) as? Bool,
+                dockIconBehaviorWhenMenuBarHidden: userDefaults.string(forKey: UserDefaultsKeys.dockIconBehaviorWhenMenuBarHidden),
+                audioDuckingEnabled: userDefaults.object(forKey: UserDefaultsKeys.audioDuckingEnabled) as? Bool,
+                audioDuckingLevel: userDefaults.object(forKey: UserDefaultsKeys.audioDuckingLevel) as? Double,
+                soundFeedbackEnabled: userDefaults.object(forKey: UserDefaultsKeys.soundFeedbackEnabled) as? Bool,
+                soundRecordingStarted: userDefaults.object(forKey: UserDefaultsKeys.soundRecordingStarted) as? Bool,
+                soundTranscriptionSuccess: userDefaults.object(forKey: UserDefaultsKeys.soundTranscriptionSuccess) as? Bool,
+                soundError: userDefaults.object(forKey: UserDefaultsKeys.soundError) as? Bool,
+                indicatorStyle: userDefaults.string(forKey: UserDefaultsKeys.indicatorStyle),
+                indicatorTranscriptPreviewEnabled: userDefaults.object(forKey: UserDefaultsKeys.indicatorTranscriptPreviewEnabled) as? Bool,
+                indicatorTranscriptPreviewFontSizeOffset: userDefaults.object(forKey: UserDefaultsKeys.indicatorTranscriptPreviewFontSizeOffset) as? Int,
+                preserveClipboard: userDefaults.object(forKey: UserDefaultsKeys.preserveClipboard) as? Bool,
+                mediaPauseEnabled: userDefaults.object(forKey: UserDefaultsKeys.mediaPauseEnabled) as? Bool,
+                transcribeShortQuietClipsAggressively: userDefaults.object(forKey: UserDefaultsKeys.transcribeShortQuietClipsAggressively) as? Bool,
+                microphoneBoostEnabled: userDefaults.object(forKey: UserDefaultsKeys.microphoneBoostEnabled) as? Bool,
+                requireSecondEscapeToCancelRecording: userDefaults.object(forKey: UserDefaultsKeys.requireSecondEscapeToCancelRecording) as? Bool,
+                dictationRecoveryLanguage: userDefaults.string(forKey: UserDefaultsKeys.dictationRecoveryLanguage),
+                dictationRecoveryAutomaticFallbackEnabled: userDefaults.object(forKey: UserDefaultsKeys.dictationRecoveryAutomaticFallbackEnabled) as? Bool,
+                fileTranscriptionLanguage: userDefaults.string(forKey: UserDefaultsKeys.fileTranscriptionLanguage),
+                recorderMicEnabled: userDefaults.object(forKey: UserDefaultsKeys.recorderMicEnabled) as? Bool,
+                recorderSystemAudioEnabled: userDefaults.object(forKey: UserDefaultsKeys.recorderSystemAudioEnabled) as? Bool,
+                recorderOutputFormat: userDefaults.string(forKey: UserDefaultsKeys.recorderOutputFormat),
+                recorderTranscriptionEnabled: userDefaults.object(forKey: UserDefaultsKeys.recorderTranscriptionEnabled) as? Bool,
+                recorderLivePreviewEnabled: userDefaults.object(forKey: UserDefaultsKeys.recorderLivePreviewEnabled) as? Bool,
+                recorderMicDuckingMode: userDefaults.string(forKey: UserDefaultsKeys.recorderMicDuckingMode),
+                recorderTrackMode: userDefaults.string(forKey: UserDefaultsKeys.recorderTrackMode)
+            )
         )
     }
 
@@ -484,6 +581,49 @@ enum SettingsBackupExporter {
             )
         }
         result.historyImported = historyService.records.count - beforeHistoryCount
+
+        if let updateChannel = backup.updateChannel,
+           AppConstants.ReleaseChannel(rawValue: updateChannel) != nil {
+            userDefaults.set(updateChannel, forKey: UserDefaultsKeys.updateChannel)
+            result.updateChannelApplied = true
+        }
+
+        let preferences = backup.preferences
+        func apply<Value>(_ value: Value?, forKey key: String) {
+            guard let value else { return }
+            userDefaults.set(value, forKey: key)
+            result.preferencesApplied += 1
+        }
+        apply(preferences.selectedLanguage, forKey: UserDefaultsKeys.selectedLanguage)
+        apply(preferences.selectedTask, forKey: UserDefaultsKeys.selectedTask)
+        apply(preferences.translationEnabled, forKey: UserDefaultsKeys.translationEnabled)
+        apply(preferences.translationTargetLanguage, forKey: UserDefaultsKeys.translationTargetLanguage)
+        apply(preferences.showMenuBarIcon, forKey: UserDefaultsKeys.showMenuBarIcon)
+        apply(preferences.dockIconBehaviorWhenMenuBarHidden, forKey: UserDefaultsKeys.dockIconBehaviorWhenMenuBarHidden)
+        apply(preferences.audioDuckingEnabled, forKey: UserDefaultsKeys.audioDuckingEnabled)
+        apply(preferences.audioDuckingLevel, forKey: UserDefaultsKeys.audioDuckingLevel)
+        apply(preferences.soundFeedbackEnabled, forKey: UserDefaultsKeys.soundFeedbackEnabled)
+        apply(preferences.soundRecordingStarted, forKey: UserDefaultsKeys.soundRecordingStarted)
+        apply(preferences.soundTranscriptionSuccess, forKey: UserDefaultsKeys.soundTranscriptionSuccess)
+        apply(preferences.soundError, forKey: UserDefaultsKeys.soundError)
+        apply(preferences.indicatorStyle, forKey: UserDefaultsKeys.indicatorStyle)
+        apply(preferences.indicatorTranscriptPreviewEnabled, forKey: UserDefaultsKeys.indicatorTranscriptPreviewEnabled)
+        apply(preferences.indicatorTranscriptPreviewFontSizeOffset, forKey: UserDefaultsKeys.indicatorTranscriptPreviewFontSizeOffset)
+        apply(preferences.preserveClipboard, forKey: UserDefaultsKeys.preserveClipboard)
+        apply(preferences.mediaPauseEnabled, forKey: UserDefaultsKeys.mediaPauseEnabled)
+        apply(preferences.transcribeShortQuietClipsAggressively, forKey: UserDefaultsKeys.transcribeShortQuietClipsAggressively)
+        apply(preferences.microphoneBoostEnabled, forKey: UserDefaultsKeys.microphoneBoostEnabled)
+        apply(preferences.requireSecondEscapeToCancelRecording, forKey: UserDefaultsKeys.requireSecondEscapeToCancelRecording)
+        apply(preferences.dictationRecoveryLanguage, forKey: UserDefaultsKeys.dictationRecoveryLanguage)
+        apply(preferences.dictationRecoveryAutomaticFallbackEnabled, forKey: UserDefaultsKeys.dictationRecoveryAutomaticFallbackEnabled)
+        apply(preferences.fileTranscriptionLanguage, forKey: UserDefaultsKeys.fileTranscriptionLanguage)
+        apply(preferences.recorderMicEnabled, forKey: UserDefaultsKeys.recorderMicEnabled)
+        apply(preferences.recorderSystemAudioEnabled, forKey: UserDefaultsKeys.recorderSystemAudioEnabled)
+        apply(preferences.recorderOutputFormat, forKey: UserDefaultsKeys.recorderOutputFormat)
+        apply(preferences.recorderTranscriptionEnabled, forKey: UserDefaultsKeys.recorderTranscriptionEnabled)
+        apply(preferences.recorderLivePreviewEnabled, forKey: UserDefaultsKeys.recorderLivePreviewEnabled)
+        apply(preferences.recorderMicDuckingMode, forKey: UserDefaultsKeys.recorderMicDuckingMode)
+        apply(preferences.recorderTrackMode, forKey: UserDefaultsKeys.recorderTrackMode)
 
         return result
     }

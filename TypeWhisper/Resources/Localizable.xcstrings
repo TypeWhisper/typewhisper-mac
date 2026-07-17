@@ -23103,22 +23103,52 @@
         }
       }
     },
-    "Exports workflows, dictionary entries, snippets, profiles, prompt actions, hotkey bindings, installed community plugins, and transcription history (text only, no saved audio) to a single file you can import on another Mac. Reinstalled plugins fetch whatever version is currently latest in the marketplace, and installing them requires network access. Provider API keys and general preferences are not included.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Exportiert Workflows, Wörterbucheinträge, Snippets, Profile, Prompt-Aktionen, Hotkey-Zuordnungen, installierte Community-Plugins und den Transkriptionsverlauf (nur Text, keine gespeicherten Audioaufnahmen) in eine Datei, die du auf einem anderen Mac importieren kannst. Wiederhergestellte Plugins laden die jeweils aktuelle Marketplace-Version, das Installieren erfordert eine Internetverbindung. Anbieter-API-Schlüssel und allgemeine Einstellungen sind nicht enthalten."
-          }
-        }
-      }
-    },
     "History: %d imported": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Verlauf: %d importiert"
+          }
+        }
+      }
+    },
+    "Exports workflows, dictionary entries, snippets, profiles, prompt actions, hotkey bindings, installed community plugins, transcription history (text only, no saved audio), and the update channel to a single file you can import on another Mac. Reinstalled plugins fetch whatever version is currently latest in the marketplace, and installing them requires network access. Provider API keys, license, and general preferences are not included.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exportiert Workflows, Wörterbucheinträge, Snippets, Profile, Prompt-Aktionen, Hotkey-Zuordnungen, installierte Community-Plugins, den Transkriptionsverlauf (nur Text, keine gespeicherten Audioaufnahmen) und den Update-Kanal in eine Datei, die du auf einem anderen Mac importieren kannst. Wiederhergestellte Plugins laden die jeweils aktuelle Marketplace-Version, das Installieren erfordert eine Internetverbindung. Anbieter-API-Schlüssel, Lizenz und allgemeine Einstellungen sind nicht enthalten."
+          }
+        }
+      }
+    },
+    "Update channel applied": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Update-Kanal übernommen"
+          }
+        }
+      }
+    },
+    "Exports workflows, dictionary entries, snippets, profiles, prompt actions, hotkey bindings, installed community plugins, transcription history (text only, no saved audio), the update channel, and preferences from the General, Dictation, Dictation Recovery, File Transcription, and Recorder tabs to a single file you can import on another Mac. Reinstalled plugins fetch whatever version is currently latest in the marketplace, and installing them requires network access. Provider API keys, license, Launch at Login, selected engines/models, and other machine-specific settings are not included.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exportiert Workflows, Wörterbucheinträge, Snippets, Profile, Prompt-Aktionen, Hotkey-Zuordnungen, installierte Community-Plugins, den Transkriptionsverlauf (nur Text, keine gespeicherten Audioaufnahmen), den Update-Kanal sowie Einstellungen aus den Tabs Allgemein, Diktat, Diktat-Wiederherstellung, Dateitranskription und Recorder in eine Datei, die du auf einem anderen Mac importieren kannst. Wiederhergestellte Plugins laden die jeweils aktuelle Marketplace-Version, das Installieren erfordert eine Internetverbindung. Anbieter-API-Schlüssel, Lizenz, „Bei Anmeldung öffnen“, ausgewählte Engines/Modelle und andere gerätespezifische Einstellungen sind nicht enthalten."
+          }
+        }
+      }
+    },
+    "Preferences: %d applied": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einstellungen: %d übernommen"
           }
         }
       }

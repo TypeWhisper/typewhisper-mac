@@ -83,8 +83,8 @@ struct AdvancedSettingsView: View {
                     }
 
                     SettingsInfoButton(text: localizedAppText(
-                        "Exports workflows, dictionary entries, snippets, profiles, prompt actions, hotkey bindings, installed community plugins, and transcription history (text only, no saved audio) to a single file you can import on another Mac. Reinstalled plugins fetch whatever version is currently latest in the marketplace, and installing them requires network access. Provider API keys and general preferences are not included.",
-                        de: "Exportiert Workflows, Wörterbucheinträge, Snippets, Profile, Prompt-Aktionen, Hotkey-Zuordnungen, installierte Community-Plugins und den Transkriptionsverlauf (nur Text, keine gespeicherten Audioaufnahmen) in eine Datei, die du auf einem anderen Mac importieren kannst. Wiederhergestellte Plugins laden die jeweils aktuelle Marketplace-Version, das Installieren erfordert eine Internetverbindung. Anbieter-API-Schlüssel und allgemeine Einstellungen sind nicht enthalten."
+                        "Exports workflows, dictionary entries, snippets, profiles, prompt actions, hotkey bindings, installed community plugins, transcription history (text only, no saved audio), the update channel, and preferences from the General, Dictation, Dictation Recovery, File Transcription, and Recorder tabs to a single file you can import on another Mac. Reinstalled plugins fetch whatever version is currently latest in the marketplace, and installing them requires network access. Provider API keys, license, Launch at Login, selected engines/models, and other machine-specific settings are not included.",
+                        de: "Exportiert Workflows, Wörterbucheinträge, Snippets, Profile, Prompt-Aktionen, Hotkey-Zuordnungen, installierte Community-Plugins, den Transkriptionsverlauf (nur Text, keine gespeicherten Audioaufnahmen), den Update-Kanal sowie Einstellungen aus den Tabs Allgemein, Diktat, Diktat-Wiederherstellung, Dateitranskription und Recorder in eine Datei, die du auf einem anderen Mac importieren kannst. Wiederhergestellte Plugins laden die jeweils aktuelle Marketplace-Version, das Installieren erfordert eine Internetverbindung. Anbieter-API-Schlüssel, Lizenz, „Bei Anmeldung öffnen“, ausgewählte Engines/Modelle und andere gerätespezifische Einstellungen sind nicht enthalten."
                     ))
                 }
             }
@@ -656,6 +656,12 @@ struct AdvancedSettingsView: View {
         lines.append(String(format: String(localized: "Hotkeys: %d applied, %d skipped (already bound)"), result.hotkeysApplied, result.hotkeysSkipped))
         lines.append(String(format: String(localized: "Plugins: %d installed, %d skipped (already installed or unavailable)"), result.pluginsInstalled, result.pluginsSkipped))
         lines.append(String(format: String(localized: "History: %d imported"), result.historyImported))
+        if result.updateChannelApplied {
+            lines.append(String(localized: "Update channel applied"))
+        }
+        if result.preferencesApplied > 0 {
+            lines.append(String(format: String(localized: "Preferences: %d applied"), result.preferencesApplied))
+        }
         return lines.joined(separator: "\n")
     }
 
