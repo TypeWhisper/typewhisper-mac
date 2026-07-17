@@ -67,14 +67,21 @@ private enum ElevenLabsReceivePayload: Sendable {
     case timedOut
 }
 
+enum ElevenLabsTranscriptionMode: String, CaseIterable, Sendable {
+    case automatic
+    case restOnly
+}
+
 @objc(ElevenLabsPlugin)
 final class ElevenLabsPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, @unchecked Sendable {
     static let pluginId = "com.typewhisper.elevenlabs"
     static let pluginName = "ElevenLabs"
+    static let transcriptionModeKey = "transcriptionMode"
 
     fileprivate var host: HostServices?
     fileprivate var _apiKey: String?
     fileprivate var _selectedModelId: String?
+    fileprivate var _transcriptionMode = ElevenLabsTranscriptionMode.automatic
 
     private let logger = Logger(subsystem: "com.typewhisper.elevenlabs", category: "Plugin")
 
@@ -87,6 +94,9 @@ final class ElevenLabsPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTer
         _apiKey = host.loadSecret(key: "api-key")
         _selectedModelId = host.userDefault(forKey: "selectedModel") as? String
             ?? transcriptionModels.first?.id
+        _transcriptionMode = (host.userDefault(forKey: Self.transcriptionModeKey) as? String)
+            .flatMap(ElevenLabsTranscriptionMode.init(rawValue:))
+            ?? .automatic
     }
 
     func deactivate() {
@@ -114,8 +124,17 @@ final class ElevenLabsPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTer
         host?.setUserDefault(modelId, forKey: "selectedModel")
     }
 
+    var transcriptionMode: ElevenLabsTranscriptionMode { _transcriptionMode }
+
+    func setTranscriptionMode(_ mode: ElevenLabsTranscriptionMode) {
+        guard _transcriptionMode != mode else { return }
+        _transcriptionMode = mode
+        host?.setUserDefault(mode.rawValue, forKey: Self.transcriptionModeKey)
+        host?.notifyCapabilitiesChanged()
+    }
+
     var supportsTranslation: Bool { false }
-    var supportsStreaming: Bool { true }
+    var supportsStreaming: Bool { _transcriptionMode == .automatic }
     var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
     var supportedLanguages: [String] { elevenLabsSupportedLanguages }
 
@@ -150,7 +169,7 @@ final class ElevenLabsPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTer
             throw PluginTranscriptionError.noModelSelected
         }
 
-        if !PluginDictionaryTerms.terms(fromPrompt: prompt).isEmpty {
+        if _transcriptionMode == .restOnly || !PluginDictionaryTerms.terms(fromPrompt: prompt).isEmpty {
             let result = try await transcribeREST(
                 audio: audio,
                 language: language,
@@ -506,6 +525,7 @@ private struct ElevenLabsSettingsView: View {
     @State private var validationResult: Bool?
     @State private var showApiKey = false
     @State private var selectedModel = ""
+    @State private var transcriptionMode = ElevenLabsTranscriptionMode.automatic
     private let bundle = Bundle(for: ElevenLabsPlugin.self)
     private var trimmedInputKey: String {
         apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -601,6 +621,27 @@ private struct ElevenLabsSettingsView: View {
                         plugin.selectModel(selectedModel)
                     }
                 }
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Transcription mode", bundle: bundle)
+                        .font(.headline)
+
+                    Picker("Transcription mode", selection: $transcriptionMode) {
+                        Text("Auto (Realtime with REST fallback)", bundle: bundle)
+                            .tag(ElevenLabsTranscriptionMode.automatic)
+                        Text("REST only (Batch Scribe v2)", bundle: bundle)
+                            .tag(ElevenLabsTranscriptionMode.restOnly)
+                    }
+                    .labelsHidden()
+                    .onChange(of: transcriptionMode) {
+                        plugin.setTranscriptionMode(transcriptionMode)
+                    }
+
+                    Text("Auto streams partial results and falls back to batch REST. REST only avoids realtime concurrency limits and uses consistent batch transcription.", bundle: bundle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
             }
 
             Text("API keys are stored securely in the Keychain", bundle: bundle)
@@ -621,6 +662,7 @@ private struct ElevenLabsSettingsView: View {
                 }
             }
             selectedModel = plugin.selectedModelId ?? plugin.transcriptionModels.first?.id ?? ""
+            transcriptionMode = plugin.transcriptionMode
         }
     }
 

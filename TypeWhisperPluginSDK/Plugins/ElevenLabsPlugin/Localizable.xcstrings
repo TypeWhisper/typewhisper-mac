@@ -17,6 +17,38 @@
         }
       }
     },
+    "Auto (Realtime with REST fallback)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatisch (Echtzeit mit REST-Fallback)"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自動（リアルタイム、RESTフォールバック）"
+          }
+        }
+      }
+    },
+    "Auto streams partial results and falls back to batch REST. REST only avoids realtime concurrency limits and uses consistent batch transcription.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatisch streamt Teilergebnisse und wechselt bei Fehlern zu Batch-REST. Nur REST vermeidet Echtzeit-Parallelitätslimits und verwendet eine konsistente Batch-Transkription."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自動モードでは部分結果をストリーミングし、失敗時はバッチRESTに切り替えます。RESTのみではリアルタイムの同時実行制限を回避し、一貫したバッチ文字起こしを使用します。"
+          }
+        }
+      }
+    },
     "API keys are stored securely in the Keychain": {
       "localizations": {
         "de": {
@@ -81,6 +113,22 @@
         }
       }
     },
+    "REST only (Batch Scribe v2)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nur REST (Batch Scribe v2)"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "RESTのみ（バッチScribe v2）"
+          }
+        }
+      }
+    },
     "Save": {
       "localizations": {
         "de": {
@@ -93,6 +141,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "保存"
+          }
+        }
+      }
+    },
+    "Transcription mode": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkriptionsmodus"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文字起こしモード"
           }
         }
       }

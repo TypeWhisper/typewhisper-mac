@@ -1,11 +1,15 @@
 {
   "id": "com.typewhisper.filler-words",
   "name": "Filler Words",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "minHostVersion": "1.0.0",
   "sdkCompatibilityVersion": "v1",
   "minOSVersion": "14.0",
   "author": "TypeWhisper",
+  "description": "Removes filler words like \"um\" and \"uh\" from transcribed text.",
+  "descriptions": {
+    "de": "Entfernt Füllwörter wie „ähm“ und „äh“ aus transkribiertem Text."
+  },
   "principalClass": "FillerWordsPlugin",
   "requiresAPIKey": false,
   "iconSystemName": "text.badge.minus",

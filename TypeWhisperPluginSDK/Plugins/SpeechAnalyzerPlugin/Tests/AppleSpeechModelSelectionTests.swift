@@ -55,6 +55,71 @@ final class AppleSpeechModelSelectionTests: XCTestCase {
         XCTAssertEqual(modelId, "speechanalyzer-de_CH")
     }
 
+    func testGenericLanguagePrefersMatchingSelectedRegionalModel() {
+        let modelId = AppleSpeechModelSelection.preferredModelId(
+            fromModelIds: [
+                "speechanalyzer-en_AU",
+                "speechanalyzer-en_US"
+            ],
+            localeIdentifier: "en",
+            languageCode: "en",
+            preferredModelId: "speechanalyzer-en_US",
+            fallbackLocaleIdentifier: "en_AU",
+            fallbackToFirst: false
+        )
+
+        XCTAssertEqual(modelId, "speechanalyzer-en_US")
+    }
+
+    func testGenericLanguageUsesMatchingFallbackLocaleBeforeFirstLanguageModel() {
+        let modelId = AppleSpeechModelSelection.preferredModelId(
+            fromModelIds: [
+                "speechanalyzer-en_AU",
+                "speechanalyzer-en_US"
+            ],
+            localeIdentifier: "en",
+            languageCode: "en",
+            fallbackLocaleIdentifier: "en_US",
+            fallbackToFirst: false
+        )
+
+        XCTAssertEqual(modelId, "speechanalyzer-en_US")
+    }
+
+    func testExactRegionalLanguageTakesPrecedenceOverPreferredAndFallbackModels() {
+        let modelId = AppleSpeechModelSelection.preferredModelId(
+            fromModelIds: [
+                "speechanalyzer-en_AU",
+                "speechanalyzer-en_GB",
+                "speechanalyzer-en_US"
+            ],
+            localeIdentifier: "en-GB",
+            languageCode: "en-GB",
+            preferredModelId: "speechanalyzer-en_US",
+            fallbackLocaleIdentifier: "en_AU",
+            fallbackToFirst: false
+        )
+
+        XCTAssertEqual(modelId, "speechanalyzer-en_GB")
+    }
+
+    func testGenericLanguageIgnoresPreferredModelFromAnotherLanguage() {
+        let modelId = AppleSpeechModelSelection.preferredModelId(
+            fromModelIds: [
+                "speechanalyzer-en_AU",
+                "speechanalyzer-en_US",
+                "speechanalyzer-de_DE"
+            ],
+            localeIdentifier: "en",
+            languageCode: "en",
+            preferredModelId: "speechanalyzer-de_DE",
+            fallbackLocaleIdentifier: "en_US",
+            fallbackToFirst: false
+        )
+
+        XCTAssertEqual(modelId, "speechanalyzer-en_US")
+    }
+
     func testReturnsNilForEmptyModelCatalog() {
         let modelId = AppleSpeechModelSelection.preferredModelId(
             fromModelIds: [],

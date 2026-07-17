@@ -9,12 +9,16 @@ public enum AppleSpeechModelSelection {
         from models: [PluginModelInfo],
         localeIdentifier: String = Locale.current.identifier,
         languageCode: String? = Locale.current.language.languageCode?.identifier,
+        preferredModelId: String? = nil,
+        fallbackLocaleIdentifier: String? = nil,
         fallbackToFirst: Bool = true
     ) -> String? {
-        preferredModelId(
+        Self.preferredModelId(
             fromModelIds: models.map(\.id),
             localeIdentifier: localeIdentifier,
             languageCode: languageCode,
+            preferredModelId: preferredModelId,
+            fallbackLocaleIdentifier: fallbackLocaleIdentifier,
             fallbackToFirst: fallbackToFirst
         )
     }
@@ -23,6 +27,8 @@ public enum AppleSpeechModelSelection {
         fromModelIds modelIds: [String],
         localeIdentifier: String = Locale.current.identifier,
         languageCode: String? = Locale.current.language.languageCode?.identifier,
+        preferredModelId: String? = nil,
+        fallbackLocaleIdentifier: String? = nil,
         fallbackToFirst: Bool = true
     ) -> String? {
         guard !modelIds.isEmpty else { return nil }
@@ -44,6 +50,21 @@ public enum AppleSpeechModelSelection {
             let languageModelId = "\(modelIdPrefix)\(normalizedLanguageCode)"
             if modelIds.contains(languageModelId) {
                 return languageModelId
+            }
+
+            if let preferredModelId,
+               modelIds.contains(preferredModelId),
+               modelLanguageCode(for: preferredModelId) == normalizedLanguageCode {
+                return preferredModelId
+            }
+
+            if let fallbackLocaleIdentifier,
+               Self.normalizedLanguageCode(for: fallbackLocaleIdentifier) == normalizedLanguageCode {
+                for modelId in localeModelIds(for: fallbackLocaleIdentifier) {
+                    if modelIds.contains(modelId) {
+                        return modelId
+                    }
+                }
             }
 
             if let match = modelIds.first(where: { modelLanguageCode(for: $0) == normalizedLanguageCode }) {
