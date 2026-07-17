@@ -294,7 +294,7 @@ struct SwiftDataStoreFactory {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
 
         let storeURL = directory.appendingPathComponent("\(storeName).store")
-        let config = ModelConfiguration(url: storeURL)
+        let config = ModelConfiguration(url: storeURL, cloudKitDatabase: .none)
 
         var container: ModelContainer
         do {
