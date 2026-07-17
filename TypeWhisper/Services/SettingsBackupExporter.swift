@@ -151,54 +151,52 @@ enum SettingsBackupExporter {
     /// - Hardware-specific settings (selected microphone, audio device
     ///   priority) and transient/live state (e.g. `dictationHotkeysPaused`).
     struct PreferencesDTO: Codable {
+        // Fields use `var` (not `let`) so a default value on the declaration
+        // is picked up by the synthesized memberwise init as a default
+        // parameter — Swift only does this for `var` properties, so a `let`
+        // with a default is instead treated as fixed and dropped from the
+        // init parameter list entirely.
         // General
-        let selectedLanguage: String?
-        let selectedTask: String?
-        let translationEnabled: Bool?
-        let translationTargetLanguage: String?
-        let showMenuBarIcon: Bool?
-        let dockIconBehaviorWhenMenuBarHidden: String?
+        var selectedLanguage: String? = nil
+        var selectedTask: String? = nil
+        var translationEnabled: Bool? = nil
+        var translationTargetLanguage: String? = nil
+        var showMenuBarIcon: Bool? = nil
+        var dockIconBehaviorWhenMenuBarHidden: String? = nil
         // Dictation
-        let audioDuckingEnabled: Bool?
-        let audioDuckingLevel: Double?
-        let soundFeedbackEnabled: Bool?
-        let soundRecordingStarted: Bool?
-        let soundTranscriptionSuccess: Bool?
-        let soundError: Bool?
-        let indicatorStyle: String?
-        let indicatorTranscriptPreviewEnabled: Bool?
-        let indicatorTranscriptPreviewFontSizeOffset: Int?
-        let preserveClipboard: Bool?
-        let mediaPauseEnabled: Bool?
-        let transcribeShortQuietClipsAggressively: Bool?
-        let microphoneBoostEnabled: Bool?
-        let requireSecondEscapeToCancelRecording: Bool?
+        var audioDuckingEnabled: Bool? = nil
+        var audioDuckingLevel: Double? = nil
+        var soundFeedbackEnabled: Bool? = nil
+        var soundRecordingStarted: Bool? = nil
+        var soundTranscriptionSuccess: Bool? = nil
+        var soundError: Bool? = nil
+        var indicatorStyle: String? = nil
+        var indicatorTranscriptPreviewEnabled: Bool? = nil
+        var indicatorTranscriptPreviewFontSizeOffset: Int? = nil
+        var preserveClipboard: Bool? = nil
+        var mediaPauseEnabled: Bool? = nil
+        var transcribeShortQuietClipsAggressively: Bool? = nil
+        var microphoneBoostEnabled: Bool? = nil
+        var requireSecondEscapeToCancelRecording: Bool? = nil
         // Dictation Recovery
-        let dictationRecoveryLanguage: String?
-        let dictationRecoveryAutomaticFallbackEnabled: Bool?
+        var dictationRecoveryLanguage: String? = nil
+        var dictationRecoveryAutomaticFallbackEnabled: Bool? = nil
         // File Transcription
-        let fileTranscriptionLanguage: String?
+        var fileTranscriptionLanguage: String? = nil
         // Recorder
-        let recorderMicEnabled: Bool?
-        let recorderSystemAudioEnabled: Bool?
-        let recorderOutputFormat: String?
-        let recorderTranscriptionEnabled: Bool?
-        let recorderLivePreviewEnabled: Bool?
-        let recorderMicDuckingMode: String?
-        let recorderTrackMode: String?
+        var recorderMicEnabled: Bool? = nil
+        var recorderSystemAudioEnabled: Bool? = nil
+        var recorderOutputFormat: String? = nil
+        var recorderTranscriptionEnabled: Bool? = nil
+        var recorderLivePreviewEnabled: Bool? = nil
+        var recorderMicDuckingMode: String? = nil
+        var recorderTrackMode: String? = nil
 
-        static let empty = PreferencesDTO(
-            selectedLanguage: nil, selectedTask: nil, translationEnabled: nil, translationTargetLanguage: nil,
-            showMenuBarIcon: nil, dockIconBehaviorWhenMenuBarHidden: nil,
-            audioDuckingEnabled: nil, audioDuckingLevel: nil, soundFeedbackEnabled: nil, soundRecordingStarted: nil,
-            soundTranscriptionSuccess: nil, soundError: nil, indicatorStyle: nil, indicatorTranscriptPreviewEnabled: nil,
-            indicatorTranscriptPreviewFontSizeOffset: nil, preserveClipboard: nil, mediaPauseEnabled: nil,
-            transcribeShortQuietClipsAggressively: nil, microphoneBoostEnabled: nil, requireSecondEscapeToCancelRecording: nil,
-            dictationRecoveryLanguage: nil, dictationRecoveryAutomaticFallbackEnabled: nil,
-            fileTranscriptionLanguage: nil,
-            recorderMicEnabled: nil, recorderSystemAudioEnabled: nil, recorderOutputFormat: nil,
-            recorderTranscriptionEnabled: nil, recorderLivePreviewEnabled: nil, recorderMicDuckingMode: nil, recorderTrackMode: nil
-        )
+        /// Every field defaults to `nil`, so the synthesized memberwise init
+        /// doubles as an "all preferences absent" value (used by `filtered`
+        /// when the Preferences category is deselected) without hand-listing
+        /// 30 `nil` arguments.
+        static let empty = PreferencesDTO()
 
         /// Number of non-nil fields, used to show a count in the category
         /// selection sheets. Listed explicitly (rather than via `Mirror`) to
@@ -269,7 +267,16 @@ enum SettingsBackupExporter {
         var hotkeysSkipped = 0
         var pluginsInstalled = 0
         var pluginsSkipped = 0
+        /// True if `PluginRegistryService.fetchRegistry()` failed (e.g. no
+        /// network). When true, `pluginsSkipped` may include plugins that
+        /// simply couldn't be looked up rather than ones genuinely missing
+        /// from the marketplace.
+        var pluginsRegistryFetchFailed = false
         var historyImported = 0
+        /// Entries older than the destination Mac's current history
+        /// retention window, excluded so they wouldn't just be silently
+        /// purged again on the next launch.
+        var historySkippedByRetention = 0
         var updateChannelApplied = false
         var preferencesApplied = 0
     }
@@ -364,18 +371,45 @@ enum SettingsBackupExporter {
     /// Returns a copy of `backup` with every category not in `categories`
     /// emptied out, so `importBackup`/`saveToFile` only see the data the user
     /// chose to include.
+    ///
+    /// Profiles → Prompt Actions → Plugins form a reference chain
+    /// (`ProfileDTO.promptActionId` → `PromptActionDTO.localId`,
+    /// `PromptActionDTO.targetActionPluginId` → `PluginDTO.id`). Deselecting
+    /// an upstream category while keeping a downstream one would otherwise
+    /// silently drop the link (e.g. a profile's custom prompt action reset to
+    /// the default) with no way to warn the user in the selection sheet, so
+    /// referenced items are pulled in automatically regardless of whether
+    /// their own category is selected.
     static func filtered(_ backup: SettingsBackup, to categories: Set<Category>) -> SettingsBackup {
-        SettingsBackup(
+        let profiles = categories.contains(.profiles) ? backup.profiles : []
+
+        let promptActionLocalIds: Set<String>
+        if categories.contains(.promptActions) {
+            promptActionLocalIds = Set(backup.promptActions.map(\.localId))
+        } else {
+            promptActionLocalIds = Set(profiles.compactMap(\.promptActionId))
+        }
+        let promptActions = backup.promptActions.filter { promptActionLocalIds.contains($0.localId) }
+
+        let pluginIds: Set<String>
+        if categories.contains(.plugins) {
+            pluginIds = Set(backup.plugins.map(\.id))
+        } else {
+            pluginIds = Set(promptActions.compactMap(\.targetActionPluginId))
+        }
+        let plugins = backup.plugins.filter { pluginIds.contains($0.id) }
+
+        return SettingsBackup(
             schemaVersion: backup.schemaVersion,
             exportedAt: backup.exportedAt,
             appVersion: backup.appVersion,
             workflows: categories.contains(.workflows) ? backup.workflows : [],
             dictionaryEntries: categories.contains(.dictionary) ? backup.dictionaryEntries : [],
             snippets: categories.contains(.snippets) ? backup.snippets : [],
-            promptActions: categories.contains(.promptActions) ? backup.promptActions : [],
-            profiles: categories.contains(.profiles) ? backup.profiles : [],
+            promptActions: promptActions,
+            profiles: profiles,
             hotkeys: categories.contains(.hotkeys) ? backup.hotkeys : [:],
-            plugins: categories.contains(.plugins) ? backup.plugins : [],
+            plugins: plugins,
             history: categories.contains(.history) ? backup.history : [],
             updateChannel: categories.contains(.updateChannel) ? backup.updateChannel : nil,
             preferences: categories.contains(.preferences) ? backup.preferences : .empty
@@ -670,7 +704,12 @@ enum SettingsBackupExporter {
                 hotkeyData: profile.hotkey.flatMap { try? JSONEncoder().encode($0) },
                 inlineCommandsEnabled: profile.inlineCommandsEnabled,
                 autoEnterEnabled: profile.autoEnterEnabled,
-                priority: profile.priority
+                // Append rather than reuse the source Mac's raw priority
+                // (mirrors how workflow import always appends via
+                // nextSortOrder()) — reusing it verbatim could collide with
+                // an existing profile's priority and silently change which
+                // one wins for a shared app/URL match.
+                priority: profileService.nextPriority()
             )
             result.profilesImported += 1
         }
@@ -692,7 +731,8 @@ enum SettingsBackupExporter {
         }
 
         if !backup.plugins.isEmpty {
-            _ = await pluginRegistryService.fetchRegistry()
+            let fetched = await pluginRegistryService.fetchRegistry()
+            result.pluginsRegistryFetchFailed = !fetched
             for plugin in backup.plugins {
                 let alreadyInstalled = pluginManager.loadedPlugins.contains { $0.id == plugin.id }
                 guard !alreadyInstalled else {
@@ -713,9 +753,25 @@ enum SettingsBackupExporter {
             }
         }
 
+        // If the destination Mac has history retention enabled, importing
+        // entries older than that window would otherwise get silently purged
+        // again on the very next launch (ServiceContainer.swift) while their
+        // usage-statistics counters (recorded below) live on forever —
+        // leaving Statistics showing data for history the user can no longer
+        // find. Exclude those entries up front instead.
+        let retentionDays = userDefaults.integer(forKey: UserDefaultsKeys.historyRetentionDays)
+        let retentionCutoff: Date? = retentionDays > 0
+            ? Calendar.current.date(byAdding: .day, value: -retentionDays, to: Date())
+            : nil
+
         let beforeHistoryCount = historyService.records.count
-        for entry in backup.history {
-            historyService.addRecord(
+        for (index, entry) in backup.history.enumerated() {
+            if let retentionCutoff, entry.timestamp < retentionCutoff {
+                result.historySkippedByRetention += 1
+                continue
+            }
+
+            let inserted = historyService.addRecord(
                 timestamp: entry.timestamp,
                 rawText: entry.rawText,
                 finalText: entry.finalText,
@@ -731,16 +787,28 @@ enum SettingsBackupExporter {
             // UsageStatisticsService only backfills from history once, at app
             // launch (ServiceContainer), so an import happening mid-session
             // would otherwise leave the Statistics tab showing no data for
-            // these entries.
-            usageStatisticsService.recordTranscription(
-                timestamp: entry.timestamp,
-                wordsCount: entry.finalText.split(separator: " ").count,
-                durationSeconds: entry.durationSeconds,
-                appBundleIdentifier: entry.appBundleIdentifier,
-                appName: entry.appName,
-                engineUsed: entry.engineUsed,
-                modelUsed: entry.modelUsed
-            )
+            // these entries. Only record stats for entries HistoryService
+            // actually inserted — it silently skips empty/invalid ones, and
+            // counting those anyway would inflate Statistics beyond what's
+            // visible in History.
+            if inserted {
+                usageStatisticsService.recordTranscription(
+                    timestamp: entry.timestamp,
+                    wordsCount: entry.finalText.split(separator: " ").count,
+                    durationSeconds: entry.durationSeconds,
+                    appBundleIdentifier: entry.appBundleIdentifier,
+                    appName: entry.appName,
+                    engineUsed: entry.engineUsed,
+                    modelUsed: entry.modelUsed
+                )
+            }
+
+            // A large imported history is a tight, otherwise-uninterrupted
+            // loop of SwiftData writes on the main actor; yield periodically
+            // so the UI (the import spinner, in particular) stays responsive.
+            if index % 25 == 24 {
+                await Task.yield()
+            }
         }
         result.historyImported = historyService.records.count - beforeHistoryCount
 

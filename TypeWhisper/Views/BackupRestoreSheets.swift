@@ -1,6 +1,12 @@
 import SwiftUI
 
-/// Category-selection sheet shown from "Export Settings…" in Advanced
+/// Categories with at least one item in `backup` — the initial/reset
+/// selection for both sheets, and what "Select All" restores.
+private func availableCategories(in backup: SettingsBackupExporter.SettingsBackup) -> Set<SettingsBackupExporter.Category> {
+    Set(SettingsBackupExporter.Category.allCases.filter { SettingsBackupExporter.Category.count($0, in: backup) > 0 })
+}
+
+/// Category-selection sheet shown from "Export Settings" in Advanced
 /// settings, mirroring `SnippetEditorSheet`'s header/content/footer layout.
 /// The backup is already built (from live state) by the time this sheet
 /// appears — the sheet only decides which categories make it into the file.
@@ -14,7 +20,7 @@ struct BackupExportSheet: View {
     init(backup: SettingsBackupExporter.SettingsBackup, onExport: @escaping (Set<SettingsBackupExporter.Category>) -> Void) {
         self.backup = backup
         self.onExport = onExport
-        _selected = State(initialValue: Self.availableCategories(in: backup))
+        _selected = State(initialValue: availableCategories(in: backup))
     }
 
     var body: some View {
@@ -38,7 +44,7 @@ struct BackupExportSheet: View {
             Divider()
 
             VStack(spacing: 0) {
-                BackupCategorySelectAllRow(selected: $selected, available: Self.availableCategories(in: backup))
+                BackupCategorySelectAllRow(selected: $selected, available: availableCategories(in: backup))
 
                 ScrollView {
                     BackupCategoryList(backup: backup, selected: $selected)
@@ -50,7 +56,6 @@ struct BackupExportSheet: View {
 
             BackupSheetFooter(
                 selectedCount: selected.count,
-                totalCount: SettingsBackupExporter.Category.allCases.count,
                 actionTitle: localizedAppText("Export…", de: "Exportieren…"),
                 actionDisabled: selected.isEmpty
             ) {
@@ -62,13 +67,9 @@ struct BackupExportSheet: View {
         }
         .frame(minWidth: 460, idealWidth: 480, minHeight: 420, idealHeight: 480)
     }
-
-    private static func availableCategories(in backup: SettingsBackupExporter.SettingsBackup) -> Set<SettingsBackupExporter.Category> {
-        Set(SettingsBackupExporter.Category.allCases.filter { SettingsBackupExporter.Category.count($0, in: backup) > 0 })
-    }
 }
 
-/// File-picker + category-selection sheet shown from "Import Settings…" in
+/// File-picker + category-selection sheet shown from "Import Settings" in
 /// Advanced settings. Unlike export, there's no live data to show until a
 /// backup file has been chosen and parsed, so this sheet has two steps.
 struct BackupImportSheet: View {
@@ -100,7 +101,7 @@ struct BackupImportSheet: View {
 
             if let backup {
                 VStack(spacing: 0) {
-                    BackupCategorySelectAllRow(selected: $selected, available: Self.availableCategories(in: backup))
+                    BackupCategorySelectAllRow(selected: $selected, available: availableCategories(in: backup))
 
                     ScrollView {
                         BackupCategoryList(backup: backup, selected: $selected)
@@ -115,7 +116,6 @@ struct BackupImportSheet: View {
 
             BackupSheetFooter(
                 selectedCount: backup == nil ? 0 : selected.count,
-                totalCount: SettingsBackupExporter.Category.allCases.count,
                 actionTitle: localizedAppText("Import…", de: "Importieren…"),
                 actionDisabled: backup == nil || selected.isEmpty,
                 showCount: backup != nil
@@ -160,14 +160,10 @@ struct BackupImportSheet: View {
             let data = try Data(contentsOf: url)
             let parsed = try SettingsBackupExporter.parse(data)
             backup = parsed
-            selected = Self.availableCategories(in: parsed)
+            selected = availableCategories(in: parsed)
         } catch {
             loadErrorMessage = error.localizedDescription
         }
-    }
-
-    private static func availableCategories(in backup: SettingsBackupExporter.SettingsBackup) -> Set<SettingsBackupExporter.Category> {
-        Set(SettingsBackupExporter.Category.allCases.filter { SettingsBackupExporter.Category.count($0, in: backup) > 0 })
     }
 }
 
@@ -257,7 +253,6 @@ private struct BackupCategorySelectAllRow: View {
 
 private struct BackupSheetFooter: View {
     let selectedCount: Int
-    let totalCount: Int
     let actionTitle: String
     let actionDisabled: Bool
     var showCount: Bool = true
@@ -272,7 +267,7 @@ private struct BackupSheetFooter: View {
             Spacer()
 
             if showCount {
-                Text(String(format: String(localized: "%d of %d categories selected"), selectedCount, totalCount))
+                Text(String(format: String(localized: "%d of %d categories selected"), selectedCount, SettingsBackupExporter.Category.allCases.count))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

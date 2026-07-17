@@ -23378,6 +23378,36 @@
           }
         }
       }
+    },
+    "History: %d skipped (older than your retention setting)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verlauf: %d übersprungen (älter als deine Aufbewahrungseinstellung)"
+          }
+        }
+      }
+    },
+    "Export Settings": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einstellungen exportieren"
+          }
+        }
+      }
+    },
+    "Import Settings": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einstellungen importieren"
+          }
+        }
+      }
     }
   },
   "version": "1.1"

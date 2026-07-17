@@ -24,8 +24,7 @@ struct AdvancedSettingsView: View {
     @State private var showBackupImportResult = false
     @State private var backupImportResultMessage = ""
     @State private var isImportingBackup = false
-    @State private var showExportSheet = false
-    @State private var exportBackupDraft: SettingsBackupExporter.SettingsBackup?
+    @State private var exportBackupDraft: ExportBackupDraft?
     @State private var showImportSheet = false
 
     @AppStorage(UserDefaultsKeys.historyEnabled) private var historyEnabled: Bool = true
@@ -60,7 +59,7 @@ struct AdvancedSettingsView: View {
                         beginExport()
                     } label: {
                         Label(
-                            localizedAppText("Export Settings…", de: "Einstellungen exportieren…"),
+                            localizedAppText("Export Settings", de: "Einstellungen exportieren"),
                             systemImage: "square.and.arrow.up"
                         )
                     }
@@ -70,7 +69,7 @@ struct AdvancedSettingsView: View {
                         showImportSheet = true
                     } label: {
                         Label(
-                            localizedAppText("Import Settings…", de: "Einstellungen importieren…"),
+                            localizedAppText("Import Settings", de: "Einstellungen importieren"),
                             systemImage: "square.and.arrow.down"
                         )
                     }
@@ -512,11 +511,9 @@ struct AdvancedSettingsView: View {
         } message: {
             Text(backupImportResultMessage)
         }
-        .sheet(isPresented: $showExportSheet) {
-            if let exportBackupDraft {
-                BackupExportSheet(backup: exportBackupDraft) { categories in
-                    performBackupExport(exportBackupDraft, categories: categories)
-                }
+        .sheet(item: $exportBackupDraft) { draft in
+            BackupExportSheet(backup: draft.backup) { categories in
+                performBackupExport(draft.backup, categories: categories)
             }
         }
         .sheet(isPresented: $showImportSheet) {
@@ -620,7 +617,7 @@ struct AdvancedSettingsView: View {
     /// right away.
     private func beginExport() {
         let container = ServiceContainer.shared
-        exportBackupDraft = SettingsBackupExporter.buildBackup(
+        let backup = SettingsBackupExporter.buildBackup(
             workflowService: container.workflowService,
             dictionaryService: container.dictionaryService,
             snippetService: container.snippetService,
@@ -629,7 +626,7 @@ struct AdvancedSettingsView: View {
             pluginManager: container.pluginManager,
             historyService: container.historyService
         )
-        showExportSheet = true
+        exportBackupDraft = ExportBackupDraft(backup: backup)
     }
 
     private func performBackupExport(_ backup: SettingsBackupExporter.SettingsBackup, categories: Set<SettingsBackupExporter.Category>) {
@@ -670,7 +667,16 @@ struct AdvancedSettingsView: View {
         lines.append(String(format: String(localized: "Profiles: %d imported"), result.profilesImported))
         lines.append(String(format: String(localized: "Hotkeys: %d applied, %d skipped (already bound)"), result.hotkeysApplied, result.hotkeysSkipped))
         lines.append(String(format: String(localized: "Plugins: %d installed, %d skipped (already installed or unavailable)"), result.pluginsInstalled, result.pluginsSkipped))
+        if result.pluginsRegistryFetchFailed {
+            lines.append(localizedAppText(
+                "Could not reach the plugin marketplace — some plugins may have been skipped due to a network error, not because they're unavailable.",
+                de: "Der Plugin-Marktplatz konnte nicht erreicht werden – einige Plugins wurden möglicherweise wegen eines Netzwerkfehlers übersprungen, nicht weil sie nicht verfügbar sind."
+            ))
+        }
         lines.append(String(format: String(localized: "History: %d imported"), result.historyImported))
+        if result.historySkippedByRetention > 0 {
+            lines.append(String(format: String(localized: "History: %d skipped (older than your retention setting)"), result.historySkippedByRetention))
+        }
         if result.updateChannelApplied {
             lines.append(String(localized: "Update channel applied"))
         }
@@ -737,6 +743,15 @@ struct AdvancedSettingsView: View {
             _ = speechFeedbackService.disableIfNoProvidersAvailable()
         }
     }
+}
+
+/// Wraps a built `SettingsBackup` snapshot with a stable identity so the
+/// export sheet can be driven by `.sheet(item:)` instead of a separate
+/// `Bool` + optional pair — `.sheet(item:)` never presents until the item is
+/// non-nil, which rules out the sheet ever appearing with no content to show.
+private struct ExportBackupDraft: Identifiable {
+    let id = UUID()
+    let backup: SettingsBackupExporter.SettingsBackup
 }
 
 struct SettingsInfoLabel: View {

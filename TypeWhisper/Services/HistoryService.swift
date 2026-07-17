@@ -40,6 +40,7 @@ final class HistoryService: ObservableObject {
         fetchRecords()
     }
 
+    @discardableResult
     func addRecord(
         id: UUID = UUID(),
         timestamp: Date = Date(),
@@ -54,16 +55,16 @@ final class HistoryService: ObservableObject {
         modelUsed: String? = nil,
         audioSamples: [Float]? = nil,
         pipelineSteps: [String]? = nil
-    ) {
+    ) -> Bool {
         let sanitizedRaw = Self.sanitize(rawText)
         let sanitizedFinal = Self.sanitize(finalText)
         guard !sanitizedRaw.isEmpty, !sanitizedFinal.isEmpty else {
             logger.warning("Skipping history record: empty text after sanitization")
-            return
+            return false
         }
         guard durationSeconds.isFinite, durationSeconds >= 0 else {
             logger.warning("Skipping history record: invalid duration \(durationSeconds)")
-            return
+            return false
         }
         let recordId = id
         var audioFileName: String?
@@ -99,6 +100,7 @@ final class HistoryService: ObservableObject {
         modelContext.insert(record)
         save()
         fetchRecords()
+        return true
     }
 
     func audioFileURL(for record: TranscriptionRecord) -> URL? {

@@ -327,6 +327,9 @@ final class SettingsBackupExporterTests: XCTestCase {
 
         XCTAssertEqual(result.pluginsInstalled, 0)
         XCTAssertEqual(result.pluginsSkipped, 1)
+        // The mocked registry fetch always fails, so this must be flagged
+        // distinctly from "plugin genuinely removed from the marketplace".
+        XCTAssertTrue(result.pluginsRegistryFetchFailed)
     }
 
     func testImportSkipsPluginAlreadyInstalled() async throws {
@@ -575,5 +578,190 @@ final class SettingsBackupExporterTests: XCTestCase {
         XCTAssertEqual(result.dictionaryImported, 0)
         XCTAssertEqual(result.snippetsImported, 0)
         XCTAssertFalse(result.updateChannelApplied)
+    }
+
+    func testUsageStatisticsNotRecordedWhenHistoryRecordSkipped() async throws {
+        // rawText/finalText of only NUL characters sanitizes to an empty
+        // string in HistoryService, so addRecord silently declines to insert
+        // it — usage statistics must not be recorded for it either.
+        let backup = SettingsBackupExporter.SettingsBackup(
+            schemaVersion: SettingsBackupExporter.schemaVersion,
+            exportedAt: Date(),
+            appVersion: "1.0",
+            workflows: [], dictionaryEntries: [], snippets: [], promptActions: [], profiles: [],
+            hotkeys: [:], plugins: [],
+            history: [
+                SettingsBackupExporter.HistoryEntryDTO(
+                    timestamp: Date(),
+                    rawText: "\0",
+                    finalText: "\0",
+                    appName: nil,
+                    appBundleIdentifier: nil,
+                    appURL: nil,
+                    durationSeconds: 1,
+                    language: nil,
+                    engineUsed: "whisperkit",
+                    modelUsed: nil,
+                    pipelineSteps: []
+                ),
+            ],
+            updateChannel: nil,
+            preferences: .empty
+        )
+
+        let destination = try makeFixture()
+        defer { teardown(destination) }
+
+        let result = await SettingsBackupExporter.importBackup(
+            backup,
+            workflowService: destination.workflowService,
+            dictionaryService: destination.dictionaryService,
+            snippetService: destination.snippetService,
+            profileService: destination.profileService,
+            promptActionService: destination.promptActionService,
+            pluginManager: destination.pluginManager,
+            pluginRegistryService: destination.pluginRegistryService,
+            historyService: destination.historyService,
+            usageStatisticsService: destination.usageStatisticsService,
+            userDefaults: destination.userDefaults
+        )
+
+        XCTAssertEqual(result.historyImported, 0)
+        XCTAssertTrue(destination.historyService.records.isEmpty)
+        XCTAssertFalse(destination.usageStatisticsService.hasAnyStatistics)
+    }
+
+    func testHistoryImportSkipsEntriesOlderThanRetentionWindow() async throws {
+        let oldTimestamp = Calendar.current.date(byAdding: .day, value: -400, to: Date())!
+        let recentTimestamp = Date()
+        let backup = SettingsBackupExporter.SettingsBackup(
+            schemaVersion: SettingsBackupExporter.schemaVersion,
+            exportedAt: Date(),
+            appVersion: "1.0",
+            workflows: [], dictionaryEntries: [], snippets: [], promptActions: [], profiles: [],
+            hotkeys: [:], plugins: [],
+            history: [
+                SettingsBackupExporter.HistoryEntryDTO(
+                    timestamp: oldTimestamp, rawText: "old", finalText: "old",
+                    appName: nil, appBundleIdentifier: nil, appURL: nil,
+                    durationSeconds: 1, language: nil, engineUsed: "whisperkit", modelUsed: nil, pipelineSteps: []
+                ),
+                SettingsBackupExporter.HistoryEntryDTO(
+                    timestamp: recentTimestamp, rawText: "recent", finalText: "recent",
+                    appName: nil, appBundleIdentifier: nil, appURL: nil,
+                    durationSeconds: 1, language: nil, engineUsed: "whisperkit", modelUsed: nil, pipelineSteps: []
+                ),
+            ],
+            updateChannel: nil,
+            preferences: .empty
+        )
+
+        let destination = try makeFixture()
+        defer { teardown(destination) }
+        destination.userDefaults.set(30, forKey: UserDefaultsKeys.historyRetentionDays)
+
+        let result = await SettingsBackupExporter.importBackup(
+            backup,
+            workflowService: destination.workflowService,
+            dictionaryService: destination.dictionaryService,
+            snippetService: destination.snippetService,
+            profileService: destination.profileService,
+            promptActionService: destination.promptActionService,
+            pluginManager: destination.pluginManager,
+            pluginRegistryService: destination.pluginRegistryService,
+            historyService: destination.historyService,
+            usageStatisticsService: destination.usageStatisticsService,
+            userDefaults: destination.userDefaults
+        )
+
+        XCTAssertEqual(result.historyImported, 1)
+        XCTAssertEqual(result.historySkippedByRetention, 1)
+        XCTAssertEqual(destination.historyService.records.first?.finalText, "recent")
+    }
+
+    func testProfileImportAppendsRatherThanReusingSourcePriority() async throws {
+        let source = try makeFixture()
+        defer { teardown(source) }
+        source.profileService.addProfile(name: "Slack", bundleIdentifiers: ["com.tinyspeck.slackmacgap"], priority: 0)
+
+        let backup = SettingsBackupExporter.buildBackup(
+            workflowService: source.workflowService,
+            dictionaryService: source.dictionaryService,
+            snippetService: source.snippetService,
+            profileService: source.profileService,
+            promptActionService: source.promptActionService,
+            pluginManager: source.pluginManager,
+            historyService: source.historyService,
+            userDefaults: source.userDefaults
+        )
+        XCTAssertEqual(backup.profiles.first?.priority, 0)
+
+        let destination = try makeFixture()
+        defer { teardown(destination) }
+        destination.profileService.addProfile(name: "Existing", bundleIdentifiers: ["com.apple.Notes"], priority: 0)
+
+        let result = await SettingsBackupExporter.importBackup(
+            backup,
+            workflowService: destination.workflowService,
+            dictionaryService: destination.dictionaryService,
+            snippetService: destination.snippetService,
+            profileService: destination.profileService,
+            promptActionService: destination.promptActionService,
+            pluginManager: destination.pluginManager,
+            pluginRegistryService: destination.pluginRegistryService,
+            historyService: destination.historyService,
+            usageStatisticsService: destination.usageStatisticsService,
+            userDefaults: destination.userDefaults
+        )
+
+        XCTAssertEqual(result.profilesImported, 1)
+        let imported = try XCTUnwrap(destination.profileService.profiles.first { $0.name == "Slack" })
+        let existing = try XCTUnwrap(destination.profileService.profiles.first { $0.name == "Existing" })
+        // Must not collide with the destination's existing priority-0 profile.
+        XCTAssertNotEqual(imported.priority, existing.priority)
+    }
+
+    func testFilteredAutoIncludesReferencedPromptActionAndPlugin() throws {
+        let source = try makeFixture()
+        defer { teardown(source) }
+
+        source.pluginManager.loadedPlugins = [
+            makeLoadedPlugin(id: "com.typewhisper.action-plugin", name: "Action Plugin", version: "1.0.0", isEnabled: true, bundled: false),
+        ]
+        let action = try XCTUnwrap(source.promptActionService.addAction(
+            name: "Summarize",
+            prompt: "Summarize the text",
+            targetActionPluginId: "com.typewhisper.action-plugin"
+        ))
+        source.profileService.addProfile(
+            name: "Slack",
+            bundleIdentifiers: ["com.tinyspeck.slackmacgap"],
+            promptActionId: action.id.uuidString
+        )
+
+        let backup = SettingsBackupExporter.buildBackup(
+            workflowService: source.workflowService,
+            dictionaryService: source.dictionaryService,
+            snippetService: source.snippetService,
+            profileService: source.profileService,
+            promptActionService: source.promptActionService,
+            pluginManager: source.pluginManager,
+            historyService: source.historyService,
+            userDefaults: source.userDefaults
+        )
+        XCTAssertEqual(backup.promptActions.count, 1)
+        XCTAssertEqual(backup.plugins.count, 1)
+
+        // Only "Profiles" selected — neither Prompt Actions nor Plugins.
+        let filtered = SettingsBackupExporter.filtered(backup, to: [.profiles])
+        XCTAssertEqual(filtered.profiles.count, 1)
+        XCTAssertEqual(filtered.promptActions.count, 1, "the profile's referenced prompt action should be auto-included")
+        XCTAssertEqual(filtered.plugins.count, 1, "the plugin referenced by the auto-included prompt action should be auto-included")
+
+        // Deselecting Profiles entirely drops the chain again.
+        let filteredNoProfiles = SettingsBackupExporter.filtered(backup, to: [])
+        XCTAssertEqual(filteredNoProfiles.profiles.count, 0)
+        XCTAssertEqual(filteredNoProfiles.promptActions.count, 0)
+        XCTAssertEqual(filteredNoProfiles.plugins.count, 0)
     }
 }
