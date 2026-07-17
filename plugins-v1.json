@@ -2163,14 +2163,24 @@
       "id": "com.typewhisper.filler-words",
       "name": "Filler Words",
       "author": "TypeWhisper",
-      "description": "",
-      "descriptions": {},
+      "description": "Removes filler words like \"um\" and \"uh\" from transcribed text.",
+      "descriptions": {
+        "de": "Entfernt F\u00fcllw\u00f6rter wie \u201e\u00e4hm\u201c und \u201e\u00e4h\u201c aus transkribiertem Text."
+      },
       "category": "post-processor",
       "downloadCount": 2077,
       "iconSystemName": "text.badge.minus",
       "requiresAPIKey": false,
       "detailsURL": "https://www.typewhisper.com/addons/filler-words/",
       "releases": [
+        {
+          "version": "1.0.1",
+          "minHostVersion": "1.0.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 82313,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-filler-words-v1.0.1/FillerWordsPlugin.zip",
+          "minOSVersion": "14.0"
+        },
         {
           "version": "1.0.0",
           "minHostVersion": "1.0.0",
