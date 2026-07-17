@@ -23,6 +23,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         let pluginManager: PluginManager
         let pluginRegistryService: PluginRegistryService
         let historyService: HistoryService
+        let usageStatisticsService: UsageStatisticsService
         let userDefaults: UserDefaults
         let suiteName: String
     }
@@ -45,6 +46,7 @@ final class SettingsBackupExporterTests: XCTestCase {
                 fetchData: { _ in throw URLError(.notConnectedToInternet) }
             ),
             historyService: HistoryService(appSupportDirectory: dir),
+            usageStatisticsService: UsageStatisticsService(appSupportDirectory: dir),
             userDefaults: userDefaults,
             suiteName: suiteName
         )
@@ -159,6 +161,7 @@ final class SettingsBackupExporterTests: XCTestCase {
             pluginManager: destination.pluginManager,
             pluginRegistryService: destination.pluginRegistryService,
             historyService: destination.historyService,
+            usageStatisticsService: destination.usageStatisticsService,
             userDefaults: destination.userDefaults
         )
 
@@ -204,6 +207,7 @@ final class SettingsBackupExporterTests: XCTestCase {
             pluginManager: destination.pluginManager,
             pluginRegistryService: destination.pluginRegistryService,
             historyService: destination.historyService,
+            usageStatisticsService: destination.usageStatisticsService,
             userDefaults: destination.userDefaults
         )
 
@@ -247,6 +251,7 @@ final class SettingsBackupExporterTests: XCTestCase {
             pluginManager: destinationEmpty.pluginManager,
             pluginRegistryService: destinationEmpty.pluginRegistryService,
             historyService: destinationEmpty.historyService,
+            usageStatisticsService: destinationEmpty.usageStatisticsService,
             userDefaults: destinationEmpty.userDefaults
         )
         XCTAssertEqual(emptyResult.hotkeysApplied, 1)
@@ -272,6 +277,7 @@ final class SettingsBackupExporterTests: XCTestCase {
             pluginManager: destinationOccupied.pluginManager,
             pluginRegistryService: destinationOccupied.pluginRegistryService,
             historyService: destinationOccupied.historyService,
+            usageStatisticsService: destinationOccupied.usageStatisticsService,
             userDefaults: destinationOccupied.userDefaults
         )
         XCTAssertEqual(occupiedResult.hotkeysApplied, 0)
@@ -315,6 +321,7 @@ final class SettingsBackupExporterTests: XCTestCase {
             pluginManager: destination.pluginManager,
             pluginRegistryService: destination.pluginRegistryService,
             historyService: destination.historyService,
+            usageStatisticsService: destination.usageStatisticsService,
             userDefaults: destination.userDefaults
         )
 
@@ -357,6 +364,7 @@ final class SettingsBackupExporterTests: XCTestCase {
             pluginManager: destination.pluginManager,
             pluginRegistryService: destination.pluginRegistryService,
             historyService: destination.historyService,
+            usageStatisticsService: destination.usageStatisticsService,
             userDefaults: destination.userDefaults
         )
 
@@ -411,6 +419,7 @@ final class SettingsBackupExporterTests: XCTestCase {
             pluginManager: destination.pluginManager,
             pluginRegistryService: destination.pluginRegistryService,
             historyService: destination.historyService,
+            usageStatisticsService: destination.usageStatisticsService,
             userDefaults: destination.userDefaults
         )
 
@@ -419,6 +428,11 @@ final class SettingsBackupExporterTests: XCTestCase {
         XCTAssertEqual(importedRecord.finalText, "Hello, world.")
         XCTAssertEqual(importedRecord.timestamp.timeIntervalSince1970, originalTimestamp.timeIntervalSince1970, accuracy: 0.001)
         XCTAssertNil(importedRecord.audioFileName)
+
+        // UsageStatisticsService only backfills from history once, at launch, so
+        // importing history mid-session must explicitly feed it too, or the
+        // Statistics tab silently shows no data for the imported entries.
+        XCTAssertTrue(destination.usageStatisticsService.hasAnyStatistics)
     }
 
     func testUpdateChannelAndPreferencesRoundTrip() async throws {
@@ -469,6 +483,7 @@ final class SettingsBackupExporterTests: XCTestCase {
             pluginManager: destination.pluginManager,
             pluginRegistryService: destination.pluginRegistryService,
             historyService: destination.historyService,
+            usageStatisticsService: destination.usageStatisticsService,
             userDefaults: destination.userDefaults
         )
 

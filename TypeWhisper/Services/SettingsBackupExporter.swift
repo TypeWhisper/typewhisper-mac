@@ -439,6 +439,7 @@ enum SettingsBackupExporter {
         pluginManager: PluginManager,
         pluginRegistryService: PluginRegistryService,
         historyService: HistoryService,
+        usageStatisticsService: UsageStatisticsService,
         userDefaults: UserDefaults = .standard
     ) async -> ImportResult {
         var result = ImportResult()
@@ -578,6 +579,19 @@ enum SettingsBackupExporter {
                 engineUsed: entry.engineUsed,
                 modelUsed: entry.modelUsed,
                 pipelineSteps: entry.pipelineSteps
+            )
+            // UsageStatisticsService only backfills from history once, at app
+            // launch (ServiceContainer), so an import happening mid-session
+            // would otherwise leave the Statistics tab showing no data for
+            // these entries.
+            usageStatisticsService.recordTranscription(
+                timestamp: entry.timestamp,
+                wordsCount: entry.finalText.split(separator: " ").count,
+                durationSeconds: entry.durationSeconds,
+                appBundleIdentifier: entry.appBundleIdentifier,
+                appName: entry.appName,
+                engineUsed: entry.engineUsed,
+                modelUsed: entry.modelUsed
             )
         }
         result.historyImported = historyService.records.count - beforeHistoryCount

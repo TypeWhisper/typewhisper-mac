@@ -635,7 +635,8 @@ struct AdvancedSettingsView: View {
                 promptActionService: container.promptActionService,
                 pluginManager: container.pluginManager,
                 pluginRegistryService: container.pluginRegistryService,
-                historyService: container.historyService
+                historyService: container.historyService,
+                usageStatisticsService: container.usageStatisticsService
             )
 
             backupImportResultMessage = backupImportSummary(result)
