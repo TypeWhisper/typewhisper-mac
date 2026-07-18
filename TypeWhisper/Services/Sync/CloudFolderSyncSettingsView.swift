@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import CryptoKit
 import Foundation
 import Security
 import SwiftUI
@@ -19,7 +20,17 @@ enum PremiumSyncMode: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-struct CrossDevicePremiumEntitlement: Codable, Sendable {
+struct CrossDevicePremiumEntitlement: Codable, Equatable, Sendable {
+    struct SignedClaims: Codable, Equatable, Sendable {
+        let status: String
+        let tier: String
+        let source: String
+        let isLifetime: Bool
+        let expiresAt: Date?
+        let deviceLimit: Int?
+        let verifiedAt: Date
+    }
+
     let status: String
     let tier: String
     let source: String
@@ -32,6 +43,75 @@ struct CrossDevicePremiumEntitlement: Codable, Sendable {
     var isActive: Bool {
         guard status == "active" || status == "granted" else { return false }
         return expiresAt.map { $0 > Date() } ?? true
+    }
+
+    var signedClaims: SignedClaims {
+        SignedClaims(
+            status: status,
+            tier: tier,
+            source: source,
+            isLifetime: isLifetime,
+            expiresAt: expiresAt,
+            deviceLimit: deviceLimit,
+            verifiedAt: verifiedAt
+        )
+    }
+}
+
+struct CrossDevicePremiumEntitlementVerifier: Sendable {
+    private let publicKey: P256.Signing.PublicKey
+
+    init?(publicKeyBase64: String) {
+        guard let keyData = Data(base64Encoded: publicKeyBase64),
+              let key = try? P256.Signing.PublicKey(rawRepresentation: keyData) else {
+            return nil
+        }
+        publicKey = key
+    }
+
+    func verified(_ entitlement: CrossDevicePremiumEntitlement) -> CrossDevicePremiumEntitlement? {
+        guard let signatureValue = entitlement.signature else { return nil }
+        let components = signatureValue.split(separator: ".", omittingEmptySubsequences: false)
+        guard components.count == 2,
+              let payload = Self.decodeBase64URL(String(components[0])),
+              let signatureData = Self.decodeBase64URL(String(components[1])),
+              let signature = try? P256.Signing.ECDSASignature(rawRepresentation: signatureData),
+              publicKey.isValidSignature(signature, for: payload) else {
+            return nil
+        }
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        guard let claims = try? decoder.decode(
+            CrossDevicePremiumEntitlement.SignedClaims.self,
+            from: payload
+        ), claims == entitlement.signedClaims else {
+            return nil
+        }
+        return entitlement
+    }
+
+    private static func decodeBase64URL(_ value: String) -> Data? {
+        let base64 = value
+            .replacingOccurrences(of: "-", with: "+")
+            .replacingOccurrences(of: "_", with: "/")
+        let padded = base64.padding(
+            toLength: ((base64.count + 3) / 4) * 4,
+            withPad: "=",
+            startingAt: 0
+        )
+        return Data(base64Encoded: padded)
+    }
+}
+
+private enum PremiumAccountServiceError: LocalizedError {
+    case invalidEntitlementSignature
+
+    var errorDescription: String? {
+        switch self {
+        case .invalidEntitlementSignature:
+            String(localized: "The Premium entitlement signature could not be verified.")
+        }
     }
 }
 
@@ -59,15 +139,35 @@ final class PremiumAccountService: ObservableObject {
     private let baseURL: URL
     private let decoder: JSONDecoder
     private let encoder: JSONEncoder
-    private let keychainService = "com.typewhisper.mac.premium-account"
+    private let session: URLSession
+    private let keychainService: String
     private let deviceID: String
+    private let entitlementVerifier: CrossDevicePremiumEntitlementVerifier?
+
+    private static let productionEntitlementPublicKeyBase64 =
+        "8ZwFh+yrpkZZ1VsZgjpZcOz2h3jKpGG93MTdRaCPqXFn/Loqh8u36hB9FLho+ozwuHbaNeoN1MxM2/AJKyBNvQ=="
 
     var hasPremiumEntitlement: Bool { entitlement?.isActive == true }
 
-    init(defaults: UserDefaults = .standard) {
+    init(
+        defaults: UserDefaults = .standard,
+        baseURL: URL? = nil,
+        session: URLSession = .shared,
+        keychainService: String = "com.typewhisper.mac.premium-account",
+        entitlementPublicKeyBase64: String = PremiumAccountService.productionEntitlementPublicKeyBase64,
+        isSignedInOverride: Bool? = nil,
+        automaticallyRefresh: Bool = true
+    ) {
         self.defaults = defaults
-        baseURL = (Bundle.main.object(forInfoDictionaryKey: "TypeWhisperAccountBaseURL") as? String)
-            .flatMap(URL.init(string:)) ?? URL(string: "https://app.typewhisper.com")!
+        self.baseURL = baseURL
+            ?? (Bundle.main.object(forInfoDictionaryKey: "TypeWhisperAccountBaseURL") as? String)
+                .flatMap(URL.init(string:))
+            ?? URL(string: "https://app.typewhisper.com")!
+        self.session = session
+        self.keychainService = keychainService
+        entitlementVerifier = CrossDevicePremiumEntitlementVerifier(
+            publicKeyBase64: entitlementPublicKeyBase64
+        )
         decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
         encoder = JSONEncoder()
@@ -79,11 +179,16 @@ final class PremiumAccountService: ObservableObject {
             defaults.set(generated, forKey: Keys.deviceID)
             deviceID = generated
         }
-        if let data = defaults.data(forKey: Keys.cachedEntitlement) {
-            entitlement = try? decoder.decode(CrossDevicePremiumEntitlement.self, from: data)
+        if let data = defaults.data(forKey: Keys.cachedEntitlement),
+           let cached = try? decoder.decode(CrossDevicePremiumEntitlement.self, from: data),
+           let verified = entitlementVerifier?.verified(cached) {
+            entitlement = verified
+        } else {
+            entitlement = nil
+            defaults.removeObject(forKey: Keys.cachedEntitlement)
         }
-        isSignedIn = Self.readToken(service: keychainService) != nil
-        if isSignedIn { Task { await refreshIfNeeded() } }
+        isSignedIn = isSignedInOverride ?? (Self.readToken(service: keychainService) != nil)
+        if isSignedIn, automaticallyRefresh { Task { await refreshIfNeeded() } }
     }
 
     func signIn(identityToken: String, authorizationCode: String?, nonceHash: String, polarLicenseKey: String?) async {
@@ -101,14 +206,14 @@ final class PremiumAccountService: ObservableObject {
             )
             try Self.saveToken(session.accessToken, service: keychainService)
             isSignedIn = true
-            setEntitlement(session.entitlement)
+            try acceptEntitlement(session.entitlement)
             if let polarLicenseKey, !polarLicenseKey.isEmpty {
                 let response: EntitlementResponse = try await request(
                     path: "/v1/entitlements/polar/link",
                     method: "POST",
                     body: try encoder.encode(["licenseKey": polarLicenseKey])
                 )
-                setEntitlement(response.entitlement)
+                try acceptEntitlement(response.entitlement)
             } else {
                 try await refresh()
             }
@@ -124,10 +229,7 @@ final class PremiumAccountService: ObservableObject {
     }
 
     func signOut() {
-        Self.deleteToken(service: keychainService)
-        isSignedIn = false
-        setEntitlement(nil)
-        defaults.removeObject(forKey: Keys.lastRefresh)
+        clearAuthorizationState()
     }
 
     func deleteAccount() async {
@@ -139,14 +241,25 @@ final class PremiumAccountService: ObservableObject {
 
     private func refresh() async throws {
         let response: EntitlementResponse = try await request(path: "/v1/entitlements/current")
-        setEntitlement(response.entitlement)
+        try acceptEntitlement(response.entitlement)
         defaults.set(Date(), forKey: Keys.lastRefresh)
     }
 
-    private func setEntitlement(_ value: CrossDevicePremiumEntitlement?) {
-        entitlement = value
-        if let value, let data = try? encoder.encode(value) { defaults.set(data, forKey: Keys.cachedEntitlement) }
-        else { defaults.removeObject(forKey: Keys.cachedEntitlement) }
+    private func acceptEntitlement(_ value: CrossDevicePremiumEntitlement?) throws {
+        guard let value else {
+            entitlement = nil
+            defaults.removeObject(forKey: Keys.cachedEntitlement)
+            return
+        }
+        guard let verified = entitlementVerifier?.verified(value) else {
+            entitlement = nil
+            defaults.removeObject(forKey: Keys.cachedEntitlement)
+            throw PremiumAccountServiceError.invalidEntitlementSignature
+        }
+        entitlement = verified
+        if let data = try? encoder.encode(verified) {
+            defaults.set(data, forKey: Keys.cachedEntitlement)
+        }
     }
 
     private func perform(_ operation: () async throws -> Void) async {
@@ -179,13 +292,29 @@ final class PremiumAccountService: ObservableObject {
             }
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse else { throw URLError(.badServerResponse) }
         guard (200..<300).contains(http.statusCode) else {
+            if authenticated, http.statusCode == 401 || http.statusCode == 403 {
+                clearAuthorizationState()
+            }
             let message = (try? decoder.decode(ErrorResponse.self, from: data).error) ?? "Account request failed (HTTP \(http.statusCode))."
             throw NSError(domain: "PremiumAccount", code: http.statusCode, userInfo: [NSLocalizedDescriptionKey: message])
         }
         return try decoder.decode(Response.self, from: data)
+    }
+
+    func clearAuthorizationForHTTPStatus(_ statusCode: Int) {
+        guard statusCode == 401 || statusCode == 403 else { return }
+        clearAuthorizationState()
+    }
+
+    private func clearAuthorizationState() {
+        Self.deleteToken(service: keychainService)
+        isSignedIn = false
+        entitlement = nil
+        defaults.removeObject(forKey: Keys.cachedEntitlement)
+        defaults.removeObject(forKey: Keys.lastRefresh)
     }
 
     private static func readToken(service: String) -> String? {
@@ -236,7 +365,7 @@ final class CloudFolderSyncController: ObservableObject {
     }
 
     private let premiumAccountService: PremiumAccountService
-    private let syncStore: TypeWhisperUserDataSyncStore
+    private let syncStore: any UserDataSyncStore
     private let defaults: UserDefaults
     private var customState: CloudFolderSyncState
     private var automaticState: CloudFolderSyncState
@@ -273,7 +402,7 @@ final class CloudFolderSyncController: ObservableObject {
 
     init(
         premiumAccountService: PremiumAccountService,
-        syncStore: TypeWhisperUserDataSyncStore,
+        syncStore: any UserDataSyncStore,
         defaults: UserDefaults = .standard
     ) {
         self.premiumAccountService = premiumAccountService
@@ -326,8 +455,9 @@ final class CloudFolderSyncController: ObservableObject {
     }
 
     func setMode(_ newMode: PremiumSyncMode) async {
-        guard newMode != mode else { return }
+        guard newMode != mode, !isSyncing else { return }
         if isConfigured, canUseSync { await syncNow() }
+        guard !isSyncing else { return }
         mode = newMode
         if newMode == .automaticICloud { provider = .iCloudDrive }
         if newMode == .cloudFolder, let selectedFolderURL {
@@ -338,15 +468,12 @@ final class CloudFolderSyncController: ObservableObject {
         statusMessage = nil
         errorMessage = nil
         updateICloudObservation()
-        if newMode == .automaticICloud {
-            automaticState = CloudFolderSyncState()
-            saveState(automaticState, key: Keys.automaticSyncState)
-        }
         lastSyncDate = state(for: newMode)?.lastSyncAt
         if isConfigured { await syncNow() }
     }
 
     func clearFolder() {
+        guard !isSyncing else { return }
         scheduledSyncTask?.cancel()
         selectedFolderURL = nil
         provider = .custom
@@ -362,8 +489,9 @@ final class CloudFolderSyncController: ObservableObject {
     }
 
     func syncNow() async {
-        guard mode != .off else { return }
-        guard let folderURL = activeFolderURL() else { return }
+        let syncMode = mode
+        guard syncMode != .off else { return }
+        guard let folderURL = activeFolderURL(for: syncMode) else { return }
         guard canUseSync else {
             errorMessage = CloudFolderSyncError.notEntitled.localizedDescription
             return
@@ -372,7 +500,7 @@ final class CloudFolderSyncController: ObservableObject {
 
         errorMessage = nil
         isSyncing = true
-        let accessed = mode == .cloudFolder && folderURL.startAccessingSecurityScopedResource()
+        let accessed = syncMode == .cloudFolder && folderURL.startAccessingSecurityScopedResource()
         defer {
             if accessed {
                 folderURL.stopAccessingSecurityScopedResource()
@@ -382,26 +510,27 @@ final class CloudFolderSyncController: ObservableObject {
         }
 
         do {
-            try FileManager.default.createDirectory(at: folderURL, withIntermediateDirectories: true)
-            var syncState = state(for: mode) ?? CloudFolderSyncState()
+            var syncState = state(for: syncMode) ?? CloudFolderSyncState()
             let result = try await CloudFolderSyncEngine.sync(
                 folderURL: folderURL,
                 store: syncStore,
                 state: &syncState,
                 entitlements: PaidEntitlements(canUseCloudFolderSync: canUseSync)
             )
-            setState(syncState, for: mode)
+            setState(syncState, for: syncMode)
+            guard mode == syncMode else { return }
             lastSyncDate = result.syncedAt
             pendingChanges = 0
             deviceCount = countDevices(in: folderURL)
+            let synchronizedChanges = result.operationsWritten + result.mutationsApplied
             if result.diagnostics.isEmpty {
                 statusMessage = String.localizedStringWithFormat(
-                    String(localized: "Synced %lld changes."), Int64(result.operationsRead)
+                    String(localized: "Synced %lld changes."), Int64(synchronizedChanges)
                 )
             } else {
                 statusMessage = String.localizedStringWithFormat(
                     String(localized: "Synced %lld changes; skipped %lld invalid files."),
-                    Int64(result.operationsRead), Int64(result.diagnostics.count)
+                    Int64(synchronizedChanges), Int64(result.diagnostics.count)
                 )
             }
         } catch {
@@ -410,7 +539,21 @@ final class CloudFolderSyncController: ObservableObject {
     }
 
     private func selectCustomFolder(_ url: URL) async {
+        guard !isSyncing else { return }
+        let bookmark: Data
+        do {
+            bookmark = try url.bookmarkData(
+                options: .withSecurityScope,
+                includingResourceValuesForKeys: nil,
+                relativeTo: nil
+            )
+        } catch {
+            errorMessage = error.localizedDescription
+            return
+        }
+
         if isConfigured, canUseSync { await syncNow() }
+        guard !isSyncing else { return }
         if selectedFolderURL != url {
             scheduledSyncTask?.cancel()
             resetCustomSyncState()
@@ -422,12 +565,7 @@ final class CloudFolderSyncController: ObservableObject {
         mode = .cloudFolder
         defaults.set(mode.rawValue, forKey: Keys.mode)
         provider = CloudFolderSyncProvider.detect(folderURL: url)
-        do {
-            let bookmark = try url.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil)
-            saveDefault(bookmark, forKey: Keys.folderBookmark, legacyKey: Keys.legacyFolderBookmark)
-        } catch {
-            errorMessage = error.localizedDescription
-        }
+        saveDefault(bookmark, forKey: Keys.folderBookmark, legacyKey: Keys.legacyFolderBookmark)
         await syncNow()
     }
 
@@ -509,13 +647,25 @@ final class CloudFolderSyncController: ObservableObject {
 
     private func handleObservedICloudChange() {
         guard mode == .automaticICloud, !isSyncing else { return }
-        if let lastLocalSyncFinishedAt, Date().timeIntervalSince(lastLocalSyncFinishedAt) < 10 { return }
+        let delay = Self.observedICloudSyncDelay(
+            lastLocalSyncFinishedAt: lastLocalSyncFinishedAt,
+            now: Date()
+        )
         scheduledSyncTask?.cancel()
         scheduledSyncTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(2))
+            try? await Task.sleep(for: .seconds(delay))
             guard !Task.isCancelled else { return }
             await self?.syncNow()
         }
+    }
+
+    static func observedICloudSyncDelay(
+        lastLocalSyncFinishedAt: Date?,
+        now: Date
+    ) -> TimeInterval {
+        guard let lastLocalSyncFinishedAt else { return 2 }
+        let remainingCooldown = 10 - now.timeIntervalSince(lastLocalSyncFinishedAt)
+        return remainingCooldown > 0 ? remainingCooldown : 2
     }
 
     private func resetCustomSyncState() {
@@ -576,8 +726,8 @@ final class CloudFolderSyncController: ObservableObject {
         }
     }
 
-    private func activeFolderURL() -> URL? {
-        switch mode {
+    private func activeFolderURL(for mode: PremiumSyncMode? = nil) -> URL? {
+        switch mode ?? self.mode {
         case .off: return nil
         case .cloudFolder:
             guard let selectedFolderURL else {
@@ -602,15 +752,23 @@ final class CloudFolderSyncController: ObservableObject {
     }
 
     func deletePrivateSyncFolder() async {
-        guard let folderURL = activeFolderURL() else { return }
-        let accessed = mode == .cloudFolder && folderURL.startAccessingSecurityScopedResource()
+        guard !isSyncing else { return }
+        let deletedMode = mode
+        guard let folderURL = activeFolderURL(for: deletedMode) else { return }
+        scheduledSyncTask?.cancel()
+        scheduledSyncTask = nil
+        stopICloudObservation()
+        mode = .off
+        defaults.set(mode.rawValue, forKey: Keys.mode)
+        pendingChanges = 0
+
+        let accessed = deletedMode == .cloudFolder && folderURL.startAccessingSecurityScopedResource()
         defer { if accessed { folderURL.stopAccessingSecurityScopedResource() } }
         do {
             let packageURL = CloudFolderSyncEngine.packageURL(for: folderURL)
             if FileManager.default.fileExists(atPath: packageURL.path) { try FileManager.default.removeItem(at: packageURL) }
-            setState(CloudFolderSyncState(), for: mode)
+            setState(CloudFolderSyncState(), for: deletedMode)
             lastSyncDate = nil
-            pendingChanges = 0
             deviceCount = 0
             statusMessage = String(localized: "The private sync folder was deleted. Local data was kept.")
         } catch {

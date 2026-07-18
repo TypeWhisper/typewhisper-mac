@@ -201,33 +201,57 @@ enum CloudFolderSyncEngine {
             throw CloudFolderSyncError.missingStore
         }
 
-        let packageURL = packageURL(for: folderURL)
-        let operationsURL = packageURL
-            .appendingPathComponent(operationsDirectoryName, isDirectory: true)
-        let deviceOperationsURL = operationsURL
-            .appendingPathComponent(state.deviceId, isDirectory: true)
-        let devicesURL = packageURL
-            .appendingPathComponent(devicesDirectoryName, isDirectory: true)
-
-        try FileManager.default.createDirectory(at: deviceOperationsURL, withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: devicesURL, withIntermediateDirectories: true)
-        try writePackageMetadata(packageURL: packageURL, devicesURL: devicesURL, deviceId: state.deviceId, now: now)
-
         let initialSnapshot = await store.snapshot()
         let initialRecords = records(from: initialSnapshot)
-        let localOperations = makeLocalOperations(records: initialRecords, state: state, now: now)
-        try write(localOperations, to: deviceOperationsURL, now: now)
-        pruneExpiredTombstones(in: deviceOperationsURL, now: now)
+        let stateSnapshot = state
+        let fileResult = try await Task.detached(priority: .utility) {
+            let packageURL = packageURL(for: folderURL)
+            let operationsURL = packageURL
+                .appendingPathComponent(operationsDirectoryName, isDirectory: true)
+            let deviceOperationsURL = operationsURL
+                .appendingPathComponent(stateSnapshot.deviceId, isDirectory: true)
+            let devicesURL = packageURL
+                .appendingPathComponent(devicesDirectoryName, isDirectory: true)
 
-        let readResult = readOperations(from: operationsURL)
-        let operations = readResult.operations
-        let winners = winningOperations(from: operations)
-        let mutations = makeMutations(
-            from: winners,
-            localRecords: initialRecords,
-            localDeviceId: state.deviceId,
-            appliedOperationIDs: state.appliedOperationIDs
-        )
+            try FileManager.default.createDirectory(
+                at: deviceOperationsURL,
+                withIntermediateDirectories: true
+            )
+            try FileManager.default.createDirectory(
+                at: devicesURL,
+                withIntermediateDirectories: true
+            )
+            try writePackageMetadata(
+                packageURL: packageURL,
+                devicesURL: devicesURL,
+                deviceId: stateSnapshot.deviceId,
+                now: now
+            )
+
+            let localOperations = makeLocalOperations(
+                records: initialRecords,
+                state: stateSnapshot,
+                now: now
+            )
+            try write(localOperations, to: deviceOperationsURL, now: now)
+            pruneExpiredTombstones(in: deviceOperationsURL, now: now)
+
+            let readResult = readOperations(from: operationsURL)
+            let winners = winningOperations(from: readResult.operations)
+            let mutations = makeMutations(
+                from: winners,
+                localRecords: initialRecords,
+                localDeviceId: stateSnapshot.deviceId,
+                appliedOperationIDs: stateSnapshot.appliedOperationIDs
+            )
+            return (
+                localOperations: localOperations,
+                readResult: readResult,
+                mutations: mutations
+            )
+        }.value
+        let operations = fileResult.readResult.operations
+        let mutations = fileResult.mutations
 
         if !mutations.isEmpty {
             try await store.apply(mutations)
@@ -242,10 +266,10 @@ enum CloudFolderSyncEngine {
 
         return CloudFolderSyncResult(
             operationsRead: operations.count,
-            operationsWritten: localOperations.count,
+            operationsWritten: fileResult.localOperations.count,
             mutationsApplied: mutations.count,
             syncedAt: now,
-            diagnostics: readResult.diagnostics
+            diagnostics: fileResult.readResult.diagnostics
         )
     }
 

@@ -97,7 +97,9 @@ struct PremiumSettingsView: View {
                         }
                     case .failure(let error):
                         appleNonceHash = nil
-                        premiumAccount.errorMessage = error.localizedDescription
+                        if (error as? ASAuthorizationError)?.code != .canceled {
+                            premiumAccount.errorMessage = error.localizedDescription
+                        }
                     }
                 }
                 .signInWithAppleButtonStyle(.whiteOutline)
@@ -601,7 +603,7 @@ struct PremiumSettingsView: View {
             return String(localized: "Syncing")
         }
 
-        if !syncController.isConfigured {
+        if !syncController.isConfigured || !syncController.canUseSync {
             return String(localized: "Not set up")
         }
 
@@ -616,7 +618,7 @@ struct PremiumSettingsView: View {
     }
 
     private var cloudSyncDetailText: String {
-        syncController.isConfigured
+        (syncController.isConfigured && syncController.canUseSync)
             ? syncController.mode.displayName
             : String(localized: "Sync is off")
     }
@@ -626,7 +628,7 @@ struct PremiumSettingsView: View {
             return .blue
         }
 
-        if !syncController.isConfigured {
+        if !syncController.isConfigured || !syncController.canUseSync {
             return .secondary
         }
 

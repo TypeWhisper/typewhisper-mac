@@ -1,3 +1,4 @@
+import CryptoKit
 import XCTest
 @testable import TypeWhisper
 
@@ -62,9 +63,222 @@ private final class InMemoryUserDataSyncStore: UserDataSyncStore, @unchecked Sen
     func removeLocalChangeObserver(_ id: UUID) {
         observers.removeValue(forKey: id)
     }
+
+    func notifyLocalChange() {
+        for observer in Array(observers.values) {
+            observer()
+        }
+    }
 }
 
 final class CloudFolderSyncTests: XCTestCase {
+    func testProductionPublicKeyVerifiesBackendGeneratedEntitlement() throws {
+        let response = """
+        {
+          "status": "active",
+          "tier": "individual",
+          "source": "storeKit",
+          "isLifetime": false,
+          "expiresAt": "2026-08-01T00:00:00Z",
+          "deviceLimit": 2,
+          "verifiedAt": "2026-07-16T12:00:00Z",
+          "signature": "eyJzdGF0dXMiOiJhY3RpdmUiLCJ0aWVyIjoiaW5kaXZpZHVhbCIsInNvdXJjZSI6InN0b3JlS2l0IiwiaXNMaWZldGltZSI6ZmFsc2UsImV4cGlyZXNBdCI6IjIwMjYtMDgtMDFUMDA6MDA6MDBaIiwiZGV2aWNlTGltaXQiOjIsInZlcmlmaWVkQXQiOiIyMDI2LTA3LTE2VDEyOjAwOjAwWiJ9.zUbfGhBQzTCXdp3Epq0FKr_J-tX7PC_pGMN-X9G2LcNd7XiP_rW4PLObpJxY6lhJVLg1Oh-k9lHNPfkK4NmS5w"
+        }
+        """
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let entitlement = try decoder.decode(
+            CrossDevicePremiumEntitlement.self,
+            from: Data(response.utf8)
+        )
+        let verifier = try XCTUnwrap(CrossDevicePremiumEntitlementVerifier(
+            publicKeyBase64: "8ZwFh+yrpkZZ1VsZgjpZcOz2h3jKpGG93MTdRaCPqXFn/Loqh8u36hB9FLho+ozwuHbaNeoN1MxM2/AJKyBNvQ=="
+        ))
+
+        XCTAssertEqual(verifier.verified(entitlement), entitlement)
+    }
+
+    @MainActor
+    func testPremiumAccountAcceptsOnlyAuthenticallySignedCachedEntitlements() throws {
+        let suiteName = "PremiumEntitlementSignature-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let privateKey = P256.Signing.PrivateKey()
+        let valid = try Self.signedEntitlement(privateKey: privateKey)
+        defaults.set(
+            try Self.entitlementEncoder.encode(valid),
+            forKey: "premium.account.cachedEntitlement"
+        )
+
+        let validService = PremiumAccountService(
+            defaults: defaults,
+            keychainService: "\(suiteName).valid",
+            entitlementPublicKeyBase64: privateKey.publicKey.rawRepresentation.base64EncodedString(),
+            isSignedInOverride: true,
+            automaticallyRefresh: false
+        )
+        XCTAssertEqual(validService.entitlement, valid)
+        XCTAssertTrue(validService.hasPremiumEntitlement)
+
+        let tampered = CrossDevicePremiumEntitlement(
+            status: valid.status,
+            tier: "enterprise",
+            source: valid.source,
+            isLifetime: valid.isLifetime,
+            expiresAt: valid.expiresAt,
+            deviceLimit: valid.deviceLimit,
+            verifiedAt: valid.verifiedAt,
+            signature: valid.signature
+        )
+        defaults.set(
+            try Self.entitlementEncoder.encode(tampered),
+            forKey: "premium.account.cachedEntitlement"
+        )
+
+        let tamperedService = PremiumAccountService(
+            defaults: defaults,
+            keychainService: "\(suiteName).tampered",
+            entitlementPublicKeyBase64: privateKey.publicKey.rawRepresentation.base64EncodedString(),
+            isSignedInOverride: true,
+            automaticallyRefresh: false
+        )
+        XCTAssertNil(tamperedService.entitlement)
+        XCTAssertFalse(tamperedService.hasPremiumEntitlement)
+        XCTAssertNil(defaults.data(forKey: "premium.account.cachedEntitlement"))
+    }
+
+    @MainActor
+    func testAuthorizationFailureClearsSignedEntitlementButTransientFailureDoesNot() throws {
+        let suiteName = "PremiumEntitlementAuthorization-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let privateKey = P256.Signing.PrivateKey()
+        let entitlement = try Self.signedEntitlement(privateKey: privateKey)
+        defaults.set(
+            try Self.entitlementEncoder.encode(entitlement),
+            forKey: "premium.account.cachedEntitlement"
+        )
+
+        let service = PremiumAccountService(
+            defaults: defaults,
+            keychainService: suiteName,
+            entitlementPublicKeyBase64: privateKey.publicKey.rawRepresentation.base64EncodedString(),
+            isSignedInOverride: true,
+            automaticallyRefresh: false
+        )
+
+        service.clearAuthorizationForHTTPStatus(503)
+        XCTAssertTrue(service.isSignedIn)
+        XCTAssertEqual(service.entitlement, entitlement)
+
+        service.clearAuthorizationForHTTPStatus(401)
+        XCTAssertFalse(service.isSignedIn)
+        XCTAssertNil(service.entitlement)
+        XCTAssertNil(defaults.data(forKey: "premium.account.cachedEntitlement"))
+    }
+
+    @MainActor
+    func testAutomaticSyncStateSurvivesModeToggle() async throws {
+        let suiteName = "PremiumSyncModeState-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let expectedState = CloudFolderSyncState(
+            deviceId: "mac-existing",
+            knownLocalItemIDs: ["dictionary:term:typewhisper"],
+            exportedItemVersions: ["dictionary:term:typewhisper": "v1"],
+            appliedOperationIDs: ["remote-operation"],
+            lastSyncAt: Self.date(20)
+        )
+        defaults.set(
+            try Self.stateEncoder.encode(expectedState),
+            forKey: "premiumSync.iCloudState"
+        )
+        defaults.set(PremiumSyncMode.off.rawValue, forKey: "premiumSync.mode")
+
+        let account = PremiumAccountService(
+            defaults: defaults,
+            keychainService: suiteName,
+            isSignedInOverride: false,
+            automaticallyRefresh: false
+        )
+        let store = InMemoryUserDataSyncStore()
+        let controller = CloudFolderSyncController(
+            premiumAccountService: account,
+            syncStore: store,
+            defaults: defaults
+        )
+        defer { controller.deactivate() }
+
+        await controller.setMode(.automaticICloud)
+
+        let persistedData = try XCTUnwrap(defaults.data(forKey: "premiumSync.iCloudState"))
+        XCTAssertEqual(try Self.stateDecoder.decode(CloudFolderSyncState.self, from: persistedData), expectedState)
+    }
+
+    @MainActor
+    func testDeletingPrivateFolderStopsSyncBeforeRemovingPackage() async throws {
+        let suiteName = "PremiumSyncDelete-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let folder = try TestSupport.makeTemporaryDirectory(prefix: "PremiumSyncDelete")
+        defer { TestSupport.remove(folder) }
+
+        let bookmark = try folder.bookmarkData(
+            options: .withSecurityScope,
+            includingResourceValuesForKeys: nil,
+            relativeTo: nil
+        )
+        defaults.set(bookmark, forKey: "cloudFolderSync.folderBookmark")
+        defaults.set(PremiumSyncMode.cloudFolder.rawValue, forKey: "premiumSync.mode")
+        let packageURL = CloudFolderSyncEngine.packageURL(for: folder)
+        try FileManager.default.createDirectory(at: packageURL, withIntermediateDirectories: true)
+
+        let account = PremiumAccountService(
+            defaults: defaults,
+            keychainService: suiteName,
+            isSignedInOverride: false,
+            automaticallyRefresh: false
+        )
+        let store = InMemoryUserDataSyncStore()
+        let controller = CloudFolderSyncController(
+            premiumAccountService: account,
+            syncStore: store,
+            defaults: defaults
+        )
+        defer { controller.deactivate() }
+
+        await controller.deletePrivateSyncFolder()
+        store.notifyLocalChange()
+        await Task.yield()
+
+        XCTAssertEqual(controller.mode, .off)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: packageURL.path))
+    }
+
+    @MainActor
+    func testObservedICloudChangesWaitForCooldownExpiry() {
+        let now = Self.date(20)
+        XCTAssertEqual(
+            CloudFolderSyncController.observedICloudSyncDelay(
+                lastLocalSyncFinishedAt: now.addingTimeInterval(-3),
+                now: now
+            ),
+            7,
+            accuracy: 0.001
+        )
+        XCTAssertEqual(
+            CloudFolderSyncController.observedICloudSyncDelay(
+                lastLocalSyncFinishedAt: now.addingTimeInterval(-11),
+                now: now
+            ),
+            2,
+            accuracy: 0.001
+        )
+    }
+
     func testCrossPlatformGoldenFixturesDecode() throws {
         let upsert: CloudFolderSyncOperation = try Self.decodeFixture("upsert-dictionary-v1")
         XCTAssertEqual(upsert.dictionary?.source, .autoLearned)
@@ -639,6 +853,40 @@ final class CloudFolderSyncTests: XCTestCase {
         Date(timeIntervalSince1970: 1_700_000_000 + seconds)
     }
 
+    private static func signedEntitlement(
+        privateKey: P256.Signing.PrivateKey
+    ) throws -> CrossDevicePremiumEntitlement {
+        let entitlement = CrossDevicePremiumEntitlement(
+            status: "active",
+            tier: "individual",
+            source: "polar",
+            isLifetime: true,
+            expiresAt: nil,
+            deviceLimit: 2,
+            verifiedAt: date(10),
+            signature: nil
+        )
+        let payload = try entitlementEncoder.encode(entitlement.signedClaims)
+        let signature = try privateKey.signature(for: payload)
+        return CrossDevicePremiumEntitlement(
+            status: entitlement.status,
+            tier: entitlement.tier,
+            source: entitlement.source,
+            isLifetime: entitlement.isLifetime,
+            expiresAt: entitlement.expiresAt,
+            deviceLimit: entitlement.deviceLimit,
+            verifiedAt: entitlement.verifiedAt,
+            signature: "\(base64URL(payload)).\(base64URL(signature.rawRepresentation))"
+        )
+    }
+
+    private static func base64URL(_ data: Data) -> String {
+        data.base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+    }
+
     private static func operationFiles(folder: URL, deviceId: String) -> [URL] {
         let directory = CloudFolderSyncEngine.packageURL(for: folder)
             .appendingPathComponent("ops", isDirectory: true)
@@ -669,6 +917,24 @@ final class CloudFolderSyncTests: XCTestCase {
             }
             return date
         }
+        return decoder
+    }()
+
+    private static let entitlementEncoder: JSONEncoder = {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        return encoder
+    }()
+
+    private static let stateEncoder: JSONEncoder = {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        return encoder
+    }()
+
+    private static let stateDecoder: JSONDecoder = {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
         return decoder
     }()
 }
