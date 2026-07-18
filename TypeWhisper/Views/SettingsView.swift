@@ -200,6 +200,148 @@ private struct SettingsModernShell: View {
     let detail: (SettingsTab) -> AnyView
 
     @State private var sidebarSearchText = ""
+    @State private var isSidebarVisible = true
+
+    var body: some View {
+        SettingsSplitView(
+            selectedTab: $selectedTab,
+            sidebarSearchText: $sidebarSearchText,
+            sections: sections,
+            isSidebarVisible: $isSidebarVisible,
+            detail: detail
+        )
+        .toolbar {
+            ToolbarItem(placement: .navigation) {
+                Button(action: { isSidebarVisible.toggle() }) {
+                    Image(systemName: "sidebar.leading")
+                }
+                .help(localizedAppText("Toggle Sidebar", de: "Seitenleiste ein-/ausblenden"))
+                .accessibilityLabel(localizedAppText("Toggle Sidebar", de: "Seitenleiste ein-/ausblenden"))
+            }
+        }
+    }
+}
+
+// Bridges to a native AppKit NSSplitViewController rather than SwiftUI's
+// NavigationSplitView or a hand-rolled HStack. Three prior pure-SwiftUI attempts
+// each fixed one property at the cost of another:
+//   - NavigationSplitView: resize is fluid (native), but its built-in collapse
+//     animation reflows row labels frame-by-frame — a visible glitch on this
+//     macOS version.
+//   - Custom HStack + zero-duration toggle: fixed the glitch, but the divider
+//     and sidebar content could pop out of sync with each other.
+//   - Custom HStack + live @GestureState width: fixed the sync issue, but
+//     SwiftUI's List (backed by NSTableView) can't relayout at pointer-tracking
+//     speed, so rows visibly lag behind the resizing frame during a live drag.
+// NSSplitViewController is the actual mechanism Finder/Mail/Notes use for their
+// sidebars — it owns both resize and collapse natively, so neither is fighting
+// a SwiftUI layout pass, and VoiceOver/keyboard resize support comes for free.
+@available(macOS 15, *)
+private struct SettingsSplitView: NSViewControllerRepresentable {
+    @Binding var selectedTab: SettingsTab
+    @Binding var sidebarSearchText: String
+    let sections: [SettingsDestinationSection]
+    @Binding var isSidebarVisible: Bool
+    let detail: (SettingsTab) -> AnyView
+
+    func makeNSViewController(context: Context) -> NSSplitViewController {
+        let splitViewController = NSSplitViewController()
+        splitViewController.splitView.dividerStyle = .thin
+
+        let sidebarHostingController = NSHostingController(
+            rootView: SettingsSidebarContent(
+                selectedTab: $selectedTab,
+                sidebarSearchText: $sidebarSearchText,
+                sections: sections
+            )
+        )
+        let sidebarItem = NSSplitViewItem(sidebarWithViewController: sidebarHostingController)
+        sidebarItem.minimumThickness = 240
+        sidebarItem.maximumThickness = 320
+        sidebarItem.canCollapse = true
+        sidebarItem.isCollapsed = !isSidebarVisible
+
+        let detailHostingController = NSHostingController(
+            rootView: AnyView(
+                detail(selectedTab)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            )
+        )
+        let detailItem = NSSplitViewItem(viewController: detailHostingController)
+
+        splitViewController.addSplitViewItem(sidebarItem)
+        splitViewController.addSplitViewItem(detailItem)
+
+        context.coordinator.sidebarItem = sidebarItem
+        context.coordinator.sidebarHostingController = sidebarHostingController
+        context.coordinator.detailHostingController = detailHostingController
+        context.coordinator.isSidebarVisible = $isSidebarVisible
+        // The user can collapse the sidebar natively — dragging the divider past
+        // its minimum thickness, or double-clicking it — without going through
+        // our toolbar button at all. Without this observer, isSidebarVisible
+        // never learns about it, so the button's next click just re-asserts the
+        // (already collapsed) state as a no-op, requiring a second click to
+        // actually reopen it.
+        context.coordinator.observeCollapseState(of: sidebarItem)
+
+        return splitViewController
+    }
+
+    func updateNSViewController(_ splitViewController: NSSplitViewController, context: Context) {
+        context.coordinator.sidebarHostingController?.rootView = SettingsSidebarContent(
+            selectedTab: $selectedTab,
+            sidebarSearchText: $sidebarSearchText,
+            sections: sections
+        )
+        context.coordinator.detailHostingController?.rootView = AnyView(
+            detail(selectedTab)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        )
+        context.coordinator.isSidebarVisible = $isSidebarVisible
+
+        guard let sidebarItem = context.coordinator.sidebarItem else { return }
+        let shouldBeCollapsed = !isSidebarVisible
+        guard sidebarItem.isCollapsed != shouldBeCollapsed else { return }
+
+        NSAnimationContext.runAnimationGroup { animationContext in
+            animationContext.duration = 0.2
+            animationContext.allowsImplicitAnimation = true
+            sidebarItem.animator().isCollapsed = shouldBeCollapsed
+        }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    final class Coordinator {
+        var sidebarItem: NSSplitViewItem?
+        var sidebarHostingController: NSHostingController<SettingsSidebarContent>?
+        var detailHostingController: NSHostingController<AnyView>?
+        var isSidebarVisible: Binding<Bool>?
+        private var collapseObservation: NSKeyValueObservation?
+
+        // Captures the binding itself rather than `self` — `Coordinator` is a
+        // plain (non-Sendable) class, and KVO's changeHandler is `@Sendable`, so
+        // capturing `self` (even weakly) to reach `self.isSidebarVisible` trips
+        // Swift 6 strict concurrency checking. The binding's identity is stable
+        // for the representable's lifetime, so a snapshot at observation time
+        // stays valid.
+        func observeCollapseState(of sidebarItem: NSSplitViewItem) {
+            let isSidebarVisible = isSidebarVisible
+            collapseObservation = sidebarItem.observe(\.isCollapsed, options: [.new]) { _, change in
+                guard let isCollapsed = change.newValue else { return }
+                let shouldBeVisible = !isCollapsed
+                if isSidebarVisible?.wrappedValue != shouldBeVisible {
+                    isSidebarVisible?.wrappedValue = shouldBeVisible
+                }
+            }
+        }
+    }
+}
+
+private struct SettingsSidebarContent: View {
+    @Binding var selectedTab: SettingsTab
+    @Binding var sidebarSearchText: String
+    let sections: [SettingsDestinationSection]
 
     private var filteredSections: [SettingsDestinationSection] {
         let query = sidebarSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -218,7 +360,9 @@ private struct SettingsModernShell: View {
     }
 
     var body: some View {
-        NavigationSplitView {
+        VStack(spacing: 0) {
+            SettingsSidebarSearchField(text: $sidebarSearchText)
+
             List(selection: $selectedTab) {
                 ForEach(filteredSections) { section in
                     Section {
@@ -230,16 +374,40 @@ private struct SettingsModernShell: View {
                 }
             }
             .listStyle(.sidebar)
-            .searchable(
-                text: $sidebarSearchText,
-                placement: .sidebar,
-                prompt: Text(localizedAppText("Search Settings", de: "Einstellungen durchsuchen"))
-            )
-            .navigationSplitViewColumnWidth(min: 240, ideal: 270, max: 320)
-        } detail: {
-            detail(selectedTab)
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            // Changing the section/row count via search filtering can leave stale,
+            // blank space behind from SwiftUI's incremental List diffing. Keying the
+            // List on the query forces a clean rebuild instead of a partial diff.
+            .id(sidebarSearchText)
         }
+    }
+}
+
+private struct SettingsSidebarSearchField: View {
+    @Binding var text: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+            TextField(
+                localizedAppText("Search Settings", de: "Einstellungen durchsuchen"),
+                text: $text
+            )
+            .textFieldStyle(.plain)
+
+            if !text.isEmpty {
+                Button(action: { text = "" }) {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .help(localizedAppText("Clear Search", de: "Suche löschen"))
+                .accessibilityLabel(localizedAppText("Clear Search", de: "Suche löschen"))
+            }
+        }
+        .padding(6)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .controlBackgroundColor)))
+        .padding(EdgeInsets(top: 8, leading: 8, bottom: 4, trailing: 8))
     }
 }
 

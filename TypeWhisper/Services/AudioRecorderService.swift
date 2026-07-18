@@ -612,6 +612,19 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
     @Published private(set) var micLevel: Float = 0
     @Published private(set) var systemLevel: Float = 0
     @Published private(set) var systemAudioWarningMessage: String?
+
+    /// Caps how often `micLevel`/`systemLevel` are actually published while
+    /// recording. Audio buffers can arrive tens of times per second (mic
+    /// taps) or even faster (system audio via ScreenCaptureKit, OS-paced),
+    /// and each unthrottled `@Published` write triggers a SwiftUI re-render
+    /// plus a Core Animation commit in every indicator view observing this
+    /// service. Left unthrottled, that flood of main-run-loop work starves
+    /// the queue used to deliver discrete `NSEvent.scrollWheel` ticks,
+    /// making menus/lists feel laggy under mouse-wheel scrolling while
+    /// recording (scrollbar-thumb dragging is unaffected, since AppKit just
+    /// re-samples the mouse position on each pass of its own tracking loop
+    /// instead of draining a backlog of discrete events).
+    private let micLevelThrottle = LevelPublishThrottle()
     var recordingsDirectoryOverride: URL?
     var startRecordingOverride: ((
         _ micEnabled: Bool,
@@ -633,6 +646,7 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
     private let micFileLock = OSAllocatedUnfairLock<AVAudioFile?>(initialState: nil)
     private var scStream: SCStream?
     private var streamOutput: SystemAudioStreamOutput?
+    private var systemLevelSetter: SystemLevelSetter?
     private let sysFileLock = OSAllocatedUnfairLock<AVAudioFile?>(initialState: nil)
     private var durationTimer: Timer?
     private var startTime: Date?
@@ -919,6 +933,13 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         finalOutputURL = nil
         startTime = nil
 
+        // Must happen before the reset below: an already-scheduled flush
+        // from a value received just before this stop would otherwise still
+        // land afterward and restore a stale nonzero reading.
+        micLevelThrottle.reset()
+        systemLevelSetter?.reset()
+        systemLevelSetter = nil
+
         DispatchQueue.main.async {
             self.isRecording = false
             self.duration = 0
@@ -1092,8 +1113,8 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
                 let samples = UnsafeBufferPointer(start: channelData, count: Int(writeBuffer.frameLength))
                 let rms = sqrt(samples.reduce(0) { $0 + $1 * $1 } / Float(samples.count))
                 let level = min(1.0, rms * 5)
-                DispatchQueue.main.async {
-                    self.micLevel = level
+                self.micLevelThrottle.publish(level) { [weak self] level in
+                    self?.micLevel = level
                 }
             }
 
@@ -1183,8 +1204,8 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
                 let samples = UnsafeBufferPointer(start: channelData, count: Int(writeBuffer.frameLength))
                 let rms = sqrt(samples.reduce(0) { $0 + $1 * $1 } / Float(max(samples.count, 1)))
                 let level = min(1.0, rms * 5)
-                DispatchQueue.main.async {
-                    self.micLevel = level
+                self.micLevelThrottle.publish(level) { [weak self] level in
+                    self?.micLevel = level
                 }
             }
 
@@ -1331,6 +1352,7 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         let output = SystemAudioStreamOutput()
         output.fileLock = sysFileLock
         let levelSetter = SystemLevelSetter(service: self)
+        systemLevelSetter = levelSetter
         output.levelCallback = { level in
             levelSetter.setLevel(level)
         }
@@ -1775,6 +1797,11 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         finalOutputURL = nil
         transcriptionBufferLock.withLock { $0.reset() }
 
+        // See the matching comment in stopCapture().
+        micLevelThrottle.reset()
+        systemLevelSetter?.reset()
+        systemLevelSetter = nil
+
         DispatchQueue.main.async {
             self.isRecording = false
             self.duration = 0
@@ -1788,15 +1815,132 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
 
 private final class SystemLevelSetter: @unchecked Sendable {
     private weak var service: AudioRecorderService?
+    private let throttle = LevelPublishThrottle()
 
     init(service: AudioRecorderService) {
         self.service = service
     }
 
     func setLevel(_ level: Float) {
-        DispatchQueue.main.async { [weak service] in
+        throttle.publish(level) { [weak service] level in
             service?.updateSystemLevel(level)
         }
+    }
+
+    /// See `LevelPublishThrottle.reset()`.
+    func reset() {
+        throttle.reset()
+    }
+}
+
+// MARK: - Level Publish Throttle
+
+/// Caps a value stream to at most one publish per `minInterval` — appropriate
+/// for a UI level meter, where only the latest reading matters. Unlike a
+/// naive throttle, a value that arrives inside the window is never silently
+/// lost: it's held as `pending` and flushed once the window closes, so the
+/// meter can't get stuck showing a stale reading if buffers happen to stop
+/// arriving right after a drop. Thread-safe so it can be called from the
+/// background audio/capture callback queues that produce levels.
+///
+/// Mirrors the equivalent `publishAudioLevel`/`flushPendingAudioLevelUpdate`
+/// pattern already used at the same ~30 Hz cadence for the dictation audio
+/// pipeline in `AudioRecordingService.swift`. Not shared into one type since
+/// the two host services have unrelated lifecycles and this fix intentionally
+/// stays scoped to the Recorder path that was reported laggy — worth
+/// extracting if a third caller shows up.
+private final class LevelPublishThrottle: @unchecked Sendable {
+    private let minIntervalNanoseconds: UInt64
+    private let lock = NSLock()
+    private var lastPublishUptimeNanoseconds: UInt64 = 0
+    private var pendingValue: Float?
+    private var scheduledWork: DispatchWorkItem?
+
+    /// Defaults to ~30 Hz — smooth enough for a level meter while staying
+    /// well clear of the main-run-loop contention that unthrottled
+    /// buffer-rate publishing causes (see `micLevelThrottle` for details).
+    init(minInterval: TimeInterval = 1.0 / 30.0) {
+        self.minIntervalNanoseconds = UInt64(minInterval * 1_000_000_000)
+    }
+
+    /// Publishes `value` on the main queue via `deliver`. At most one
+    /// delivery is ever scheduled on the main queue at a time: if one is
+    /// already pending (immediate or delayed), this call just replaces the
+    /// value it will eventually carry instead of scheduling a second one.
+    ///
+    /// A prior version scheduled an "immediate" `.async` block and a delayed
+    /// `.asyncAfter` flush as two independent main-queue submissions, and
+    /// stamped `lastPublishUptimeNanoseconds` at decision time rather than
+    /// actual delivery time. Under main-queue congestion past a throttle
+    /// window, later `publish()` calls could see enough elapsed time to take
+    /// the "immediate" path again — enqueuing their own block — while an
+    /// older delayed flush was still sitting in the queue; GCD gives no
+    /// ordering guarantee between two independently-submitted blocks once
+    /// both are eligible to run, so they could execute in either order and
+    /// deliver values out of sequence (e.g. inputs 1,2,3,4 arriving as
+    /// 1,4,3). Coalescing to a single scheduled work item removes the
+    /// second submission entirely, so there's nothing left to reorder.
+    func publish(_ value: Float, deliver: @escaping @Sendable (Float) -> Void) {
+        lock.lock()
+        pendingValue = value
+        guard scheduledWork == nil else {
+            lock.unlock()
+            return
+        }
+
+        // Sampled under the lock, not before it: if `now` were captured
+        // first, a concurrent delivery could advance
+        // `lastPublishUptimeNanoseconds` past this (now-stale) `now` while
+        // this call was waiting on the lock, making the unsigned subtraction
+        // below underflow/wrap to a huge value and slip an extra publish
+        // through inside the throttle window.
+        let now = DispatchTime.now().uptimeNanoseconds
+        let elapsed = now &- lastPublishUptimeNanoseconds
+        let delayNanoseconds = (lastPublishUptimeNanoseconds == 0 || elapsed >= minIntervalNanoseconds)
+            ? 0
+            : minIntervalNanoseconds - elapsed
+
+        let work = DispatchWorkItem { [weak self] in
+            self?.deliverPending(deliver: deliver)
+        }
+        scheduledWork = work
+        lock.unlock()
+
+        if delayNanoseconds == 0 {
+            DispatchQueue.main.async(execute: work)
+        } else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + .nanoseconds(Int(delayNanoseconds)), execute: work)
+        }
+    }
+
+    private func deliverPending(deliver: @Sendable (Float) -> Void) {
+        lock.lock()
+        let value = pendingValue
+        pendingValue = nil
+        scheduledWork = nil
+        // Stamped at actual delivery time, not when the work item was
+        // scheduled — the whole point of coalescing is that those two
+        // moments can now be far apart under main-queue congestion.
+        lastPublishUptimeNanoseconds = DispatchTime.now().uptimeNanoseconds
+        lock.unlock()
+
+        guard let value else { return }
+        deliver(value)
+    }
+
+    /// Clears any pending value, cancels an already-scheduled delivery so it
+    /// can't fire, and rearms the throttle to publish immediately next time.
+    /// Call this when a recording session ends and its level is explicitly
+    /// reset to 0 — without it, a delivery already scheduled from a value
+    /// received just before the stop would otherwise still fire afterward
+    /// and restore a stale nonzero reading.
+    func reset() {
+        lock.lock()
+        pendingValue = nil
+        scheduledWork?.cancel()
+        scheduledWork = nil
+        lastPublishUptimeNanoseconds = 0
+        lock.unlock()
     }
 }
 
