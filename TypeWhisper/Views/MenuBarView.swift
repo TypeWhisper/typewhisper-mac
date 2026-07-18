@@ -10,6 +10,7 @@ private final class MenuBarState: ObservableObject {
     @Published var isModelReady: Bool
     @Published var hasRecentTranscriptions: Bool
     @Published var canCopyLastTranscription: Bool
+    @Published var hasLastTranscribedText: Bool
     @Published var hasRecoverableRecording: Bool
     @Published var recorderState: AudioRecorderViewModel.RecorderState
     @Published var canToggleRecorder: Bool
@@ -34,6 +35,7 @@ private final class MenuBarState: ObservableObject {
         let hasRecentTranscriptions = recentTranscriptionStore.latestEntry(historyRecords: historyService.records) != nil
         self.hasRecentTranscriptions = hasRecentTranscriptions
         self.canCopyLastTranscription = hasRecentTranscriptions
+        self.hasLastTranscribedText = dictation.lastTranscribedText != nil
         self.hasRecoverableRecording = audioRecordingService.latestRecoveryRecordingURL != nil
         self.recorderState = recorder.state
         self.canToggleRecorder = recorder.canToggleRecording
@@ -86,6 +88,15 @@ private final class MenuBarState: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] url in
                 self?.hasRecoverableRecording = url != nil
+            }
+            .store(in: &cancellables)
+
+        dictation.$lastTranscribedText
+            .map { $0 != nil }
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] hasText in
+                self?.hasLastTranscribedText = hasText
             }
             .store(in: &cancellables)
 
@@ -364,7 +375,7 @@ struct MenuBarView: View {
             .disabled(
                 !status.hasRecentTranscriptions
                     && !status.canCopyLastTranscription
-                    && DictationViewModel.shared.lastTranscribedText == nil
+                    && !status.hasLastTranscribedText
             )
 
         case .recentTranscriptions:
@@ -416,7 +427,7 @@ struct MenuBarView: View {
             Label(String(localized: "Read Back Last Transcription"), systemImage: "speaker.wave.2")
         }
         .keyboardShortcut("r", modifiers: [.command, .shift])
-        .disabled(DictationViewModel.shared.lastTranscribedText == nil)
+        .disabled(!status.hasLastTranscribedText)
     }
 
     private var recorderToggleTitle: String {
