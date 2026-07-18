@@ -29,38 +29,43 @@ struct LicenseSettingsView: View {
     }
 
     var body: some View {
-        ScrollViewReader { proxy in
-            ScrollView {
-                VStack(alignment: .leading, spacing: 20) {
-                    Color.clear
-                        .frame(height: 0)
-                        .id(ScrollAnchor.top)
+        VStack(spacing: 0) {
+            SettingsPageHeader(String(localized: "License"))
+            Divider()
 
-                    planSelectionSection
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: SettingsLayoutMetrics.sectionSpacing) {
+                        Color.clear
+                            .frame(height: 0)
+                            .id(ScrollAnchor.top)
 
-                    if shouldShowCommercialSection {
-                        commercialSection
+                        planSelectionSection
+
+                        if shouldShowCommercialSection {
+                            commercialSection
+                        }
+
+                        supporterSection
+                            .id(ScrollAnchor.supporter)
+
+                        sharedActivationSection
+                            .id(ScrollAnchor.activationKey)
                     }
-
-                    supporterSection
-                        .id(ScrollAnchor.supporter)
-
-                    sharedActivationSection
-                        .id(ScrollAnchor.activationKey)
+                    .padding(SettingsLayoutMetrics.pagePadding)
                 }
-                .padding(20)
-            }
-            .frame(minWidth: 560, minHeight: 360)
-            .task(id: "\(license.supporterStatus.rawValue)-\(license.supporterTier?.rawValue ?? "none")") {
-                if license.isSupporter {
-                    await supporterDiscord.refreshStatusIfNeeded()
-                } else {
-                    supporterDiscord.handleSupporterEntitlementRemoved()
+                .frame(minWidth: 560, minHeight: 360)
+                .task(id: "\(license.supporterStatus.rawValue)-\(license.supporterTier?.rawValue ?? "none")") {
+                    if license.isSupporter {
+                        await supporterDiscord.refreshStatusIfNeeded()
+                    } else {
+                        supporterDiscord.handleSupporterEntitlementRemoved()
+                    }
                 }
-            }
-            .onReceive(settingsNavigation.$request.compactMap { $0 }) { request in
-                guard request.tab == .license else { return }
-                handleNavigation(request.licenseTarget ?? .top, proxy: proxy)
+                .onReceive(settingsNavigation.$request.compactMap { $0 }) { request in
+                    guard request.tab == .license else { return }
+                    handleNavigation(request.licenseTarget ?? .top, proxy: proxy)
+                }
             }
         }
     }
@@ -137,7 +142,7 @@ struct LicenseSettingsView: View {
     }
 
     private var sharedActivationSection: some View {
-        PanelCard {
+        SettingsCard {
             VStack(alignment: .leading, spacing: 12) {
                 Text(localizedAppText("Already have a key?", de: "Bereits einen Schlüssel?"))
                     .font(.headline)
@@ -192,7 +197,7 @@ struct LicenseSettingsView: View {
 
     private var inactiveCommercialSection: some View {
         VStack(alignment: .leading, spacing: 20) {
-            PanelCard {
+            SettingsCard {
                 VStack(alignment: .leading, spacing: 12) {
                     Text(localizedAppText("Pricing in short", de: "Preise im Überblick"))
                         .font(.headline)
@@ -236,7 +241,7 @@ struct LicenseSettingsView: View {
                 }
             }
 
-            PanelCard {
+            SettingsCard {
                 VStack(alignment: .leading, spacing: 10) {
                     Label(commercialStatusTitle, systemImage: commercialStatusSymbol)
                         .foregroundStyle(commercialStatusColor)
@@ -252,7 +257,7 @@ struct LicenseSettingsView: View {
 
     private var activeCommercialSection: some View {
         VStack(alignment: .leading, spacing: 20) {
-            PanelCard {
+            SettingsCard {
                 VStack(alignment: .leading, spacing: 10) {
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Label(localizedAppText("Licensed", de: "Lizenziert"), systemImage: "checkmark.seal.fill")
@@ -271,7 +276,7 @@ struct LicenseSettingsView: View {
                 }
             }
 
-            PanelCard {
+            SettingsCard {
                 VStack(alignment: .leading, spacing: 10) {
                     Text(localizedAppText("Manage this Mac and your subscription", de: "Diesen Mac und dein Abo verwalten"))
                         .font(.headline)
@@ -329,7 +334,7 @@ struct LicenseSettingsView: View {
     // MARK: - Supporter
 
     private var supporterSection: some View {
-        PanelCard {
+        SettingsCard {
             VStack(alignment: .leading, spacing: 12) {
                 Text(localizedAppText("Supporter", de: "Supporter"))
                     .font(.headline)
@@ -982,36 +987,6 @@ func commercialPurchaseOptionCopy(for tier: LicenseTier, cadence: CommercialPurc
             billingLabel: localizedAppText("one-time", de: "einmalig"),
             detail: localizedAppText("Pay once, keep this tier", de: "Einmal zahlen, dieses Tier behalten")
         )
-    }
-}
-
-private struct PanelCard<Content: View>: View {
-    let selected: Bool
-    let accent: Color
-    @ViewBuilder let content: Content
-
-    init(
-        selected: Bool = false,
-        accent: Color = .accentColor,
-        @ViewBuilder content: () -> Content
-    ) {
-        self.selected = selected
-        self.accent = accent
-        self.content = content()
-    }
-
-    var body: some View {
-        content
-            .padding(16)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(Color(nsColor: .controlBackgroundColor))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .stroke(selected ? accent.opacity(0.8) : Color.primary.opacity(0.08), lineWidth: selected ? 1.5 : 1)
-            )
     }
 }
 

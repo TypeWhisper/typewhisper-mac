@@ -142,7 +142,7 @@ private struct MyWorkflowsPage: View {
             Divider()
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: SettingsLayoutMetrics.sectionSpacing) {
                     fallbackPriorityCard
 
                     if workflowService.workflows.isEmpty {
@@ -161,7 +161,7 @@ private struct MyWorkflowsPage: View {
                         }
                     }
                 }
-                .padding(16)
+                .padding(SettingsLayoutMetrics.pagePadding)
                 .frame(maxWidth: .infinity, alignment: .topLeading)
             }
         }
@@ -204,23 +204,13 @@ private struct MyWorkflowsPage: View {
     }
 
     private var header: some View {
-        HStack(alignment: .top, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(localizedAppText("Workflows", de: "Workflows"))
-                    .font(.headline)
-                Text(
-                    localizedAppText(
-                        "Create and manage the workflows TypeWhisper should actively run.",
-                        de: "Erstelle und verwalte die Workflows, die TypeWhisper aktiv ausführen soll."
-                    )
-                )
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .layoutPriority(1)
-
+        SettingsPageHeader(
+            localizedAppText("Workflows", de: "Workflows"),
+            summary: localizedAppText(
+                "Create and manage the workflows TypeWhisper should actively run.",
+                de: "Erstelle und verwalte die Workflows, die TypeWhisper aktiv ausführen soll."
+            )
+        ) {
             Button {
                 navigation.createWorkflow()
             } label: {
@@ -234,8 +224,6 @@ private struct MyWorkflowsPage: View {
             .fixedSize()
             .help(localizedAppText("New Workflow", de: "Neuer Workflow"))
         }
-        .padding(16)
-        .background(.bar)
     }
 
     private var fallbackPriorityCard: some View {
@@ -1050,7 +1038,7 @@ private struct WorkflowEditorPage: View {
             Divider()
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: SettingsLayoutMetrics.sectionSpacing) {
                     if let validationMessage {
                         ValidationBanner(message: validationMessage)
                     }
@@ -1060,7 +1048,7 @@ private struct WorkflowEditorPage: View {
                     behaviorSection
                     reviewSection
                 }
-                .padding(16)
+                .padding(SettingsLayoutMetrics.pagePadding)
             }
         }
         .sheet(isPresented: $showingAppPicker) {
@@ -1072,8 +1060,15 @@ private struct WorkflowEditorPage: View {
     }
 
     private var header: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .center) {
+        SettingsPageHeader(
+            isEditing
+                ? localizedAppText("Edit Workflow", de: "Workflow bearbeiten")
+                : localizedAppText("New Workflow", de: "Neuer Workflow"),
+            summary: isEditing
+                ? localizedAppText("Adjust the current workflow without changing its template.", de: "Passe den aktuellen Workflow an, ohne seine Vorlage zu ändern.")
+                : localizedAppText("Pick a concrete outcome first, then add behavior and one or more triggers.", de: "Wähle zuerst ein konkretes Ergebnis und ergänze dann Verhalten und einen oder mehrere Trigger.")
+        ) {
+            HStack(spacing: 12) {
                 Button {
                     navigation.goBackToList()
                 } label: {
@@ -1081,33 +1076,12 @@ private struct WorkflowEditorPage: View {
                 }
                 .buttonStyle(.borderless)
 
-                Spacer()
-
                 Button(localizedAppText("Save Workflow", de: "Workflow speichern")) {
                     save()
                 }
                 .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-            }
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(isEditing
-                    ? localizedAppText("Edit Workflow", de: "Workflow bearbeiten")
-                    : localizedAppText("New Workflow", de: "Neuer Workflow")
-                )
-                .font(.headline)
-
-                Text(
-                    isEditing
-                        ? localizedAppText("Adjust the current workflow without changing its template.", de: "Passe den aktuellen Workflow an, ohne seine Vorlage zu ändern.")
-                        : localizedAppText("Pick a concrete outcome first, then add behavior and one or more triggers.", de: "Wähle zuerst ein konkretes Ergebnis und ergänze dann Verhalten und einen oder mehrere Trigger.")
-                )
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
             }
         }
-        .padding(16)
-        .background(.bar)
     }
 
     private var templateSection: some View {

@@ -29,13 +29,18 @@ struct PremiumSettingsView: View {
     }
 
     var body: some View {
-        ScrollView {
-            premiumAccountCard
+        VStack(spacing: 0) {
+            SettingsPageHeader(String(localized: "Premium"))
+            Divider()
 
-            if license.hasCommercialLicense || premiumAccount.hasPremiumEntitlement {
-                premiumControlCenter
-            } else {
-                lockedPremiumLanding
+            ScrollView {
+                premiumAccountCard
+
+                if license.hasCommercialLicense || premiumAccount.hasPremiumEntitlement {
+                    premiumControlCenter
+                } else {
+                    lockedPremiumLanding
+                }
             }
         }
         .frame(minWidth: 560, minHeight: 360, alignment: .topLeading)
@@ -50,77 +55,77 @@ struct PremiumSettingsView: View {
     }
 
     private var premiumAccountCard: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                Label(String(localized: "Cross-device Premium Account"), systemImage: "person.crop.circle")
-                    .font(.headline)
-                Spacer()
-                if premiumAccount.hasPremiumEntitlement {
-                    Label(String(localized: "Premium active"), systemImage: "checkmark.seal.fill")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.green)
-                }
-            }
-
-            if premiumAccount.isSignedIn {
-                Text(String(localized: "Your Apple account keeps Polar and App Store entitlements available on Mac and iPhone."))
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+        SettingsCard {
+            VStack(alignment: .leading, spacing: 10) {
                 HStack {
-                    Button(String(localized: "Sign Out")) { premiumAccount.signOut() }
-                    Button(String(localized: "Delete Account"), role: .destructive) { confirmingAccountDeletion = true }
-                }
-            } else {
-                SignInWithAppleButton(.signIn) { request in
-                    request.requestedScopes = [.fullName, .email]
-                    let nonceHash = SHA256.hash(data: Data(UUID().uuidString.utf8))
-                        .map { String(format: "%02x", $0) }
-                        .joined()
-                    appleNonceHash = nonceHash
-                    request.nonce = nonceHash
-                } onCompletion: { result in
-                    switch result {
-                    case .success(let authorization):
-                        guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
-                              let tokenData = credential.identityToken,
-                              let identityToken = String(data: tokenData, encoding: .utf8),
-                              let nonceHash = appleNonceHash else { return }
-                        appleNonceHash = nil
-                        let authorizationCode = credential.authorizationCode.flatMap { String(data: $0, encoding: .utf8) }
-                        Task {
-                            await premiumAccount.signIn(
-                                identityToken: identityToken,
-                                authorizationCode: authorizationCode,
-                                nonceHash: nonceHash,
-                                polarLicenseKey: license.commercialLicenseKeyForAccountLink
-                            )
-                        }
-                    case .failure(let error):
-                        appleNonceHash = nil
-                        if (error as? ASAuthorizationError)?.code != .canceled {
-                            premiumAccount.errorMessage = error.localizedDescription
-                        }
+                    Label(String(localized: "Cross-device Premium Account"), systemImage: "person.crop.circle")
+                        .font(.headline)
+                    Spacer()
+                    if premiumAccount.hasPremiumEntitlement {
+                        Label(String(localized: "Premium active"), systemImage: "checkmark.seal.fill")
+                            .font(.caption.weight(.medium))
+                            .foregroundStyle(.green)
                     }
                 }
-                .signInWithAppleButtonStyle(.whiteOutline)
-                .frame(width: 240, height: 38)
 
-                Text(String(localized: "Sync data stays in your selected cloud location and never passes through the TypeWhisper account service."))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
+                if premiumAccount.isSignedIn {
+                    Text(String(localized: "Your Apple account keeps Polar and App Store entitlements available on Mac and iPhone."))
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                    HStack {
+                        Button(String(localized: "Sign Out")) { premiumAccount.signOut() }
+                        Button(String(localized: "Delete Account"), role: .destructive) { confirmingAccountDeletion = true }
+                    }
+                } else {
+                    SignInWithAppleButton(.signIn) { request in
+                        request.requestedScopes = [.fullName, .email]
+                        let nonceHash = SHA256.hash(data: Data(UUID().uuidString.utf8))
+                            .map { String(format: "%02x", $0) }
+                            .joined()
+                        appleNonceHash = nonceHash
+                        request.nonce = nonceHash
+                    } onCompletion: { result in
+                        switch result {
+                        case .success(let authorization):
+                            guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
+                                  let tokenData = credential.identityToken,
+                                  let identityToken = String(data: tokenData, encoding: .utf8),
+                                  let nonceHash = appleNonceHash else { return }
+                            appleNonceHash = nil
+                            let authorizationCode = credential.authorizationCode.flatMap { String(data: $0, encoding: .utf8) }
+                            Task {
+                                await premiumAccount.signIn(
+                                    identityToken: identityToken,
+                                    authorizationCode: authorizationCode,
+                                    nonceHash: nonceHash,
+                                    polarLicenseKey: license.commercialLicenseKeyForAccountLink
+                                )
+                            }
+                        case .failure(let error):
+                            appleNonceHash = nil
+                            if (error as? ASAuthorizationError)?.code != .canceled {
+                                premiumAccount.errorMessage = error.localizedDescription
+                            }
+                        }
+                    }
+                    .signInWithAppleButtonStyle(.whiteOutline)
+                    .frame(width: 240, height: 38)
 
-            if let errorMessage = premiumAccount.errorMessage {
-                Label(errorMessage, systemImage: "exclamationmark.triangle")
-                    .font(.caption)
-                    .foregroundStyle(.orange)
+                    Text(String(localized: "Sync data stays in your selected cloud location and never passes through the TypeWhisper account service."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                if let errorMessage = premiumAccount.errorMessage {
+                    Label(errorMessage, systemImage: "exclamationmark.triangle")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                }
             }
         }
-        .padding(16)
         .frame(maxWidth: 760, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.055)))
-        .padding(.horizontal, 22)
-        .padding(.top, 22)
+        .padding(.horizontal, SettingsLayoutMetrics.pagePadding)
+        .padding(.top, SettingsLayoutMetrics.pagePadding)
     }
 
     private var featureColumns: [GridItem] {
@@ -136,7 +141,7 @@ struct PremiumSettingsView: View {
     }
 
     private var lockedPremiumLanding: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: SettingsLayoutMetrics.sectionSpacing) {
             lockedPremiumHero
 
             LazyVGrid(columns: featureColumns, alignment: .leading, spacing: 14) {
@@ -174,51 +179,47 @@ struct PremiumSettingsView: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .padding(22)
+        .padding(SettingsLayoutMetrics.pagePadding)
         .frame(maxWidth: 760, alignment: .topLeading)
     }
 
     private var lockedPremiumHero: some View {
-        HStack(alignment: .top, spacing: 16) {
-            Image(systemName: "sparkles")
-                .font(.system(size: 34, weight: .semibold))
-                .foregroundStyle(.yellow)
-                .frame(width: 58, height: 58)
-                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.yellow.opacity(0.13)))
-                .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: 8) {
-                Text(String(localized: "TypeWhisper gets better with every workflow"))
-                    .font(.system(size: 24, weight: .semibold))
-                    .lineLimit(2)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Text(String(localized: "Teach TypeWhisper your corrections and keep dictionaries and snippets in sync across Macs."))
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(3)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                Label(String(localized: "Commercial license required"), systemImage: "lock.fill")
-                    .font(.caption.weight(.medium))
+        SettingsCard {
+            HStack(alignment: .top, spacing: SettingsLayoutMetrics.cardSpacing) {
+                Image(systemName: "sparkles")
+                    .font(.system(size: 34, weight: .semibold))
                     .foregroundStyle(.yellow)
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 5)
-                    .background(Capsule().fill(.yellow.opacity(0.13)))
-            }
+                    .frame(width: 58, height: 58)
+                    .background(
+                        RoundedRectangle(cornerRadius: SettingsLayoutMetrics.compactCornerRadius, style: .continuous)
+                            .fill(.yellow.opacity(0.13))
+                    )
+                    .accessibilityHidden(true)
 
-            Spacer(minLength: 12)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(String(localized: "TypeWhisper gets better with every workflow"))
+                        .font(.system(size: 24, weight: .semibold))
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text(String(localized: "Teach TypeWhisper your corrections and keep dictionaries and snippets in sync across Macs."))
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(3)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Label(String(localized: "Commercial license required"), systemImage: "lock.fill")
+                        .font(.caption.weight(.medium))
+                        .foregroundStyle(.yellow)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .background(Capsule().fill(.yellow.opacity(0.13)))
+                }
+
+                Spacer(minLength: 12)
+            }
         }
-        .padding(18)
         .frame(maxWidth: 640, alignment: .topLeading)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color.white.opacity(0.07))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.12), lineWidth: 1)
-        )
     }
 
     private func premiumLandingFeatureCard(
@@ -229,80 +230,73 @@ struct PremiumSettingsView: View {
         examples: [PremiumCorrectionExample] = [],
         badges: [String] = []
     ) -> some View {
-        VStack(alignment: .leading, spacing: 13) {
-            HStack(alignment: .center, spacing: 12) {
-                Image(systemName: icon)
-                    .font(.title2)
-                    .foregroundStyle(iconColor)
-                    .frame(width: 42, height: 42)
-                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(iconColor.opacity(0.12)))
-                    .accessibilityHidden(true)
+        SettingsCard {
+            VStack(alignment: .leading, spacing: 13) {
+                HStack(alignment: .center, spacing: 12) {
+                    Image(systemName: icon)
+                        .font(.title2)
+                        .foregroundStyle(iconColor)
+                        .frame(width: 42, height: 42)
+                        .background(
+                            RoundedRectangle(cornerRadius: SettingsLayoutMetrics.compactCornerRadius, style: .continuous)
+                                .fill(iconColor.opacity(0.12))
+                        )
+                        .accessibilityHidden(true)
 
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(title)
-                        .font(.headline)
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(title)
+                            .font(.headline)
 
-                    lockedPremiumBadge
-                }
-            }
-
-            Text(description)
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            if !examples.isEmpty {
-                VStack(alignment: .leading, spacing: 7) {
-                    Text(String(localized: "Correction examples"))
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
-
-                    ForEach(examples) { example in
-                        correctionExampleRow(example)
+                        lockedPremiumBadge
                     }
                 }
-            }
 
-            if !badges.isEmpty {
-                VStack(alignment: .leading, spacing: 7) {
-                    Text(String(localized: "Works with"))
-                        .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                Text(description)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
 
-                    FlexibleTagRow(items: badges)
+                if !examples.isEmpty {
+                    VStack(alignment: .leading, spacing: 7) {
+                        Text(String(localized: "Correction examples"))
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+
+                        ForEach(examples) { example in
+                            correctionExampleRow(example)
+                        }
+                    }
                 }
-            }
 
-            Spacer(minLength: 0)
+                if !badges.isEmpty {
+                    VStack(alignment: .leading, spacing: 7) {
+                        Text(String(localized: "Works with"))
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+
+                        FlexibleTagRow(items: badges)
+                    }
+                }
+
+                Spacer(minLength: 0)
+            }
         }
-        .padding(16)
         .frame(maxWidth: .infinity, minHeight: 210, alignment: .topLeading)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color.white.opacity(0.055))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
-        )
     }
 
     private var premiumLicenseCallout: some View {
-        HStack(alignment: .center, spacing: 12) {
-            Label(String(localized: "A Commercial license unlocks both premium features."), systemImage: "lock.open")
-                .font(.callout.weight(.medium))
-                .foregroundStyle(.secondary)
+        SettingsCard {
+            HStack(alignment: .center, spacing: 12) {
+                Label(String(localized: "A Commercial license unlocks both premium features."), systemImage: "lock.open")
+                    .font(.callout.weight(.medium))
+                    .foregroundStyle(.secondary)
 
-            Spacer(minLength: 12)
+                Spacer(minLength: 12)
 
-            premiumLockedActionButton
+                premiumLockedActionButton
+            }
         }
-        .padding(14)
         .frame(maxWidth: 640, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color.black.opacity(0.18))
-        )
     }
 
     private var premiumLockedActionButton: some View {
@@ -319,7 +313,7 @@ struct PremiumSettingsView: View {
             .font(.caption.weight(.medium))
             .padding(.horizontal, 8)
             .padding(.vertical, 4)
-            .background(Color.white.opacity(0.08))
+            .background(Color.secondary.opacity(0.10))
             .foregroundStyle(.secondary)
             .clipShape(Capsule())
             .lineLimit(1)
@@ -351,7 +345,7 @@ struct PremiumSettingsView: View {
 
             CloudFolderSyncSettingsView(controller: syncController)
         }
-        .padding(22)
+        .padding(SettingsLayoutMetrics.pagePadding)
         .frame(maxWidth: 760, alignment: .topLeading)
     }
 
@@ -394,39 +388,35 @@ struct PremiumSettingsView: View {
         value: String,
         description: String
     ) -> some View {
-        HStack(alignment: .top, spacing: 11) {
-            Image(systemName: icon)
-                .font(.headline)
-                .foregroundStyle(iconColor)
-                .frame(width: 30, height: 30)
-                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(iconColor.opacity(0.12)))
-                .accessibilityHidden(true)
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(title)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(.secondary)
-
-                Text(value)
+        SettingsCard {
+            HStack(alignment: .top, spacing: 11) {
+                Image(systemName: icon)
                     .font(.headline)
-                    .lineLimit(1)
+                    .foregroundStyle(iconColor)
+                    .frame(width: 30, height: 30)
+                    .background(
+                        RoundedRectangle(cornerRadius: SettingsLayoutMetrics.compactCornerRadius, style: .continuous)
+                            .fill(iconColor.opacity(0.12))
+                    )
+                    .accessibilityHidden(true)
 
-                Text(description)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+
+                    Text(value)
+                        .font(.headline)
+                        .lineLimit(1)
+
+                    Text(description)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
             }
         }
-        .padding(13)
         .frame(maxWidth: .infinity, alignment: .topLeading)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color.white.opacity(0.055))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.10), lineWidth: 1)
-        )
     }
 
     private var targetAppCorrectionLearningSection: some View {
@@ -594,7 +584,7 @@ struct PremiumSettingsView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(Color.black.opacity(0.16))
+                .fill(Color(nsColor: .controlBackgroundColor))
         )
     }
 
@@ -655,50 +645,46 @@ private struct PremiumControlSection<Content: View>: View {
     @ViewBuilder let content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top, spacing: 12) {
-                Image(systemName: icon)
-                    .font(.title2)
-                    .foregroundStyle(iconColor)
-                    .frame(width: 38, height: 38)
-                    .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(iconColor.opacity(0.12)))
-                    .accessibilityHidden(true)
+        SettingsCard {
+            VStack(alignment: .leading, spacing: 14) {
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: icon)
+                        .font(.title2)
+                        .foregroundStyle(iconColor)
+                        .frame(width: 38, height: 38)
+                        .background(
+                            RoundedRectangle(cornerRadius: SettingsLayoutMetrics.compactCornerRadius, style: .continuous)
+                                .fill(iconColor.opacity(0.12))
+                        )
+                        .accessibilityHidden(true)
 
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
-                        .font(.headline)
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(title)
+                            .font(.headline)
 
-                    Text(description)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
+                        Text(description)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+
+                    Spacer(minLength: 12)
+
+                    Text(statusText)
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(statusColor)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 5)
+                        .background(Capsule().fill(statusColor.opacity(0.13)))
                 }
 
-                Spacer(minLength: 12)
-
-                Text(statusText)
-                    .font(.caption.weight(.semibold))
-                    .foregroundStyle(statusColor)
-                    .padding(.horizontal, 9)
-                    .padding(.vertical, 5)
-                    .background(Capsule().fill(statusColor.opacity(0.13)))
+                VStack(alignment: .leading, spacing: 10) {
+                    content
+                }
+                .padding(.leading, 50)
             }
-
-            VStack(alignment: .leading, spacing: 10) {
-                content
-            }
-            .padding(.leading, 50)
         }
-        .padding(16)
         .frame(maxWidth: .infinity, alignment: .topLeading)
-        .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(Color.white.opacity(0.065))
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .strokeBorder(Color.white.opacity(0.11), lineWidth: 1)
-        )
     }
 }
 
@@ -715,7 +701,7 @@ private struct FlexibleTagRow: View {
                     .padding(.vertical, 5)
                     .background(
                         RoundedRectangle(cornerRadius: 6, style: .continuous)
-                            .fill(Color.white.opacity(0.08))
+                            .fill(Color.secondary.opacity(0.10))
                     )
             }
         }

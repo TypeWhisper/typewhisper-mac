@@ -188,7 +188,7 @@ struct PluginSettingsView: View {
             Divider()
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: SettingsLayoutMetrics.sectionSpacing) {
                     integrationTabHeader
 
                     switch selectedTab {
@@ -198,7 +198,7 @@ struct PluginSettingsView: View {
                         availableTab
                     }
                 }
-                .padding(16)
+                .padding(SettingsLayoutMetrics.pagePadding)
             }
         }
         .frame(minWidth: 560, minHeight: 420)
@@ -307,43 +307,26 @@ struct PluginSettingsView: View {
     // MARK: - Header
 
     private var integrationsHeader: some View {
-        HStack(alignment: .center, spacing: 12) {
-            Image(systemName: "puzzlepiece.extension")
-                .font(.title2)
-                .foregroundStyle(.blue)
-                .frame(width: 38, height: 38)
-                .background(RoundedRectangle(cornerRadius: 8).fill(.blue.opacity(0.12)))
+        SettingsPageHeader(
+            String(localized: "Integrations"),
+            summary: integrationSummaryText
+        ) {
+            HStack(spacing: 12) {
+                Button {
+                    pluginManager.openPluginsFolder()
+                } label: {
+                    Label(String(localized: "Open Plugins Folder"), systemImage: "folder")
+                }
+                .help(String(localized: "Open Plugins Folder"))
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(String(localized: "Integrations"))
-                    .font(.title3.weight(.semibold))
-                Text(integrationSummaryText)
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                Button {
+                    installFromFile()
+                } label: {
+                    Label(localizedAppText("Install Plugin", de: "Plugin installieren"), systemImage: "plus")
+                }
+                .help(String(localized: "Install from File..."))
             }
-
-            Spacer()
-
-            Button {
-                pluginManager.openPluginsFolder()
-            } label: {
-                Label(String(localized: "Open Plugins Folder"), systemImage: "folder")
-            }
-            .controlSize(.small)
-            .help(String(localized: "Open Plugins Folder"))
-
-            Button {
-                installFromFile()
-            } label: {
-                Label(localizedAppText("Install Plugin", de: "Plugin installieren"), systemImage: "plus")
-            }
-            .controlSize(.small)
-            .help(String(localized: "Install from File..."))
         }
-        .padding(.horizontal)
-        .padding(.top, 14)
-        .padding(.bottom, 14)
-        .background(.bar)
     }
 
     private var integrationSummaryText: String {
