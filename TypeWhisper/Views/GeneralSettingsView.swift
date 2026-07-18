@@ -85,8 +85,12 @@ struct GeneralSettingsView: View {
     }
 
     var body: some View {
-        Form {
-            Section(String(localized: "Spoken Language")) {
+        VStack(spacing: 0) {
+            SettingsPageHeader(String(localized: "General"))
+            Divider()
+
+            Form {
+                Section(String(localized: "Spoken Language")) {
                 LanguageSelectionEditor(
                     selection: $settings.languageSelection,
                     availableLanguages: settings.availableLanguages,
@@ -98,9 +102,9 @@ struct GeneralSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            #if canImport(Translation)
-            if #available(macOS 15, *) {
-                Section(String(localized: "Translation")) {
+                #if canImport(Translation)
+                if #available(macOS 15, *) {
+                    Section(String(localized: "Translation")) {
                     Toggle(String(localized: "Enable translation"), isOn: $settings.translationEnabled)
 
                     if settings.translationEnabled {
@@ -114,11 +118,11 @@ struct GeneralSettingsView: View {
                     Text(String(localized: "Uses Apple Translate (on-device)"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                    }
                 }
-            }
-            #endif
+                #endif
 
-            Section(String(localized: "Language")) {
+                Section(String(localized: "Language")) {
                 Picker(String(localized: "App Language"), selection: $appLanguage) {
                     Text("English").tag("en")
                     Text("Deutsch").tag("de")
@@ -131,7 +135,7 @@ struct GeneralSettingsView: View {
                 }
             }
 
-            Section(String(localized: "Startup")) {
+                Section(String(localized: "Startup")) {
                 Toggle(String(localized: "Launch at Login"), isOn: $launchAtLogin)
                     .onChange(of: launchAtLogin) { _, newValue in
                         toggleLaunchAtLogin(newValue)
@@ -142,7 +146,7 @@ struct GeneralSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section(String(localized: "Appearance")) {
+                Section(String(localized: "Appearance")) {
                 Picker(String(localized: "App visibility"), selection: Binding(
                     get: { appVisibilityMode },
                     set: { appVisibilityMode = $0 }
@@ -157,7 +161,7 @@ struct GeneralSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section(String(localized: "Indicator")) {
+                Section(String(localized: "Indicator")) {
                 IndicatorPreviewView()
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
@@ -231,11 +235,12 @@ struct GeneralSettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+                }
             }
-
+            .formStyle(.grouped)
+            .padding(.horizontal, SettingsLayoutMetrics.pagePadding)
+            .padding(.bottom, SettingsLayoutMetrics.pagePadding)
         }
-        .formStyle(.grouped)
-        .padding()
         .frame(minWidth: 500, minHeight: 300)
         .alert(String(localized: "Restart Required"), isPresented: $showRestartAlert) {
             Button(String(localized: "Restart Now")) {

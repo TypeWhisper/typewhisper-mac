@@ -8,21 +8,26 @@ struct HistoryView: View {
     }
 
     var body: some View {
-        HStack(spacing: 0) {
-            listPanel
-                .frame(minWidth: 280)
-
+        VStack(spacing: 0) {
+            SettingsPageHeader(String(localized: "History"))
             Divider()
-                .opacity(hasSelection ? 1 : 0)
-                .frame(width: hasSelection ? 1 : 0)
 
-            detailPanelContainer
-                .frame(
-                    minWidth: hasSelection ? 300 : 0,
-                    idealWidth: hasSelection ? 340 : 0,
-                    maxWidth: hasSelection ? .infinity : 0
-                )
-                .clipped()
+            HStack(spacing: 0) {
+                listPanel
+                    .frame(minWidth: 280)
+
+                Divider()
+                    .opacity(hasSelection ? 1 : 0)
+                    .frame(width: hasSelection ? 1 : 0)
+
+                detailPanelContainer
+                    .frame(
+                        minWidth: hasSelection ? 300 : 0,
+                        idealWidth: hasSelection ? 340 : 0,
+                        maxWidth: hasSelection ? .infinity : 0
+                    )
+                    .clipped()
+            }
         }
         .frame(minHeight: 400)
     }
@@ -38,7 +43,7 @@ struct HistoryView: View {
             )
             .frame(maxWidth: .infinity)
             .frame(height: 32)
-            .padding(.horizontal, 8)
+            .padding(.horizontal, SettingsLayoutMetrics.pagePadding)
             .padding(.vertical, 6)
             .background(.bar)
 
@@ -71,7 +76,7 @@ struct HistoryView: View {
 
                 Spacer()
             }
-            .padding(.horizontal, 8)
+            .padding(.horizontal, SettingsLayoutMetrics.pagePadding)
             .padding(.vertical, 6)
             .background(.bar)
 

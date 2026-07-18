@@ -1,0 +1,10 @@
+{
+  "collection" : "snippets",
+  "deletedAt" : "2026-07-16T11:00:00.000Z",
+  "deviceId" : "fixture-iphone",
+  "itemId" : "snippet:;sig",
+  "kind" : "delete",
+  "operationId" : "fixture-delete-snippet",
+  "schemaVersion" : 1,
+  "updatedAt" : "2026-07-16T11:00:00.000Z"
+}

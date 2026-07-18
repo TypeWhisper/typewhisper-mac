@@ -773,12 +773,16 @@ struct RecordingSettingsView: View {
     }
 
     var body: some View {
-        Form {
-            if needsPermissions {
-                PermissionsBanner(dictation: dictation)
-            }
+        VStack(spacing: 0) {
+            SettingsPageHeader(String(localized: "Dictation"))
+            Divider()
 
-            Section(String(localized: "Spoken Language")) {
+            Form {
+                if needsPermissions {
+                    PermissionsBanner(dictation: dictation)
+                }
+
+                Section(String(localized: "Spoken Language")) {
                 LanguageSelectionEditor(
                     selection: $settings.languageSelection,
                     availableLanguages: settings.availableLanguages,
@@ -790,7 +794,7 @@ struct RecordingSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section(String(localized: "Engine")) {
+                Section(String(localized: "Engine")) {
                 let engines = pluginManager.transcriptionEngines
                 if engines.isEmpty {
                     Text(String(localized: "No transcription engines installed. Install engines via Integrations."))
@@ -836,7 +840,7 @@ struct RecordingSettingsView: View {
                 }
             }
 
-            Section(String(localized: "Microphone")) {
+                Section(String(localized: "Microphone")) {
                 Picker(String(localized: "Input Device"), selection: inputDeviceSelectionBinding) {
                     Text(String(localized: "System Default")).tag(nil as String?)
                     Divider()
@@ -904,7 +908,7 @@ struct RecordingSettingsView: View {
                 }
             }
 
-            Section(String(localized: "Sound")) {
+                Section(String(localized: "Sound")) {
                 Toggle(String(localized: "Play sound feedback"), isOn: $dictation.soundFeedbackEnabled)
 
                 if dictation.soundFeedbackEnabled {
@@ -919,7 +923,7 @@ struct RecordingSettingsView: View {
 
             }
 
-            Section(String(localized: "Clipboard")) {
+                Section(String(localized: "Clipboard")) {
                 Toggle(String(localized: "Preserve clipboard content"), isOn: $dictation.preserveClipboard)
 
                 Text(String(localized: "Restores your clipboard after text insertion. Without this, your clipboard contains the transcribed text after dictation."))
@@ -927,7 +931,7 @@ struct RecordingSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section(String(localized: "Output Formatting")) {
+                Section(String(localized: "Output Formatting")) {
                 Toggle(String(localized: "App-aware formatting"), isOn: Binding(
                     get: { UserDefaults.standard.bool(forKey: UserDefaultsKeys.appFormattingEnabled) },
                     set: { UserDefaults.standard.set($0, forKey: UserDefaultsKeys.appFormattingEnabled) }
@@ -947,7 +951,7 @@ struct RecordingSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section(String(localized: "Audio Ducking")) {
+                Section(String(localized: "Audio Ducking")) {
                 Toggle(String(localized: "Reduce system volume during recording"), isOn: $dictation.audioDuckingEnabled)
 
                 if dictation.audioDuckingEnabled {
@@ -965,7 +969,7 @@ struct RecordingSettingsView: View {
                 }
             }
 
-            Section(String(localized: "Media Pause")) {
+                Section(String(localized: "Media Pause")) {
                 Toggle(String(localized: "Pause media playback during recording"), isOn: $dictation.mediaPauseEnabled)
 
                 Text(String(localized: "Automatically pauses music and videos while recording and resumes when done. Uses macOS system media controls - may not work with all apps."))
@@ -973,8 +977,8 @@ struct RecordingSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            if needsPermissions {
-                Section(String(localized: "Permissions")) {
+                if needsPermissions {
+                    Section(String(localized: "Permissions")) {
                     if dictation.needsMicPermission {
                         HStack {
                             Label(
@@ -1010,11 +1014,13 @@ struct RecordingSettingsView: View {
                             .controlSize(.small)
                         }
                     }
+                    }
                 }
             }
+            .formStyle(.grouped)
+            .padding(.horizontal, SettingsLayoutMetrics.pagePadding)
+            .padding(.bottom, SettingsLayoutMetrics.pagePadding)
         }
-        .formStyle(.grouped)
-        .padding()
         .frame(minWidth: 500, minHeight: 300)
         .onAppear {
             modelManager.restoreProviderSelection()

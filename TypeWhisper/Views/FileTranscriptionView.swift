@@ -11,23 +11,27 @@ struct FileTranscriptionView: View {
     @State private var expandedFileId: UUID?
 
     var body: some View {
-        ScrollView {
-            VStack(spacing: 16) {
-                if viewModel.files.isEmpty {
-                    dropZone
-                } else {
-                    fileList
-                    controls
-                }
-            }
-            .padding()
-
+        VStack(spacing: 0) {
+            SettingsPageHeader(String(localized: "File Transcription"))
             Divider()
-                .padding(.horizontal)
 
-            // MARK: - Watch Folder
+            ScrollView {
+                VStack(spacing: SettingsLayoutMetrics.sectionSpacing) {
+                    if viewModel.files.isEmpty {
+                        dropZone
+                    } else {
+                        fileList
+                        controls
+                    }
+                }
+                .padding(SettingsLayoutMetrics.pagePadding)
 
-            Form {
+                Divider()
+                    .padding(.horizontal, SettingsLayoutMetrics.pagePadding)
+
+                // MARK: - Watch Folder
+
+                Form {
                 Section(String(localized: "watchFolder.folders")) {
                     HStack {
                         VStack(alignment: .leading, spacing: 2) {
@@ -193,8 +197,11 @@ struct FileTranscriptionView: View {
                         }
                     }
                 }
+                }
+                .formStyle(.grouped)
+                .padding(.horizontal, SettingsLayoutMetrics.pagePadding)
+                .padding(.bottom, SettingsLayoutMetrics.pagePadding)
             }
-            .formStyle(.grouped)
         }
         .frame(minWidth: 500, minHeight: 400)
         .onDrop(of: [.fileURL], isTargeted: $isDragTargeted) { providers in
@@ -247,10 +254,14 @@ struct FileTranscriptionView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(isDragTargeted ? Color.blue.opacity(0.1) : Color.clear)
+            RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius)
+                .fill(
+                    isDragTargeted
+                        ? Color.blue.opacity(0.1)
+                        : Color(nsColor: .controlBackgroundColor)
+                )
                 .overlay(
-                    RoundedRectangle(cornerRadius: 12)
+                    RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius)
                         .strokeBorder(
                             isDragTargeted ? Color.blue : Color.secondary.opacity(0.3),
                             style: StrokeStyle(lineWidth: 2, dash: [8])
@@ -263,7 +274,7 @@ struct FileTranscriptionView: View {
 
     @ViewBuilder
     private var fileList: some View {
-        LazyVStack(spacing: 8) {
+        LazyVStack(spacing: SettingsLayoutMetrics.cardSpacing) {
             ForEach(viewModel.files) { item in
                 fileRow(item)
             }

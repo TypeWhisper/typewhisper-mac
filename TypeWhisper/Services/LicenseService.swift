@@ -200,6 +200,10 @@ final class LicenseService: ObservableObject {
 
     var isSupporter: Bool { supporterStatus == .active && supporterTier != nil }
     var hasCommercialLicense: Bool { licenseStatus == .active }
+    var commercialLicenseKeyForAccountLink: String? {
+        guard hasCommercialLicense else { return nil }
+        return loadLicenseFromKeychain()?.key
+    }
     var canUseProTranscriptionFallback: Bool { hasCommercialLicense || isSupporter }
     var supporterClaimProof: SupporterClaimProof? {
         guard supporterStatus == .active,

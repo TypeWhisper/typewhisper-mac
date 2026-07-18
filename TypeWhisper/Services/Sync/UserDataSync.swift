@@ -111,6 +111,21 @@ struct UserDataSyncSnippet: Codable, Equatable, Sendable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
+
+    private enum CodingKeys: String, CodingKey {
+        case trigger, replacement, caseSensitive, isEnabled, tags, createdAt, updatedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        trigger = try container.decode(String.self, forKey: .trigger)
+        replacement = try container.decode(String.self, forKey: .replacement)
+        caseSensitive = try container.decode(Bool.self, forKey: .caseSensitive)
+        isEnabled = try container.decode(Bool.self, forKey: .isEnabled)
+        tags = try container.decodeIfPresent([String].self, forKey: .tags) ?? []
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+    }
 }
 
 struct UserDataSyncSnapshot: Codable, Equatable, Sendable {

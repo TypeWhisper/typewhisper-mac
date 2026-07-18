@@ -23,7 +23,7 @@ class PromptActionService: ObservableObject {
         try? FileManager.default.createDirectory(at: storeDir, withIntermediateDirectories: true)
 
         let storeURL = storeDir.appendingPathComponent("prompt-actions.store")
-        let config = ModelConfiguration(url: storeURL)
+        let config = ModelConfiguration(url: storeURL, cloudKitDatabase: .none)
 
         do {
             modelContainer = try ModelContainer(for: schema, configurations: [config])

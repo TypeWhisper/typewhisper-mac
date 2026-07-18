@@ -46,6 +46,7 @@ final class ServiceContainer: ObservableObject {
     let speechFeedbackService: SpeechFeedbackService
     let errorLogService: ErrorLogService
     let licenseService: LicenseService
+    let premiumAccountService: PremiumAccountService
     let supporterDiscordService: SupporterDiscordService
 
     // HTTP API
@@ -134,9 +135,10 @@ final class ServiceContainer: ObservableObject {
         speechFeedbackService = SpeechFeedbackService()
         errorLogService = ErrorLogService()
         licenseService = LicenseService()
+        premiumAccountService = PremiumAccountService()
         supporterDiscordService = SupporterDiscordService(licenseService: licenseService)
         cloudFolderSyncController = CloudFolderSyncController(
-            licenseService: licenseService,
+            premiumAccountService: premiumAccountService,
             syncStore: userDataSyncStore
         )
 

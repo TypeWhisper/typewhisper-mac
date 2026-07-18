@@ -6,7 +6,14 @@ struct DictationRecoveryView: View {
     @Environment(\.openWindow) private var openWindow
 
     var body: some View {
-        recoveryForm
+        VStack(spacing: 0) {
+            SettingsPageHeader(localizedAppText("Recovery", de: "Wiederherstellung"))
+            Divider()
+
+            recoveryForm
+                .padding(.horizontal, SettingsLayoutMetrics.pagePadding)
+                .padding(.bottom, SettingsLayoutMetrics.pagePadding)
+        }
         .frame(minWidth: 500, minHeight: 400)
     }
 

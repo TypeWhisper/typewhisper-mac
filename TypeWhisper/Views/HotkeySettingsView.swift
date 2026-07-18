@@ -7,9 +7,13 @@ struct HotkeySettingsView: View {
     private let secureInputRefresh = Timer.publish(every: 3, on: .main, in: .common).autoconnect()
 
     var body: some View {
-        Form {
-            if secureInputDiagnostics.isActive {
-                Section {
+        VStack(spacing: 0) {
+            SettingsPageHeader(String(localized: "Hotkeys"))
+            Divider()
+
+            Form {
+                if secureInputDiagnostics.isActive {
+                    Section {
                     Label {
                         Text(String(localized: "Secure Input is active in \(secureInputDiagnostics.userFacingOwner). Standard key+modifier shortcuts should keep working. Fallback-only shortcut types may not work until that app leaves password or sensitive input."))
                             .font(.callout)
@@ -18,10 +22,10 @@ struct HotkeySettingsView: View {
                         Image(systemName: "exclamationmark.triangle.fill")
                             .foregroundStyle(.orange)
                     }
+                    }
                 }
-            }
 
-            Section(String(localized: "Hotkeys")) {
+                Section(String(localized: "Hotkeys")) {
                 MultiHotkeySlotRecorder(
                     slot: .hybrid,
                     title: String(localized: "Hybrid"),
@@ -41,7 +45,7 @@ struct HotkeySettingsView: View {
                 )
             }
 
-            Section(localizedAppText("Workflow Palette", de: "Workflow-Palette")) {
+                Section(localizedAppText("Workflow Palette", de: "Workflow-Palette")) {
                 MultiHotkeySlotRecorder(
                     slot: .promptPalette,
                     title: localizedAppText("Palette shortcut", de: "Palette-Shortcut"),
@@ -56,7 +60,7 @@ struct HotkeySettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section(String(localized: "settings.tab.recorder")) {
+                Section(String(localized: "settings.tab.recorder")) {
                 MultiHotkeySlotRecorder(
                     slot: .recorderToggle,
                     title: String(localized: "recorder.shortcut.title"),
@@ -64,7 +68,7 @@ struct HotkeySettingsView: View {
                 )
             }
 
-            Section(String(localized: "Recent Transcriptions")) {
+                Section(String(localized: "Recent Transcriptions")) {
                 MultiHotkeySlotRecorder(
                     slot: .recentTranscriptions,
                     title: String(localized: "Recent transcription shortcut"),
@@ -76,10 +80,12 @@ struct HotkeySettingsView: View {
                     title: String(localized: "Copy last transcription shortcut"),
                     subtitle: String(localized: "Copy your latest transcription to the clipboard.")
                 )
+                }
             }
+            .formStyle(.grouped)
+            .padding(.horizontal, SettingsLayoutMetrics.pagePadding)
+            .padding(.bottom, SettingsLayoutMetrics.pagePadding)
         }
-        .formStyle(.grouped)
-        .padding()
         .frame(minWidth: 500, minHeight: 300)
         .onReceive(secureInputRefresh) { _ in
             secureInputDiagnostics = SecureInputDiagnosticsProvider.snapshot()

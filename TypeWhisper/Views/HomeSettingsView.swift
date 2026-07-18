@@ -14,26 +14,17 @@ struct HomeSettingsView: View {
 
     private var dashboardView: some View {
         VStack(alignment: .leading, spacing: 0) {
-            // Row 0: Permissions banner (outside scroll)
+            SettingsPageHeader(String(localized: "Dashboard"))
+            Divider()
+
             if dictation.needsMicPermission || dictation.needsAccessibilityPermission {
                 permissionsBanner
-                    .padding(.horizontal)
-                    .padding(.top)
+                    .padding(.horizontal, SettingsLayoutMetrics.pagePadding)
+                    .padding(.top, SettingsLayoutMetrics.sectionSpacing)
             }
-
-            // Header (outside scroll, always visible)
-            HStack {
-                Text(String(localized: "Dashboard"))
-                    .font(.title2)
-                    .fontWeight(.semibold)
-                Spacer()
-            }
-            .padding(.horizontal)
-            .padding(.top)
-            .padding(.bottom, 8)
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: SettingsLayoutMetrics.sectionSpacing) {
                     if license.shouldShowWorkUsagePrompt && !workUsagePromptDismissed {
                         workUsageCard
                     }
@@ -70,8 +61,8 @@ struct HomeSettingsView: View {
                     }
                     #endif
                 }
-                .padding(.horizontal)
-                .padding(.bottom)
+                .padding(.horizontal, SettingsLayoutMetrics.pagePadding)
+                .padding(.vertical, SettingsLayoutMetrics.sectionSpacing)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -130,10 +121,14 @@ struct HomeSettingsView: View {
                 )
             }
         }
-        .padding()
+        .padding(SettingsLayoutMetrics.cardPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.quaternary.opacity(0.3))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .background(Color(nsColor: .controlBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius))
+        .overlay(
+            RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius)
+                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+        )
     }
 
     private func statisticsSummaryCard(title: String, value: String, systemImage: String) -> some View {
@@ -187,14 +182,14 @@ struct HomeSettingsView: View {
                 .buttonStyle(.bordered)
             }
         }
-        .padding(16)
+        .padding(SettingsLayoutMetrics.cardPadding)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius, style: .continuous)
                 .fill(Color(nsColor: .controlBackgroundColor))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 16, style: .continuous)
+            RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius, style: .continuous)
                 .stroke(Color.accentColor.opacity(0.2), lineWidth: 1)
         )
     }
@@ -274,9 +269,13 @@ struct HomeSettingsView: View {
                 }
             }
         }
-        .padding()
-        .background(.quaternary.opacity(0.3))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .padding(SettingsLayoutMetrics.cardPadding)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius))
+        .overlay(
+            RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius)
+                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+        )
     }
 
     // MARK: - Getting Started Card
@@ -311,7 +310,10 @@ struct HomeSettingsView: View {
                     .font(.body.weight(.medium))
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
-                    .background(RoundedRectangle(cornerRadius: 6).fill(Color.accentColor.opacity(0.1)))
+                    .background(
+                        RoundedRectangle(cornerRadius: SettingsLayoutMetrics.compactCornerRadius)
+                            .fill(Color.accentColor.opacity(0.1))
+                    )
                 Text(String(localized: "in any app to begin."))
                     .foregroundStyle(.secondary)
             }
@@ -319,8 +321,12 @@ struct HomeSettingsView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 24)
-        .background(.quaternary.opacity(0.3))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .background(Color(nsColor: .controlBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius))
+        .overlay(
+            RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius)
+                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+        )
     }
 
     // MARK: - Permissions Banner
@@ -357,8 +363,12 @@ struct HomeSettingsView: View {
             }
         }
         .foregroundStyle(.red)
-        .padding()
+        .padding(SettingsLayoutMetrics.cardPadding)
         .background(.red.opacity(0.1))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .clipShape(RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius))
+        .overlay(
+            RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius)
+                .stroke(Color.red.opacity(0.25), lineWidth: 1)
+        )
     }
 }

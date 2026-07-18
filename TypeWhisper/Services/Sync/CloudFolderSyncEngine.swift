@@ -61,6 +61,13 @@ struct CloudFolderSyncResult: Equatable, Sendable {
     let operationsWritten: Int
     let mutationsApplied: Int
     let syncedAt: Date
+    let diagnostics: [CloudFolderSyncDiagnostic]
+}
+
+struct CloudFolderSyncDiagnostic: Equatable, Sendable {
+    enum Kind: String, Sendable { case unreadableFile, malformedOperation, unsupportedSchema }
+    let kind: Kind
+    let fileName: String
 }
 
 struct CloudFolderSyncManifest: Codable, Equatable, Sendable {
@@ -164,7 +171,7 @@ enum CloudFolderSyncError: LocalizedError {
         case .missingStore:
             String(localized: "TypeWhisper user data is unavailable.")
         case .notEntitled:
-            String(localized: "Cloud Folder Sync requires an active Commercial license.")
+            String(localized: "Cloud Folder Sync requires an active Premium entitlement.")
         }
     }
 }
@@ -185,7 +192,8 @@ enum CloudFolderSyncEngine {
         store: (any UserDataSyncStore)?,
         state: inout CloudFolderSyncState,
         entitlements: PaidEntitlements,
-        now: Date = Date()
+        now: Date = Date(),
+        afterFileIO: (@Sendable () async -> Void)? = nil
     ) async throws -> CloudFolderSyncResult {
         guard entitlements.canUseCloudFolderSync else {
             throw CloudFolderSyncError.notEntitled
@@ -194,49 +202,75 @@ enum CloudFolderSyncEngine {
             throw CloudFolderSyncError.missingStore
         }
 
-        let packageURL = packageURL(for: folderURL)
-        let operationsURL = packageURL
-            .appendingPathComponent(operationsDirectoryName, isDirectory: true)
-        let deviceOperationsURL = operationsURL
-            .appendingPathComponent(state.deviceId, isDirectory: true)
-        let devicesURL = packageURL
-            .appendingPathComponent(devicesDirectoryName, isDirectory: true)
-
-        try FileManager.default.createDirectory(at: deviceOperationsURL, withIntermediateDirectories: true)
-        try FileManager.default.createDirectory(at: devicesURL, withIntermediateDirectories: true)
-        try writePackageMetadata(packageURL: packageURL, devicesURL: devicesURL, deviceId: state.deviceId, now: now)
-
         let initialSnapshot = await store.snapshot()
         let initialRecords = records(from: initialSnapshot)
-        let localOperations = makeLocalOperations(records: initialRecords, state: state, now: now)
-        try write(localOperations, to: deviceOperationsURL, now: now)
-        pruneExpiredTombstones(in: deviceOperationsURL, now: now)
+        let stateSnapshot = state
+        let fileResult = try await Task.detached(priority: .utility) {
+            let packageURL = packageURL(for: folderURL)
+            let operationsURL = packageURL
+                .appendingPathComponent(operationsDirectoryName, isDirectory: true)
+            let deviceOperationsURL = operationsURL
+                .appendingPathComponent(stateSnapshot.deviceId, isDirectory: true)
+            let devicesURL = packageURL
+                .appendingPathComponent(devicesDirectoryName, isDirectory: true)
 
-        let operations = readOperations(from: operationsURL)
-        let winners = winningOperations(from: operations)
-        let mutations = makeMutations(
-            from: winners,
-            localRecords: initialRecords,
-            localDeviceId: state.deviceId,
-            appliedOperationIDs: state.appliedOperationIDs
-        )
+            try FileManager.default.createDirectory(
+                at: deviceOperationsURL,
+                withIntermediateDirectories: true
+            )
+            try FileManager.default.createDirectory(
+                at: devicesURL,
+                withIntermediateDirectories: true
+            )
+            try writePackageMetadata(
+                packageURL: packageURL,
+                devicesURL: devicesURL,
+                deviceId: stateSnapshot.deviceId,
+                now: now
+            )
 
+            let localOperations = makeLocalOperations(
+                records: initialRecords,
+                state: stateSnapshot,
+                now: now
+            )
+            try write(localOperations, to: deviceOperationsURL, now: now)
+            pruneExpiredTombstones(in: deviceOperationsURL, now: now)
+
+            let readResult = try readOperations(from: operationsURL)
+            let winners = winningOperations(from: readResult.operations)
+            let mutations = makeMutations(
+                from: winners,
+                localRecords: initialRecords,
+                localDeviceId: stateSnapshot.deviceId,
+                appliedOperationIDs: stateSnapshot.appliedOperationIDs
+            )
+            return (
+                localOperations: localOperations,
+                readResult: readResult,
+                mutations: mutations
+            )
+        }.value
+        let operations = fileResult.readResult.operations
+        let mutations = fileResult.mutations
+
+        await afterFileIO?()
         if !mutations.isEmpty {
             try await store.apply(mutations)
         }
 
-        let finalSnapshot = await store.snapshot()
-        let finalRecords = records(from: finalSnapshot)
-        state.knownLocalItemIDs = Set(finalRecords.keys)
-        state.exportedItemVersions = finalRecords.mapValues(\.version)
+        let synchronizedRecords = records(afterApplying: mutations, to: initialRecords)
+        state.knownLocalItemIDs = Set(synchronizedRecords.keys)
+        state.exportedItemVersions = synchronizedRecords.mapValues(\.version)
         state.appliedOperationIDs.formUnion(operations.map(\.operationId))
         state.lastSyncAt = now
 
         return CloudFolderSyncResult(
             operationsRead: operations.count,
-            operationsWritten: localOperations.count,
+            operationsWritten: fileResult.localOperations.count,
             mutationsApplied: mutations.count,
-            syncedAt: now
+            syncedAt: now,
+            diagnostics: fileResult.readResult.diagnostics
         )
     }
 
@@ -269,6 +303,33 @@ enum CloudFolderSyncEngine {
                 ),
                 into: &records
             )
+        }
+        return records
+    }
+
+    private static func records(
+        afterApplying mutations: [UserDataSyncMutation],
+        to initialRecords: [String: CloudFolderSyncRecord]
+    ) -> [String: CloudFolderSyncRecord] {
+        var records = initialRecords
+        for mutation in mutations {
+            switch mutation {
+            case .upsertDictionary(let entry):
+                let itemID = UserDataSyncIdentity.dictionaryItemID(
+                    entryType: entry.entryType,
+                    original: entry.original
+                )
+                records[itemID] = Self.records(
+                    from: UserDataSyncSnapshot(dictionaryEntries: [entry])
+                )[itemID]
+            case .deleteDictionary(let itemID), .deleteSnippet(let itemID):
+                records.removeValue(forKey: itemID)
+            case .upsertSnippet(let snippet):
+                let itemID = UserDataSyncIdentity.snippetItemID(trigger: snippet.trigger)
+                records[itemID] = Self.records(
+                    from: UserDataSyncSnapshot(snippets: [snippet])
+                )[itemID]
+            }
         }
         return records
     }
@@ -444,31 +505,54 @@ enum CloudFolderSyncEngine {
         }
     }
 
-    private static func readOperations(from operationsURL: URL) -> [CloudFolderSyncOperation] {
-        guard let deviceDirectories = try? FileManager.default.contentsOfDirectory(
+    static func readOperations(
+        from operationsURL: URL
+    ) throws -> (operations: [CloudFolderSyncOperation], diagnostics: [CloudFolderSyncDiagnostic]) {
+        let deviceDirectories = try FileManager.default.contentsOfDirectory(
             at: operationsURL,
             includingPropertiesForKeys: [.isDirectoryKey],
             options: [.skipsHiddenFiles]
-        ) else {
-            return []
-        }
+        )
 
-        return deviceDirectories.flatMap { deviceDirectory -> [CloudFolderSyncOperation] in
-            guard (try? deviceDirectory.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true,
-                  let files = try? FileManager.default.contentsOfDirectory(
+        var operations: [CloudFolderSyncOperation] = []
+        var diagnostics: [CloudFolderSyncDiagnostic] = []
+        for deviceDirectory in deviceDirectories {
+            guard (try? deviceDirectory.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else {
+                continue
+            }
+            let files: [URL]
+            do {
+                files = try FileManager.default.contentsOfDirectory(
                     at: deviceDirectory,
                     includingPropertiesForKeys: nil,
                     options: [.skipsHiddenFiles]
-                  ) else {
-                return []
+                )
+            } catch {
+                diagnostics.append(.init(kind: .unreadableFile, fileName: deviceDirectory.lastPathComponent))
+                continue
             }
 
-            return files.compactMap { file in
-                guard file.pathExtension == "json",
-                      let data = try? Data(contentsOf: file) else { return nil }
-                return try? decoder.decode(CloudFolderSyncOperation.self, from: data)
+            for file in files where file.pathExtension == "json" {
+                guard let data = try? Data(contentsOf: file) else {
+                    diagnostics.append(.init(kind: .unreadableFile, fileName: file.lastPathComponent))
+                    continue
+                }
+                guard let envelope = try? decoder.decode(CloudFolderSyncSchemaEnvelope.self, from: data) else {
+                    diagnostics.append(.init(kind: .malformedOperation, fileName: file.lastPathComponent))
+                    continue
+                }
+                guard envelope.schemaVersion == 1 else {
+                    diagnostics.append(.init(kind: .unsupportedSchema, fileName: file.lastPathComponent))
+                    continue
+                }
+                guard let operation = try? decoder.decode(CloudFolderSyncOperation.self, from: data) else {
+                    diagnostics.append(.init(kind: .malformedOperation, fileName: file.lastPathComponent))
+                    continue
+                }
+                operations.append(operation)
             }
         }
+        return (operations, diagnostics)
     }
 
     private static func pruneExpiredTombstones(in deviceOperationsURL: URL, now: Date) {
@@ -549,6 +633,10 @@ enum CloudFolderSyncEngine {
         return decoder
     }()
 
+}
+
+private struct CloudFolderSyncSchemaEnvelope: Decodable {
+    let schemaVersion: Int
 }
 
 struct CloudFolderSyncRecord: Equatable, Sendable {
