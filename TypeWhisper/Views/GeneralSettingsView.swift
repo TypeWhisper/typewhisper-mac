@@ -178,7 +178,15 @@ struct GeneralSettingsView: View {
                         Text(String(localized: "Match dictation engine")).tag(nil as String?)
                         Divider()
                         ForEach(previewEngineOptions, id: \.providerId) { engine in
-                            Text(engine.providerDisplayName).tag(engine.providerId as String?)
+                            HStack {
+                                Text(engine.providerDisplayName)
+                                if !dictation.canUseEngineForPreview(engine) {
+                                    Text("(\(String(localized: "not ready")))")
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .tag(engine.providerId as String?)
+                            .disabled(!dictation.canUseEngineForPreview(engine))
                         }
                     }
                     .disabled(!dictation.indicatorTranscriptPreviewEnabled)

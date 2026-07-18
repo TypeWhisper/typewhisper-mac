@@ -338,6 +338,10 @@ final class DictationViewModel: ObservableObject {
         let normalizeNumbers: Bool?
     }
     private var lastStreamingParams: StreamingParamsSnapshot?
+    /// Whether the most recent `streamingHandler.start(...)` ran the preview on the
+    /// dictation engine. When false (a distinct preview engine), the live session's
+    /// text is display-only and must never be promoted to the final transcription.
+    private var lastPreviewFollowsDictationEngine = true
     private var isStopInFlight = false
     private var activeDictationSessionID: UUID?
     private var pendingPushToTalkDiscardMessage: String?
@@ -1373,6 +1377,8 @@ final class DictationViewModel: ObservableObject {
 
         let streamingParams = lastStreamingParams
         lastStreamingParams = nil
+        let previewFollowedDictationEngine = lastPreviewFollowsDictationEngine
+        lastPreviewFollowsDictationEngine = true
         stopRecordingTimer()
         let previewText = partialText.trimmingCharacters(in: .whitespacesAndNewlines)
         let stopPolicy = AudioRecordingService.StopPolicy.finalizeShortSpeech()
@@ -1384,6 +1390,11 @@ final class DictationViewModel: ObservableObject {
         logger.info("Stop timing: streamingHandler.finish done elapsedMs=\(stopElapsedMs(), privacy: .public), resultTextLength=\(liveSessionResultBeforePreviewFallback?.text.count ?? -1, privacy: .public)")
         var liveSessionResult = liveSessionResultBeforePreviewFallback.map {
             StreamingHandler.resultPreferringStablePreviewIfNeeded($0, stablePreview: previewText)
+        }
+        if !previewFollowedDictationEngine {
+            // The live session ran on a preview-only engine; its text is display-only.
+            // The final transcription must come from the dictation engine below.
+            liveSessionResult = nil
         }
         let hasPreviewText = !previewText.isEmpty
 
@@ -1398,7 +1409,8 @@ final class DictationViewModel: ObservableObject {
 
         let peakLevel = audioRecordingService.peakRawAudioLevel
         let rawDuration = Double(samples.count) / AudioRecordingService.targetSampleRate
-        if !hasConfirmedTranscriptionResultText(liveSessionResult),
+        if previewFollowedDictationEngine,
+           !hasConfirmedTranscriptionResultText(liveSessionResult),
            let previewResult = stableLivePreviewFallbackResult(
             previewText: previewText,
             streamingParams: streamingParams,
@@ -1969,10 +1981,16 @@ final class DictationViewModel: ObservableObject {
             preferredPreviewEngineId: livePreviewEngineId,
             dictationEngineOverrideId: params.engineOverrideId,
             selectedProviderId: params.providerId,
-            isEngineAvailable: { PluginManager.shared?.transcriptionEngine(for: $0) != nil }
+            isEngineAvailable: { [weak self] engineId in
+                guard let self, let engine = PluginManager.shared?.transcriptionEngine(for: engineId) else {
+                    return false
+                }
+                return self.modelManager.canPrepareForTranscription(engine)
+            }
         )
         let previewFollowsDictationEngine =
             (previewEngineOverrideId ?? params.providerId) == (params.engineOverrideId ?? params.providerId)
+        lastPreviewFollowsDictationEngine = previewFollowsDictationEngine
         let dictionaryProviderId = previewEngineOverrideId ?? params.providerId
         streamingHandler.start(
             streamPrompt: dictionaryService.getTermsForPrompt(providerId: dictionaryProviderId) ?? "",
@@ -1986,6 +2004,12 @@ final class DictationViewModel: ObservableObject {
             allowLiveTranscription: allowLiveTranscription,
             stateCheck: { [weak self] in self?.state == .recording }
         )
+    }
+
+    /// Whether an engine is usable as the live preview engine right now
+    /// (installed, configured, and ready — not merely present).
+    func canUseEngineForPreview(_ engine: TranscriptionEnginePlugin) -> Bool {
+        modelManager.canPrepareForTranscription(engine)
     }
 
     /// Resolve the engine override for the live transcript preview session.
