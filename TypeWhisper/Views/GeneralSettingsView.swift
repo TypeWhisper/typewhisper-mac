@@ -1,5 +1,6 @@
 import SwiftUI
 import ServiceManagement
+import TypeWhisperPluginSDK
 
 struct GeneralSettingsView: View {
     private enum AppVisibilityMode: String, CaseIterable {
@@ -32,6 +33,10 @@ struct GeneralSettingsView: View {
 
     private var supportsPositionSelection: Bool {
         dictation.indicatorStyle == .overlay || dictation.indicatorStyle == .minimal
+    }
+
+    private var previewEngineOptions: [TranscriptionEnginePlugin] {
+        pluginManager.transcriptionEngines
     }
 
     private var dockIconBehavior: DockIconBehavior {
@@ -168,6 +173,29 @@ struct GeneralSettingsView: View {
 
                 if supportsTranscriptPreview {
                     Toggle(String(localized: "Show live transcript preview"), isOn: $dictation.indicatorTranscriptPreviewEnabled)
+
+                    Picker(String(localized: "Live preview engine"), selection: $dictation.livePreviewEngineId) {
+                        Text(String(localized: "Match dictation engine")).tag(nil as String?)
+                        Divider()
+                        ForEach(previewEngineOptions, id: \.providerId) { engine in
+                            HStack {
+                                Text(engine.providerDisplayName)
+                                if !dictation.canUseEngineForPreview(engine) {
+                                    Text("(\(String(localized: "not ready")))")
+                                        .foregroundStyle(.secondary)
+                                }
+                            }
+                            .tag(engine.providerId as String?)
+                            .disabled(!dictation.canUseEngineForPreview(engine))
+                        }
+                    }
+                    .disabled(!dictation.indicatorTranscriptPreviewEnabled)
+
+                    if dictation.indicatorTranscriptPreviewEnabled, dictation.livePreviewEngineId != nil {
+                        Text(String(localized: "The live preview runs on this engine while the final transcription still uses your dictation engine. A fast local engine avoids extra network requests while you speak."))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
 
                     LabeledContent(String(localized: "Live transcript size")) {
                         HStack(spacing: 12) {
