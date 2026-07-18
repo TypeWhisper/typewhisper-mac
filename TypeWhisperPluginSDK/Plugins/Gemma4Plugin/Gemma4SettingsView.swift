@@ -2,7 +2,7 @@ import SwiftUI
 import TypeWhisperPluginSDK
 
 struct Gemma4SettingsView: View {
-    let plugin: Gemma4Plugin
+    @ObservedObject var plugin: Gemma4Plugin
     private let bundle = Bundle(for: Gemma4Plugin.self)
     @State private var modelState: Gemma4ModelState = .notLoaded
     @State private var selectedModelId: String = ""
@@ -12,10 +12,7 @@ struct Gemma4SettingsView: View {
     @State private var hfTokenInput = ""
     @State private var isValidatingToken = false
     @State private var tokenValidationResult: Bool?
-    @State private var isPolling = false
     @State private var loadTask: Task<Void, Never>?
-
-    private let pollTimer = Timer.publish(every: 0.5, on: .main, in: .common).autoconnect()
 
     private var trimmedHfTokenInput: String {
         hfTokenInput.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -177,21 +174,16 @@ struct Gemma4SettingsView: View {
         }
         .task {
             if case .notLoaded = plugin.modelState, plugin.shouldRestoreLoadedModelsPassively {
-                isPolling = true
                 await plugin.restoreLoadedModel(allowDownloads: false)
-                isPolling = false
                 modelState = plugin.modelState
+                downloadProgress = plugin.currentDownloadProgress
             }
         }
-        .onReceive(pollTimer) { _ in
-            guard isPolling else { return }
-            downloadProgress = plugin.currentDownloadProgress
-            let pluginState = plugin.modelState
-            if pluginState != .notLoaded {
-                modelState = pluginState
-            }
-            if case .ready = pluginState { isPolling = false }
-            else if case .error = pluginState { isPolling = false }
+        .onReceive(plugin.$modelState) { newValue in
+            modelState = newValue
+        }
+        .onReceive(plugin.$downloadProgress) { newValue in
+            downloadProgress = newValue
         }
         .onChange(of: hfTokenInput) { _, newValue in
             let trimmedValue = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -330,7 +322,6 @@ struct Gemma4SettingsView: View {
     private func resetCachedModel(_ modelDef: Gemma4ModelDef) {
         loadTask?.cancel()
         loadTask = nil
-        isPolling = false
         plugin.resetCachedModel(modelDef)
         modelState = plugin.modelState
         downloadProgress = plugin.currentDownloadProgress
@@ -339,7 +330,6 @@ struct Gemma4SettingsView: View {
     private func unloadCurrentModel() {
         loadTask?.cancel()
         loadTask = nil
-        isPolling = false
         plugin.unloadModel()
         modelState = plugin.modelState
         downloadProgress = plugin.currentDownloadProgress
@@ -348,7 +338,6 @@ struct Gemma4SettingsView: View {
     private func removeDownloadedModel(_ modelDef: Gemma4ModelDef) {
         loadTask?.cancel()
         loadTask = nil
-        isPolling = false
         Task {
             do {
                 try await plugin.deleteDownloadedModel(modelDef.id)
@@ -374,7 +363,6 @@ struct Gemma4SettingsView: View {
         plugin.beginModelLoad(for: modelDef, isAlreadyDownloaded: alreadyDownloaded)
         modelState = plugin.modelState
         downloadProgress = plugin.currentDownloadProgress
-        isPolling = true
         loadTask?.cancel()
         loadTask = Task {
             do {
@@ -384,7 +372,6 @@ struct Gemma4SettingsView: View {
             }
 
             await MainActor.run {
-                isPolling = false
                 modelState = plugin.modelState
                 downloadProgress = plugin.currentDownloadProgress
                 loadTask = nil
@@ -395,7 +382,6 @@ struct Gemma4SettingsView: View {
     private func cancelCurrentLoad() {
         loadTask?.cancel()
         loadTask = nil
-        isPolling = false
         plugin.cancelModelLoad()
         modelState = plugin.modelState
         downloadProgress = plugin.currentDownloadProgress

@@ -65,18 +65,34 @@
         }
       }
     },
-    "Downloading or preparing %@ has not made progress for several minutes. Cancel, delete the cached model if one is shown, and try again. Adding an optional HuggingFace token may also help if Hugging Face is throttling downloads.": {
+    "Downloading %1$@ stalled at %2$@ because no additional bytes were received for five minutes. Try again. If the issue persists, delete the cached model and download it again.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Beim Laden oder Vorbereiten von %@ gab es mehrere Minuten keinen Fortschritt. Breche ab, lösche das zwischengespeicherte Modell, falls es angezeigt wird, und versuche es erneut. Ein optionaler HuggingFace-Token kann ebenfalls helfen, wenn Hugging Face Downloads drosselt."
+            "value": "Der Download von %1$@ ist bei %2$@ stehen geblieben, da fünf Minuten lang keine weiteren Bytes empfangen wurden. Versuche es erneut. Wenn das Problem bestehen bleibt, lösche das zwischengespeicherte Modell und lade es erneut herunter."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "%@ のダウンロードまたは準備が数分間進んでいません。キャンセルし、表示されている場合はキャッシュされたモデルを削除してから再試行してください。Hugging Face のダウンロードが制限されている場合は、オプションの HuggingFace トークンも役立つことがあります。"
+            "value": "%1$@ のダウンロードは %2$@ で停止し、5 分間新しいバイトを受信しませんでした。もう一度お試しください。問題が続く場合は、キャッシュされたモデルを削除して再度ダウンロードしてください。"
+          }
+        }
+      }
+    },
+    "Preparing %1$@ timed out after 15 minutes (last download progress: %2$@). The downloaded model was kept; try loading it again.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Vorbereitung von %1$@ hat nach 15 Minuten das Zeitlimit erreicht (letzter Downloadfortschritt: %2$@). Das heruntergeladene Modell wurde beibehalten; versuche erneut, es zu laden."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ の準備は 15 分後にタイムアウトしました（最後のダウンロード進捗: %2$@）。ダウンロード済みモデルは保持されています。もう一度読み込んでください。"
           }
         }
       }

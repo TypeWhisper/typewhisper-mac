@@ -620,7 +620,11 @@ final class Gemma4PluginModelPolicyTests: XCTestCase {
         let plugin = Gemma4Plugin()
         let generation = plugin.startModelLoadTimeoutForTesting(modelName: "Gemma 4 E2B")
 
-        plugin.recordModelLoadProgressForTesting(fraction: 0.5, generation: generation)
+        plugin.recordModelLoadProgressForTesting(
+            completedUnitCount: 500_000,
+            fraction: 0.5,
+            generation: generation
+        )
 
         let activity = try XCTUnwrap(plugin.currentSettingsActivity)
         XCTAssertEqual(activity.message, "Downloading model")
@@ -684,16 +688,98 @@ final class Gemma4PluginModelPolicyTests: XCTestCase {
         XCTAssertEqual(plugin.downloadedModels.map(\.id), [model.id])
     }
 
-    func testGemma4ModelLoadTimeoutSetsErrorAndResetsProgress() async throws {
+    func testGemma4ByteProgressBelowVisibleThresholdPreventsFalseTimeout() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
 
         let host = MockHostServices(pluginDataDirectory: appSupportDirectory)
         let plugin = Gemma4Plugin()
         plugin.activate(host: host)
-        plugin.setModelLoadTimeoutForTesting(.milliseconds(20))
+        plugin.setModelLoadTimeoutForTesting(.milliseconds(500))
+        let generation = plugin.startModelLoadTimeoutForTesting(modelName: "Gemma 4 E2B")
 
-        plugin.startModelLoadTimeoutForTesting(modelName: "Gemma 4 E4B")
+        for step in 1 ... 6 {
+            try await Task.sleep(for: .milliseconds(100))
+            plugin.recordModelLoadProgressForTesting(
+                completedUnitCount: Int64(step),
+                fraction: Double(step) * 0.0001,
+                generation: generation
+            )
+        }
+
+        XCTAssertEqual(plugin.modelState, .downloading)
+        XCTAssertEqual(plugin.currentDownloadProgress, 0)
+        XCTAssertFalse(plugin.hasVisibleDownloadProgress)
+        XCTAssertEqual(host.capabilitiesChangedCount, 0)
+        plugin.cancelModelLoad()
+    }
+
+    func testGemma4SnapshotChildProgressProducesEffectiveCompletedBytes() {
+        let completedUnitCount = Gemma4Plugin.effectiveCompletedUnitCountForTesting(
+            completedUnitCount: 0,
+            totalUnitCount: 3_550_000_000,
+            fraction: 0.0005
+        )
+
+        XCTAssertEqual(completedUnitCount, 1_775_000)
+    }
+
+    func testGemma4NetworkTaskBytesDriveProgressWhenSnapshotParentIsStatic() throws {
+        let report = try XCTUnwrap(Gemma4Plugin.sampledDownloadProgressForTesting(
+            snapshotCompletedUnitCount: 0,
+            snapshotTotalUnitCount: 3_550_000_000,
+            snapshotFraction: 0,
+            receivedBytesByTask: [
+                41: 250_000_000,
+                42: 105_000_000,
+            ]
+        ))
+
+        XCTAssertEqual(report.completedUnitCount, 355_000_000)
+        XCTAssertEqual(report.totalUnitCount, 3_550_000_000)
+        XCTAssertFalse(report.isSnapshotComplete)
+    }
+
+    func testGemma4NetworkTaskBytesCannotFinishBeforeSnapshotCompletes() throws {
+        let inFlightReport = try XCTUnwrap(Gemma4Plugin.sampledDownloadProgressForTesting(
+            snapshotCompletedUnitCount: 0,
+            snapshotTotalUnitCount: 1_000,
+            snapshotFraction: 0,
+            receivedBytesByTask: [7: 1_000]
+        ))
+        let completedReport = try XCTUnwrap(Gemma4Plugin.sampledDownloadProgressForTesting(
+            snapshotCompletedUnitCount: 1_000,
+            snapshotTotalUnitCount: 1_000,
+            snapshotFraction: 1,
+            receivedBytesByTask: [7: 1_000]
+        ))
+
+        XCTAssertEqual(inFlightReport.completedUnitCount, 999)
+        XCTAssertFalse(inFlightReport.isSnapshotComplete)
+        XCTAssertEqual(completedReport.completedUnitCount, 1_000)
+        XCTAssertTrue(completedReport.isSnapshotComplete)
+    }
+
+    func testGemma4UnchangedByteCountTriggersDownloadTimeout() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let host = MockHostServices(pluginDataDirectory: appSupportDirectory)
+        let plugin = Gemma4Plugin()
+        plugin.activate(host: host)
+        plugin.setModelLoadTimeoutForTesting(.milliseconds(40))
+
+        let generation = plugin.startModelLoadTimeoutForTesting(modelName: "Gemma 4 E4B")
+        plugin.recordModelLoadProgressForTesting(
+            completedUnitCount: 250_000,
+            fraction: 0.25,
+            generation: generation
+        )
+        plugin.recordModelLoadProgressForTesting(
+            completedUnitCount: 250_000,
+            fraction: 0.25,
+            generation: generation
+        )
         try await waitUntil("Gemma 4 timeout error") {
             if case .error = plugin.modelState {
                 return true
@@ -704,10 +790,53 @@ final class Gemma4PluginModelPolicyTests: XCTestCase {
         guard case .error(let message) = plugin.modelState else {
             return XCTFail("Expected Gemma 4 load timeout to set an error state")
         }
+        XCTAssertTrue(message.contains("Downloading"))
         XCTAssertTrue(message.contains("Gemma 4 E4B"))
+        XCTAssertTrue(message.contains("25.00%"))
+        XCTAssertTrue(message.contains("five minutes"))
         XCTAssertEqual(plugin.currentDownloadProgress, 0)
         XCTAssertNil(host.userDefault(forKey: "loadedModel"))
         XCTAssertGreaterThanOrEqual(host.capabilitiesChangedCount, 1)
+    }
+
+    func testGemma4CompletedDownloadUsesLongerPreparationTimeout() async throws {
+        let plugin = Gemma4Plugin()
+        plugin.setModelLoadTimeoutsForTesting(
+            downloadInactivity: .milliseconds(40),
+            preparation: .milliseconds(180)
+        )
+        let generation = plugin.startModelLoadTimeoutForTesting(modelName: "Gemma 4 E2B")
+
+        plugin.recordModelLoadProgressForTesting(
+            completedUnitCount: 1_000,
+            totalUnitCount: 1_000,
+            fraction: 1.0,
+            generation: generation
+        )
+
+        XCTAssertEqual(plugin.modelState, .loading)
+        XCTAssertEqual(plugin.currentDownloadProgress, 0.9, accuracy: 0.001)
+        XCTAssertEqual(plugin.currentSettingsActivity?.message, "Preparing model")
+
+        try await Task.sleep(for: .milliseconds(80))
+        XCTAssertEqual(plugin.modelState, .loading)
+
+        try await waitUntil("Gemma 4 preparation timeout error") {
+            if case .error = plugin.modelState {
+                return true
+            }
+            return false
+        }
+
+        guard case .error(let message) = plugin.modelState else {
+            return XCTFail("Expected Gemma 4 preparation timeout to set an error state")
+        }
+        XCTAssertTrue(message.contains("Preparing"))
+        XCTAssertTrue(message.contains("Gemma 4 E2B"))
+        XCTAssertTrue(message.contains("100.00%"))
+        XCTAssertTrue(message.contains("15 minutes"))
+        XCTAssertTrue(message.contains("downloaded model was kept"))
+        XCTAssertEqual(plugin.currentDownloadProgress, 0)
     }
 
     func testGemma4LateProgressFromInvalidatedLoadIsIgnored() throws {
@@ -715,7 +844,12 @@ final class Gemma4PluginModelPolicyTests: XCTestCase {
         let generation = plugin.startModelLoadTimeoutForTesting(modelName: "Gemma 4 E4B")
 
         plugin.invalidateModelLoadForTesting()
-        plugin.recordModelLoadProgressForTesting(fraction: 1.0, generation: generation)
+        plugin.recordModelLoadProgressForTesting(
+            completedUnitCount: 1_000,
+            totalUnitCount: 1_000,
+            fraction: 1.0,
+            generation: generation
+        )
 
         XCTAssertEqual(plugin.currentDownloadProgress, 0)
         XCTAssertEqual(plugin.modelState, .downloading)
@@ -725,10 +859,16 @@ final class Gemma4PluginModelPolicyTests: XCTestCase {
         let plugin = Gemma4Plugin()
         let model = try XCTUnwrap(Gemma4Plugin.modelDefinition(for: "gemma-4-e2b-it-4bit"))
 
-        plugin.setModelLoadTimeoutForTesting(.milliseconds(20))
+        plugin.setModelLoadTimeoutForTesting(.milliseconds(40))
         let generation = plugin.startModelLoadTimeoutForTesting(modelName: model.displayName)
         plugin.cancelModelLoad()
-        try await Task.sleep(for: .milliseconds(40))
+        plugin.recordModelLoadProgressForTesting(
+            completedUnitCount: 1_000,
+            totalUnitCount: 1_000,
+            fraction: 1.0,
+            generation: generation
+        )
+        try await Task.sleep(for: .milliseconds(80))
 
         XCTAssertFalse(plugin.isCurrentModelLoadForTesting(generation))
         XCTAssertEqual(plugin.modelState, .notLoaded)

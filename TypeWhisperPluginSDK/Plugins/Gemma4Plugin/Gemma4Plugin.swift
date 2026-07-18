@@ -1,4 +1,5 @@
 import Foundation
+import Combine
 import SwiftUI
 import MLX
 import MLXLLM
@@ -7,9 +8,153 @@ import HuggingFace
 import Hub
 import Tokenizers
 import TypeWhisperPluginSDK
+import os
+
+private struct Gemma4DownloadProgressReport: Equatable {
+    let completedUnitCount: Int64
+    let totalUnitCount: Int64
+    let isSnapshotComplete: Bool
+}
+
+private struct Gemma4DownloadProgressAccumulator {
+    private var snapshotCompletedUnitCount: Int64 = 0
+    private var snapshotTotalUnitCount: Int64 = 0
+    private var snapshotFraction: Double = 0
+    private var isSnapshotComplete = false
+    private var receivedBytesByTask: [Int: Int64] = [:]
+    private var lastReport: Gemma4DownloadProgressReport?
+
+    mutating func observeSnapshot(
+        completedUnitCount: Int64,
+        totalUnitCount: Int64,
+        fraction: Double
+    ) -> Gemma4DownloadProgressReport? {
+        let normalizedFraction = fraction.isFinite
+            ? max(0.0, min(fraction, 1.0))
+            : 0.0
+        snapshotCompletedUnitCount = max(snapshotCompletedUnitCount, max(completedUnitCount, 0))
+        snapshotTotalUnitCount = max(snapshotTotalUnitCount, max(totalUnitCount, 0))
+        snapshotFraction = max(snapshotFraction, normalizedFraction)
+        if snapshotTotalUnitCount > 0,
+           snapshotCompletedUnitCount >= snapshotTotalUnitCount || snapshotFraction >= 1.0 {
+            isSnapshotComplete = true
+        }
+        return makeReport()
+    }
+
+    mutating func observeNetworkTasks(
+        receivedBytes: [Int: Int64]
+    ) -> Gemma4DownloadProgressReport? {
+        for (taskIdentifier, byteCount) in receivedBytes {
+            receivedBytesByTask[taskIdentifier] = max(
+                receivedBytesByTask[taskIdentifier] ?? 0,
+                max(byteCount, 0)
+            )
+        }
+        return makeReport()
+    }
+
+    private mutating func makeReport() -> Gemma4DownloadProgressReport? {
+        guard snapshotTotalUnitCount > 0 else { return nil }
+
+        let fractionCompletedUnitCount = Int64(
+            (Double(snapshotTotalUnitCount) * snapshotFraction).rounded(.down)
+        )
+        let receivedByteCount = receivedBytesByTask.values.reduce(Int64(0)) { partial, byteCount in
+            partial.addingReportingOverflow(byteCount).overflow
+                ? Int64.max
+                : partial + byteCount
+        }
+        var completedUnitCount = max(
+            snapshotCompletedUnitCount,
+            max(fractionCompletedUnitCount, receivedByteCount)
+        )
+
+        if isSnapshotComplete {
+            completedUnitCount = snapshotTotalUnitCount
+        } else {
+            completedUnitCount = min(completedUnitCount, max(snapshotTotalUnitCount - 1, 0))
+        }
+
+        let report = Gemma4DownloadProgressReport(
+            completedUnitCount: completedUnitCount,
+            totalUnitCount: snapshotTotalUnitCount,
+            isSnapshotComplete: isSnapshotComplete
+        )
+        guard report != lastReport else { return nil }
+        lastReport = report
+        return report
+    }
+}
+
+private final class Gemma4DownloadProgressSampler: @unchecked Sendable {
+    private let session: URLSession
+    private let progressHandler: @Sendable (Progress) -> Void
+    private let state = OSAllocatedUnfairLock(initialState: Gemma4DownloadProgressAccumulator())
+
+    init(
+        session: URLSession,
+        progressHandler: @Sendable @escaping (Progress) -> Void
+    ) {
+        self.session = session
+        self.progressHandler = progressHandler
+    }
+
+    func start() -> Task<Void, Never> {
+        let session = session
+        return Task { [weak self, session] in
+            while !Task.isCancelled {
+                let tasks = await session.allTasks
+                self?.observeNetworkTasks(tasks)
+                do {
+                    try await Task.sleep(for: .milliseconds(250))
+                } catch {
+                    return
+                }
+            }
+        }
+    }
+
+    func observeSnapshot(_ progress: Progress) {
+        let report = state.withLock { accumulator in
+            accumulator.observeSnapshot(
+                completedUnitCount: progress.completedUnitCount,
+                totalUnitCount: progress.totalUnitCount,
+                fraction: progress.fractionCompleted
+            )
+        }
+        emit(report)
+    }
+
+    private func observeNetworkTasks(_ tasks: [URLSessionTask]) {
+        let receivedBytes = tasks.reduce(into: [Int: Int64]()) { result, task in
+            guard Self.isModelFileTask(task) else { return }
+            result[task.taskIdentifier] = max(task.countOfBytesReceived, 0)
+        }
+        let report = state.withLock { accumulator in
+            accumulator.observeNetworkTasks(receivedBytes: receivedBytes)
+        }
+        emit(report)
+    }
+
+    private func emit(_ report: Gemma4DownloadProgressReport?) {
+        guard let report else { return }
+        let progress = Progress(totalUnitCount: report.totalUnitCount)
+        progress.completedUnitCount = report.completedUnitCount
+        progressHandler(progress)
+    }
+
+    private static func isModelFileTask(_ task: URLSessionTask) -> Bool {
+        let path = task.originalRequest?.url?.path
+            ?? task.currentRequest?.url?.path
+            ?? ""
+        return path.contains("/resolve/")
+    }
+}
 
 private struct Gemma4HubDownloader: Downloader {
     let client: HubClient
+    let session: URLSession
     let modelsDirectory: URL
 
     func download(
@@ -29,13 +174,20 @@ private struct Gemma4HubDownloader: Downloader {
             withIntermediateDirectories: true
         )
 
+        let progressSampler = Gemma4DownloadProgressSampler(
+            session: session,
+            progressHandler: progressHandler
+        )
+        let samplingTask = progressSampler.start()
+        defer { samplingTask.cancel() }
+
         return try await client.downloadSnapshot(
             of: repoID,
             to: destination,
             revision: revision ?? "main",
             matching: patterns,
             progressHandler: { @MainActor progress in
-                progressHandler(progress)
+                progressSampler.observeSnapshot(progress)
             }
         )
     }
@@ -91,7 +243,7 @@ private struct Gemma4TokenizerLoader: TokenizerLoader {
 // MARK: - Plugin Entry Point
 
 @objc(Gemma4Plugin)
-final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMTemperatureControllableProvider, LLMProviderSetupStatusProviding, LLMModelSelectable, PluginSettingsActivityReporting, PluginDownloadedModelManaging, PluginRuntimeMemoryDiagnosticsReporting, @unchecked Sendable {
+final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemperatureControllableProvider, LLMProviderSetupStatusProviding, LLMModelSelectable, PluginSettingsActivityReporting, PluginDownloadedModelManaging, PluginRuntimeMemoryDiagnosticsReporting, @unchecked Sendable {
     static let pluginId = "com.typewhisper.gemma4"
     static let pluginName = "Gemma 4"
     static let defaultGenerationTemperature = 0.1
@@ -101,7 +253,12 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMTemperatureControllabl
     private static let downloadedModelLoadProgress = 0.8
     private static let loadedModelPreparationProgress = 0.9
     private static let minimumVisibleDownloadProgress = 0.01
-    private static let minimumProgressAdvance = 0.001
+    private static let minimumVisibleProgressAdvance = 0.001
+
+    private enum ModelLoadPhase: Equatable {
+        case downloading
+        case preparing
+    }
 
     enum DownloadError: LocalizedError {
         case invalidRepositoryID(String)
@@ -122,11 +279,16 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMTemperatureControllabl
     fileprivate var _llmTemperatureModeRaw: String = PluginLLMTemperatureMode.custom.rawValue
     fileprivate var _hfToken: String?
     private var modelLoadGeneration = 0
-    private var modelLoadTimeoutDuration: Duration = .seconds(300)
+    private var downloadInactivityTimeoutDuration: Duration = .seconds(300)
+    private var modelPreparationTimeoutDuration: Duration = .seconds(900)
     private let modelLoadClock = ContinuousClock()
-    private var lastModelLoadProgressInstant = ContinuousClock().now
-    private var lastModelLoadProgressFraction = 0.0
+    private var modelLoadPhase: ModelLoadPhase?
+    private var lastModelLoadActivityInstant = ContinuousClock().now
+    private var lastDownloadCompletedUnitCount: Int64 = 0
+    private var lastObservedDownloadFraction = 0.0
+    private var lastVisibleDownloadFraction = 0.0
     private var activeModelLoadTask: (generation: Int, task: Task<ModelContainer, Error>)?
+    private var modelLoadTimeoutTask: Task<Void, Never>?
     private var restoreModelTask: Task<Void, Never>?
 
     private func modelsDirectory() -> URL {
@@ -157,9 +319,9 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMTemperatureControllabl
             hubLockDirectory(for: modelDef.repoId),
         ]
     }
-    fileprivate var downloadProgress: Double = 0
+    @Published var downloadProgress: Double = 0
 
-    var modelState: Gemma4ModelState = .notLoaded
+    @Published var modelState: Gemma4ModelState = .notLoaded
 
     required override init() {
         super.init()
@@ -266,6 +428,7 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMTemperatureControllabl
         }
 
         try deleteModelFiles(modelDef)
+        objectWillChange.send()
         host?.notifyCapabilitiesChanged()
     }
 
@@ -433,7 +596,10 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMTemperatureControllabl
 
     @discardableResult
     func beginModelLoad(for modelDef: Gemma4ModelDef, isAlreadyDownloaded: Bool) -> Int {
-        let generation = beginModelLoad()
+        let generation = beginModelLoad(
+            phase: isAlreadyDownloaded ? .preparing : .downloading,
+            initialDownloadFraction: isAlreadyDownloaded ? 1.0 : 0.0
+        )
         _selectedLLMModelId = modelDef.id
         modelState = isAlreadyDownloaded ? .loading : .downloading
         downloadProgress = isAlreadyDownloaded ? Self.downloadedModelLoadProgress : Self.initialDownloadProgress
@@ -463,12 +629,19 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMTemperatureControllabl
                 removeIncompleteModelIfNeeded(modelDef)
             }
 
+            let hubSession = URLSession(configuration: .default)
+            defer { hubSession.invalidateAndCancel() }
             let hubClient = HubClient(
+                session: hubSession,
                 host: HubClient.defaultHost,
                 bearerToken: token?.isEmpty == false ? token : nil,
                 cache: HubCache(cacheDirectory: modelsDir)
             )
-            let downloader = Gemma4HubDownloader(client: hubClient, modelsDirectory: modelsDir)
+            let downloader = Gemma4HubDownloader(
+                client: hubClient,
+                session: hubSession,
+                modelsDirectory: modelsDir
+            )
             let configuration = isAlreadyDownloaded
                 ? ModelConfiguration(
                     directory: localModelDirectory(for: modelDef.repoId),
@@ -485,16 +658,19 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMTemperatureControllabl
                     configuration: configuration
                 ) { progress in
                     guard !Task.isCancelled else { return }
-                    let fraction = max(0.0, min(progress.fractionCompleted, 1.0))
-                    let mapped = Self.initialDownloadProgress + fraction * 0.78
+                    let rawFraction = progress.fractionCompleted
+                    let fraction = rawFraction.isFinite ? max(0.0, min(rawFraction, 1.0)) : 0.0
+                    let completedUnitCount = Self.effectiveCompletedUnitCount(
+                        completedUnitCount: progress.completedUnitCount,
+                        totalUnitCount: progress.totalUnitCount,
+                        fraction: fraction
+                    )
                     Task { @MainActor in
-                        guard self.recordModelLoadProgress(fraction: fraction, generation: loadGeneration) else {
-                            return
-                        }
-                        self.downloadProgress = max(self.downloadProgress, mapped)
-                        if case .downloading = self.modelState {
-                            self.host?.notifyCapabilitiesChanged()
-                        }
+                        self.recordModelLoadProgress(
+                            completedUnitCount: completedUnitCount,
+                            fraction: fraction,
+                            generation: loadGeneration
+                        )
                     }
                 }
             }
@@ -508,6 +684,7 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMTemperatureControllabl
 
             try Task.checkCancellation()
             guard isCurrentModelLoad(loadGeneration) else { return }
+            stopModelLoadTimeout(generation: loadGeneration)
             modelState = .loading
             downloadProgress = Self.loadedModelPreparationProgress
             modelContainer = container
@@ -526,6 +703,7 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMTemperatureControllabl
                 throw error
             }
             guard isCurrentModelLoad(loadGeneration) else { return }
+            stopModelLoadTimeout(generation: loadGeneration)
             modelContainer = nil
             loadedModelId = nil
             downloadProgress = 0
@@ -608,15 +786,26 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMTemperatureControllabl
     }
 
     @discardableResult
-    private func beginModelLoad() -> Int {
+    private func beginModelLoad(
+        phase: ModelLoadPhase,
+        initialDownloadFraction: Double
+    ) -> Int {
         modelLoadGeneration += 1
-        lastModelLoadProgressInstant = modelLoadClock.now
-        lastModelLoadProgressFraction = 0
+        modelLoadTimeoutTask?.cancel()
+        modelLoadTimeoutTask = nil
+        modelLoadPhase = phase
+        lastModelLoadActivityInstant = modelLoadClock.now
+        lastDownloadCompletedUnitCount = 0
+        lastObservedDownloadFraction = max(0.0, min(initialDownloadFraction, 1.0))
+        lastVisibleDownloadFraction = 0
         return modelLoadGeneration
     }
 
     private func invalidateModelLoad() {
         modelLoadGeneration += 1
+        modelLoadTimeoutTask?.cancel()
+        modelLoadTimeoutTask = nil
+        modelLoadPhase = nil
         restoreModelTask?.cancel()
         restoreModelTask = nil
         activeModelLoadTask?.task.cancel()
@@ -627,45 +816,127 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMTemperatureControllabl
         generation == modelLoadGeneration
     }
 
-    private func recordModelLoadProgress(fraction: Double, generation: Int) -> Bool {
-        guard isCurrentModelLoad(generation) else { return false }
-        let normalized = max(0.0, min(fraction, 1.0))
-        guard normalized - lastModelLoadProgressFraction >= Self.minimumProgressAdvance else {
-            return false
+    private static func effectiveCompletedUnitCount(
+        completedUnitCount: Int64,
+        totalUnitCount: Int64,
+        fraction: Double
+    ) -> Int64 {
+        let normalizedCompletedUnitCount = max(completedUnitCount, 0)
+        guard totalUnitCount > 0 else {
+            return normalizedCompletedUnitCount
         }
-        lastModelLoadProgressFraction = normalized
-        lastModelLoadProgressInstant = modelLoadClock.now
-        return true
+
+        // Snapshot Progress reports in-flight child bytes through fractionCompleted,
+        // while its parent completedUnitCount may not advance until the file finishes.
+        let fractionCompletedUnitCount = Int64(
+            (Double(totalUnitCount) * max(0.0, min(fraction, 1.0))).rounded(.down)
+        )
+        return max(normalizedCompletedUnitCount, fractionCompletedUnitCount)
+    }
+
+    private func recordModelLoadProgress(
+        completedUnitCount: Int64,
+        fraction: Double,
+        generation: Int
+    ) {
+        guard isCurrentModelLoad(generation),
+              modelLoadPhase == .downloading else {
+            return
+        }
+
+        let normalized = max(0.0, min(fraction, 1.0))
+        lastObservedDownloadFraction = max(lastObservedDownloadFraction, normalized)
+
+        if completedUnitCount > lastDownloadCompletedUnitCount {
+            lastDownloadCompletedUnitCount = completedUnitCount
+            lastModelLoadActivityInstant = modelLoadClock.now
+        }
+
+        if normalized >= 1.0 {
+            enterModelPreparation(generation: generation)
+            return
+        }
+
+        guard normalized - lastVisibleDownloadFraction >= Self.minimumVisibleProgressAdvance else {
+            return
+        }
+
+        lastVisibleDownloadFraction = normalized
+        let mapped = Self.initialDownloadProgress + normalized * 0.78
+        downloadProgress = max(downloadProgress, mapped)
+        host?.notifyCapabilitiesChanged()
+    }
+
+    private func enterModelPreparation(generation: Int) {
+        guard isCurrentModelLoad(generation),
+              modelLoadPhase == .downloading else {
+            return
+        }
+
+        modelLoadPhase = .preparing
+        lastModelLoadActivityInstant = modelLoadClock.now
+        lastObservedDownloadFraction = 1.0
+        modelState = .loading
+        downloadProgress = max(downloadProgress, Self.loadedModelPreparationProgress)
+        host?.notifyCapabilitiesChanged()
+    }
+
+    private func stopModelLoadTimeout(generation: Int) {
+        guard isCurrentModelLoad(generation) else { return }
+        modelLoadTimeoutTask?.cancel()
+        modelLoadTimeoutTask = nil
+        modelLoadPhase = nil
+    }
+
+    private func timeoutDuration(for phase: ModelLoadPhase) -> Duration {
+        switch phase {
+        case .downloading:
+            downloadInactivityTimeoutDuration
+        case .preparing:
+            modelPreparationTimeoutDuration
+        }
     }
 
     private func startModelLoadTimeout(generation: Int, modelName: String) {
-        let timeout = modelLoadTimeoutDuration
-        Task { [weak self] in
-            while true {
+        modelLoadTimeoutTask?.cancel()
+        modelLoadTimeoutTask = Task { [weak self] in
+            while !Task.isCancelled {
                 guard let self,
                       self.isCurrentModelLoad(generation),
-                      self.loadedModelId == nil else {
+                      self.loadedModelId == nil,
+                      let phase = self.modelLoadPhase else {
                     return
                 }
 
-                switch self.modelState {
-                case .downloading, .loading:
-                    break
-                default:
+                guard (phase == .downloading && self.modelState == .downloading)
+                        || (phase == .preparing && self.modelState == .loading) else {
                     return
                 }
 
-                let elapsed = self.lastModelLoadProgressInstant.duration(to: self.modelLoadClock.now)
+                let timeout = self.timeoutDuration(for: phase)
+                let elapsed = self.lastModelLoadActivityInstant.duration(to: self.modelLoadClock.now)
                 guard elapsed >= timeout else {
-                    try? await Task.sleep(for: timeout - elapsed)
+                    do {
+                        try await Task.sleep(for: timeout - elapsed)
+                    } catch {
+                        return
+                    }
                     continue
                 }
 
+                guard self.modelLoadPhase == phase else { continue }
+                let lastProgress = self.lastObservedDownloadFraction
                 self.invalidateModelLoad()
                 self.modelContainer = nil
                 self.loadedModelId = nil
                 self.downloadProgress = 0
-                self.modelState = .error(Self.stalledDownloadMessage(for: modelName))
+                self.modelState = .error(
+                    Self.modelLoadTimeoutMessage(
+                        for: phase,
+                        modelName: modelName,
+                        lastDownloadFraction: lastProgress
+                    )
+                )
                 self.host?.setUserDefault(nil, forKey: "loadedModel")
                 self.host?.notifyCapabilitiesChanged()
                 return
@@ -716,22 +987,79 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMTemperatureControllabl
 
     #if DEBUG
     func setModelLoadTimeoutForTesting(_ timeout: Duration) {
-        modelLoadTimeoutDuration = timeout
+        downloadInactivityTimeoutDuration = timeout
+        modelPreparationTimeoutDuration = timeout
+    }
+
+    func setModelLoadTimeoutsForTesting(
+        downloadInactivity: Duration,
+        preparation: Duration
+    ) {
+        downloadInactivityTimeoutDuration = downloadInactivity
+        modelPreparationTimeoutDuration = preparation
     }
 
     @discardableResult
     func startModelLoadTimeoutForTesting(modelName: String) -> Int {
-        let generation = beginModelLoad()
+        let generation = beginModelLoad(phase: .downloading, initialDownloadFraction: 0)
         modelState = .downloading
         downloadProgress = Self.initialDownloadProgress
         startModelLoadTimeout(generation: generation, modelName: modelName)
         return generation
     }
 
-    func recordModelLoadProgressForTesting(fraction: Double, generation: Int? = nil) {
+    func recordModelLoadProgressForTesting(
+        completedUnitCount: Int64,
+        totalUnitCount: Int64 = 1_000_000,
+        fraction: Double,
+        generation: Int? = nil
+    ) {
         let resolvedGeneration = generation ?? modelLoadGeneration
-        guard recordModelLoadProgress(fraction: fraction, generation: resolvedGeneration) else { return }
-        downloadProgress = Self.initialDownloadProgress + max(0.0, min(fraction, 1.0)) * 0.78
+        let effectiveCompletedUnitCount = Self.effectiveCompletedUnitCount(
+            completedUnitCount: completedUnitCount,
+            totalUnitCount: totalUnitCount,
+            fraction: fraction
+        )
+        recordModelLoadProgress(
+            completedUnitCount: effectiveCompletedUnitCount,
+            fraction: fraction,
+            generation: resolvedGeneration
+        )
+    }
+
+    static func effectiveCompletedUnitCountForTesting(
+        completedUnitCount: Int64,
+        totalUnitCount: Int64,
+        fraction: Double
+    ) -> Int64 {
+        effectiveCompletedUnitCount(
+            completedUnitCount: completedUnitCount,
+            totalUnitCount: totalUnitCount,
+            fraction: fraction
+        )
+    }
+
+    static func sampledDownloadProgressForTesting(
+        snapshotCompletedUnitCount: Int64,
+        snapshotTotalUnitCount: Int64,
+        snapshotFraction: Double,
+        receivedBytesByTask: [Int: Int64]
+    ) -> (completedUnitCount: Int64, totalUnitCount: Int64, isSnapshotComplete: Bool)? {
+        var accumulator = Gemma4DownloadProgressAccumulator()
+        let snapshotReport = accumulator.observeSnapshot(
+            completedUnitCount: snapshotCompletedUnitCount,
+            totalUnitCount: snapshotTotalUnitCount,
+            fraction: snapshotFraction
+        )
+        guard let report = accumulator.observeNetworkTasks(receivedBytes: receivedBytesByTask)
+            ?? snapshotReport else {
+            return nil
+        }
+        return (
+            completedUnitCount: report.completedUnitCount,
+            totalUnitCount: report.totalUnitCount,
+            isSnapshotComplete: report.isSnapshotComplete
+        )
     }
 
     func invalidateModelLoadForTesting() {
@@ -856,13 +1184,31 @@ final class Gemma4Plugin: NSObject, LLMProviderPlugin, LLMTemperatureControllabl
         return error.localizedDescription
     }
 
-    private static func stalledDownloadMessage(for modelName: String) -> String {
-        let bundle = Bundle(for: Gemma4Plugin.self)
-        let format = String(
-            localized: "Downloading or preparing %@ has not made progress for several minutes. Cancel, delete the cached model if one is shown, and try again. Adding an optional HuggingFace token may also help if Hugging Face is throttling downloads.",
-            bundle: bundle
+    private static func modelLoadTimeoutMessage(
+        for phase: ModelLoadPhase,
+        modelName: String,
+        lastDownloadFraction: Double
+    ) -> String {
+        let progress = String(
+            format: "%.2f%%",
+            locale: Locale(identifier: "en_US_POSIX"),
+            max(0.0, min(lastDownloadFraction, 1.0)) * 100
         )
-        return String(format: format, modelName)
+        let bundle = Bundle(for: Gemma4Plugin.self)
+        switch phase {
+        case .downloading:
+            let format = String(
+                localized: "Downloading %1$@ stalled at %2$@ because no additional bytes were received for five minutes. Try again. If the issue persists, delete the cached model and download it again.",
+                bundle: bundle
+            )
+            return String(format: format, modelName, progress)
+        case .preparing:
+            let format = String(
+                localized: "Preparing %1$@ timed out after 15 minutes (last download progress: %2$@). The downloaded model was kept; try loading it again.",
+                bundle: bundle
+            )
+            return String(format: format, modelName, progress)
+        }
     }
 
     private static func isRecoverableCacheError(_ rawMessage: String) -> Bool {
