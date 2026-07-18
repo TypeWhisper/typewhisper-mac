@@ -5,41 +5,42 @@ struct SnippetsSettingsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            SettingsPageHeader(String(localized: "Snippets")) {
+                Button {
+                    viewModel.startCreating()
+                } label: {
+                    Label(String(localized: "Add Snippet"), systemImage: "plus")
+                }
+                .help(String(localized: "Add new snippet"))
+                .accessibilityLabel(String(localized: "Add new snippet"))
+            }
+            Divider()
+
             if viewModel.snippets.isEmpty {
                 emptyState
             } else {
-                // Header with add button
                 HStack {
                     Text(String(format: String(localized: "%d Snippets"), viewModel.snippets.count))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
 
                     Spacer()
-
-                    Button {
-                        viewModel.startCreating()
-                    } label: {
-                        Image(systemName: "plus")
-                    }
-                    .help(String(localized: "Add new snippet"))
-                    .accessibilityLabel(String(localized: "Add new snippet"))
                 }
-                .padding(.horizontal, 4)
-                .padding(.bottom, 8)
+                .padding(.horizontal, SettingsLayoutMetrics.pagePadding)
+                .padding(.vertical, 10)
 
                 ScrollView {
-                    LazyVStack(spacing: 10) {
+                    LazyVStack(spacing: SettingsLayoutMetrics.cardSpacing) {
                         ForEach(viewModel.snippets) { snippet in
                             SnippetCardView(snippet: snippet, viewModel: viewModel)
                         }
                     }
-                    .padding(.horizontal, 2)
+                    .padding(.horizontal, SettingsLayoutMetrics.pagePadding)
+                    .padding(.bottom, SettingsLayoutMetrics.pagePadding)
                 }
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.vertical, 8)
-        .padding(.horizontal, 8)
         .sheet(isPresented: $viewModel.isEditing) {
             SnippetEditorSheet(viewModel: viewModel)
         }
@@ -54,26 +55,15 @@ struct SnippetsSettingsView: View {
     }
 
     private var emptyState: some View {
-        VStack {
-            Spacer()
-            VStack(spacing: 12) {
-                Image(systemName: "text.badge.plus")
-                    .font(.system(size: 40))
-                    .foregroundStyle(.secondary)
-                Text(String(localized: "No snippets yet"))
-                    .font(.headline)
-                    .foregroundStyle(.secondary)
-                Text(String(localized: "Create snippets to automatically expand short triggers into longer text"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: 320)
-                Button(String(localized: "Add Snippet")) {
-                    viewModel.startCreating()
-                }
-                .buttonStyle(.borderedProminent)
+        SettingsEmptyState(
+            systemImage: "text.badge.plus",
+            title: String(localized: "No snippets yet"),
+            message: String(localized: "Create snippets to automatically expand short triggers into longer text")
+        ) {
+            Button(String(localized: "Add Snippet")) {
+                viewModel.startCreating()
             }
-            Spacer()
+            .buttonStyle(.borderedProminent)
         }
     }
 }
@@ -129,11 +119,11 @@ private struct SnippetCardView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius, style: .continuous)
                 .fill(Color(NSColor.controlBackgroundColor))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius, style: .continuous)
                 .strokeBorder(isHovering ? Color.accentColor.opacity(0.3) : Color.primary.opacity(0.06), lineWidth: 1)
         )
         .contentShape(Rectangle())

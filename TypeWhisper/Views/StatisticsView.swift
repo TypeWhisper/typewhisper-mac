@@ -10,19 +10,13 @@ struct StatisticsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text(String(localized: "Statistics"))
-                    .font(.title2)
-                    .fontWeight(.semibold)
-                Spacer()
+            SettingsPageHeader(String(localized: "Statistics")) {
                 timePeriodPicker
             }
-            .padding(.horizontal)
-            .padding(.top)
-            .padding(.bottom, 8)
+            Divider()
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: SettingsLayoutMetrics.sectionSpacing) {
                     if viewModel.hasAnyData {
                         overviewGrid
                         metricsGrid
@@ -36,8 +30,7 @@ struct StatisticsView: View {
                         emptyStateCard
                     }
                 }
-                .padding(.horizontal)
-                .padding(.bottom)
+                .padding(SettingsLayoutMetrics.pagePadding)
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -54,7 +47,7 @@ struct StatisticsView: View {
         }
         .padding(2)
         .background(.quaternary.opacity(0.5))
-        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .clipShape(RoundedRectangle(cornerRadius: SettingsLayoutMetrics.compactCornerRadius))
     }
 
     private func periodButton(_ period: TimePeriod) -> some View {
@@ -69,7 +62,7 @@ struct StatisticsView: View {
                 .padding(.vertical, 4)
                 .background(isSelected ? Color.accentColor : Color.clear)
                 .foregroundStyle(isSelected ? .white : .secondary)
-                .clipShape(RoundedRectangle(cornerRadius: 5))
+                .clipShape(RoundedRectangle(cornerRadius: SettingsLayoutMetrics.compactCornerRadius))
         }
         .buttonStyle(.plain)
         .accessibilityElement(children: .combine)
@@ -212,9 +205,13 @@ struct StatisticsView: View {
                 .accessibilityLabel(chartAccessibilitySummary)
             }
         }
-        .padding()
-        .background(.quaternary.opacity(0.3))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .padding(SettingsLayoutMetrics.cardPadding)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius))
+        .overlay(
+            RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius)
+                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+        )
     }
 
     private var chartAccessibilitySummary: Text {
@@ -280,9 +277,13 @@ struct StatisticsView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .background(.quaternary.opacity(0.3))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .padding(SettingsLayoutMetrics.cardPadding)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius))
+        .overlay(
+            RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius)
+                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+        )
     }
 
     // MARK: - Heatmap
@@ -312,9 +313,13 @@ struct StatisticsView: View {
                 heatmapGrid
             }
         }
-        .padding()
-        .background(.quaternary.opacity(0.3))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .padding(SettingsLayoutMetrics.cardPadding)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius))
+        .overlay(
+            RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius)
+                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+        )
     }
 
     private let heatmapLabelWidth: CGFloat = 28
@@ -425,9 +430,13 @@ struct StatisticsView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding()
-        .background(.quaternary.opacity(0.3))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .padding(SettingsLayoutMetrics.cardPadding)
+        .background(Color(nsColor: .controlBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius))
+        .overlay(
+            RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius)
+                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+        )
     }
 
     // MARK: - Empty state
@@ -446,8 +455,12 @@ struct StatisticsView: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 24)
-        .background(.quaternary.opacity(0.3))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .background(Color(nsColor: .controlBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius))
+        .overlay(
+            RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius)
+                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+        )
     }
 }
 
@@ -474,8 +487,12 @@ private struct StatisticsStatCard: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 12)
-        .background(.quaternary.opacity(0.3))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .background(Color(nsColor: .controlBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius))
+        .overlay(
+            RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius)
+                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+        )
         .accessibilityElement(children: .combine)
         .accessibilityLabel(Text("\(title), \(accessibilityValue ?? value)"))
     }
@@ -506,8 +523,12 @@ struct StatisticsMetricCard: View {
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 12)
-        .background(.quaternary.opacity(0.3))
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .background(Color(nsColor: .controlBackgroundColor))
+        .clipShape(RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius))
+        .overlay(
+            RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius)
+                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
+        )
         .accessibilityElement(children: .combine)
         .accessibilityLabel(trendAwareAccessibilityLabel)
     }

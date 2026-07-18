@@ -20,6 +20,9 @@ struct DictionarySettingsView: View {
 
     var body: some View {
         VStack(spacing: 0) {
+            SettingsPageHeader(String(localized: "Dictionary"))
+            Divider()
+
             dictionaryHeader
 
             if viewModel.filterTab == .termPacks {
@@ -32,8 +35,6 @@ struct DictionarySettingsView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-        .padding(.vertical, 8)
-        .padding(.horizontal, 8)
         .sheet(isPresented: $viewModel.isEditing) {
             DictionaryEditorSheet(viewModel: viewModel)
         }
@@ -144,8 +145,12 @@ struct DictionarySettingsView: View {
             .menuStyle(.borderlessButton)
             .frame(width: 28)
         }
-        .padding(.horizontal, 4)
-        .padding(.bottom, 4)
+        .padding(.horizontal, SettingsLayoutMetrics.pagePadding)
+        .padding(.vertical, SettingsLayoutMetrics.sectionSpacing)
+        .background(.bar)
+        .overlay(alignment: .bottom) {
+            Divider()
+        }
     }
 
     @ViewBuilder
@@ -249,8 +254,8 @@ struct DictionarySettingsView: View {
         )
         .frame(maxWidth: .infinity)
         .frame(height: 32)
-        .padding(.horizontal, 2)
-        .padding(.vertical, 6)
+        .padding(.horizontal, SettingsLayoutMetrics.pagePadding)
+        .padding(.vertical, 8)
     }
 
     private var dictionaryEntriesView: some View {
@@ -268,7 +273,8 @@ struct DictionarySettingsView: View {
                     }
                 }
             }
-            .padding(.horizontal, 2)
+            .padding(.horizontal, SettingsLayoutMetrics.pagePadding)
+            .padding(.bottom, SettingsLayoutMetrics.pagePadding)
         }
     }
 
@@ -348,20 +354,12 @@ struct DictionarySettingsView: View {
     }
 
     private var emptyState: some View {
-        VStack {
-            Spacer()
+        SettingsEmptyState(
+            systemImage: "character.book.closed",
+            title: String(localized: "No dictionary entries"),
+            message: String(localized: "Terms help only on engines that support transcription-time biasing. Corrections always run after transcription and apply across engines.")
+        ) {
             VStack(spacing: 12) {
-                Image(systemName: "character.book.closed")
-                    .font(.system(size: 40))
-                    .foregroundStyle(.secondary)
-                Text(String(localized: "No dictionary entries"))
-                    .font(.headline)
-                    .foregroundStyle(.secondary)
-                Text(String(localized: "Terms help only on engines that support transcription-time biasing. Corrections always run after transcription and apply across engines."))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: 320)
                 HStack(spacing: 12) {
                     Button(String(localized: "Add Term")) {
                         viewModel.startCreating(type: .term)
@@ -394,7 +392,6 @@ struct DictionarySettingsView: View {
                 }
                 .buttonStyle(.bordered)
             }
-            Spacer()
         }
     }
 
@@ -409,7 +406,8 @@ struct DictionarySettingsView: View {
                 // Community Packs
                 communityPacksSection
             }
-            .padding(.horizontal, 2)
+            .padding(.horizontal, SettingsLayoutMetrics.pagePadding)
+            .padding(.bottom, SettingsLayoutMetrics.pagePadding)
         }
     }
 
@@ -1119,11 +1117,11 @@ private struct TermPackCardView: View {
             }
         }
         .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius, style: .continuous)
                 .fill(Color(NSColor.controlBackgroundColor))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius, style: .continuous)
                 .strokeBorder(isHovering ? Color.accentColor.opacity(0.3) : Color.primary.opacity(0.06), lineWidth: 1)
         )
         .onHover { hovering in
@@ -1215,11 +1213,11 @@ private struct DictionaryCardView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius, style: .continuous)
                 .fill(Color(NSColor.controlBackgroundColor))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius, style: .continuous)
                 .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
         )
         .contentShape(Rectangle())
@@ -1312,11 +1310,11 @@ private struct DictionaryCorrectionGroupCardView: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius, style: .continuous)
                 .fill(Color(NSColor.controlBackgroundColor))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
+            RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius, style: .continuous)
                 .strokeBorder(Color.primary.opacity(0.06), lineWidth: 1)
         )
         .contextMenu {
