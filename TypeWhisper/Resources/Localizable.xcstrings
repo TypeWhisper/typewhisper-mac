@@ -6537,7 +6537,20 @@
       }
     },
     "Match dictation engine": {
-
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diktat-Engine verwenden"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ディクテーションエンジンと同じ"
+          }
+        }
+      }
     },
     "Media Pause": {
       "localizations": {
@@ -11808,7 +11821,20 @@
       }
     },
     "Live preview engine": {
-
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Engine für die Live-Vorschau"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ライブプレビューのエンジン"
+          }
+        }
+      }
     },
     "Live transcript size": {
       "localizations": {
@@ -12816,7 +12842,20 @@
       }
     },
     "The live preview runs on this engine while the final transcription still uses your dictation engine. A fast local engine avoids extra network requests while you speak.": {
-
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Live-Vorschau läuft auf dieser Engine, während die endgültige Transkription weiterhin deine Diktat-Engine verwendet. Eine schnelle lokale Engine vermeidet zusätzliche Netzwerkanfragen während des Sprechens."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ライブプレビューはこのエンジンで実行され、最終的な文字起こしには引き続きディクテーションエンジンが使用されます。高速なローカルエンジンを使えば、話している間の余分なネットワークリクエストを回避できます。"
+          }
+        }
+      }
     },
     "The notch indicator extends the MacBook notch area to show recording status.": {
       "localizations": {
