@@ -16,10 +16,6 @@ struct HistoryView: View {
                 listPanel
                     .frame(minWidth: 280)
 
-                Divider()
-                    .opacity(hasSelection ? 1 : 0)
-                    .frame(width: hasSelection ? 1 : 0)
-
                 detailPanelContainer
                     .frame(
                         minWidth: hasSelection ? 300 : 0,
@@ -35,137 +31,147 @@ struct HistoryView: View {
     // MARK: - List Panel
 
     private var listPanel: some View {
-        VStack(spacing: 0) {
-            // Search
-            NativeSearchField(
-                text: $viewModel.searchQuery,
-                placeholder: String(localized: "Search...")
-            )
-            .frame(maxWidth: .infinity)
-            .frame(height: 32)
-            .padding(.horizontal, SettingsLayoutMetrics.pagePadding)
-            .padding(.vertical, 6)
-            .background(.bar)
+        VStack(spacing: SettingsLayoutMetrics.cardSpacing) {
+            SettingsCard {
+                VStack(spacing: 12) {
+                    NativeSearchField(
+                        text: $viewModel.searchQuery,
+                        placeholder: String(localized: "Search...")
+                    )
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 28)
 
-            // Filter pickers
-            HStack(spacing: 6) {
-                Picker(selection: Binding(
-                    get: { viewModel.selectedAppFilter ?? "" },
-                    set: { viewModel.selectedAppFilter = $0.isEmpty ? nil : $0 }
-                )) {
-                    Text(String(localized: "All Apps")).tag("")
-                    if !viewModel.availableApps.isEmpty {
-                        Divider()
-                        ForEach(viewModel.availableApps) { app in
-                            Text(app.name).tag(app.bundleId)
-                        }
-                    }
-                } label: {
-                    EmptyView()
-                }
-                .fixedSize()
-
-                Picker(selection: $viewModel.selectedTimeRange) {
-                    ForEach(HistoryTimeRange.allCases) { range in
-                        Text(range.displayName).tag(range)
-                    }
-                } label: {
-                    EmptyView()
-                }
-                .fixedSize()
-
-                Spacer()
-            }
-            .padding(.horizontal, SettingsLayoutMetrics.pagePadding)
-            .padding(.vertical, 6)
-            .background(.bar)
-
-            Divider()
-
-            // List
-            if viewModel.filteredRecords.isEmpty {
-                ContentUnavailableView {
-                    Label(String(localized: "No Entries"), systemImage: "clock")
-                } description: {
-                    if viewModel.hasActiveFilters || !viewModel.searchQuery.isEmpty {
-                        Text(String(localized: "No results for the active filters."))
-                    } else {
-                        Text(String(localized: "Dictated text will appear here."))
-                    }
-                } actions: {
-                    if viewModel.hasActiveFilters || !viewModel.searchQuery.isEmpty {
-                        Button(String(localized: "Clear Filters")) {
-                            viewModel.clearAllFilters()
-                        }
-                    }
-                }
-                .frame(maxHeight: .infinity)
-            } else {
-                List(selection: $viewModel.selectedRecordIDs) {
-                    ForEach(viewModel.groupedSections) { section in
-                        Section {
-                            if !viewModel.collapsedGroups.contains(section.group) {
-                                ForEach(section.records, id: \.id) { record in
-                                    RecordRow(record: record)
-                                        .tag(record.id)
-                                        .contextMenu {
-                                            recordContextMenu(for: record)
-                                        }
+                    HStack(spacing: 8) {
+                        Picker(selection: Binding(
+                            get: { viewModel.selectedAppFilter ?? "" },
+                            set: { viewModel.selectedAppFilter = $0.isEmpty ? nil : $0 }
+                        )) {
+                            Text(String(localized: "All Apps")).tag("")
+                            if !viewModel.availableApps.isEmpty {
+                                Divider()
+                                ForEach(viewModel.availableApps) { app in
+                                    Text(app.name).tag(app.bundleId)
                                 }
                             }
-                        } header: {
-                            SectionHeader(
-                                group: section.group,
-                                count: section.records.count,
-                                isCollapsed: viewModel.collapsedGroups.contains(section.group)
-                            ) {
-                                viewModel.toggleSection(section.group)
+                        } label: {
+                            EmptyView()
+                        }
+                        .fixedSize()
+
+                        Picker(selection: $viewModel.selectedTimeRange) {
+                            ForEach(HistoryTimeRange.allCases) { range in
+                                Text(range.displayName).tag(range)
                             }
+                        } label: {
+                            EmptyView()
+                        }
+                        .fixedSize()
+
+                        Spacer()
+                    }
+                    .controlSize(.small)
+                }
+            }
+
+            SettingsCard {
+                if viewModel.filteredRecords.isEmpty {
+                    historyEmptyState
+                } else {
+                    VStack(spacing: 0) {
+                        historyList
+                        Divider()
+                        historyFooter
+                    }
+                }
+            }
+            .frame(maxHeight: .infinity)
+        }
+        .padding(SettingsLayoutMetrics.pagePadding)
+    }
+
+    private var historyList: some View {
+        List(selection: $viewModel.selectedRecordIDs) {
+            ForEach(viewModel.groupedSections) { section in
+                Section {
+                    if !viewModel.collapsedGroups.contains(section.group) {
+                        ForEach(section.records, id: \.id) { record in
+                            RecordRow(record: record)
+                                .tag(record.id)
+                                .contextMenu {
+                                    recordContextMenu(for: record)
+                                }
                         }
                     }
-                }
-                .listStyle(.plain)
-            }
-
-            Divider()
-
-            // Footer stats
-            HStack {
-                if viewModel.hasActiveFilters || !viewModel.searchQuery.isEmpty {
-                    Text("\(viewModel.visibleRecordCount) \(String(localized: "entries")) (\(viewModel.totalRecords) \(String(localized: "total")))")
-                } else {
-                    Text("\(viewModel.totalRecords) \(String(localized: "entries"))")
-                }
-                Spacer()
-                if !viewModel.filteredRecords.isEmpty {
-                    Button(String(localized: "Delete All Visible"), role: .destructive) {
-                        viewModel.showDeleteAllVisibleConfirmation = true
+                } header: {
+                    SectionHeader(
+                        group: section.group,
+                        count: section.records.count,
+                        isCollapsed: viewModel.collapsedGroups.contains(section.group)
+                    ) {
+                        viewModel.toggleSection(section.group)
                     }
-                    .buttonStyle(.plain)
-                    .foregroundStyle(.red)
-                    .font(.caption)
                 }
             }
-            .font(.caption)
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 6)
-            .background(.bar)
-            .confirmationDialog(
-                String(localized: "Delete Entries"),
-                isPresented: $viewModel.showDeleteAllVisibleConfirmation,
-                titleVisibility: .visible
+        }
+        .listStyle(.plain)
+        .scrollContentBackground(.hidden)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    @ViewBuilder
+    private var historyEmptyState: some View {
+        if viewModel.hasActiveFilters || !viewModel.searchQuery.isEmpty {
+            SettingsEmptyState(
+                systemImage: "clock",
+                title: String(localized: "No Entries"),
+                message: String(localized: "No results for the active filters.")
             ) {
-                Button(String(localized: "Delete"), role: .destructive) {
-                    viewModel.deleteAllVisible()
+                Button(String(localized: "Clear Filters")) {
+                    viewModel.clearAllFilters()
                 }
-                Button(String(localized: "Cancel"), role: .cancel) {}
-            } message: {
-                if viewModel.hasActiveFilters || !viewModel.searchQuery.isEmpty {
-                    Text("Delete \(viewModel.visibleRecordCount) entries matching current filters?")
-                } else {
-                    Text("Delete all \(viewModel.visibleRecordCount) entries? This cannot be undone.")
-                }
+            }
+        } else {
+            SettingsEmptyState(
+                systemImage: "clock",
+                title: String(localized: "No Entries"),
+                message: String(localized: "Dictated text will appear here.")
+            )
+        }
+    }
+
+    private var historyFooter: some View {
+        HStack {
+            if viewModel.hasActiveFilters || !viewModel.searchQuery.isEmpty {
+                Text("\(viewModel.visibleRecordCount) \(String(localized: "entries")) (\(viewModel.totalRecords) \(String(localized: "total")))")
+            } else {
+                Text("\(viewModel.totalRecords) \(String(localized: "entries"))")
+            }
+
+            Spacer()
+
+            Button(String(localized: "Delete All Visible"), role: .destructive) {
+                viewModel.showDeleteAllVisibleConfirmation = true
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.red)
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .padding(.top, 10)
+        .confirmationDialog(
+            String(localized: "Delete Entries"),
+            isPresented: $viewModel.showDeleteAllVisibleConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button(String(localized: "Delete"), role: .destructive) {
+                viewModel.deleteAllVisible()
+            }
+            Button(String(localized: "Cancel"), role: .cancel) {}
+        } message: {
+            if viewModel.hasActiveFilters || !viewModel.searchQuery.isEmpty {
+                Text("Delete \(viewModel.visibleRecordCount) entries matching current filters?")
+            } else {
+                Text("Delete all \(viewModel.visibleRecordCount) entries? This cannot be undone.")
             }
         }
     }
@@ -175,7 +181,11 @@ struct HistoryView: View {
     @ViewBuilder
     private var detailPanelContainer: some View {
         if hasSelection {
-            detailPanel
+            SettingsCard {
+                detailPanel
+            }
+            .padding(.vertical, SettingsLayoutMetrics.pagePadding)
+            .padding(.trailing, SettingsLayoutMetrics.pagePadding)
         } else {
             Color.clear
         }
@@ -184,11 +194,11 @@ struct HistoryView: View {
     @ViewBuilder
     private var detailPanel: some View {
         if viewModel.selectedRecordIDs.count > 1 {
-            ContentUnavailableView {
-                Label(String(localized: "\(viewModel.selectedRecordIDs.count) items selected"), systemImage: "checkmark.circle")
-            } description: {
-                Text(String(localized: "Right-click to export or delete selected entries."))
-            } actions: {
+            SettingsEmptyState(
+                systemImage: "checkmark.circle",
+                title: String(localized: "\(viewModel.selectedRecordIDs.count) items selected"),
+                message: String(localized: "Right-click to export or delete selected entries.")
+            ) {
                 Button {
                     viewModel.selectRecord(nil)
                 } label: {
