@@ -150,11 +150,24 @@ private final class MenuBarState: ObservableObject {
             return (String(localized: "No model loaded"), "exclamationmark.triangle.fill")
         }
 
+        let label = activeModelLabel(engine: modelManager.activeEngineName, model: name)
+
         if modelManager.isModelReady {
-            return (String(localized: "\(name) ready"), "checkmark.circle.fill")
+            return (String(localized: "\(label) ready"), "checkmark.circle.fill")
         }
 
-        return (String(localized: "\(name) selected"), "clock.fill")
+        return (String(localized: "\(label) selected"), "clock.fill")
+    }
+
+    /// Prefixes the model name with its provider/engine (e.g. "Groq • whisper-large-v3") so the
+    /// menu bar shows which provider handles transcription. Skips the prefix when it would be
+    /// redundant — e.g. local engines whose model name already contains the provider ("Parakeet").
+    static func activeModelLabel(engine: String?, model: String) -> String {
+        guard let engine, !engine.isEmpty, engine != model,
+              !model.localizedCaseInsensitiveContains(engine) else {
+            return model
+        }
+        return "\(engine) • \(model)"
     }
 
     private func refreshCopyAvailability() {
