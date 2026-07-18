@@ -203,6 +203,12 @@ final class DictationViewModel: ObservableObject {
     @Published var indicatorVisibleInScreenCaptures: Bool {
         didSet { Self.persistIndicatorVisibleInScreenCaptures(indicatorVisibleInScreenCaptures) }
     }
+    /// Engine override for the live transcript preview only. `nil` = follow the
+    /// dictation engine (prior behavior). Lets the preview run a fast local
+    /// streaming engine while the final transcription uses a cloud engine.
+    @Published var livePreviewEngineId: String? {
+        didSet { Self.persistLivePreviewEngineId(livePreviewEngineId) }
+    }
     @Published var indicatorTranscriptPreviewFontSizeOffset: Int {
         didSet {
             let clampedOffset = Self.clampedIndicatorTranscriptPreviewFontSizeOffset(indicatorTranscriptPreviewFontSizeOffset)
@@ -503,6 +509,7 @@ final class DictationViewModel: ObservableObject {
         self.indicatorTranscriptPreviewEnabled = Self.loadIndicatorTranscriptPreviewEnabled()
         self.indicatorVisibleInScreenCaptures = Self.loadIndicatorVisibleInScreenCaptures()
         self.indicatorTranscriptPreviewFontSizeOffset = Self.loadIndicatorTranscriptPreviewFontSizeOffset()
+        self.livePreviewEngineId = Self.loadLivePreviewEngineId()
         self.preserveClipboard = UserDefaults.standard.bool(forKey: UserDefaultsKeys.preserveClipboard)
         self.mediaPauseEnabled = UserDefaults.standard.bool(forKey: UserDefaultsKeys.mediaPauseEnabled)
         self.transcribeShortQuietClipsAggressively = Self.loadTranscribeShortQuietClipsAggressively()
@@ -594,6 +601,22 @@ final class DictationViewModel: ObservableObject {
 
     nonisolated static func persistIndicatorVisibleInScreenCaptures(_ visible: Bool, defaults: UserDefaults = .standard) {
         defaults.set(visible, forKey: UserDefaultsKeys.indicatorVisibleInScreenCaptures)
+    }
+
+    nonisolated static func loadLivePreviewEngineId(defaults: UserDefaults = .standard) -> String? {
+        guard let engineId = defaults.string(forKey: UserDefaultsKeys.livePreviewEngineId),
+              !engineId.isEmpty else {
+            return nil
+        }
+        return engineId
+    }
+
+    nonisolated static func persistLivePreviewEngineId(_ engineId: String?, defaults: UserDefaults = .standard) {
+        if let engineId, !engineId.isEmpty {
+            defaults.set(engineId, forKey: UserDefaultsKeys.livePreviewEngineId)
+        } else {
+            defaults.removeObject(forKey: UserDefaultsKeys.livePreviewEngineId)
+        }
     }
 
     nonisolated static func loadIndicatorTranscriptPreviewFontSizeOffset(defaults: UserDefaults = .standard) -> Int {
@@ -2197,19 +2220,47 @@ final class DictationViewModel: ObservableObject {
             normalizeNumbers: effectiveNumberNormalizationOverride
         )
         lastStreamingParams = allowLiveTranscription ? params : nil
-        let dictionaryProviderId = params.engineOverrideId ?? params.providerId
+        let previewEngineOverrideId = Self.resolvePreviewEngineOverrideId(
+            preferredPreviewEngineId: livePreviewEngineId,
+            dictationEngineOverrideId: params.engineOverrideId,
+            selectedProviderId: params.providerId,
+            isEngineAvailable: { PluginManager.shared?.transcriptionEngine(for: $0) != nil }
+        )
+        let previewFollowsDictationEngine =
+            (previewEngineOverrideId ?? params.providerId) == (params.engineOverrideId ?? params.providerId)
+        let dictionaryProviderId = previewEngineOverrideId ?? params.providerId
         streamingHandler.start(
             streamPrompt: dictionaryService.getTermsForPrompt(providerId: dictionaryProviderId) ?? "",
             dictionaryTermHints: dictionaryService.getTermHints(providerId: dictionaryProviderId),
-            engineOverrideId: params.engineOverrideId,
+            engineOverrideId: previewEngineOverrideId,
             selectedProviderId: params.providerId,
             languageSelection: params.languageSelection,
             task: params.task,
-            cloudModelOverride: params.cloudModelOverride,
+            cloudModelOverride: previewFollowsDictationEngine ? params.cloudModelOverride : nil,
             normalizeNumbers: params.normalizeNumbers,
             allowLiveTranscription: allowLiveTranscription,
             stateCheck: { [weak self] in self?.state == .recording }
         )
+    }
+
+    /// Resolve the engine override for the live transcript preview session.
+    /// The user's preview engine wins when it is installed and differs from the
+    /// effective dictation engine; otherwise the preview follows the dictation
+    /// engine (prior behavior), keeping any cloud model override intact.
+    nonisolated static func resolvePreviewEngineOverrideId(
+        preferredPreviewEngineId: String?,
+        dictationEngineOverrideId: String?,
+        selectedProviderId: String?,
+        isEngineAvailable: (String) -> Bool
+    ) -> String? {
+        guard let preferred = preferredPreviewEngineId, !preferred.isEmpty,
+              isEngineAvailable(preferred) else {
+            return dictationEngineOverrideId
+        }
+        if preferred == (dictationEngineOverrideId ?? selectedProviderId) {
+            return dictationEngineOverrideId
+        }
+        return preferred
     }
 
     /// Restart live streaming if the currently effective params differ from the ones

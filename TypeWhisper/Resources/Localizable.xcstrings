@@ -9278,6 +9278,9 @@
         }
       }
     },
+    "Live preview engine": {
+
+    },
     "Live transcript size": {
       "localizations": {
         "de": {
@@ -9652,6 +9655,9 @@
           }
         }
       }
+    },
+    "Match dictation engine": {
+
     },
     "Media Pause": {
       "localizations": {
@@ -17345,6 +17351,9 @@
           }
         }
       }
+    },
+    "The live preview runs on this engine while the final transcription still uses your dictation engine. A fast local engine avoids extra network requests while you speak.": {
+
     },
     "The notch indicator extends the MacBook notch area to show recording status.": {
       "localizations": {
