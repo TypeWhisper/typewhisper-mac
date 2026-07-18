@@ -406,7 +406,10 @@ private struct SettingsSidebarSearchField: View {
             }
         }
         .padding(6)
-        .background(RoundedRectangle(cornerRadius: 8).fill(Color(nsColor: .controlBackgroundColor)))
+        .background(
+            RoundedRectangle(cornerRadius: SettingsLayoutMetrics.compactCornerRadius)
+                .fill(Color(nsColor: .controlBackgroundColor))
+        )
         .padding(EdgeInsets(top: 8, leading: 8, bottom: 4, trailing: 8))
     }
 }

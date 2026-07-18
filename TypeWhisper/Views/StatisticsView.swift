@@ -21,7 +21,7 @@ struct StatisticsView: View {
                         overviewGrid
                         metricsGrid
                         chartSection
-                        HStack(alignment: .top, spacing: 16) {
+                        HStack(alignment: .top, spacing: SettingsLayoutMetrics.cardSpacing) {
                             appsSection
                             modelsSection
                         }
@@ -134,16 +134,17 @@ struct StatisticsView: View {
     // MARK: - Activity chart
 
     private var chartSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(String(localized: "Activity"))
-                .font(.headline)
+        SettingsCard {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(String(localized: "Activity"))
+                    .font(.headline)
 
-            if viewModel.chartData.isEmpty || viewModel.chartData.allSatisfy({ $0.wordCount == 0 }) {
-                Text(String(localized: "No activity in this period."))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, minHeight: 200)
-            } else {
-                ZStack(alignment: .top) {
+                if viewModel.chartData.isEmpty || viewModel.chartData.allSatisfy({ $0.wordCount == 0 }) {
+                    Text(String(localized: "No activity in this period."))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, minHeight: 200)
+                } else {
+                    ZStack(alignment: .top) {
                     Chart(viewModel.chartData) { point in
                         BarMark(
                             x: .value(String(localized: "Date"), point.date, unit: .day),
@@ -198,20 +199,14 @@ struct StatisticsView: View {
                             .allowsHitTesting(false)
                         }
                     }
+                    }
+                    .frame(height: 200)
+                    .accessibilityElement(children: .ignore)
+                    .accessibilityAddTraits(.isStaticText)
+                    .accessibilityLabel(chartAccessibilitySummary)
                 }
-                .frame(height: 200)
-                .accessibilityElement(children: .ignore)
-                .accessibilityAddTraits(.isStaticText)
-                .accessibilityLabel(chartAccessibilitySummary)
             }
         }
-        .padding(SettingsLayoutMetrics.cardPadding)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius))
-        .overlay(
-            RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius)
-                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-        )
     }
 
     private var chartAccessibilitySummary: Text {
@@ -236,7 +231,8 @@ struct StatisticsView: View {
     // MARK: - Apps
 
     private var appsSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        SettingsCard {
+            VStack(alignment: .leading, spacing: 8) {
             Text(String(localized: "Top Apps"))
                 .font(.headline)
 
@@ -275,15 +271,8 @@ struct StatisticsView: View {
                     }
                 }
             }
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(SettingsLayoutMetrics.cardPadding)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius))
-        .overlay(
-            RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius)
-                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-        )
     }
 
     // MARK: - Heatmap
@@ -301,25 +290,20 @@ struct StatisticsView: View {
     }
 
     private var heatmapSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(String(localized: "Usage by Time of Day"))
-                .font(.headline)
+        SettingsCard {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(String(localized: "Usage by Time of Day"))
+                    .font(.headline)
 
-            if viewModel.maxHourlyCount == 0 {
-                Text(String(localized: "No activity for this period."))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, minHeight: 60)
-            } else {
-                heatmapGrid
+                if viewModel.maxHourlyCount == 0 {
+                    Text(String(localized: "No activity for this period."))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, minHeight: 60)
+                } else {
+                    heatmapGrid
+                }
             }
         }
-        .padding(SettingsLayoutMetrics.cardPadding)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius))
-        .overlay(
-            RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius)
-                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-        )
     }
 
     private let heatmapLabelWidth: CGFloat = 28
@@ -389,7 +373,8 @@ struct StatisticsView: View {
     // MARK: - Models
 
     private var modelsSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        SettingsCard {
+            VStack(alignment: .leading, spacing: 8) {
             Text(String(localized: "Models Used"))
                 .font(.headline)
 
@@ -428,39 +413,28 @@ struct StatisticsView: View {
                     }
                 }
             }
+            }
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(SettingsLayoutMetrics.cardPadding)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius))
-        .overlay(
-            RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius)
-                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-        )
     }
 
     // MARK: - Empty state
 
     private var emptyStateCard: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "chart.bar.xaxis")
-                .font(.system(size: 36))
-                .foregroundStyle(Color.accentColor)
-                .accessibilityHidden(true)
+        SettingsCard {
+            VStack(spacing: 12) {
+                Image(systemName: "chart.bar.xaxis")
+                    .font(.system(size: 36))
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
 
-            Text(String(localized: "Your statistics will appear here after your first transcription."))
-                .font(.callout)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
+                Text(String(localized: "Your statistics will appear here after your first transcription."))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 24)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius))
-        .overlay(
-            RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius)
-                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-        )
     }
 }
 
@@ -472,27 +446,22 @@ private struct StatisticsStatCard: View {
     var accessibilityValue: String?
 
     var body: some View {
-        VStack(spacing: 6) {
-            Image(systemName: systemImage)
-                .font(.title2)
-                .foregroundStyle(Color.accentColor)
-                .accessibilityHidden(true)
-            Text(value)
-                .font(.title)
-                .fontWeight(.bold)
-                .monospacedDigit()
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        SettingsCard {
+            VStack(spacing: 6) {
+                Image(systemName: systemImage)
+                    .font(.title2)
+                    .foregroundStyle(Color.accentColor)
+                    .accessibilityHidden(true)
+                Text(value)
+                    .font(.title)
+                    .fontWeight(.bold)
+                    .monospacedDigit()
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .frame(maxWidth: .infinity)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius))
-        .overlay(
-            RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius)
-                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-        )
         .accessibilityElement(children: .combine)
         .accessibilityLabel(Text("\(title), \(accessibilityValue ?? value)"))
     }
@@ -505,30 +474,25 @@ struct StatisticsMetricCard: View {
     var trend: Double?
 
     var body: some View {
-        VStack(spacing: 6) {
-            Image(systemName: systemImage)
-                .font(.title2)
-                .foregroundStyle(Color.accentColor)
-                .accessibilityHidden(true)
-            Text(value)
-                .font(.title)
-                .fontWeight(.bold)
-                .monospacedDigit()
-            if let trend {
-                trendLabel(trend)
+        SettingsCard {
+            VStack(spacing: 6) {
+                Image(systemName: systemImage)
+                    .font(.title2)
+                    .foregroundStyle(Color.accentColor)
+                    .accessibilityHidden(true)
+                Text(value)
+                    .font(.title)
+                    .fontWeight(.bold)
+                    .monospacedDigit()
+                if let trend {
+                    trendLabel(trend)
+                }
+                Text(title)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
-            Text(title)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius))
-        .overlay(
-            RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius)
-                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-        )
         .accessibilityElement(children: .combine)
         .accessibilityLabel(trendAwareAccessibilityLabel)
     }

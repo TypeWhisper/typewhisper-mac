@@ -347,7 +347,10 @@ struct FileTranscriptionView: View {
                 activeFileDetails(item)
             }
         }
-        .background(RoundedRectangle(cornerRadius: 8).fill(.quaternary))
+        .background(
+            RoundedRectangle(cornerRadius: SettingsLayoutMetrics.compactCornerRadius)
+                .fill(.quaternary)
+        )
     }
 
     @ViewBuilder

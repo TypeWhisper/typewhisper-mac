@@ -72,63 +72,57 @@ struct HomeSettingsView: View {
     // MARK: - Statistics summary
 
     private var statisticsSummarySection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Button {
-                viewModel.navigateToStatistics = true
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "chart.bar.xaxis")
-                        .font(.subheadline)
-                        .foregroundStyle(Color.accentColor)
-                    Text(String(localized: "Your Activity"))
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-                    Spacer()
-                    Text(String(localized: "View all statistics"))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Image(systemName: "chevron.right")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
+        SettingsCard {
+            VStack(alignment: .leading, spacing: 12) {
+                Button {
+                    viewModel.navigateToStatistics = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "chart.bar.xaxis")
+                            .font(.subheadline)
+                            .foregroundStyle(Color.accentColor)
+                        Text(String(localized: "Your Activity"))
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+                        Spacer()
+                        Text(String(localized: "View all statistics"))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Image(systemName: "chevron.right")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                    .contentShape(Rectangle())
                 }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(String(localized: "View your statistics"))
-            .accessibilityAddTraits(.isButton)
+                .buttonStyle(.plain)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(String(localized: "View your statistics"))
+                .accessibilityAddTraits(.isButton)
 
-            LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4), spacing: 12) {
-                statisticsSummaryCard(
-                    title: String(localized: "Words"),
-                    value: "\(statistics.wordsCount)",
-                    systemImage: "text.word.spacing"
-                )
-                statisticsSummaryCard(
-                    title: String(localized: "Avg. WPM"),
-                    value: statistics.averageWPM,
-                    systemImage: "speedometer"
-                )
-                statisticsSummaryCard(
-                    title: String(localized: "Apps Used"),
-                    value: "\(statistics.appsUsed)",
-                    systemImage: "app.badge"
-                )
-                statisticsSummaryCard(
-                    title: String(localized: "Time Saved"),
-                    value: statistics.timeSaved,
-                    systemImage: "clock.badge.checkmark"
-                )
+                LazyVGrid(columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4), spacing: 12) {
+                    statisticsSummaryCard(
+                        title: String(localized: "Words"),
+                        value: "\(statistics.wordsCount)",
+                        systemImage: "text.word.spacing"
+                    )
+                    statisticsSummaryCard(
+                        title: String(localized: "Avg. WPM"),
+                        value: statistics.averageWPM,
+                        systemImage: "speedometer"
+                    )
+                    statisticsSummaryCard(
+                        title: String(localized: "Apps Used"),
+                        value: "\(statistics.appsUsed)",
+                        systemImage: "app.badge"
+                    )
+                    statisticsSummaryCard(
+                        title: String(localized: "Time Saved"),
+                        value: statistics.timeSaved,
+                        systemImage: "clock.badge.checkmark"
+                    )
+                }
             }
         }
-        .padding(SettingsLayoutMetrics.cardPadding)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius))
-        .overlay(
-            RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius)
-                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-        )
     }
 
     private func statisticsSummaryCard(title: String, value: String, systemImage: String) -> some View {
@@ -197,85 +191,80 @@ struct HomeSettingsView: View {
     // MARK: - Recent Transcriptions
 
     private var recentTranscriptionsSection: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Button {
-                viewModel.navigateToHistory = true
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "clock.arrow.circlepath")
-                        .font(.subheadline)
-                        .foregroundStyle(Color.accentColor)
-                    Text(String(localized: "Recent Transcriptions"))
-                        .font(.headline)
-                        .foregroundStyle(.primary)
-                    Spacer()
-                    Text(String(localized: "View all history"))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Image(systemName: "chevron.right")
-                        .font(.caption2)
-                        .foregroundStyle(.tertiary)
+        SettingsCard {
+            VStack(alignment: .leading, spacing: 12) {
+                Button {
+                    viewModel.navigateToHistory = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "clock.arrow.circlepath")
+                            .font(.subheadline)
+                            .foregroundStyle(Color.accentColor)
+                        Text(String(localized: "Recent Transcriptions"))
+                            .font(.headline)
+                            .foregroundStyle(.primary)
+                        Spacer()
+                        Text(String(localized: "View all history"))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                        Image(systemName: "chevron.right")
+                            .font(.caption2)
+                            .foregroundStyle(.tertiary)
+                    }
+                    .contentShape(Rectangle())
                 }
-                .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityElement(children: .combine)
-            .accessibilityLabel(String(localized: "View all history"))
-            .accessibilityAddTraits(.isButton)
+                .buttonStyle(.plain)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(String(localized: "View all history"))
+                .accessibilityAddTraits(.isButton)
 
-            if viewModel.recentTranscriptions.isEmpty {
-                Text(String(localized: "Press \(primaryHotkeyLabel) in any app to get started."))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, minHeight: 60)
-            } else {
-                VStack(spacing: 0) {
-                    ForEach(viewModel.recentTranscriptions, id: \.id) { record in
-                        Button {
-                            viewModel.navigateToHistory = true
-                        } label: {
-                            HStack {
-                                VStack(alignment: .leading, spacing: 2) {
-                                    Text(record.finalText)
-                                        .lineLimit(1)
-                                        .truncationMode(.tail)
-                                        .font(.body)
-                                        .foregroundStyle(.primary)
-                                    HStack(spacing: 4) {
-                                        Text(record.timestamp, format: .relative(presentation: .named))
-                                            .font(.caption)
-                                            .foregroundStyle(.secondary)
-                                        if let appName = record.appName {
-                                            Text("- \(appName)")
+                if viewModel.recentTranscriptions.isEmpty {
+                    Text(String(localized: "Press \(primaryHotkeyLabel) in any app to get started."))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, minHeight: 60)
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(viewModel.recentTranscriptions, id: \.id) { record in
+                            Button {
+                                viewModel.navigateToHistory = true
+                            } label: {
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(record.finalText)
+                                            .lineLimit(1)
+                                            .truncationMode(.tail)
+                                            .font(.body)
+                                            .foregroundStyle(.primary)
+                                        HStack(spacing: 4) {
+                                            Text(record.timestamp, format: .relative(presentation: .named))
                                                 .font(.caption)
-                                                .foregroundStyle(.tertiary)
+                                                .foregroundStyle(.secondary)
+                                            if let appName = record.appName {
+                                                Text("- \(appName)")
+                                                    .font(.caption)
+                                                    .foregroundStyle(.tertiary)
+                                            }
                                         }
                                     }
+                                    Spacer()
+                                    Image(systemName: "chevron.right")
+                                        .font(.caption)
+                                        .foregroundStyle(.tertiary)
                                 }
-                                Spacer()
-                                Image(systemName: "chevron.right")
-                                    .font(.caption)
-                                    .foregroundStyle(.tertiary)
+                                .padding(.vertical, 8)
+                                .padding(.horizontal, 4)
+                                .contentShape(Rectangle())
                             }
-                            .padding(.vertical, 8)
-                            .padding(.horizontal, 4)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(.plain)
+                            .buttonStyle(.plain)
 
-                        if record.id != viewModel.recentTranscriptions.last?.id {
-                            Divider()
+                            if record.id != viewModel.recentTranscriptions.last?.id {
+                                Divider()
+                            }
                         }
                     }
                 }
             }
         }
-        .padding(SettingsLayoutMetrics.cardPadding)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius))
-        .overlay(
-            RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius)
-                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-        )
     }
 
     // MARK: - Getting Started Card
@@ -294,39 +283,35 @@ struct HomeSettingsView: View {
     }
 
     private var gettingStartedCard: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "mic.badge.plus")
-                .font(.system(size: 36))
-                .foregroundStyle(Color.accentColor)
-                .accessibilityHidden(true)
+        SettingsCard {
+            VStack(spacing: 12) {
+                Image(systemName: "mic.badge.plus")
+                    .font(.system(size: 36))
+                    .foregroundStyle(Color.accentColor)
+                    .accessibilityHidden(true)
 
-            Text(String(localized: "Ready to start dictating?"))
-                .font(.headline)
+                Text(String(localized: "Ready to start dictating?"))
+                    .font(.headline)
 
-            HStack(spacing: 6) {
-                Text(String(localized: "Press"))
-                    .foregroundStyle(.secondary)
-                Text(primaryHotkeyLabel)
-                    .font(.body.weight(.medium))
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(
-                        RoundedRectangle(cornerRadius: SettingsLayoutMetrics.compactCornerRadius)
-                            .fill(Color.accentColor.opacity(0.1))
-                    )
-                Text(String(localized: "in any app to begin."))
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    Text(String(localized: "Press"))
+                        .foregroundStyle(.secondary)
+                    Text(primaryHotkeyLabel)
+                        .font(.body.weight(.medium))
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(
+                            RoundedRectangle(cornerRadius: SettingsLayoutMetrics.compactCornerRadius)
+                                .fill(Color.accentColor.opacity(0.1))
+                        )
+                    Text(String(localized: "in any app to begin."))
+                        .foregroundStyle(.secondary)
+                }
+                .font(.callout)
             }
-            .font(.callout)
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 24)
-        .background(Color(nsColor: .controlBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius))
-        .overlay(
-            RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius)
-                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-        )
     }
 
     // MARK: - Permissions Banner

@@ -355,7 +355,10 @@ struct PremiumSettingsView: View {
                 .font(.title2)
                 .foregroundStyle(.yellow)
                 .frame(width: 44, height: 44)
-                .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.yellow.opacity(0.13)))
+                .background(
+                    RoundedRectangle(cornerRadius: SettingsLayoutMetrics.compactCornerRadius, style: .continuous)
+                        .fill(.yellow.opacity(0.13))
+                )
                 .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 5) {

@@ -40,7 +40,7 @@ struct AudioRecorderView: View {
             Form {
             // Recording Controls
             Section {
-                VStack(spacing: 16) {
+                VStack(spacing: SettingsLayoutMetrics.sectionSpacing) {
                     // Duration display
                     Text(viewModel.formattedDuration(viewModel.duration))
                         .font(.system(size: 48, weight: .light, design: .monospaced))
