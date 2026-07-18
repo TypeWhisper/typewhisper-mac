@@ -24,9 +24,13 @@ struct AdvancedSettingsView: View {
     @AppStorage(UserDefaultsKeys.saveAudioWithHistory) private var saveAudioWithHistory: Bool = false
 
     var body: some View {
-        Form {
-            // MARK: - Support Diagnostics
-            Section(localizedAppText("Support Diagnostics", de: "Support-Diagnose")) {
+        VStack(spacing: 0) {
+            SettingsPageHeader(String(localized: "Advanced"))
+            Divider()
+
+            Form {
+                // MARK: - Support Diagnostics
+                Section(localizedAppText("Support Diagnostics", de: "Support-Diagnose")) {
                 HStack {
                     Button {
                         exportDiagnostics()
@@ -44,8 +48,8 @@ struct AdvancedSettingsView: View {
                 }
             }
 
-            // MARK: - Memory
-            Section(String(localized: "Memory")) {
+                // MARK: - Memory
+                Section(String(localized: "Memory")) {
                 Toggle(isOn: $memoryService.isEnabled) {
                     SettingsInfoLabel(
                         title: String(localized: "Enable Memory"),
@@ -147,8 +151,8 @@ struct AdvancedSettingsView: View {
                 }
             }
 
-            // MARK: - Recording
-            Section(String(localized: "Recording")) {
+                // MARK: - Recording
+                Section(String(localized: "Recording")) {
                 Picker(selection: Binding(
                     get: { modelManager.autoUnloadSeconds },
                     set: { modelManager.autoUnloadSeconds = $0 }
@@ -269,10 +273,10 @@ struct AdvancedSettingsView: View {
                 }
             }
 
-            SpokenPunctuationSettingsSection()
+                SpokenPunctuationSettingsSection()
 
-            // MARK: - History
-            Section(String(localized: "History")) {
+                // MARK: - History
+                Section(String(localized: "History")) {
                 Toggle(isOn: $historyEnabled) {
                     SettingsInfoLabel(
                         title: String(localized: "Save history"),
@@ -319,8 +323,8 @@ struct AdvancedSettingsView: View {
                 }
             }
 
-            // MARK: - API Server
-            Section(String(localized: "API Server")) {
+                // MARK: - API Server
+                Section(String(localized: "API Server")) {
                 Toggle(isOn: $viewModel.isEnabled) {
                     SettingsInfoLabel(
                         title: String(localized: "Enable API Server"),
@@ -363,8 +367,8 @@ struct AdvancedSettingsView: View {
                 }
             }
 
-            // MARK: - Command Line Tool
-            Section(String(localized: "Command Line Tool")) {
+                // MARK: - Command Line Tool
+                Section(String(localized: "Command Line Tool")) {
                 HStack {
                     Image(systemName: "circle.fill")
                         .foregroundStyle(cliInstalled ? .green : .orange)
@@ -396,19 +400,19 @@ struct AdvancedSettingsView: View {
                 }
             }
 
-            // MARK: - Usage Examples
-            if viewModel.isEnabled {
-                Section(String(localized: "Usage Examples")) {
+                // MARK: - Usage Examples
+                if viewModel.isEnabled {
+                    Section(String(localized: "Usage Examples")) {
                     if cliInstalled {
                         cliExamples
                     } else {
                         curlExamples
                     }
+                    }
                 }
-            }
 
-            // MARK: - Integrations
-            Section(String(localized: "Integrations")) {
+                // MARK: - Integrations
+                Section(String(localized: "Integrations")) {
                 HStack(alignment: .top, spacing: 12) {
                     Image(systemName: "command.square")
                         .font(.title2)
@@ -438,10 +442,12 @@ struct AdvancedSettingsView: View {
                         }
                     }
                 }
+                }
             }
+            .formStyle(.grouped)
+            .padding(.horizontal, SettingsLayoutMetrics.pagePadding)
+            .padding(.bottom, SettingsLayoutMetrics.pagePadding)
         }
-        .formStyle(.grouped)
-        .padding()
         .frame(minWidth: 500, minHeight: 300)
         .onAppear {
             raycastInstalled = NSWorkspace.shared.urlForApplication(

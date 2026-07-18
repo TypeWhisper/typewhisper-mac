@@ -20,8 +20,12 @@ struct AboutSettingsView: View {
     }
 
     var body: some View {
-        Form {
-            Section {
+        VStack(spacing: 0) {
+            SettingsPageHeader(String(localized: "About"))
+            Divider()
+
+            Form {
+                Section {
                 VStack(spacing: 12) {
                     Image(nsImage: NSApp.applicationIconImage)
                         .resizable()
@@ -57,7 +61,7 @@ struct AboutSettingsView: View {
                 .padding(.vertical, 12)
             }
 
-            Section {
+                Section {
                 Picker(String(localized: "Update Channel"), selection: updateChannelBinding) {
                     ForEach(AppConstants.ReleaseChannel.allCases, id: \.self) { channel in
                         Text(channel.selectionDisplayName)
@@ -80,7 +84,7 @@ struct AboutSettingsView: View {
                 }
             }
 
-            Section {
+                Section {
                 HStack {
                     Spacer()
                     Button {
@@ -102,7 +106,7 @@ struct AboutSettingsView: View {
                 .foregroundStyle(.secondary)
             }
 
-            Section {
+                Section {
                 VStack(spacing: 4) {
                     Text(String(localized: "\u{00A9} 2024-2026 TypeWhisper Contributors"))
                         .font(.caption)
@@ -113,10 +117,12 @@ struct AboutSettingsView: View {
                         .foregroundStyle(.tertiary)
                 }
                 .frame(maxWidth: .infinity)
+                }
             }
+            .formStyle(.grouped)
+            .padding(.horizontal, SettingsLayoutMetrics.pagePadding)
+            .padding(.bottom, SettingsLayoutMetrics.pagePadding)
         }
-        .formStyle(.grouped)
-        .padding()
         .frame(minWidth: 500, minHeight: 300)
     }
 
