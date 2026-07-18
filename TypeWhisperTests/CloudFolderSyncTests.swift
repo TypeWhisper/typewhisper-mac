@@ -453,6 +453,110 @@ final class CloudFolderSyncTests: XCTestCase {
     }
 
     @MainActor
+    func testFutureSchemaIsDiagnosedBeforeFullOperationDecoding() async throws {
+        let folder = try TestSupport.makeTemporaryDirectory(prefix: "CloudFolderSyncFutureSchema")
+        defer { TestSupport.remove(folder) }
+
+        let remoteDirectory = CloudFolderSyncEngine.packageURL(for: folder)
+            .appendingPathComponent("ops/remote-device", isDirectory: true)
+        try FileManager.default.createDirectory(at: remoteDirectory, withIntermediateDirectories: true)
+        try Data(#"{"schemaVersion":2}"#.utf8)
+            .write(to: remoteDirectory.appendingPathComponent("future.json"))
+
+        let store = InMemoryUserDataSyncStore()
+        var state = CloudFolderSyncState(deviceId: "mac-a")
+
+        let result = try await CloudFolderSyncEngine.sync(
+            folderURL: folder,
+            store: store,
+            state: &state,
+            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
+            now: Self.date(20)
+        )
+
+        XCTAssertEqual(result.diagnostics.map(\.kind), [.unsupportedSchema])
+    }
+
+    func testMissingOperationsDirectoryThrowsInsteadOfReportingEmptySync() throws {
+        let folder = try TestSupport.makeTemporaryDirectory(prefix: "CloudFolderSyncMissingOperations")
+        defer { TestSupport.remove(folder) }
+
+        XCTAssertThrowsError(
+            try CloudFolderSyncEngine.readOperations(
+                from: folder.appendingPathComponent("missing", isDirectory: true)
+            )
+        )
+    }
+
+    func testUnreadableDeviceDirectoryProducesDiagnostic() throws {
+        let folder = try TestSupport.makeTemporaryDirectory(prefix: "CloudFolderSyncUnreadableDevice")
+        defer { TestSupport.remove(folder) }
+        let deviceDirectory = folder.appendingPathComponent("remote-device", isDirectory: true)
+        try FileManager.default.createDirectory(at: deviceDirectory, withIntermediateDirectories: true)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: NSNumber(value: 0)],
+            ofItemAtPath: deviceDirectory.path
+        )
+        defer {
+            try? FileManager.default.setAttributes(
+                [.posixPermissions: NSNumber(value: 0o700)],
+                ofItemAtPath: deviceDirectory.path
+            )
+        }
+
+        let result = try CloudFolderSyncEngine.readOperations(from: folder)
+
+        XCTAssertEqual(
+            result.diagnostics,
+            [.init(kind: .unreadableFile, fileName: "remote-device")]
+        )
+    }
+
+    @MainActor
+    func testConcurrentLocalEditRemainsPendingForNextSync() async throws {
+        let folder = try TestSupport.makeTemporaryDirectory(prefix: "CloudFolderSyncConcurrentEdit")
+        defer { TestSupport.remove(folder) }
+
+        let original = Self.dictionaryEntry(original: "TypeWhisper", updatedAt: Self.date(10))
+        let edited = Self.dictionaryEntry(original: "TypeWhisper", updatedAt: Self.date(30))
+        let store = InMemoryUserDataSyncStore(dictionaryEntries: [original])
+        let editDuringFileIO: @Sendable () async -> Void = {
+            await MainActor.run {
+                store.dictionaryEntries = [edited]
+            }
+        }
+        var state = CloudFolderSyncState(deviceId: "mac-a")
+
+        let firstResult = try await CloudFolderSyncEngine.sync(
+            folderURL: folder,
+            store: store,
+            state: &state,
+            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
+            now: Self.date(20),
+            afterFileIO: editDuringFileIO
+        )
+        let secondResult = try await CloudFolderSyncEngine.sync(
+            folderURL: folder,
+            store: store,
+            state: &state,
+            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
+            now: Self.date(40)
+        )
+
+        XCTAssertEqual(firstResult.operationsWritten, 1)
+        XCTAssertEqual(secondResult.operationsWritten, 1)
+        XCTAssertEqual(
+            state.exportedItemVersions[
+                UserDataSyncIdentity.dictionaryItemID(
+                    entryType: UserDataSyncDictionaryEntryType.term,
+                    original: "TypeWhisper"
+                )
+            ],
+            CloudFolderSyncEngine.records(from: store.snapshot()).values.first?.version
+        )
+    }
+
+    @MainActor
     func testTwoSimulatedDevicesShareAppendOnlyOperations() async throws {
         let folder = try TestSupport.makeTemporaryDirectory(prefix: "CloudFolderSyncTwoDevices")
         defer { TestSupport.remove(folder) }

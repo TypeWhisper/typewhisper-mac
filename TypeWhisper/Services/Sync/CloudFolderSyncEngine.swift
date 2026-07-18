@@ -192,7 +192,8 @@ enum CloudFolderSyncEngine {
         store: (any UserDataSyncStore)?,
         state: inout CloudFolderSyncState,
         entitlements: PaidEntitlements,
-        now: Date = Date()
+        now: Date = Date(),
+        afterFileIO: (@Sendable () async -> Void)? = nil
     ) async throws -> CloudFolderSyncResult {
         guard entitlements.canUseCloudFolderSync else {
             throw CloudFolderSyncError.notEntitled
@@ -236,7 +237,7 @@ enum CloudFolderSyncEngine {
             try write(localOperations, to: deviceOperationsURL, now: now)
             pruneExpiredTombstones(in: deviceOperationsURL, now: now)
 
-            let readResult = readOperations(from: operationsURL)
+            let readResult = try readOperations(from: operationsURL)
             let winners = winningOperations(from: readResult.operations)
             let mutations = makeMutations(
                 from: winners,
@@ -253,14 +254,14 @@ enum CloudFolderSyncEngine {
         let operations = fileResult.readResult.operations
         let mutations = fileResult.mutations
 
+        await afterFileIO?()
         if !mutations.isEmpty {
             try await store.apply(mutations)
         }
 
-        let finalSnapshot = await store.snapshot()
-        let finalRecords = records(from: finalSnapshot)
-        state.knownLocalItemIDs = Set(finalRecords.keys)
-        state.exportedItemVersions = finalRecords.mapValues(\.version)
+        let synchronizedRecords = records(afterApplying: mutations, to: initialRecords)
+        state.knownLocalItemIDs = Set(synchronizedRecords.keys)
+        state.exportedItemVersions = synchronizedRecords.mapValues(\.version)
         state.appliedOperationIDs.formUnion(operations.map(\.operationId))
         state.lastSyncAt = now
 
@@ -302,6 +303,33 @@ enum CloudFolderSyncEngine {
                 ),
                 into: &records
             )
+        }
+        return records
+    }
+
+    private static func records(
+        afterApplying mutations: [UserDataSyncMutation],
+        to initialRecords: [String: CloudFolderSyncRecord]
+    ) -> [String: CloudFolderSyncRecord] {
+        var records = initialRecords
+        for mutation in mutations {
+            switch mutation {
+            case .upsertDictionary(let entry):
+                let itemID = UserDataSyncIdentity.dictionaryItemID(
+                    entryType: entry.entryType,
+                    original: entry.original
+                )
+                records[itemID] = Self.records(
+                    from: UserDataSyncSnapshot(dictionaryEntries: [entry])
+                )[itemID]
+            case .deleteDictionary(let itemID), .deleteSnippet(let itemID):
+                records.removeValue(forKey: itemID)
+            case .upsertSnippet(let snippet):
+                let itemID = UserDataSyncIdentity.snippetItemID(trigger: snippet.trigger)
+                records[itemID] = Self.records(
+                    from: UserDataSyncSnapshot(snippets: [snippet])
+                )[itemID]
+            }
         }
         return records
     }
@@ -477,26 +505,30 @@ enum CloudFolderSyncEngine {
         }
     }
 
-    private static func readOperations(
+    static func readOperations(
         from operationsURL: URL
-    ) -> (operations: [CloudFolderSyncOperation], diagnostics: [CloudFolderSyncDiagnostic]) {
-        guard let deviceDirectories = try? FileManager.default.contentsOfDirectory(
+    ) throws -> (operations: [CloudFolderSyncOperation], diagnostics: [CloudFolderSyncDiagnostic]) {
+        let deviceDirectories = try FileManager.default.contentsOfDirectory(
             at: operationsURL,
             includingPropertiesForKeys: [.isDirectoryKey],
             options: [.skipsHiddenFiles]
-        ) else {
-            return ([], [])
-        }
+        )
 
         var operations: [CloudFolderSyncOperation] = []
         var diagnostics: [CloudFolderSyncDiagnostic] = []
         for deviceDirectory in deviceDirectories {
-            guard (try? deviceDirectory.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true,
-                  let files = try? FileManager.default.contentsOfDirectory(
+            guard (try? deviceDirectory.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else {
+                continue
+            }
+            let files: [URL]
+            do {
+                files = try FileManager.default.contentsOfDirectory(
                     at: deviceDirectory,
                     includingPropertiesForKeys: nil,
                     options: [.skipsHiddenFiles]
-                  ) else {
+                )
+            } catch {
+                diagnostics.append(.init(kind: .unreadableFile, fileName: deviceDirectory.lastPathComponent))
                 continue
             }
 
@@ -505,12 +537,16 @@ enum CloudFolderSyncEngine {
                     diagnostics.append(.init(kind: .unreadableFile, fileName: file.lastPathComponent))
                     continue
                 }
-                guard let operation = try? decoder.decode(CloudFolderSyncOperation.self, from: data) else {
+                guard let envelope = try? decoder.decode(CloudFolderSyncSchemaEnvelope.self, from: data) else {
                     diagnostics.append(.init(kind: .malformedOperation, fileName: file.lastPathComponent))
                     continue
                 }
-                guard operation.schemaVersion == 1 else {
+                guard envelope.schemaVersion == 1 else {
                     diagnostics.append(.init(kind: .unsupportedSchema, fileName: file.lastPathComponent))
+                    continue
+                }
+                guard let operation = try? decoder.decode(CloudFolderSyncOperation.self, from: data) else {
+                    diagnostics.append(.init(kind: .malformedOperation, fileName: file.lastPathComponent))
                     continue
                 }
                 operations.append(operation)
@@ -597,6 +633,10 @@ enum CloudFolderSyncEngine {
         return decoder
     }()
 
+}
+
+private struct CloudFolderSyncSchemaEnvelope: Decodable {
+    let schemaVersion: Int
 }
 
 struct CloudFolderSyncRecord: Equatable, Sendable {
