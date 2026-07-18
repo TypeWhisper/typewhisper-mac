@@ -878,7 +878,7 @@ final class MenuBarGroupingTests: XCTestCase {
     func testMenuBarSectionsUseExpectedOrderAndLocalizedKeys() {
         XCTAssertEqual(
             MenuBarMenuSection.allCases.map(\.titleLocalizationKey),
-            ["General", "Recorder", "Transcription", "Updates"]
+            ["General", "Transcription"]
         )
     }
 
@@ -888,20 +888,12 @@ final class MenuBarGroupingTests: XCTestCase {
             [.settings, .history, .errorLog]
         )
         XCTAssertEqual(
-            MenuBarMenuSection.recorder.items,
-            [.toggleRecorder]
-        )
-        XCTAssertEqual(
             MenuBarMenuSection.transcription.items(hasRecoverableRecording: true),
-            [.toggleDictationHotkeysPause, .transcribeFile, .recoverLastRecording, .recentTranscriptions, .copyLastTranscription, .readBackLastTranscription]
+            [.toggleDictationHotkeysPause, .transcribeFile, .recoverLastRecording, .lastTranscription]
         )
         XCTAssertEqual(
             MenuBarMenuSection.transcription.items(hasRecoverableRecording: false),
-            [.toggleDictationHotkeysPause, .transcribeFile, .recentTranscriptions, .copyLastTranscription, .readBackLastTranscription]
-        )
-        XCTAssertEqual(
-            MenuBarMenuSection.updates.items,
-            [.checkForUpdates]
+            [.toggleDictationHotkeysPause, .transcribeFile, .lastTranscription]
         )
     }
 }
