@@ -13,6 +13,7 @@ enum UserDefaultsKeys {
     static let indicatorStyle = "indicatorStyle"
     static let indicatorTranscriptPreviewEnabled = "indicatorTranscriptPreviewEnabled"
     static let indicatorTranscriptPreviewFontSizeOffset = "indicatorTranscriptPreviewFontSizeOffset"
+    static let livePreviewEngineId = "livePreviewEngineId"
     static let preserveClipboard = "preserveClipboard"
     static let mediaPauseEnabled = "mediaPauseEnabled"
     static let dictationHotkeysPaused = "dictationHotkeysPaused"

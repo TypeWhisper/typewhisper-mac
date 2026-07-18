@@ -19,6 +19,7 @@
 		A1C3E59B7D1042F9A8C6E2B1 /* PromptActionTemperaturePersistenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2D4F6A8C0E2143F9B7D5C1A /* PromptActionTemperaturePersistenceTests.swift */; };
 		FEEDFACE00000000000000A1 /* PromptProcessingModelResolutionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FEEDFACE00000000000000B1 /* PromptProcessingModelResolutionTests.swift */; };
 		24FFE19AC026C48AE32BCD7C /* AppFormatterServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE5852D6767C5FA955B84C52 /* AppFormatterServiceTests.swift */; };
+		8E4B0A32C5D96F7B1E203C4D /* LivePreviewEngineResolutionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D3A9F21B4C85E6A0D1F2B3C /* LivePreviewEngineResolutionTests.swift */; };
 		24FFE19AC026C48AE32BCD7D /* SpeechPunctuationServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE5852D6767C5FA955B84C53 /* SpeechPunctuationServiceTests.swift */; };
 		24FFE19AC026C48AE32BCD7E /* DictationPunctuationProfileStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE5852D6767C5FA955B84C54 /* DictationPunctuationProfileStoreTests.swift */; };
 		24FFE19AC026C48AE32BCD7F /* PunctuationRulesLoaderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CE5852D6767C5FA955B84C55 /* PunctuationRulesLoaderTests.swift */; };
@@ -883,6 +884,7 @@
 		B2D4F6A8C0E2143F9B7D5C1A /* PromptActionTemperaturePersistenceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PromptActionTemperaturePersistenceTests.swift; sourceTree = "<group>"; };
 		FEEDFACE00000000000000B1 /* PromptProcessingModelResolutionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PromptProcessingModelResolutionTests.swift; sourceTree = "<group>"; };
 		CE5852D6767C5FA955B84C52 /* AppFormatterServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AppFormatterServiceTests.swift; sourceTree = "<group>"; };
+		7D3A9F21B4C85E6A0D1F2B3C /* LivePreviewEngineResolutionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LivePreviewEngineResolutionTests.swift; sourceTree = "<group>"; };
 		CE5852D6767C5FA955B84C53 /* SpeechPunctuationServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SpeechPunctuationServiceTests.swift; sourceTree = "<group>"; };
 		50756E40757C6BC13C52ED74 /* NumberWordNormalizerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = NumberWordNormalizerTests.swift; sourceTree = "<group>"; };
 		16CD1A34084E0761A8659612 /* TranscriptionNormalizationServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TranscriptionNormalizationServiceTests.swift; sourceTree = "<group>"; };
@@ -2290,6 +2292,7 @@
 				E6D200DCDD6580F443C5CE0A /* APIRouterAndHandlersTests.swift */,
 				3A4B5C6D7E8F901234567891 /* AudioEngineRecoverySupportTests.swift */,
 				CE5852D6767C5FA955B84C52 /* AppFormatterServiceTests.swift */,
+				7D3A9F21B4C85E6A0D1F2B3C /* LivePreviewEngineResolutionTests.swift */,
 				CE5852D6767C5FA955B84C53 /* SpeechPunctuationServiceTests.swift */,
 				50756E40757C6BC13C52ED74 /* NumberWordNormalizerTests.swift */,
 				16CD1A34084E0761A8659612 /* TranscriptionNormalizationServiceTests.swift */,
@@ -3802,6 +3805,7 @@
 			files = (
 				7EC0EFA7DA6597CAEA640448 /* APIRouterAndHandlersTests.swift in Sources */,
 				24FFE19AC026C48AE32BCD7C /* AppFormatterServiceTests.swift in Sources */,
+				8E4B0A32C5D96F7B1E203C4D /* LivePreviewEngineResolutionTests.swift in Sources */,
 				24FFE19AC026C48AE32BCD7D /* SpeechPunctuationServiceTests.swift in Sources */,
 				540AE1FA22F41A63C78B89EC /* NumberWordNormalizerTests.swift in Sources */,
 				E8FB3269B522A8923134AD9A /* TranscriptionNormalizationServiceTests.swift in Sources */,
