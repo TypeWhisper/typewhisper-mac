@@ -33,7 +33,11 @@ struct AudioRecorderView: View {
     }
 
     var body: some View {
-        Form {
+        VStack(spacing: 0) {
+            SettingsPageHeader(String(localized: "settings.tab.recorder"))
+            Divider()
+
+            Form {
             // Recording Controls
             Section {
                 VStack(spacing: 16) {
@@ -309,9 +313,11 @@ struct AudioRecorderView: View {
                     }
                 }
             }
+            }
+            .formStyle(.grouped)
+            .padding(.horizontal, SettingsLayoutMetrics.pagePadding)
+            .padding(.bottom, SettingsLayoutMetrics.pagePadding)
         }
-        .formStyle(.grouped)
-        .padding()
         .frame(minWidth: 500, minHeight: 400)
     }
 
