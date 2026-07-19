@@ -5935,9 +5935,11 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let errorLogService = ErrorLogService(appSupportDirectory: appSupportDirectory)
         let settingsViewModel = SettingsViewModel(modelManager: modelManager)
 
-        // Unit tests must start from the documented default (nil = match dictation
-        // engine); the test host app's persisted preference would otherwise leak in.
+        // Unit tests must start from the documented defaults (preview enabled,
+        // preview engine = match dictation engine); the test host app's persisted
+        // preferences would otherwise leak in.
         UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.livePreviewEngineId)
+        UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.indicatorTranscriptPreviewEnabled)
 
         let dictationViewModel = DictationViewModel(
             audioRecordingService: audioRecordingService,
@@ -6351,9 +6353,11 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let errorLogService = ErrorLogService(appSupportDirectory: appSupportDirectory)
         let settingsViewModel = SettingsViewModel(modelManager: modelManager)
 
-        // Unit tests must start from the documented default (nil = match dictation
-        // engine); the test host app's persisted preference would otherwise leak in.
+        // Unit tests must start from the documented defaults (preview enabled,
+        // preview engine = match dictation engine); the test host app's persisted
+        // preferences would otherwise leak in.
         UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.livePreviewEngineId)
+        UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.indicatorTranscriptPreviewEnabled)
 
         let dictationViewModel = DictationViewModel(
             audioRecordingService: audioRecordingService,
@@ -6664,9 +6668,11 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let settingsViewModel = SettingsViewModel(modelManager: modelManager)
         let mediaPlaybackService = mediaPlaybackService ?? MediaPlaybackService(startListening: false)
 
-        // Unit tests must start from the documented default (nil = match dictation
-        // engine); the test host app's persisted preference would otherwise leak in.
+        // Unit tests must start from the documented defaults (preview enabled,
+        // preview engine = match dictation engine); the test host app's persisted
+        // preferences would otherwise leak in.
         UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.livePreviewEngineId)
+        UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.indicatorTranscriptPreviewEnabled)
 
         let dictationViewModel = DictationViewModel(
             audioRecordingService: audioRecordingService,

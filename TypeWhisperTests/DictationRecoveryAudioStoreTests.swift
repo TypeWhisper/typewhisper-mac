@@ -192,9 +192,11 @@ final class DictationRecoveryAudioStoreTests: XCTestCase {
         modelManager: ModelManagerService,
         audioRecordingService: AudioRecordingService
     ) -> DictationViewModel {
-        // Unit tests must start from the documented default (nil = match dictation
-        // engine); the test host app's persisted preference would otherwise leak in.
+        // Unit tests must start from the documented defaults (preview enabled,
+        // preview engine = match dictation engine); the test host app's persisted
+        // preferences would otherwise leak in.
         UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.livePreviewEngineId)
+        UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.indicatorTranscriptPreviewEnabled)
         let textInsertionService = TextInsertionService()
         let hotkeyService = HotkeyService()
         let historyService = HistoryService(appSupportDirectory: appSupportDirectory)
