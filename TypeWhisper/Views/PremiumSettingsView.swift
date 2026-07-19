@@ -617,11 +617,13 @@ private struct AppKitSignInWithAppleButton: NSViewRepresentable {
         )
         button.target = context.coordinator
         button.action = #selector(Coordinator.activate)
+        button.isEnabled = context.environment.isEnabled
         return button
     }
 
     func updateNSView(_ button: ASAuthorizationAppleIDButton, context: Context) {
         context.coordinator.action = action
+        button.isEnabled = context.environment.isEnabled
     }
 
     @MainActor

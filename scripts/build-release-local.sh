@@ -69,6 +69,7 @@ bash "$script_dir/archive_release.sh" \
   --export-path "$export_path" \
   --profile "$profile_path" \
   --release-tag "$release_tag" \
+  --release-channel local \
   --build-number "$build_number" |
   tee "$build_dir/build.log"
 

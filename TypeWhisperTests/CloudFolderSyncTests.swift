@@ -234,7 +234,7 @@ final class CloudFolderSyncTests: XCTestCase {
             {
               "authorizationURL": "https://appleid.apple.com/auth/authorize?state=server-state",
               "state": "server-state",
-              "expiresAt": "2026-07-19T12:10:00.000Z"
+              "expiresAt": "2099-07-19T12:10:00.000Z"
             }
             """,
             "/v1/auth/apple/web/exchange": """
@@ -311,7 +311,7 @@ final class CloudFolderSyncTests: XCTestCase {
             {
               "authorizationURL": "https://appleid.apple.com/auth/authorize?state=server-state",
               "state": "server-state",
-              "expiresAt": "2026-07-19T12:10:00.000Z"
+              "expiresAt": "2099-07-19T12:10:00.000Z"
             }
             """,
         ])
@@ -336,6 +336,81 @@ final class CloudFolderSyncTests: XCTestCase {
         XCTAssertNil(service.errorMessage)
         let requests = await recorder.recordedRequests()
         XCTAssertEqual(requests.count, 1)
+    }
+
+    @MainActor
+    func testPremiumAccountRejectsMismatchedAppleCallbackState() async throws {
+        let suiteName = "PremiumAppleWebAuthStateMismatch-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let recorder = PremiumAccountHTTPRecorder(responses: [
+            "/v1/auth/apple/web/start": """
+            {
+              "authorizationURL": "https://appleid.apple.com/auth/authorize?state=server-state",
+              "state": "server-state",
+              "expiresAt": "2099-07-19T12:10:00.000Z"
+            }
+            """,
+        ])
+        let authenticator = PremiumAppleWebAuthenticator(
+            callbackURL: try XCTUnwrap(URL(
+                string: "typewhisper://premium-auth/callback?state=wrong-state&code=exchange-code"
+            ))
+        )
+        let service = PremiumAccountService(
+            defaults: defaults,
+            baseURL: URL(string: "https://app.typewhisper.com"),
+            requestExecutor: { request in try await recorder.execute(request) },
+            appleWebAuthenticator: authenticator,
+            keychainService: suiteName,
+            isSignedInOverride: false,
+            automaticallyRefresh: false
+        )
+
+        await service.signInWithApple(polarLicenseKey: nil)
+
+        XCTAssertFalse(service.isSignedIn)
+        XCTAssertNotNil(service.errorMessage)
+        let requests = await recorder.recordedRequests()
+        XCTAssertEqual(requests.compactMap(\.url?.path), ["/v1/auth/apple/web/start"])
+    }
+
+    @MainActor
+    func testPremiumAccountRejectsExpiredAppleWebStart() async throws {
+        let suiteName = "PremiumAppleWebAuthExpired-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let recorder = PremiumAccountHTTPRecorder(responses: [
+            "/v1/auth/apple/web/start": """
+            {
+              "authorizationURL": "https://appleid.apple.com/auth/authorize?state=server-state",
+              "state": "server-state",
+              "expiresAt": "2020-07-19T12:10:00.000Z"
+            }
+            """,
+        ])
+        let authenticator = PremiumAppleWebAuthenticator(
+            callbackURL: try XCTUnwrap(URL(
+                string: "typewhisper://premium-auth/callback?state=server-state&code=exchange-code"
+            ))
+        )
+        let service = PremiumAccountService(
+            defaults: defaults,
+            baseURL: URL(string: "https://app.typewhisper.com"),
+            requestExecutor: { request in try await recorder.execute(request) },
+            appleWebAuthenticator: authenticator,
+            keychainService: suiteName,
+            isSignedInOverride: false,
+            automaticallyRefresh: false
+        )
+
+        await service.signInWithApple(polarLicenseKey: nil)
+
+        XCTAssertFalse(service.isSignedIn)
+        XCTAssertNotNil(service.errorMessage)
+        XCTAssertTrue(authenticator.authorizationURLs.isEmpty)
+        let requests = await recorder.recordedRequests()
+        XCTAssertEqual(requests.compactMap(\.url?.path), ["/v1/auth/apple/web/start"])
     }
 
     @MainActor

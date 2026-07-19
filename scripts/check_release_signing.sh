@@ -19,6 +19,37 @@ contains_unresolved_variable() {
   grep -F '$(' >/dev/null
 }
 
+plist_array_contains() {
+  local plist_path="$1"
+  local key_path="$2"
+  local expected_value="$3"
+  local index=0
+  local value
+
+  while value="$(
+    /usr/libexec/PlistBuddy -c "Print :$key_path:$index" "$plist_path" 2>/dev/null
+  )"; do
+    if [[ "$value" == "$expected_value" ]]; then
+      return 0
+    fi
+    index=$((index + 1))
+  done
+  return 1
+}
+
+plist_array_equals_single_value() {
+  local plist_path="$1"
+  local key_path="$2"
+  local expected_value="$3"
+  local first_value
+
+  first_value="$(
+    /usr/libexec/PlistBuddy -c "Print :$key_path:0" "$plist_path" 2>/dev/null
+  )" || return 1
+  [[ "$first_value" == "$expected_value" ]] || return 1
+  ! /usr/libexec/PlistBuddy -c "Print :$key_path:1" "$plist_path" >/dev/null 2>&1
+}
+
 widget_has_forbidden_entitlement() {
   grep -Eq \
     'com\.apple\.developer\.(applesignin|icloud|ubiquity)|com\.apple\.security\.(automation|cs\.disable-library-validation|device\.audio-input|network)' \
@@ -105,9 +136,6 @@ actual_bundle_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$inf
 profile_team="$(/usr/libexec/PlistBuddy -c 'Print :TeamIdentifier:0' "$decoded_profile")"
 profile_app_id="$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.application-identifier' "$decoded_profile")"
 profile_expiration="$(plutil -extract ExpirationDate raw -o - "$decoded_profile")"
-profile_icloud="$(
-  /usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.developer.icloud-container-identifiers' "$decoded_profile"
-)"
 profile_all_devices="$(/usr/libexec/PlistBuddy -c 'Print :ProvisionsAllDevices' "$decoded_profile" 2>/dev/null || true)"
 
 [[ "$actual_bundle_id" == "$bundle_id" ]] || {
@@ -126,7 +154,10 @@ profile_all_devices="$(/usr/libexec/PlistBuddy -c 'Print :ProvisionsAllDevices' 
   echo "error: embedded profile is not a Developer ID profile" >&2
   exit 1
 }
-grep -Fxq "    $icloud_container" <<< "$profile_icloud" || {
+plist_array_contains \
+  "$decoded_profile" \
+  "Entitlements:com.apple.developer.icloud-container-identifiers" \
+  "$icloud_container" || {
   echo "error: profile is missing iCloud container '$icloud_container'" >&2
   exit 1
 }
@@ -138,9 +169,6 @@ expiration_epoch="$(date -j -f '%Y-%m-%dT%H:%M:%SZ' "$profile_expiration" '+%s')
 
 main_application_id="$(/usr/libexec/PlistBuddy -c 'Print :com.apple.application-identifier' "$main_entitlements")"
 main_team="$(/usr/libexec/PlistBuddy -c 'Print :com.apple.developer.team-identifier' "$main_entitlements")"
-main_group="$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.application-groups:0' "$main_entitlements")"
-main_icloud="$(/usr/libexec/PlistBuddy -c 'Print :com.apple.developer.icloud-container-identifiers:0' "$main_entitlements")"
-main_ubiquity="$(/usr/libexec/PlistBuddy -c 'Print :com.apple.developer.ubiquity-container-identifiers:0' "$main_entitlements")"
 
 [[ "$main_application_id" == "$team_id.$bundle_id" ]] || {
   echo "error: signed application identifier is '$main_application_id'" >&2
@@ -150,14 +178,24 @@ main_ubiquity="$(/usr/libexec/PlistBuddy -c 'Print :com.apple.developer.ubiquity
   echo "error: signed team identifier is '$main_team'" >&2
   exit 1
 }
-[[ "$main_group" == "$app_group" ]] || {
-  echo "error: signed app group is '$main_group'" >&2
+plist_array_equals_single_value \
+  "$main_entitlements" \
+  "com.apple.security.application-groups" \
+  "$app_group" || {
+  echo "error: signed app group is incorrect" >&2
   exit 1
 }
-[[ "$main_icloud" == "$icloud_container" && "$main_ubiquity" == "$icloud_container" ]] || {
+if ! plist_array_equals_single_value \
+    "$main_entitlements" \
+    "com.apple.developer.icloud-container-identifiers" \
+    "$icloud_container" ||
+  ! plist_array_equals_single_value \
+    "$main_entitlements" \
+    "com.apple.developer.ubiquity-container-identifiers" \
+    "$icloud_container"; then
   echo "error: signed iCloud containers are incorrect" >&2
   exit 1
-}
+fi
 if /usr/libexec/PlistBuddy -c 'Print :com.apple.developer.applesignin' "$main_entitlements" >/dev/null 2>&1; then
   echo "error: native Sign in with Apple entitlement must not be signed into the Developer ID app" >&2
   exit 1
@@ -165,15 +203,18 @@ fi
 
 widget_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$widget_path/Contents/Info.plist")"
 widget_sandbox="$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.app-sandbox' "$widget_entitlements")"
-widget_group="$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.application-groups:0' "$widget_entitlements")"
 [[ "$widget_id" == "$widget_bundle_id" ]] || {
   echo "error: widget bundle identifier is '$widget_id'" >&2
   exit 1
 }
-[[ "$widget_sandbox" == "true" && "$widget_group" == "$app_group" ]] || {
+if [[ "$widget_sandbox" != "true" ]] ||
+  ! plist_array_equals_single_value \
+    "$widget_entitlements" \
+    "com.apple.security.application-groups" \
+    "$app_group"; then
   echo "error: widget sandbox or app group entitlement is incorrect" >&2
   exit 1
-}
+fi
 if plutil -convert xml1 -o - "$widget_entitlements" | widget_has_forbidden_entitlement; then
   echo "error: widget contains main-app-only entitlements" >&2
   exit 1

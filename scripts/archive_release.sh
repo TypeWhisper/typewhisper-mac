@@ -28,6 +28,24 @@ Usage: scripts/archive_release.sh \
 USAGE
 }
 
+plist_array_contains() {
+  local plist_path="$1"
+  local key_path="$2"
+  local expected_value="$3"
+  local index=0
+  local value
+
+  while value="$(
+    /usr/libexec/PlistBuddy -c "Print :$key_path:$index" "$plist_path" 2>/dev/null
+  )"; do
+    if [[ "$value" == "$expected_value" ]]; then
+      return 0
+    fi
+    index=$((index + 1))
+  done
+  return 1
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --archive-path) archive_path="${2:-}"; shift 2 ;;
@@ -90,7 +108,16 @@ if [[ -z "$signing_identity" ]]; then
 fi
 
 temporary_dir="$(mktemp -d "${TMPDIR:-/tmp}/typewhisper-release.XXXXXX")"
+installed_profile=""
+installed_profile_backup=""
 cleanup() {
+  if [[ -n "$installed_profile" ]]; then
+    if [[ -n "$installed_profile_backup" && -f "$installed_profile_backup" ]]; then
+      cp "$installed_profile_backup" "$installed_profile"
+    else
+      rm -f "$installed_profile"
+    fi
+  fi
   rm -rf "$temporary_dir"
 }
 trap cleanup EXIT
@@ -104,9 +131,6 @@ profile_team="$(/usr/libexec/PlistBuddy -c 'Print :TeamIdentifier:0' "$decoded_p
 profile_app_id="$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.application-identifier' "$decoded_profile")"
 profile_expiration="$(plutil -extract ExpirationDate raw -o - "$decoded_profile")"
 profile_all_devices="$(/usr/libexec/PlistBuddy -c 'Print :ProvisionsAllDevices' "$decoded_profile" 2>/dev/null || true)"
-profile_icloud="$(
-  /usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.developer.icloud-container-identifiers' "$decoded_profile"
-)"
 
 if [[ "$profile_team" != "$team_id" ]]; then
   echo "error: profile team is '$profile_team', expected '$team_id'" >&2
@@ -120,7 +144,10 @@ if [[ "$profile_all_devices" != "true" ]]; then
   echo "error: profile is not a Developer ID provisioning profile" >&2
   exit 1
 fi
-if ! grep -Fxq "    $icloud_container" <<< "$profile_icloud"; then
+if ! plist_array_contains \
+  "$decoded_profile" \
+  "Entitlements:com.apple.developer.icloud-container-identifiers" \
+  "$icloud_container"; then
   echo "error: profile does not contain iCloud container '$icloud_container'" >&2
   exit 1
 fi
@@ -133,6 +160,10 @@ fi
 profile_directory="$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"
 mkdir -p "$profile_directory"
 installed_profile="$profile_directory/$profile_uuid.provisionprofile"
+if [[ -f "$installed_profile" ]]; then
+  installed_profile_backup="$temporary_dir/existing-profile.provisionprofile"
+  cp "$installed_profile" "$installed_profile_backup"
+fi
 cp "$profile_path" "$installed_profile"
 
 echo "Using profile: $profile_name ($profile_uuid, expires $profile_expiration)"

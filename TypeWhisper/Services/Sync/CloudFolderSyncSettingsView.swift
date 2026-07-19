@@ -133,32 +133,64 @@ protocol AppleWebAuthenticating: AnyObject {
     func authenticate(at authorizationURL: URL, callbackScheme: String) async throws -> URL
 }
 
+private final class AppleWebAuthenticationCompletion: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<URL, Error>?
+
+    init(continuation: CheckedContinuation<URL, Error>) {
+        self.continuation = continuation
+    }
+
+    func resume(callbackURL: URL?, error: Error?) {
+        lock.lock()
+        let continuation = continuation
+        self.continuation = nil
+        lock.unlock()
+
+        guard let continuation else { return }
+        if let callbackURL {
+            continuation.resume(returning: callbackURL)
+        } else {
+            continuation.resume(throwing: error ?? URLError(.cancelled))
+        }
+    }
+}
+
+private func makeAppleWebAuthenticationSession(
+    authorizationURL: URL,
+    callbackScheme: String,
+    completion: AppleWebAuthenticationCompletion
+) -> ASWebAuthenticationSession {
+    ASWebAuthenticationSession(
+        url: authorizationURL,
+        callbackURLScheme: callbackScheme
+    ) { callbackURL, error in
+        completion.resume(callbackURL: callbackURL, error: error)
+    }
+}
+
 @MainActor
 final class AppleWebAuthenticationSession: NSObject, AppleWebAuthenticating, ASWebAuthenticationPresentationContextProviding {
     private var authenticationSession: ASWebAuthenticationSession?
     private let fallbackWindow = NSWindow()
 
     func authenticate(at authorizationURL: URL, callbackScheme: String) async throws -> URL {
-        try await withCheckedThrowingContinuation { continuation in
-            let session = ASWebAuthenticationSession(
-                url: authorizationURL,
-                callbackURLScheme: callbackScheme
-            ) { [weak self] callbackURL, error in
-                Task { @MainActor in
-                    self?.authenticationSession = nil
-                    if let callbackURL {
-                        continuation.resume(returning: callbackURL)
-                    } else {
-                        continuation.resume(throwing: error ?? URLError(.cancelled))
-                    }
-                }
-            }
+        defer { authenticationSession = nil }
+        return try await withCheckedThrowingContinuation { continuation in
+            let completion = AppleWebAuthenticationCompletion(continuation: continuation)
+            let session = makeAppleWebAuthenticationSession(
+                authorizationURL: authorizationURL,
+                callbackScheme: callbackScheme,
+                completion: completion
+            )
             session.presentationContextProvider = self
             session.prefersEphemeralWebBrowserSession = false
             authenticationSession = session
             guard session.start() else {
-                authenticationSession = nil
-                continuation.resume(throwing: URLError(.cannotLoadFromNetwork))
+                completion.resume(
+                    callbackURL: nil,
+                    error: URLError(.cannotLoadFromNetwork)
+                )
                 return
             }
         }
@@ -180,7 +212,7 @@ final class PremiumAccountService: ObservableObject {
     private struct AppleWebStartResponse: Decodable {
         let authorizationURL: URL
         let state: String
-        let expiresAt: String
+        let expiresAt: Date
     }
 
     private enum Keys {
@@ -269,7 +301,7 @@ final class PremiumAccountService: ObservableObject {
                 ]),
                 authenticated: false
             )
-            guard start.expiresAt.isEmpty == false,
+            guard start.expiresAt > Date(),
                   start.authorizationURL.scheme == "https",
                   start.authorizationURL.host == "appleid.apple.com" else {
                 throw PremiumAccountServiceError.invalidAppleAuthorizationCallback
