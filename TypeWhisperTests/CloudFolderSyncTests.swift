@@ -466,6 +466,37 @@ final class CloudFolderSyncTests: XCTestCase {
     }
 
     @MainActor
+    func testNoICloudBuildHidesAutomaticModeWithoutOverwritingStoredChoice() async throws {
+        let suiteName = "PremiumSyncNoICloud-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(PremiumSyncMode.automaticICloud.rawValue, forKey: "premiumSync.mode")
+
+        let account = PremiumAccountService(
+            defaults: defaults,
+            keychainService: suiteName,
+            isSignedInOverride: false,
+            automaticallyRefresh: false
+        )
+        let controller = CloudFolderSyncController(
+            premiumAccountService: account,
+            syncStore: InMemoryUserDataSyncStore(),
+            defaults: defaults,
+            automaticICloudAvailable: false
+        )
+        defer { controller.deactivate() }
+
+        XCTAssertEqual(controller.availableModes, [.off, .cloudFolder])
+        XCTAssertEqual(controller.mode, .off)
+        XCTAssertEqual(defaults.string(forKey: "premiumSync.mode"), PremiumSyncMode.automaticICloud.rawValue)
+
+        await controller.setMode(.automaticICloud)
+
+        XCTAssertEqual(controller.mode, .off)
+        XCTAssertEqual(defaults.string(forKey: "premiumSync.mode"), PremiumSyncMode.automaticICloud.rawValue)
+    }
+
+    @MainActor
     func testDeletingPrivateFolderStopsSyncBeforeRemovingPackage() async throws {
         let suiteName = "PremiumSyncDelete-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))

@@ -21,6 +21,15 @@ enum PremiumSyncMode: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
+private enum TypeWhisperBuildCapabilities {
+    static var iCloudSyncEnabled: Bool {
+        guard let value = Bundle.main.object(forInfoDictionaryKey: "TypeWhisperICloudEnabled") as? String else {
+            return true
+        }
+        return !["no", "false", "0"].contains(value.lowercased())
+    }
+}
+
 struct CrossDevicePremiumEntitlement: Codable, Equatable, Sendable {
     struct SignedClaims: Codable, Equatable, Sendable {
         let status: String
@@ -569,6 +578,7 @@ final class CloudFolderSyncController: ObservableObject {
     private let premiumAccountService: PremiumAccountService
     private let syncStore: any UserDataSyncStore
     private let defaults: UserDefaults
+    private let automaticICloudAvailable: Bool
     private var customState: CloudFolderSyncState
     private var automaticState: CloudFolderSyncState
     private var localChangeObserverId: UUID?
@@ -592,6 +602,10 @@ final class CloudFolderSyncController: ObservableObject {
         premiumAccountService.isSignedIn && premiumAccountService.hasPremiumEntitlement
     }
 
+    var availableModes: [PremiumSyncMode] {
+        automaticICloudAvailable ? PremiumSyncMode.allCases : [.off, .cloudFolder]
+    }
+
     var selectedFolderDisplayName: String {
         switch mode {
         case .automaticICloud: String(localized: "TypeWhisper private iCloud container")
@@ -605,15 +619,18 @@ final class CloudFolderSyncController: ObservableObject {
     init(
         premiumAccountService: PremiumAccountService,
         syncStore: any UserDataSyncStore,
-        defaults: UserDefaults = .standard
+        defaults: UserDefaults = .standard,
+        automaticICloudAvailable: Bool = TypeWhisperBuildCapabilities.iCloudSyncEnabled
     ) {
         self.premiumAccountService = premiumAccountService
         self.syncStore = syncStore
         self.defaults = defaults
+        self.automaticICloudAvailable = automaticICloudAvailable
         self.customState = Self.loadState(from: defaults, key: Keys.syncState, legacyKey: Keys.legacySyncState)
         self.automaticState = Self.loadState(from: defaults, key: Keys.automaticSyncState)
         let storedMode = defaults.string(forKey: Keys.mode).flatMap(PremiumSyncMode.init(rawValue:))
-        self.mode = storedMode ?? (defaults.data(forKey: Keys.folderBookmark) != nil ? .cloudFolder : .off)
+        let requestedMode = storedMode ?? (defaults.data(forKey: Keys.folderBookmark) != nil ? .cloudFolder : .off)
+        self.mode = requestedMode == .automaticICloud && !automaticICloudAvailable ? .off : requestedMode
         self.lastSyncDate = mode == .automaticICloud ? automaticState.lastSyncAt : customState.lastSyncAt
 
         restoreSelectedFolder()
@@ -657,6 +674,7 @@ final class CloudFolderSyncController: ObservableObject {
     }
 
     func setMode(_ newMode: PremiumSyncMode) async {
+        guard automaticICloudAvailable || newMode != .automaticICloud else { return }
         guard newMode != mode, !isSyncing else { return }
         if isConfigured, canUseSync { await syncNow() }
         guard !isSyncing else { return }
@@ -1008,7 +1026,7 @@ struct CloudFolderSyncSettingsView: View {
                     get: { controller.mode },
                     set: { mode in Task { await controller.setMode(mode) } }
                 )) {
-                    ForEach(PremiumSyncMode.allCases) { mode in
+                    ForEach(controller.availableModes) { mode in
                         Text(mode.displayName).tag(mode)
                     }
                 }

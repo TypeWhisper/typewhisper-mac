@@ -13,6 +13,11 @@ on:
         description: Optional exact release tag (for example v1.6.0-daily.20260719.1)
         required: false
         type: string
+      without_icloud:
+        description: Build without iCloud entitlements while the production App ID is unavailable
+        required: false
+        default: false
+        type: boolean
 
 env:
   SCHEME: TypeWhisper
@@ -28,6 +33,7 @@ jobs:
     outputs:
       tag: ${{ steps.resolve.outputs.tag }}
       should_run: ${{ steps.resolve.outputs.should_run }}
+      without_icloud: ${{ steps.resolve.outputs.without_icloud }}
     steps:
       - name: Checkout
         if: github.event_name != 'push'
@@ -41,7 +47,16 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           REF_NAME: ${{ github.ref_name }}
           REQUESTED_TAG: ${{ inputs.release_tag }}
+          REQUESTED_WITHOUT_ICLOUD: ${{ inputs.without_icloud }}
+          SCHEDULED_WITHOUT_ICLOUD: ${{ vars.MACOS_SCHEDULED_WITHOUT_ICLOUD }}
         run: |
+          WITHOUT_ICLOUD="false"
+          if [ "$REQUESTED_WITHOUT_ICLOUD" = "true" ] ||
+            { [ "$EVENT_NAME" = "schedule" ] && [ "$SCHEDULED_WITHOUT_ICLOUD" = "true" ]; }; then
+            WITHOUT_ICLOUD="true"
+          fi
+          echo "without_icloud=$WITHOUT_ICLOUD" >> "$GITHUB_OUTPUT"
+
           if [ "$EVENT_NAME" = "push" ]; then
             printf 'tag=%s\n' "$REF_NAME" >> "$GITHUB_OUTPUT"
             echo "should_run=true" >> "$GITHUB_OUTPUT"
@@ -158,6 +173,7 @@ jobs:
     runs-on: macos-15
     env:
       RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+      WITHOUT_ICLOUD: ${{ needs.prepare.outputs.without_icloud }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -202,6 +218,7 @@ jobs:
           bash scripts/check_release_signing.sh --self-test
 
       - name: Decode Developer ID Provisioning Profile
+        if: needs.prepare.outputs.without_icloud != 'true'
         env:
           MACOS_DEVELOPER_ID_PROVISIONING_PROFILE: ${{ secrets.MACOS_DEVELOPER_ID_PROVISIONING_PROFILE }}
         run: |
@@ -233,15 +250,22 @@ jobs:
           echo "RELEASE_CHANNEL=$RELEASE_CHANNEL" >> $GITHUB_ENV
           echo "IS_PRERELEASE=$IS_PRERELEASE" >> $GITHUB_ENV
 
+          ARCHIVE_ARGS=(
+            --archive-path build/TypeWhisper.xcarchive
+            --export-path build/export
+            --release-tag "$RELEASE_TAG"
+            --release-channel "$RELEASE_CHANNEL"
+            --build-number "$BUILD_NUMBER"
+            --signing-identity "$MACOS_SIGNING_IDENTITY"
+          )
+          if [ "$WITHOUT_ICLOUD" = "true" ]; then
+            ARCHIVE_ARGS+=(--without-icloud)
+          else
+            ARCHIVE_ARGS+=(--profile "$MACOS_DEVELOPER_ID_PROVISIONING_PROFILE_PATH")
+          fi
+
           set -o pipefail
-          bash scripts/archive_release.sh \
-            --archive-path build/TypeWhisper.xcarchive \
-            --export-path build/export \
-            --profile "$MACOS_DEVELOPER_ID_PROVISIONING_PROFILE_PATH" \
-            --release-tag "$RELEASE_TAG" \
-            --release-channel "$RELEASE_CHANNEL" \
-            --build-number "$BUILD_NUMBER" \
-            --signing-identity "$MACOS_SIGNING_IDENTITY" | tee build.log
+          bash scripts/archive_release.sh "${ARCHIVE_ARGS[@]}" | tee build.log
 
       - name: Check First-Party Warnings
         run: bash scripts/check_first_party_warnings.sh build.log
@@ -250,7 +274,12 @@ jobs:
         run: bash scripts/check_release_binary_instrumentation.sh build/export/TypeWhisper.app/Contents/MacOS/typewhisper-cli
 
       - name: Check Developer ID Signing
-        run: bash scripts/check_release_signing.sh build/export/TypeWhisper.app
+        run: |
+          CHECK_ARGS=()
+          if [ "$WITHOUT_ICLOUD" = "true" ]; then
+            CHECK_ARGS+=(--without-icloud)
+          fi
+          bash scripts/check_release_signing.sh "${CHECK_ARGS[@]}" build/export/TypeWhisper.app
 
       - name: Notarize App
         env:
@@ -275,7 +304,12 @@ jobs:
 
       - name: Verify Notarized App and Spawn
         run: |
+          CHECK_ARGS=()
+          if [ "$WITHOUT_ICLOUD" = "true" ]; then
+            CHECK_ARGS+=(--without-icloud)
+          fi
           bash scripts/check_release_signing.sh \
+            "${CHECK_ARGS[@]}" \
             --require-notarization \
             --spawn \
             build/export/TypeWhisper.app
