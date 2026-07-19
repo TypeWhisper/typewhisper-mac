@@ -5306,6 +5306,10 @@ final class APIRouterAndHandlersTests: XCTestCase {
         let errorLogService = ErrorLogService(appSupportDirectory: appSupportDirectory)
         let settingsViewModel = SettingsViewModel(modelManager: modelManager)
 
+        // Unit tests must start from the documented default (nil = match dictation
+        // engine); the test host app's persisted preference would otherwise leak in.
+        UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.livePreviewEngineId)
+
         let dictationViewModel = DictationViewModel(
             audioRecordingService: audioRecordingService,
             textInsertionService: textInsertionService,
@@ -5703,6 +5707,10 @@ final class APIRouterAndHandlersTests: XCTestCase {
         let errorLogService = ErrorLogService(appSupportDirectory: appSupportDirectory)
         let settingsViewModel = SettingsViewModel(modelManager: modelManager)
 
+        // Unit tests must start from the documented default (nil = match dictation
+        // engine); the test host app's persisted preference would otherwise leak in.
+        UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.livePreviewEngineId)
+
         let dictationViewModel = DictationViewModel(
             audioRecordingService: audioRecordingService,
             textInsertionService: textInsertionService,
@@ -6006,6 +6014,10 @@ final class APIRouterAndHandlersTests: XCTestCase {
         let errorLogService = ErrorLogService(appSupportDirectory: appSupportDirectory)
         let settingsViewModel = SettingsViewModel(modelManager: modelManager)
         let mediaPlaybackService = mediaPlaybackService ?? MediaPlaybackService(startListening: false)
+
+        // Unit tests must start from the documented default (nil = match dictation
+        // engine); the test host app's persisted preference would otherwise leak in.
+        UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.livePreviewEngineId)
 
         let dictationViewModel = DictationViewModel(
             audioRecordingService: audioRecordingService,

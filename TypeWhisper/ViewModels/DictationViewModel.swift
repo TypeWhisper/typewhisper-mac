@@ -1989,8 +1989,7 @@ final class DictationViewModel: ObservableObject {
             cloudModelOverride: effectiveCloudModelOverride,
             normalizeNumbers: effectiveNumberNormalizationOverride
         )
-        lastStreamingParams = allowLiveTranscription ? params : nil
-        let previewEngineOverrideId = Self.resolvePreviewEngineOverrideId(
+        let resolution = Self.resolvePreviewEngine(
             preferredPreviewEngineId: livePreviewEngineId,
             dictationEngineOverrideId: params.engineOverrideId,
             selectedProviderId: params.providerId,
@@ -2001,6 +2000,25 @@ final class DictationViewModel: ObservableObject {
                 return self.canUseEngineForPreview(engine)
             }
         )
+        let previewEngineOverrideId: String?
+        let previewUsable: Bool
+        switch resolution {
+        case .followsDictationEngine:
+            previewEngineOverrideId = params.engineOverrideId
+            previewUsable = true
+        case .overrideEngine(let engineId):
+            previewEngineOverrideId = engineId
+            previewUsable = true
+        case .previewUnavailable:
+            // The user explicitly chose a preview engine that can't run right now.
+            // Fail visibly (no preview) instead of silently resuming preview
+            // traffic on the (possibly metered cloud) dictation engine.
+            previewEngineOverrideId = params.engineOverrideId
+            previewUsable = false
+            logger.warning("Selected live preview engine is unavailable; preview disabled for this recording instead of falling back to the dictation engine")
+        }
+        let effectiveAllowLiveTranscription = allowLiveTranscription && previewUsable
+        lastStreamingParams = effectiveAllowLiveTranscription ? params : nil
         let previewFollowsDictationEngine =
             (previewEngineOverrideId ?? params.providerId) == (params.engineOverrideId ?? params.providerId)
         lastPreviewFollowsDictationEngine = previewFollowsDictationEngine
@@ -2025,40 +2043,73 @@ final class DictationViewModel: ObservableObject {
             task: previewTask,
             cloudModelOverride: previewFollowsDictationEngine ? params.cloudModelOverride : nil,
             normalizeNumbers: params.normalizeNumbers,
-            allowLiveTranscription: allowLiveTranscription,
+            allowLiveTranscription: effectiveAllowLiveTranscription,
             stateCheck: { [weak self] in self?.state == .recording }
         )
     }
 
-    /// Whether an engine is usable as the live preview engine right now:
-    /// installed, configured, and ready (not merely present), AND actually able
+    /// Whether an engine is usable as the live preview engine: auth-available and
+    /// either currently configured or restorable on demand (an installed local
+    /// engine whose model was auto-unloaded restores at session start via
+    /// `prepareEngineForTranscription` → `triggerRestoreModel`), AND actually able
     /// to produce a preview — via a native live session or the batch fallback.
     func canUseEngineForPreview(_ engine: TranscriptionEnginePlugin) -> Bool {
-        guard modelManager.canPrepareForTranscription(engine) else { return false }
+        guard Self.engineIsReadyOrRestorableForPreview(
+            authAvailable: modelManager.canUseForTranscription(engine),
+            isConfigured: engine.isConfigured,
+            selectedModelId: engine.selectedModelId,
+            canPrepare: modelManager.canPrepareForTranscription(engine)
+        ) else { return false }
         if engine is any LiveTranscriptionCapablePlugin { return true }
         let allowsFallback = (engine as? any TranscriptPreviewFallbackPolicyProviding)?
             .allowsTranscriptPreviewFallback ?? true
         return allowsFallback
     }
 
-    /// Resolve the engine override for the live transcript preview session.
-    /// The user's preview engine wins when it is installed and differs from the
-    /// effective dictation engine; otherwise the preview follows the dictation
-    /// engine (prior behavior), keeping any cloud model override intact.
-    nonisolated static func resolvePreviewEngineOverrideId(
+    /// Pure readiness predicate for the preview engine. A persisted model
+    /// selection counts as available even when the model is not currently
+    /// loaded (`isConfigured == false`) — auto-unloaded local engines restore
+    /// at session start. `canPrepare` additionally keeps Apple Speech's
+    /// catalog-based grace from `canPrepareForTranscription`.
+    nonisolated static func engineIsReadyOrRestorableForPreview(
+        authAvailable: Bool,
+        isConfigured: Bool,
+        selectedModelId: String?,
+        canPrepare: Bool
+    ) -> Bool {
+        guard authAvailable else { return false }
+        return isConfigured || selectedModelId != nil || canPrepare
+    }
+
+    enum PreviewEngineResolution: Equatable {
+        /// No usable distinct preference — the preview follows the dictation
+        /// engine (prior behavior), keeping any cloud model override intact.
+        case followsDictationEngine
+        /// A distinct, usable preview engine runs the preview session.
+        case overrideEngine(String)
+        /// A preview engine is explicitly selected but unusable — suppress the
+        /// preview entirely rather than silently falling back to the (possibly
+        /// metered cloud) dictation engine.
+        case previewUnavailable
+    }
+
+    /// Resolve which engine the live transcript preview session should use.
+    nonisolated static func resolvePreviewEngine(
         preferredPreviewEngineId: String?,
         dictationEngineOverrideId: String?,
         selectedProviderId: String?,
         isEngineAvailable: (String) -> Bool
-    ) -> String? {
-        guard let preferred = preferredPreviewEngineId, !preferred.isEmpty,
-              isEngineAvailable(preferred) else {
-            return dictationEngineOverrideId
+    ) -> PreviewEngineResolution {
+        guard let preferred = preferredPreviewEngineId, !preferred.isEmpty else {
+            return .followsDictationEngine
+        }
+        guard isEngineAvailable(preferred) else {
+            return .previewUnavailable
         }
         if preferred == (dictationEngineOverrideId ?? selectedProviderId) {
-            return dictationEngineOverrideId
+            return .followsDictationEngine
         }
-        return preferred
+        return .overrideEngine(preferred)
     }
 
     /// Restart live streaming if the currently effective params differ from the ones
