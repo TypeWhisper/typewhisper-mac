@@ -61,6 +61,10 @@ main_has_icloud_entitlement() {
   grep -Eq 'com\.apple\.developer\.(icloud|ubiquity)' >/dev/null
 }
 
+contains_hardened_runtime_flag() {
+  grep -Eq 'flags=0x[0-9a-fA-F]+\(.*runtime.*\)' >/dev/null
+}
+
 self_test() {
   # shellcheck disable=SC2016 # Exercise the literal unresolved marker.
   if printf '%s\n' '<string>$(ICLOUD_CONTAINER_ID)</string>' | contains_unresolved_variable; then
@@ -87,6 +91,14 @@ self_test() {
   fi
   if printf '%s\n' '<key>com.apple.security.application-groups</key>' | main_has_icloud_entitlement; then
     echo "self-test failed: non-iCloud main entitlement was rejected" >&2
+    return 1
+  fi
+  if ! printf '%s\n' 'CodeDirectory flags=0x10000(runtime)' | contains_hardened_runtime_flag; then
+    echo "self-test failed: hardened runtime flag was not detected" >&2
+    return 1
+  fi
+  if printf '%s\n' 'CodeDirectory flags=0x0(none)' | contains_hardened_runtime_flag; then
+    echo "self-test failed: missing hardened runtime was accepted" >&2
     return 1
   fi
   echo "release signing self-test passed"
@@ -271,12 +283,21 @@ done
 
 codesign --verify --deep --strict --verbose=2 "$app_path"
 signature_details="$(codesign -dvvv "$app_path" 2>&1)"
+widget_signature_details="$(codesign -dvvv "$widget_path" 2>&1)"
 grep -Fq "Authority=Developer ID Application:" <<< "$signature_details" || {
   echo "error: app is not signed with Developer ID Application" >&2
   exit 1
 }
 grep -Fq "TeamIdentifier=$team_id" <<< "$signature_details" || {
   echo "error: signature team identifier does not match" >&2
+  exit 1
+}
+contains_hardened_runtime_flag <<< "$signature_details" || {
+  echo "error: main app does not have the hardened runtime enabled" >&2
+  exit 1
+}
+contains_hardened_runtime_flag <<< "$widget_signature_details" || {
+  echo "error: widget does not have the hardened runtime enabled" >&2
   exit 1
 }
 
