@@ -128,6 +128,29 @@ private enum PremiumAccountServiceError: LocalizedError {
     }
 }
 
+private func decodeISO8601DateWithOptionalFractionalSeconds(
+    from decoder: Decoder
+) throws -> Date {
+    let container = try decoder.singleValueContainer()
+    let value = try container.decode(String.self)
+    let formatter = ISO8601DateFormatter()
+
+    formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    if let date = formatter.date(from: value) {
+        return date
+    }
+
+    formatter.formatOptions = [.withInternetDateTime]
+    if let date = formatter.date(from: value) {
+        return date
+    }
+
+    throw DecodingError.dataCorruptedError(
+        in: container,
+        debugDescription: "Expected an ISO 8601 date"
+    )
+}
+
 @MainActor
 protocol AppleWebAuthenticating: AnyObject {
     func authenticate(at authorizationURL: URL, callbackScheme: String) async throws -> URL
@@ -264,7 +287,9 @@ final class PremiumAccountService: ObservableObject {
             publicKeyBase64: entitlementPublicKeyBase64
         )
         decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        decoder.dateDecodingStrategy = .custom(
+            decodeISO8601DateWithOptionalFractionalSeconds
+        )
         encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         if let existing = defaults.string(forKey: Keys.deviceID) {

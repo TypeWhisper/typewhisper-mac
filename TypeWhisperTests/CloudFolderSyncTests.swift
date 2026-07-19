@@ -278,14 +278,24 @@ final class CloudFolderSyncTests: XCTestCase {
             ]
         )
 
-        let startBody = try XCTUnwrap(requests[0].httpBody)
+        let startRequest = try XCTUnwrap(
+            requests.first { $0.url?.path == "/v1/auth/apple/web/start" }
+        )
+        let exchangeRequest = try XCTUnwrap(
+            requests.first { $0.url?.path == "/v1/auth/apple/web/exchange" }
+        )
+        let linkRequest = try XCTUnwrap(
+            requests.first { $0.url?.path == "/v1/entitlements/polar/link" }
+        )
+
+        let startBody = try XCTUnwrap(startRequest.httpBody)
         let startJSON = try XCTUnwrap(
             JSONSerialization.jsonObject(with: startBody) as? [String: String]
         )
         XCTAssertEqual(startJSON["nonceHash"]?.count, 64)
         XCTAssertTrue(startJSON["nonceHash"]?.allSatisfy(\.isHexDigit) == true)
 
-        let exchangeBody = try XCTUnwrap(requests[1].httpBody)
+        let exchangeBody = try XCTUnwrap(exchangeRequest.httpBody)
         let exchangeJSON = try XCTUnwrap(
             JSONSerialization.jsonObject(with: exchangeBody) as? [String: String]
         )
@@ -298,7 +308,10 @@ final class CloudFolderSyncTests: XCTestCase {
             .replacingOccurrences(of: "/", with: "_")
             .replacingOccurrences(of: "=", with: "")
         XCTAssertEqual(startJSON["codeChallenge"], expectedChallenge)
-        XCTAssertEqual(requests[2].value(forHTTPHeaderField: "Authorization"), "Bearer account-token")
+        XCTAssertEqual(
+            linkRequest.value(forHTTPHeaderField: "Authorization"),
+            "Bearer account-token"
+        )
     }
 
     @MainActor
