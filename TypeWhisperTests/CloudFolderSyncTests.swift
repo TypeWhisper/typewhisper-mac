@@ -71,6 +71,51 @@ private final class InMemoryUserDataSyncStore: UserDataSyncStore, @unchecked Sen
     }
 }
 
+private actor PremiumAccountHTTPRecorder {
+    private let responses: [String: String]
+    private(set) var requests: [URLRequest] = []
+
+    init(responses: [String: String]) {
+        self.responses = responses
+    }
+
+    func execute(_ request: URLRequest) throws -> (Data, URLResponse) {
+        requests.append(request)
+        let path = request.url?.path ?? ""
+        guard let body = responses[path],
+              let url = request.url,
+              let response = HTTPURLResponse(
+                  url: url,
+                  statusCode: 200,
+                  httpVersion: "HTTP/1.1",
+                  headerFields: ["Content-Type": "application/json"]
+              ) else {
+            throw URLError(.badServerResponse)
+        }
+        return (Data(body.utf8), response)
+    }
+
+    func recordedRequests() -> [URLRequest] {
+        requests
+    }
+}
+
+@MainActor
+private final class PremiumAppleWebAuthenticator: AppleWebAuthenticating {
+    private(set) var authorizationURLs: [URL] = []
+    let callbackURL: URL
+
+    init(callbackURL: URL) {
+        self.callbackURL = callbackURL
+    }
+
+    func authenticate(at authorizationURL: URL, callbackScheme: String) async throws -> URL {
+        authorizationURLs.append(authorizationURL)
+        XCTAssertEqual(callbackScheme, "typewhisper")
+        return callbackURL
+    }
+}
+
 final class CloudFolderSyncTests: XCTestCase {
     func testProductionPublicKeyVerifiesBackendGeneratedEntitlement() throws {
         let response = """
@@ -177,6 +222,120 @@ final class CloudFolderSyncTests: XCTestCase {
         XCTAssertFalse(service.isSignedIn)
         XCTAssertNil(service.entitlement)
         XCTAssertNil(defaults.data(forKey: "premium.account.cachedEntitlement"))
+    }
+
+    @MainActor
+    func testPremiumAccountUsesAppleWebAuthWithStatePKCEAndPolarLink() async throws {
+        let suiteName = "PremiumAppleWebAuth-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let recorder = PremiumAccountHTTPRecorder(responses: [
+            "/v1/auth/apple/web/start": """
+            {
+              "authorizationURL": "https://appleid.apple.com/auth/authorize?state=server-state",
+              "state": "server-state",
+              "expiresAt": "2026-07-19T12:10:00.000Z"
+            }
+            """,
+            "/v1/auth/apple/web/exchange": """
+            {"accessToken": "account-token", "entitlement": null}
+            """,
+            "/v1/entitlements/polar/link": """
+            {"entitlement": null}
+            """,
+        ])
+        let authenticator = PremiumAppleWebAuthenticator(
+            callbackURL: try XCTUnwrap(URL(
+                string: "typewhisper://premium-auth/callback?state=server-state&code=exchange-code"
+            ))
+        )
+        let service = PremiumAccountService(
+            defaults: defaults,
+            baseURL: URL(string: "https://app.typewhisper.com"),
+            requestExecutor: { request in try await recorder.execute(request) },
+            appleWebAuthenticator: authenticator,
+            keychainService: suiteName,
+            isSignedInOverride: false,
+            automaticallyRefresh: false
+        )
+        defer { service.signOut() }
+
+        await service.signInWithApple(polarLicenseKey: "polar-license")
+
+        XCTAssertTrue(service.isSignedIn)
+        XCTAssertNil(service.errorMessage)
+        XCTAssertEqual(
+            authenticator.authorizationURLs.map(\.host),
+            ["appleid.apple.com"]
+        )
+        let requests = await recorder.recordedRequests()
+        XCTAssertEqual(
+            requests.compactMap(\.url?.path),
+            [
+                "/v1/auth/apple/web/start",
+                "/v1/auth/apple/web/exchange",
+                "/v1/entitlements/polar/link",
+            ]
+        )
+
+        let startBody = try XCTUnwrap(requests[0].httpBody)
+        let startJSON = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: startBody) as? [String: String]
+        )
+        XCTAssertEqual(startJSON["nonceHash"]?.count, 64)
+        XCTAssertTrue(startJSON["nonceHash"]?.allSatisfy(\.isHexDigit) == true)
+
+        let exchangeBody = try XCTUnwrap(requests[1].httpBody)
+        let exchangeJSON = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: exchangeBody) as? [String: String]
+        )
+        XCTAssertEqual(exchangeJSON["state"], "server-state")
+        XCTAssertEqual(exchangeJSON["code"], "exchange-code")
+        let verifier = try XCTUnwrap(exchangeJSON["codeVerifier"])
+        let expectedChallenge = Data(SHA256.hash(data: Data(verifier.utf8)))
+            .base64EncodedString()
+            .replacingOccurrences(of: "+", with: "-")
+            .replacingOccurrences(of: "/", with: "_")
+            .replacingOccurrences(of: "=", with: "")
+        XCTAssertEqual(startJSON["codeChallenge"], expectedChallenge)
+        XCTAssertEqual(requests[2].value(forHTTPHeaderField: "Authorization"), "Bearer account-token")
+    }
+
+    @MainActor
+    func testPremiumAccountKeepsAppleCancellationSilent() async throws {
+        let suiteName = "PremiumAppleWebAuthCancel-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let recorder = PremiumAccountHTTPRecorder(responses: [
+            "/v1/auth/apple/web/start": """
+            {
+              "authorizationURL": "https://appleid.apple.com/auth/authorize?state=server-state",
+              "state": "server-state",
+              "expiresAt": "2026-07-19T12:10:00.000Z"
+            }
+            """,
+        ])
+        let authenticator = PremiumAppleWebAuthenticator(
+            callbackURL: try XCTUnwrap(URL(
+                string: "typewhisper://premium-auth/callback?state=server-state&error=user_cancelled_authorize"
+            ))
+        )
+        let service = PremiumAccountService(
+            defaults: defaults,
+            baseURL: URL(string: "https://app.typewhisper.com"),
+            requestExecutor: { request in try await recorder.execute(request) },
+            appleWebAuthenticator: authenticator,
+            keychainService: suiteName,
+            isSignedInOverride: false,
+            automaticallyRefresh: false
+        )
+
+        await service.signInWithApple(polarLicenseKey: nil)
+
+        XCTAssertFalse(service.isSignedIn)
+        XCTAssertNil(service.errorMessage)
+        let requests = await recorder.recordedRequests()
+        XCTAssertEqual(requests.count, 1)
     }
 
     @MainActor

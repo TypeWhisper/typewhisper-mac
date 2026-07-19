@@ -8,6 +8,11 @@ on:
   schedule:
     - cron: '0 4 * * *'
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Optional exact release tag (for example v1.6.0-daily.20260719.1)
+        required: false
+        type: string
 
 env:
   SCHEME: TypeWhisper
@@ -32,10 +37,20 @@ jobs:
 
       - name: Resolve release tag
         id: resolve
+        env:
+          REQUESTED_TAG: ${{ inputs.release_tag }}
         run: |
           if [ "${{ github.event_name }}" = "push" ]; then
             echo "tag=${{ github.ref_name }}" >> $GITHUB_OUTPUT
             echo "should_run=true" >> $GITHUB_OUTPUT
+          elif [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ -n "$REQUESTED_TAG" ]; then
+            if ! [[ "$REQUESTED_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9][A-Za-z0-9.-]*)?$ ]]; then
+              echo "Invalid requested release tag: $REQUESTED_TAG" >&2
+              exit 1
+            fi
+            echo "tag=$REQUESTED_TAG" >> $GITHUB_OUTPUT
+            echo "should_run=true" >> $GITHUB_OUTPUT
+            echo "Requested release tag: $REQUESTED_TAG"
           else
             # Schedule or manual trigger - resolve the daily tag name
             # Tag format must match the exclusion pattern in push.tags above.
@@ -67,46 +82,18 @@ jobs:
             echo "Planned daily tag: $TAG"
           fi
 
-  verify-release-build:
+  verify-release-tools:
     needs: [prepare]
     if: needs.prepare.outputs.should_run == 'true'
-    runs-on: macos-15
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v7
 
-      - name: Setup Xcode
-        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1
-        with:
-          xcode-version: "26.3"
-
-      - name: Resolve Swift packages
+      - name: Verify Release Check Scripts
         run: |
-          xcodebuild -resolvePackageDependencies \
-            -project $PROJECT \
-            -scheme $SCHEME
-
-      - name: Verify Instrumentation Check Script
-        run: bash scripts/check_release_binary_instrumentation.sh --self-test
-
-      - name: Verify Release Build
-        run: |
-          set -o pipefail
-          xcodebuild -project $PROJECT \
-            -scheme $SCHEME \
-            -configuration Release \
-            -derivedDataPath verify-build \
-            -destination 'generic/platform=macOS' \
-            ENABLE_CODE_COVERAGE=NO \
-            CODE_SIGN_IDENTITY="-" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO | tee verify-build.log
-
-      - name: Check First-Party Warnings
-        run: bash scripts/check_first_party_warnings.sh verify-build.log
-
-      - name: Check Release Binary Instrumentation
-        run: bash scripts/check_release_binary_instrumentation.sh verify-build/Build/Products/Release/TypeWhisper.app/Contents/MacOS/typewhisper-cli
+          bash scripts/check_release_binary_instrumentation.sh --self-test
+          bash scripts/check_release_signing.sh --self-test
 
   app-tests:
     needs: [prepare]
@@ -160,7 +147,7 @@ jobs:
   build:
     needs:
       - prepare
-      - verify-release-build
+      - verify-release-tools
       - app-tests
       - plugin-sdk-tests
     if: needs.prepare.outputs.should_run == 'true'
@@ -206,9 +193,22 @@ jobs:
           echo "KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD" >> $GITHUB_ENV
 
       - name: Verify Instrumentation Check Script
-        run: bash scripts/check_release_binary_instrumentation.sh --self-test
+        run: |
+          bash scripts/check_release_binary_instrumentation.sh --self-test
+          bash scripts/check_release_signing.sh --self-test
 
-      - name: Build App
+      - name: Decode Developer ID Provisioning Profile
+        env:
+          MACOS_DEVELOPER_ID_PROVISIONING_PROFILE: ${{ secrets.MACOS_DEVELOPER_ID_PROVISIONING_PROFILE }}
+        run: |
+          PROFILE_PATH="${RUNNER_TEMP}/TypeWhisper.provisionprofile"
+          printf '%s' "$MACOS_DEVELOPER_ID_PROVISIONING_PROFILE" | base64 --decode > "$PROFILE_PATH"
+          chmod 600 "$PROFILE_PATH"
+          echo "MACOS_DEVELOPER_ID_PROVISIONING_PROFILE_PATH=$PROFILE_PATH" >> "$GITHUB_ENV"
+
+      - name: Archive and Export Developer ID App
+        env:
+          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
         run: |
           RAW_VERSION="${RELEASE_TAG#v}"
           VERSION="${RAW_VERSION%%-*}"
@@ -230,48 +230,23 @@ jobs:
           echo "IS_PRERELEASE=$IS_PRERELEASE" >> $GITHUB_ENV
 
           set -o pipefail
-          xcodebuild -project $PROJECT \
-            -scheme $SCHEME \
-            -configuration Release \
-            -derivedDataPath build \
-            -destination 'generic/platform=macOS' \
-            ENABLE_CODE_COVERAGE=NO \
-            CODE_SIGN_IDENTITY="-" \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGNING_ALLOWED=NO \
-            DEVELOPMENT_TEAM=2D8ALY3LCL \
-            MARKETING_VERSION="$VERSION" \
-            CURRENT_PROJECT_VERSION="$BUILD_NUMBER" | tee build.log
+          bash scripts/archive_release.sh \
+            --archive-path build/TypeWhisper.xcarchive \
+            --export-path build/export \
+            --profile "$MACOS_DEVELOPER_ID_PROVISIONING_PROFILE_PATH" \
+            --release-tag "$RELEASE_TAG" \
+            --release-channel "$RELEASE_CHANNEL" \
+            --build-number "$BUILD_NUMBER" \
+            --signing-identity "$MACOS_SIGNING_IDENTITY" | tee build.log
 
       - name: Check First-Party Warnings
         run: bash scripts/check_first_party_warnings.sh build.log
 
       - name: Check Release Binary Instrumentation
-        run: bash scripts/check_release_binary_instrumentation.sh build/Build/Products/Release/TypeWhisper.app/Contents/MacOS/typewhisper-cli
+        run: bash scripts/check_release_binary_instrumentation.sh build/export/TypeWhisper.app/Contents/MacOS/typewhisper-cli
 
-      - name: Configure Release Metadata
-        run: |
-          APP_INFO_PLIST="build/Build/Products/Release/TypeWhisper.app/Contents/Info.plist"
-          /usr/libexec/PlistBuddy -c "Set :TypeWhisperReleaseChannel ${RELEASE_CHANNEL}" "$APP_INFO_PLIST"
-          /usr/libexec/PlistBuddy -c "Set :TypeWhisperReleaseTag ${RELEASE_TAG}" "$APP_INFO_PLIST"
-
-      - name: Sign App (Developer ID)
-        env:
-          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
-        run: |
-          cd build/Build/Products/Release
-          find TypeWhisper.app -name '._*' -delete
-          xattr -cr TypeWhisper.app
-          # Pre-process entitlements to resolve $(APP_GROUP_ID)
-          ENTITLEMENTS_SRC="${GITHUB_WORKSPACE}/TypeWhisper/Resources/TypeWhisper.entitlements"
-          ENTITLEMENTS_DEST="${RUNNER_TEMP}/TypeWhisper.entitlements"
-          sed "s/\$(APP_GROUP_ID)/2D8ALY3LCL.com.typewhisper.mac/g" "$ENTITLEMENTS_SRC" > "$ENTITLEMENTS_DEST"
-
-          codesign --force --deep --options runtime --timestamp \
-            --entitlements "$ENTITLEMENTS_DEST" \
-            --sign "$MACOS_SIGNING_IDENTITY" \
-            TypeWhisper.app
-          codesign --verify --deep --strict --verbose=2 TypeWhisper.app
+      - name: Check Developer ID Signing
+        run: bash scripts/check_release_signing.sh build/export/TypeWhisper.app
 
       - name: Notarize App
         env:
@@ -282,7 +257,7 @@ jobs:
           printf '%s' "$APPLE_API_KEY_P8" > /tmp/AuthKey.p8
           chmod 600 /tmp/AuthKey.p8
 
-          cd build/Build/Products/Release
+          cd build/export
           ditto -c -k --keepParent TypeWhisper.app TypeWhisper-notarize.zip
 
           xcrun notarytool submit TypeWhisper-notarize.zip \
@@ -293,6 +268,13 @@ jobs:
 
           xcrun stapler staple TypeWhisper.app
           rm -f TypeWhisper-notarize.zip
+
+      - name: Verify Notarized App and Spawn
+        run: |
+          bash scripts/check_release_signing.sh \
+            --require-notarization \
+            --spawn \
+            build/export/TypeWhisper.app
 
       - name: Install dmgbuild
         run: |
@@ -308,7 +290,7 @@ jobs:
           TAG="$RELEASE_TAG"
           APP_NAME="TypeWhisper"
           DMG_NAME="TypeWhisper-${TAG}.dmg"
-          APP_PATH="build/Build/Products/Release/TypeWhisper.app"
+          APP_PATH="build/export/TypeWhisper.app"
           SETTINGS="${GITHUB_WORKSPACE}/.github/dmgbuild-settings.py"
           BACKGROUND="${GITHUB_WORKSPACE}/.github/dmg-background.png"
 
@@ -317,7 +299,7 @@ jobs:
             -D app_path="$APP_PATH" \
             -D background="$BACKGROUND" \
             "$APP_NAME" \
-            "build/Build/Products/Release/${DMG_NAME}"
+            "build/export/${DMG_NAME}"
 
       - name: Notarize DMG
         env:
@@ -330,7 +312,7 @@ jobs:
             chmod 600 /tmp/AuthKey.p8
           fi
 
-          DMG_PATH="build/Build/Products/Release/TypeWhisper-${RELEASE_TAG}.dmg"
+          DMG_PATH="build/export/TypeWhisper-${RELEASE_TAG}.dmg"
           xcrun notarytool submit "$DMG_PATH" \
             --key /tmp/AuthKey.p8 \
             --key-id "$APPLE_API_KEY_ID" \
@@ -341,7 +323,7 @@ jobs:
 
       - name: Create ZIP
         run: |
-          cd build/Build/Products/Release
+          cd build/export
           ditto -c -k --keepParent TypeWhisper.app "TypeWhisper-${RELEASE_TAG}.zip"
 
       - name: Cleanup Signing Assets
@@ -357,7 +339,7 @@ jobs:
           SPARKLE_EDDSA_KEY: ${{ secrets.SPARKLE_EDDSA_KEY }}
         run: |
           TAG="$RELEASE_TAG"
-          ZIP_PATH="build/Build/Products/Release/TypeWhisper-${TAG}.zip"
+          ZIP_PATH="build/export/TypeWhisper-${TAG}.zip"
 
           # Download Sparkle CLI tools
           SPARKLE_VERSION="2.8.1"
@@ -379,8 +361,8 @@ jobs:
         run: |
           TAG="$RELEASE_TAG"
           RAW_VERSION="${TAG#v}"
-          ASSET_DMG="build/Build/Products/Release/TypeWhisper-${TAG}.dmg"
-          ASSET_ZIP="build/Build/Products/Release/TypeWhisper-${TAG}.zip"
+          ASSET_DMG="build/export/TypeWhisper-${TAG}.dmg"
+          ASSET_ZIP="build/export/TypeWhisper-${TAG}.zip"
 
           # Check if a draft release already exists (manual feature release notes)
           EXISTING_DRAFT=$(gh release view "$TAG" --json isDraft --jq '.isDraft' 2>/dev/null || echo "")

@@ -53,9 +53,9 @@
 	<key>SUPublicEDKey</key>
 	<string>OdAMiN136Ckglxnq4FeLagPjcrZiASYGaeUWBkK6tuc=</string>
 	<key>TypeWhisperReleaseChannel</key>
-	<string>stable</string>
+	<string>$(TYPEWHISPER_RELEASE_CHANNEL)</string>
 	<key>TypeWhisperReleaseTag</key>
-	<string></string>
+	<string>$(TYPEWHISPER_RELEASE_TAG)</string>
 	<key>TypeWhisperDiscordClaimBaseURL</key>
 	<string>https://community.typewhisper.com</string>
 	<key>AppGroupIdentifier</key>

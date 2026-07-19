@@ -44,6 +44,9 @@ python3 scripts/test_verify_appcast_publication.py
 log "checking release instrumentation helper"
 run_if_exists scripts/check_release_binary_instrumentation.sh --self-test
 
+log "checking release signing helper"
+run_if_exists scripts/check_release_signing.sh --self-test
+
 log "running Plugin SDK tests"
 swift test --package-path TypeWhisperPluginSDK
 

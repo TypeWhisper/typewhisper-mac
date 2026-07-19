@@ -1,5 +1,4 @@
 import AuthenticationServices
-import CryptoKit
 import SwiftUI
 
 @MainActor
@@ -9,7 +8,6 @@ struct PremiumSettingsView: View {
     @ObservedObject private var premiumAccount: PremiumAccountService
     @ObservedObject private var correctionLearningService: TargetAppCorrectionLearningService
     @AppStorage(UserDefaultsKeys.targetAppCorrectionLearningEnabled) private var targetAppCorrectionLearningEnabled = false
-    @State private var appleNonceHash: String?
     @State private var confirmingAccountDeletion = false
 
     private let settingsNavigation: SettingsNavigationCoordinator
@@ -77,39 +75,15 @@ struct PremiumSettingsView: View {
                         Button(String(localized: "Delete Account"), role: .destructive) { confirmingAccountDeletion = true }
                     }
                 } else {
-                    SignInWithAppleButton(.signIn) { request in
-                        request.requestedScopes = [.fullName, .email]
-                        let nonceHash = SHA256.hash(data: Data(UUID().uuidString.utf8))
-                            .map { String(format: "%02x", $0) }
-                            .joined()
-                        appleNonceHash = nonceHash
-                        request.nonce = nonceHash
-                    } onCompletion: { result in
-                        switch result {
-                        case .success(let authorization):
-                            guard let credential = authorization.credential as? ASAuthorizationAppleIDCredential,
-                                  let tokenData = credential.identityToken,
-                                  let identityToken = String(data: tokenData, encoding: .utf8),
-                                  let nonceHash = appleNonceHash else { return }
-                            appleNonceHash = nil
-                            let authorizationCode = credential.authorizationCode.flatMap { String(data: $0, encoding: .utf8) }
-                            Task {
-                                await premiumAccount.signIn(
-                                    identityToken: identityToken,
-                                    authorizationCode: authorizationCode,
-                                    nonceHash: nonceHash,
-                                    polarLicenseKey: license.commercialLicenseKeyForAccountLink
-                                )
-                            }
-                        case .failure(let error):
-                            appleNonceHash = nil
-                            if (error as? ASAuthorizationError)?.code != .canceled {
-                                premiumAccount.errorMessage = error.localizedDescription
-                            }
+                    AppKitSignInWithAppleButton {
+                        Task {
+                            await premiumAccount.signInWithApple(
+                                polarLicenseKey: license.commercialLicenseKeyForAccountLink
+                            )
                         }
                     }
-                    .signInWithAppleButtonStyle(.whiteOutline)
                     .frame(width: 240, height: 38)
+                    .disabled(premiumAccount.isWorking)
 
                     Text(String(localized: "Sync data stays in your selected cloud location and never passes through the TypeWhisper account service."))
                         .font(.caption)
@@ -626,6 +600,41 @@ struct PremiumSettingsView: View {
         }
 
         return syncController.pendingChanges > 0 ? .yellow : .green
+    }
+}
+
+private struct AppKitSignInWithAppleButton: NSViewRepresentable {
+    let action: @MainActor () -> Void
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(action: action)
+    }
+
+    func makeNSView(context: Context) -> ASAuthorizationAppleIDButton {
+        let button = ASAuthorizationAppleIDButton(
+            authorizationButtonType: .signIn,
+            authorizationButtonStyle: .whiteOutline
+        )
+        button.target = context.coordinator
+        button.action = #selector(Coordinator.activate)
+        return button
+    }
+
+    func updateNSView(_ button: ASAuthorizationAppleIDButton, context: Context) {
+        context.coordinator.action = action
+    }
+
+    @MainActor
+    final class Coordinator: NSObject {
+        var action: @MainActor () -> Void
+
+        init(action: @escaping @MainActor () -> Void) {
+            self.action = action
+        }
+
+        @objc func activate() {
+            action()
+        }
     }
 }
 

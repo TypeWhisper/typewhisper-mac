@@ -7,3 +7,5 @@
 
 #include? "CodeSigning.local.xcconfig"
 APP_GROUP_ID = $(DEVELOPMENT_TEAM).com.typewhisper.mac
+TYPEWHISPER_RELEASE_CHANNEL = stable
+TYPEWHISPER_RELEASE_TAG =
