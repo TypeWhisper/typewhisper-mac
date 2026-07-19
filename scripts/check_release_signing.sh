@@ -62,7 +62,7 @@ main_has_icloud_entitlement() {
 }
 
 contains_hardened_runtime_flag() {
-  grep -Eq 'flags=0x[0-9a-fA-F]+\(.*runtime.*\)' >/dev/null
+  grep -Eq 'flags=0x[0-9a-fA-F]+\(.*runtime.*\)'
 }
 
 self_test() {
