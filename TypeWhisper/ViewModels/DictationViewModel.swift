@@ -2057,7 +2057,7 @@ final class DictationViewModel: ObservableObject {
         guard Self.engineIsReadyOrRestorableForPreview(
             authAvailable: modelManager.canUseForTranscription(engine),
             isConfigured: engine.isConfigured,
-            selectedModelId: engine.selectedModelId,
+            hasPersistedRestorableModel: Self.hasPersistedRestorableModel(providerId: engine.providerId),
             canPrepare: modelManager.canPrepareForTranscription(engine)
         ) else { return false }
         if engine is any LiveTranscriptionCapablePlugin { return true }
@@ -2066,19 +2066,31 @@ final class DictationViewModel: ObservableObject {
         return allowsFallback
     }
 
-    /// Pure readiness predicate for the preview engine. A persisted model
-    /// selection counts as available even when the model is not currently
-    /// loaded (`isConfigured == false`) — auto-unloaded local engines restore
-    /// at session start. `canPrepare` additionally keeps Apple Speech's
+    /// Whether the plugin has a persisted `loadedModel` default —  the state
+    /// `triggerRestoreModel` restores from. Auto-unload keeps it (restorable);
+    /// manually unloading a model clears it (restore is a no-op, so the engine
+    /// must not be treated as available). Same plugin-scoped convention key the
+    /// host special-cases in `HostServicesImpl.userDefault(forKey:)`.
+    nonisolated static func hasPersistedRestorableModel(
+        providerId: String,
+        defaults: UserDefaults = .standard
+    ) -> Bool {
+        defaults.object(forKey: "plugin.\(providerId).loadedModel") != nil
+    }
+
+    /// Pure readiness predicate for the preview engine. A persisted restorable
+    /// model counts as available even when it is not currently loaded
+    /// (`isConfigured == false`) — auto-unloaded local engines restore at
+    /// session start. `canPrepare` additionally keeps Apple Speech's
     /// catalog-based grace from `canPrepareForTranscription`.
     nonisolated static func engineIsReadyOrRestorableForPreview(
         authAvailable: Bool,
         isConfigured: Bool,
-        selectedModelId: String?,
+        hasPersistedRestorableModel: Bool,
         canPrepare: Bool
     ) -> Bool {
         guard authAvailable else { return false }
-        return isConfigured || selectedModelId != nil || canPrepare
+        return isConfigured || hasPersistedRestorableModel || canPrepare
     }
 
     enum PreviewEngineResolution: Equatable {
