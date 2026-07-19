@@ -14,15 +14,16 @@ release_tag=""
 release_channel=""
 build_number=""
 signing_identity="${MACOS_SIGNING_IDENTITY:-}"
+without_icloud=false
 
 usage() {
   cat >&2 <<'USAGE'
 Usage: scripts/archive_release.sh \
   --archive-path PATH \
   --export-path PATH \
-  --profile PATH \
   --release-tag TAG \
   --build-number NUMBER \
+  (--profile PATH | --without-icloud) \
   [--release-channel CHANNEL] \
   [--signing-identity IDENTITY]
 USAGE
@@ -55,12 +56,13 @@ while [[ $# -gt 0 ]]; do
     --release-channel) release_channel="${2:-}"; shift 2 ;;
     --build-number) build_number="${2:-}"; shift 2 ;;
     --signing-identity) signing_identity="${2:-}"; shift 2 ;;
+    --without-icloud) without_icloud=true; shift ;;
     -h|--help) usage; exit 0 ;;
     *) echo "error: unknown option: $1" >&2; usage; exit 2 ;;
   esac
 done
 
-for required_value in archive_path export_path profile_path release_tag build_number; do
+for required_value in archive_path export_path release_tag build_number; do
   if [[ -z "${!required_value}" ]]; then
     echo "error: --${required_value//_/-} is required" >&2
     usage
@@ -68,7 +70,15 @@ for required_value in archive_path export_path profile_path release_tag build_nu
   fi
 done
 
-if [[ ! -f "$profile_path" ]]; then
+if [[ "$without_icloud" == true && -n "$profile_path" ]]; then
+  echo "error: --profile and --without-icloud cannot be combined" >&2
+  exit 2
+fi
+if [[ "$without_icloud" == false && -z "$profile_path" ]]; then
+  echo "error: --profile or MACOS_DEVELOPER_ID_PROVISIONING_PROFILE_PATH is required" >&2
+  exit 2
+fi
+if [[ "$without_icloud" == false && ! -f "$profile_path" ]]; then
   echo "error: provisioning profile not found: $profile_path" >&2
   exit 2
 fi
@@ -123,55 +133,71 @@ cleanup() {
 trap cleanup EXIT
 
 decoded_profile="$temporary_dir/profile.plist"
-security cms -D -i "$profile_path" > "$decoded_profile"
+profile_name=""
+main_entitlements="$repo_root/TypeWhisper/Resources/TypeWhisper.entitlements"
+icloud_enabled="YES"
 
-profile_name="$(/usr/libexec/PlistBuddy -c 'Print :Name' "$decoded_profile")"
-profile_uuid="$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$decoded_profile")"
-profile_team="$(/usr/libexec/PlistBuddy -c 'Print :TeamIdentifier:0' "$decoded_profile")"
-profile_app_id="$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.application-identifier' "$decoded_profile")"
-profile_expiration="$(plutil -extract ExpirationDate raw -o - "$decoded_profile")"
-profile_all_devices="$(/usr/libexec/PlistBuddy -c 'Print :ProvisionsAllDevices' "$decoded_profile" 2>/dev/null || true)"
+if [[ "$without_icloud" == true ]]; then
+  main_entitlements="$temporary_dir/TypeWhisper-NoICloud.entitlements"
+  cp "$repo_root/TypeWhisper/Resources/TypeWhisper.entitlements" "$main_entitlements"
+  /usr/libexec/PlistBuddy -c 'Delete :com.apple.developer.icloud-container-identifiers' "$main_entitlements"
+  /usr/libexec/PlistBuddy -c 'Delete :com.apple.developer.icloud-services' "$main_entitlements"
+  /usr/libexec/PlistBuddy -c 'Delete :com.apple.developer.ubiquity-container-identifiers' "$main_entitlements"
+  icloud_enabled="NO"
+  echo "Building without iCloud entitlements or a provisioning profile"
+else
+  security cms -D -i "$profile_path" > "$decoded_profile"
 
-if [[ "$profile_team" != "$team_id" ]]; then
-  echo "error: profile team is '$profile_team', expected '$team_id'" >&2
-  exit 1
-fi
-if [[ "$profile_app_id" != "$team_id.$bundle_id" ]]; then
-  echo "error: profile application identifier is '$profile_app_id', expected '$team_id.$bundle_id'" >&2
-  exit 1
-fi
-if [[ "$profile_all_devices" != "true" ]]; then
-  echo "error: profile is not a Developer ID provisioning profile" >&2
-  exit 1
-fi
-if ! plist_array_contains \
-  "$decoded_profile" \
-  "Entitlements:com.apple.developer.icloud-container-identifiers" \
-  "$icloud_container"; then
-  echo "error: profile does not contain iCloud container '$icloud_container'" >&2
-  exit 1
-fi
-expiration_epoch="$(date -j -f '%Y-%m-%dT%H:%M:%SZ' "$profile_expiration" '+%s')"
-if (( expiration_epoch <= $(date '+%s') )); then
-  echo "error: provisioning profile expired at $profile_expiration" >&2
-  exit 1
+  profile_name="$(/usr/libexec/PlistBuddy -c 'Print :Name' "$decoded_profile")"
+  profile_uuid="$(/usr/libexec/PlistBuddy -c 'Print :UUID' "$decoded_profile")"
+  profile_team="$(/usr/libexec/PlistBuddy -c 'Print :TeamIdentifier:0' "$decoded_profile")"
+  profile_app_id="$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.application-identifier' "$decoded_profile")"
+  profile_expiration="$(plutil -extract ExpirationDate raw -o - "$decoded_profile")"
+  profile_all_devices="$(/usr/libexec/PlistBuddy -c 'Print :ProvisionsAllDevices' "$decoded_profile" 2>/dev/null || true)"
+
+  if [[ "$profile_team" != "$team_id" ]]; then
+    echo "error: profile team is '$profile_team', expected '$team_id'" >&2
+    exit 1
+  fi
+  if [[ "$profile_app_id" != "$team_id.$bundle_id" ]]; then
+    echo "error: profile application identifier is '$profile_app_id', expected '$team_id.$bundle_id'" >&2
+    exit 1
+  fi
+  if [[ "$profile_all_devices" != "true" ]]; then
+    echo "error: profile is not a Developer ID provisioning profile" >&2
+    exit 1
+  fi
+  if ! plist_array_contains \
+    "$decoded_profile" \
+    "Entitlements:com.apple.developer.icloud-container-identifiers" \
+    "$icloud_container"; then
+    echo "error: profile does not contain iCloud container '$icloud_container'" >&2
+    exit 1
+  fi
+  expiration_epoch="$(date -j -f '%Y-%m-%dT%H:%M:%SZ' "$profile_expiration" '+%s')"
+  if (( expiration_epoch <= $(date '+%s') )); then
+    echo "error: provisioning profile expired at $profile_expiration" >&2
+    exit 1
+  fi
+
+  profile_directory="$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"
+  mkdir -p "$profile_directory"
+  installed_profile="$profile_directory/$profile_uuid.provisionprofile"
+  if [[ -f "$installed_profile" ]]; then
+    installed_profile_backup="$temporary_dir/existing-profile.provisionprofile"
+    cp "$installed_profile" "$installed_profile_backup"
+  fi
+  cp "$profile_path" "$installed_profile"
+
+  echo "Using profile: $profile_name ($profile_uuid, expires $profile_expiration)"
 fi
 
-profile_directory="$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"
-mkdir -p "$profile_directory"
-installed_profile="$profile_directory/$profile_uuid.provisionprofile"
-if [[ -f "$installed_profile" ]]; then
-  installed_profile_backup="$temporary_dir/existing-profile.provisionprofile"
-  cp "$installed_profile" "$installed_profile_backup"
-fi
-cp "$profile_path" "$installed_profile"
-
-echo "Using profile: $profile_name ($profile_uuid, expires $profile_expiration)"
 echo "Using signing identity: $signing_identity"
 echo "Archiving $release_tag (build $build_number, channel $release_channel)"
 
 set -o pipefail
-xcodebuild archive \
+archive_arguments=(
+  archive
   -project "$project" \
   -scheme "$scheme" \
   -configuration Release \
@@ -181,13 +207,16 @@ xcodebuild archive \
   DEVELOPMENT_TEAM="$team_id" \
   CODE_SIGN_STYLE=Manual \
   CODE_SIGN_IDENTITY="$signing_identity" \
-  TYPEWHISPER_DEVELOPER_ID_PROFILE_SPECIFIER="$profile_name" \
+  TYPEWHISPER_DEVELOPER_ID_PROFILE_SPECIFIER="$profile_name"
+  TYPEWHISPER_MAIN_ENTITLEMENTS="$main_entitlements"
+  TYPEWHISPER_ICLOUD_ENABLED="$icloud_enabled"
   TYPEWHISPER_RELEASE_CHANNEL="$release_channel" \
   TYPEWHISPER_RELEASE_TAG="$release_tag" \
   MARKETING_VERSION="$marketing_version" \
   CURRENT_PROJECT_VERSION="$build_number" \
-  OTHER_CODE_SIGN_FLAGS="--timestamp" \
-  archive
+  OTHER_CODE_SIGN_FLAGS="--timestamp"
+)
+xcodebuild "${archive_arguments[@]}"
 
 export_options="$temporary_dir/ExportOptions.plist"
 plutil -create xml1 "$export_options"
@@ -196,10 +225,12 @@ plutil -create xml1 "$export_options"
 /usr/libexec/PlistBuddy -c "Add :teamID string $team_id" "$export_options"
 /usr/libexec/PlistBuddy -c 'Add :signingStyle string manual' "$export_options"
 /usr/libexec/PlistBuddy -c 'Add :signingCertificate string Developer ID Application' "$export_options"
-/usr/libexec/PlistBuddy -c 'Add :provisioningProfiles dict' "$export_options"
-/usr/libexec/PlistBuddy \
-  -c "Add :provisioningProfiles:$bundle_id string $profile_name" \
-  "$export_options"
+if [[ "$without_icloud" == false ]]; then
+  /usr/libexec/PlistBuddy -c 'Add :provisioningProfiles dict' "$export_options"
+  /usr/libexec/PlistBuddy \
+    -c "Add :provisioningProfiles:$bundle_id string $profile_name" \
+    "$export_options"
+fi
 
 xcodebuild -exportArchive \
   -archivePath "$archive_path" \
