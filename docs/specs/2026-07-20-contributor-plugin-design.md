@@ -3,10 +3,9 @@
 ## Context
 
 TypeWhisper can improve dictation cleanup models when users voluntarily contribute real
-before-and-after correction pairs. The existing development-only training capture is useful for
-local experimentation, but it is not an appropriate production contribution flow: it is tied to
-the development app, records accepted candidates before a correction exists, has no user-facing
-review step, and has no consent or reward model.
+before-and-after correction pairs. An earlier development-only JSONL capture recorded accepted
+candidates before a correction existed and had no user-facing review step, consent, or reward
+model. That path is retired in favor of the official plugin.
 
 The product should offer an official first-party plugin that works the same way in TypeWhisper
 Production and TypeWhisper Dev. Users must not need to know which app variant captured a
@@ -146,8 +145,8 @@ must continue to handle unknown events through a default switch branch.
 ### Detection Lifetime
 
 The host keeps only the transient state required to associate inserted text with a subsequent
-committed edit. If no correction is detected, no contribution record is created. Enabling the
-plugin must not turn accepted-candidate capture on in Production.
+committed edit. If no correction is detected, no contribution record is created. The host does
+not record accepted candidates in any build.
 
 The host remains responsible for correction detection because a plugin cannot reliably observe
 the target application's edited text by itself. The plugin is responsible for consent, local
@@ -163,9 +162,9 @@ Pending corrections use one atomic JSON file per UUID. This permits a single ent
 without leaving its text in an append-only log. Submission receipts are stored separately and do
 not retain original or corrected text after terminal acceptance.
 
-The existing development capture JSONL file remains a separate developer-only training artifact.
-The Improve TypeWhisper plugin never reads it and exposes no import command. Its review queue contains only
-corrections captured by the enabled plugin after installation.
+The legacy development capture JSONL file is no longer written. Improve TypeWhisper exposes no
+import command; its review queue contains only corrections captured by the enabled plugin after
+installation.
 
 ## Contribution Schema
 
@@ -414,5 +413,5 @@ Run the signed TypeWhisper-Dev app with the development plugin build and verify:
 8. Enable optional Apple-account reward linking and manually configured Premium rewards.
 9. Publish the signed plugin through the official marketplace feed.
 
-The plugin remains opt-in at every rollout stage. Existing development captures remain separate
-and local.
+The plugin remains opt-in at every rollout stage. No separate development capture runs alongside
+it.

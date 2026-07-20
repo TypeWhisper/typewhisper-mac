@@ -9,7 +9,7 @@ enum TargetAppCorrectionCommitSignal: String, Codable, Equatable, Sendable {
     case focusChanged
     case activeApplicationChanged
 
-    var trainingCaptureValue: String {
+    var contributionPayloadValue: String {
         switch self {
         case .returnKey:
             "return-key"
