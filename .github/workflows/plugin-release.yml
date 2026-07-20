@@ -323,7 +323,7 @@ jobs:
 
           codesign --verify --deep --strict --verbose=2 "$VERIFIED_BUNDLE"
           xcrun stapler validate "$VERIFIED_BUNDLE"
-          spctl --assess --type execute --verbose=4 "$VERIFIED_BUNDLE"
+          codesign -vvvv -R='notarized' --check-notarization "$VERIFIED_BUNDLE"
 
           INFO_VERSION=$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' "$VERIFIED_BUNDLE/Contents/Info.plist")
           MANIFEST_VERSION=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["version"])' "$VERIFIED_BUNDLE/Contents/Resources/manifest.json")
