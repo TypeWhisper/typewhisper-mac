@@ -1033,7 +1033,8 @@ final class AudioDeviceServiceCompatibilityTests: XCTestCase {
         let service = AudioDeviceService(
             initialInputDevices: [],
             monitorDeviceChanges: false,
-            probeCompatibilities: false
+            probeCompatibilities: false,
+            defaultInputDeviceController: FakeAudioInputDeviceDefaultController(defaultInputDeviceID: nil)
         )
 
         let selection = service.resolvedRecordingInputSelection()
@@ -1041,6 +1042,37 @@ final class AudioDeviceServiceCompatibilityTests: XCTestCase {
         XCTAssertNil(selection.deviceUID)
         XCTAssertNil(selection.deviceID)
         XCTAssertFalse(selection.hasExplicitDeviceSelection)
+    }
+
+    func testResolvedRecordingInputSelectionDetectsBluetoothSystemDefault() throws {
+        UserDefaults.standard.set(
+            try JSONEncoder().encode([
+                AudioInputDevicePriorityItem(uid: "missing-primary", name: "Desk Mic")
+            ]),
+            forKey: UserDefaultsKeys.inputDevicePriorityList
+        )
+        let bluetoothDeviceID = AudioDeviceID(702)
+        let service = AudioDeviceService(
+            initialInputDevices: [
+                AudioInputDevice(deviceID: bluetoothDeviceID, name: "Sony WH-1000XM4", uid: "sony-input")
+            ],
+            monitorDeviceChanges: false,
+            probeCompatibilities: false,
+            transportResolver: FakeAudioDeviceTransportResolver(
+                transports: [bluetoothDeviceID: kAudioDeviceTransportTypeBluetooth]
+            ),
+            defaultInputDeviceController: FakeAudioInputDeviceDefaultController(
+                defaultInputDeviceID: bluetoothDeviceID
+            )
+        )
+
+        let selection = service.resolvedRecordingInputSelection()
+
+        XCTAssertNil(selection.deviceUID)
+        XCTAssertEqual(selection.deviceID, bluetoothDeviceID)
+        XCTAssertEqual(selection.deviceName, "Sony WH-1000XM4")
+        XCTAssertFalse(selection.hasExplicitDeviceSelection)
+        XCTAssertTrue(selection.usesBluetoothTransport)
     }
 
     func testResolvedRecordingInputSelectionSkipsBuiltInMicWhenLidIsClosed() throws {
@@ -1145,7 +1177,8 @@ final class AudioDeviceServiceCompatibilityTests: XCTestCase {
             transportResolver: FakeAudioDeviceTransportResolver(
                 transports: [builtInDeviceID: kAudioDeviceTransportTypeBuiltIn]
             ),
-            clamshellStateProvider: clamshellProvider
+            clamshellStateProvider: clamshellProvider,
+            defaultInputDeviceController: FakeAudioInputDeviceDefaultController(defaultInputDeviceID: nil)
         )
         service.audioDeviceIDResolverOverride = { uid in
             uid == "built-in" ? builtInDeviceID : nil
@@ -1526,6 +1559,45 @@ final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
         XCTAssertEqual(inputActivationGuard.restoreCalls, ["recording-stop-override"])
     }
 
+    func testStartRecordingActivatesBluetoothSystemDefaultWithoutExplicitSelection() async {
+        var routeEvents: [String] = []
+        let inputActivationGuard = FakeAudioInputDeviceActivator { call in
+            routeEvents.append("input:\(call.reason)")
+        }
+        let routeStabilizer = FakeBluetoothInputRouteStabilizer { inputDeviceID, reason in
+            XCTAssertEqual(inputDeviceID, AudioDeviceID(42))
+            XCTAssertEqual(reason, "recording-start")
+            routeEvents.append("stabilize:\(reason)")
+            return true
+        }
+        let service = AudioRecordingService(
+            inputActivationGuard: inputActivationGuard,
+            bluetoothInputRouteStabilizer: routeStabilizer
+        )
+        service.hasMicrophonePermissionOverride = true
+        service.hasExplicitDeviceSelection = false
+        service.selectedDeviceID = AudioDeviceID(42)
+        service.selectedInputDeviceUsesBluetoothTransport = true
+        service.inputAvailabilityOverride = { selectedDeviceID in
+            XCTAssertEqual(selectedDeviceID, AudioDeviceID(42))
+            return true
+        }
+        service.startRecordingOverride = {}
+        service.stopRecordingOverride = { _ in [] }
+
+        XCTAssertNoThrow(try service.startRecording())
+        _ = await service.stopRecording(policy: .immediate)
+
+        XCTAssertEqual(routeEvents, [
+            "input:recording-start",
+            "stabilize:recording-start"
+        ])
+        XCTAssertEqual(inputActivationGuard.activateCalls, [
+            .init(deviceID: AudioDeviceID(42), reason: "recording-start")
+        ])
+        XCTAssertEqual(inputActivationGuard.restoreCalls, ["recording-stop-override"])
+    }
+
     func testSelectedDeviceUsesBluetoothTransport_resolvesTransportFromSelectedUID() {
         let bluetoothDeviceID = AudioDeviceID(700)
         let transportResolver = FakeAudioDeviceTransportResolver(
@@ -1683,6 +1755,16 @@ final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
         try service.testingMarkInitialInputTapSeen(makeMonoBuffer(samples: [0, 0.002, 0, -0.001]))
 
         XCTAssertNoThrow(try service.testingWaitForInitialInputReadinessIfNeeded())
+    }
+
+    func testBluetoothInputReadinessRunsForSystemDefaultWithoutExplicitSelection() {
+        let readinessChecker = FakeAudioInputReadinessChecker()
+        let service = AudioRecordingService(inputReadinessChecker: readinessChecker)
+        service.hasExplicitDeviceSelection = false
+        service.selectedInputDeviceUsesBluetoothTransport = true
+
+        XCTAssertNoThrow(try service.testingWaitForInitialInputReadinessIfNeeded())
+        XCTAssertEqual(readinessChecker.waitCalls, [.init(label: "test")])
     }
 
     func testBluetoothInputReadinessProbeIsSkippedForNonBluetoothInput() {

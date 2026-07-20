@@ -830,7 +830,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
 
     private var requiresInitialInputReadiness: Bool {
         configLock.withLock {
-            _hasExplicitDeviceSelection && _selectedInputDeviceUsesBluetoothTransport
+            _selectedInputDeviceUsesBluetoothTransport
         }
     }
 
@@ -839,7 +839,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         usesBluetoothTransport: Bool
     ) {
         configLock.withLock {
-            let usesBluetoothTransport = _hasExplicitDeviceSelection && _selectedInputDeviceUsesBluetoothTransport
+            let usesBluetoothTransport = _selectedInputDeviceUsesBluetoothTransport
             return (
                 _selectedDeviceID,
                 usesBluetoothTransport
@@ -849,7 +849,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
 
     private var selectedEngineInputRoute: (selectedDeviceID: AudioDeviceID?, engineDeviceID: AudioDeviceID?) {
         configLock.withLock {
-            let usesBluetoothTransport = _hasExplicitDeviceSelection && _selectedInputDeviceUsesBluetoothTransport
+            let usesBluetoothTransport = _selectedInputDeviceUsesBluetoothTransport
             return (
                 _selectedDeviceID,
                 AudioEngineInputRoute.preferredDeviceIDForEngine(
@@ -864,7 +864,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         configLock.withLock {
             AudioInputCaptureRoute.selectedRoute(
                 selectedDeviceID: _hasExplicitDeviceSelection ? _selectedDeviceID : nil,
-                usesBluetoothTransport: _hasExplicitDeviceSelection && _selectedInputDeviceUsesBluetoothTransport
+                usesBluetoothTransport: _selectedInputDeviceUsesBluetoothTransport
             )
         }
     }

@@ -274,6 +274,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
     private let selectionEngineValidator: AudioInputSelectionEngineValidating
     private let inputCaptureFactory: AudioInputCaptureFactory
     private let clamshellStateProvider: ClamshellStateProviding
+    private let defaultInputDeviceController: AudioInputDeviceDefaultControlling
 
     var selectedDeviceID: AudioDeviceID? {
         guard let uid = selectedDeviceUID else { return nil }
@@ -348,7 +349,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
     }
 
     func diagnosticsReport() -> AudioInputDiagnosticsReport {
-        let defaultInputDeviceID = CoreAudioInputDeviceDefaultController().defaultInputDeviceID()
+        let defaultInputDeviceID = defaultInputDeviceController.defaultInputDeviceID()
         var listedDevicesByID: [AudioDeviceID: AudioInputDevice] = [:]
         var listedDevicesByUID: [String: AudioInputDevice] = [:]
         for device in inputDevices {
@@ -405,7 +406,8 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         selectionEngineValidator: AudioInputSelectionEngineValidating = AVAudioInputSelectionEngineValidator(),
         inputCaptureFactory: AudioInputCaptureFactory = CoreAudioHALInputCaptureFactory(),
         inputActivationGuard: AudioInputDeviceActivating = AudioInputDeviceActivationGuard(),
-        clamshellStateProvider: ClamshellStateProviding = IOKitClamshellStateProvider()
+        clamshellStateProvider: ClamshellStateProviding = IOKitClamshellStateProvider(),
+        defaultInputDeviceController: AudioInputDeviceDefaultControlling = CoreAudioInputDeviceDefaultController()
     ) {
         self.outputVolumeGuard = outputVolumeGuard
         self.transportResolver = transportResolver
@@ -414,6 +416,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         self.inputCaptureFactory = inputCaptureFactory
         self.inputActivationGuard = inputActivationGuard
         self.clamshellStateProvider = clamshellStateProvider
+        self.defaultInputDeviceController = defaultInputDeviceController
         previewNotificationQueue.underlyingQueue = previewRecoveryQueue
         isInitializingSelection = true
         selectedDeviceUID = UserDefaults.standard.string(forKey: UserDefaultsKeys.selectedInputDeviceUID)
@@ -546,7 +549,17 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
             )
         }
 
-        return .systemDefault
+        guard let defaultInputDeviceID = defaultInputDeviceController.defaultInputDeviceID() else {
+            return .systemDefault
+        }
+        let usesBluetoothTransport = transportType(for: defaultInputDeviceID)
+            .map(Self.isBluetoothTransportType) ?? false
+        return ResolvedRecordingInputSelection(
+            deviceUID: nil,
+            deviceID: defaultInputDeviceID,
+            deviceName: inputDevices.first(where: { $0.deviceID == defaultInputDeviceID })?.name,
+            usesBluetoothTransport: usesBluetoothTransport
+        )
     }
 
     // MARK: - Audio Preview
