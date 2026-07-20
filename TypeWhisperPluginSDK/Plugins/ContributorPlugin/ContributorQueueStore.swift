@@ -37,9 +37,12 @@ final class ContributorQueueStore: @unchecked Sendable {
                 includingPropertiesForKeys: nil,
                 options: [.skipsHiddenFiles]
             )
-            return try urls
+            return urls
                 .filter { $0.pathExtension == "json" }
-                .map { try decoder.decode(ContributionRecord.self, from: Data(contentsOf: $0)) }
+                .compactMap { url in
+                    guard let data = try? Data(contentsOf: url) else { return nil }
+                    return try? decoder.decode(ContributionRecord.self, from: data)
+                }
                 .sorted { $0.capturedAt > $1.capturedAt }
         }
     }

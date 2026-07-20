@@ -123,6 +123,11 @@ enum ContributorAPIError: LocalizedError {
     case invalidResponse
     case server(status: Int, message: String)
 
+    var isAuthenticationFailure: Bool {
+        guard case .server(let status, _) = self else { return false }
+        return status == 401 || status == 403
+    }
+
     var errorDescription: String? {
         switch self {
         case .missingToken:

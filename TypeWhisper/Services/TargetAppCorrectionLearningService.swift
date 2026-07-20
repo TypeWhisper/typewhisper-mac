@@ -490,7 +490,7 @@ final class TargetAppCorrectionLearningService: ObservableObject {
         let beforeCorrection = baselineText[baselineInsertedRange.lowerBound..<changedRanges.baseline.lowerBound]
         let correction = editedText[changedRanges.edited]
         let afterCorrection = baselineText[changedRanges.baseline.upperBound..<baselineInsertedRange.upperBound]
-        let corrected = String(beforeCorrection) + String(correction) + String(afterCorrection)
+        let corrected = (String(beforeCorrection) + String(correction) + String(afterCorrection))
             .trimmingCharacters(in: .whitespacesAndNewlines)
         return corrected.isEmpty || corrected == insertedText ? nil : corrected
     }

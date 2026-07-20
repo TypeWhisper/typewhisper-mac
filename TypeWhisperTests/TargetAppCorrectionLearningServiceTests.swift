@@ -190,6 +190,26 @@ final class TargetAppCorrectionLearningServiceTests: XCTestCase {
         XCTAssertEqual(dictionaryService.correctionsCount, 0)
     }
 
+    func testCorrectedInsertedTextTrimsTheCompleteReconstructedCorrection() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let service = TargetAppCorrectionLearningService(
+            textInsertionService: TextInsertionService(),
+            textDiffService: TextDiffService(),
+            dictionaryService: DictionaryService(appSupportDirectory: appSupportDirectory),
+            pollSchedule: []
+        )
+
+        XCTAssertEqual(
+            service.correctedInsertedText(
+                insertedText: "  wrong value  ",
+                baselineText: "Before  wrong value  After",
+                editedText: "Before  right value  After"
+            ),
+            "right value"
+        )
+    }
+
     func testSkipsInsertedTextRemovalAfterCommitSignal() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }

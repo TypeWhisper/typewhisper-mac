@@ -100,14 +100,19 @@ final class ContributorPlugin: NSObject, TypeWhisperPlugin, PluginSettingsWindow
 
         Task { [weak self] in
             do {
-                let client = try await Self.authenticatedClient(host: host, baseURL: self?.serviceURL)
                 for chunk in selected.chunked(maximumCount: 50) {
-                    let response = try await client.submit(
-                        batchId: UUID(),
-                        records: chunk,
-                        consentVersion: Self.consentVersion,
-                        pluginVersion: Self.pluginVersion
-                    )
+                    let batchId = UUID()
+                    let response = try await Self.withAuthenticatedClient(
+                        host: host,
+                        baseURL: self?.serviceURL
+                    ) { client in
+                        try await client.submit(
+                            batchId: batchId,
+                            records: chunk,
+                            consentVersion: Self.consentVersion,
+                            pluginVersion: Self.pluginVersion
+                        )
+                    }
                     try Self.apply(response.records, to: chunk, store: queueStore)
                 }
                 await MainActor.run {
@@ -138,9 +143,13 @@ final class ContributorPlugin: NSObject, TypeWhisperPlugin, PluginSettingsWindow
 
         Task { [weak self] in
             do {
-                let client = try await Self.authenticatedClient(host: host, baseURL: self?.serviceURL)
                 for chunk in submitted.chunked(maximumCount: 100) {
-                    let statuses = try await client.statuses(for: chunk.map(\.id))
+                    let statuses = try await Self.withAuthenticatedClient(
+                        host: host,
+                        baseURL: self?.serviceURL
+                    ) { client in
+                        try await client.statuses(for: chunk.map(\.id))
+                    }
                     try Self.apply(statuses, to: chunk, store: queueStore)
                 }
                 await MainActor.run {
@@ -179,8 +188,12 @@ final class ContributorPlugin: NSObject, TypeWhisperPlugin, PluginSettingsWindow
         clearActivity()
         Task { [weak self] in
             do {
-                let client = try await Self.authenticatedClient(host: host, baseURL: self?.serviceURL)
-                try await client.delete(record.id)
+                try await Self.withAuthenticatedClient(
+                    host: host,
+                    baseURL: self?.serviceURL
+                ) { client in
+                    try await client.delete(record.id)
+                }
                 try queueStore.remove(record.id)
                 await MainActor.run {
                     self?.isWorking = false
@@ -260,12 +273,27 @@ final class ContributorPlugin: NSObject, TypeWhisperPlugin, PluginSettingsWindow
         baseURL: URL?
     ) async throws -> ContributorAPIClient {
         guard let baseURL else { throw ContributorAPIError.invalidResponse }
-        if let token = host.loadSecret(key: "contributor-token") {
+        if let token = host.loadSecret(key: "contributor-token"), !token.isEmpty {
             return ContributorAPIClient(baseURL: baseURL, token: token)
         }
         let session = try await ContributorAPIClient(baseURL: baseURL, token: nil).createSession()
         try host.storeSecret(key: "contributor-token", value: session.token)
         return ContributorAPIClient(baseURL: baseURL, token: session.token)
+    }
+
+    private static func withAuthenticatedClient<Result: Sendable>(
+        host: HostServices,
+        baseURL: URL?,
+        operation: @Sendable (ContributorAPIClient) async throws -> Result
+    ) async throws -> Result {
+        let client = try await authenticatedClient(host: host, baseURL: baseURL)
+        do {
+            return try await operation(client)
+        } catch let error as ContributorAPIError where error.isAuthenticationFailure {
+            try host.storeSecret(key: "contributor-token", value: "")
+            let renewedClient = try await authenticatedClient(host: host, baseURL: baseURL)
+            return try await operation(renewedClient)
+        }
     }
 
     private static func apply(

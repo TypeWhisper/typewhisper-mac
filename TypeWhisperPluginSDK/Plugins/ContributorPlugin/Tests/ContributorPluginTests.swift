@@ -1,10 +1,15 @@
 import Foundation
 import XCTest
 import TypeWhisperPluginSDK
-import TypeWhisperPluginSDKTesting
+@_spi(Testing) import TypeWhisperPluginSDKTesting
 @testable import ContributorPlugin
 
 final class ContributorPluginTests: XCTestCase {
+    override func tearDown() {
+        PluginHTTPClientTestHarness.reset()
+        super.tearDown()
+    }
+
     func testPluginIdentity() {
         XCTAssertEqual(ContributorPlugin.pluginId, "com.typewhisper.improve")
         XCTAssertEqual(ContributorPlugin.pluginName, "Improve TypeWhisper")
@@ -75,6 +80,22 @@ final class ContributorPluginTests: XCTestCase {
         XCTAssertEqual(try permissions(at: receiptFile), 0o600)
     }
 
+    func testQueueSkipsCorruptPendingFiles() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("ContributorPluginCorruptQueue-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let store = ContributorQueueStore(rootDirectory: directory)
+        let record = makeRecord()
+
+        XCTAssertTrue(try store.insert(record))
+        let corruptFile = directory
+            .appendingPathComponent("pending", isDirectory: true)
+            .appendingPathComponent("corrupt.json")
+        try Data("not-json".utf8).write(to: corruptFile)
+
+        XCTAssertEqual(try store.loadRecords(), [record])
+    }
+
     @MainActor
     func testPluginCapturesEventOnlyWhenEnabled() async throws {
         let eventBus = PluginTestEventBus()
@@ -90,6 +111,96 @@ final class ContributorPluginTests: XCTestCase {
         XCTAssertEqual(plugin.records.count, 1)
         XCTAssertEqual(plugin.records.first?.correctedText, "Ich kaufe kein Auto.")
         XCTAssertTrue(plugin.selectedIds.isEmpty)
+        plugin.deactivate()
+    }
+
+    @MainActor
+    func testPluginDoesNotCaptureEventWhenDisabled() async throws {
+        let eventBus = PluginTestEventBus()
+        let host = try PluginTestHostServices(eventBus: eventBus)
+        let plugin = ContributorPlugin()
+        plugin.activate(host: host)
+
+        await eventBus.emit(.textCorrectionCommitted(makePayload()))
+
+        XCTAssertTrue(plugin.records.isEmpty)
+        plugin.deactivate()
+    }
+
+    @MainActor
+    func testPluginRenewsStaleContributorTokenAfterAuthenticationFailure() async throws {
+        let eventBus = PluginTestEventBus()
+        let host = try PluginTestHostServices(
+            defaults: ["collectCorrections": true],
+            secrets: ["contributor-token": "stale-token"],
+            eventBus: eventBus
+        )
+        let plugin = ContributorPlugin()
+        plugin.activate(host: host)
+        await eventBus.emit(.textCorrectionCommitted(makePayload()))
+        plugin.selectedIds = [makePayload().id]
+        plugin.sendConfirmed = true
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"error":"Not authenticated."}"#.utf8),
+                    Self.httpResponse(path: "/v1/contributions/batches", statusCode: 401)
+                ),
+                .success(
+                    Data(
+                        #"""
+                        {
+                          "contributorId": "66666666-6666-4666-8666-666666666666",
+                          "token": "fresh-token"
+                        }
+                        """#.utf8
+                    ),
+                    Self.httpResponse(path: "/v1/contributors/session", statusCode: 201)
+                ),
+                .success(
+                    Data(
+                        #"""
+                        {
+                          "batchId": "77777777-7777-4777-8777-777777777777",
+                          "records": [{
+                            "id": "55555555-5555-4555-8555-555555555555",
+                            "status": "pending",
+                            "reason_code": null,
+                            "quality_credit": 0
+                          }]
+                        }
+                        """#.utf8
+                    ),
+                    Self.httpResponse(path: "/v1/contributions/batches", statusCode: 201)
+                ),
+            ])
+        }
+
+        plugin.sendSelected()
+        for _ in 0..<1_000 where plugin.isWorking {
+            try await Task.sleep(for: .milliseconds(1))
+        }
+
+        XCTAssertFalse(plugin.isWorking)
+        XCTAssertEqual(host.loadSecret(key: "contributor-token"), "fresh-token")
+        XCTAssertEqual(plugin.records.first?.status, .pending)
+        let requests = try XCTUnwrap(store.sessions.first?.requestedRequests)
+        XCTAssertEqual(requests.map(\.url?.path), [
+            "/v1/contributions/batches",
+            "/v1/contributors/session",
+            "/v1/contributions/batches",
+        ])
+        XCTAssertEqual(
+            requests[0].value(forHTTPHeaderField: "Authorization"),
+            "Contributor stale-token"
+        )
+        XCTAssertNil(requests[1].value(forHTTPHeaderField: "Authorization"))
+        XCTAssertEqual(
+            requests[2].value(forHTTPHeaderField: "Authorization"),
+            "Contributor fresh-token"
+        )
         plugin.deactivate()
     }
 
@@ -137,5 +248,14 @@ final class ContributorPluginTests: XCTestCase {
             commitSignal: "return-key",
             sourceChannel: .development
         )
+    }
+
+    private static func httpResponse(path: String, statusCode: Int) -> HTTPURLResponse {
+        HTTPURLResponse(
+            url: URL(string: "https://app.typewhisper.com\(path)")!,
+            statusCode: statusCode,
+            httpVersion: nil,
+            headerFields: ["Content-Type": "application/json"]
+        )!
     }
 }
