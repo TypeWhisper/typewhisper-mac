@@ -285,11 +285,27 @@ jobs:
           printf '%s' "$APPLE_API_KEY_P8" > "$NOTARY_KEY_PATH"
           chmod 600 "$NOTARY_KEY_PATH"
 
-          xcrun notarytool submit "$NOTARIZATION_ZIP" \
+          NOTARIZATION_EXIT=0
+          NOTARIZATION_RESULT=$(xcrun notarytool submit "$NOTARIZATION_ZIP" \
             --key "$NOTARY_KEY_PATH" \
             --key-id "$APPLE_API_KEY_ID" \
             --issuer "$APPLE_API_ISSUER_ID" \
-            --wait
+            --wait \
+            --output-format json) || NOTARIZATION_EXIT=$?
+          printf '%s\n' "$NOTARIZATION_RESULT"
+
+          SUBMISSION_ID=$(printf '%s' "$NOTARIZATION_RESULT" | python3 -c 'import json, sys; print(json.load(sys.stdin).get("id", ""))')
+          NOTARIZATION_STATUS=$(printf '%s' "$NOTARIZATION_RESULT" | python3 -c 'import json, sys; print(json.load(sys.stdin).get("status", ""))')
+          if [ "$NOTARIZATION_EXIT" -ne 0 ] || [ "$NOTARIZATION_STATUS" != "Accepted" ]; then
+            if [ -n "$SUBMISSION_ID" ]; then
+              xcrun notarytool log "$SUBMISSION_ID" \
+                --key "$NOTARY_KEY_PATH" \
+                --key-id "$APPLE_API_KEY_ID" \
+                --issuer "$APPLE_API_ISSUER_ID" || true
+            fi
+            echo "Notarization failed: exit=$NOTARIZATION_EXIT status=${NOTARIZATION_STATUS:-unknown}"
+            exit 1
+          fi
 
           xcrun stapler staple "$BUNDLE_PATH"
           xcrun stapler validate "$BUNDLE_PATH"
