@@ -1075,6 +1075,27 @@ final class AudioDeviceServiceCompatibilityTests: XCTestCase {
         XCTAssertTrue(selection.usesBluetoothTransport)
     }
 
+    func testResolvedRecordingInputSelectionKeepsBuiltInSystemDefaultOnDefaultRoute() {
+        let builtInDeviceID = AudioDeviceID(703)
+        let service = AudioDeviceService(
+            initialInputDevices: [
+                AudioInputDevice(deviceID: builtInDeviceID, name: "MacBook Microphone", uid: "built-in-input")
+            ],
+            monitorDeviceChanges: false,
+            probeCompatibilities: false,
+            transportResolver: FakeAudioDeviceTransportResolver(
+                transports: [builtInDeviceID: kAudioDeviceTransportTypeBuiltIn]
+            ),
+            defaultInputDeviceController: FakeAudioInputDeviceDefaultController(
+                defaultInputDeviceID: builtInDeviceID
+            )
+        )
+
+        let selection = service.resolvedRecordingInputSelection()
+
+        XCTAssertEqual(selection, .systemDefault)
+    }
+
     func testResolvedRecordingInputSelectionSkipsBuiltInMicWhenLidIsClosed() throws {
         let builtInDeviceID = AudioDeviceID(1)
         let usbDeviceID = AudioDeviceID(2)
@@ -1321,6 +1342,76 @@ final class AudioDeviceServiceCompatibilityTests: XCTestCase {
         service.stopPreview()
 
         XCTAssertEqual(inputActivationGuard.restoreCalls, ["preview-stop"])
+    }
+
+    @MainActor
+    func testStartPreviewActivatesBluetoothSystemDefaultAndUsesAggregateEngineRoute() {
+        let bluetoothDeviceID = AudioDeviceID(712)
+        let inputActivationGuard = FakeAudioInputDeviceActivator()
+        let routeStabilizer = FakeBluetoothInputRouteStabilizer { inputDeviceID, reason in
+            XCTAssertEqual(inputDeviceID, bluetoothDeviceID)
+            XCTAssertEqual(reason, "preview-start")
+            return true
+        }
+        let service = AudioDeviceService(
+            initialInputDevices: [
+                AudioInputDevice(deviceID: bluetoothDeviceID, name: "System Headset", uid: "system-headset")
+            ],
+            monitorDeviceChanges: false,
+            probeCompatibilities: false,
+            transportResolver: FakeAudioDeviceTransportResolver(
+                transports: [bluetoothDeviceID: kAudioDeviceTransportTypeBluetooth]
+            ),
+            bluetoothInputRouteStabilizer: routeStabilizer,
+            inputActivationGuard: inputActivationGuard,
+            defaultInputDeviceController: FakeAudioInputDeviceDefaultController(
+                defaultInputDeviceID: bluetoothDeviceID
+            )
+        )
+        service.hasMicrophonePermissionOverride = true
+        service.startPreviewOverride = { preferredDeviceID in
+            XCTAssertNil(preferredDeviceID)
+        }
+
+        service.startPreview()
+
+        XCTAssertEqual(inputActivationGuard.activateCalls, [
+            .init(deviceID: bluetoothDeviceID, reason: "preview-start")
+        ])
+        XCTAssertTrue(service.isPreviewActive)
+
+        service.stopPreview()
+
+        XCTAssertEqual(inputActivationGuard.restoreCalls, ["preview-stop"])
+    }
+
+    @MainActor
+    func testStartPreviewKeepsBuiltInSystemDefaultOnDefaultRoute() {
+        let builtInDeviceID = AudioDeviceID(713)
+        let inputActivationGuard = FakeAudioInputDeviceActivator()
+        let service = AudioDeviceService(
+            initialInputDevices: [
+                AudioInputDevice(deviceID: builtInDeviceID, name: "MacBook Microphone", uid: "built-in-input")
+            ],
+            monitorDeviceChanges: false,
+            probeCompatibilities: false,
+            transportResolver: FakeAudioDeviceTransportResolver(
+                transports: [builtInDeviceID: kAudioDeviceTransportTypeBuiltIn]
+            ),
+            inputActivationGuard: inputActivationGuard,
+            defaultInputDeviceController: FakeAudioInputDeviceDefaultController(
+                defaultInputDeviceID: builtInDeviceID
+            )
+        )
+        service.hasMicrophonePermissionOverride = true
+        service.startPreviewOverride = { preferredDeviceID in
+            XCTAssertNil(preferredDeviceID)
+        }
+
+        service.startPreview()
+
+        XCTAssertTrue(inputActivationGuard.activateCalls.isEmpty)
+        XCTAssertTrue(service.isPreviewActive)
     }
 
     @MainActor

@@ -554,6 +554,9 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         }
         let usesBluetoothTransport = transportType(for: defaultInputDeviceID)
             .map(Self.isBluetoothTransportType) ?? false
+        guard usesBluetoothTransport else {
+            return .systemDefault
+        }
         return ResolvedRecordingInputSelection(
             deviceUID: nil,
             deviceID: defaultInputDeviceID,

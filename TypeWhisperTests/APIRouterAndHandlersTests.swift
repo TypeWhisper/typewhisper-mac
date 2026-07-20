@@ -4919,6 +4919,9 @@ final class APIRouterAndHandlersTests: XCTestCase {
         let defaultInputDeviceID = AudioDeviceID(79)
         dictationContext = Self.makeDictationContext(
             appSupportDirectory: appSupportDirectory,
+            audioDeviceTransportResolver: FakeAudioDeviceTransportResolver(
+                transports: [defaultInputDeviceID: kAudioDeviceTransportTypeBluetooth]
+            ),
             audioDeviceDefaultInputController: APIFakeAudioInputDeviceDefaultController(
                 defaultInputDeviceID: defaultInputDeviceID
             )
