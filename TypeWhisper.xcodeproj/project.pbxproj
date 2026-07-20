@@ -345,6 +345,13 @@
 		AA00000000000000000219 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000209 /* manifest.json */; };
 		AA00000000000000000220 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000210 /* Localizable.xcstrings */; };
 		AA00000000000000000221 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000025 /* TypeWhisperPluginSDK */; };
+		C07A00000000000000000001 /* ContributorModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = C07B00000000000000000001 /* ContributorModels.swift */; };
+		C07A00000000000000000002 /* ContributorQueueStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = C07B00000000000000000002 /* ContributorQueueStore.swift */; };
+		C07A00000000000000000003 /* ContributorAPIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = C07B00000000000000000003 /* ContributorAPIClient.swift */; };
+		C07A00000000000000000004 /* ContributorPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = C07B00000000000000000004 /* ContributorPlugin.swift */; };
+		C07A00000000000000000005 /* ContributorSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C07B00000000000000000005 /* ContributorSettingsView.swift */; };
+		C07A00000000000000000006 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = C07B00000000000000000006 /* manifest.json */; };
+		C07A00000000000000000007 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = C07A00000000000000000008 /* TypeWhisperPluginSDK */; };
 		AA00000000000000000222 /* ScriptPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000212 /* ScriptPlugin.swift */; };
 		AA00000000000000000223 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000213 /* manifest.json */; };
 		AA00000000000000000224 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000214 /* Localizable.xcstrings */; };
@@ -811,6 +818,13 @@
 		BB00000000000000000209 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		BB00000000000000000210 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		BB00000000000000000211 /* ObsidianPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ObsidianPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
+		C07B00000000000000000001 /* ContributorModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContributorModels.swift; sourceTree = "<group>"; };
+		C07B00000000000000000002 /* ContributorQueueStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContributorQueueStore.swift; sourceTree = "<group>"; };
+		C07B00000000000000000003 /* ContributorAPIClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContributorAPIClient.swift; sourceTree = "<group>"; };
+		C07B00000000000000000004 /* ContributorPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContributorPlugin.swift; sourceTree = "<group>"; };
+		C07B00000000000000000005 /* ContributorSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContributorSettingsView.swift; sourceTree = "<group>"; };
+		C07B00000000000000000006 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
+		C07B00000000000000000007 /* ContributorPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ContributorPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB00000000000000000212 /* ScriptPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScriptPlugin.swift; sourceTree = "<group>"; };
 		BB00000000000000000213 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		BB00000000000000000214 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
@@ -1188,6 +1202,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C07C00000000000000000002 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C07A00000000000000000007 /* TypeWhisperPluginSDK in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		FF00000000000000000100 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -1423,6 +1445,7 @@
 				5B2200000000000000000020 /* SaluteSpeechPlugin */,
 				CART00000000000000000020 /* CartesiaPlugin */,
 				CC00000000000000000030 /* ObsidianPlugin */,
+				C07D00000000000000000001 /* ContributorPlugin */,
 				CC00000000000000000031 /* ScriptPlugin */,
 				F18A00000000000000000020 /* FillerWordsPlugin */,
 				F48400000000000000000020 /* FileJobScriptPlugin */,
@@ -1986,6 +2009,20 @@
 			path = TypeWhisperPluginSDK/Plugins/ObsidianPlugin;
 			sourceTree = "<group>";
 		};
+		C07D00000000000000000001 /* ContributorPlugin */ = {
+			isa = PBXGroup;
+			children = (
+				C07B00000000000000000001 /* ContributorModels.swift */,
+				C07B00000000000000000002 /* ContributorQueueStore.swift */,
+				C07B00000000000000000003 /* ContributorAPIClient.swift */,
+				C07B00000000000000000004 /* ContributorPlugin.swift */,
+				C07B00000000000000000005 /* ContributorSettingsView.swift */,
+				C07B00000000000000000006 /* manifest.json */,
+			);
+			name = ContributorPlugin;
+			path = TypeWhisperPluginSDK/Plugins/ContributorPlugin;
+			sourceTree = "<group>";
+		};
 		CC00000000000000000031 /* ScriptPlugin */ = {
 			isa = PBXGroup;
 			children = (
@@ -2265,6 +2302,7 @@
 				5B2200000000000000000012 /* SaluteSpeechPlugin.bundle */,
 				CART00000000000000000012 /* CartesiaPlugin.bundle */,
 				BB00000000000000000211 /* ObsidianPlugin.bundle */,
+				C07B00000000000000000007 /* ContributorPlugin.bundle */,
 				BB00000000000000000215 /* ScriptPlugin.bundle */,
 				F18A00000000000000000012 /* FillerWordsPlugin.bundle */,
 				F48400000000000000000012 /* FileJobScriptPlugin.bundle */,
@@ -2834,6 +2872,26 @@
 			productReference = BB00000000000000000211 /* ObsidianPlugin.bundle */;
 			productType = "com.apple.product-type.bundle";
 		};
+		C07E00000000000000000001 /* ContributorPlugin */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C07F00000000000000000003 /* Build configuration list for PBXNativeTarget "ContributorPlugin" */;
+			buildPhases = (
+				C07C00000000000000000001 /* Sources */,
+				C07C00000000000000000002 /* Frameworks */,
+				C07C00000000000000000003 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ContributorPlugin;
+			packageProductDependencies = (
+				C07A00000000000000000008 /* TypeWhisperPluginSDK */,
+			);
+			productName = ContributorPlugin;
+			productReference = C07B00000000000000000007 /* ContributorPlugin.bundle */;
+			productType = "com.apple.product-type.bundle";
+		};
 		DD00000000000000000019 /* ScriptPlugin */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = FF00000000000000000102 /* Build configuration list for PBXNativeTarget "ScriptPlugin" */;
@@ -3370,6 +3428,7 @@
 				5B2200000000000000000040 /* SaluteSpeechPlugin */,
 				CART00000000000000000040 /* CartesiaPlugin */,
 				DD00000000000000000018 /* ObsidianPlugin */,
+				C07E00000000000000000001 /* ContributorPlugin */,
 				DD00000000000000000019 /* ScriptPlugin */,
 				F18A00000000000000000030 /* FillerWordsPlugin */,
 				F48400000000000000000030 /* FileJobScriptPlugin */,
@@ -3601,6 +3660,14 @@
 			files = (
 				AA00000000000000000219 /* manifest.json in Resources */,
 				AA00000000000000000220 /* Localizable.xcstrings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C07C00000000000000000003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C07A00000000000000000006 /* manifest.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -4256,6 +4323,18 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA00000000000000000218 /* ObsidianPlugin.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C07C00000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C07A00000000000000000001 /* ContributorModels.swift in Sources */,
+				C07A00000000000000000002 /* ContributorQueueStore.swift in Sources */,
+				C07A00000000000000000003 /* ContributorAPIClient.swift in Sources */,
+				C07A00000000000000000004 /* ContributorPlugin.swift in Sources */,
+				C07A00000000000000000005 /* ContributorSettingsView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -5756,6 +5835,52 @@
 			};
 			name = Release;
 		};
+		C07F00000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Improve TypeWhisper";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = ContributorPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.improve;
+				PRODUCT_NAME = ContributorPlugin;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Debug;
+		};
+		C07F00000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Improve TypeWhisper";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = ContributorPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.improve;
+				PRODUCT_NAME = ContributorPlugin;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Release;
+		};
 		XX00000000000000000077 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -7052,6 +7177,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		C07F00000000000000000003 /* Build configuration list for PBXNativeTarget "ContributorPlugin" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C07F00000000000000000001 /* Debug */,
+				C07F00000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		FF00000000000000000102 /* Build configuration list for PBXNativeTarget "ScriptPlugin" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -7441,6 +7575,10 @@
 			productName = TypeWhisperPluginSDK;
 		};
 		PP00000000000000000025 /* TypeWhisperPluginSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = TypeWhisperPluginSDK;
+		};
+		C07A00000000000000000008 /* TypeWhisperPluginSDK */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = TypeWhisperPluginSDK;
 		};

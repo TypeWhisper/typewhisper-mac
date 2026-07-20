@@ -8,6 +8,26 @@ enum TargetAppCorrectionCommitSignal: String, Codable, Equatable, Sendable {
     case tabKey
     case focusChanged
     case activeApplicationChanged
+
+    var trainingCaptureValue: String {
+        switch self {
+        case .returnKey:
+            "return-key"
+        case .keypadEnterKey:
+            "keypad-enter-key"
+        case .tabKey:
+            "tab-key"
+        case .focusChanged:
+            "focus-changed"
+        case .activeApplicationChanged:
+            "active-application-changed"
+        }
+    }
+}
+
+struct TargetAppCorrectionObservation: Equatable, Sendable {
+    let correctedInsertedText: String
+    let commitSignal: TargetAppCorrectionCommitSignal?
 }
 
 enum TargetAppCorrectionLearningOutcome: String, Codable, Equatable, Sendable {
@@ -31,6 +51,7 @@ struct TargetAppCorrectionLearningAttemptSnapshot: Codable, Equatable, Sendable 
 struct TargetAppCorrectionLearningResult: Equatable, Sendable {
     let snapshot: TargetAppCorrectionLearningAttemptSnapshot
     let learnedCorrections: [LearnedDictionaryCorrection]
+    let correctionObservation: TargetAppCorrectionObservation?
 }
 
 private func targetAppCorrectionCommitSignal(forKeyCode keyCode: UInt16) -> TargetAppCorrectionCommitSignal? {
@@ -270,6 +291,7 @@ final class TargetAppCorrectionLearningService: ObservableObject {
 
         var latestSuggestions: [CorrectionSuggestion] = []
         var latestNonConfidentOutcome: TargetAppCorrectionLearningOutcome = .unsupportedTextObservation
+        var latestObservation: TargetAppCorrectionObservation?
         var elapsed: Duration = .seconds(0)
         for pollOffset in pollSchedule {
             let waitDuration: Duration
@@ -302,19 +324,35 @@ final class TargetAppCorrectionLearningService: ObservableObject {
                             id: attemptID,
                             suggestions: latestSuggestions,
                             fallbackOutcome: latestNonConfidentOutcome,
-                            commitSignal: commitSignal
+                            commitSignal: commitSignal,
+                            correctionObservation: committedObservation(
+                                latestObservation,
+                                commitSignal: commitSignal
+                            )
                         )
                     }
                     continue
                 case .different:
+                    let resolvedCommitSignal = commitSignal ?? .focusChanged
                     return completeCommittedAttempt(
                         id: attemptID,
                         suggestions: latestSuggestions,
                         fallbackOutcome: latestNonConfidentOutcome,
-                        commitSignal: commitSignal ?? .focusChanged
+                        commitSignal: resolvedCommitSignal,
+                        correctionObservation: committedObservation(
+                            latestObservation,
+                            commitSignal: resolvedCommitSignal
+                        )
                     )
                 }
             }
+
+            latestObservation = correctionObservation(
+                insertedText: insertedText,
+                baselineText: baseline.value,
+                editedText: observation.value,
+                commitSignal: commitSignal
+            )
 
             let suggestions = highConfidenceCorrectionSuggestions(
                 insertedText: insertedText,
@@ -333,7 +371,8 @@ final class TargetAppCorrectionLearningService: ObservableObject {
                     id: attemptID,
                     suggestions: latestSuggestions,
                     fallbackOutcome: latestNonConfidentOutcome,
-                    commitSignal: commitSignal
+                    commitSignal: commitSignal,
+                    correctionObservation: latestObservation
                 )
             }
         }
@@ -352,17 +391,26 @@ final class TargetAppCorrectionLearningService: ObservableObject {
         )
     }
 
+    func trackInsertionResult(
+        insertedText: String,
+        baseline: TextInsertionService.FocusedTextObservation
+    ) async -> TargetAppCorrectionLearningResult {
+        await trackInsertion(insertedText: insertedText, baseline: baseline)
+    }
+
     private func completeCommittedAttempt(
         id: UUID,
         suggestions: [CorrectionSuggestion],
         fallbackOutcome: TargetAppCorrectionLearningOutcome,
-        commitSignal: TargetAppCorrectionCommitSignal
+        commitSignal: TargetAppCorrectionCommitSignal,
+        correctionObservation: TargetAppCorrectionObservation?
     ) -> TargetAppCorrectionLearningResult {
         guard !suggestions.isEmpty else {
             return completeAttempt(
                 id: id,
                 outcome: fallbackOutcome,
-                commitSignal: commitSignal
+                commitSignal: commitSignal,
+                correctionObservation: correctionObservation
             )
         }
 
@@ -381,7 +429,8 @@ final class TargetAppCorrectionLearningService: ObservableObject {
             id: id,
             outcome: outcome,
             commitSignal: commitSignal,
-            learnedCorrections: dictionaryResult.learnedCorrections
+            learnedCorrections: dictionaryResult.learnedCorrections,
+            correctionObservation: correctionObservation
         )
     }
 
@@ -389,7 +438,8 @@ final class TargetAppCorrectionLearningService: ObservableObject {
         id: UUID,
         outcome: TargetAppCorrectionLearningOutcome,
         commitSignal: TargetAppCorrectionCommitSignal?,
-        learnedCorrections: [LearnedDictionaryCorrection] = []
+        learnedCorrections: [LearnedDictionaryCorrection] = [],
+        correctionObservation: TargetAppCorrectionObservation? = nil
     ) -> TargetAppCorrectionLearningResult {
         let snapshot = TargetAppCorrectionLearningAttemptSnapshot(
             outcome: outcome,
@@ -404,7 +454,8 @@ final class TargetAppCorrectionLearningService: ObservableObject {
         }
         return TargetAppCorrectionLearningResult(
             snapshot: snapshot,
-            learnedCorrections: learnedCorrections
+            learnedCorrections: learnedCorrections,
+            correctionObservation: correctionObservation
         )
     }
 
@@ -419,6 +470,59 @@ final class TargetAppCorrectionLearningService: ObservableObject {
             return nil
         }
         return try? JSONDecoder().decode(TargetAppCorrectionLearningAttemptSnapshot.self, from: data)
+    }
+
+    func correctedInsertedText(
+        insertedText: String,
+        baselineText: String,
+        editedText: String
+    ) -> String? {
+        guard let changedRanges = Self.changedRanges(from: baselineText, to: editedText),
+              let baselineInsertedRange = Self.insertedRange(
+                containing: changedRanges.baseline,
+                insertedText: insertedText,
+                in: baselineText
+              ),
+              Self.range(changedRanges.baseline, isContainedIn: baselineInsertedRange) else {
+            return nil
+        }
+
+        let beforeCorrection = baselineText[baselineInsertedRange.lowerBound..<changedRanges.baseline.lowerBound]
+        let correction = editedText[changedRanges.edited]
+        let afterCorrection = baselineText[changedRanges.baseline.upperBound..<baselineInsertedRange.upperBound]
+        let corrected = String(beforeCorrection) + String(correction) + String(afterCorrection)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return corrected.isEmpty || corrected == insertedText ? nil : corrected
+    }
+
+    private func correctionObservation(
+        insertedText: String,
+        baselineText: String,
+        editedText: String,
+        commitSignal: TargetAppCorrectionCommitSignal?
+    ) -> TargetAppCorrectionObservation? {
+        correctedInsertedText(
+            insertedText: insertedText,
+            baselineText: baselineText,
+            editedText: editedText
+        ).map {
+            TargetAppCorrectionObservation(
+                correctedInsertedText: $0,
+                commitSignal: commitSignal
+            )
+        }
+    }
+
+    private func committedObservation(
+        _ observation: TargetAppCorrectionObservation?,
+        commitSignal: TargetAppCorrectionCommitSignal
+    ) -> TargetAppCorrectionObservation? {
+        observation.map {
+            TargetAppCorrectionObservation(
+                correctedInsertedText: $0.correctedInsertedText,
+                commitSignal: commitSignal
+            )
+        }
     }
 
     func highConfidenceCorrectionSuggestions(

@@ -11,6 +11,10 @@ final class PluginSettingsWindowManager {
 
     func present(_ plugin: LoadedPlugin) {
         guard let settingsView = plugin.instance.settingsView else { return }
+        let layout = plugin.instance as? any PluginSettingsWindowLayoutProviding
+        let preferredSize = layout?.preferredSettingsWindowSize ?? CGSize(width: 560, height: 440)
+        let minimumSize = layout?.minimumSettingsWindowSize ?? CGSize(width: 500, height: 400)
+        let settingsViewManagesScrolling = layout?.settingsViewManagesScrolling ?? false
 
         if let window = windows[plugin.id] {
             window.makeKeyAndOrderFront(nil)
@@ -19,13 +23,16 @@ final class PluginSettingsWindowManager {
         }
 
         let window = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 560, height: 440),
+            contentRect: NSRect(origin: .zero, size: preferredSize),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
         let hostingView = NSHostingView(
-            rootView: PluginSettingsWindowContent(settingsView: settingsView)
+            rootView: PluginSettingsWindowContent(
+                settingsView: settingsView,
+                settingsViewManagesScrolling: settingsViewManagesScrolling
+            )
                 .environment(\.pluginSettingsClose, { [weak window] in
                     window?.close()
                 })
@@ -33,7 +40,7 @@ final class PluginSettingsWindowManager {
         )
         hostingView.sizingOptions = []
         window.title = plugin.manifest.name
-        window.contentMinSize = NSSize(width: 500, height: 400)
+        window.contentMinSize = minimumSize
         window.isReleasedWhenClosed = false
         window.contentView = hostingView
 
@@ -57,13 +64,23 @@ final class PluginSettingsWindowManager {
 
 private struct PluginSettingsWindowContent: View {
     let settingsView: AnyView
+    let settingsViewManagesScrolling: Bool
 
     var body: some View {
-        ScrollView(.vertical, showsIndicators: true) {
+        if settingsViewManagesScrolling {
             settingsView
-                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .frame(
+                    maxWidth: .infinity,
+                    maxHeight: .infinity,
+                    alignment: .topLeading
+                )
+        } else {
+            ScrollView(.vertical, showsIndicators: true) {
+                settingsView
+                    .frame(maxWidth: .infinity, alignment: .topLeading)
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }
 

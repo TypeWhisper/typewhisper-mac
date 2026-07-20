@@ -16,6 +16,7 @@ public enum TypeWhisperEvent: Sendable {
     case transcriptionCompleted(TranscriptionCompletedPayload)
     case transcriptionFailed(TranscriptionFailedPayload)
     case textInserted(TextInsertedPayload)
+    case textCorrectionCommitted(TextCorrectionCommittedPayload)
     case actionCompleted(ActionCompletedPayload)
     case partialTranscriptionUpdate(PartialTranscriptionPayload)
 }
@@ -188,6 +189,57 @@ public struct TextInsertedPayload: Sendable, Codable {
         self.text = text
         self.appName = appName
         self.bundleIdentifier = bundleIdentifier
+    }
+}
+
+public struct TextCorrectionCommittedPayload: Sendable, Codable, Equatable {
+    public enum SourceChannel: String, Sendable, Codable {
+        case production
+        case development
+    }
+
+    public let schemaVersion: Int
+    public let id: UUID
+    public let capturedAt: Date
+    public let originalText: String
+    public let correctedText: String
+    public let language: String?
+    public let engineId: String
+    public let modelId: String?
+    public let appVersion: String
+    public let appBuild: String
+    public let platformVersion: String
+    public let commitSignal: String?
+    public let sourceChannel: SourceChannel
+
+    public init(
+        schemaVersion: Int = 1,
+        id: UUID = UUID(),
+        capturedAt: Date = Date(),
+        originalText: String,
+        correctedText: String,
+        language: String? = nil,
+        engineId: String,
+        modelId: String? = nil,
+        appVersion: String,
+        appBuild: String,
+        platformVersion: String,
+        commitSignal: String? = nil,
+        sourceChannel: SourceChannel
+    ) {
+        self.schemaVersion = schemaVersion
+        self.id = id
+        self.capturedAt = capturedAt
+        self.originalText = originalText
+        self.correctedText = correctedText
+        self.language = language
+        self.engineId = engineId
+        self.modelId = modelId
+        self.appVersion = appVersion
+        self.appBuild = appBuild
+        self.platformVersion = platformVersion
+        self.commitSignal = commitSignal
+        self.sourceChannel = sourceChannel
     }
 }
 

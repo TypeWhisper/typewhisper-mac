@@ -18,6 +18,18 @@ public extension TypeWhisperPlugin {
     var settingsView: AnyView? { nil }
 }
 
+public protocol PluginSettingsWindowLayoutProviding: TypeWhisperPlugin {
+    var settingsViewManagesScrolling: Bool { get }
+    var preferredSettingsWindowSize: CGSize? { get }
+    var minimumSettingsWindowSize: CGSize? { get }
+}
+
+public extension PluginSettingsWindowLayoutProviding {
+    var settingsViewManagesScrolling: Bool { false }
+    var preferredSettingsWindowSize: CGSize? { nil }
+    var minimumSettingsWindowSize: CGSize? { nil }
+}
+
 public protocol HostModelLifecyclePolicyAwarePlugin: TypeWhisperPlugin {}
 
 // MARK: - Shared Settings Activity

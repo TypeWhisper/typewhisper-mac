@@ -172,6 +172,15 @@ let package = Package(
             ]
         ),
         .target(
+            name: "ContributorPlugin",
+            dependencies: ["TypeWhisperPluginSDK"],
+            path: "Plugins/ContributorPlugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("manifest.json"),
+            ]
+        ),
+        .target(
             name: "SystemTTSPlugin",
             dependencies: ["TypeWhisperPluginSDK"],
             path: "Plugins/SystemTTSPlugin",
@@ -445,6 +454,15 @@ let package = Package(
                 "ObsidianPlugin",
             ],
             path: "Plugins/ObsidianPlugin/Tests"
+        ),
+        .testTarget(
+            name: "ContributorPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "ContributorPlugin",
+            ],
+            path: "Plugins/ContributorPlugin/Tests"
         ),
         .testTarget(
             name: "SystemTTSPluginTests",

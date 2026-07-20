@@ -292,6 +292,7 @@ final class DictationViewModel: ObservableObject {
     private let accessibilityAnnouncementService: AccessibilityAnnouncementService
     private let errorLogService: ErrorLogService
     private let mediaPlaybackService: MediaPlaybackService
+    private let trainingCaptureStore: TrainingCaptureStore
     private let postProcessingPipeline: PostProcessingPipeline
     private let recoveryFallbackConfigurationProvider: RecoveryFallbackConfigurationProvider
     private let recoveryFallbackRunner: RecoveryFallbackRunner
@@ -384,6 +385,7 @@ final class DictationViewModel: ObservableObject {
         accessibilityAnnouncementService: AccessibilityAnnouncementService,
         errorLogService: ErrorLogService,
         mediaPlaybackService: MediaPlaybackService,
+        trainingCaptureStore: TrainingCaptureStore = TrainingCaptureStore(),
         usageStatisticsRecorder: UsageStatisticsRecording? = nil,
         recoveryFallbackConfigurationProvider: RecoveryFallbackConfigurationProvider? = nil,
         recoveryFallbackRunner: RecoveryFallbackRunner? = nil
@@ -423,6 +425,7 @@ final class DictationViewModel: ObservableObject {
         self.accessibilityAnnouncementService = accessibilityAnnouncementService
         self.errorLogService = errorLogService
         self.mediaPlaybackService = mediaPlaybackService
+        self.trainingCaptureStore = trainingCaptureStore
         self.recoveryFallbackConfigurationProvider = recoveryFallbackConfigurationProvider ?? { _, _ in nil }
         self.recoveryFallbackRunner = recoveryFallbackRunner ?? { [modelManager] samples, languageSelection, task, configuration, prompt, dictionaryTermHints, normalizeNumbers in
             try await modelManager.transcribe(
@@ -1565,6 +1568,8 @@ final class DictationViewModel: ObservableObject {
                 )
 
                 partialText = ""
+                var insertedTextForTrainingCapture: String?
+                var targetAppCorrectionBaseline: TextInsertionService.FocusedTextObservation?
 
                 // Route to action plugin or insert text
                 if let actionPluginId = self.effectiveActionPluginId,
@@ -1583,7 +1588,12 @@ final class DictationViewModel: ObservableObject {
                         insertionContext: insertionContext,
                         contextualInsertionEnabled: contextualInsertionEnabled
                     )
-                    let learningPreInsertionObservation = shouldTrackTargetAppCorrectionLearning && resolvedOutputFormat == nil
+                    let shouldObservePostInsertionEdits = (
+                        shouldTrackTargetAppCorrectionLearning
+                            || trainingCaptureStore.isEnabled
+                            || improveTypeWhisperCaptureEnabled
+                    ) && resolvedOutputFormat == nil
+                    let learningPreInsertionObservation = shouldObservePostInsertionEdits
                         ? textInsertionService.captureFocusedTextObservation()
                         : nil
                     let insertionResult = try await textInsertionService.insertText(
@@ -1601,10 +1611,8 @@ final class DictationViewModel: ObservableObject {
                     let learningBaselineObservation = learningPreInsertionObservation.flatMap {
                         textInsertionService.recaptureFocusedTextObservation(matching: $0)
                     }
-                    startTargetAppCorrectionLearningIfNeeded(
-                        insertedText: insertionText,
-                        baseline: learningBaselineObservation
-                    )
+                    targetAppCorrectionBaseline = learningBaselineObservation
+                    insertedTextForTrainingCapture = insertionText
                     EventBus.shared.emit(.textInserted(TextInsertedPayload(
                         text: insertionText,
                         appName: activeApp.name,
@@ -1616,6 +1624,41 @@ final class DictationViewModel: ObservableObject {
                 var pipelineSteps = ppResult.appliedSteps
                 if transcription.usedRecoveryFallback {
                     pipelineSteps.append(localizedAppText("Recovery fallback", de: "Recovery-Fallback"))
+                }
+
+                var trainingCaptureRecord: TrainingCaptureRecord?
+                if let insertedTextForTrainingCapture {
+                    let record = TrainingCaptureRecord(
+                        id: transcriptionID,
+                        createdAt: completionTimestamp,
+                        locale: Locale.current.identifier,
+                        configuredLanguage: language,
+                        detectedLanguage: result.detectedLanguage,
+                        engineUsed: result.engineUsed,
+                        modelId: transcription.modelId,
+                        modelDisplayName: modelDisplayName,
+                        workflowId: matchedWorkflow?.id,
+                        workflowName: matchedWorkflow?.name,
+                        outputFormat: resolvedOutputFormat,
+                        pipelineSteps: pipelineSteps,
+                        rawText: result.text,
+                        finalText: text,
+                        insertedText: insertedTextForTrainingCapture,
+                        targetApp: TrainingCaptureRecord.TargetApp(
+                            name: activeApp.name,
+                            bundleIdentifier: activeApp.bundleId
+                        )
+                    )
+                    trainingCaptureRecord = record
+                    trainingCaptureStore.record(record)
+                }
+
+                if let insertedTextForTrainingCapture {
+                    startTargetAppCorrectionLearningIfNeeded(
+                        insertedText: insertedTextForTrainingCapture,
+                        baseline: targetAppCorrectionBaseline,
+                        trainingCaptureRecord: trainingCaptureRecord
+                    )
                 }
 
                 if UserDefaults.standard.object(forKey: UserDefaultsKeys.historyEnabled) as? Bool ?? true {
@@ -2249,17 +2292,22 @@ final class DictationViewModel: ObservableObject {
 
     private func startTargetAppCorrectionLearningIfNeeded(
         insertedText: String,
-        baseline: TextInsertionService.FocusedTextObservation?
+        baseline: TextInsertionService.FocusedTextObservation?,
+        trainingCaptureRecord: TrainingCaptureRecord?
     ) {
         targetAppCorrectionLearningTask?.cancel()
         targetAppCorrectionLearningTask = nil
 
-        guard shouldTrackTargetAppCorrectionLearning,
+        let shouldLearn = shouldTrackTargetAppCorrectionLearning
+        let shouldCaptureTrainingCorrection = trainingCaptureRecord != nil && trainingCaptureStore.isEnabled
+        let shouldCaptureContributorCorrection = trainingCaptureRecord != nil && improveTypeWhisperCaptureEnabled
+        guard (shouldLearn || shouldCaptureTrainingCorrection || shouldCaptureContributorCorrection),
               let baseline else {
             return
         }
 
-        targetAppCorrectionLearningTask = Task { @MainActor [weak self, baseline, insertedText] in
+        targetAppCorrectionLearningTask = Task {
+            @MainActor [weak self, baseline, insertedText, trainingCaptureRecord, shouldLearn, shouldCaptureContributorCorrection] in
             guard let self else { return }
             let result = await self.targetAppCorrectionLearningService.trackInsertion(
                 insertedText: insertedText,
@@ -2267,9 +2315,39 @@ final class DictationViewModel: ObservableObject {
             )
             guard !Task.isCancelled else { return }
             self.targetAppCorrectionLearningTask = nil
-            guard !result.learnedCorrections.isEmpty else { return }
+            if let trainingCaptureRecord,
+               let correctionObservation = result.correctionObservation {
+                let correctionId = UUID()
+                let manualCorrectionRecord = trainingCaptureRecord.manualCorrection(
+                    correctionId: correctionId,
+                    correctedText: correctionObservation.correctedInsertedText,
+                    commitSignal: correctionObservation.commitSignal
+                )
+                self.trainingCaptureStore.record(manualCorrectionRecord)
+                if shouldCaptureContributorCorrection {
+                    EventBus.shared.emit(.textCorrectionCommitted(TextCorrectionCommittedPayload(
+                        id: correctionId,
+                        capturedAt: manualCorrectionRecord.createdAt,
+                        originalText: insertedText,
+                        correctedText: correctionObservation.correctedInsertedText,
+                        language: trainingCaptureRecord.detectedLanguage ?? trainingCaptureRecord.configuredLanguage,
+                        engineId: trainingCaptureRecord.engineUsed,
+                        modelId: trainingCaptureRecord.modelId,
+                        appVersion: AppConstants.appVersion,
+                        appBuild: AppConstants.buildVersion,
+                        platformVersion: ProcessInfo.processInfo.operatingSystemVersionString,
+                        commitSignal: correctionObservation.commitSignal?.trainingCaptureValue,
+                        sourceChannel: AppConstants.isDevelopment ? .development : .production
+                    )))
+                }
+            }
+            guard shouldLearn, !result.learnedCorrections.isEmpty else { return }
             self.showLearnedCorrectionsFeedback(result.learnedCorrections)
         }
+    }
+
+    private var improveTypeWhisperCaptureEnabled: Bool {
+        UserDefaults.standard.bool(forKey: UserDefaultsKeys.improveTypeWhisperCaptureEnabled)
     }
 
     private func cancelTargetAppCorrectionLearning() {

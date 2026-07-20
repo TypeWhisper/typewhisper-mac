@@ -1,0 +1,20 @@
+{
+    "id": "com.typewhisper.improve",
+    "name": "Improve TypeWhisper",
+    "version": "0.1.0",
+    "minHostVersion": "1.6.0",
+    "sdkCompatibilityVersion": "v1",
+    "minOSVersion": "14.0",
+    "author": "TypeWhisper",
+    "description": "Review and manually contribute corrected dictation text to improve TypeWhisper.",
+    "descriptions": {
+        "de": "Korrigierte Diktattexte prüfen und manuell zur Verbesserung von TypeWhisper beitragen.",
+        "ja": "修正済みの音声入力テキストを確認し、TypeWhisperの改善に手動で提供します。"
+    },
+    "category": "utility",
+    "hosting": "cloud",
+    "requiresAPIKey": false,
+    "iconSystemName": "checkmark.bubble",
+    "principalClass": "ContributorPlugin",
+    "detailsURL": "https://www.typewhisper.com/addons/improve-typewhisper/"
+}
