@@ -3062,6 +3062,25 @@ final class APIRouterAndHandlersTests: XCTestCase {
         let router = apiContext.router
 
         let workflowID = try await MainActor.run {
+            let globalPlugin = NamedTranscriptionPlugin(
+                providerId: "global-mock",
+                providerDisplayName: "Global Mock",
+                modelId: "global-model"
+            )
+            PluginManager.shared.loadedPlugins.append(LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.global-transcription",
+                    name: "Global Mock Transcription",
+                    version: "1.0.0",
+                    principalClass: "APIRouterNamedTranscriptionPlugin"
+                ),
+                instance: globalPlugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            ))
+            apiContext.modelManager.selectProvider(globalPlugin.providerId)
+
             apiContext.audioRecordingService.hasMicrophonePermissionOverride = true
             apiContext.audioRecordingService.inputAvailabilityOverride = { _ in true }
             apiContext.audioRecordingService.startRecordingOverride = {}
@@ -3080,7 +3099,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
                 trigger: .manual(),
                 behavior: WorkflowBehavior(
                     transcriptionEngineId: "mock",
-                    transcriptionModelId: "workflow-model"
+                    transcriptionModelId: "tiny"
                 )
             )?.id.uuidString)
         }
@@ -3106,7 +3125,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         XCTAssertEqual(activeStatus["state"] as? String, "recording")
         XCTAssertEqual(activeStatus["active_workflow_id"] as? String, workflowID)
         XCTAssertEqual(activeStatus["active_workflow"] as? String, "Meeting notes")
-        XCTAssertEqual(activeStatus["active_model"] as? String, "workflow-model")
+        XCTAssertEqual(activeStatus["active_model"] as? String, "tiny")
 
         await MainActor.run {
             apiContext.dictationViewModel.partialText = "transcribed"
