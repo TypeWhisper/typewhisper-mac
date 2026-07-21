@@ -670,6 +670,10 @@ final class DictationViewModel: ObservableObject {
         state == .recording
     }
 
+    var canStartAPIRecording: Bool {
+        state == .idle
+    }
+
     var activeWorkflowId: UUID? {
         matchedWorkflow?.id
     }
@@ -684,6 +688,13 @@ final class DictationViewModel: ObservableObject {
         case .promptProcessing: "prompt_processing"
         case .error: "error"
         }
+    }
+
+    var apiActiveModelId: String? {
+        modelManager.resolvedModelId(
+            engineOverrideId: effectiveEngineOverrideId,
+            cloudModelOverride: effectiveCloudModelOverride
+        )
     }
 
     func apiStartRecording(forcedWorkflowId: UUID? = nil) -> UUID {

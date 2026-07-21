@@ -3009,11 +3009,33 @@ final class APIRouterAndHandlersTests: XCTestCase {
             headers: ["content-type": "application/json"],
             body: try JSONSerialization.data(withJSONObject: ["workflow_id": disabledID])
         ))
+        await MainActor.run {
+            apiContext.dictationViewModel.state = .processing
+        }
+        let processing = await apiContext.router.route(HTTPRequest(
+            method: "POST",
+            path: "/v1/dictation/start",
+            queryParams: [:],
+            headers: [:],
+            body: Data()
+        ))
+        await MainActor.run {
+            apiContext.dictationViewModel.state = .inserting
+        }
+        let inserting = await apiContext.router.route(HTTPRequest(
+            method: "POST",
+            path: "/v1/dictation/start",
+            queryParams: [:],
+            headers: [:],
+            body: Data()
+        ))
 
         XCTAssertEqual(malformed.status, 400)
         XCTAssertEqual(invalidID.status, 400)
         XCTAssertEqual(unknown.status, 404)
         XCTAssertEqual(disabled.status, 409)
+        XCTAssertEqual(processing.status, 409)
+        XCTAssertEqual(inserting.status, 409)
     }
 
     func testDictationEndpointsReturnSessionIDAndCompletedTranscription() async throws {
@@ -3054,8 +3076,12 @@ final class APIRouterAndHandlersTests: XCTestCase {
             apiContext.textInsertionService.pasteSimulatorOverride = {}
             return try XCTUnwrap(apiContext.workflowService.addWorkflow(
                 name: "Meeting notes",
-                template: .custom,
-                trigger: .manual()
+                template: .dictation,
+                trigger: .manual(),
+                behavior: WorkflowBehavior(
+                    transcriptionEngineId: "mock",
+                    transcriptionModelId: "workflow-model"
+                )
             )?.id.uuidString)
         }
 
@@ -3080,6 +3106,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         XCTAssertEqual(activeStatus["state"] as? String, "recording")
         XCTAssertEqual(activeStatus["active_workflow_id"] as? String, workflowID)
         XCTAssertEqual(activeStatus["active_workflow"] as? String, "Meeting notes")
+        XCTAssertEqual(activeStatus["active_model"] as? String, "workflow-model")
 
         await MainActor.run {
             apiContext.dictationViewModel.partialText = "transcribed"

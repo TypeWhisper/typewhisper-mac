@@ -1124,8 +1124,8 @@ final class APIHandlers: @unchecked Sendable {
         let dictationViewModel = self.dictationViewModel
         let workflowService = self.workflowService
         return await MainActor.run {
-            guard !dictationViewModel.isRecording else {
-                return .error(status: 409, message: "Already recording")
+            guard dictationViewModel.canStartAPIRecording else {
+                return .error(status: 409, message: "Dictation is not idle")
             }
 
             var workflow: Workflow?
@@ -1187,7 +1187,6 @@ final class APIHandlers: @unchecked Sendable {
 
     private func handleDictationStatus(_ request: HTTPRequest) async -> HTTPResponse {
         let dictationViewModel = self.dictationViewModel
-        let activeModel = await modelManager.selectedModelId
         return await MainActor.run {
             struct DictationStatusResponse: Encodable {
                 let state: String
@@ -1199,7 +1198,7 @@ final class APIHandlers: @unchecked Sendable {
             return .json(DictationStatusResponse(
                 state: dictationViewModel.apiStateName,
                 is_recording: dictationViewModel.isRecording,
-                active_model: activeModel,
+                active_model: dictationViewModel.apiActiveModelId,
                 active_workflow: dictationViewModel.activeRuleName,
                 active_workflow_id: dictationViewModel.activeWorkflowId?.uuidString
             ))
