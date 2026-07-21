@@ -670,9 +670,26 @@ final class DictationViewModel: ObservableObject {
         state == .recording
     }
 
-    func apiStartRecording() -> UUID {
+    var activeWorkflowId: UUID? {
+        matchedWorkflow?.id
+    }
+
+    var apiStateName: String {
+        switch state {
+        case .idle: "idle"
+        case .recording: "recording"
+        case .processing: "processing"
+        case .inserting: "inserting"
+        case .promptSelection: "prompt_selection"
+        case .promptProcessing: "prompt_processing"
+        case .error: "error"
+        }
+    }
+
+    func apiStartRecording(forcedWorkflowId: UUID? = nil) -> UUID {
         let sessionID = UUID()
         startRecording(
+            forcedWorkflowId: forcedWorkflowId,
             sessionID: sessionID,
             requestUptimeNanoseconds: DispatchTime.now().uptimeNanoseconds
         )

@@ -1342,6 +1342,8 @@ final class APIRouterAndHandlersTests: XCTestCase {
         )
 
         XCTAssertEqual(status["status"] as? String, "no_model")
+        XCTAssertEqual(status["api_version"] as? String, "1.1")
+        XCTAssertEqual(status["supports_workflow_dictation"] as? Bool, true)
         XCTAssertEqual((history["entries"] as? [[String: Any]])?.count, 1)
         XCTAssertEqual((rules["rules"] as? [[String: Any]])?.first?["name"] as? String, "Docs")
         XCTAssertEqual((rules["rules"] as? [[String: Any]])?.first?["language_mode"] as? String, "multiple")
@@ -2567,6 +2569,9 @@ final class APIRouterAndHandlersTests: XCTestCase {
         let statusJSON = try Self.jsonObject(statusResponse)
         XCTAssertEqual(statusResponse.status, 200)
         XCTAssertEqual(statusJSON["is_recording"] as? Bool, false)
+        XCTAssertEqual(statusJSON["state"] as? String, "idle")
+        XCTAssertNil(statusJSON["active_workflow"] as? String)
+        XCTAssertNil(statusJSON["active_workflow_id"] as? String)
 
         let stopResponse = await router.route(
             HTTPRequest(method: "POST", path: "/v1/dictation/stop", queryParams: [:], headers: [:], body: Data())
@@ -2953,6 +2958,64 @@ final class APIRouterAndHandlersTests: XCTestCase {
         XCTAssertEqual((json["error"] as? [String: Any])?["message"] as? String, TranscriptionEngineError.modelNotLoaded.localizedDescription)
     }
 
+    func testWorkflowDictationStartRejectsMalformedUnknownAndDisabledWorkflow() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        context = await MainActor.run {
+            let context = Self.makeAPIContext(appSupportDirectory: appSupportDirectory)
+            _ = context.workflowService.addWorkflow(
+                name: "Disabled",
+                template: .custom,
+                trigger: .manual(),
+                isEnabled: false
+            )
+            return context
+        }
+        let apiContext = try XCTUnwrap(context)
+        let disabledID = try await MainActor.run {
+            try XCTUnwrap(apiContext.workflowService.workflows.first?.id.uuidString)
+        }
+
+        let malformed = await apiContext.router.route(HTTPRequest(
+            method: "POST",
+            path: "/v1/dictation/start",
+            queryParams: [:],
+            headers: ["content-type": "application/json"],
+            body: Data("{".utf8)
+        ))
+        let invalidID = await apiContext.router.route(HTTPRequest(
+            method: "POST",
+            path: "/v1/dictation/start",
+            queryParams: [:],
+            headers: ["content-type": "application/json"],
+            body: try JSONSerialization.data(withJSONObject: ["workflow_id": "not-a-uuid"])
+        ))
+        let unknown = await apiContext.router.route(HTTPRequest(
+            method: "POST",
+            path: "/v1/dictation/start",
+            queryParams: [:],
+            headers: ["content-type": "application/json"],
+            body: try JSONSerialization.data(withJSONObject: ["workflow_id": UUID().uuidString])
+        ))
+        let disabled = await apiContext.router.route(HTTPRequest(
+            method: "POST",
+            path: "/v1/dictation/start",
+            queryParams: [:],
+            headers: ["content-type": "application/json"],
+            body: try JSONSerialization.data(withJSONObject: ["workflow_id": disabledID])
+        ))
+
+        XCTAssertEqual(malformed.status, 400)
+        XCTAssertEqual(invalidID.status, 400)
+        XCTAssertEqual(unknown.status, 404)
+        XCTAssertEqual(disabled.status, 409)
+    }
+
     func testDictationEndpointsReturnSessionIDAndCompletedTranscription() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         let historyEnabledKey = UserDefaultsKeys.historyEnabled
@@ -2976,7 +3039,7 @@ final class APIRouterAndHandlersTests: XCTestCase {
         let apiContext = try XCTUnwrap(context)
         let router = apiContext.router
 
-        await MainActor.run {
+        let workflowID = try await MainActor.run {
             apiContext.audioRecordingService.hasMicrophonePermissionOverride = true
             apiContext.audioRecordingService.inputAvailabilityOverride = { _ in true }
             apiContext.audioRecordingService.startRecordingOverride = {}
@@ -2989,14 +3052,34 @@ final class APIRouterAndHandlersTests: XCTestCase {
             }
             apiContext.textInsertionService.selectedTextOverride = { nil }
             apiContext.textInsertionService.pasteSimulatorOverride = {}
+            return try XCTUnwrap(apiContext.workflowService.addWorkflow(
+                name: "Meeting notes",
+                template: .custom,
+                trigger: .manual()
+            )?.id.uuidString)
         }
 
         let start = try Self.jsonObject(
-            await router.route(HTTPRequest(method: "POST", path: "/v1/dictation/start", queryParams: [:], headers: [:], body: Data()))
+            await router.route(HTTPRequest(
+                method: "POST",
+                path: "/v1/dictation/start",
+                queryParams: [:],
+                headers: ["content-type": "application/json"],
+                body: try JSONSerialization.data(withJSONObject: ["workflow_id": workflowID])
+            ))
         )
         let startID = try XCTUnwrap(start["id"] as? String)
         XCTAssertEqual(start["status"] as? String, "recording")
+        XCTAssertEqual(start["workflow_id"] as? String, workflowID)
+        XCTAssertEqual(start["workflow_name"] as? String, "Meeting notes")
         XCTAssertNotNil(UUID(uuidString: startID))
+
+        let activeStatus = try Self.jsonObject(
+            await router.route(HTTPRequest(method: "GET", path: "/v1/dictation/status", queryParams: [:], headers: [:], body: Data()))
+        )
+        XCTAssertEqual(activeStatus["state"] as? String, "recording")
+        XCTAssertEqual(activeStatus["active_workflow_id"] as? String, workflowID)
+        XCTAssertEqual(activeStatus["active_workflow"] as? String, "Meeting notes")
 
         await MainActor.run {
             apiContext.dictationViewModel.partialText = "transcribed"

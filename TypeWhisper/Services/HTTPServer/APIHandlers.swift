@@ -623,6 +623,8 @@ final class APIHandlers: @unchecked Sendable {
             let status: String
             let engine: String?
             let model: String?
+            let api_version: String
+            let supports_workflow_dictation: Bool
             let supports_streaming: Bool
             let supports_translation: Bool
         }
@@ -631,6 +633,8 @@ final class APIHandlers: @unchecked Sendable {
             status: isReady ? "ready" : "no_model",
             engine: providerId,
             model: modelId,
+            api_version: "1.1",
+            supports_workflow_dictation: true,
             supports_streaming: supportsStreaming,
             supports_translation: supportsTranslation
         )
@@ -1098,14 +1102,48 @@ final class APIHandlers: @unchecked Sendable {
 
     // MARK: - POST /v1/dictation/start
 
+    private struct DictationStartRequest: Decodable {
+        let workflowId: String?
+
+        enum CodingKeys: String, CodingKey {
+            case workflowId = "workflow_id"
+        }
+    }
+
     private func handleStartDictation(_ request: HTTPRequest) async -> HTTPResponse {
+        let payload: DictationStartRequest?
+        if request.body.isEmpty {
+            payload = nil
+        } else {
+            guard let decoded = try? JSONDecoder().decode(DictationStartRequest.self, from: request.body) else {
+                return .error(status: 400, message: "Invalid JSON body")
+            }
+            payload = decoded
+        }
+
         let dictationViewModel = self.dictationViewModel
+        let workflowService = self.workflowService
         return await MainActor.run {
             guard !dictationViewModel.isRecording else {
                 return .error(status: 409, message: "Already recording")
             }
 
-            let id = dictationViewModel.apiStartRecording()
+            var workflow: Workflow?
+            if let workflowId = payload?.workflowId {
+                guard !workflowId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                      let uuid = UUID(uuidString: workflowId) else {
+                    return .error(status: 400, message: "Missing or invalid 'workflow_id'")
+                }
+                guard let requestedWorkflow = workflowService.workflow(id: uuid) else {
+                    return .error(status: 404, message: "Workflow not found")
+                }
+                guard requestedWorkflow.isEnabled else {
+                    return .error(status: 409, message: "Workflow is disabled")
+                }
+                workflow = requestedWorkflow
+            }
+
+            let id = dictationViewModel.apiStartRecording(forcedWorkflowId: workflow?.id)
             if let session = dictationViewModel.apiDictationSession(id: id), session.status == .failed {
                 return .error(status: 409, message: session.error ?? "Failed to start dictation")
             }
@@ -1113,8 +1151,15 @@ final class APIHandlers: @unchecked Sendable {
             struct StartResponse: Encodable {
                 let id: String
                 let status: String
+                let workflow_id: String?
+                let workflow_name: String?
             }
-            return .json(StartResponse(id: id.uuidString, status: "recording"))
+            return .json(StartResponse(
+                id: id.uuidString,
+                status: "recording",
+                workflow_id: workflow?.id.uuidString,
+                workflow_name: workflow?.name
+            ))
         }
     }
 
@@ -1142,9 +1187,22 @@ final class APIHandlers: @unchecked Sendable {
 
     private func handleDictationStatus(_ request: HTTPRequest) async -> HTTPResponse {
         let dictationViewModel = self.dictationViewModel
+        let activeModel = await modelManager.selectedModelId
         return await MainActor.run {
-            struct DictationStatusResponse: Encodable { let is_recording: Bool }
-            return .json(DictationStatusResponse(is_recording: dictationViewModel.isRecording))
+            struct DictationStatusResponse: Encodable {
+                let state: String
+                let is_recording: Bool
+                let active_model: String?
+                let active_workflow: String?
+                let active_workflow_id: String?
+            }
+            return .json(DictationStatusResponse(
+                state: dictationViewModel.apiStateName,
+                is_recording: dictationViewModel.isRecording,
+                active_model: activeModel,
+                active_workflow: dictationViewModel.activeRuleName,
+                active_workflow_id: dictationViewModel.activeWorkflowId?.uuidString
+            ))
         }
     }
 
