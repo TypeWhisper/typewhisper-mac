@@ -312,7 +312,7 @@ final class ClaudePluginTests: XCTestCase {
         )
 
         plugin.activate(host: host)
-        await fetcher.waitForRequestCount(1)
+        try await fetcher.waitForRequestCount(1)
 
         let manualRefresh = Task { await plugin.refreshModels() }
         await Self.waitForRefreshWaiterCount(2, plugin: plugin)
@@ -340,11 +340,11 @@ final class ClaudePluginTests: XCTestCase {
         plugin.setApiKey("old-key")
 
         let oldRefresh = Task { await plugin.refreshModels() }
-        await fetcher.waitForRequestCount(1)
+        try await fetcher.waitForRequestCount(1)
 
         plugin.setApiKey("new-key")
         let newRefresh = Task { await plugin.refreshModels() }
-        await fetcher.waitForRequestCount(2)
+        try await fetcher.waitForRequestCount(2)
 
         await fetcher.resolveFirst(
             apiKey: "new-key",
@@ -378,7 +378,7 @@ final class ClaudePluginTests: XCTestCase {
         let notificationsBeforeRefresh = host.capabilitiesChangedCount
 
         let refresh = Task { await plugin.refreshModels() }
-        await fetcher.waitForRequestCount(1)
+        try await fetcher.waitForRequestCount(1)
         plugin.deactivate()
 
         await fetcher.resolveFirst(
@@ -649,23 +649,25 @@ final class ClaudePluginTests: XCTestCase {
 }
 
 private actor ControlledClaudeModelFetcher {
+    private struct RequestCountTimeoutError: Error, CustomStringConvertible {
+        let expectedCount: Int
+        let actualCount: Int
+
+        var description: String {
+            "Timed out after one second waiting for \(expectedCount) Claude model request(s); observed \(actualCount)"
+        }
+    }
+
     private struct PendingRequest {
         let apiKey: String
         let continuation: CheckedContinuation<[ClaudeFetchedModel]?, Never>
     }
 
-    private struct RequestCountWaiter {
-        let expectedCount: Int
-        let continuation: CheckedContinuation<Void, Never>
-    }
-
     private var keys: [String] = []
     private var pendingRequests: [PendingRequest] = []
-    private var requestCountWaiters: [RequestCountWaiter] = []
 
     func fetch(apiKey: String) async -> [ClaudeFetchedModel]? {
         keys.append(apiKey)
-        resumeSatisfiedRequestCountWaiters()
         return await withCheckedContinuation { continuation in
             pendingRequests.append(
                 PendingRequest(apiKey: apiKey, continuation: continuation)
@@ -673,11 +675,16 @@ private actor ControlledClaudeModelFetcher {
         }
     }
 
-    func waitForRequestCount(_ expectedCount: Int) async {
-        guard keys.count < expectedCount else { return }
-        await withCheckedContinuation { continuation in
-            requestCountWaiters.append(
-                RequestCountWaiter(expectedCount: expectedCount, continuation: continuation)
+    func waitForRequestCount(_ expectedCount: Int) async throws {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: .seconds(1))
+        while keys.count < expectedCount, clock.now < deadline {
+            try await Task.sleep(for: .milliseconds(1))
+        }
+        guard keys.count >= expectedCount else {
+            throw RequestCountTimeoutError(
+                expectedCount: expectedCount,
+                actualCount: keys.count
             )
         }
     }
@@ -692,17 +699,5 @@ private actor ControlledClaudeModelFetcher {
 
     func recordedKeys() -> [String] {
         keys
-    }
-
-    private func resumeSatisfiedRequestCountWaiters() {
-        var remaining: [RequestCountWaiter] = []
-        for waiter in requestCountWaiters {
-            if keys.count >= waiter.expectedCount {
-                waiter.continuation.resume()
-            } else {
-                remaining.append(waiter)
-            }
-        }
-        requestCountWaiters = remaining
     }
 }
