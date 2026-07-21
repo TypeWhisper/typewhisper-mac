@@ -126,6 +126,12 @@ final class TextInsertionService {
         if normalized.contains("wavebox") {
             return .chromiumBased
         }
+        if normalized == "org.mozilla.firefox"
+            || normalized == "org.mozilla.firefoxdeveloperedition"
+            || normalized == "org.mozilla.nightly"
+            || normalized == "app.zen-browser.zen" {
+            return .firefox
+        }
 
         switch bundleId {
         case "com.apple.Safari":
@@ -140,8 +146,6 @@ final class TextInsertionService {
              "com.vivaldi.Vivaldi",
              "org.chromium.Chromium":
             return .chromiumBased
-        case "org.mozilla.firefox":
-            return .firefox
         default:
             return .notABrowser
         }
@@ -553,12 +557,14 @@ final class TextInsertionService {
         let appName = activeApp.name
         let bundleId = activeApp.bundleId
         let isTerminalApp = bundleId.map { syntheticPastePreferredBundleIdentifiers.contains($0) } ?? false
+        let isFirefoxBasedBrowser = bundleId.map { Self.identifyBrowser($0) == .firefox } ?? false
+        let prefersSyntheticPaste = isTerminalApp || isFirefoxBasedBrowser
 
         logger.info(
-            "insertText requested: app=\(appName ?? "nil", privacy: .public), bundle=\(bundleId ?? "nil", privacy: .public), preserveClipboard=\(preserveClipboard, privacy: .public), outputFormat=\(outputFormat ?? "plain", privacy: .public), terminalPreferredSyntheticPaste=\(isTerminalApp, privacy: .public)"
+            "insertText requested: app=\(appName ?? "nil", privacy: .public), bundle=\(bundleId ?? "nil", privacy: .public), preserveClipboard=\(preserveClipboard, privacy: .public), outputFormat=\(outputFormat ?? "plain", privacy: .public), prefersSyntheticPaste=\(prefersSyntheticPaste, privacy: .public)"
         )
 
-        if preserveClipboard, !requiresPasteboardInsertion, !isTerminalApp,
+        if preserveClipboard, !requiresPasteboardInsertion, !prefersSyntheticPaste,
            let focusedElement = getFocusedTextElement(),
            insertTextAtAndVerifyChange(element: focusedElement, text: text) {
             if hadFocusedTextField {
