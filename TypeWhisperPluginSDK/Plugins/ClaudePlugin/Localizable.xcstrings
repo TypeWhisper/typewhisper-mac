@@ -129,6 +129,22 @@
         }
       }
     },
+    "Unable to refresh models. Check your connection and try again.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modelle konnten nicht aktualisiert werden. Prüfe deine Verbindung und versuche es erneut."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "モデルを更新できませんでした。接続を確認して、もう一度お試しください。"
+          }
+        }
+      }
+    },
     "Valid API Key": {
       "localizations": {
         "de": {

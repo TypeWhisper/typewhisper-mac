@@ -1,4 +1,5 @@
 import Foundation
+import os
 import SwiftUI
 import TypeWhisperPluginSDK
 
@@ -19,35 +20,92 @@ final class ClaudePlugin: NSObject, LLMProviderPlugin, LLMModelSelectable, @unch
     /// Safety bound on pagination so a misbehaving `has_more` never loops forever.
     private static let maxModelPages = 20
 
-    fileprivate var host: HostServices?
-    fileprivate var _apiKey: String?
-    fileprivate var _selectedLLMModelId: String?
-    fileprivate var _llmTemperatureModeRaw: String = PluginLLMTemperatureMode.providerDefault.rawValue
-    fileprivate var _llmTemperatureValue: Double = 0.3
-    fileprivate var _modelCache: ClaudeModelCache?
+    typealias ModelFetchOperation = @Sendable (String) async -> [ClaudeFetchedModel]?
+
+    private struct InFlightModelRefresh {
+        let id: UUID
+        let apiKey: String
+        let generation: UInt64
+        let task: Task<Bool, Never>
+        var waiterCount: Int
+    }
+
+    private struct State {
+        var isActive = false
+        var host: HostServices?
+        var apiKey: String?
+        var selectedLLMModelId: String?
+        var llmTemperatureModeRaw = PluginLLMTemperatureMode.providerDefault.rawValue
+        var llmTemperatureValue = 0.3
+        var modelCache: ClaudeModelCache?
+        var refreshGeneration: UInt64 = 0
+        var inFlightModelRefresh: InFlightModelRefresh?
+    }
+
+    private struct ProcessingSnapshot {
+        let apiKey: String?
+        let selectedModelId: String?
+        let defaultModelId: String
+        let temperatureDirective: PluginLLMTemperatureDirective
+    }
+
+    private let state = OSAllocatedUnfairLock(initialState: State())
+    private let modelFetchOverride: ModelFetchOperation?
 
     required override init() {
+        modelFetchOverride = nil
+        super.init()
+    }
+
+    init(modelFetchOverride: @escaping ModelFetchOperation) {
+        self.modelFetchOverride = modelFetchOverride
         super.init()
     }
 
     func activate(host: HostServices) {
-        self.host = host
-        _apiKey = host.loadSecret(key: "api-key")
-        _selectedLLMModelId = host.userDefault(forKey: Self.selectedLLMModelKey) as? String
+        let apiKey = host.loadSecret(key: "api-key")
+        let selectedLLMModelId = host.userDefault(forKey: Self.selectedLLMModelKey) as? String
+        let modelCache: ClaudeModelCache?
         if let data = host.userDefault(forKey: Self.cachedModelsKey) as? Data,
            let cache = try? JSONDecoder().decode(ClaudeModelCache.self, from: data) {
-            _modelCache = cache
+            modelCache = cache
+        } else {
+            modelCache = nil
         }
-        _llmTemperatureModeRaw = host.userDefault(forKey: "llmTemperatureMode") as? String
+        let llmTemperatureModeRaw = host.userDefault(forKey: "llmTemperatureMode") as? String
             ?? PluginLLMTemperatureMode.providerDefault.rawValue
-        _llmTemperatureValue = host.userDefault(forKey: "llmTemperatureValue") as? Double
+        let llmTemperatureValue = host.userDefault(forKey: "llmTemperatureValue") as? Double
             ?? 0.3
+
+        let previousTask = state.withLock { state -> Task<Bool, Never>? in
+            let previousTask = state.inFlightModelRefresh?.task
+            state.isActive = true
+            state.host = host
+            state.apiKey = apiKey
+            state.selectedLLMModelId = selectedLLMModelId
+            state.llmTemperatureModeRaw = llmTemperatureModeRaw
+            state.llmTemperatureValue = llmTemperatureValue
+            state.modelCache = modelCache
+            state.refreshGeneration &+= 1
+            state.inFlightModelRefresh = nil
+            return previousTask
+        }
+        previousTask?.cancel()
+
         // Refresh the model list on activation when the cache is missing or stale.
         refreshModelsIfNeeded()
     }
 
     func deactivate() {
-        host = nil
+        let refreshTask = state.withLock { state -> Task<Bool, Never>? in
+            let refreshTask = state.inFlightModelRefresh?.task
+            state.isActive = false
+            state.host = nil
+            state.refreshGeneration &+= 1
+            state.inFlightModelRefresh = nil
+            return refreshTask
+        }
+        refreshTask?.cancel()
     }
 
     // MARK: - LLMProviderPlugin
@@ -55,9 +113,13 @@ final class ClaudePlugin: NSObject, LLMProviderPlugin, LLMModelSelectable, @unch
     var providerName: String { "Claude" }
 
     var isAvailable: Bool {
-        guard let key = _apiKey else { return false }
-        return !key.isEmpty
+        state.withLock { state in
+            guard let key = state.apiKey else { return false }
+            return !key.isEmpty
+        }
     }
+
+    fileprivate var apiKey: String? { state.withLock { $0.apiKey } }
 
     /// Shown when no cache exists yet (no key configured, or offline). Uses the
     /// current alias ids with no date suffixes — the API returns the same aliases.
@@ -71,20 +133,21 @@ final class ClaudePlugin: NSObject, LLMProviderPlugin, LLMModelSelectable, @unch
 
     /// The fetched list (newest-first) when a non-empty cache exists, otherwise
     /// the hardcoded fallback.
-    private var baseModels: [PluginModelInfo] {
-        if let cache = _modelCache, !cache.models.isEmpty {
+    private static func baseModels(from cache: ClaudeModelCache?) -> [PluginModelInfo] {
+        if let cache, !cache.models.isEmpty {
             return cache.models.map { PluginModelInfo(id: $0.id, displayName: $0.displayName) }
         }
-        return Self.fallbackLLMModels
+        return fallbackLLMModels
     }
 
     var supportedModels: [PluginModelInfo] {
-        var models = baseModels
+        let snapshot = state.withLock { ($0.modelCache, $0.selectedLLMModelId) }
+        var models = Self.baseModels(from: snapshot.0)
         // Selection preservation: if the user's selected model isn't in the
         // current list (e.g. a previously-selected dated id, or a model the
         // account no longer exposes), keep it selectable by appending it rather
         // than silently switching the user to a different model.
-        if let selected = _selectedLLMModelId,
+        if let selected = snapshot.1,
            !selected.isEmpty,
            !models.contains(where: { $0.id == selected }) {
             models.append(PluginModelInfo(id: selected, displayName: selected))
@@ -107,11 +170,23 @@ final class ClaudePlugin: NSObject, LLMProviderPlugin, LLMModelSelectable, @unch
         model: String?,
         temperatureDirective: PluginLLMTemperatureDirective
     ) async throws -> String {
-        guard let apiKey = _apiKey, !apiKey.isEmpty else {
+        let snapshot = state.withLock { state -> ProcessingSnapshot in
+            let models = Self.baseModels(from: state.modelCache)
+            return ProcessingSnapshot(
+                apiKey: state.apiKey,
+                selectedModelId: state.selectedLLMModelId,
+                defaultModelId: models.first?.id ?? Self.fallbackLLMModels[0].id,
+                temperatureDirective: PluginLLMTemperatureDirective(
+                    mode: PluginLLMTemperatureMode(rawValue: state.llmTemperatureModeRaw) ?? .providerDefault,
+                    value: state.llmTemperatureValue
+                )
+            )
+        }
+        guard let apiKey = snapshot.apiKey, !apiKey.isEmpty else {
             throw PluginChatError.notConfigured
         }
-        let modelId = model ?? _selectedLLMModelId ?? supportedModels.first!.id
-        let resolvedTemperature = providerTemperatureDirective.resolvedTemperature(applying: temperatureDirective)
+        let modelId = model ?? snapshot.selectedModelId ?? snapshot.defaultModelId
+        let resolvedTemperature = snapshot.temperatureDirective.resolvedTemperature(applying: temperatureDirective)
         return try await callMessagesAPI(
             apiKey: apiKey,
             model: modelId,
@@ -122,28 +197,36 @@ final class ClaudePlugin: NSObject, LLMProviderPlugin, LLMModelSelectable, @unch
     }
 
     func selectLLMModel(_ modelId: String) {
-        _selectedLLMModelId = modelId
+        let host = state.withLock { state -> HostServices? in
+            state.selectedLLMModelId = modelId
+            return state.host
+        }
         host?.setUserDefault(modelId, forKey: Self.selectedLLMModelKey)
     }
 
-    var selectedLLMModelId: String? { _selectedLLMModelId }
-    @objc var preferredModelId: String? { _selectedLLMModelId }
+    var selectedLLMModelId: String? { state.withLock { $0.selectedLLMModelId } }
+    @objc var preferredModelId: String? { state.withLock { $0.selectedLLMModelId } }
     var llmTemperatureMode: PluginLLMTemperatureMode {
-        PluginLLMTemperatureMode(rawValue: _llmTemperatureModeRaw) ?? .providerDefault
+        state.withLock {
+            PluginLLMTemperatureMode(rawValue: $0.llmTemperatureModeRaw) ?? .providerDefault
+        }
     }
-    var llmTemperatureValue: Double { _llmTemperatureValue }
-    fileprivate var providerTemperatureDirective: PluginLLMTemperatureDirective {
-        PluginLLMTemperatureDirective(mode: llmTemperatureMode, value: _llmTemperatureValue)
-    }
+    var llmTemperatureValue: Double { state.withLock { $0.llmTemperatureValue } }
 
     func setLLMTemperatureMode(_ mode: PluginLLMTemperatureMode) {
-        _llmTemperatureModeRaw = mode.rawValue
+        let host = state.withLock { state -> HostServices? in
+            state.llmTemperatureModeRaw = mode.rawValue
+            return state.host
+        }
         host?.setUserDefault(mode.rawValue, forKey: "llmTemperatureMode")
     }
 
     func setLLMTemperatureValue(_ value: Double) {
         let clamped = min(max(value, 0.0), 2.0)
-        _llmTemperatureValue = clamped
+        let host = state.withLock { state -> HostServices? in
+            state.llmTemperatureValue = clamped
+            return state.host
+        }
         host?.setUserDefault(clamped, forKey: "llmTemperatureValue")
     }
 
@@ -156,8 +239,19 @@ final class ClaudePlugin: NSObject, LLMProviderPlugin, LLMModelSelectable, @unch
     // MARK: - API Key Management
 
     func setApiKey(_ key: String) {
-        _apiKey = key
-        if let host {
+        let transition = state.withLock { state -> (host: HostServices?, task: Task<Bool, Never>?) in
+            let keyChanged = state.apiKey != key
+            let task = keyChanged ? state.inFlightModelRefresh?.task : nil
+            state.apiKey = key
+            if keyChanged {
+                state.refreshGeneration &+= 1
+                state.inFlightModelRefresh = nil
+            }
+            return (state.host, task)
+        }
+        transition.task?.cancel()
+
+        if let host = transition.host {
             do {
                 try host.storeSecret(key: "api-key", value: key)
             } catch {
@@ -168,8 +262,16 @@ final class ClaudePlugin: NSObject, LLMProviderPlugin, LLMModelSelectable, @unch
     }
 
     func removeApiKey() {
-        _apiKey = nil
-        if let host {
+        let transition = state.withLock { state -> (host: HostServices?, task: Task<Bool, Never>?) in
+            let task = state.inFlightModelRefresh?.task
+            state.apiKey = nil
+            state.refreshGeneration &+= 1
+            state.inFlightModelRefresh = nil
+            return (state.host, task)
+        }
+        transition.task?.cancel()
+
+        if let host = transition.host {
             do {
                 try host.storeSecret(key: "api-key", value: "")
             } catch {
@@ -179,35 +281,48 @@ final class ClaudePlugin: NSObject, LLMProviderPlugin, LLMModelSelectable, @unch
         }
     }
 
-    /// Validates the key by hitting the models endpoint. A successful validation
-    /// also seeds/refreshes the model cache from the same response instead of
-    /// discarding it.
+    /// Validates the current key through the same coordinated model refresh used
+    /// by activation and the settings UI. The settings flow stores the candidate
+    /// key before calling this method, so an obsolete validation can never replace
+    /// the cache after the key changes again.
     func validateApiKey(_ key: String) async -> Bool {
         guard !key.isEmpty else { return false }
-        guard let models = await fetchModels(apiKey: key) else { return false }
-        if !models.isEmpty {
-            await MainActor.run { self.setModelCache(models) }
-        }
-        return true
+        return await coordinatedModelRefresh(apiKey: key)
     }
 
     // MARK: - Dynamic Model Discovery
 
     /// True when a cached list exists and is younger than the TTL.
     var isModelCacheFresh: Bool {
-        guard let cache = _modelCache else { return false }
+        guard let cache = state.withLock({ $0.modelCache }) else { return false }
         return Date().timeIntervalSince(cache.fetchedAt) < Self.cacheTTL
     }
 
-    var cacheLastUpdated: Date? { _modelCache?.fetchedAt }
+    var cacheLastUpdated: Date? { state.withLock { $0.modelCache?.fetchedAt } }
 
-    fileprivate func setModelCache(_ models: [ClaudeFetchedModel]) {
+    /// Commits only a result that still belongs to the active API key and refresh
+    /// generation. Persistence and host callbacks deliberately run outside the
+    /// state lock.
+    private func commitModelCache(
+        _ models: [ClaudeFetchedModel],
+        apiKey: String,
+        generation: UInt64
+    ) -> Bool {
         let cache = ClaudeModelCache(models: models, fetchedAt: Date())
-        _modelCache = cache
-        if let data = try? JSONEncoder().encode(cache) {
-            host?.setUserDefault(data, forKey: Self.cachedModelsKey)
+        let host = state.withLock { state -> HostServices? in
+            guard state.isActive,
+                  state.apiKey == apiKey,
+                  state.refreshGeneration == generation else { return nil }
+            state.modelCache = cache
+            return state.host
         }
-        host?.notifyCapabilitiesChanged()
+        guard let host else { return false }
+
+        if let data = try? JSONEncoder().encode(cache) {
+            host.setUserDefault(data, forKey: Self.cachedModelsKey)
+        }
+        host.notifyCapabilitiesChanged()
+        return true
     }
 
     /// Fetches the full model list (following pagination), returning nil on any
@@ -217,12 +332,15 @@ final class ClaudePlugin: NSObject, LLMProviderPlugin, LLMModelSelectable, @unch
 
         var collected: [ClaudeFetchedModel] = []
         var afterId: String?
+        var seenCursors = Set<String>()
 
         for _ in 0..<Self.maxModelPages {
             guard var components = URLComponents(string: Self.modelsEndpoint) else { return nil }
+            var queryItems = [URLQueryItem(name: "limit", value: "1000")]
             if let afterId {
-                components.queryItems = [URLQueryItem(name: "after_id", value: afterId)]
+                queryItems.append(URLQueryItem(name: "after_id", value: afterId))
             }
+            components.queryItems = queryItems
             guard let url = components.url else { return nil }
 
             var request = URLRequest(url: url)
@@ -236,38 +354,109 @@ final class ClaudePlugin: NSObject, LLMProviderPlugin, LLMModelSelectable, @unch
                       httpResponse.statusCode == 200 else { return nil }
                 let page = try Self.decodeModelsPage(from: data)
                 collected.append(contentsOf: page.models)
-                if page.hasMore, let last = page.lastId, !last.isEmpty {
-                    afterId = last
-                } else {
-                    break
+                guard page.hasMore else {
+                    return Self.sortedNewestFirst(collected)
                 }
+
+                guard let lastId = page.lastId?.trimmingCharacters(in: .whitespacesAndNewlines),
+                      !lastId.isEmpty,
+                      seenCursors.insert(lastId).inserted else { return nil }
+                afterId = lastId
             } catch {
                 return nil
             }
         }
 
-        return Self.sortedNewestFirst(collected)
+        // Reaching the safety bound with `has_more` still set means the response
+        // is incomplete. Never replace a known-good cache with a partial list.
+        return nil
     }
 
     /// Explicit refresh used by the settings UI and the "Refresh models" button.
     /// Returns whether a fresh list was fetched and cached.
     @discardableResult
     func refreshModels() async -> Bool {
-        guard let apiKey = _apiKey, !apiKey.isEmpty else { return false }
-        guard let models = await fetchModels(apiKey: apiKey), !models.isEmpty else { return false }
-        await MainActor.run { self.setModelCache(models) }
-        return true
+        guard let apiKey = state.withLock({ state -> String? in
+            guard state.isActive else { return nil }
+            return state.apiKey
+        }), !apiKey.isEmpty else { return false }
+        return await coordinatedModelRefresh(apiKey: apiKey)
     }
 
     /// Background refresh: serve the cache immediately, refresh only when missing
     /// or stale, and keep the cache on failure.
     private func refreshModelsIfNeeded() {
-        guard let apiKey = _apiKey, !apiKey.isEmpty, !isModelCacheFresh else { return }
-        Task { [weak self] in
-            guard let self else { return }
-            guard let models = await self.fetchModels(apiKey: apiKey), !models.isEmpty else { return }
-            await MainActor.run { self.setModelCache(models) }
+        let apiKey = state.withLock { state -> String? in
+            guard state.isActive,
+                  let apiKey = state.apiKey,
+                  !apiKey.isEmpty else { return nil }
+            if let cache = state.modelCache,
+               Date().timeIntervalSince(cache.fetchedAt) < Self.cacheTTL {
+                return nil
+            }
+            return apiKey
         }
+        guard let apiKey else { return }
+
+        Task { [weak self] in
+            _ = await self?.coordinatedModelRefresh(apiKey: apiKey)
+        }
+    }
+
+    /// Starts or joins the single refresh for the active key. The task itself
+    /// performs the guarded commit exactly once, so every same-key caller sees the
+    /// same result without duplicate writes or requests.
+    private func coordinatedModelRefresh(apiKey: String) async -> Bool {
+        let refresh = state.withLock { state -> InFlightModelRefresh? in
+            guard state.isActive, state.apiKey == apiKey else { return nil }
+
+            if var inFlight = state.inFlightModelRefresh,
+               inFlight.apiKey == apiKey,
+               inFlight.generation == state.refreshGeneration {
+                inFlight.waiterCount += 1
+                state.inFlightModelRefresh = inFlight
+                return inFlight
+            }
+
+            let id = UUID()
+            let generation = state.refreshGeneration
+            let task = Task { [weak self] in
+                guard let self, !Task.isCancelled,
+                      let models = await self.performModelFetch(apiKey: apiKey),
+                      !Task.isCancelled,
+                      !models.isEmpty else { return false }
+                return self.commitModelCache(models, apiKey: apiKey, generation: generation)
+            }
+            let refresh = InFlightModelRefresh(
+                id: id,
+                apiKey: apiKey,
+                generation: generation,
+                task: task,
+                waiterCount: 1
+            )
+            state.inFlightModelRefresh = refresh
+            return refresh
+        }
+        guard let refresh else { return false }
+
+        let succeeded = await refresh.task.value
+        state.withLock { state in
+            if state.inFlightModelRefresh?.id == refresh.id {
+                state.inFlightModelRefresh = nil
+            }
+        }
+        return succeeded
+    }
+
+    var inFlightModelRefreshWaiterCountForTesting: Int {
+        state.withLock { $0.inFlightModelRefresh?.waiterCount ?? 0 }
+    }
+
+    private func performModelFetch(apiKey: String) async -> [ClaudeFetchedModel]? {
+        if let modelFetchOverride {
+            return await modelFetchOverride(apiKey)
+        }
+        return await fetchModels(apiKey: apiKey)
     }
 
     nonisolated static func decodeModelsPage(
@@ -302,22 +491,18 @@ final class ClaudePlugin: NSObject, LLMProviderPlugin, LLMModelSelectable, @unch
         return formatter.date(from: raw)?.timeIntervalSince1970 ?? 0
     }
 
-    /// Newer Claude models (Opus 4.8, Opus 4.7, Sonnet 5, Fable/Mythos 5, and any
-    /// id in those 4.7+/5 families) reject `temperature`/`top_p`/`top_k` with HTTP
-    /// 400, so those parameters must be omitted for them. Sonnet 4.6, Opus 4.6,
-    /// Haiku 4.5, and older still honor the app's temperature override, so we keep
-    /// sending it there. Conservative id-prefix check against the known families.
+    /// Anthropic models released after Opus 4.6 reject sampling parameters. Keep
+    /// an explicit allowlist for known compatible families and conservatively
+    /// omit `temperature` for every unknown or future model id.
     nonisolated static func modelRejectsSamplingParams(_ modelId: String) -> Bool {
         let id = modelId.lowercased()
-        let rejectingPrefixes = [
-            "claude-opus-4-8",
-            "claude-opus-4-7",
-            "claude-sonnet-5",
-            "claude-fable-5",
-            "claude-mythos-5",
-            "claude-mythos-preview",
+        let compatiblePrefixes = [
+            "claude-3-",
+            "claude-haiku-4-5",
+            "claude-sonnet-4-6",
+            "claude-opus-4-6",
         ]
-        return rejectingPrefixes.contains { id.hasPrefix($0) }
+        return !compatiblePrefixes.contains { id.hasPrefix($0) }
     }
 
     // MARK: - Anthropic Messages API
@@ -442,6 +627,7 @@ private struct ClaudeSettingsView: View {
     @State private var llmTemperatureValue: Double = 0.3
     @State private var isRefreshing = false
     @State private var lastUpdated: Date?
+    @State private var refreshErrorMessage: String?
     private let bundle = Bundle(for: ClaudePlugin.self)
 
     var body: some View {
@@ -472,6 +658,7 @@ private struct ClaudeSettingsView: View {
                         Button(String(localized: "Remove", bundle: bundle)) {
                             apiKeyInput = ""
                             validationResult = nil
+                            refreshErrorMessage = nil
                             plugin.removeApiKey()
                         }
                         .buttonStyle(.bordered)
@@ -549,6 +736,12 @@ private struct ClaudeSettingsView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
+
+                    if let refreshErrorMessage {
+                        Label(refreshErrorMessage, systemImage: "exclamationmark.triangle.fill")
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                    }
                 }
 
                 Divider()
@@ -590,7 +783,7 @@ private struct ClaudeSettingsView: View {
         }
         .padding()
         .onAppear {
-            if let key = plugin._apiKey, !key.isEmpty {
+            if let key = plugin.apiKey, !key.isEmpty {
                 apiKeyInput = key
             }
             selectedModel = plugin.selectedLLMModelId ?? plugin.supportedModels.first?.id ?? ""
@@ -612,6 +805,7 @@ private struct ClaudeSettingsView: View {
 
         isValidating = true
         validationResult = nil
+        refreshErrorMessage = nil
         Task {
             let isValid = await plugin.validateApiKey(trimmedKey)
             await MainActor.run {
@@ -628,6 +822,7 @@ private struct ClaudeSettingsView: View {
     private func refresh() {
         guard !isRefreshing else { return }
         isRefreshing = true
+        refreshErrorMessage = nil
         Task {
             let ok = await plugin.refreshModels()
             await MainActor.run {
@@ -639,6 +834,11 @@ private struct ClaudeSettingsView: View {
                     selectedModel = plugin.selectedLLMModelId
                         ?? plugin.supportedModels.first?.id
                         ?? selectedModel
+                } else {
+                    refreshErrorMessage = String(
+                        localized: "Unable to refresh models. Check your connection and try again.",
+                        bundle: bundle
+                    )
                 }
             }
         }
