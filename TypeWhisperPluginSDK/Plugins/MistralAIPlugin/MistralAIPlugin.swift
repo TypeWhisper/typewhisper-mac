@@ -416,6 +416,7 @@ struct MistralAPIClient {
         guard let url = URL(string: "https://api.mistral.ai/v1/models") else { return false }
         var request = URLRequest(url: url)
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.timeoutInterval = 120
 
         do {
             let (_, response) = try await PluginHTTPClient.data(for: request)
@@ -526,11 +527,13 @@ struct MistralSettingsView: View {
                         .font(.subheadline)
                         .fontWeight(.medium)
                     
-                    Picker("Transcription Model", selection: $selectedSTTModel) {
+                    Picker(selection: $selectedSTTModel) {
                         Text("None", bundle: bundle).tag("")
                         ForEach(plugin.transcriptionModels, id: \.id) { model in
                             Text(model.displayName).tag(model.id)
                         }
+                    } label: {
+                        Text("Transcription Model", bundle: bundle)
                     }
                     .pickerStyle(.menu)
                     .labelsHidden()
@@ -544,11 +547,13 @@ struct MistralSettingsView: View {
                         .font(.subheadline)
                         .fontWeight(.medium)
 
-                    Picker("LLM Model", selection: $selectedLLMModel) {
+                    Picker(selection: $selectedLLMModel) {
                         Text("None", bundle: bundle).tag("")
                         ForEach(plugin.supportedModels, id: \.id) { model in
                             Text(model.displayName).tag(model.id)
                         }
+                    } label: {
+                        Text("LLM Model", bundle: bundle)
                     }
                     .pickerStyle(.menu)
                     .labelsHidden()
@@ -562,9 +567,11 @@ struct MistralSettingsView: View {
                         .font(.subheadline)
                         .fontWeight(.medium)
 
-                    Picker("Temperature Mode", selection: $llmTemperatureMode) {
+                    Picker(selection: $llmTemperatureMode) {
                         Text("Provider Default", bundle: bundle).tag(PluginLLMTemperatureMode.providerDefault)
                         Text("Custom", bundle: bundle).tag(PluginLLMTemperatureMode.custom)
+                    } label: {
+                        Text("Temperature Mode", bundle: bundle)
                     }
                     .pickerStyle(.menu)
                     .labelsHidden()

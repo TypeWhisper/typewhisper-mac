@@ -51,6 +51,16 @@
         }
       }
     },
+    "Temperature Mode": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Temperaturmodus"
+          }
+        }
+      }
+    },
     "Cloud API integration for Mistral LLMs and Voxtral STT.": {
       "localizations": {
         "de": {
