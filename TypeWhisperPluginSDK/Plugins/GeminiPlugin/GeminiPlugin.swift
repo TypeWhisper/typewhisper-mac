@@ -7,6 +7,7 @@ import TypeWhisperPluginSDK
 @objc(GeminiPlugin)
 final class GeminiPlugin: NSObject,
     LLMProviderPlugin,
+    LLMTemperatureControllableProvider,
     LLMModelSelectable,
     TranscriptionEnginePlugin,
     DictionaryTermsCapabilityProviding,

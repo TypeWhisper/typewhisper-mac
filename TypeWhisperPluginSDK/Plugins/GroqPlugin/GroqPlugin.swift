@@ -5,7 +5,7 @@ import TypeWhisperPluginSDK
 // MARK: - Plugin Entry Point
 
 @objc(GroqPlugin)
-final class GroqPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, LLMProviderPlugin, LLMModelSelectable, @unchecked Sendable {
+final class GroqPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, LLMProviderPlugin, LLMTemperatureControllableProvider, LLMModelSelectable, @unchecked Sendable {
     static let pluginId = "com.typewhisper.groq"
     static let pluginName = "Groq"
     private static let transcriptionRequestTimeout: TimeInterval = 600

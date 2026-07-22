@@ -5,7 +5,7 @@ import TypeWhisperPluginSDK
 // MARK: - Plugin Entry Point
 
 @objc(ClaudePlugin)
-final class ClaudePlugin: NSObject, LLMProviderPlugin, LLMModelSelectable, @unchecked Sendable {
+final class ClaudePlugin: NSObject, LLMProviderPlugin, LLMTemperatureControllableProvider, LLMModelSelectable, @unchecked Sendable {
     static let pluginId = "com.typewhisper.claude"
     static let pluginName = "Claude"
 

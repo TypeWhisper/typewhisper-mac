@@ -9,6 +9,7 @@ final class OpenRouterPlugin: NSObject,
     TranscriptionEnginePlugin,
     DictionaryTermsCapabilityProviding,
     LLMProviderPlugin,
+    LLMTemperatureControllableProvider,
     LLMModelSelectable,
     @unchecked Sendable
 {

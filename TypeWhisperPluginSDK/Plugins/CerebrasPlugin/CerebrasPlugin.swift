@@ -5,7 +5,7 @@ import TypeWhisperPluginSDK
 // MARK: - Plugin Entry Point
 
 @objc(CerebrasPlugin)
-final class CerebrasPlugin: NSObject, LLMProviderPlugin, LLMModelSelectable, @unchecked Sendable {
+final class CerebrasPlugin: NSObject, LLMProviderPlugin, LLMTemperatureControllableProvider, LLMModelSelectable, @unchecked Sendable {
     static let pluginId = "com.typewhisper.cerebras"
     static let pluginName = "Cerebras"
 
