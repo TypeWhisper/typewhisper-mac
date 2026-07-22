@@ -824,13 +824,17 @@ final class Gemma4PluginModelPolicyTests: XCTestCase {
         XCTAssertFalse(plugin.isAvailable)
     }
 
-    func testGemma4CompletedDownloadUsesLongerPreparationTimeout() async throws {
+    func testGemma4CompletedDownloadUsesLongerPreparationTimeout() {
         let plugin = Gemma4Plugin()
         plugin.setModelLoadTimeoutsForTesting(
             downloadInactivity: .milliseconds(40),
             preparation: .milliseconds(180)
         )
-        let generation = plugin.startModelLoadTimeoutForTesting(modelName: "Gemma 4 E2B")
+        let generation = plugin.startModelLoadTimeoutForTesting(
+            modelName: "Gemma 4 E2B",
+            scheduleWatchdog: false
+        )
+        XCTAssertEqual(plugin.currentModelLoadTimeoutForTesting(), .milliseconds(40))
 
         plugin.recordModelLoadProgressForTesting(
             completedUnitCount: 1_000,
@@ -842,16 +846,12 @@ final class Gemma4PluginModelPolicyTests: XCTestCase {
         XCTAssertEqual(plugin.modelState, .loading)
         XCTAssertEqual(plugin.currentDownloadProgress, 0.9, accuracy: 0.001)
         XCTAssertEqual(plugin.currentSettingsActivity?.message, "Preparing model")
+        XCTAssertEqual(plugin.currentModelLoadTimeoutForTesting(), .milliseconds(180))
 
-        try await Task.sleep(for: .milliseconds(80))
-        XCTAssertEqual(plugin.modelState, .loading)
-
-        try await waitUntil("Gemma 4 preparation timeout error") {
-            if case .error = plugin.modelState {
-                return true
-            }
-            return false
-        }
+        XCTAssertTrue(plugin.applyModelLoadTimeoutForTesting(
+            generation: generation,
+            modelName: "Gemma 4 E2B"
+        ))
 
         guard case .error(let message) = plugin.modelState else {
             return XCTFail("Expected Gemma 4 preparation timeout to set an error state")

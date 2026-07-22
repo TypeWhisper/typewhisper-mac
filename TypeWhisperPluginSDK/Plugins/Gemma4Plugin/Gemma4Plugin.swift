@@ -924,23 +924,43 @@ final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemp
                 }
 
                 guard self.modelLoadPhase == phase else { continue }
-                let lastProgress = self.lastObservedDownloadFraction
-                self.invalidateModelLoad()
-                self.modelContainer = nil
-                self.loadedModelId = nil
-                self.downloadProgress = 0
-                self.modelState = .error(
-                    Self.modelLoadTimeoutMessage(
-                        for: phase,
-                        modelName: modelName,
-                        lastDownloadFraction: lastProgress
-                    )
-                )
-                self.host?.setUserDefault(nil, forKey: "loadedModel")
-                self.host?.notifyCapabilitiesChanged()
-                return
+                if self.applyModelLoadTimeout(
+                    generation: generation,
+                    modelName: modelName,
+                    phase: phase
+                ) {
+                    return
+                }
             }
         }
+    }
+
+    @discardableResult
+    private func applyModelLoadTimeout(
+        generation: Int,
+        modelName: String,
+        phase: ModelLoadPhase
+    ) -> Bool {
+        guard isCurrentModelLoad(generation),
+              modelLoadPhase == phase else {
+            return false
+        }
+
+        let lastProgress = lastObservedDownloadFraction
+        invalidateModelLoad()
+        modelContainer = nil
+        loadedModelId = nil
+        downloadProgress = 0
+        modelState = .error(
+            Self.modelLoadTimeoutMessage(
+                for: phase,
+                modelName: modelName,
+                lastDownloadFraction: lastProgress
+            )
+        )
+        host?.setUserDefault(nil, forKey: "loadedModel")
+        host?.notifyCapabilitiesChanged()
+        return true
     }
 
     private func isUsableDownloadedModel(_ modelDef: Gemma4ModelDef) -> Bool {
@@ -999,11 +1019,16 @@ final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemp
     }
 
     @discardableResult
-    func startModelLoadTimeoutForTesting(modelName: String) -> Int {
+    func startModelLoadTimeoutForTesting(
+        modelName: String,
+        scheduleWatchdog: Bool = true
+    ) -> Int {
         let generation = beginModelLoad(phase: .downloading, initialDownloadFraction: 0)
         modelState = .downloading
         downloadProgress = Self.initialDownloadProgress
-        startModelLoadTimeout(generation: generation, modelName: modelName)
+        if scheduleWatchdog {
+            startModelLoadTimeout(generation: generation, modelName: modelName)
+        }
         return generation
     }
 
@@ -1063,6 +1088,21 @@ final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemp
 
     func invalidateModelLoadForTesting() {
         invalidateModelLoad()
+    }
+
+    func currentModelLoadTimeoutForTesting() -> Duration? {
+        guard let phase = modelLoadPhase else { return nil }
+        return timeoutDuration(for: phase)
+    }
+
+    @discardableResult
+    func applyModelLoadTimeoutForTesting(generation: Int, modelName: String) -> Bool {
+        guard let phase = modelLoadPhase else { return false }
+        return applyModelLoadTimeout(
+            generation: generation,
+            modelName: modelName,
+            phase: phase
+        )
     }
 
     func setLoadedModelIdForTesting(_ modelId: String?) {
