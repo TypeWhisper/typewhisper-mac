@@ -731,7 +731,8 @@
       "author": "TypeWhisper",
       "description": "LLM provider via Anthropic Claude API. Requires API key.",
       "descriptions": {
-        "de": "LLM-Anbieter ueber die Anthropic Claude API. Erfordert API-Key."
+        "de": "LLM-Anbieter \u00fcber die Anthropic Claude API. Erfordert API-Key.",
+        "ja": "Anthropic Claude API\u306b\u3088\u308bLLM\u30d7\u30ed\u30d0\u30a4\u30c0\u30fc\u3067\u3059\u3002API\u30ad\u30fc\u304c\u5fc5\u8981\u3067\u3059\u3002"
       },
       "category": "llm",
       "downloadCount": 1022,
@@ -740,6 +741,14 @@
       "requiresAPIKey": true,
       "detailsURL": "https://www.typewhisper.com/addons/claude/",
       "releases": [
+        {
+          "version": "1.1.0",
+          "minHostVersion": "0.9.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 248829,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-claude-v1.1.0/ClaudePlugin.zip",
+          "minOSVersion": "14.0"
+        },
         {
           "version": "1.0.3",
           "minHostVersion": "0.9.0",
