@@ -526,33 +526,32 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
 
         for uid in candidateUIDs {
             guard let device = inputDevices.first(where: { $0.uid == uid }) else { continue }
-            guard let deviceID = resolvedAudioDeviceID(for: device) else { continue }
-
-            // When the MacBook lid is closed, the built-in microphone is
-            // physically disconnected by Apple Silicon / T2 hardware security,
-            // but CoreAudio still reports it as available. Skip it so failover
-            // proceeds to the next candidate in the priority list. See #888.
-            if lidClosed,
-               let transport = transportType(for: deviceID),
-               Self.isBuiltInTransportType(transport) {
-                logger.info("Skipping built-in microphone \(device.name, privacy: .public) because lid is closed (clamshell mode)")
-                continue
-            }
-
-            let usesBluetoothTransport = transportType(for: deviceID)
-                .map(Self.isBluetoothTransportType) ?? false
-            return ResolvedRecordingInputSelection(
-                deviceUID: uid,
-                deviceID: deviceID,
-                deviceName: device.name,
-                usesBluetoothTransport: usesBluetoothTransport
-            )
+            guard let selection = resolvedInputSelection(for: device, lidClosed: lidClosed) else { continue }
+            return selection
         }
 
         guard let defaultInputDeviceID = defaultInputDeviceController.defaultInputDeviceID() else {
             return .systemDefault
         }
-        let usesBluetoothTransport = transportType(for: defaultInputDeviceID)
+        let defaultInputTransport = transportType(for: defaultInputDeviceID)
+
+        if lidClosed,
+           let defaultInputTransport,
+           Self.isBuiltInTransportType(defaultInputTransport) {
+            for device in inputDevices {
+                guard let fallbackSelection = resolvedInputSelection(for: device, lidClosed: true),
+                      fallbackSelection.deviceID != defaultInputDeviceID else {
+                    continue
+                }
+                logger.info("Using \(device.name, privacy: .public) instead of the built-in system-default microphone because the lid is closed")
+                return fallbackSelection
+            }
+
+            logger.warning("Built-in system-default microphone is unavailable because the lid is closed, and no alternative input was found")
+            return .systemDefault
+        }
+
+        let usesBluetoothTransport = defaultInputTransport
             .map(Self.isBluetoothTransportType) ?? false
         guard usesBluetoothTransport else {
             return .systemDefault
@@ -562,6 +561,32 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
             deviceID: defaultInputDeviceID,
             deviceName: inputDevices.first(where: { $0.deviceID == defaultInputDeviceID })?.name,
             usesBluetoothTransport: usesBluetoothTransport
+        )
+    }
+
+    private func resolvedInputSelection(
+        for device: AudioInputDevice,
+        lidClosed: Bool
+    ) -> ResolvedRecordingInputSelection? {
+        guard let deviceID = resolvedAudioDeviceID(for: device) else { return nil }
+        let transport = transportType(for: deviceID)
+
+        // When the MacBook lid is closed, the built-in microphone is
+        // physically disconnected by Apple Silicon / T2 hardware security,
+        // but CoreAudio still reports it as available. Skip it so failover
+        // proceeds to the next candidate. See #888 and #983.
+        if lidClosed,
+           let transport,
+           Self.isBuiltInTransportType(transport) {
+            logger.info("Skipping built-in microphone \(device.name, privacy: .public) because lid is closed (clamshell mode)")
+            return nil
+        }
+
+        return ResolvedRecordingInputSelection(
+            deviceUID: device.uid,
+            deviceID: deviceID,
+            deviceName: device.name,
+            usesBluetoothTransport: transport.map(Self.isBluetoothTransportType) ?? false
         )
     }
 
