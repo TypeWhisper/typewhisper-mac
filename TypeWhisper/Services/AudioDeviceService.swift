@@ -543,7 +543,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
                       fallbackSelection.deviceID != defaultInputDeviceID else {
                     continue
                 }
-                logger.info("Using \(device.name, privacy: .public) instead of the built-in system-default microphone because the lid is closed")
+                logger.info("Using \(device.name, privacy: .private) instead of the built-in system-default microphone because the lid is closed")
                 return fallbackSelection
             }
 
@@ -578,7 +578,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         if lidClosed,
            let transport,
            Self.isBuiltInTransportType(transport) {
-            logger.info("Skipping built-in microphone \(device.name, privacy: .public) because lid is closed (clamshell mode)")
+            logger.info("Skipping built-in microphone \(device.name, privacy: .private) because lid is closed (clamshell mode)")
             return nil
         }
 
