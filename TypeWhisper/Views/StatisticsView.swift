@@ -500,11 +500,11 @@ private struct StatisticsStatCard: View {
         }
         .scaleEffect(hovering && !reduceMotion ? 1.02 : 1.0)
         .shadow(
-            color: .black.opacity(hovering ? 0.16 : 0),
-            radius: hovering ? 8 : 0,
-            y: hovering ? 3 : 0
+            color: .black.opacity(hovering && !reduceMotion ? 0.16 : 0),
+            radius: hovering && !reduceMotion ? 8 : 0,
+            y: hovering && !reduceMotion ? 3 : 0
         )
-        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: hovering)
+        .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.7), value: hovering)
         .onHover { isHovering in
             hovering = isHovering
             if isHovering && !reduceMotion { iconBounce += 1 }
@@ -547,11 +547,11 @@ struct StatisticsMetricCard: View {
         }
         .scaleEffect(hovering && !reduceMotion ? 1.02 : 1.0)
         .shadow(
-            color: .black.opacity(hovering ? 0.16 : 0),
-            radius: hovering ? 8 : 0,
-            y: hovering ? 3 : 0
+            color: .black.opacity(hovering && !reduceMotion ? 0.16 : 0),
+            radius: hovering && !reduceMotion ? 8 : 0,
+            y: hovering && !reduceMotion ? 3 : 0
         )
-        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: hovering)
+        .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.7), value: hovering)
         .onHover { isHovering in
             hovering = isHovering
             if isHovering && !reduceMotion { iconBounce += 1 }
