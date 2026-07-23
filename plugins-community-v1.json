@@ -2560,6 +2560,14 @@
       "iconURL": "https://www.typewhisper.com/brand-logos/mistral/logo.svg",
       "releases": [
         {
+          "version": "1.0.5",
+          "minHostVersion": "1.5.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 187242,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-mistral-v1.0.5/MistralAIPlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
           "version": "1.0.4",
           "minHostVersion": "1.5.0",
           "sdkCompatibilityVersion": "v1",
