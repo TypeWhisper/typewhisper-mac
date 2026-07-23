@@ -549,6 +549,10 @@ private struct SettingsSidebarRow: View {
     // Incremented each time this row becomes selected, to fire the icon bounce
     // only when the tab is pressed (not when it is deselected).
     @State private var bounceTrigger = 0
+    // The List applies its restored selection after the rows are created, so a
+    // freshly opened sidebar sees a false->true transition for the selected row.
+    // Gate the bounce on this flag so only genuine in-session selections animate.
+    @State private var hasAppeared = false
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
@@ -564,7 +568,11 @@ private struct SettingsSidebarRow: View {
         }
         .contentShape(Rectangle())
         .onChange(of: isSelected) { _, selected in
-            if selected && !reduceMotion { bounceTrigger += 1 }
+            guard hasAppeared, selected, !reduceMotion else { return }
+            bounceTrigger += 1
+        }
+        .onAppear {
+            DispatchQueue.main.async { hasAppeared = true }
         }
     }
 }
