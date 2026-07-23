@@ -463,7 +463,9 @@ final class DeepgramPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
         apiKey: String,
         prompt: String?
     ) async throws -> PluginTranscriptionResult {
-        var components = URLComponents(string: "\(effectiveBaseURL)/v1/listen")!
+        guard var components = URLComponents(string: "\(effectiveBaseURL)/v1/listen") else {
+            throw PluginTranscriptionError.apiError("Invalid base URL: \(effectiveBaseURL)")
+        }
         var queryItems = [
             URLQueryItem(name: "model", value: modelId),
             URLQueryItem(name: "smart_format", value: "true"),
@@ -475,8 +477,12 @@ final class DeepgramPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
         queryItems.append(contentsOf: Self.dictionaryQueryItems(prompt: prompt, modelId: modelId))
         components.queryItems = queryItems
 
+        guard let requestURL = components.url else {
+            throw PluginTranscriptionError.apiError("Invalid base URL: \(effectiveBaseURL)")
+        }
+
         return try await PluginAudioUploadEncoder.withCompressedM4AUploadWavFallback(from: audio) { uploadFile in
-            var request = URLRequest(url: components.url!)
+            var request = URLRequest(url: requestURL)
             request.httpMethod = "POST"
             request.setValue(authHeaderValue(apiKey: apiKey), forHTTPHeaderField: effectiveAuthHeader)
             request.setValue(uploadFile.contentType, forHTTPHeaderField: "Content-Type")
