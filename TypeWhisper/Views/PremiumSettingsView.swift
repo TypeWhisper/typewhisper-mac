@@ -9,6 +9,7 @@ struct PremiumSettingsView: View {
     @ObservedObject private var correctionLearningService: TargetAppCorrectionLearningService
     @AppStorage(UserDefaultsKeys.targetAppCorrectionLearningEnabled) private var targetAppCorrectionLearningEnabled = false
     @State private var confirmingAccountDeletion = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private let settingsNavigation: SettingsNavigationCoordinator
 
@@ -32,13 +33,17 @@ struct PremiumSettingsView: View {
             Divider()
 
             ScrollView {
-                premiumAccountCard
+                VStack(alignment: .leading, spacing: SettingsLayoutMetrics.sectionSpacing) {
+                    premiumAccountCard
 
-                if license.hasCommercialLicense || premiumAccount.hasPremiumEntitlement {
-                    premiumControlCenter
-                } else {
-                    lockedPremiumLanding
+                    if license.hasCommercialLicense || premiumAccount.hasPremiumEntitlement {
+                        premiumControlCenter
+                    } else {
+                        lockedPremiumLanding
+                    }
                 }
+                .padding(SettingsLayoutMetrics.pagePadding)
+                .frame(maxWidth: 760, alignment: .topLeading)
             }
         }
         .frame(minWidth: 560, minHeight: 360, alignment: .topLeading)
@@ -97,9 +102,6 @@ struct PremiumSettingsView: View {
                 }
             }
         }
-        .frame(maxWidth: 760, alignment: .leading)
-        .padding(.horizontal, SettingsLayoutMetrics.pagePadding)
-        .padding(.top, SettingsLayoutMetrics.pagePadding)
     }
 
     private var featureColumns: [GridItem] {
@@ -153,8 +155,6 @@ struct PremiumSettingsView: View {
                     .foregroundStyle(.secondary)
             }
         }
-        .padding(SettingsLayoutMetrics.pagePadding)
-        .frame(maxWidth: 760, alignment: .topLeading)
     }
 
     private var lockedPremiumHero: some View {
@@ -163,6 +163,7 @@ struct PremiumSettingsView: View {
                 Image(systemName: "sparkles")
                     .font(.system(size: 34, weight: .semibold))
                     .foregroundStyle(.yellow)
+                    .symbolEffect(.variableColor.iterative.reversing, options: .repeating.speed(0.4), isActive: !reduceMotion)
                     .frame(width: 58, height: 58)
                     .background(
                         RoundedRectangle(cornerRadius: SettingsLayoutMetrics.compactCornerRadius, style: .continuous)
@@ -193,7 +194,6 @@ struct PremiumSettingsView: View {
                 Spacer(minLength: 12)
             }
         }
-        .frame(maxWidth: 640, alignment: .topLeading)
     }
 
     private func premiumLandingFeatureCard(
@@ -270,7 +270,6 @@ struct PremiumSettingsView: View {
                 premiumLockedActionButton
             }
         }
-        .frame(maxWidth: 640, alignment: .leading)
     }
 
     private var premiumLockedActionButton: some View {
@@ -319,8 +318,6 @@ struct PremiumSettingsView: View {
 
             CloudFolderSyncSettingsView(controller: syncController)
         }
-        .padding(SettingsLayoutMetrics.pagePadding)
-        .frame(maxWidth: 760, alignment: .topLeading)
     }
 
     private var premiumControlHeader: some View {
@@ -328,6 +325,7 @@ struct PremiumSettingsView: View {
             Image(systemName: "sparkles")
                 .font(.title2)
                 .foregroundStyle(.yellow)
+                .symbolEffect(.variableColor.iterative.reversing, options: .repeating.speed(0.4), isActive: !reduceMotion)
                 .frame(width: 44, height: 44)
                 .background(
                     RoundedRectangle(cornerRadius: SettingsLayoutMetrics.compactCornerRadius, style: .continuous)
