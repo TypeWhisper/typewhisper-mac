@@ -43,6 +43,10 @@ struct SettingsPageHeader<Actions: View>: View {
             actions
                 .controlSize(.small)
         }
+        // Consistent header height across pages: a trailing accessory (e.g. the
+        // Statistics period picker) must not make the bar taller than a
+        // title-only header. Summary (two-line) headers still grow past this.
+        .frame(minHeight: 28)
         .padding(.horizontal, SettingsLayoutMetrics.pagePadding)
         .padding(.vertical, 14)
         .frame(maxWidth: .infinity, alignment: .leading)
