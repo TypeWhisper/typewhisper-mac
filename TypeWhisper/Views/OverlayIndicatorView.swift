@@ -183,10 +183,7 @@ struct OverlayIndicatorView: View {
         case .idle, .promptSelection, .promptProcessing:
             return String(localized: "Idle")
         case .recording:
-            if !presentation.isRecordingInputReady {
-                return String(localized: "Preparing microphone")
-            }
-            return String(localized: "Recording")
+            return presentation.recordingStatusLabel
         case .processing:
             return String(localized: "Processing transcription")
         case .inserting:
@@ -276,23 +273,29 @@ struct OverlayIndicatorView: View {
             )
 
             if case .recording = presentation.state {
-                IndicatorRecordingContent(
-                    presentation: presentation,
-                    content: viewModel.notchIndicatorLeftContent,
-                    sizing: sizing,
-                    dotPulse: dotPulse
-                )
+                if presentation.isPreparingMicrophone {
+                    IndicatorPreparingLabel(presentation: presentation, sizing: sizing)
+                } else {
+                    IndicatorRecordingContent(
+                        presentation: presentation,
+                        content: viewModel.notchIndicatorLeftContent,
+                        sizing: sizing,
+                        dotPulse: dotPulse
+                    )
+                }
             }
 
             Spacer()
 
             if case .recording = presentation.state {
-                IndicatorRecordingContent(
-                    presentation: presentation,
-                    content: viewModel.notchIndicatorRightContent,
-                    sizing: sizing,
-                    dotPulse: dotPulse
-                )
+                if !presentation.isPreparingMicrophone {
+                    IndicatorRecordingContent(
+                        presentation: presentation,
+                        content: viewModel.notchIndicatorRightContent,
+                        sizing: sizing,
+                        dotPulse: dotPulse
+                    )
+                }
             } else if case .processing = presentation.state {
                 if let phase = presentation.processingPhase {
                     Text(phase)

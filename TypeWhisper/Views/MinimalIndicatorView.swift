@@ -17,6 +17,9 @@ struct MinimalIndicatorView: View {
     }
 
     private var recordingWidth: CGFloat {
+        if presentation.isPreparingMicrophone {
+            return 220
+        }
         switch viewModel.notchIndicatorRightContent {
         case .none:
             return idleWidth
@@ -118,10 +121,7 @@ struct MinimalIndicatorView: View {
         case .idle, .promptSelection, .promptProcessing:
             return String(localized: "Idle")
         case .recording:
-            if !presentation.isRecordingInputReady {
-                return String(localized: "Preparing microphone")
-            }
-            return String(localized: "Recording")
+            return presentation.recordingStatusLabel
         case .processing:
             return String(localized: "Processing transcription")
         case .inserting:
@@ -173,7 +173,7 @@ struct MinimalIndicatorView: View {
     private var compactStatus: some View {
         switch presentation.state {
         case .recording:
-            HStack(spacing: viewModel.notchIndicatorRightContent == .none ? 0 : 8) {
+            HStack(spacing: presentation.isPreparingMicrophone || viewModel.notchIndicatorRightContent != .none ? 8 : 0) {
                 IndicatorLeftStatus(
                     presentation: presentation,
                     sizing: sizing,
@@ -181,7 +181,9 @@ struct MinimalIndicatorView: View {
                     hasActionFeedback: false
                 )
 
-                if viewModel.notchIndicatorRightContent != .none {
+                if presentation.isPreparingMicrophone {
+                    IndicatorPreparingLabel(presentation: presentation, sizing: sizing)
+                } else if viewModel.notchIndicatorRightContent != .none {
                     IndicatorRecordingContent(
                         presentation: presentation,
                         content: viewModel.notchIndicatorRightContent,

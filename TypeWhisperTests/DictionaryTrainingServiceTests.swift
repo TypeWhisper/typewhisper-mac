@@ -314,6 +314,109 @@ final class DictionaryTrainingServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testCancelDuringMicrophonePreparationCancelsPendingAudioStart() async {
+        let snapshot = makeSnapshot()
+        var startContinuation: CheckedContinuation<Void, Error>?
+        let recordingStartEntered = expectation(description: "recording start entered")
+        var cancelStartCount = 0
+        var stopCount = 0
+        var discardCount = 0
+        let service = DictionaryTrainingService(dependencies: DictionaryTrainingDependencies(
+            engineSnapshot: { snapshot },
+            canTranscribe: { true },
+            requestMicrophonePermission: { true },
+            startRecording: {
+                try await withCheckedThrowingContinuation { continuation in
+                    startContinuation = continuation
+                    recordingStartEntered.fulfill()
+                }
+            },
+            cancelRecordingStart: {
+                cancelStartCount += 1
+                startContinuation?.resume(throwing: CancellationError())
+                startContinuation = nil
+            },
+            stopRecording: {
+                stopCount += 1
+                return []
+            },
+            discardActiveRecording: { discardCount += 1 },
+            transcribe: { _ in "unused" },
+            dictionaryEntries: { [] },
+            commit: { [self] _, _ in self.emptyCommitResult() }
+        ))
+
+        service.canonicalWord = "TypeWhisper"
+        service.beginTraining(localeIdentifier: "en_US")
+        let sampleID = service.samples[0].id
+        let startTask = Task { @MainActor in
+            await service.startRecording(sampleID: sampleID)
+        }
+
+        await fulfillment(of: [recordingStartEntered], timeout: 1)
+        XCTAssertNotNil(startContinuation)
+        XCTAssertEqual(service.samples[0].state, .preparing)
+
+        await service.cancel()
+        await startTask.value
+
+        XCTAssertEqual(cancelStartCount, 1)
+        XCTAssertEqual(stopCount, 0)
+        XCTAssertGreaterThanOrEqual(discardCount, 1)
+        XCTAssertEqual(service.stage, .word)
+        XCTAssertTrue(service.samples.isEmpty)
+    }
+
+    @MainActor
+    func testReplacedTrainingSamplesCannotBeMutatedByLateRecordingStart() async {
+        let snapshot = makeSnapshot()
+        var startContinuation: CheckedContinuation<Void, Never>?
+        let recordingStartEntered = expectation(description: "recording start entered")
+        var stopCount = 0
+        var discardCount = 0
+        let service = DictionaryTrainingService(dependencies: DictionaryTrainingDependencies(
+            engineSnapshot: { snapshot },
+            canTranscribe: { true },
+            requestMicrophonePermission: { true },
+            startRecording: {
+                await withCheckedContinuation { continuation in
+                    startContinuation = continuation
+                    recordingStartEntered.fulfill()
+                }
+            },
+            stopRecording: {
+                stopCount += 1
+                return []
+            },
+            discardActiveRecording: { discardCount += 1 },
+            transcribe: { _ in "unused" },
+            dictionaryEntries: { [] },
+            commit: { [self] _, _ in self.emptyCommitResult() }
+        ))
+
+        service.canonicalWord = "TypeWhisper"
+        service.beginTraining(localeIdentifier: "en_US")
+        let originalSampleID = service.samples[0].id
+        let startTask = Task { @MainActor in
+            await service.startRecording(sampleID: originalSampleID)
+        }
+
+        await fulfillment(of: [recordingStartEntered], timeout: 1)
+        service.canonicalWord = "WhisperFlow"
+        service.beginTraining(localeIdentifier: "en_US")
+        let replacementSampleIDs = service.samples.map(\.id)
+
+        startContinuation?.resume()
+        startContinuation = nil
+        await startTask.value
+
+        XCTAssertEqual(service.samples.map(\.id), replacementSampleIDs)
+        XCTAssertTrue(service.samples.allSatisfy { $0.state == .pending })
+        XCTAssertEqual(stopCount, 1)
+        XCTAssertGreaterThanOrEqual(discardCount, 1)
+    }
+
+    @MainActor
     func testLateTranscriptionResultCannotMutateCancelledSession() async {
         let snapshot = makeSnapshot()
         let service = DictionaryTrainingService(dependencies: DictionaryTrainingDependencies(

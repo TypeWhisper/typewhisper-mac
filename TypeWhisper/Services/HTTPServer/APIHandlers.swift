@@ -1110,6 +1110,34 @@ final class APIHandlers: @unchecked Sendable {
         }
     }
 
+    private struct DictationStartPreparation: Sendable {
+        let id: UUID?
+        let workflowID: UUID?
+        let workflowName: String?
+        let errorStatus: Int?
+        let errorMessage: String?
+
+        static func start(id: UUID, workflowID: UUID?, workflowName: String?) -> Self {
+            Self(
+                id: id,
+                workflowID: workflowID,
+                workflowName: workflowName,
+                errorStatus: nil,
+                errorMessage: nil
+            )
+        }
+
+        static func failure(status: Int, message: String) -> Self {
+            Self(
+                id: nil,
+                workflowID: nil,
+                workflowName: nil,
+                errorStatus: status,
+                errorMessage: message
+            )
+        }
+    }
+
     private func handleStartDictation(_ request: HTTPRequest) async -> HTTPResponse {
         let payload: DictationStartRequest?
         if request.body.isEmpty {
@@ -1123,44 +1151,87 @@ final class APIHandlers: @unchecked Sendable {
 
         let dictationViewModel = self.dictationViewModel
         let workflowService = self.workflowService
-        return await MainActor.run {
+        let preparation = await MainActor.run {
             guard dictationViewModel.canStartAPIRecording else {
-                return .error(status: 409, message: "Dictation is not idle")
+                return DictationStartPreparation.failure(
+                    status: 409,
+                    message: "Dictation is not idle"
+                )
             }
 
-            var workflow: Workflow?
+            let workflowID: UUID?
+            let workflowName: String?
             if let workflowId = payload?.workflowId {
                 guard !workflowId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
                       let uuid = UUID(uuidString: workflowId) else {
-                    return .error(status: 400, message: "Missing or invalid 'workflow_id'")
+                    return DictationStartPreparation.failure(
+                        status: 400,
+                        message: "Missing or invalid 'workflow_id'"
+                    )
                 }
                 guard let requestedWorkflow = workflowService.workflow(id: uuid) else {
-                    return .error(status: 404, message: "Workflow not found")
+                    return DictationStartPreparation.failure(
+                        status: 404,
+                        message: "Workflow not found"
+                    )
                 }
                 guard requestedWorkflow.isEnabled else {
-                    return .error(status: 409, message: "Workflow is disabled")
+                    return DictationStartPreparation.failure(
+                        status: 409,
+                        message: "Workflow is disabled"
+                    )
                 }
-                workflow = requestedWorkflow
+                workflowID = requestedWorkflow.id
+                workflowName = requestedWorkflow.name
+            } else {
+                workflowID = nil
+                workflowName = nil
             }
 
-            let id = dictationViewModel.apiStartRecording(forcedWorkflowId: workflow?.id)
+            let id = dictationViewModel.apiStartRecording(forcedWorkflowId: workflowID)
             if let session = dictationViewModel.apiDictationSession(id: id), session.status == .failed {
-                return .error(status: 409, message: session.error ?? "Failed to start dictation")
+                return DictationStartPreparation.failure(
+                    status: 409,
+                    message: session.error ?? "Failed to start dictation"
+                )
             }
-
-            struct StartResponse: Encodable {
-                let id: String
-                let status: String
-                let workflow_id: String?
-                let workflow_name: String?
-            }
-            return .json(StartResponse(
-                id: id.uuidString,
-                status: "recording",
-                workflow_id: workflow?.id.uuidString,
-                workflow_name: workflow?.name
-            ))
+            return DictationStartPreparation.start(
+                id: id,
+                workflowID: workflowID,
+                workflowName: workflowName
+            )
         }
+        if let errorStatus = preparation.errorStatus,
+           let errorMessage = preparation.errorMessage {
+            return .error(status: errorStatus, message: errorMessage)
+        }
+
+        guard let id = preparation.id else {
+            return .error(status: 500, message: "Failed to reserve dictation session")
+        }
+        await dictationViewModel.apiWaitForRecordingReadiness()
+        let failedMessage: String? = await MainActor.run {
+            if let session = dictationViewModel.apiDictationSession(id: id), session.status == .failed {
+                return session.error ?? "Failed to start dictation"
+            }
+            return nil
+        }
+        if let failedMessage {
+            return .error(status: 409, message: failedMessage)
+        }
+
+        struct StartResponse: Encodable {
+            let id: String
+            let status: String
+            let workflow_id: String?
+            let workflow_name: String?
+        }
+        return .json(StartResponse(
+            id: id.uuidString,
+            status: "recording",
+            workflow_id: preparation.workflowID?.uuidString,
+            workflow_name: preparation.workflowName
+        ))
     }
 
     // MARK: - POST /v1/dictation/stop

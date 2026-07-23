@@ -188,6 +188,15 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     private let stopStateLock = NSLock()
     private let engineLock = NSLock()
     private let audioLevelPublishLock = NSLock()
+    private let recordingActivityLock = OSAllocatedUnfairLock(initialState: false)
+    private struct AsyncRecordingStartState {
+        var nextRequestID: UInt64 = 0
+        var activeRequestID: UInt64?
+        var isCancelled = false
+        var isCommitted = false
+    }
+    private let asyncRecordingStartState = OSAllocatedUnfairLock(initialState: AsyncRecordingStartState())
+    private let recordingStartQueue = DispatchQueue(label: "com.typewhisper.audio-recording-start", qos: .userInitiated)
     private let processingQueue = DispatchQueue(label: "com.typewhisper.audio-processing", qos: .userInteractive)
     private let recoveryQueue = DispatchQueue(label: "com.typewhisper.audio-recovery", qos: .userInitiated)
     private let engineTeardownRetainer = DelayedReleaseRetainer<AVAudioEngine>(label: "com.typewhisper.audio-engine-teardown")
@@ -200,7 +209,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     private let inputCaptureFactory: AudioInputCaptureFactory
     private let defaultInputController: AudioInputDeviceDefaultControlling
     private let inputTransportResolver: AudioDeviceTransportResolving
-    private let initialInputTapSeenLock = OSAllocatedUnfairLock(initialState: false)
+    private let bluetoothInputStartupTracker = BluetoothInputStartupTracker()
     private var _lastStopGraceCaptureApplied = false
     private var recordingRequestUptimeNanoseconds: UInt64?
     private var hasLoggedFirstConvertedSample = false
@@ -209,6 +218,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     private var isAudioLevelPublishScheduled = false
 
     static let targetSampleRate: Double = 16000
+    private static let bluetoothInputReadinessTimeout: TimeInterval = 5.0
     private static let captureTapFrames: AVAudioFrameCount = 256
     private static let audioLevelPublishIntervalNanoseconds: UInt64 = 33_333_333
     private static let engineTeardownRetentionInterval: TimeInterval = 0.3
@@ -241,6 +251,31 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         bufferLock.lock()
         defer { bufferLock.unlock() }
         return _peakRawAudioLevel
+    }
+
+    private var isRecordingActive: Bool {
+        recordingActivityLock.withLock { $0 }
+    }
+
+    private func setRecordingActive(_ active: Bool) {
+        recordingActivityLock.withLock { $0 = active }
+        if Thread.isMainThread {
+            isRecording = active
+        } else {
+            DispatchQueue.main.sync { [self] in
+                isRecording = active
+            }
+        }
+    }
+
+    private func publishRecoveryError(_ error: AudioRecordingError?) {
+        if Thread.isMainThread {
+            recoveryError = error
+        } else {
+            DispatchQueue.main.sync { [self] in
+                recoveryError = error
+            }
+        }
     }
 
     var lastStopGraceCaptureApplied: Bool {
@@ -330,15 +365,138 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     }
 
     func startRecording(requestUptimeNanoseconds: UInt64 = DispatchTime.now().uptimeNanoseconds) throws {
+        try performStartRecording(
+            requestUptimeNanoseconds: requestUptimeNanoseconds,
+            shouldCancel: { false },
+            commitStart: { true }
+        )
+    }
+
+    func startRecordingAsync(
+        requestUptimeNanoseconds: UInt64 = DispatchTime.now().uptimeNanoseconds
+    ) async throws {
+        let requestID = asyncRecordingStartState.withLock { state -> UInt64 in
+            state.nextRequestID &+= 1
+            state.activeRequestID = state.nextRequestID
+            state.isCancelled = false
+            state.isCommitted = false
+            return state.nextRequestID
+        }
+
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+                recordingStartQueue.async { [weak self] in
+                    guard let self else {
+                        continuation.resume(throwing: CancellationError())
+                        return
+                    }
+
+                    defer {
+                        self.asyncRecordingStartState.withLock { state in
+                            if state.activeRequestID == requestID {
+                                state.activeRequestID = nil
+                                state.isCancelled = false
+                                state.isCommitted = false
+                            }
+                        }
+                    }
+
+                    do {
+                        try self.performStartRecording(
+                            requestUptimeNanoseconds: requestUptimeNanoseconds,
+                            shouldCancel: { [weak self] in
+                                self?.isRecordingStartCancelled(requestID: requestID) ?? true
+                            },
+                            commitStart: { [weak self] in
+                                self?.commitRecordingStart(requestID: requestID) ?? false
+                            }
+                        )
+                        continuation.resume()
+                    } catch {
+                        continuation.resume(throwing: error)
+                    }
+                }
+            }
+        } onCancel: {
+            asyncRecordingStartState.withLock { state in
+                guard state.activeRequestID == requestID, !state.isCommitted else { return }
+                state.isCancelled = true
+            }
+        }
+    }
+
+    func cancelPendingRecordingStart() {
+        asyncRecordingStartState.withLock { state in
+            guard state.activeRequestID != nil, !state.isCommitted else { return }
+            state.isCancelled = true
+        }
+    }
+
+    private func isRecordingStartCancelled(requestID: UInt64) -> Bool {
+        asyncRecordingStartState.withLock { state in
+            state.activeRequestID != requestID || state.isCancelled
+        }
+    }
+
+    private func commitRecordingStart(requestID: UInt64) -> Bool {
+        asyncRecordingStartState.withLock { state in
+            guard state.activeRequestID == requestID,
+                  !state.isCancelled,
+                  !state.isCommitted else {
+                return false
+            }
+            state.isCommitted = true
+            return true
+        }
+    }
+
+    private func throwIfRecordingStartCancelled(_ shouldCancel: () -> Bool) throws {
+        if shouldCancel() {
+            throw CancellationError()
+        }
+    }
+
+    private func throwIfRecordingStartExpired(_ deadline: TimeInterval?) throws {
+        guard let deadline, CFAbsoluteTimeGetCurrent() >= deadline else { return }
+        throw AudioRecordingError.noAudioData
+    }
+
+    private func waitBeforeRecordingStartRetry(
+        _ delay: TimeInterval,
+        readinessDeadline: TimeInterval?,
+        shouldCancel: () -> Bool
+    ) throws {
+        let requestedEnd = CFAbsoluteTimeGetCurrent() + delay
+        let end = min(requestedEnd, readinessDeadline ?? requestedEnd)
+        while CFAbsoluteTimeGetCurrent() < end {
+            try throwIfRecordingStartCancelled(shouldCancel)
+            let remaining = end - CFAbsoluteTimeGetCurrent()
+            Thread.sleep(forTimeInterval: min(0.01, max(0, remaining)))
+        }
+        try throwIfRecordingStartCancelled(shouldCancel)
+        try throwIfRecordingStartExpired(readinessDeadline)
+    }
+
+    private func performStartRecording(
+        requestUptimeNanoseconds: UInt64,
+        shouldCancel: @escaping () -> Bool,
+        commitStart: @escaping () -> Bool
+    ) throws {
+        try throwIfRecordingStartCancelled(shouldCancel)
         guard hasMicrophonePermission else {
             throw AudioRecordingError.microphonePermissionDenied
         }
+        let readinessDeadline = requiresInitialInputReadiness
+            ? CFAbsoluteTimeGetCurrent() + Self.bluetoothInputReadinessTimeout
+            : nil
 
         // Clear any terminal-recovery error from a previous session so the
         // view model doesn't see a stale failure on the first buffer update.
-        recoveryError = nil
+        publishRecoveryError(nil)
 
         try validateRecordingInputAvailability()
+        try throwIfRecordingStartCancelled(shouldCancel)
+        try throwIfRecordingStartExpired(readinessDeadline)
         clearRecordingBuffer(requestUptimeNanoseconds: requestUptimeNanoseconds)
         recoveryAudioStore.startNewRecording()
         publishRecoverableRecordingURLs(recoveryAudioStore.recoveryURLs)
@@ -361,12 +519,24 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             try waitForBluetoothRouteStabilizationIfNeeded(
                 inputDeviceID: routeActivationRequest.inputDeviceID,
                 usesBluetoothTransport: routeActivationRequest.usesBluetoothTransport,
-                reason: "recording-start"
+                reason: "recording-start",
+                readinessDeadline: readinessDeadline,
+                shouldCancel: shouldCancel
             )
         } catch {
             outputVolumeGuard.restoreIfRaised(reason: "recording-start-route-stabilization-failed")
             outputVolumeGuard.clear()
             inputActivationGuard.restore(reason: "recording-start-route-stabilization-failed")
+            discardActiveRecoveryRecording(keepingLatest: true)
+            throw error
+        }
+        do {
+            try throwIfRecordingStartCancelled(shouldCancel)
+            try throwIfRecordingStartExpired(readinessDeadline)
+        } catch {
+            outputVolumeGuard.restoreIfRaised(reason: "recording-start-cancelled")
+            outputVolumeGuard.clear()
+            inputActivationGuard.restore(reason: "recording-start-cancelled")
             discardActiveRecoveryRecording(keepingLatest: true)
             throw error
         }
@@ -378,9 +548,11 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             bufferLock.unlock()
             do {
                 try startRecordingOverride()
+                try throwIfRecordingStartCancelled(shouldCancel)
+                guard commitStart() else { throw CancellationError() }
                 outputVolumeGuard.restoreIfRaised(reason: "recording-start-override")
                 outputVolumeGuard.clear()
-                isRecording = true
+                setRecordingActive(true)
             } catch {
                 outputVolumeGuard.restoreIfRaised(reason: "recording-start-override-failed")
                 outputVolumeGuard.clear()
@@ -394,9 +566,11 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         if case .inputOnlyDevice(let inputOnlyDeviceID) = selectedCaptureRoute {
             do {
                 try startInputOnlyRecording(deviceID: inputOnlyDeviceID, label: "recording")
+                try throwIfRecordingStartCancelled(shouldCancel)
+                guard commitStart() else { throw CancellationError() }
                 outputVolumeGuard.restoreIfRaised(reason: "recording-start")
                 outputVolumeGuard.clear()
-                isRecording = true
+                setRecordingActive(true)
             } catch {
                 cleanupAfterFailedInputOnlyStart()
                 discardActiveRecoveryRecording(keepingLatest: true)
@@ -415,7 +589,12 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         installConfigurationObserver(for: engine)
 
         do {
-            try startEngineWithRecovery(engine, label: "recording")
+            try startEngineWithRecovery(
+                engine,
+                label: "recording",
+                readinessDeadline: readinessDeadline,
+                shouldCancel: shouldCancel
+            )
 
             if recoveryCoordinator.finishStartingSuccessfully() == .performImmediateRecovery {
                 guard let currentEngine = engineLock.withLock({ audioEngine }) else {
@@ -425,14 +604,22 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
                     logger.info("Ignoring benign post-start audio engine configuration change after tap renegotiation")
                 } else {
                     logger.warning("Audio engine configuration changed while recording was starting, restarting with fresh input format")
-                    try restartEngineWithRecovery(currentEngine, label: "recording-startup")
+                    try restartEngineWithRecovery(
+                        currentEngine,
+                        label: "recording-startup",
+                        readinessDeadline: readinessDeadline,
+                        shouldCancel: shouldCancel
+                    )
                 }
                 scheduleRecoveryIfNeeded(recoveryCoordinator.finishRecovery())
             }
 
+            try throwIfRecordingStartCancelled(shouldCancel)
+            guard commitStart() else { throw CancellationError() }
+            finishBluetoothInputStartupIfNeeded()
             outputVolumeGuard.restoreIfRaised(reason: "recording-start")
             outputVolumeGuard.clear()
-            isRecording = true
+            setRecordingActive(true)
         } catch {
             let failedEngine = engineLock.withLock { audioEngine } ?? engine
             cleanupAfterFailedStart(failedEngine)
@@ -461,9 +648,9 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             }
 
             setLastStopGraceCaptureApplied(false)
+            setRecordingActive(false)
             resetAudioLevelPublishing()
             DispatchQueue.main.async { [weak self] in
-                self?.isRecording = false
                 self?.audioLevel = normalizedLevel
                 self?.rawAudioLevel = rms
             }
@@ -478,6 +665,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             startupConfigurationChangeGuard = nil
             return capture
         }
+        setRecordingActive(false)
         if let inputCaptureSession = capture.inputCaptureSession {
             let bufferedDuration = totalBufferDuration
             var graceApplied = false
@@ -506,7 +694,6 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
 
             resetAudioLevelPublishing()
             DispatchQueue.main.async { [weak self] in
-                self?.isRecording = false
                 self?.audioLevel = 0
                 self?.rawAudioLevel = 0
             }
@@ -552,7 +739,6 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
 
         resetAudioLevelPublishing()
         DispatchQueue.main.async { [weak self] in
-            self?.isRecording = false
             self?.audioLevel = 0
             self?.rawAudioLevel = 0
         }
@@ -586,7 +772,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         }
 
         let engine: AVAudioEngine? = engineLock.withLock { audioEngine }
-        guard isRecording, let engine else { return }
+        guard isRecordingActive, let engine else { return }
 
         if consumeStartupConfigurationChangeGuardIfNeeded(for: engine) {
             logger.info("Ignoring benign post-start audio engine configuration change after tap renegotiation")
@@ -618,6 +804,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     }
 
     private func failActiveRecordingDueToRecovery(_ error: AudioRecordingError) {
+        setRecordingActive(false)
         recoveryCoordinator.transitionToIdle()
         removeConfigurationObserver()
         outputVolumeGuard.captureBaselineIfNeeded()
@@ -641,7 +828,6 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         DispatchQueue.main.async { [weak self] in
             guard let self else { return }
             self.recoveryError = error
-            self.isRecording = false
             self.audioLevel = 0
             self.rawAudioLevel = 0
             self.recoverableRecordingURLs = recoveryURLs
@@ -667,20 +853,40 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         }
     }
 
-    private func startEngineWithRecovery(_ engine: AVAudioEngine, label: String) throws {
+    private func startEngineWithRecovery(
+        _ engine: AVAudioEngine,
+        label: String,
+        readinessDeadline: TimeInterval? = nil,
+        shouldCancel: @escaping () -> Bool = { false }
+    ) throws {
         let explicitDeviceSelected = hasExplicitDeviceSelection
         let selectedBluetoothDevice = requiresInitialInputReadiness
+        let effectiveReadinessDeadline = readinessDeadline ?? (
+            selectedBluetoothDevice
+                ? CFAbsoluteTimeGetCurrent() + Self.bluetoothInputReadinessTimeout
+                : nil
+        )
         var currentEngine = engine
         // Main-thread callers (e.g. startRecording from hotkey) get a bounded
         // backoff to keep UI responsive; the observer-based recovery queue
         // uses the full schedule. See AudioEngineRecoveryPolicy.
         let backoff = AudioEngineRecoveryPolicy.retryBackoffForCurrentThread()
-        for (attempt, delay) in backoff.enumerated() {
+        var retryCount = 0
+        while true {
             do {
-                try configureAndStartEngine(currentEngine, label: label)
+                try throwIfRecordingStartCancelled(shouldCancel)
+                try throwIfRecordingStartExpired(effectiveReadinessDeadline)
+                try configureAndStartEngine(
+                    currentEngine,
+                    label: label,
+                    readinessDeadline: effectiveReadinessDeadline,
+                    shouldCancel: shouldCancel
+                )
                 return
             } catch let error as SelectedInputDeviceError {
                 throw mapSelectedInputDeviceError(error)
+            } catch is CancellationError {
+                throw CancellationError()
             } catch let error as AudioRecordingError {
                 throw error
             } catch {
@@ -691,32 +897,42 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
                     throw AudioRecordingError.engineStartFailed(error.localizedDescription)
                 }
 
-                logger.warning("\(label, privacy: .public) audio engine start failed with retryable error, retry \(attempt + 1) in \(delay, privacy: .public)s: \(error.localizedDescription, privacy: .public)")
+                if !selectedBluetoothDevice, retryCount >= backoff.count {
+                    if explicitDeviceSelected {
+                        throw AudioRecordingError.selectedInputDeviceIncompatible(.engineStartFailed)
+                    }
+                    throw AudioRecordingError.engineStartFailed(error.localizedDescription)
+                }
+
+                try throwIfRecordingStartExpired(effectiveReadinessDeadline)
+                let delay = backoff.isEmpty
+                    ? 0.05
+                    : backoff[min(retryCount, backoff.count - 1)]
+                retryCount += 1
+                logger.warning("\(label, privacy: .public) audio engine start failed with retryable error, retry \(retryCount, privacy: .public) in \(delay, privacy: .public)s: \(error.localizedDescription, privacy: .public)")
+                recoveryCoordinator.consumePendingConfigurationChangeForEngineReplacement()
                 if let replacementEngine = replaceAudioEngineForRecoveryIfNeeded(currentEngine) {
                     installConfigurationObserver(for: replacementEngine)
                     teardownEngine(currentEngine)
                     engineTeardownRetainer.retain(currentEngine, for: Self.engineTeardownRetentionInterval)
                     currentEngine = replacementEngine
                 }
-                Thread.sleep(forTimeInterval: delay)
+                try throwIfRecordingStartCancelled(shouldCancel)
+                try waitBeforeRecordingStartRetry(
+                    delay,
+                    readinessDeadline: effectiveReadinessDeadline,
+                    shouldCancel: shouldCancel
+                )
             }
-        }
-
-        do {
-            try configureAndStartEngine(currentEngine, label: label)
-        } catch let error as SelectedInputDeviceError {
-            throw mapSelectedInputDeviceError(error)
-        } catch let error as AudioRecordingError {
-            throw error
-        } catch {
-            if explicitDeviceSelected && !selectedBluetoothDevice {
-                throw AudioRecordingError.selectedInputDeviceIncompatible(.engineStartFailed)
-            }
-            throw AudioRecordingError.engineStartFailed(error.localizedDescription)
         }
     }
 
-    private func restartEngineWithRecovery(_ engine: AVAudioEngine, label: String) throws {
+    private func restartEngineWithRecovery(
+        _ engine: AVAudioEngine,
+        label: String,
+        readinessDeadline: TimeInterval? = nil,
+        shouldCancel: @escaping () -> Bool = { false }
+    ) throws {
         outputVolumeGuard.captureBaselineIfNeeded()
         guard let replacementEngine = replaceAudioEngineForRecoveryIfNeeded(engine) else { return }
         defer {
@@ -729,14 +945,28 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         engineTeardownRetainer.retain(engine, for: Self.engineTeardownRetentionInterval)
 
         do {
-            try startEngineWithRecovery(replacementEngine, label: label)
+            try startEngineWithRecovery(
+                replacementEngine,
+                label: label,
+                readinessDeadline: readinessDeadline,
+                shouldCancel: shouldCancel
+            )
+            if isRecordingActive {
+                finishBluetoothInputStartupIfNeeded()
+            }
         } catch {
             cleanupAfterFailedStart(replacementEngine)
             throw error
         }
     }
 
-    private func configureAndStartEngine(_ engine: AVAudioEngine, label: String) throws {
+    private func configureAndStartEngine(
+        _ engine: AVAudioEngine,
+        label: String,
+        readinessDeadline: TimeInterval?,
+        shouldCancel: @escaping () -> Bool
+    ) throws {
+        try throwIfRecordingStartCancelled(shouldCancel)
         let inputRoute = selectedEngineInputRoute
         // Set non-Bluetooth explicit inputs before reading the format so each retry sees fresh hardware state.
         // Bluetooth inputs are first activated as the system default input and then left to AVAudioEngine's
@@ -786,6 +1016,9 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             throw AudioRecordingError.engineStartFailed("Cannot create audio converter")
         }
 
+        let bluetoothInputGeneration = requiresInitialInputReadiness
+            ? bluetoothInputStartupTracker.beginGeneration()
+            : nil
         inputNode.removeTap(onBus: 0)
 
         do {
@@ -794,8 +1027,12 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
                     guard let normalizedBuffer = Self.normalizedInputBuffer(buffer) else {
                         return
                     }
-                    self?.markInitialInputTapSeenIfNeeded(normalizedBuffer)
-                    self?.processAudioBuffer(normalizedBuffer, converter: converter, targetFormat: targetFormat)
+                    self?.processAudioBuffer(
+                        normalizedBuffer,
+                        converter: converter,
+                        targetFormat: targetFormat,
+                        bluetoothInputGeneration: bluetoothInputGeneration
+                    )
                 }
             }
         } catch {
@@ -818,7 +1055,15 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             // sequence (Bluetooth A2DP↔HFP renegotiation) are deferred
             // instead of driving an infinite restart loop. See issue #332.
             recoveryCoordinator.noteEngineStarted()
-            try waitForInitialInputReadinessIfNeeded(label: label, isEngineRunning: { engine.isRunning })
+            try waitForInitialInputReadinessIfNeeded(
+                label: label,
+                generation: bluetoothInputGeneration,
+                deadline: readinessDeadline,
+                isEngineRunning: { [recoveryCoordinator] in
+                    engine.isRunning && !recoveryCoordinator.hasPendingConfigurationChange
+                },
+                shouldCancel: shouldCancel
+            )
             let elapsedMs = (CFAbsoluteTimeGetCurrent() - engineStartTime) * 1000
             logger.info("\(label, privacy: .public) audio engine started in \(String(format: "%.1f", elapsedMs), privacy: .public)ms")
         } catch {
@@ -869,38 +1114,75 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         }
     }
 
-    private var hasCapturedInitialInput: Bool {
-        initialInputTapSeenLock.withLock { $0 }
-    }
-
     private func waitForBluetoothRouteStabilizationIfNeeded(
         inputDeviceID: AudioDeviceID?,
         usesBluetoothTransport: Bool,
-        reason: String
+        reason: String,
+        readinessDeadline: TimeInterval?,
+        shouldCancel: @escaping () -> Bool
     ) throws {
         guard usesBluetoothTransport else { return }
+        try throwIfRecordingStartCancelled(shouldCancel)
+        try throwIfRecordingStartExpired(readinessDeadline)
+        let timeout = readinessDeadline.map {
+            max(0, $0 - CFAbsoluteTimeGetCurrent())
+        } ?? BluetoothAudioRouteStabilizer.defaultTimeout
 
         guard bluetoothInputRouteStabilizer.waitForActivatedDefaultInput(
             deviceID: inputDeviceID,
-            reason: reason
+            reason: reason,
+            timeout: timeout,
+            shouldCancel: shouldCancel
         ) else {
+            try throwIfRecordingStartCancelled(shouldCancel)
+            try throwIfRecordingStartExpired(readinessDeadline)
             throw AudioRecordingError.audioRoutingConflict
         }
     }
 
     private func waitForInitialInputReadinessIfNeeded(
         label: String,
-        isEngineRunning: (() -> Bool)? = nil
+        generation: UInt64?,
+        deadline: TimeInterval? = nil,
+        isEngineRunning: (() -> Bool)? = nil,
+        shouldCancel: @escaping () -> Bool = { false }
     ) throws {
-        guard requiresInitialInputReadiness else { return }
+        guard requiresInitialInputReadiness, let generation else { return }
 
         try inputReadinessChecker.waitForInitialInput(
             label: label,
-            hasCapturedInitialInput: { [weak self] in
-                self?.hasCapturedInitialInput ?? false
+            deadline: deadline,
+            readinessSnapshot: { [weak self] in
+                self?.bluetoothInputStartupTracker.snapshot(for: generation)
             },
-            isEngineRunning: isEngineRunning
+            isEngineRunning: isEngineRunning,
+            shouldCancel: shouldCancel
         )
+    }
+
+    private func finishBluetoothInputStartupIfNeeded() {
+        guard requiresInitialInputReadiness else { return }
+
+        var promotion: BluetoothInputStartupTracker.Promotion?
+        processingQueue.sync {
+            promotion = bluetoothInputStartupTracker.promoteCurrentGeneration()
+            guard let promotion else { return }
+            bufferLock.withLock {
+                sampleBuffer.append(contentsOf: promotion.samples)
+                if promotion.peakInputRMS > _peakRawAudioLevel {
+                    _peakRawAudioLevel = promotion.peakInputRMS
+                }
+            }
+            recoveryAudioStore.append(promotion.samples)
+        }
+        guard let promotion else { return }
+
+        logger.info(
+            "Bluetooth recording input ready: generation=\(promotion.generation, privacy: .public), bufferedSamples=\(promotion.samples.count, privacy: .public), readinessMs=\(String(format: "%.1f", promotion.readinessDuration * 1000), privacy: .public)"
+        )
+        DispatchQueue.main.async { [weak self] in
+            self?.onFirstRecordingAudioBuffer?()
+        }
     }
 
     private func teardownEngine(_ engine: AVAudioEngine) {
@@ -922,6 +1204,8 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     }
 
     private func cleanupAfterFailedStart(_ engine: AVAudioEngine) {
+        setRecordingActive(false)
+        bluetoothInputStartupTracker.reset()
         recoveryCoordinator.transitionToIdle()
         removeConfigurationObserver()
         engineLock.withLock {
@@ -940,7 +1224,6 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         inputActivationGuard.restore(reason: "recording-start-failed")
         resetAudioLevelPublishing()
         DispatchQueue.main.async { [weak self] in
-            self?.isRecording = false
             self?.audioLevel = 0
             self?.rawAudioLevel = 0
         }
@@ -971,13 +1254,8 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         recordingRequestUptimeNanoseconds = requestUptimeNanoseconds
         hasLoggedFirstConvertedSample = false
         bufferLock.unlock()
-        initialInputTapSeenLock.withLock { $0 = false }
+        bluetoothInputStartupTracker.reset()
         resetAudioLevelPublishing()
-    }
-
-    private func markInitialInputTapSeenIfNeeded(_ buffer: AVAudioPCMBuffer) {
-        guard AudioInputSignal.containsSignal(buffer) else { return }
-        initialInputTapSeenLock.withLock { $0 = true }
     }
 
     private func enableVoiceProcessingIfNeeded(
@@ -1024,7 +1302,8 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     private func processAudioBuffer(
         _ buffer: AVAudioPCMBuffer,
         converter: AVAudioConverter,
-        targetFormat: AVAudioFormat
+        targetFormat: AVAudioFormat,
+        bluetoothInputGeneration: UInt64? = nil
     ) {
         // Convert sample rate on the render thread (AVAudioConverter requires thread consistency)
         let frameCount = AVAudioFrameCount(
@@ -1061,7 +1340,10 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         let samples = Array(UnsafeBufferPointer(start: channelData, count: Int(convertedBuffer.frameLength)))
 
         processingQueue.async { [weak self] in
-            self?.processConvertedSamples(samples)
+            self?.processConvertedSamples(
+                samples,
+                bluetoothInputGeneration: bluetoothInputGeneration
+            )
         }
     }
 
@@ -1088,7 +1370,6 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
                       let monoBuffer = AudioInputBufferNormalizer.monoFloatBuffer(from: buffer) else {
                     return
                 }
-                self.markInitialInputTapSeenIfNeeded(monoBuffer)
                 self.processAudioBuffer(monoBuffer, converter: converter, targetFormat: targetFormat)
             }
 
@@ -1109,6 +1390,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     }
 
     private func cleanupAfterFailedInputOnlyStart() {
+        setRecordingActive(false)
         recoveryCoordinator.transitionToIdle()
         removeConfigurationObserver()
         let session: AudioInputCaptureSession? = engineLock.withLock {
@@ -1124,19 +1406,42 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         inputActivationGuard.restore(reason: "recording-start-failed")
         resetAudioLevelPublishing()
         DispatchQueue.main.async { [weak self] in
-            self?.isRecording = false
             self?.audioLevel = 0
             self?.rawAudioLevel = 0
         }
     }
 
-    private func processConvertedSamples(_ samples: [Float]) {
+    private func processConvertedSamples(
+        _ samples: [Float],
+        bluetoothInputGeneration: UInt64? = nil
+    ) {
         let boostResult = MicrophoneBoostProcessor.process(samples, enabled: microphoneBoostEnabled)
         let processedSamples = boostResult.samples
         let rms = boostResult.outputRMS
         let normalizedLevel = AudioLevelMeter.normalizedLevel(rms: rms)
         var requestToFirstBufferMs: Double?
         var didReceiveFirstBuffer = false
+
+        if let bluetoothInputGeneration {
+            let disposition = bluetoothInputStartupTracker.consume(
+                samples: processedSamples,
+                inputRMS: boostResult.inputRMS,
+                generation: bluetoothInputGeneration
+            )
+            switch disposition {
+            case .ignored:
+                return
+            case .staged:
+                logFirstConvertedBufferIfNeeded(
+                    sampleCount: processedSamples.count,
+                    requestToFirstBufferMs: &requestToFirstBufferMs
+                )
+                publishAudioLevel(normalizedLevel, rms: rms, force: requestToFirstBufferMs != nil)
+                return
+            case .appendDirectly:
+                break
+            }
+        }
 
         bufferLock.lock()
         sampleBuffer.append(contentsOf: processedSamples)
@@ -1163,6 +1468,26 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             DispatchQueue.main.async { [weak self] in
                 self?.onFirstRecordingAudioBuffer?()
             }
+        }
+    }
+
+    private func logFirstConvertedBufferIfNeeded(
+        sampleCount: Int,
+        requestToFirstBufferMs: inout Double?
+    ) {
+        bufferLock.withLock {
+            guard !hasLoggedFirstConvertedSample else { return }
+            hasLoggedFirstConvertedSample = true
+            requestToFirstBufferMs = Self.elapsedMilliseconds(
+                from: recordingRequestUptimeNanoseconds,
+                to: DispatchTime.now().uptimeNanoseconds
+            )
+        }
+
+        if let requestToFirstBufferMs {
+            logger.info(
+                "First recording audio buffer received: requestToFirstBufferMs=\(Self.formatMilliseconds(requestToFirstBufferMs), privacy: .public), sampleCount=\(sampleCount, privacy: .public)"
+            )
         }
     }
 
@@ -1269,7 +1594,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     /// handled it. Called from `DictationViewModel` once the session is
     /// unwound so the @Published value doesn't linger for later bindings.
     func clearRecoveryError() {
-        recoveryError = nil
+        publishRecoveryError(nil)
     }
 
     var latestRecoveryRecordingURL: URL? {
@@ -1379,27 +1704,191 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     }
 }
 
+struct AudioInputReadinessSnapshot: Equatable, Sendable {
+    let generation: UInt64
+    let consecutiveBufferCount: Int
+    let buffersSinceSignal: Int
+    let continuousDuration: TimeInterval
+    let lastBufferTimestamp: TimeInterval
+}
+
+final class BluetoothInputStartupTracker: @unchecked Sendable {
+    enum ConsumeDisposition: Equatable {
+        case ignored
+        case staged
+        case appendDirectly
+    }
+
+    struct Promotion {
+        let generation: UInt64
+        let samples: [Float]
+        let peakInputRMS: Float
+        let readinessDuration: TimeInterval
+    }
+
+    private struct State {
+        var generation: UInt64 = 0
+        var isActive = false
+        var isReady = false
+        var generationStartedAt: TimeInterval = 0
+        var streakStartedAt: TimeInterval?
+        var lastBufferTimestamp: TimeInterval?
+        var consecutiveBufferCount = 0
+        var buffersSinceSignal = 0
+        var stagedSamples: [Float] = []
+        var peakInputRMS: Float = 0
+    }
+
+    private static let maximumBufferGap: TimeInterval = 0.25
+    private static let signalPeakThreshold: Float = 0.000_01
+    private let now: @Sendable () -> TimeInterval
+    private let state = OSAllocatedUnfairLock(initialState: State())
+
+    init(now: @escaping @Sendable () -> TimeInterval = { CFAbsoluteTimeGetCurrent() }) {
+        self.now = now
+    }
+
+    func beginGeneration() -> UInt64 {
+        let timestamp = now()
+        return state.withLock { state in
+            state.generation &+= 1
+            state.isActive = true
+            state.isReady = false
+            state.generationStartedAt = timestamp
+            state.streakStartedAt = nil
+            state.lastBufferTimestamp = nil
+            state.consecutiveBufferCount = 0
+            state.buffersSinceSignal = 0
+            state.stagedSamples.removeAll(keepingCapacity: true)
+            state.peakInputRMS = 0
+            return state.generation
+        }
+    }
+
+    func consume(
+        samples: [Float],
+        inputRMS: Float,
+        generation: UInt64
+    ) -> ConsumeDisposition {
+        let timestamp = now()
+        let containsSignal = samples.contains { abs($0) > Self.signalPeakThreshold }
+
+        return state.withLock { state in
+            guard state.isActive, state.generation == generation else {
+                return .ignored
+            }
+            guard !state.isReady else {
+                return .appendDirectly
+            }
+
+            if let lastBufferTimestamp = state.lastBufferTimestamp,
+               timestamp - lastBufferTimestamp <= Self.maximumBufferGap {
+                state.consecutiveBufferCount += 1
+                if state.buffersSinceSignal > 0 {
+                    state.buffersSinceSignal += 1
+                }
+            } else {
+                state.streakStartedAt = timestamp
+                state.consecutiveBufferCount = 1
+                state.buffersSinceSignal = 0
+            }
+
+            if containsSignal, state.buffersSinceSignal == 0 {
+                state.buffersSinceSignal = 1
+            }
+            state.lastBufferTimestamp = timestamp
+            state.stagedSamples.append(contentsOf: samples)
+            if inputRMS > state.peakInputRMS {
+                state.peakInputRMS = inputRMS
+            }
+            return .staged
+        }
+    }
+
+    func snapshot(for generation: UInt64) -> AudioInputReadinessSnapshot? {
+        state.withLock { state in
+            guard state.isActive,
+                  !state.isReady,
+                  state.generation == generation,
+                  let streakStartedAt = state.streakStartedAt,
+                  let lastBufferTimestamp = state.lastBufferTimestamp else {
+                return nil
+            }
+            return AudioInputReadinessSnapshot(
+                generation: generation,
+                consecutiveBufferCount: state.consecutiveBufferCount,
+                buffersSinceSignal: state.buffersSinceSignal,
+                continuousDuration: max(0, lastBufferTimestamp - streakStartedAt),
+                lastBufferTimestamp: lastBufferTimestamp
+            )
+        }
+    }
+
+    func promoteCurrentGeneration() -> Promotion? {
+        let timestamp = now()
+        return state.withLock { state in
+            guard state.isActive, !state.isReady else { return nil }
+            state.isReady = true
+            let promotion = Promotion(
+                generation: state.generation,
+                samples: state.stagedSamples,
+                peakInputRMS: state.peakInputRMS,
+                readinessDuration: max(0, timestamp - state.generationStartedAt)
+            )
+            state.stagedSamples.removeAll(keepingCapacity: false)
+            return promotion
+        }
+    }
+
+    func reset() {
+        state.withLock { state in
+            state.isActive = false
+            state.isReady = false
+            state.streakStartedAt = nil
+            state.lastBufferTimestamp = nil
+            state.consecutiveBufferCount = 0
+            state.buffersSinceSignal = 0
+            state.stagedSamples.removeAll(keepingCapacity: false)
+            state.peakInputRMS = 0
+        }
+    }
+}
+
 protocol AudioInputReadinessChecking: AnyObject {
     func waitForInitialInput(
         label: String,
-        hasCapturedInitialInput: () -> Bool,
-        isEngineRunning: (() -> Bool)?
+        deadline: TimeInterval?,
+        readinessSnapshot: () -> AudioInputReadinessSnapshot?,
+        isEngineRunning: (() -> Bool)?,
+        shouldCancel: () -> Bool
     ) throws
 }
 
 final class BluetoothInputReadinessChecker: AudioInputReadinessChecking {
     private let timeout: TimeInterval
+    private let silentFallback: TimeInterval
+    private let missingBufferRecoveryInterval: TimeInterval
+    private let maximumBufferGap: TimeInterval
+    private let requiredSignalBufferCount: Int
     private let pollInterval: TimeInterval
     private let now: () -> TimeInterval
     private let sleep: (TimeInterval) -> Void
 
     init(
-        timeout: TimeInterval = 1.0,
+        timeout: TimeInterval = 5.0,
+        silentFallback: TimeInterval = 3.0,
+        missingBufferRecoveryInterval: TimeInterval = 3.0,
+        maximumBufferGap: TimeInterval = 0.25,
+        requiredSignalBufferCount: Int = 3,
         pollInterval: TimeInterval = 0.01,
         now: @escaping () -> TimeInterval = { CFAbsoluteTimeGetCurrent() },
         sleep: @escaping (TimeInterval) -> Void = { Thread.sleep(forTimeInterval: $0) }
     ) {
         self.timeout = timeout
+        self.silentFallback = silentFallback
+        self.missingBufferRecoveryInterval = missingBufferRecoveryInterval
+        self.maximumBufferGap = maximumBufferGap
+        self.requiredSignalBufferCount = requiredSignalBufferCount
         self.pollInterval = pollInterval
         self.now = now
         self.sleep = sleep
@@ -1407,35 +1896,73 @@ final class BluetoothInputReadinessChecker: AudioInputReadinessChecking {
 
     func waitForInitialInput(
         label: String,
-        hasCapturedInitialInput: () -> Bool,
-        isEngineRunning: (() -> Bool)?
+        deadline: TimeInterval?,
+        readinessSnapshot: () -> AudioInputReadinessSnapshot?,
+        isEngineRunning: (() -> Bool)?,
+        shouldCancel: () -> Bool
     ) throws {
-        let deadline = now() + timeout
-        while now() < deadline {
-            if hasCapturedInitialInput() {
-                logger.info("\(label, privacy: .public) Bluetooth input delivered initial non-silent audio")
-                return
+        let startedAt = now()
+        let localDeadline = startedAt + timeout
+        let effectiveDeadline = min(localDeadline, deadline ?? localDeadline)
+        while now() < effectiveDeadline {
+            if shouldCancel() {
+                throw CancellationError()
             }
             if let isEngineRunning, !isEngineRunning() {
-                throw makeStartupRouteChangeError(label: label)
+                throw makeStartupRouteChangeError(
+                    label: label,
+                    detail: "Bluetooth input route changed before readiness"
+                )
             }
-            sleep(min(pollInterval, max(0, deadline - now())))
+            if let snapshot = readinessSnapshot() {
+                if snapshot.buffersSinceSignal >= requiredSignalBufferCount {
+                    logger.info(
+                        "\(label, privacy: .public) Bluetooth input delivered stable non-silent audio in generation \(snapshot.generation, privacy: .public)"
+                    )
+                    return
+                }
+                if snapshot.consecutiveBufferCount >= requiredSignalBufferCount,
+                   snapshot.continuousDuration >= silentFallback {
+                    logger.info(
+                        "\(label, privacy: .public) Bluetooth input delivered a stable silent stream for \(self.silentFallback, privacy: .public)s in generation \(snapshot.generation, privacy: .public)"
+                    )
+                    return
+                }
+                if now() - snapshot.lastBufferTimestamp > maximumBufferGap {
+                    throw makeStartupRouteChangeError(
+                        label: label,
+                        detail: "Bluetooth input stalled before readiness"
+                    )
+                }
+            } else if now() - startedAt >= missingBufferRecoveryInterval {
+                throw makeStartupRouteChangeError(
+                    label: label,
+                    detail: "Bluetooth input did not deliver buffers before readiness"
+                )
+            }
+            sleep(min(pollInterval, max(0, effectiveDeadline - now())))
         }
 
+        if shouldCancel() {
+            throw CancellationError()
+        }
         if let isEngineRunning, !isEngineRunning() {
-            throw makeStartupRouteChangeError(label: label)
+            throw makeStartupRouteChangeError(
+                label: label,
+                detail: "Bluetooth input route changed before readiness"
+            )
         }
 
         logger.error("\(label, privacy: .public) Bluetooth input did not deliver audio within \(self.timeout, privacy: .public)s after engine start")
         throw AudioRecordingService.AudioRecordingError.noAudioData
     }
 
-    private func makeStartupRouteChangeError(label: String) -> NSError {
+    private func makeStartupRouteChangeError(label: String, detail: String) -> NSError {
         NSError(
             domain: AudioEngineRecoveryErrorDomains.transientFormatMismatch,
             code: 0,
             userInfo: [
-                NSLocalizedDescriptionKey: "\(label) Bluetooth input route changed before initial audio"
+                NSLocalizedDescriptionKey: "\(label) \(detail)"
             ]
         )
     }
@@ -1471,16 +1998,34 @@ extension AudioRecordingService {
         consumeStartupConfigurationChangeGuardIfMatching(for: engine, liveFormat: liveFormat)
     }
 
-    func testingWaitForInitialInputReadinessIfNeeded(isEngineRunning: (() -> Bool)? = nil) throws {
-        try waitForInitialInputReadinessIfNeeded(label: "test", isEngineRunning: isEngineRunning)
+    func testingWaitForInitialInputReadinessIfNeeded(
+        generation: UInt64,
+        isEngineRunning: (() -> Bool)? = nil,
+        shouldCancel: @escaping () -> Bool = { false }
+    ) throws {
+        try waitForInitialInputReadinessIfNeeded(
+            label: "test",
+            generation: generation,
+            isEngineRunning: isEngineRunning,
+            shouldCancel: shouldCancel
+        )
     }
 
-    func testingMarkInitialInputTapSeen() {
-        initialInputTapSeenLock.withLock { $0 = true }
+    func testingBeginBluetoothInputGeneration() -> UInt64 {
+        bluetoothInputStartupTracker.beginGeneration()
     }
 
-    func testingMarkInitialInputTapSeen(_ buffer: AVAudioPCMBuffer) {
-        markInitialInputTapSeenIfNeeded(buffer)
+    @discardableResult
+    func testingConsumeBluetoothInputSamples(
+        _ samples: [Float],
+        inputRMS: Float,
+        generation: UInt64
+    ) -> BluetoothInputStartupTracker.ConsumeDisposition {
+        bluetoothInputStartupTracker.consume(
+            samples: samples,
+            inputRMS: inputRMS,
+            generation: generation
+        )
     }
 
     func testingProcessConvertedSamples(_ samples: [Float]) {

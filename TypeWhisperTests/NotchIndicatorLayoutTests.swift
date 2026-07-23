@@ -50,6 +50,21 @@ final class NotchIndicatorLayoutTests: XCTestCase {
         XCTAssertGreaterThan(recordingWidth, baseline)
     }
 
+    func testPreparingWidthReservesSpaceForStatusLabel() {
+        let shortLabelWidth = NotchIndicatorLayout.preparingClosedWidth(
+            hasNotch: false,
+            notchWidth: 0,
+            label: ""
+        )
+        let longLabelWidth = NotchIndicatorLayout.preparingClosedWidth(
+            hasNotch: false,
+            notchWidth: 0,
+            label: "Mikrofon wird vorbereitet …"
+        )
+
+        XCTAssertGreaterThan(longLabelWidth, shortLabelWidth)
+    }
+
     func testReservedTimerTextUsesTwoMinuteDigitsBelowOneHundredMinutes() {
         XCTAssertEqual(NotchIndicatorLayout.reservedTimerText(for: 3), "00:00")
     }

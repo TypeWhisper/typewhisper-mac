@@ -2810,12 +2810,17 @@ enum BluetoothAudioRouteStabilizer {
         pollInterval: TimeInterval = defaultPollInterval,
         now: () -> TimeInterval = { CFAbsoluteTimeGetCurrent() },
         sleep: (TimeInterval) -> Void = { Thread.sleep(forTimeInterval: $0) },
-        readDefaultInput: () -> AudioDeviceID? = { CoreAudioInputDeviceDefaultController().defaultInputDeviceID() }
+        readDefaultInput: () -> AudioDeviceID? = { CoreAudioInputDeviceDefaultController().defaultInputDeviceID() },
+        shouldCancel: () -> Bool = { false }
     ) -> Bool {
         let deadline = now() + timeout
         var stableSince: TimeInterval?
 
         while true {
+            guard !shouldCancel() else {
+                deviceHelperLogger.info("Bluetooth default route stabilization cancelled for \(reason, privacy: .public)")
+                return false
+            }
             let currentTime = now()
             let inputMatches = inputDeviceID.map { readDefaultInput() == $0 } ?? true
 
@@ -2941,6 +2946,24 @@ enum AudioInputFormatStabilizer {
 
 protocol BluetoothInputRouteStabilizing: AnyObject {
     func waitForActivatedDefaultInput(deviceID: AudioDeviceID?, reason: String) -> Bool
+    func waitForActivatedDefaultInput(
+        deviceID: AudioDeviceID?,
+        reason: String,
+        timeout: TimeInterval,
+        shouldCancel: () -> Bool
+    ) -> Bool
+}
+
+extension BluetoothInputRouteStabilizing {
+    func waitForActivatedDefaultInput(
+        deviceID: AudioDeviceID?,
+        reason: String,
+        timeout: TimeInterval,
+        shouldCancel: () -> Bool
+    ) -> Bool {
+        guard !shouldCancel() else { return false }
+        return waitForActivatedDefaultInput(deviceID: deviceID, reason: reason)
+    }
 }
 
 final class CoreAudioBluetoothInputRouteStabilizer: BluetoothInputRouteStabilizing {
@@ -2948,6 +2971,20 @@ final class CoreAudioBluetoothInputRouteStabilizer: BluetoothInputRouteStabilizi
         BluetoothAudioRouteStabilizer.waitForActivatedDefaultRoute(
             inputDeviceID: deviceID,
             reason: reason
+        )
+    }
+
+    func waitForActivatedDefaultInput(
+        deviceID: AudioDeviceID?,
+        reason: String,
+        timeout: TimeInterval,
+        shouldCancel: () -> Bool
+    ) -> Bool {
+        BluetoothAudioRouteStabilizer.waitForActivatedDefaultRoute(
+            inputDeviceID: deviceID,
+            reason: reason,
+            timeout: timeout,
+            shouldCancel: shouldCancel
         )
     }
 }

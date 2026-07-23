@@ -187,6 +187,16 @@ final class AudioEngineRecoveryCoordinator: @unchecked Sendable {
         }
     }
 
+    var hasPendingConfigurationChange: Bool {
+        state.withLock { $0.pendingConfigurationChange }
+    }
+
+    func consumePendingConfigurationChangeForEngineReplacement() {
+        state.withLock { state in
+            state.pendingConfigurationChange = false
+        }
+    }
+
     func beginScheduledRecovery(generation: UInt64) -> Bool {
         state.withLock { state in
             guard state.lifecycle == .running,
