@@ -1448,7 +1448,7 @@ final class PluginDictionaryGuardTests: XCTestCase {
     }
 
     func testDeepgramRESTRequestURLPreservesEndpointAndQueryParameters() throws {
-        let prompt = PluginDictionaryTerms.prompt(from: ["TypeWhisper"], maxLength: 10_000)
+        let prompt = PluginDictionaryTerms.prompt(from: ["TypeWhisper", "Deepgram"], maxLength: 10_000)
         let url = try DeepgramPlugin.restRequestURL(
             baseURL: "http://localhost:8080/deepgram",
             modelId: "nova-3",
@@ -1456,19 +1456,23 @@ final class PluginDictionaryGuardTests: XCTestCase {
             prompt: prompt
         )
         let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
-        let queryItems = Dictionary(
-            uniqueKeysWithValues: (components.queryItems ?? []).map { ($0.name, $0.value ?? "") }
-        )
+        let queryItems = components.queryItems ?? []
+        let firstValue = { (name: String) in
+            queryItems.first(where: { $0.name == name })?.value
+        }
 
         XCTAssertEqual(components.scheme, "http")
         XCTAssertEqual(components.host, "localhost")
         XCTAssertEqual(components.port, 8080)
         XCTAssertEqual(components.path, "/deepgram/v1/listen")
-        XCTAssertEqual(queryItems["model"], "nova-3")
-        XCTAssertEqual(queryItems["smart_format"], "true")
-        XCTAssertEqual(queryItems["punctuate"], "true")
-        XCTAssertEqual(queryItems["language"], "de")
-        XCTAssertEqual(queryItems["keyterm"], "TypeWhisper")
+        XCTAssertEqual(firstValue("model"), "nova-3")
+        XCTAssertEqual(firstValue("smart_format"), "true")
+        XCTAssertEqual(firstValue("punctuate"), "true")
+        XCTAssertEqual(firstValue("language"), "de")
+        XCTAssertEqual(
+            queryItems.filter { $0.name == "keyterm" }.compactMap(\.value),
+            ["TypeWhisper", "Deepgram"]
+        )
     }
 
     @available(macOS 26, *)
