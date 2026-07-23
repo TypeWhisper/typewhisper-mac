@@ -784,7 +784,8 @@
       "author": "TypeWhisper",
       "description": "Ultra-fast LLM inference via Cerebras API. Up to 3,000 tokens/sec. Requires API key.",
       "descriptions": {
-        "de": "Ultra-schnelle LLM-Inferenz ueber die Cerebras-API. Bis zu 3.000 Tokens/Sek. Erfordert API-Key."
+        "de": "Ultra-schnelle LLM-Inferenz \u00fcber die Cerebras-API. Bis zu 3.000 Tokens/Sek. Erfordert API-Key.",
+        "ja": "Cerebras API\u306b\u3088\u308b\u8d85\u9ad8\u901fLLM\u63a8\u8ad6\u3067\u3059\u3002\u6700\u59273,000\u30c8\u30fc\u30af\u30f3/\u79d2\u306b\u5bfe\u5fdc\u3057\u3001API\u30ad\u30fc\u304c\u5fc5\u8981\u3067\u3059\u3002"
       },
       "category": "llm",
       "downloadCount": 229,
@@ -792,6 +793,14 @@
       "requiresAPIKey": true,
       "detailsURL": "https://www.typewhisper.com/addons/cerebras/",
       "releases": [
+        {
+          "version": "1.0.5",
+          "minHostVersion": "0.9.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 178003,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-cerebras-v1.0.5/CerebrasPlugin.zip",
+          "minOSVersion": "14.0"
+        },
         {
           "version": "1.0.4",
           "minHostVersion": "0.9.0",
