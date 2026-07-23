@@ -476,17 +476,12 @@ private struct StatisticsStatCard: View {
     /// Overrides `value` for VoiceOver, e.g. spelling out "3 days" instead of the compact "3d" badge text.
     var accessibilityValue: String?
 
-    @State private var hovering = false
-    @State private var iconBounce = 0
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
     var body: some View {
         SettingsCard {
             VStack(spacing: 6) {
                 Image(systemName: systemImage)
                     .font(.title2)
                     .foregroundStyle(Color.accentColor)
-                    .symbolEffect(.bounce, value: iconBounce)
                     .accessibilityHidden(true)
                 CountUpText(value: value)
                     .font(.title)
@@ -497,17 +492,6 @@ private struct StatisticsStatCard: View {
                     .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity)
-        }
-        .scaleEffect(hovering && !reduceMotion ? 1.02 : 1.0)
-        .shadow(
-            color: .black.opacity(hovering && !reduceMotion ? 0.16 : 0),
-            radius: hovering && !reduceMotion ? 8 : 0,
-            y: hovering && !reduceMotion ? 3 : 0
-        )
-        .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.7), value: hovering)
-        .onHover { isHovering in
-            hovering = isHovering
-            if isHovering && !reduceMotion { iconBounce += 1 }
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(Text("\(title), \(accessibilityValue ?? value)"))
@@ -520,17 +504,12 @@ struct StatisticsMetricCard: View {
     let systemImage: String
     var trend: Double?
 
-    @State private var hovering = false
-    @State private var iconBounce = 0
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
     var body: some View {
         SettingsCard {
             VStack(spacing: 6) {
                 Image(systemName: systemImage)
                     .font(.title2)
                     .foregroundStyle(Color.accentColor)
-                    .symbolEffect(.bounce, value: iconBounce)
                     .accessibilityHidden(true)
                 CountUpText(value: value)
                     .font(.title)
@@ -544,17 +523,6 @@ struct StatisticsMetricCard: View {
                     .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity)
-        }
-        .scaleEffect(hovering && !reduceMotion ? 1.02 : 1.0)
-        .shadow(
-            color: .black.opacity(hovering && !reduceMotion ? 0.16 : 0),
-            radius: hovering && !reduceMotion ? 8 : 0,
-            y: hovering && !reduceMotion ? 3 : 0
-        )
-        .animation(reduceMotion ? nil : .spring(response: 0.3, dampingFraction: 0.7), value: hovering)
-        .onHover { isHovering in
-            hovering = isHovering
-            if isHovering && !reduceMotion { iconBounce += 1 }
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(trendAwareAccessibilityLabel)
