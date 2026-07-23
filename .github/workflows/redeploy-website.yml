@@ -4,6 +4,8 @@ on:
   release:
     types: [edited]
 
+permissions: {}
+
 jobs:
   trigger-website:
     runs-on: ubuntu-latest
