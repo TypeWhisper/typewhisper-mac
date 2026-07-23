@@ -194,7 +194,13 @@ public final class MistralAIPlugin: NSObject, LLMProviderPlugin, LLMProviderIden
     
     public var supportsTranslation: Bool { false }
     public var supportsStreaming: Bool { false } // Note: We declare false here because Mistral's basic API doesn't support WebSocket streaming chunk-by-chunk in a public STT endpoint yet. The TypeWhisper app will just use transcribe(audio:...) normally.
-    public var supportedLanguages: [String] { [] }
+    // Languages officially supported by Voxtral (Mini and Small alike). Declaring
+    // them lets the app show a language picker so users can force a language
+    // instead of relying on auto-detection, which otherwise defaults erratically
+    // (e.g. transcribing Italian speech as English).
+    public var supportedLanguages: [String] {
+        ["en", "fr", "de", "es", "it", "pt", "nl", "hi"]
+    }
     
     public func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
         let client = MistralAPIClient(apiKey: apiKey)
@@ -369,7 +375,10 @@ struct MistralAPIClient {
 
         var instruction = "Transcribe this audio verbatim. Output only the transcription text, with no additional commentary, labels, or quotation marks."
         if let language, !language.isEmpty {
-            instruction += " The spoken language is \(language)."
+            // Use the human-readable name (e.g. "it" -> "Italian") so the chat
+            // model reliably transcribes in the requested language.
+            let languageName = Locale(identifier: "en_US").localizedString(forLanguageCode: language) ?? language
+            instruction += " The spoken language is \(languageName)."
         }
 
         let body: [String: Any] = [

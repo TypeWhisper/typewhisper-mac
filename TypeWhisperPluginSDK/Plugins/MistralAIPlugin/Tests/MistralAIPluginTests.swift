@@ -247,6 +247,47 @@ final class MistralAIPluginTests: XCTestCase {
         XCTAssertTrue(content.contains { ($0["type"] as? String) == "text" })
     }
 
+    func testSupportedLanguagesIncludeVoxtralOfficialSet() {
+        let plugin = MistralAIPlugin()
+        let languages = plugin.supportedLanguages
+        // A non-empty list is what makes the app expose a language picker, so the
+        // user can force a language instead of relying on auto-detection.
+        XCTAssertFalse(languages.isEmpty)
+        for code in ["en", "fr", "de", "es", "it", "pt", "nl", "hi"] {
+            XCTAssertTrue(languages.contains(code), "missing language: \(code)")
+        }
+    }
+
+    func testVoxtralSmallChatInstructionUsesLanguageName() async throws {
+        let host = try PluginTestHostServices(secrets: ["api-key": "mistral-key"])
+        let plugin = MistralAIPlugin()
+        plugin.activate(host: host)
+        plugin.selectModel("voxtral-small-latest")
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"choices":[{"message":{"content":"ciao"}}]}"#.utf8),
+                    Self.httpResponse(url: "https://api.mistral.ai/v1/chat/completions", statusCode: 200)
+                ),
+            ])
+        }
+
+        let samples = [Float](repeating: 0.1, count: 16_000)
+        let audio = AudioData(samples: samples, wavData: PluginWavEncoder.encode(samples), duration: 1.0)
+        _ = try await plugin.transcribe(audio: audio, language: "it", translate: false, prompt: nil)
+
+        let body = try XCTUnwrap(store.sessions[0].requestedRequests.first?.httpBody)
+        let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+        let messages = try XCTUnwrap(json["messages"] as? [[String: Any]])
+        let content = try XCTUnwrap(messages.first?["content"] as? [[String: Any]])
+        let instruction = content.compactMap { ($0["type"] as? String) == "text" ? $0["text"] as? String : nil }.first
+        // The ISO code "it" must be surfaced to the model as "Italian".
+        XCTAssertEqual(instruction?.contains("Italian"), true)
+        XCTAssertEqual(instruction?.contains(" it."), false)
+    }
+
     private static func httpResponse(url: String, statusCode: Int) -> HTTPURLResponse {
         HTTPURLResponse(
             url: URL(string: url)!,
