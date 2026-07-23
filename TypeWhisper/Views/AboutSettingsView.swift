@@ -144,7 +144,7 @@ struct AboutSettingsView: View {
 /// At rest the bars reproduce the app icon's static silhouette
 /// (short / mid / tall / mid / short). When `isActive` is true the bars
 /// animate like a voice spectrum, each oscillating on its own phase.
-private struct WaveformLogoView: View {
+struct WaveformLogoView: View {
     /// Drives the live spectrum motion; bars settle into the static logo shape when false.
     var isActive: Bool
 

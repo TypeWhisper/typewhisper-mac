@@ -18,6 +18,8 @@ struct SetupWizardView: View {
     @State private var isPreparingAppleSpeechFallback = false
     @State private var isActivatingParakeet = false
     @State private var manuallySelectedSetupProviderId: String?
+    @State private var isLogoHovering = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @FocusState private var isTrialFieldFocused: Bool
 
     private let accessibilityAnnouncementService = ServiceContainer.shared.accessibilityAnnouncementService
@@ -321,10 +323,14 @@ struct SetupWizardView: View {
 
     private var welcomeStep: some View {
         VStack(spacing: 22) {
-            Image(nsImage: NSApplication.shared.applicationIconImage)
-                .resizable()
+            WaveformLogoView(isActive: isLogoHovering && !reduceMotion)
                 .frame(width: 74, height: 74)
                 .shadow(color: .blue.opacity(0.35), radius: 16)
+                .scaleEffect(isLogoHovering && !reduceMotion ? 1.05 : 1.0)
+                .animation(.spring(response: 0.35, dampingFraction: 0.6), value: isLogoHovering)
+                .onHover { isLogoHovering = $0 }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(Text("TypeWhisper"))
 
             VStack(alignment: .leading, spacing: 14) {
                 setupFeatureRow(
