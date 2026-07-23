@@ -12761,6 +12761,12 @@
     },
     "Preparing microphone": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mikrofon wird vorbereitet …"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",

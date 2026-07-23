@@ -47,7 +47,7 @@ Add focused regression coverage proving:
 5. Disabling recording confirmation does not change the two-press processing cancellation behavior.
 6. Preference persistence round-trips through `UserDefaults`.
 
-Run the focused `APIRouterAndHandlersTests` cancellation tests and the relevant settings/defaults tests, followed by the normal project build or broader test suite appropriate for the changed files.
+Run the focused `TypeWhisperIntegrationTests` cancellation tests and the relevant settings/defaults tests, followed by the normal project build or broader test suite appropriate for the changed files.
 
 ## Non-Goals
 

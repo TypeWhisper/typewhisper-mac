@@ -97,7 +97,7 @@ struct IndicatorLeftStatus: View {
         case .idle, .promptSelection, .promptProcessing:
             Color.clear.frame(width: 0, height: 0)
         case .recording:
-            if !presentation.isRecordingInputReady {
+            if presentation.isPreparingMicrophone {
                 IndicatorPreparingView(sizing: sizing)
             } else if let icon = presentation.activeAppIcon {
                 IndicatorAppIconView(icon: icon, sizing: sizing)
@@ -148,6 +148,20 @@ struct IndicatorPreparingView: View {
     }
 }
 
+struct IndicatorPreparingLabel: View {
+    let presentation: IndicatorPresentationData
+    let sizing: IndicatorSizing
+
+    var body: some View {
+        Text(presentation.recordingStatusLabel)
+            .font(.system(size: sizing.profileFontSize, weight: .medium))
+            .foregroundStyle(.white.opacity(sizing.timerOpacity))
+            .lineLimit(1)
+            .fixedSize(horizontal: true, vertical: false)
+            .accessibilityLabel(presentation.recordingStatusLabel)
+    }
+}
+
 // MARK: - Recording Dot
 
 struct IndicatorDot: View {
@@ -176,23 +190,27 @@ struct IndicatorRecordingContent: View {
     var body: some View {
         switch content {
         case .indicator:
-            if presentation.isRecordingInputReady {
-                IndicatorDot(audioLevel: presentation.audioLevel, dotPulse: dotPulse, sizing: sizing)
-            } else {
+            if presentation.isPreparingMicrophone {
                 IndicatorPreparingView(sizing: sizing)
+            } else {
+                IndicatorDot(audioLevel: presentation.audioLevel, dotPulse: dotPulse, sizing: sizing)
             }
         case .timer:
-            Text(formatDuration(presentation.recordingDuration))
-                .font(.system(size: sizing.timerFontSize, weight: .medium).monospacedDigit())
-                .foregroundStyle(.white.opacity(sizing.timerOpacity))
-                .lineLimit(1)
-                .fixedSize(horizontal: true, vertical: false)
-                .accessibilityLabel(String(localized: "Recording timer"))
-                .accessibilityValue(formatDuration(presentation.recordingDuration))
+            if presentation.isPreparingMicrophone {
+                IndicatorPreparingLabel(presentation: presentation, sizing: sizing)
+            } else {
+                Text(formatDuration(presentation.recordingDuration))
+                    .font(.system(size: sizing.timerFontSize, weight: .medium).monospacedDigit())
+                    .foregroundStyle(.white.opacity(sizing.timerOpacity))
+                    .lineLimit(1)
+                    .fixedSize(horizontal: true, vertical: false)
+                    .accessibilityLabel(String(localized: "Recording timer"))
+                    .accessibilityValue(formatDuration(presentation.recordingDuration))
+            }
         case .waveform:
             AudioWaveformView(
                 audioLevel: presentation.audioLevel,
-                isSetup: !presentation.isRecordingInputReady || (presentation.recordingDuration < 0.5 && presentation.audioLevel < 0.05),
+                isSetup: presentation.isPreparingMicrophone || (presentation.recordingDuration < 0.5 && presentation.audioLevel < 0.05),
                 compact: true
             )
         case .profile:

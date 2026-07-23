@@ -73,7 +73,8 @@ struct DictionaryTrainingDependencies {
     var engineSnapshot: () -> DictionaryTrainingEngineSnapshot?
     var canTranscribe: () -> Bool
     var requestMicrophonePermission: () async -> Bool
-    var startRecording: () throws -> Void
+    var startRecording: () async throws -> Void
+    var cancelRecordingStart: () -> Void = {}
     var stopRecording: () async -> [Float]
     var discardActiveRecording: () -> Void
     var transcribe: (DictionaryTrainingTranscriptionRequest) async throws -> String
@@ -105,7 +106,10 @@ struct DictionaryTrainingDependencies {
                 await audioRecordingService.requestMicrophonePermission()
             },
             startRecording: {
-                try audioRecordingService.startRecording()
+                try await audioRecordingService.startRecordingAsync()
+            },
+            cancelRecordingStart: {
+                audioRecordingService.cancelPendingRecordingStart()
             },
             stopRecording: {
                 await audioRecordingService.stopRecording(policy: .immediate)
@@ -280,7 +284,7 @@ final class DictionaryTrainingService: ObservableObject {
 
         do {
             guard requestedSessionID == sessionID else { return }
-            try dependencies.startRecording()
+            try await dependencies.startRecording()
             guard requestedSessionID == sessionID, !isCancelled else {
                 _ = await dependencies.stopRecording()
                 dependencies.discardActiveRecording()
@@ -291,6 +295,11 @@ final class DictionaryTrainingService: ObservableObject {
             samples[index].state = .recording
         } catch {
             dependencies.discardActiveRecording()
+            guard requestedSessionID == sessionID,
+                  samples.indices.contains(index),
+                  samples[index].id == sampleID else {
+                return
+            }
             samples[index].state = .failed(error.localizedDescription)
         }
     }
@@ -410,6 +419,11 @@ final class DictionaryTrainingService: ObservableObject {
 
     func cancel() async {
         isCancelled = true
+        if let activeSampleID,
+           let index = samples.firstIndex(where: { $0.id == activeSampleID }),
+           samples[index].state == .preparing {
+            dependencies.cancelRecordingStart()
+        }
         if let activeSampleID,
            let index = samples.firstIndex(where: { $0.id == activeSampleID }),
            samples[index].state == .recording {

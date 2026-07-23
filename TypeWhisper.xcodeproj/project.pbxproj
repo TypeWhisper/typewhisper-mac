@@ -123,7 +123,7 @@
 		AA7080000000000000000002 /* TargetAppCorrectionLearningServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB7080000000000000000002 /* TargetAppCorrectionLearningServiceTests.swift */; };
 		7DADCC6E1AEA99CA48F83F50 /* CLISupportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD34FDF9D999D85DA1C35375 /* CLISupportTests.swift */; };
 		A40500000000000000000101 /* CLIClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000104 /* CLIClient.swift */; };
-		7EC0EFA7DA6597CAEA640448 /* APIRouterAndHandlersTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6D200DCDD6580F443C5CE0A /* APIRouterAndHandlersTests.swift */; };
+		7EC0EFA7DA6597CAEA640448 /* TypeWhisperIntegrationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = E6D200DCDD6580F443C5CE0A /* TypeWhisperIntegrationTests.swift */; };
 		7B8C9D0E1F22334455667790 /* FloatingPanelSpacePolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6A7B8C9D0E1F223344556679 /* FloatingPanelSpacePolicyTests.swift */; };
 		86F4253D3CDE30E859D0F219 /* ProfileServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = F41BD305007A3A158038C75C /* ProfileServiceTests.swift */; };
 		C50700000000000000000001 /* MemoryServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C50700000000000000000002 /* MemoryServiceTests.swift */; };
@@ -913,7 +913,7 @@
 		D8AA5F3DBFD9010D09311C40 /* Cocoa.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Cocoa.framework; path = Platforms/MacOSX.platform/Developer/SDKs/MacOSX15.0.sdk/System/Library/Frameworks/Cocoa.framework; sourceTree = DEVELOPER_DIR; };
 		DD00000000000000000098 /* typewhisper-cli */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = "typewhisper-cli"; sourceTree = BUILT_PRODUCTS_DIR; };
 		DD00000000000000000099 /* TypeWhisper.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = TypeWhisper.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		E6D200DCDD6580F443C5CE0A /* APIRouterAndHandlersTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = APIRouterAndHandlersTests.swift; sourceTree = "<group>"; };
+		E6D200DCDD6580F443C5CE0A /* TypeWhisperIntegrationTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TypeWhisperIntegrationTests.swift; sourceTree = "<group>"; };
 		E6F8E5940EF4832A7B8D735D /* TypeWhisperTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = TypeWhisperTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		2F4D6A8B0C1E3F5A7B9D2C4F /* DictationViewModelIndicatorSettingsTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DictationViewModelIndicatorSettingsTests.swift; sourceTree = "<group>"; };
 		2F4D6A8B0C1E3F5A7B9D2C51 /* IndicatorTranscriptPreviewSizingTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = IndicatorTranscriptPreviewSizingTests.swift; sourceTree = "<group>"; };
@@ -2336,7 +2336,7 @@
 		D310CE5CC61C8F01487BBDF4 /* TypeWhisperTests */ = {
 			isa = PBXGroup;
 			children = (
-				E6D200DCDD6580F443C5CE0A /* APIRouterAndHandlersTests.swift */,
+				E6D200DCDD6580F443C5CE0A /* TypeWhisperIntegrationTests.swift */,
 				3A4B5C6D7E8F901234567891 /* AudioEngineRecoverySupportTests.swift */,
 				CE5852D6767C5FA955B84C52 /* AppFormatterServiceTests.swift */,
 				CE5852D6767C5FA955B84C53 /* SpeechPunctuationServiceTests.swift */,
@@ -3879,7 +3879,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				7EC0EFA7DA6597CAEA640448 /* APIRouterAndHandlersTests.swift in Sources */,
+				7EC0EFA7DA6597CAEA640448 /* TypeWhisperIntegrationTests.swift in Sources */,
 				24FFE19AC026C48AE32BCD7C /* AppFormatterServiceTests.swift in Sources */,
 				24FFE19AC026C48AE32BCD7D /* SpeechPunctuationServiceTests.swift in Sources */,
 				540AE1FA22F41A63C78B89EC /* NumberWordNormalizerTests.swift in Sources */,

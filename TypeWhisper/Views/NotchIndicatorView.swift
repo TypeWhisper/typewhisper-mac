@@ -23,6 +23,13 @@ struct NotchIndicatorView: View {
 
     private var closedWidth: CGFloat {
         if case .recording = presentation.state {
+            if presentation.isPreparingMicrophone {
+                return NotchIndicatorLayout.preparingClosedWidth(
+                    hasNotch: geometry.hasNotch,
+                    notchWidth: geometry.notchWidth,
+                    label: presentation.recordingStatusLabel
+                )
+            }
             return NotchIndicatorLayout.recordingClosedWidth(
                 hasNotch: geometry.hasNotch,
                 notchWidth: geometry.notchWidth,
@@ -39,6 +46,9 @@ struct NotchIndicatorView: View {
     private var leftStatusSpacing: CGFloat {
         guard case .recording = presentation.state else {
             return 0
+        }
+        if presentation.isPreparingMicrophone {
+            return NotchIndicatorLayout.leftContentSpacing
         }
 
         let leftContentWidth = NotchIndicatorLayout.recordingContentWidth(
@@ -205,10 +215,7 @@ struct NotchIndicatorView: View {
             if let warning = presentation.cancelWarningMessage {
                 return warning
             }
-            if !presentation.isRecordingInputReady {
-                return String(localized: "Preparing microphone")
-            }
-            return String(localized: "Recording")
+            return presentation.recordingStatusLabel
         case .processing:
             if let warning = presentation.cancelWarningMessage {
                 return warning
@@ -314,24 +321,30 @@ struct NotchIndicatorView: View {
     @ViewBuilder
     private var leftContent: some View {
         if case .recording = presentation.state {
-            IndicatorRecordingContent(
-                presentation: presentation,
-                content: viewModel.notchIndicatorLeftContent,
-                sizing: sizing,
-                dotPulse: dotPulse
-            )
+            if presentation.isPreparingMicrophone {
+                IndicatorPreparingLabel(presentation: presentation, sizing: sizing)
+            } else {
+                IndicatorRecordingContent(
+                    presentation: presentation,
+                    content: viewModel.notchIndicatorLeftContent,
+                    sizing: sizing,
+                    dotPulse: dotPulse
+                )
+            }
         }
     }
 
     @ViewBuilder
     private var rightContent: some View {
         if case .recording = presentation.state {
-            IndicatorRecordingContent(
-                presentation: presentation,
-                content: viewModel.notchIndicatorRightContent,
-                sizing: sizing,
-                dotPulse: dotPulse
-            )
+            if !presentation.isPreparingMicrophone {
+                IndicatorRecordingContent(
+                    presentation: presentation,
+                    content: viewModel.notchIndicatorRightContent,
+                    sizing: sizing,
+                    dotPulse: dotPulse
+                )
+            }
         } else if case .processing = presentation.state {
             ProgressView()
                 .controlSize(.mini)

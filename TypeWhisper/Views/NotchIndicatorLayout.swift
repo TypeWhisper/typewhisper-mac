@@ -66,6 +66,31 @@ enum NotchIndicatorLayout {
         return max(baseWidth, candidateWidth)
     }
 
+    static func preparingClosedWidth(
+        hasNotch: Bool,
+        notchWidth: CGFloat,
+        label: String
+    ) -> CGFloat {
+        let baseWidth = closedWidth(hasNotch: hasNotch, notchWidth: notchWidth)
+        let labelWidth = measureTextWidth(
+            label,
+            font: NSFont.systemFont(
+                ofSize: IndicatorSizing.notch.profileFontSize,
+                weight: .medium
+            )
+        )
+        let requiredContentWidth = leadingInset
+            + IndicatorSizing.notch.iconSize
+            + leftContentSpacing
+            + labelWidth
+            + trailingInset
+            + widthSafetyBuffer
+        let candidateWidth = hasNotch
+            ? notchWidth + requiredContentWidth
+            : requiredContentWidth
+        return max(baseWidth, candidateWidth)
+    }
+
     static func reservedTimerText(for seconds: TimeInterval) -> String {
         let totalSeconds = max(0, Int(seconds))
         let minuteDigits = max(2, String(totalSeconds / 60).count)

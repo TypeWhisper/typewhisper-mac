@@ -314,6 +314,59 @@ final class DictionaryTrainingServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testCancelDuringMicrophonePreparationCancelsPendingAudioStart() async {
+        let snapshot = makeSnapshot()
+        var startContinuation: CheckedContinuation<Void, Error>?
+        var cancelStartCount = 0
+        var stopCount = 0
+        var discardCount = 0
+        let service = DictionaryTrainingService(dependencies: DictionaryTrainingDependencies(
+            engineSnapshot: { snapshot },
+            canTranscribe: { true },
+            requestMicrophonePermission: { true },
+            startRecording: {
+                try await withCheckedThrowingContinuation { continuation in
+                    startContinuation = continuation
+                }
+            },
+            cancelRecordingStart: {
+                cancelStartCount += 1
+                startContinuation?.resume(throwing: CancellationError())
+                startContinuation = nil
+            },
+            stopRecording: {
+                stopCount += 1
+                return []
+            },
+            discardActiveRecording: { discardCount += 1 },
+            transcribe: { _ in "unused" },
+            dictionaryEntries: { [] },
+            commit: { [self] _, _ in self.emptyCommitResult() }
+        ))
+
+        service.canonicalWord = "TypeWhisper"
+        service.beginTraining(localeIdentifier: "en_US")
+        let sampleID = service.samples[0].id
+        let startTask = Task { @MainActor in
+            await service.startRecording(sampleID: sampleID)
+        }
+
+        for _ in 0..<20 where startContinuation == nil {
+            await Task.yield()
+        }
+        XCTAssertEqual(service.samples[0].state, .preparing)
+
+        await service.cancel()
+        await startTask.value
+
+        XCTAssertEqual(cancelStartCount, 1)
+        XCTAssertEqual(stopCount, 0)
+        XCTAssertGreaterThanOrEqual(discardCount, 1)
+        XCTAssertEqual(service.stage, .word)
+        XCTAssertTrue(service.samples.isEmpty)
+    }
+
+    @MainActor
     func testLateTranscriptionResultCannotMutateCancelledSession() async {
         let snapshot = makeSnapshot()
         let service = DictionaryTrainingService(dependencies: DictionaryTrainingDependencies(

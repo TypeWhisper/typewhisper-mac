@@ -315,6 +315,7 @@ final class DictationViewModel: ObservableObject {
     private let recentTranscriptionPaletteHandler: RecentTranscriptionPaletteHandler
     private let settingsHandler: DictationSettingsHandler
     private var transcriptionTask: Task<Void, Never>?
+    private var recordingStartTask: Task<Void, Never>?
     private var stopFinalizationTask: Task<Void, Never>?
     private var targetAppCorrectionLearningTask: Task<Void, Never>?
     private var pendingLearnedCorrections: [LearnedDictionaryCorrection] = []
@@ -707,6 +708,24 @@ final class DictationViewModel: ObservableObject {
         return sessionID
     }
 
+    func apiStartRecordingAwaitingReadiness(forcedWorkflowId: UUID? = nil) async -> UUID {
+        let sessionID = apiStartRecording(forcedWorkflowId: forcedWorkflowId)
+        await apiWaitForRecordingReadiness()
+        return sessionID
+    }
+
+    func apiWaitForRecordingReadiness() async {
+        let startTask = recordingStartTask
+        await startTask?.value
+    }
+
+#if DEBUG
+    func testingWaitForRecordingStart() async {
+        let startTask = recordingStartTask
+        await startTask?.value
+    }
+#endif
+
     func apiStopRecording() -> UUID? {
         let sessionID = activeDictationSessionID
         stopDictation()
@@ -859,12 +878,18 @@ final class DictationViewModel: ObservableObject {
     }
 
     private func abortActiveRecordingImmediately(sessionMessage: String, preserveRecoveryAudio: Bool = false) {
+        let pendingStartTask = recordingStartTask
+        if pendingStartTask != nil {
+            pendingStartTask?.cancel()
+            audioRecordingService.cancelPendingRecordingStart()
+        }
         clearRecordingStartCueState()
         clearDeferredRecordingContext()
         restoreRecordingSideEffects()
         streamingHandler.stop()
         stopRecordingTimer()
         Task {
+            await pendingStartTask?.value
             _ = await audioRecordingService.stopRecording(policy: .immediate)
             if preserveRecoveryAudio {
                 audioRecordingService.preserveActiveRecoveryRecording()
@@ -937,8 +962,8 @@ final class DictationViewModel: ObservableObject {
         // it to the UI and unwind the dictation session cleanly — restore
         // ducking, resume media, stop streaming, cancel the session.
         audioRecordingService.$recoveryError
-            .compactMap { $0 }
             .receive(on: DispatchQueue.main)
+            .compactMap { $0 }
             .sink { [weak self] error in
                 guard let self else { return }
                 // Always drain the publisher so `recoveryError` never lingers
@@ -1099,100 +1124,193 @@ final class DictationViewModel: ObservableObject {
         }
 
         let resolvedInputSelection = audioDeviceService.resolvedRecordingInputSelection()
+        let initialForcedWorkflow = forcedWorkflow(for: forcedWorkflowId)
+        audioRecordingService.microphoneBoostEnabled = microphoneBoostEnabled(for: initialForcedWorkflow)
+        audioRecordingService.selectedDeviceID = resolvedInputSelection.deviceID
+        audioRecordingService.hasExplicitDeviceSelection = resolvedInputSelection.hasExplicitDeviceSelection
+        let selectedInputUsesBluetooth = resolvedInputSelection.usesBluetoothTransport
+        audioRecordingService.selectedInputDeviceUsesBluetoothTransport = selectedInputUsesBluetooth
+        prepareRecordingStartCue(playsSound: !selectedInputUsesBluetooth)
+        let audioStartTimestamp = DispatchTime.now().uptimeNanoseconds
+
+        if selectedInputUsesBluetooth {
+            beginRecordingPreparation()
+            logger.info("Preparing Bluetooth recording input without blocking the main actor")
+            recordingStartTask?.cancel()
+            recordingStartTask = Task { @MainActor [weak self] in
+                guard let self else { return }
+                defer {
+                    if self.activeDictationSessionID == sessionID || self.activeDictationSessionID == nil {
+                        self.recordingStartTask = nil
+                    }
+                }
+
+                do {
+                    try await self.audioRecordingService.startRecordingAsync(
+                        requestUptimeNanoseconds: requestUptimeNanoseconds
+                    )
+                    guard !Task.isCancelled,
+                          self.activeDictationSessionID == sessionID,
+                          self.state == .recording else {
+                        return
+                    }
+                    self.completeRecordingStart(
+                        forcedWorkflowId: forcedWorkflowId,
+                        sessionID: sessionID,
+                        requestUptimeNanoseconds: requestUptimeNanoseconds,
+                        startTimestamp: startTimestamp,
+                        audioStartTimestamp: audioStartTimestamp,
+                        selectedInputUsesBluetooth: true,
+                        initialForcedWorkflow: initialForcedWorkflow
+                    )
+                } catch is CancellationError {
+                    logger.info("Bluetooth recording preparation cancelled")
+                } catch {
+                    guard self.activeDictationSessionID == sessionID else { return }
+                    self.handleRecordingStartFailure(
+                        error,
+                        sessionID: sessionID,
+                        resolvedInputSelection: resolvedInputSelection
+                    )
+                }
+            }
+            return
+        }
 
         do {
-            let initialForcedWorkflow = forcedWorkflow(for: forcedWorkflowId)
-            audioRecordingService.microphoneBoostEnabled = microphoneBoostEnabled(for: initialForcedWorkflow)
-            audioRecordingService.selectedDeviceID = resolvedInputSelection.deviceID
-            audioRecordingService.hasExplicitDeviceSelection = resolvedInputSelection.hasExplicitDeviceSelection
-            let selectedInputUsesBluetooth = resolvedInputSelection.usesBluetoothTransport
-            audioRecordingService.selectedInputDeviceUsesBluetoothTransport = selectedInputUsesBluetooth
-            prepareRecordingStartCue(playsSound: !selectedInputUsesBluetooth)
-            let audioStartTimestamp = DispatchTime.now().uptimeNanoseconds
             try audioRecordingService.startRecording(requestUptimeNanoseconds: requestUptimeNanoseconds)
-            let audioStartCompletedTimestamp = DispatchTime.now().uptimeNanoseconds
-            let audioStartMs = Self.elapsedMilliseconds(
-                from: audioStartTimestamp,
-                to: audioStartCompletedTimestamp
-            )
-            let requestToAudioStartMs = Self.elapsedMilliseconds(
-                from: requestUptimeNanoseconds,
-                to: audioStartCompletedTimestamp
-            )
-            promptPaletteHandler.hide()
-            recentTranscriptionPaletteHandler.hide()
-            modelManager.cancelAutoUnloadTimer()
-            if selectedInputUsesBluetooth {
-                logger.info("Skipping recording start sound for Bluetooth input device")
-            }
-            if mediaPauseEnabled { mediaPlaybackService.pauseIfPlaying() }
-            if audioDuckingEnabled {
-                pendingRecordingAudioDuckingLevel = max(0, min(1, Float(audioDuckingLevel)))
-            } else {
-                pendingRecordingAudioDuckingLevel = nil
-            }
-            state = .recording
-            // Reset hotkey timer so hybrid threshold counts from recording start,
-            // not from key press. Slow device init (e.g. iPhone Continuity ~2-3s)
-            // would otherwise make the hold appear as "long press" → PTT stop.
-            hotkeyService.resetKeyDownTime()
-            partialText = ""
-            isStopInFlight = false
-            recordingStartTime = Date()
-            startRecordingTimer()
-
-            let contextStartTimestamp = CFAbsoluteTimeGetCurrent()
-            // Match rule after the audio engine is live so app/context lookup does
-            // not delay capture of the user's first spoken words.
-            let activeApp = textInsertionService.captureActiveApp()
-            capturedActiveApp = activeApp
-            capturedSelectedText = nil
-            activeAppIcon = nil
-
-            if let forcedWorkflow = initialForcedWorkflow {
-                applyWorkflowMatch(workflowService.forcedWorkflowMatch(for: forcedWorkflow), activeApp: activeApp)
-            } else if let workflowMatch = workflowService.matchWorkflow(bundleIdentifier: activeApp.bundleId, url: nil) {
-                applyWorkflowMatch(workflowMatch, activeApp: activeApp)
-            } else {
-                clearActiveRuleState()
-            }
-            applyEffectiveMicrophoneBoostToAudioService()
-            updateRecordingStartCuePayload(activeApp: activeApp)
-            let contextMs = (CFAbsoluteTimeGetCurrent() - contextStartTimestamp) * 1000
-
-            startLiveStreaming(allowLiveTranscription: indicatorTranscriptPreviewEnabled || externalStreamingDisplayCount > 0)
-            scheduleDeferredRecordingMetadataCapture(
-                activeApp: activeApp,
-                forcedWorkflowId: forcedWorkflowId
-            )
-
-            let totalStartMs = (CFAbsoluteTimeGetCurrent() - startTimestamp) * 1000
-            logger.info(
-                "Recording started: requestToAudioStartMs=\(Self.formatMilliseconds(requestToAudioStartMs), privacy: .public), audioStartMs=\(Self.formatMilliseconds(audioStartMs), privacy: .public), contextMs=\(String(format: "%.1f", contextMs), privacy: .public), totalStartMs=\(String(format: "%.1f", totalStartMs), privacy: .public)"
+            completeRecordingStart(
+                forcedWorkflowId: forcedWorkflowId,
+                sessionID: sessionID,
+                requestUptimeNanoseconds: requestUptimeNanoseconds,
+                startTimestamp: startTimestamp,
+                audioStartTimestamp: audioStartTimestamp,
+                selectedInputUsesBluetooth: false,
+                initialForcedWorkflow: initialForcedWorkflow
             )
         } catch {
-            clearRecordingStartCueState()
-            clearDeferredRecordingContext()
-            restoreRecordingSideEffects()
-            let errorMessage: String
-            if let recordingError = error as? AudioRecordingService.AudioRecordingError,
-               case .noMicrophoneDetected = recordingError {
-                errorMessage = String(localized: "No mic detected.")
-            } else if let recordingError = error as? AudioRecordingService.AudioRecordingError,
-                      case .selectedInputDeviceIncompatible(let issue) = recordingError {
-                audioDeviceService.markRecordingInputSelectionCompatibility(
-                    .incompatible(issue),
-                    selection: resolvedInputSelection
-                )
-                errorMessage = recordingError.localizedDescription
-            } else {
-                errorMessage = error.localizedDescription
-            }
-            accessibilityAnnouncementService.announceError(errorMessage)
-            failDictationSession(id: sessionID, error: errorMessage)
-            showError(errorMessage, category: "recording")
-            hotkeyService.cancelDictation()
+            handleRecordingStartFailure(
+                error,
+                sessionID: sessionID,
+                resolvedInputSelection: resolvedInputSelection
+            )
         }
+    }
+
+    private func beginRecordingPreparation() {
+        promptPaletteHandler.hide()
+        recentTranscriptionPaletteHandler.hide()
+        modelManager.cancelAutoUnloadTimer()
+        state = .recording
+        partialText = ""
+        isStopInFlight = false
+        recordingStartTime = nil
+        stopRecordingTimer()
+    }
+
+    private func completeRecordingStart(
+        forcedWorkflowId: UUID?,
+        sessionID: UUID,
+        requestUptimeNanoseconds: UInt64,
+        startTimestamp: TimeInterval,
+        audioStartTimestamp: UInt64,
+        selectedInputUsesBluetooth: Bool,
+        initialForcedWorkflow: Workflow?
+    ) {
+        guard activeDictationSessionID == sessionID else { return }
+
+        let audioStartCompletedTimestamp = DispatchTime.now().uptimeNanoseconds
+        let audioStartMs = Self.elapsedMilliseconds(
+            from: audioStartTimestamp,
+            to: audioStartCompletedTimestamp
+        )
+        let requestToAudioStartMs = Self.elapsedMilliseconds(
+            from: requestUptimeNanoseconds,
+            to: audioStartCompletedTimestamp
+        )
+        promptPaletteHandler.hide()
+        recentTranscriptionPaletteHandler.hide()
+        modelManager.cancelAutoUnloadTimer()
+        if selectedInputUsesBluetooth {
+            logger.info("Skipping recording start sound for Bluetooth input device")
+        }
+        if mediaPauseEnabled { mediaPlaybackService.pauseIfPlaying() }
+        if audioDuckingEnabled {
+            pendingRecordingAudioDuckingLevel = max(0, min(1, Float(audioDuckingLevel)))
+        } else {
+            pendingRecordingAudioDuckingLevel = nil
+        }
+        state = .recording
+        // Reset hotkey timer so hybrid threshold counts from recording readiness,
+        // not from the key press or Bluetooth route preparation.
+        hotkeyService.resetKeyDownTime()
+        partialText = ""
+        isStopInFlight = false
+        recordingStartTime = Date()
+        startRecordingTimer()
+
+        let contextStartTimestamp = CFAbsoluteTimeGetCurrent()
+        // Match rule after the audio engine is live so app/context lookup does
+        // not delay capture of the user's first spoken words.
+        let activeApp = textInsertionService.captureActiveApp()
+        capturedActiveApp = activeApp
+        capturedSelectedText = nil
+        activeAppIcon = nil
+
+        if let forcedWorkflow = initialForcedWorkflow {
+            applyWorkflowMatch(workflowService.forcedWorkflowMatch(for: forcedWorkflow), activeApp: activeApp)
+        } else if let workflowMatch = workflowService.matchWorkflow(bundleIdentifier: activeApp.bundleId, url: nil) {
+            applyWorkflowMatch(workflowMatch, activeApp: activeApp)
+        } else {
+            clearActiveRuleState()
+        }
+        applyEffectiveMicrophoneBoostToAudioService()
+        if selectedInputUsesBluetooth {
+            // The asynchronous Bluetooth start only returns after the current
+            // engine generation has produced a confirmed ready stream.
+            firstRecordingAudioBufferSeen = true
+        }
+        updateRecordingStartCuePayload(activeApp: activeApp)
+        let contextMs = (CFAbsoluteTimeGetCurrent() - contextStartTimestamp) * 1000
+
+        startLiveStreaming(allowLiveTranscription: indicatorTranscriptPreviewEnabled || externalStreamingDisplayCount > 0)
+        scheduleDeferredRecordingMetadataCapture(
+            activeApp: activeApp,
+            forcedWorkflowId: forcedWorkflowId
+        )
+
+        let totalStartMs = (CFAbsoluteTimeGetCurrent() - startTimestamp) * 1000
+        logger.info(
+            "Recording started: requestToAudioStartMs=\(Self.formatMilliseconds(requestToAudioStartMs), privacy: .public), audioStartMs=\(Self.formatMilliseconds(audioStartMs), privacy: .public), contextMs=\(String(format: "%.1f", contextMs), privacy: .public), totalStartMs=\(String(format: "%.1f", totalStartMs), privacy: .public)"
+        )
+    }
+
+    private func handleRecordingStartFailure(
+        _ error: Error,
+        sessionID: UUID,
+        resolvedInputSelection: ResolvedRecordingInputSelection
+    ) {
+        clearRecordingStartCueState()
+        clearDeferredRecordingContext()
+        restoreRecordingSideEffects()
+        let errorMessage: String
+        if let recordingError = error as? AudioRecordingService.AudioRecordingError,
+           case .noMicrophoneDetected = recordingError {
+            errorMessage = String(localized: "No mic detected.")
+        } else if let recordingError = error as? AudioRecordingService.AudioRecordingError,
+                  case .selectedInputDeviceIncompatible(let issue) = recordingError {
+            audioDeviceService.markRecordingInputSelectionCompatibility(
+                .incompatible(issue),
+                selection: resolvedInputSelection
+            )
+            errorMessage = recordingError.localizedDescription
+        } else {
+            errorMessage = error.localizedDescription
+        }
+        accessibilityAnnouncementService.announceError(errorMessage)
+        failDictationSession(id: sessionID, error: errorMessage)
+        showError(errorMessage, category: "recording")
+        hotkeyService.cancelDictation()
     }
 
     private func scheduleDeferredRecordingMetadataCapture(
@@ -1340,6 +1458,12 @@ final class DictationViewModel: ObservableObject {
     private func stopDictation() {
         guard state == .recording, !isStopInFlight else { return }
         clearCancelWarning()
+        if recordingStartTask != nil, !isRecordingInputReady {
+            let cancelledMessage = String(localized: "Cancelled")
+            abortActiveRecordingImmediately(sessionMessage: cancelledMessage)
+            showNotchFeedback(message: cancelledMessage, icon: "xmark.circle", duration: 1.5)
+            return
+        }
         isStopInFlight = true
         state = .processing
         processingPhase = String(localized: "Processing...")
@@ -1928,6 +2052,9 @@ final class DictationViewModel: ObservableObject {
         stopFinalizationTask = nil
         transcriptionTask?.cancel()
         transcriptionTask = nil
+        recordingStartTask?.cancel()
+        recordingStartTask = nil
+        audioRecordingService.cancelPendingRecordingStart()
         urlResolutionTask?.cancel()
         urlResolutionTask = nil
         metadataCaptureTask?.cancel()

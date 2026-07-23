@@ -937,6 +937,26 @@ final class MenuBarIconStateTests: XCTestCase {
 }
 
 final class IndicatorPresentationStateTests: XCTestCase {
+    private func makeRecordingPresentation(isInputReady: Bool) -> IndicatorPresentationData {
+        IndicatorPresentationData(
+            source: .dictation,
+            state: .recording,
+            recordingDuration: 0,
+            audioLevel: 0,
+            partialText: "",
+            activeRuleName: nil,
+            activeAppIcon: nil,
+            isRecordingInputReady: isInputReady,
+            cancelWarningMessage: nil,
+            processingPhase: nil,
+            actionFeedbackMessage: nil,
+            actionFeedbackIcon: nil,
+            actionFeedbackIsError: false,
+            actionFeedbackUndoTitle: nil,
+            externalStreamingDisplayCount: 0
+        )
+    }
+
     func testRecorderRecordingShowsRecordingPresentationWhenDictationIsIdle() {
         let presentation = IndicatorPresentationState.resolve(
             dictationState: .idle,
@@ -1004,6 +1024,28 @@ final class IndicatorPresentationStateTests: XCTestCase {
         XCTAssertFalse(IndicatorPresentationState.shouldShow(
             visibility: .never,
             presentation: recorderPresentation
+        ))
+    }
+
+    func testBluetoothPreparationUsesSharedPreparingMicrophonePresentation() {
+        let preparing = makeRecordingPresentation(isInputReady: false)
+        let ready = makeRecordingPresentation(isInputReady: true)
+
+        XCTAssertTrue(preparing.isPreparingMicrophone)
+        XCTAssertEqual(preparing.recordingStatusLabel, String(localized: "Preparing microphone"))
+        XCTAssertFalse(ready.isPreparingMicrophone)
+        XCTAssertEqual(ready.recordingStatusLabel, String(localized: "Recording"))
+    }
+
+    func testNeverVisibilityStillSuppressesMicrophonePreparation() {
+        let preparing = IndicatorPresentationState.resolve(
+            dictationState: .recording,
+            recorderState: .idle
+        )
+
+        XCTAssertFalse(IndicatorPresentationState.shouldShow(
+            visibility: .never,
+            presentation: preparing
         ))
     }
 }
@@ -1167,6 +1209,16 @@ final class LanguageLocalizationTests: XCTestCase {
 
         XCTAssertEqual(options.map(\.code), ["de", "en"])
         XCTAssertEqual(options.map(\.name), ["German", "English"])
+    }
+
+    func testPreparingMicrophoneHasGermanLocalization() throws {
+        XCTAssertEqual(
+            try TestSupport.localizedCatalogValue(
+                for: "Preparing microphone",
+                language: "de"
+            ),
+            "Mikrofon wird vorbereitet …"
+        )
     }
 
     func testLanguageSearchTermsIncludeEnglishAliasForEnglish() {

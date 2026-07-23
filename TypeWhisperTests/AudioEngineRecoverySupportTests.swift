@@ -337,6 +337,19 @@ final class AudioEngineRecoverySupportTests: XCTestCase {
         XCTAssertEqual(coordinator.finishRecovery(), .none)
     }
 
+    func testConfigurationChangeDuringReadinessCanBeConsumedByEngineReplacement() {
+        let coordinator = AudioEngineRecoveryCoordinator()
+
+        coordinator.beginStarting()
+        XCTAssertEqual(coordinator.noteConfigurationChange(), .none)
+        XCTAssertTrue(coordinator.hasPendingConfigurationChange)
+
+        coordinator.consumePendingConfigurationChangeForEngineReplacement()
+
+        XCTAssertFalse(coordinator.hasPendingConfigurationChange)
+        XCTAssertEqual(coordinator.finishStartingSuccessfully(), .none)
+    }
+
     func testConfigurationChangeWithinQuiescenceWindow_preservesStartupRecoveryPath() {
         let clock = TestClock()
         let coordinator = AudioEngineRecoveryCoordinator(now: { clock.now })
@@ -1966,7 +1979,7 @@ final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
         XCTAssertFalse(service.selectedDeviceUsesBluetoothTransport)
     }
 
-    func testBluetoothInputReadinessProbeTimesOutWithNoInitialInput() {
+    func testBluetoothInputReadinessTimesOutWhenNoBuffersArrive() {
         let clock = FakeReadinessClock()
         let checker = BluetoothInputReadinessChecker(
             timeout: 0.002,
@@ -1977,8 +1990,10 @@ final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
 
         XCTAssertThrowsError(try checker.waitForInitialInput(
             label: "test",
-            hasCapturedInitialInput: { false },
-            isEngineRunning: nil
+            deadline: nil,
+            readinessSnapshot: { nil },
+            isEngineRunning: nil,
+            shouldCancel: { false }
         )) { error in
             guard case AudioRecordingService.AudioRecordingError.noAudioData = error else {
                 return XCTFail("Expected noAudioData, got \(error)")
@@ -1986,7 +2001,58 @@ final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
         }
     }
 
-    func testBluetoothInputReadinessThrowsRetryableErrorWhenEngineStopsBeforeInitialInput() {
+    func testBluetoothInputReadinessHonorsSharedFiveSecondDeadline() {
+        let clock = FakeReadinessClock()
+        let checker = BluetoothInputReadinessChecker(
+            timeout: 30,
+            missingBufferRecoveryInterval: .infinity,
+            pollInterval: 0.1,
+            now: { clock.now },
+            sleep: { clock.now += $0 }
+        )
+
+        XCTAssertThrowsError(try checker.waitForInitialInput(
+            label: "test",
+            deadline: 5,
+            readinessSnapshot: { nil },
+            isEngineRunning: nil,
+            shouldCancel: { false }
+        )) { error in
+            guard case AudioRecordingService.AudioRecordingError.noAudioData = error else {
+                return XCTFail("Expected noAudioData, got \(error)")
+            }
+        }
+        XCTAssertEqual(clock.now, 5, accuracy: 0.001)
+    }
+
+    func testBluetoothInputReadinessTreatsMissingBuffersAsRetryable() {
+        let clock = FakeReadinessClock()
+        let checker = BluetoothInputReadinessChecker(
+            timeout: 5,
+            missingBufferRecoveryInterval: 0.2,
+            pollInterval: 0.05,
+            now: { clock.now },
+            sleep: { clock.now += $0 }
+        )
+
+        XCTAssertThrowsError(try checker.waitForInitialInput(
+            label: "test",
+            deadline: nil,
+            readinessSnapshot: { nil },
+            isEngineRunning: nil,
+            shouldCancel: { false }
+        )) { error in
+            XCTAssertEqual(
+                (error as NSError).domain,
+                AudioEngineRecoveryErrorDomains.transientFormatMismatch
+            )
+            XCTAssertTrue(AudioEngineRecoveryPolicy.isRetryable(error: error))
+        }
+        XCTAssertGreaterThanOrEqual(clock.now, 0.2)
+        XCTAssertLessThan(clock.now, 1)
+    }
+
+    func testBluetoothInputReadinessThrowsRetryableErrorWhenEngineStopsBeforeReadiness() {
         let clock = FakeReadinessClock()
         let checker = BluetoothInputReadinessChecker(
             timeout: 0.05,
@@ -1998,11 +2064,13 @@ final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
 
         XCTAssertThrowsError(try checker.waitForInitialInput(
             label: "test",
-            hasCapturedInitialInput: { false },
+            deadline: nil,
+            readinessSnapshot: { nil },
             isEngineRunning: {
                 engineRunningProbeCalls += 1
                 return engineRunningProbeCalls == 1
-            }
+            },
+            shouldCancel: { false }
         )) { error in
             let nsError = error as NSError
             XCTAssertEqual(nsError.domain, AudioEngineRecoveryErrorDomains.transientFormatMismatch)
@@ -2011,66 +2079,337 @@ final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(engineRunningProbeCalls, 2)
     }
 
-    func testBluetoothInputReadinessProbeSucceedsWhenInitialInputArrives() {
+    func testBluetoothInputReadinessRejectsReadyCandidateAfterRouteChange() {
+        let checker = BluetoothInputReadinessChecker()
+
+        XCTAssertThrowsError(try checker.waitForInitialInput(
+            label: "test",
+            deadline: nil,
+            readinessSnapshot: {
+                AudioInputReadinessSnapshot(
+                    generation: 1,
+                    consecutiveBufferCount: 3,
+                    buffersSinceSignal: 3,
+                    continuousDuration: 0.02,
+                    lastBufferTimestamp: 0
+                )
+            },
+            isEngineRunning: { false },
+            shouldCancel: { false }
+        )) { error in
+            XCTAssertEqual(
+                (error as NSError).domain,
+                AudioEngineRecoveryErrorDomains.transientFormatMismatch
+            )
+            XCTAssertTrue(AudioEngineRecoveryPolicy.isRetryable(error: error))
+        }
+    }
+
+    func testBluetoothInputReadinessAcceptsSignalBeginningAfterOneAndAHalfSeconds() {
         let clock = FakeReadinessClock()
         let checker = BluetoothInputReadinessChecker(
-            timeout: 0.05,
-            pollInterval: 0.001,
+            timeout: 5,
+            pollInterval: 0.05,
             now: { clock.now },
             sleep: { clock.now += $0 }
         )
-        var probeCalls = 0
-        let probe = {
-            probeCalls += 1
-            return probeCalls >= 2
-        }
 
         XCTAssertNoThrow(try checker.waitForInitialInput(
             label: "test",
-            hasCapturedInitialInput: probe,
-            isEngineRunning: nil
+            deadline: nil,
+            readinessSnapshot: {
+                guard clock.now >= 1.5 else { return nil }
+                let buffersSinceSignal = min(3, 1 + Int((clock.now - 1.5) / 0.1))
+                return AudioInputReadinessSnapshot(
+                    generation: 1,
+                    consecutiveBufferCount: buffersSinceSignal,
+                    buffersSinceSignal: buffersSinceSignal,
+                    continuousDuration: clock.now - 1.5,
+                    lastBufferTimestamp: clock.now
+                )
+            },
+            isEngineRunning: nil,
+            shouldCancel: { false }
         ))
-        XCTAssertGreaterThanOrEqual(probeCalls, 2)
+        XCTAssertGreaterThanOrEqual(clock.now, 1.7)
+        XCTAssertLessThan(clock.now, 2)
     }
 
-    func testBluetoothInputReadinessDoesNotAcceptZeroFilledTapCallback() throws {
+    func testBluetoothInputReadinessAcceptsImmediateStableSignal() {
         let clock = FakeReadinessClock()
-        let service = AudioRecordingService(
-            inputReadinessChecker: BluetoothInputReadinessChecker(
-                timeout: 0.002,
-                pollInterval: 0.001,
-                now: { clock.now },
-                sleep: { clock.now += $0 }
-            )
+        let checker = BluetoothInputReadinessChecker(
+            timeout: 5,
+            now: { clock.now },
+            sleep: { clock.now += $0 }
         )
-        service.hasExplicitDeviceSelection = true
-        service.selectedInputDeviceUsesBluetoothTransport = true
 
-        try service.testingMarkInitialInputTapSeen(makeMonoBuffer(samples: [0, 0, 0, 0]))
+        XCTAssertNoThrow(try checker.waitForInitialInput(
+            label: "test",
+            deadline: nil,
+            readinessSnapshot: {
+                AudioInputReadinessSnapshot(
+                    generation: 1,
+                    consecutiveBufferCount: 3,
+                    buffersSinceSignal: 3,
+                    continuousDuration: 0.02,
+                    lastBufferTimestamp: clock.now
+                )
+            },
+            isEngineRunning: nil,
+            shouldCancel: { false }
+        ))
+        XCTAssertEqual(clock.now, 0)
+    }
 
-        XCTAssertThrowsError(try service.testingWaitForInitialInputReadinessIfNeeded()) { error in
-            guard case AudioRecordingService.AudioRecordingError.noAudioData = error else {
-                return XCTFail("Expected noAudioData, got \(error)")
-            }
+    func testBluetoothInputReadinessUsesThreeSecondSilentStreamFallback() {
+        let clock = FakeReadinessClock()
+        let checker = BluetoothInputReadinessChecker(
+            timeout: 5,
+            silentFallback: 3,
+            pollInterval: 0.1,
+            now: { clock.now },
+            sleep: { clock.now += $0 }
+        )
+
+        XCTAssertNoThrow(try checker.waitForInitialInput(
+            label: "test",
+            deadline: nil,
+            readinessSnapshot: {
+                AudioInputReadinessSnapshot(
+                    generation: 1,
+                    consecutiveBufferCount: max(3, Int(clock.now / 0.1)),
+                    buffersSinceSignal: 0,
+                    continuousDuration: clock.now,
+                    lastBufferTimestamp: clock.now
+                )
+            },
+            isEngineRunning: nil,
+            shouldCancel: { false }
+        ))
+        XCTAssertGreaterThanOrEqual(clock.now, 3)
+        XCTAssertLessThan(clock.now, 3.2)
+    }
+
+    func testBluetoothInputReadinessTreatsStagnatingBuffersAsRetryable() {
+        let clock = FakeReadinessClock()
+        let checker = BluetoothInputReadinessChecker(
+            timeout: 5,
+            maximumBufferGap: 0.25,
+            pollInterval: 0.1,
+            now: { clock.now },
+            sleep: { clock.now += $0 }
+        )
+
+        XCTAssertThrowsError(try checker.waitForInitialInput(
+            label: "test",
+            deadline: nil,
+            readinessSnapshot: {
+                AudioInputReadinessSnapshot(
+                    generation: 1,
+                    consecutiveBufferCount: 1,
+                    buffersSinceSignal: 0,
+                    continuousDuration: 0,
+                    lastBufferTimestamp: 0
+                )
+            },
+            isEngineRunning: nil,
+            shouldCancel: { false }
+        )) { error in
+            XCTAssertEqual(
+                (error as NSError).domain,
+                AudioEngineRecoveryErrorDomains.transientFormatMismatch
+            )
         }
     }
 
-    func testBluetoothInputReadinessSucceedsWhenTapCallbackContainsSignalBeforeConvertedSamples() throws {
+    func testBluetoothInputReadinessCanBeCancelledBeforeReady() {
         let clock = FakeReadinessClock()
-        let service = AudioRecordingService(
-            inputReadinessChecker: BluetoothInputReadinessChecker(
-                timeout: 0.01,
-                pollInterval: 0.001,
-                now: { clock.now },
-                sleep: { clock.now += $0 }
-            )
+        let checker = BluetoothInputReadinessChecker(
+            timeout: 5,
+            pollInterval: 0.1,
+            now: { clock.now },
+            sleep: { clock.now += $0 }
         )
-        service.hasExplicitDeviceSelection = true
+
+        XCTAssertThrowsError(try checker.waitForInitialInput(
+            label: "test",
+            deadline: nil,
+            readinessSnapshot: { nil },
+            isEngineRunning: nil,
+            shouldCancel: { clock.now >= 0.2 }
+        )) { error in
+            XCTAssertTrue(error is CancellationError)
+        }
+        XCTAssertLessThan(clock.now, 1)
+    }
+
+    func testBluetoothRouteStabilizationCanBeCancelledBeforeTimeout() {
+        let clock = FakeReadinessClock()
+
+        XCTAssertFalse(BluetoothAudioRouteStabilizer.waitForActivatedDefaultRoute(
+            inputDeviceID: AudioDeviceID(938),
+            reason: "test",
+            timeout: 5,
+            stableDuration: 0.25,
+            pollInterval: 0.1,
+            now: { clock.now },
+            sleep: { clock.now += $0 },
+            readDefaultInput: { AudioDeviceID(1) },
+            shouldCancel: { clock.now >= 0.2 }
+        ))
+        XCTAssertEqual(clock.now, 0.2, accuracy: 0.001)
+    }
+
+    func testBluetoothInputStartupTrackerRejectsOldGenerationsAndPromotesOnlyCurrentSamples() throws {
+        let clock = FakeReadinessClock()
+        let tracker = BluetoothInputStartupTracker(now: { clock.now })
+        let firstGeneration = tracker.beginGeneration()
+
+        XCTAssertEqual(
+            tracker.consume(samples: [0.2, 0.1], inputRMS: 0.15, generation: firstGeneration),
+            .staged
+        )
+
+        clock.now = 0.1
+        let secondGeneration = tracker.beginGeneration()
+        XCTAssertEqual(
+            tracker.consume(samples: [0.9], inputRMS: 0.9, generation: firstGeneration),
+            .ignored
+        )
+        XCTAssertNil(tracker.snapshot(for: firstGeneration))
+
+        XCTAssertEqual(
+            tracker.consume(samples: [0, 0.3], inputRMS: 0.2, generation: secondGeneration),
+            .staged
+        )
+        clock.now = 0.15
+        XCTAssertEqual(
+            tracker.consume(samples: [0.4], inputRMS: 0.4, generation: secondGeneration),
+            .staged
+        )
+        clock.now = 0.2
+        XCTAssertEqual(
+            tracker.consume(samples: [0.5], inputRMS: 0.5, generation: secondGeneration),
+            .staged
+        )
+
+        let snapshot = try XCTUnwrap(tracker.snapshot(for: secondGeneration))
+        XCTAssertEqual(snapshot.buffersSinceSignal, 3)
+        XCTAssertEqual(snapshot.consecutiveBufferCount, 3)
+
+        let promotion = try XCTUnwrap(tracker.promoteCurrentGeneration())
+        XCTAssertEqual(promotion.generation, secondGeneration)
+        XCTAssertEqual(promotion.samples, [0, 0.3, 0.4, 0.5])
+        XCTAssertEqual(promotion.peakInputRMS, 0.5)
+        XCTAssertEqual(
+            tracker.consume(samples: [0.6], inputRMS: 0.6, generation: secondGeneration),
+            .appendDirectly
+        )
+        XCTAssertNil(tracker.promoteCurrentGeneration())
+    }
+
+    func testAsyncRecordingStartCancellationDuringPreparationDoesNotBecomeRecording() async throws {
+        let recoveryDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(recoveryDirectory) }
+        let enteredStart = expectation(description: "async Bluetooth start entered")
+        let releaseStart = DispatchSemaphore(value: 0)
+        defer { releaseStart.signal() }
+        let inputActivationGuard = FakeAudioInputDeviceActivator()
+        let routeStabilizer = FakeBluetoothInputRouteStabilizer { _, _ in true }
+        let service = AudioRecordingService(
+            inputActivationGuard: inputActivationGuard,
+            bluetoothInputRouteStabilizer: routeStabilizer,
+            recoveryAudioStore: DictationRecoveryAudioStore(directory: recoveryDirectory)
+        )
+        service.hasMicrophonePermissionOverride = true
+        service.hasExplicitDeviceSelection = false
+        service.selectedDeviceID = AudioDeviceID(938)
         service.selectedInputDeviceUsesBluetoothTransport = true
+        service.startRecordingOverride = {
+            enteredStart.fulfill()
+            releaseStart.wait()
+        }
 
-        try service.testingMarkInitialInputTapSeen(makeMonoBuffer(samples: [0, 0.002, 0, -0.001]))
+        let startTask = Task {
+            try await service.startRecordingAsync()
+        }
 
-        XCTAssertNoThrow(try service.testingWaitForInitialInputReadinessIfNeeded())
+        await fulfillment(of: [enteredStart], timeout: 1)
+        service.cancelPendingRecordingStart()
+        releaseStart.signal()
+
+        do {
+            try await startTask.value
+            XCTFail("Expected Bluetooth preparation to be cancelled")
+        } catch is CancellationError {
+            // Expected.
+        } catch {
+            XCTFail("Expected CancellationError, got \(error)")
+        }
+
+        XCTAssertFalse(service.isRecording)
+        XCTAssertTrue(service.getCurrentBuffer().isEmpty)
+        XCTAssertTrue(service.recoveryRecordingURLs.isEmpty)
+        XCTAssertEqual(inputActivationGuard.restoreCalls, ["recording-start-override-failed"])
+    }
+
+    func testAsyncRecordingStartCancelReadyRaceLeavesAConsistentState() async throws {
+        let raceQueue = DispatchQueue(
+            label: "com.typewhisper.tests.audio-start-race",
+            attributes: .concurrent
+        )
+
+        for iteration in 0..<12 {
+            let recoveryDirectory = try TestSupport.makeTemporaryDirectory()
+            defer { TestSupport.remove(recoveryDirectory) }
+            let enteredStart = expectation(description: "race start entered \(iteration)")
+            let releaseStart = DispatchSemaphore(value: 0)
+            let service = AudioRecordingService(
+                inputActivationGuard: FakeAudioInputDeviceActivator(),
+                bluetoothInputRouteStabilizer: FakeBluetoothInputRouteStabilizer { _, _ in true },
+                recoveryAudioStore: DictationRecoveryAudioStore(directory: recoveryDirectory)
+            )
+            service.hasMicrophonePermissionOverride = true
+            service.hasExplicitDeviceSelection = false
+            service.selectedDeviceID = AudioDeviceID(938)
+            service.selectedInputDeviceUsesBluetoothTransport = true
+            service.startRecordingOverride = {
+                enteredStart.fulfill()
+                releaseStart.wait()
+            }
+            service.stopRecordingOverride = { _ in [] }
+
+            let startTask = Task {
+                try await service.startRecordingAsync()
+            }
+            await fulfillment(of: [enteredStart], timeout: 1)
+
+            let raceFinished = expectation(description: "cancel/ready race finished \(iteration)")
+            raceFinished.expectedFulfillmentCount = 2
+            raceQueue.async {
+                service.cancelPendingRecordingStart()
+                raceFinished.fulfill()
+            }
+            raceQueue.async {
+                releaseStart.signal()
+                raceFinished.fulfill()
+            }
+            await fulfillment(of: [raceFinished], timeout: 1)
+
+            do {
+                try await startTask.value
+                XCTAssertTrue(service.isRecording)
+                _ = await service.stopRecording(policy: .immediate)
+                service.discardActiveRecoveryRecording()
+            } catch is CancellationError {
+                XCTAssertFalse(service.isRecording)
+            } catch {
+                XCTFail("Expected a committed start or CancellationError, got \(error)")
+            }
+
+            XCTAssertFalse(service.isRecording)
+            XCTAssertTrue(service.recoveryRecordingURLs.isEmpty)
+        }
     }
 
     func testBluetoothInputReadinessRunsForSystemDefaultWithoutExplicitSelection() {
@@ -2078,8 +2417,9 @@ final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
         let service = AudioRecordingService(inputReadinessChecker: readinessChecker)
         service.hasExplicitDeviceSelection = false
         service.selectedInputDeviceUsesBluetoothTransport = true
+        let generation = service.testingBeginBluetoothInputGeneration()
 
-        XCTAssertNoThrow(try service.testingWaitForInitialInputReadinessIfNeeded())
+        XCTAssertNoThrow(try service.testingWaitForInitialInputReadinessIfNeeded(generation: generation))
         XCTAssertEqual(readinessChecker.waitCalls, [.init(label: "test")])
     }
 
@@ -2089,7 +2429,7 @@ final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
         service.hasExplicitDeviceSelection = true
         service.selectedInputDeviceUsesBluetoothTransport = false
 
-        XCTAssertNoThrow(try service.testingWaitForInitialInputReadinessIfNeeded())
+        XCTAssertNoThrow(try service.testingWaitForInitialInputReadinessIfNeeded(generation: 1))
         XCTAssertTrue(readinessChecker.waitCalls.isEmpty)
     }
 
@@ -3143,7 +3483,7 @@ private final class FakeCoreAudioHALInputOperations: CoreAudioHALInputOperating,
     }
 }
 
-private final class FakeReadinessClock {
+private final class FakeReadinessClock: @unchecked Sendable {
     var now: TimeInterval = 0
 }
 
@@ -3156,8 +3496,10 @@ private final class FakeAudioInputReadinessChecker: AudioInputReadinessChecking 
 
     func waitForInitialInput(
         label: String,
-        hasCapturedInitialInput: () -> Bool,
-        isEngineRunning: (() -> Bool)?
+        deadline: TimeInterval?,
+        readinessSnapshot: () -> AudioInputReadinessSnapshot?,
+        isEngineRunning: (() -> Bool)?,
+        shouldCancel: () -> Bool
     ) throws {
         waitCalls.append(.init(label: label))
     }

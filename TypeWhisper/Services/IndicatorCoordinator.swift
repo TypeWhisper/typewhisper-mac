@@ -72,6 +72,16 @@ struct IndicatorPresentationData {
         source == .recorder
     }
 
+    var isPreparingMicrophone: Bool {
+        state == .recording && !isRecordingInputReady
+    }
+
+    var recordingStatusLabel: String {
+        isPreparingMicrophone
+            ? String(localized: "Preparing microphone")
+            : String(localized: "Recording")
+    }
+
     @MainActor
     static func make(
         dictation: DictationViewModel,
