@@ -332,6 +332,14 @@
       "detailsURL": "https://www.typewhisper.com/addons/groq/",
       "releases": [
         {
+          "version": "1.0.24",
+          "minHostVersion": "1.5.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 187153,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-groq-v1.0.24/GroqPlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
           "version": "1.0.23",
           "minHostVersion": "1.5.0",
           "sdkCompatibilityVersion": "v1",
