@@ -19,6 +19,7 @@ struct SetupWizardView: View {
     @State private var isActivatingParakeet = false
     @State private var manuallySelectedSetupProviderId: String?
     @State private var isLogoHovering = false
+    @State private var isMovingForward = true
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @FocusState private var isTrialFieldFocused: Bool
 
@@ -115,7 +116,8 @@ struct SetupWizardView: View {
         trialText = ""
         manuallySelectedSetupProviderId = nil
         UserDefaults.standard.set(0, forKey: UserDefaultsKeys.setupWizardCurrentStep)
-        withAnimation(.easeInOut(duration: 0.18)) {
+        isMovingForward = false
+        withAnimation(.easeInOut(duration: 0.3)) {
             currentStep = 0
         }
     }
@@ -198,31 +200,38 @@ struct SetupWizardView: View {
     private var stepContent: some View {
         ScrollView {
             VStack(spacing: 18) {
-                VStack(spacing: 5) {
-                    Text(currentWizardStep.title)
-                        .font(.title2.weight(.bold))
-                        .multilineTextAlignment(.center)
-                        .accessibilityAddTraits(.isHeader)
+                VStack(spacing: 18) {
+                    VStack(spacing: 5) {
+                        Text(currentWizardStep.title)
+                            .font(.title2.weight(.bold))
+                            .multilineTextAlignment(.center)
+                            .accessibilityAddTraits(.isHeader)
 
-                    Text(currentWizardStep.subtitle)
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .multilineTextAlignment(.center)
-                }
-                .padding(.top, 12)
+                        Text(currentWizardStep.subtitle)
+                            .font(.callout)
+                            .foregroundStyle(.secondary)
+                            .multilineTextAlignment(.center)
+                    }
+                    .padding(.top, 12)
 
-                switch currentWizardStep {
-                case .welcome:
-                    welcomeStep
-                case .permissions:
-                    permissionsStep
-                case .hotkey:
-                    hotkeyStep
-                case .engineAI:
-                    engineAIStep
-                case .finish:
-                    finishStep
+                    switch currentWizardStep {
+                    case .welcome:
+                        welcomeStep
+                    case .permissions:
+                        permissionsStep
+                    case .hotkey:
+                        hotkeyStep
+                    case .engineAI:
+                        engineAIStep
+                    case .finish:
+                        finishStep
+                    }
                 }
+                // Slide each step in from the direction of travel (forward from
+                // the trailing edge, back from the leading edge); fall back to a
+                // plain fade under Reduce Motion.
+                .id(currentWizardStep)
+                .transition(stepTransition)
             }
             .frame(maxWidth: 620)
             .frame(maxWidth: .infinity)
@@ -232,11 +241,23 @@ struct SetupWizardView: View {
         .scrollIndicators(.never)
     }
 
+    /// Directional slide+fade for step changes; plain fade under Reduce Motion.
+    private var stepTransition: AnyTransition {
+        if reduceMotion { return .opacity }
+        let insertionEdge: Edge = isMovingForward ? .trailing : .leading
+        let removalEdge: Edge = isMovingForward ? .leading : .trailing
+        return .asymmetric(
+            insertion: .move(edge: insertionEdge).combined(with: .opacity),
+            removal: .move(edge: removalEdge).combined(with: .opacity)
+        )
+    }
+
     private var footer: some View {
         HStack(spacing: 12) {
             if currentStep > 0 {
                 Button(localizedAppText("Back", de: "Zurück")) {
-                    withAnimation(.easeInOut(duration: 0.18)) {
+                    isMovingForward = false
+                    withAnimation(.easeInOut(duration: 0.3)) {
                         currentStep -= 1
                     }
                 }
@@ -304,7 +325,8 @@ struct SetupWizardView: View {
             return
         }
 
-        withAnimation(.easeInOut(duration: 0.18)) {
+        isMovingForward = true
+        withAnimation(.easeInOut(duration: 0.3)) {
             currentStep = min(currentStep + 1, SetupWizardStep.allCases.count - 1)
         }
     }

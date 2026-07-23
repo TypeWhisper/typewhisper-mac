@@ -7,6 +7,8 @@ struct StatisticsView: View {
 
     @State private var hoveredDate: Date?
     @State private var hoverLocation: CGPoint = .zero
+    @State private var animateBars = false
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -148,7 +150,7 @@ struct StatisticsView: View {
                     Chart(viewModel.chartData) { point in
                         BarMark(
                             x: .value(String(localized: "Date"), point.date, unit: .day),
-                            y: .value(String(localized: "Words"), point.wordCount)
+                            y: .value(String(localized: "Words"), animateBars ? point.wordCount : 0)
                         )
                         .foregroundStyle(
                             hoveredDate != nil && Calendar.current.isDate(point.date, inSameDayAs: hoveredDate!)
@@ -201,12 +203,32 @@ struct StatisticsView: View {
                     }
                     }
                     .frame(height: 200)
+                    // Keep the y-axis fixed so the bars visibly grow from the
+                    // baseline instead of the whole chart rescaling.
+                    .chartYScale(domain: 0...chartYMax)
+                    .onAppear {
+                        guard !animateBars else { return }
+                        if reduceMotion {
+                            animateBars = true
+                        } else {
+                            withAnimation(.easeOut(duration: 0.6)) { animateBars = true }
+                        }
+                    }
                     .accessibilityElement(children: .ignore)
                     .accessibilityAddTraits(.isStaticText)
                     .accessibilityLabel(chartAccessibilitySummary)
                 }
             }
         }
+    }
+
+    /// Fixed upper bound for the activity chart's y-axis (with a little headroom),
+    /// so bars animate up into a stable axis rather than rescaling as they grow.
+    private var chartYMax: Int {
+        // ~15% headroom above the tallest bar so it doesn't sit flush against the
+        // top edge, and the axis stays stable while the bars animate up.
+        let peak = viewModel.chartData.map(\.wordCount).max() ?? 0
+        return max(Int((Double(peak) * 1.15).rounded(.up)), 1)
     }
 
     private var chartAccessibilitySummary: Text {
@@ -452,7 +474,7 @@ private struct StatisticsStatCard: View {
                     .font(.title2)
                     .foregroundStyle(Color.accentColor)
                     .accessibilityHidden(true)
-                Text(value)
+                CountUpText(value: value)
                     .font(.title)
                     .fontWeight(.bold)
                     .monospacedDigit()
@@ -480,7 +502,7 @@ struct StatisticsMetricCard: View {
                     .font(.title2)
                     .foregroundStyle(Color.accentColor)
                     .accessibilityHidden(true)
-                Text(value)
+                CountUpText(value: value)
                     .font(.title)
                     .fontWeight(.bold)
                     .monospacedDigit()
@@ -520,5 +542,51 @@ struct StatisticsMetricCard: View {
                 .monospacedDigit()
         }
         .foregroundStyle(isPositive ? .green : .red)
+    }
+}
+
+// MARK: - Count-up number
+
+/// Renders a stat value, counting up from zero on appear when the value is a
+/// plain whole number (e.g. "42", "1,234"). Values with units or non-numeric
+/// characters (e.g. "3d", "12:34", "18 WPM") are shown as-is so nothing is
+/// mis-animated. Respects Reduce Motion.
+private struct CountUpText: View {
+    let value: String
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var animate = false
+
+    /// The integer to count up to, but only when `value` is a plain whole number
+    /// with no grouping separators or units, so the displayed count-up matches the
+    /// source string exactly (values like "3d", "12:34", "42.5", "1,234" are left
+    /// untouched).
+    private var target: Int? {
+        let trimmed = value.trimmingCharacters(in: .whitespaces)
+        guard let intValue = Int(trimmed), "\(intValue)" == trimmed else { return nil }
+        return intValue
+    }
+
+    var body: some View {
+        if let target, !reduceMotion {
+            AnimatableNumberText(number: animate ? Double(target) : 0)
+                .onAppear { withAnimation(.easeOut(duration: 0.7)) { animate = true } }
+        } else {
+            Text(value)
+        }
+    }
+}
+
+/// A `Text` whose numeric content animates smoothly via `Animatable`.
+private struct AnimatableNumberText: View, Animatable {
+    var number: Double
+
+    nonisolated var animatableData: Double {
+        get { number }
+        set { number = newValue }
+    }
+
+    var body: some View {
+        // Plain integer string (no grouping) to match the source value formatting.
+        Text("\(Int(number.rounded()))")
     }
 }
