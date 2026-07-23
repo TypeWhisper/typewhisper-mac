@@ -1266,7 +1266,6 @@ final class OpenAIPlugin: NSObject,
     DictionaryTermsCapabilityProviding,
     LiveTranscriptionCapablePlugin,
     LLMProviderPlugin,
-    LLMTemperatureControllableProvider,
     TTSProviderPlugin,
     PluginAuthRoleStatusProviding,
     @unchecked Sendable
