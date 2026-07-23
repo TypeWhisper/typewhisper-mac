@@ -1,7 +1,7 @@
 {
     "id": "com.minerale.mistralai",
     "name": "Mistral AI",
-    "version": "1.0.4",
+    "version": "1.0.5",
     "minHostVersion": "1.5.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
