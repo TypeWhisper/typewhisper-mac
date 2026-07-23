@@ -401,6 +401,37 @@ final class DeepgramPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
         return apiKey
     }
 
+    static func restRequestURL(
+        baseURL: String,
+        modelId: String,
+        language: String?,
+        prompt: String?
+    ) throws -> URL {
+        guard var components = URLComponents(string: "\(baseURL)/v1/listen"),
+              let scheme = components.scheme?.lowercased(),
+              scheme == "http" || scheme == "https",
+              let host = components.host,
+              !host.isEmpty else {
+            throw PluginTranscriptionError.apiError("Invalid base URL: \(baseURL)")
+        }
+
+        var queryItems = [
+            URLQueryItem(name: "model", value: modelId),
+            URLQueryItem(name: "smart_format", value: "true"),
+            URLQueryItem(name: "punctuate", value: "true"),
+        ]
+        if let language, !language.isEmpty {
+            queryItems.append(URLQueryItem(name: "language", value: language))
+        }
+        queryItems.append(contentsOf: dictionaryQueryItems(prompt: prompt, modelId: modelId))
+        components.queryItems = queryItems
+
+        guard let requestURL = components.url else {
+            throw PluginTranscriptionError.apiError("Invalid base URL: \(baseURL)")
+        }
+        return requestURL
+    }
+
     // MARK: - Transcription (REST Fallback)
 
     func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
@@ -463,20 +494,15 @@ final class DeepgramPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
         apiKey: String,
         prompt: String?
     ) async throws -> PluginTranscriptionResult {
-        var components = URLComponents(string: "\(effectiveBaseURL)/v1/listen")!
-        var queryItems = [
-            URLQueryItem(name: "model", value: modelId),
-            URLQueryItem(name: "smart_format", value: "true"),
-            URLQueryItem(name: "punctuate", value: "true"),
-        ]
-        if let lang = language, !lang.isEmpty {
-            queryItems.append(URLQueryItem(name: "language", value: lang))
-        }
-        queryItems.append(contentsOf: Self.dictionaryQueryItems(prompt: prompt, modelId: modelId))
-        components.queryItems = queryItems
+        let requestURL = try Self.restRequestURL(
+            baseURL: effectiveBaseURL,
+            modelId: modelId,
+            language: language,
+            prompt: prompt
+        )
 
         return try await PluginAudioUploadEncoder.withCompressedM4AUploadWavFallback(from: audio) { uploadFile in
-            var request = URLRequest(url: components.url!)
+            var request = URLRequest(url: requestURL)
             request.httpMethod = "POST"
             request.setValue(authHeaderValue(apiKey: apiKey), forHTTPHeaderField: effectiveAuthHeader)
             request.setValue(uploadFile.contentType, forHTTPHeaderField: "Content-Type")

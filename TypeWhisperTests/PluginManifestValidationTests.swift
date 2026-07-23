@@ -1413,6 +1413,68 @@ final class PluginDictionaryGuardTests: XCTestCase {
         XCTAssertEqual(queryItems.last?.value, "Term100-xx")
     }
 
+    func testDeepgramRESTRequestURLRejectsMalformedBaseURL() {
+        XCTAssertThrowsError(
+            try DeepgramPlugin.restRequestURL(
+                baseURL: "https://api deepgram.com",
+                modelId: "nova-3",
+                language: nil,
+                prompt: nil
+            )
+        ) { error in
+            guard case PluginTranscriptionError.apiError(let message) = error else {
+                return XCTFail("Expected apiError, got \(error)")
+            }
+            XCTAssertEqual(message, "Invalid base URL: https://api deepgram.com")
+        }
+    }
+
+    func testDeepgramRESTRequestURLRejectsHostlessAndUnsupportedURLs() {
+        for baseURL in ["not a URL", "file:///tmp/deepgram", "ftp://example.com"] {
+            XCTAssertThrowsError(
+                try DeepgramPlugin.restRequestURL(
+                    baseURL: baseURL,
+                    modelId: "nova-3",
+                    language: nil,
+                    prompt: nil
+                ),
+                baseURL
+            ) { error in
+                guard case PluginTranscriptionError.apiError = error else {
+                    return XCTFail("Expected apiError for \(baseURL), got \(error)")
+                }
+            }
+        }
+    }
+
+    func testDeepgramRESTRequestURLPreservesEndpointAndQueryParameters() throws {
+        let prompt = PluginDictionaryTerms.prompt(from: ["TypeWhisper", "Deepgram"], maxLength: 10_000)
+        let url = try DeepgramPlugin.restRequestURL(
+            baseURL: "http://localhost:8080/deepgram",
+            modelId: "nova-3",
+            language: "de",
+            prompt: prompt
+        )
+        let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
+        let queryItems = components.queryItems ?? []
+        let firstValue = { (name: String) in
+            queryItems.first(where: { $0.name == name })?.value
+        }
+
+        XCTAssertEqual(components.scheme, "http")
+        XCTAssertEqual(components.host, "localhost")
+        XCTAssertEqual(components.port, 8080)
+        XCTAssertEqual(components.path, "/deepgram/v1/listen")
+        XCTAssertEqual(firstValue("model"), "nova-3")
+        XCTAssertEqual(firstValue("smart_format"), "true")
+        XCTAssertEqual(firstValue("punctuate"), "true")
+        XCTAssertEqual(firstValue("language"), "de")
+        XCTAssertEqual(
+            queryItems.filter { $0.name == "keyterm" }.compactMap(\.value),
+            ["TypeWhisper", "Deepgram"]
+        )
+    }
+
     @available(macOS 26, *)
     func testSpeechAnalyzerAnalysisContextLimitsDictionaryTermsTo100() {
         let prompt = PluginDictionaryTerms.prompt(from: makeLongTerms(count: 150, length: 10), maxLength: 10_000)
