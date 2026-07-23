@@ -247,15 +247,13 @@ final class MistralAIPluginTests: XCTestCase {
         XCTAssertTrue(content.contains { ($0["type"] as? String) == "text" })
     }
 
-    func testSupportedLanguagesIncludeVoxtralOfficialSet() {
+    func testSupportedLanguagesMatchVoxtralOfficialSet() {
         let plugin = MistralAIPlugin()
-        let languages = plugin.supportedLanguages
         // A non-empty list is what makes the app expose a language picker, so the
-        // user can force a language instead of relying on auto-detection.
-        XCTAssertFalse(languages.isEmpty)
-        for code in ["en", "fr", "de", "es", "it", "pt", "nl", "hi"] {
-            XCTAssertTrue(languages.contains(code), "missing language: \(code)")
-        }
+        // user can force a language instead of relying on auto-detection. Assert
+        // the exact set so an unsupported extra language can't silently slip into
+        // the picker.
+        XCTAssertEqual(Set(plugin.supportedLanguages), ["en", "fr", "de", "es", "it", "pt", "nl", "hi"])
     }
 
     func testVoxtralSmallChatInstructionUsesLanguageName() async throws {
