@@ -528,7 +528,7 @@ struct MistralSettingsView: View {
                         .fontWeight(.medium)
                     
                     Picker(selection: $selectedSTTModel) {
-                        Text("None", bundle: bundle).tag("")
+                        Text("Default", bundle: bundle).tag("")
                         ForEach(plugin.transcriptionModels, id: \.id) { model in
                             Text(model.displayName).tag(model.id)
                         }
@@ -548,7 +548,7 @@ struct MistralSettingsView: View {
                         .fontWeight(.medium)
 
                     Picker(selection: $selectedLLMModel) {
-                        Text("None", bundle: bundle).tag("")
+                        Text("Default", bundle: bundle).tag("")
                         ForEach(plugin.supportedModels, id: \.id) { model in
                             Text(model.displayName).tag(model.id)
                         }

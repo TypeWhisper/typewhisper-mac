@@ -21,6 +21,16 @@
         }
       }
     },
+    "Cloud API integration for Mistral LLMs and Voxtral STT.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cloud-API-Integration für Mistral-LLMs und Voxtral-STT."
+          }
+        }
+      }
+    },
     "Custom": {
       "localizations": {
         "de": {
@@ -31,42 +41,12 @@
         }
       }
     },
-    "Provider Default": {
+    "Default": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Anbieter-Standard"
-          }
-        }
-      }
-    },
-    "Temperature": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Temperatur"
-          }
-        }
-      }
-    },
-    "Temperature Mode": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Temperaturmodus"
-          }
-        }
-      }
-    },
-    "Cloud API integration for Mistral LLMs and Voxtral STT.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Cloud-API-Integration für Mistral-LLMs und Voxtral-STT."
+            "value": "Standard"
           }
         }
       }
@@ -101,6 +81,16 @@
         }
       }
     },
+    "Provider Default": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anbieter-Standard"
+          }
+        }
+      }
+    },
     "Remove": {
       "localizations": {
         "de": {
@@ -121,12 +111,22 @@
         }
       }
     },
-    "None": {
+    "Temperature": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Keines"
+            "value": "Temperatur"
+          }
+        }
+      }
+    },
+    "Temperature Mode": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Temperaturmodus"
           }
         }
       }

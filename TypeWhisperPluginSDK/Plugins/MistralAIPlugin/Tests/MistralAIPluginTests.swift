@@ -158,7 +158,6 @@ final class MistralAIPluginTests: XCTestCase {
         let host = try PluginTestHostServices(secrets: ["api-key": "mistral-key"])
         let plugin = MistralAIPlugin()
         plugin.activate(host: host)
-        plugin.selectLLMModel("mistral-small-latest")
         plugin.setLLMTemperatureMode(.custom)
         plugin.setLLMTemperatureValue(0.7)
 
@@ -172,23 +171,45 @@ final class MistralAIPluginTests: XCTestCase {
             ])
         }
 
-        // Route through PluginHTTPClient by using the same client the plugin uses.
-        let client = MistralAPIClient(apiKey: "mistral-key")
-        _ = try? await client.processChat(systemPrompt: "s", userText: "u", model: "mistral-small-latest", temperature: 0.7)
+        // End-to-end through the provider: the custom mode/value must be
+        // resolved and sent as the request's temperature field.
+        let output = try await plugin.process(systemPrompt: "s", userText: "u", model: nil)
+        XCTAssertEqual(output, "ok")
+
         let requests = store.sessions[0].requestedRequests
         XCTAssertEqual(requests.count, 1)
+        XCTAssertEqual(requests[0].url?.absoluteString, "https://api.mistral.ai/v1/chat/completions")
         let body = try XCTUnwrap(requests[0].httpBody)
         let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+        XCTAssertEqual(json["model"] as? String, "mistral-small-latest")
         XCTAssertEqual(json["temperature"] as? Double, 0.7)
     }
 
-    func testProviderDefaultTemperatureOmitsField() throws {
+    func testProviderDefaultTemperatureOmitsField() async throws {
         let host = try PluginTestHostServices(secrets: ["api-key": "mistral-key"])
         let plugin = MistralAIPlugin()
         plugin.activate(host: host)
         plugin.setLLMTemperatureMode(.providerDefault)
 
-        XCTAssertEqual(plugin.llmTemperatureMode, .providerDefault)
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"choices":[{"message":{"content":"ok"}}]}"#.utf8),
+                    Self.httpResponse(url: "https://api.mistral.ai/v1/chat/completions", statusCode: 200)
+                ),
+            ])
+        }
+
+        // End-to-end through the provider: provider-default mode must omit the
+        // temperature field entirely from the request.
+        _ = try await plugin.process(systemPrompt: "s", userText: "u", model: nil)
+
+        let requests = store.sessions[0].requestedRequests
+        XCTAssertEqual(requests.count, 1)
+        let body = try XCTUnwrap(requests[0].httpBody)
+        let json = try XCTUnwrap(try JSONSerialization.jsonObject(with: body) as? [String: Any])
+        XCTAssertNil(json["temperature"])
     }
 
     func testVoxtralSmallTranscribesViaChatCompletions() async throws {
