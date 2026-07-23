@@ -1004,6 +1004,9 @@ final class DictationViewModel: ObservableObject {
     }
 
     func handleCancelHotkey() {
+        logger.info(
+            "Cancel hotkey received: state=\(String(describing: self.state), privacy: .public), inputReady=\(self.isRecordingInputReady, privacy: .public), startPending=\(self.recordingStartTask != nil, privacy: .public)"
+        )
         guard let target = cancelWarningTargetForCurrentState() else { return }
 
         if target == .recording, !requireSecondEscapeToCancelRecording {

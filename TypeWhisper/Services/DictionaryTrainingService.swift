@@ -285,7 +285,10 @@ final class DictionaryTrainingService: ObservableObject {
         do {
             guard requestedSessionID == sessionID else { return }
             try await dependencies.startRecording()
-            guard requestedSessionID == sessionID, !isCancelled else {
+            guard requestedSessionID == sessionID,
+                  !isCancelled,
+                  samples.indices.contains(index),
+                  samples[index].id == sampleID else {
                 _ = await dependencies.stopRecording()
                 dependencies.discardActiveRecording()
                 return
