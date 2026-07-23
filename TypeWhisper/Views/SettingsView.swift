@@ -367,8 +367,11 @@ private struct SettingsSidebarContent: View {
                 ForEach(filteredSections) { section in
                     Section {
                         ForEach(section.destinations) { destination in
-                            SettingsSidebarRow(destination: destination)
-                                .tag(destination.tab)
+                            SettingsSidebarRow(
+                                destination: destination,
+                                isSelected: destination.tab == selectedTab
+                            )
+                            .tag(destination.tab)
                         }
                     }
                 }
@@ -497,8 +500,11 @@ private struct SettingsSidebarShell<DetailContent: View>: View {
                     ForEach(sections) { section in
                         Section {
                             ForEach(section.destinations) { destination in
-                                SettingsSidebarRow(destination: destination)
-                                    .tag(destination.tab)
+                                SettingsSidebarRow(
+                                    destination: destination,
+                                    isSelected: destination.tab == selectedTab
+                                )
+                                .tag(destination.tab)
                             }
                         }
                     }
@@ -538,10 +544,17 @@ private struct SettingsSidebarShell<DetailContent: View>: View {
 
 private struct SettingsSidebarRow: View {
     let destination: SettingsDestination
+    let isSelected: Bool
+
+    // Incremented each time this row becomes selected, to fire the icon bounce
+    // only when the tab is pressed (not when it is deselected).
+    @State private var bounceTrigger = 0
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         HStack(spacing: 10) {
             Label(destination.title, systemImage: destination.systemImage)
+                .symbolEffect(.bounce, value: bounceTrigger)
 
             Spacer(minLength: 8)
 
@@ -550,6 +563,9 @@ private struct SettingsSidebarRow: View {
             }
         }
         .contentShape(Rectangle())
+        .onChange(of: isSelected) { _, selected in
+            if selected && !reduceMotion { bounceTrigger += 1 }
+        }
     }
 }
 
