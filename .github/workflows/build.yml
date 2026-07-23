@@ -20,6 +20,9 @@ env:
   SCHEME: TypeWhisper
   PROJECT: TypeWhisper.xcodeproj
 
+permissions:
+  contents: read
+
 jobs:
   release-build:
     runs-on: macos-15

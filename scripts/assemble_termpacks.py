@@ -2,7 +2,6 @@
 """Assemble individual term pack JSON files into a single termpacks.json registry."""
 
 import json
-import os
 import sys
 from pathlib import Path
 

@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import argparse
-import os
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
