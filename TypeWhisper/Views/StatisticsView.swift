@@ -206,13 +206,9 @@ struct StatisticsView: View {
                     // Keep the y-axis fixed so the bars visibly grow from the
                     // baseline instead of the whole chart rescaling.
                     .chartYScale(domain: 0...chartYMax)
-                    .onAppear {
-                        guard !animateBars else { return }
-                        if reduceMotion {
-                            animateBars = true
-                        } else {
-                            withAnimation(.easeOut(duration: 0.6)) { animateBars = true }
-                        }
+                    .onAppear { startBarAnimation() }
+                    .onChange(of: viewModel.selectedTimePeriod) { _, _ in
+                        startBarAnimation()
                     }
                     .accessibilityElement(children: .ignore)
                     .accessibilityAddTraits(.isStaticText)
@@ -229,6 +225,19 @@ struct StatisticsView: View {
         // top edge, and the axis stays stable while the bars animate up.
         let peak = viewModel.chartData.map(\.wordCount).max() ?? 0
         return max(Int((Double(peak) * 1.15).rounded(.up)), 1)
+    }
+
+    /// Drops the activity bars to the baseline and animates them up. Runs on first
+    /// appearance and re-arms on every period change so the bars re-grow each time.
+    private func startBarAnimation() {
+        animateBars = false
+        guard !reduceMotion else {
+            animateBars = true
+            return
+        }
+        DispatchQueue.main.async {
+            withAnimation(.easeOut(duration: 0.6)) { animateBars = true }
+        }
     }
 
     private var chartAccessibilitySummary: Text {
