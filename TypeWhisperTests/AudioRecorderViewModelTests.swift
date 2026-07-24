@@ -281,6 +281,7 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertNil(session.text)
         XCTAssertTrue(session.error?.contains("HTTP 413") == true)
 
+        try await waitForRecordingsToLoad(viewModel, count: 1)
         let recording = try XCTUnwrap(viewModel.recordings.first)
         XCTAssertEqual(
             recording.url.resolvingSymlinksInPath().path,
@@ -316,6 +317,7 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertNotNil(session.outputFile)
         XCTAssertNil(session.text)
 
+        try await waitForRecordingsToLoad(viewModel, count: 1)
         let recording = try XCTUnwrap(viewModel.recordings.first)
         XCTAssertNil(recording.transcript)
         let failure = try XCTUnwrap(recording.transcriptionFailure)
