@@ -30,6 +30,7 @@ final class APIServerViewModel: ObservableObject {
 
     private let httpServer: HTTPServer
     private let apiAuthenticator: LocalAPIAuthenticator
+    private var startTask: Task<Void, Never>?
 
     init(httpServer: HTTPServer, apiAuthenticator: LocalAPIAuthenticator) {
         self.httpServer = httpServer
@@ -52,23 +53,33 @@ final class APIServerViewModel: ObservableObject {
     }
 
     func startServer() {
+        startTask?.cancel()
         errorMessage = nil
-        do {
-            let apiToken = try apiAuthenticator.loadOrCreateToken()
-            try httpServer.start(port: port)
+        let selectedPort = port
+        startTask = Task { @MainActor [weak self] in
+            guard let self else { return }
             do {
-                try writeDiscoveryFiles(apiToken: apiToken)
+                let apiToken = try await apiAuthenticator.loadOrCreateToken()
+                try Task.checkCancellation()
+                try httpServer.start(port: selectedPort)
+                do {
+                    try writeDiscoveryFiles(apiToken: apiToken, port: selectedPort)
+                } catch {
+                    httpServer.stop()
+                    throw error
+                }
+            } catch is CancellationError {
+                return
             } catch {
-                httpServer.stop()
-                throw error
+                errorMessage = error.localizedDescription
+                isRunning = false
             }
-        } catch {
-            errorMessage = error.localizedDescription
-            isRunning = false
         }
     }
 
     func stopServer() {
+        startTask?.cancel()
+        startTask = nil
         httpServer.stop()
         isRunning = false
         errorMessage = nil
@@ -94,7 +105,7 @@ final class APIServerViewModel: ObservableObject {
             .appendingPathComponent("api-discovery.json")
     }
 
-    private func writeDiscoveryFiles(apiToken: String) throws {
+    private func writeDiscoveryFiles(apiToken: String, port: UInt16) throws {
         let url = Self.portFileURL
         let directory = url.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
@@ -127,19 +138,23 @@ final class LocalAPIAuthenticator: @unchecked Sendable {
 
     private let token: OSAllocatedUnfairLock<String?>
     private let requiresAuthentication: OSAllocatedUnfairLock<Bool>
+    private let tokenLoader: @Sendable () -> String?
+    private let tokenSaver: @Sendable (String) throws -> Void
 
     init(
         initialToken: String? = nil,
-        requiresAuthentication: Bool = UserDefaults.standard.bool(forKey: UserDefaultsKeys.apiServerRequiresAuthentication)
+        requiresAuthentication: Bool = UserDefaults.standard.bool(forKey: UserDefaultsKeys.apiServerRequiresAuthentication),
+        tokenLoader: @escaping @Sendable () -> String? = {
+            KeychainService.load(service: LocalAPIAuthenticator.keychainService)
+        },
+        tokenSaver: @escaping @Sendable (String) throws -> Void = {
+            try KeychainService.save(key: $0, service: LocalAPIAuthenticator.keychainService)
+        }
     ) {
         token = OSAllocatedUnfairLock<String?>(initialState: initialToken)
         self.requiresAuthentication = OSAllocatedUnfairLock<Bool>(initialState: requiresAuthentication)
-
-        if initialToken == nil,
-           let existingToken = KeychainService.load(service: Self.keychainService),
-           !existingToken.isEmpty {
-            token.withLock { $0 = existingToken }
-        }
+        self.tokenLoader = tokenLoader
+        self.tokenSaver = tokenSaver
     }
 
     func currentToken() -> String? {
@@ -155,20 +170,24 @@ final class LocalAPIAuthenticator: @unchecked Sendable {
         requiresAuthentication.withLock { $0 = enabled }
     }
 
-    func loadOrCreateToken() throws -> String {
-        if let existingToken = currentToken(), !existingToken.isEmpty {
-            return existingToken
-        }
+    func loadOrCreateToken() async throws -> String {
+        try await Task.detached { [token, tokenLoader, tokenSaver] in
+            try token.withLock { cachedToken in
+                if let cachedToken, !cachedToken.isEmpty {
+                    return cachedToken
+                }
 
-        if let storedToken = KeychainService.load(service: Self.keychainService), !storedToken.isEmpty {
-            token.withLock { $0 = storedToken }
-            return storedToken
-        }
+                if let storedToken = tokenLoader(), !storedToken.isEmpty {
+                    cachedToken = storedToken
+                    return storedToken
+                }
 
-        let newToken = try Self.makeToken()
-        try KeychainService.save(key: newToken, service: Self.keychainService)
-        token.withLock { $0 = newToken }
-        return newToken
+                let newToken = try Self.makeToken()
+                try tokenSaver(newToken)
+                cachedToken = newToken
+                return newToken
+            }
+        }.value
     }
 
     private static func makeToken() throws -> String {

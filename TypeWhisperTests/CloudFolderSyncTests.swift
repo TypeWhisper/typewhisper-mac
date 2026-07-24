@@ -100,6 +100,42 @@ private actor PremiumAccountHTTPRecorder {
     }
 }
 
+private final class BlockingPremiumTokenReader: @unchecked Sendable {
+    private let lock = NSLock()
+    private let releaseSemaphore = DispatchSemaphore(value: 0)
+    private var released = false
+    private var storedReadCount = 0
+    private var storedReadWasOnMainThread = false
+
+    var readCount: Int {
+        lock.withLock { storedReadCount }
+    }
+
+    var readWasOnMainThread: Bool {
+        lock.withLock { storedReadWasOnMainThread }
+    }
+
+    func read(service: String) -> String? {
+        lock.withLock {
+            storedReadCount += 1
+            storedReadWasOnMainThread = Thread.isMainThread
+        }
+        releaseSemaphore.wait()
+        return "stored-token"
+    }
+
+    func release() {
+        let shouldSignal = lock.withLock {
+            guard !released else { return false }
+            released = true
+            return true
+        }
+        if shouldSignal {
+            releaseSemaphore.signal()
+        }
+    }
+}
+
 @MainActor
 private final class PremiumAppleWebAuthenticator: AppleWebAuthenticating {
     private(set) var authorizationURLs: [URL] = []
@@ -117,6 +153,41 @@ private final class PremiumAppleWebAuthenticator: AppleWebAuthenticating {
 }
 
 final class CloudFolderSyncTests: XCTestCase {
+    @MainActor
+    func testPremiumAccountDefersStartupTokenReadOffMainThread() async throws {
+        let suiteName = "PremiumStartupToken-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let reader = BlockingPremiumTokenReader()
+        defer { reader.release() }
+
+        let service = PremiumAccountService(
+            defaults: defaults,
+            keychainService: suiteName,
+            isSignedInOverride: nil,
+            automaticallyRefresh: false,
+            startupTokenReader: { reader.read(service: $0) }
+        )
+
+        XCTAssertEqual(reader.readCount, 0)
+        XCTAssertFalse(service.isSignedIn)
+
+        for _ in 0..<100 {
+            if reader.readCount == 1 { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertEqual(reader.readCount, 1)
+        XCTAssertFalse(reader.readWasOnMainThread)
+        XCTAssertFalse(service.isSignedIn)
+
+        reader.release()
+        for _ in 0..<100 {
+            if service.isSignedIn { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertTrue(service.isSignedIn)
+    }
+
     func testProductionPublicKeyVerifiesBackendGeneratedEntitlement() throws {
         let response = """
         {

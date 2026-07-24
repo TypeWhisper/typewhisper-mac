@@ -6,6 +6,20 @@ import Foundation
 import Security
 import SwiftUI
 
+private func readPremiumAccountToken(service: String) -> String? {
+    let query: [String: Any] = [
+        kSecClass as String: kSecClassGenericPassword,
+        kSecAttrService as String: service,
+        kSecAttrAccount as String: "access-token",
+        kSecReturnData as String: true,
+        kSecMatchLimit as String: kSecMatchLimitOne,
+    ]
+    var value: CFTypeRef?
+    guard SecItemCopyMatching(query as CFDictionary, &value) == errSecSuccess,
+          let data = value as? Data else { return nil }
+    return String(data: data, encoding: .utf8)
+}
+
 enum PremiumSyncMode: String, CaseIterable, Identifiable, Sendable {
     case off
     case automaticICloud
@@ -267,6 +281,7 @@ final class PremiumAccountService: ObservableObject {
     private let deviceID: String
     private let entitlementVerifier: CrossDevicePremiumEntitlementVerifier?
     private let appleWebAuthenticator: any AppleWebAuthenticating
+    private var startupTokenTask: Task<Void, Never>?
 
     private static let productionEntitlementPublicKeyBase64 =
         "8ZwFh+yrpkZZ1VsZgjpZcOz2h3jKpGG93MTdRaCPqXFn/Loqh8u36hB9FLho+ozwuHbaNeoN1MxM2/AJKyBNvQ=="
@@ -282,7 +297,8 @@ final class PremiumAccountService: ObservableObject {
         keychainService: String = "com.typewhisper.mac.premium-account",
         entitlementPublicKeyBase64: String = PremiumAccountService.productionEntitlementPublicKeyBase64,
         isSignedInOverride: Bool? = nil,
-        automaticallyRefresh: Bool = true
+        automaticallyRefresh: Bool = true,
+        startupTokenReader: @escaping @Sendable (String) -> String? = readPremiumAccountToken
     ) {
         self.defaults = defaults
         self.baseURL = baseURL
@@ -316,8 +332,24 @@ final class PremiumAccountService: ObservableObject {
             entitlement = nil
             defaults.removeObject(forKey: Keys.cachedEntitlement)
         }
-        isSignedIn = isSignedInOverride ?? (Self.readToken(service: keychainService) != nil)
-        if isSignedIn, automaticallyRefresh { Task { await refreshIfNeeded() } }
+        isSignedIn = isSignedInOverride ?? false
+        if let isSignedInOverride {
+            if isSignedInOverride, automaticallyRefresh {
+                Task { await refreshIfNeeded() }
+            }
+        } else {
+            startupTokenTask = Task { @MainActor [weak self] in
+                let hasStoredToken = await Task.detached {
+                    startupTokenReader(keychainService) != nil
+                }.value
+                guard !Task.isCancelled, let self else { return }
+                self.isSignedIn = hasStoredToken
+                self.startupTokenTask = nil
+                if hasStoredToken, automaticallyRefresh {
+                    await self.refreshIfNeeded()
+                }
+            }
+        }
     }
 
     func signInWithApple(polarLicenseKey: String?) async {
@@ -415,6 +447,8 @@ final class PremiumAccountService: ObservableObject {
         _ accountSession: AccountSession,
         polarLicenseKey: String?
     ) async throws {
+        startupTokenTask?.cancel()
+        startupTokenTask = nil
         try Self.saveToken(accountSession.accessToken, service: keychainService)
         isSignedIn = true
         try acceptEntitlement(accountSession.entitlement)
@@ -496,6 +530,8 @@ final class PremiumAccountService: ObservableObject {
     }
 
     private func clearAuthorizationState() {
+        startupTokenTask?.cancel()
+        startupTokenTask = nil
         Self.deleteToken(service: keychainService)
         isSignedIn = false
         entitlement = nil
@@ -504,17 +540,7 @@ final class PremiumAccountService: ObservableObject {
     }
 
     private static func readToken(service: String) -> String? {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: "access-token",
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne,
-        ]
-        var value: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &value) == errSecSuccess,
-              let data = value as? Data else { return nil }
-        return String(data: data, encoding: .utf8)
+        readPremiumAccountToken(service: service)
     }
 
     private static func saveToken(_ token: String, service: String) throws {

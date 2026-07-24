@@ -27,8 +27,46 @@ private actor RecorderStopFinalizationGate {
     }
 }
 
+private final class BlockingRecordingsLoader: @unchecked Sendable {
+    let started = DispatchSemaphore(value: 0)
+    let release = DispatchSemaphore(value: 0)
+
+    private let lock = NSLock()
+    private var _ranOnMainThread = false
+
+    var ranOnMainThread: Bool {
+        lock.withLock { _ranOnMainThread }
+    }
+
+    func load(
+        directory: URL,
+        transientFailures: [String: AudioRecorderViewModel.RecordingTranscriptionFailure]
+    ) -> [AudioRecorderViewModel.RecordingItem] {
+        lock.withLock {
+            _ranOnMainThread = Thread.isMainThread
+        }
+        started.signal()
+        release.wait()
+        return []
+    }
+}
+
 @MainActor
 final class AudioRecorderViewModelTests: XCTestCase {
+    func testRecorderFilesAreLoadedOffMainThreadDuringInitialization() throws {
+        let probe = BlockingRecordingsLoader()
+        defer { probe.release.signal() }
+
+        let viewModel = makeViewModel(
+            defaults: try makeDefaults(),
+            recordingsLoader: probe.load
+        )
+
+        XCTAssertEqual(probe.started.wait(timeout: .now() + 1), .success)
+        XCTAssertFalse(probe.ranOnMainThread)
+        XCTAssertTrue(viewModel.recordings.isEmpty)
+    }
+
     func testRecorderSelectionPersistsSeparatelyFromGlobalDefault() throws {
         try preserveStandardDefaults()
         let defaults = try makeDefaults()
@@ -443,6 +481,7 @@ final class AudioRecorderViewModelTests: XCTestCase {
         viewModel.languageSelection = .exact("de")
         viewModel.selectedTask = .translate
         viewModel.loadRecordings()
+        try await waitForRecordingsToLoad(viewModel, count: 1)
 
         let recording = try XCTUnwrap(viewModel.recordings.first)
         viewModel.transcribeRecording(recording)
@@ -484,6 +523,7 @@ final class AudioRecorderViewModelTests: XCTestCase {
             audioSamplesLoader: { _ in throw AudioFileService.AudioFileError.unsupportedFormat }
         )
         viewModel.loadRecordings()
+        try await waitForRecordingsToLoad(viewModel, count: 1)
 
         viewModel.transcribeRecording(try XCTUnwrap(viewModel.recordings.first))
         try await waitForRetranscriptionToFinish(viewModel)
@@ -511,6 +551,7 @@ final class AudioRecorderViewModelTests: XCTestCase {
             audioSamplesLoader: { _ in [0.25, -0.25] }
         )
         viewModel.loadRecordings()
+        try await waitForRecordingsToLoad(viewModel, count: 1)
 
         viewModel.transcribeRecording(try XCTUnwrap(viewModel.recordings.first))
         try await waitForRetranscriptionToFinish(viewModel)
@@ -536,6 +577,7 @@ final class AudioRecorderViewModelTests: XCTestCase {
             audioSamplesLoader: { _ in [0.25, -0.25] }
         )
         viewModel.loadRecordings()
+        try await waitForRecordingsToLoad(viewModel, count: 1)
 
         viewModel.transcribeRecording(try XCTUnwrap(viewModel.recordings.first))
         try await waitForRetranscriptionToFinish(viewModel)
@@ -567,6 +609,7 @@ final class AudioRecorderViewModelTests: XCTestCase {
             audioSamplesLoader: { _ in [0.25, -0.25] }
         )
         viewModel.loadRecordings()
+        try await waitForRecordingsToLoad(viewModel, count: 1)
 
         viewModel.transcribeRecording(try XCTUnwrap(viewModel.recordings.first))
         try await waitForRetranscriptionToFinish(viewModel)
@@ -599,6 +642,7 @@ final class AudioRecorderViewModelTests: XCTestCase {
             }
         )
         viewModel.loadRecordings()
+        try await waitForRecordingsToLoad(viewModel, count: 2)
         XCTAssertEqual(viewModel.recordings.count, 2)
         let first = try XCTUnwrap(viewModel.recordings.first)
         let second = try XCTUnwrap(viewModel.recordings.dropFirst().first)
@@ -785,6 +829,7 @@ final class AudioRecorderViewModelTests: XCTestCase {
         dictionaryService: DictionaryService? = nil,
         audioDeviceService: AudioDeviceService = AudioDeviceService(initialInputDevices: [], monitorDeviceChanges: false),
         audioSamplesLoader: AudioRecorderViewModel.AudioSamplesLoader? = nil,
+        recordingsLoader: AudioRecorderViewModel.RecordingsLoader? = nil,
         livePreviewStartObserver: (() -> Void)? = nil
     ) -> AudioRecorderViewModel {
         setupEventBus()
@@ -800,6 +845,7 @@ final class AudioRecorderViewModelTests: XCTestCase {
             audioDeviceService: audioDeviceService,
             defaults: defaults,
             audioSamplesLoader: audioSamplesLoader,
+            recordingsLoader: recordingsLoader,
             livePreviewStartObserver: livePreviewStartObserver
         )
     }
@@ -893,6 +939,25 @@ final class AudioRecorderViewModelTests: XCTestCase {
             try await Task.sleep(for: .milliseconds(20))
         }
         XCTFail("Recorder retranscription did not finish", file: file, line: line)
+    }
+
+    private func waitForRecordingsToLoad(
+        _ viewModel: AudioRecorderViewModel,
+        count: Int,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async throws {
+        for _ in 0..<100 {
+            if viewModel.recordings.count == count {
+                return
+            }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        XCTFail(
+            "Recorder library did not load \(count) items. Current count: \(viewModel.recordings.count)",
+            file: file,
+            line: line
+        )
     }
 
     private func livePreviewStartCount(

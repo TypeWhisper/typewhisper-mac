@@ -10,6 +10,10 @@ private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "typewhis
 @MainActor
 final class AudioRecorderViewModel: ObservableObject {
     typealias AudioSamplesLoader = @MainActor (URL) async throws -> [Float]
+    typealias RecordingsLoader = @Sendable (
+        URL,
+        [String: RecordingTranscriptionFailure]
+    ) -> [RecordingItem]
 
     nonisolated(unsafe) static var _shared: AudioRecorderViewModel?
     static var shared: AudioRecorderViewModel {
@@ -111,7 +115,7 @@ final class AudioRecorderViewModel: ObservableObject {
         }
     }
 
-    struct RecordingItem: Identifiable {
+    struct RecordingItem: Identifiable, Sendable {
         let id = UUID()
         let url: URL
         let date: Date
@@ -217,6 +221,7 @@ final class AudioRecorderViewModel: ObservableObject {
     private let modelManager: ModelManagerService
     private let dictionaryService: DictionaryService
     private let audioSamplesLoader: AudioSamplesLoader
+    private let recordingsLoader: RecordingsLoader
     private let defaults: UserDefaults
     private let streamingHandler: StreamingHandler
     private let livePreviewStartObserver: (() -> Void)?
@@ -225,6 +230,8 @@ final class AudioRecorderViewModel: ObservableObject {
     private var activeRecorderAPISessionID: UUID?
     private var recorderAPISessions: [UUID: RecorderAPISessionSnapshot] = [:]
     private var transientTranscriptionFailures: [String: RecordingTranscriptionFailure] = [:]
+    private var recordingsLoadTask: Task<Void, Never>?
+    private var recordingsLoadGeneration = 0
     private var isInitialized = false
 
     init(
@@ -235,6 +242,7 @@ final class AudioRecorderViewModel: ObservableObject {
         audioDeviceService: AudioDeviceService = AudioDeviceService(initialInputDevices: [], monitorDeviceChanges: false),
         defaults: UserDefaults = .standard,
         audioSamplesLoader: AudioSamplesLoader? = nil,
+        recordingsLoader: RecordingsLoader? = nil,
         livePreviewStartObserver: (() -> Void)? = nil
     ) {
         self.recorderService = recorderService
@@ -243,6 +251,9 @@ final class AudioRecorderViewModel: ObservableObject {
         self.dictionaryService = dictionaryService
         self.audioSamplesLoader = audioSamplesLoader ?? { [audioFileService] url in
             try await audioFileService.loadAudioSamples(from: url)
+        }
+        self.recordingsLoader = recordingsLoader ?? { directory, transientFailures in
+            Self.readRecordings(from: directory, transientFailures: transientFailures)
         }
         self.defaults = defaults
         self.livePreviewStartObserver = livePreviewStartObserver
@@ -782,47 +793,62 @@ final class AudioRecorderViewModel: ObservableObject {
 
     func loadRecordings() {
         let dir = recorderService.recordingsDirectory
-        guard FileManager.default.fileExists(atPath: dir.path) else {
-            recordings = []
-            return
+        let transientFailures = transientTranscriptionFailures
+        let loader = recordingsLoader
+        recordingsLoadGeneration += 1
+        let generation = recordingsLoadGeneration
+
+        recordingsLoadTask?.cancel()
+        let worker = Task.detached(priority: .userInitiated) {
+            loader(dir, transientFailures)
         }
-
-        do {
-            let files = try FileManager.default.contentsOfDirectory(
-                at: dir,
-                includingPropertiesForKeys: [.creationDateKey, .fileSizeKey, .contentModificationDateKey],
-                options: [.skipsHiddenFiles]
-            )
-
-            let audioExtensions: Set<String> = ["wav", "m4a", "mp3", "aac", "caf"]
-            let items: [RecordingItem] = files
-                .filter { audioExtensions.contains($0.pathExtension.lowercased()) }
-                .compactMap { url in
-                    guard let attrs = try? FileManager.default.attributesOfItem(atPath: url.path) else { return nil }
-                    let date = (attrs[.creationDate] as? Date) ?? Date.distantPast
-                    let size = (attrs[.size] as? Int64) ?? 0
-                    let duration = audioDuration(for: url)
-                    let transcript = loadTranscript(for: url)
-                    let transcriptionFailure = loadTranscriptionFailure(for: url)
-                        ?? transientTranscriptionFailures[transcriptionFailureKey(for: url)]
-                    return RecordingItem(
-                        url: url,
-                        date: date,
-                        duration: duration,
-                        fileSize: size,
-                        transcript: transcript,
-                        transcriptionFailure: transcriptionFailure
-                    )
-                }
-                .sorted { $0.date > $1.date }
-
-            recordings = items
-        } catch {
-            recordings = []
+        recordingsLoadTask = Task { [weak self] in
+            let items = await worker.value
+            guard !Task.isCancelled, let self, generation == self.recordingsLoadGeneration else { return }
+            self.recordings = items
         }
     }
 
-    private func audioDuration(for url: URL) -> TimeInterval {
+    nonisolated private static func readRecordings(
+        from directory: URL,
+        transientFailures: [String: RecordingTranscriptionFailure]
+    ) -> [RecordingItem] {
+        guard FileManager.default.fileExists(atPath: directory.path),
+              let files = try? FileManager.default.contentsOfDirectory(
+                  at: directory,
+                  includingPropertiesForKeys: [.creationDateKey, .fileSizeKey, .contentModificationDateKey],
+                  options: [.skipsHiddenFiles]
+              ) else {
+            return []
+        }
+
+        let audioExtensions: Set<String> = ["wav", "m4a", "mp3", "aac", "caf"]
+        return files
+            .filter { audioExtensions.contains($0.pathExtension.lowercased()) }
+            .compactMap { url in
+                guard let attrs = try? FileManager.default.attributesOfItem(atPath: url.path) else { return nil }
+                let date = (attrs[.creationDate] as? Date) ?? Date.distantPast
+                let size = (attrs[.size] as? Int64) ?? 0
+                let duration = audioDuration(for: url)
+                let transcriptURL = url.deletingPathExtension().appendingPathExtension("txt")
+                let transcript = try? String(contentsOf: transcriptURL, encoding: .utf8)
+                let failureURL = url.appendingPathExtension("transcription-failure.json")
+                let persistedFailure = (try? Data(contentsOf: failureURL))
+                    .flatMap { try? JSONDecoder().decode(RecordingTranscriptionFailure.self, from: $0) }
+                let failureKey = url.resolvingSymlinksInPath().path
+                return RecordingItem(
+                    url: url,
+                    date: date,
+                    duration: duration,
+                    fileSize: size,
+                    transcript: transcript,
+                    transcriptionFailure: persistedFailure ?? transientFailures[failureKey]
+                )
+            }
+            .sorted { $0.date > $1.date }
+    }
+
+    nonisolated private static func audioDuration(for url: URL) -> TimeInterval {
         guard let player = try? AVAudioPlayer(contentsOf: url) else { return 0 }
         return player.duration.isFinite ? player.duration : 0
     }

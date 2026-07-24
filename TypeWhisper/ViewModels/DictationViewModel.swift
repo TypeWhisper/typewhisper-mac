@@ -174,6 +174,11 @@ final class DictationViewModel: ObservableObject {
         case processing
     }
 
+    private struct PendingHotkeyDictationStart {
+        let forcedWorkflowId: UUID?
+        let requestUptimeNanoseconds: UInt64
+    }
+
     @Published var state: State = .idle {
         didSet { clearCancelWarningIfStateNoLongerMatches() }
     }
@@ -321,6 +326,7 @@ final class DictationViewModel: ObservableObject {
     private var pendingLearnedCorrections: [LearnedDictionaryCorrection] = []
     private var errorResetTask: Task<Void, Never>?
     private var insertingResetTask: Task<Void, Never>?
+    private var pendingHotkeyStartTask: Task<Void, Never>?
     @Published private var cancelWarningTarget: CancelWarningTarget?
     private var urlResolutionTask: Task<Void, Never>?
     private var metadataCaptureTask: Task<Void, Never>?
@@ -341,6 +347,7 @@ final class DictationViewModel: ObservableObject {
     private var lastStreamingParams: StreamingParamsSnapshot?
     private var isStopInFlight = false
     private var activeDictationSessionID: UUID?
+    private var pendingHotkeyDictationStart: PendingHotkeyDictationStart?
     private var pendingPushToTalkDiscardMessage: String?
     private var recordingStartCuePending = false
     private var firstRecordingAudioBufferSeen = false
@@ -916,17 +923,27 @@ final class DictationViewModel: ObservableObject {
         hotkeyService.onDictationStart = { [weak self] requestTimestamp in
             guard let self else { return }
             logger.info("hotkey→onDictationStart (state=\(String(describing: self.state), privacy: .public))")
-            self.startRecording(requestUptimeNanoseconds: requestTimestamp)
+            self.handleHotkeyDictationStart(requestUptimeNanoseconds: requestTimestamp)
         }
 
         hotkeyService.onDictationStop = { [weak self] in
             guard let self else { return }
             logger.info("hotkey→onDictationStop (state=\(String(describing: self.state), privacy: .public), stopInFlight=\(String(describing: self.isStopInFlight), privacy: .public))")
+            if self.pendingHotkeyDictationStart != nil {
+                logger.info("Cancelling queued dictation start")
+                self.pendingHotkeyDictationStart = nil
+                self.pendingHotkeyStartTask?.cancel()
+                self.pendingHotkeyStartTask = nil
+                return
+            }
             self.stopDictation()
         }
 
         hotkeyService.onWorkflowDictationStart = { [weak self] workflowId, requestTimestamp in
-            self?.startRecording(forcedWorkflowId: workflowId, requestUptimeNanoseconds: requestTimestamp)
+            self?.handleHotkeyDictationStart(
+                forcedWorkflowId: workflowId,
+                requestUptimeNanoseconds: requestTimestamp
+            )
         }
 
         hotkeyService.onWorkflowTextProcessing = { [weak self] workflowId in
@@ -1197,6 +1214,35 @@ final class DictationViewModel: ObservableObject {
                 sessionID: sessionID,
                 resolvedInputSelection: resolvedInputSelection
             )
+        }
+    }
+
+    private func handleHotkeyDictationStart(
+        forcedWorkflowId: UUID? = nil,
+        requestUptimeNanoseconds: UInt64
+    ) {
+        guard state == .processing || state == .inserting else {
+            startRecording(
+                forcedWorkflowId: forcedWorkflowId,
+                requestUptimeNanoseconds: requestUptimeNanoseconds
+            )
+            return
+        }
+
+        if pendingHotkeyDictationStart == nil {
+            pendingHotkeyDictationStart = PendingHotkeyDictationStart(
+                forcedWorkflowId: forcedWorkflowId,
+                requestUptimeNanoseconds: requestUptimeNanoseconds
+            )
+            logger.info(
+                "Queued dictation start while state=\(String(describing: self.state), privacy: .public)"
+            )
+        } else {
+            logger.info("Keeping existing queued dictation start")
+        }
+
+        if state == .inserting {
+            scheduleInsertingReset(after: .seconds(actionDisplayDuration))
         }
     }
 
@@ -1863,13 +1909,8 @@ final class DictationViewModel: ObservableObject {
                 lastTranscriptionLanguage = detectedLang
 
                 state = .inserting
-                insertingResetTask?.cancel()
                 let resetDelay: Duration = actionFeedbackMessage != nil ? .seconds(actionDisplayDuration) : .seconds(1.5)
-                insertingResetTask = Task {
-                    try? await Task.sleep(for: resetDelay)
-                    guard !Task.isCancelled else { return }
-                    resetDictationState()
-                }
+                scheduleInsertingReset(after: resetDelay)
             } catch {
                 guard !Task.isCancelled else { return }
                 audioRecordingService.preserveActiveRecoveryRecording()
@@ -2081,6 +2122,25 @@ final class DictationViewModel: ObservableObject {
         actionFeedbackIsError = false
         clearPendingUndoActionFeedback()
         actionDisplayDuration = 3.5
+
+        guard pendingHotkeyDictationStart != nil else { return }
+        pendingHotkeyStartTask?.cancel()
+        pendingHotkeyStartTask = Task { @MainActor [weak self] in
+            await Task.yield()
+            guard !Task.isCancelled, let self else { return }
+            defer { self.pendingHotkeyStartTask = nil }
+            guard self.state == .idle,
+                  let pendingHotkeyStart = self.pendingHotkeyDictationStart else {
+                self.pendingHotkeyDictationStart = nil
+                return
+            }
+            self.pendingHotkeyDictationStart = nil
+            logger.info("Starting queued dictation")
+            self.startRecording(
+                forcedWorkflowId: pendingHotkeyStart.forcedWorkflowId,
+                requestUptimeNanoseconds: pendingHotkeyStart.requestUptimeNanoseconds
+            )
+        }
     }
 
     private func handlePushToTalkInterruption() {
@@ -2549,9 +2609,18 @@ final class DictationViewModel: ObservableObject {
             errorLogService.addEntry(message: message, category: errorCategory)
         }
 
+        scheduleInsertingReset(after: .seconds(duration))
+    }
+
+    private func scheduleInsertingReset(after delay: Duration) {
         insertingResetTask?.cancel()
+        let shouldStartQueuedDictation = pendingHotkeyDictationStart != nil
         insertingResetTask = Task {
-            try? await Task.sleep(for: .seconds(duration))
+            if shouldStartQueuedDictation {
+                await Task.yield()
+            } else {
+                try? await Task.sleep(for: delay)
+            }
             guard !Task.isCancelled else { return }
             resetDictationState()
         }

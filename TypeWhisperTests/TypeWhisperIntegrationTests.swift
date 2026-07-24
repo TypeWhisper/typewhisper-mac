@@ -148,6 +148,29 @@ final class SecureInputDiagnosticsProviderTests: XCTestCase {
 }
 
 final class TypeWhisperIntegrationTests: XCTestCase {
+    private final class KeychainTokenProbe: @unchecked Sendable {
+        private let lock = NSLock()
+        private var loadCalls = 0
+        private var saveCalls = 0
+        private var loadWasOnMainThread = false
+
+        var snapshot: (loadCalls: Int, saveCalls: Int, loadWasOnMainThread: Bool) {
+            lock.withLock { (loadCalls, saveCalls, loadWasOnMainThread) }
+        }
+
+        func load() -> String? {
+            lock.withLock {
+                loadCalls += 1
+                loadWasOnMainThread = Thread.isMainThread
+            }
+            return "stored-token"
+        }
+
+        func save(_ token: String) {
+            lock.withLock { saveCalls += 1 }
+        }
+    }
+
     private final class LockedFlag: @unchecked Sendable {
         private let lock = NSLock()
         private var storedValue = false
@@ -1296,6 +1319,25 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         authenticator.setRequiresAuthentication(false)
         XCTAssertNil(authenticator.tokenForEnforcedRequests())
+    }
+
+    func testLocalAPIAuthenticatorDefersKeychainReadOffMainThread() async throws {
+        let probe = KeychainTokenProbe()
+        let authenticator = LocalAPIAuthenticator(
+            requiresAuthentication: true,
+            tokenLoader: { probe.load() },
+            tokenSaver: { probe.save($0) }
+        )
+
+        XCTAssertEqual(probe.snapshot.loadCalls, 0)
+
+        let token = try await authenticator.loadOrCreateToken()
+
+        XCTAssertEqual(token, "stored-token")
+        XCTAssertEqual(authenticator.currentToken(), "stored-token")
+        XCTAssertEqual(probe.snapshot.loadCalls, 1)
+        XCTAssertEqual(probe.snapshot.saveCalls, 0)
+        XCTAssertFalse(probe.snapshot.loadWasOnMainThread)
     }
 
     func testSerializedResponseOmitsWildcardCORSHeaders() {
@@ -4196,6 +4238,69 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         await fulfillment(of: [selectedTextCaptured], timeout: 1.0)
         XCTAssertEqual(Array(events.prefix(3)), ["start_audio", "capture_app", "selected_text"])
+    }
+
+    @MainActor
+    func testHotkeyStartDuringInsertingIsBufferedExactlyOnce() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        let context = try XCTUnwrap(dictationContext)
+        var startCount = 0
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {
+            startCount += 1
+        }
+        context.dictationViewModel.state = .inserting
+
+        let requestTimestamp = DispatchTime.now().uptimeNanoseconds
+        context.hotkeyService.onDictationStart?(requestTimestamp)
+        context.hotkeyService.onDictationStart?(requestTimestamp + 1)
+
+        for _ in 0..<100 {
+            if context.dictationViewModel.state == .recording { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        XCTAssertEqual(context.dictationViewModel.state, .recording)
+        XCTAssertEqual(startCount, 1)
+    }
+
+    @MainActor
+    func testBufferedHotkeyStartIsCancelledWhenPushToTalkStops() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        let context = try XCTUnwrap(dictationContext)
+        var startCount = 0
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {
+            startCount += 1
+        }
+        context.dictationViewModel.state = .inserting
+
+        context.hotkeyService.onDictationStart?(DispatchTime.now().uptimeNanoseconds)
+        context.hotkeyService.onDictationStop?()
+
+        for _ in 0..<100 {
+            if context.dictationViewModel.state == .idle { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        XCTAssertEqual(context.dictationViewModel.state, .idle)
+        XCTAssertEqual(startCount, 0)
     }
 
     @MainActor
