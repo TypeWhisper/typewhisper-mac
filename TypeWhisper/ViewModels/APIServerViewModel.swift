@@ -45,7 +45,9 @@ final class APIServerViewModel: ObservableObject {
             DispatchQueue.main.async {
                 self?.isRunning = running
                 if !running {
-                    self?.errorMessage = "Server stopped unexpectedly"
+                    if self?.errorMessage == nil {
+                        self?.errorMessage = "Server stopped unexpectedly"
+                    }
                     self?.removeDiscoveryFiles()
                 }
             }

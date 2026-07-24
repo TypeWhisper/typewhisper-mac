@@ -51,6 +51,41 @@ private final class BlockingRecordingsLoader: @unchecked Sendable {
     }
 }
 
+private final class OutOfOrderRecordingsLoader: @unchecked Sendable {
+    let firstStarted = DispatchSemaphore(value: 0)
+    let releaseFirst = DispatchSemaphore(value: 0)
+    let firstFinished = DispatchSemaphore(value: 0)
+
+    private let lock = NSLock()
+    private var callCount = 0
+    private let firstResult: [AudioRecorderViewModel.RecordingItem]
+    private let secondResult: [AudioRecorderViewModel.RecordingItem]
+
+    init(
+        firstResult: [AudioRecorderViewModel.RecordingItem],
+        secondResult: [AudioRecorderViewModel.RecordingItem]
+    ) {
+        self.firstResult = firstResult
+        self.secondResult = secondResult
+    }
+
+    func load(
+        directory: URL,
+        transientFailures: [String: AudioRecorderViewModel.RecordingTranscriptionFailure]
+    ) -> [AudioRecorderViewModel.RecordingItem] {
+        let invocation = lock.withLock {
+            callCount += 1
+            return callCount
+        }
+        guard invocation == 1 else { return secondResult }
+
+        firstStarted.signal()
+        releaseFirst.wait()
+        firstFinished.signal()
+        return firstResult
+    }
+}
+
 @MainActor
 final class AudioRecorderViewModelTests: XCTestCase {
     func testRecorderFilesAreLoadedOffMainThreadDuringInitialization() throws {
@@ -65,6 +100,48 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertEqual(probe.started.wait(timeout: .now() + 1), .success)
         XCTAssertFalse(probe.ranOnMainThread)
         XCTAssertTrue(viewModel.recordings.isEmpty)
+    }
+
+    func testRecorderLoadIgnoresOlderResultThatFinishesLast() async throws {
+        let directory = makeTemporaryDirectory()
+        let olderURL = directory.appendingPathComponent("Older.wav")
+        let newerURL = directory.appendingPathComponent("Newer.wav")
+        let older = AudioRecorderViewModel.RecordingItem(
+            url: olderURL,
+            date: .distantPast,
+            duration: 1,
+            fileSize: 1,
+            transcript: nil,
+            transcriptionFailure: nil
+        )
+        let newer = AudioRecorderViewModel.RecordingItem(
+            url: newerURL,
+            date: .now,
+            duration: 2,
+            fileSize: 2,
+            transcript: "new",
+            transcriptionFailure: nil
+        )
+        let loader = OutOfOrderRecordingsLoader(firstResult: [older], secondResult: [newer])
+        defer { loader.releaseFirst.signal() }
+        let recorderService = makeRecorderService(recordingsDirectory: directory)
+        let viewModel = makeViewModel(
+            defaults: try makeDefaults(),
+            recorderService: recorderService,
+            recordingsLoader: loader.load
+        )
+
+        XCTAssertEqual(loader.firstStarted.wait(timeout: .now() + 1), .success)
+        viewModel.loadRecordings()
+        try await waitForRecordingsToLoad(viewModel, count: 1)
+        XCTAssertEqual(viewModel.recordings.first?.url, newerURL)
+
+        loader.releaseFirst.signal()
+        XCTAssertEqual(loader.firstFinished.wait(timeout: .now() + 1), .success)
+        for _ in 0..<10 {
+            await Task.yield()
+        }
+        XCTAssertEqual(viewModel.recordings.first?.url, newerURL)
     }
 
     func testRecorderSelectionPersistsSeparatelyFromGlobalDefault() throws {
