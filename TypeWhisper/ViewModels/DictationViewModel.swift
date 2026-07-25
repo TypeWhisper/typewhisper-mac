@@ -2881,6 +2881,9 @@ enum DictationInsertionTextFormatter {
         if closingPunctuation.contains(right) || openingPunctuation.contains(left) {
             return false
         }
+        if isCJKCharacter(left) && isCJKCharacter(right) {
+            return false
+        }
         if isWordLike(left) && isWordLike(right) {
             return true
         }
@@ -2893,9 +2896,18 @@ enum DictationInsertionTextFormatter {
     private static let openingPunctuation: Set<Character> = ["(", "[", "{", "\"", "'", "“", "‘"]
     private static let closingPunctuation: Set<Character> = [".", ",", "!", "?", ";", ":", ")", "]", "}", "\"", "'", "”", "’"]
     private static let punctuationThatTakesFollowingSpace: Set<Character> = [".", ",", "!", "?", ";", ":", ")", "]", "}", "\"", "'", "”", "’"]
+    private static let cjkScriptCharacterRegex = try? NSRegularExpression(
+        pattern: #"[\p{Han}\p{Hiragana}\p{Katakana}\p{Hangul}]"#
+    )
 
     private static func isWordLike(_ character: Character) -> Bool {
         character.unicodeScalars.contains { CharacterSet.alphanumerics.contains($0) }
+    }
+
+    private static func isCJKCharacter(_ character: Character) -> Bool {
+        let text = String(character)
+        let range = NSRange(text.startIndex..<text.endIndex, in: text)
+        return cjkScriptCharacterRegex?.firstMatch(in: text, range: range) != nil
     }
 
     private static func isWhitespace(_ character: Character) -> Bool {

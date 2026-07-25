@@ -284,6 +284,48 @@ final class DictationInsertionTextFormatterTests: XCTestCase {
         )
     }
 
+    func testSmartInsertionDoesNotAddSpacesBetweenCJKCharacters() {
+        let cases: [(script: String, value: String, insertion: String)] = [
+            ("Han", "你好", "世"),
+            ("Kana", "あい", "カ"),
+            ("Hangul", "가나", "다")
+        ]
+
+        for testCase in cases {
+            let context = TextInsertionService.InsertionContext(
+                value: testCase.value,
+                selectedRange: NSRange(location: 1, length: 0),
+                selectedText: nil,
+                previousCharacter: nil,
+                nextCharacter: nil
+            )
+
+            XCTAssertEqual(
+                DictationInsertionTextFormatter.textForInsertion(
+                    testCase.insertion,
+                    insertionContext: context
+                ),
+                testCase.insertion,
+                testCase.script
+            )
+        }
+    }
+
+    func testSmartInsertionPreservesSpacesAtMixedLatinCJKBoundaries() {
+        let context = TextInsertionService.InsertionContext(
+            value: "AB",
+            selectedRange: NSRange(location: 1, length: 0),
+            selectedText: nil,
+            previousCharacter: "A",
+            nextCharacter: "B"
+        )
+
+        XCTAssertEqual(
+            DictationInsertionTextFormatter.textForInsertion("中", insertionContext: context),
+            " 中 "
+        )
+    }
+
     func testSmartInsertionAvoidsDuplicateLeadingSpace() {
         let context = TextInsertionService.InsertionContext(
             value: "coffee machine",
