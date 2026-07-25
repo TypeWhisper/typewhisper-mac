@@ -1179,6 +1179,12 @@
             "state": "translated",
             "value": "このアプリについて"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "О приложении"
+          }
         }
       }
     },
@@ -1295,6 +1301,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "有効化"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Активировать"
           }
         }
       }
@@ -1752,6 +1764,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "詳細"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Расширенные"
           }
         }
       }
@@ -2817,6 +2835,12 @@
             "state": "translated",
             "value": "戻る"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Назад"
+          }
         }
       }
     },
@@ -3160,6 +3184,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "キャンセル"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отмена"
           }
         }
       }
@@ -3629,6 +3659,12 @@
             "state": "translated",
             "value": "クリア"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Очистить"
+          }
         }
       }
     },
@@ -3888,6 +3924,12 @@
             "state": "translated",
             "value": "閉じる"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Закрыть"
+          }
         }
       }
     },
@@ -3905,6 +3947,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "クラウド"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Облачный"
           }
         }
       }
@@ -4348,6 +4396,12 @@
             "state": "translated",
             "value": "コピー"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Копировать"
+          }
         }
       }
     },
@@ -4777,6 +4831,12 @@
             "state": "translated",
             "value": "カスタム"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пользовательский"
+          }
         }
       }
     },
@@ -5034,6 +5094,12 @@
             "state": "translated",
             "value": "デフォルト"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "По умолчанию"
+          }
         }
       }
     },
@@ -5153,6 +5219,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "削除"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить"
           }
         }
       }
@@ -5773,6 +5845,12 @@
             "state": "translated",
             "value": "完了"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Готово"
+          }
         }
       }
     },
@@ -6253,6 +6331,12 @@
             "state": "translated",
             "value": "エンジン"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Движок"
+          }
         }
       }
     },
@@ -6383,6 +6467,12 @@
             "state": "translated",
             "value": "エンタープライズ"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Корпоративная"
+          }
         }
       }
     },
@@ -6408,6 +6498,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "エラー"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ошибка"
           }
         }
       }
@@ -7144,6 +7240,12 @@
             "state": "translated",
             "value": "フォルダ"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Папка"
+          }
         }
       }
     },
@@ -7240,6 +7342,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "無料"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Бесплатно"
           }
         }
       }
@@ -7354,6 +7462,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "一般"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Общие"
           }
         }
       }
@@ -7640,6 +7754,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "履歴"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "История"
           }
         }
       }
@@ -8266,6 +8386,12 @@
             "state": "translated",
             "value": "インストール"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Установить"
+          }
         }
       }
     },
@@ -8450,6 +8576,12 @@
             "state": "translated",
             "value": "インストール済み"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Установлено"
+          }
         }
       }
     },
@@ -8499,6 +8631,12 @@
             "state": "translated",
             "value": "プラグインがインストール中..."
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Установка плагинов..."
+          }
         }
       }
     },
@@ -8524,6 +8662,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "インストール..."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Установка..."
           }
         }
       }
@@ -8579,6 +8723,12 @@
             "state": "translated",
             "value": "統合"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Интеграции"
+          }
         }
       }
     },
@@ -8603,6 +8753,12 @@
           }
         },
         "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "JSON (.json)"
+          }
+        },
+        "ru": {
           "stringUnit": {
             "state": "translated",
             "value": "JSON (.json)"
@@ -8815,6 +8971,12 @@
             "state": "translated",
             "value": "言語"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Язык"
+          }
         }
       }
     },
@@ -8947,6 +9109,12 @@
             "state": "translated",
             "value": "ログイン時に起動"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Запуск при входе в систему"
+          }
         }
       }
     },
@@ -8962,6 +9130,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "詳しく見る"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Узнать больше"
           }
         }
       }
@@ -9131,6 +9305,12 @@
             "state": "translated",
             "value": "ライセンス"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Лицензия"
+          }
         }
       }
     },
@@ -9146,6 +9326,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "ライセンス状態"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Статус лицензии"
           }
         }
       }
@@ -9179,6 +9365,12 @@
             "state": "translated",
             "value": "ライセンス認証済み"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Лицензировано"
+          }
         }
       }
     },
@@ -9204,6 +9396,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "ライフタイム"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пожизненная"
           }
         }
       }
@@ -9336,6 +9534,12 @@
             "state": "translated",
             "value": "読み込む"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Загрузка"
+          }
         }
       }
     },
@@ -9362,6 +9566,12 @@
             "state": "translated",
             "value": "コミュニティパッケージを読み込み中..."
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Загрузка пакетов сообщества..."
+          }
         }
       }
     },
@@ -9377,6 +9587,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "ローカル"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Локальный"
           }
         }
       }
@@ -9430,6 +9646,12 @@
             "state": "translated",
             "value": "M4A"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "M4A"
+          }
         }
       }
     },
@@ -9455,6 +9677,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "管理"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Управление"
           }
         }
       }
@@ -9606,6 +9834,12 @@
             "state": "translated",
             "value": "Markdown"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Markdown"
+          }
         }
       }
     },
@@ -9620,6 +9854,12 @@
           }
         },
         "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Markdown (.md)"
+          }
+        },
+        "ru": {
           "stringUnit": {
             "state": "translated",
             "value": "Markdown (.md)"
@@ -9666,6 +9906,12 @@
             "state": "translated",
             "value": "メディア再生"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пауза медиа"
+          }
         }
       }
     },
@@ -9707,6 +9953,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "メモリ"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Память"
           }
         }
       }
@@ -9756,6 +10008,12 @@
             "state": "translated",
             "value": "メニューバーアイコン"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Значок в строке меню"
+          }
         }
       }
     },
@@ -9773,6 +10031,12 @@
             "state": "translated",
             "value": "メニューバーのアイコンが非表示"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Значок в строке меню скрыт"
+          }
         }
       }
     },
@@ -9788,6 +10052,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "マイク"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Микрофон"
           }
         }
       }
@@ -9832,6 +10102,12 @@
             "state": "translated",
             "value": "音声入力にはマイク権限が必要です。"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Для диктовки нужен доступ к микрофону."
+          }
         }
       }
     },
@@ -9866,6 +10142,12 @@
             "state": "translated",
             "value": "マイク権限が必要です"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Требуется доступ к микрофону"
+          }
         }
       }
     },
@@ -9883,6 +10165,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "マイクが切断されました"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Микрофон отключён"
           }
         }
       }
@@ -10009,6 +10297,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "モデル"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Модель"
           }
         }
       }
@@ -10263,6 +10557,12 @@
             "state": "translated",
             "value": "名前"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Название"
+          }
         }
       }
     },
@@ -10399,6 +10699,12 @@
             "state": "translated",
             "value": "新しい修正"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Новая коррекция"
+          }
         }
       }
     },
@@ -10416,6 +10722,12 @@
             "state": "translated",
             "value": "新しいプロファイル"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Новый профиль"
+          }
         }
       }
     },
@@ -10431,6 +10743,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "新しいプロンプト"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Новый промпт"
           }
         }
       }
@@ -10458,6 +10776,12 @@
             "state": "translated",
             "value": "新しいスニペット"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Новый сниппет"
+          }
         }
       }
     },
@@ -10475,6 +10799,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "新しい語"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Новый термин"
           }
         }
       }
@@ -10511,6 +10841,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "次へ"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Далее"
           }
         }
       }
@@ -11019,6 +11355,12 @@
             "state": "translated",
             "value": "モデルが読み込まれていません"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Модель не загружена"
+          }
         }
       }
     },
@@ -11052,6 +11394,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "インストールされたプラグインはありません。"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Плагины не установлены."
           }
         }
       }
@@ -11173,6 +11521,12 @@
             "state": "translated",
             "value": "認識された言語がありません"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Речь не обнаружена"
+          }
         }
       }
     },
@@ -11188,6 +11542,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "認識された言語がありません"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Речь не распознана"
           }
         }
       }
@@ -11331,6 +11691,12 @@
             "state": "translated",
             "value": "なし"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нет"
+          }
         }
       }
     },
@@ -11385,6 +11751,12 @@
             "state": "translated",
             "value": "設定されていません"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не настроено"
+          }
         }
       }
     },
@@ -11400,6 +11772,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "インストールされていません"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не установлено"
           }
         }
       }
@@ -11427,6 +11805,12 @@
             "state": "translated",
             "value": "非アクティブ"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не запущено"
+          }
         }
       }
     },
@@ -11446,6 +11830,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nicht eingerichtet"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Не настроено"
           }
         }
       }
@@ -11472,6 +11862,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "ノッチ"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notch"
           }
         }
       }
@@ -11501,6 +11897,12 @@
             "state": "translated",
             "value": "OK"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ОК"
+          }
         }
       }
     },
@@ -11510,6 +11912,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aus"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выкл"
           }
         }
       }
@@ -11562,6 +11970,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ein"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Вкл"
           }
         }
       }
@@ -11718,6 +12132,12 @@
             "state": "translated",
             "value": "統合を開く"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Открыть интеграции"
+          }
         }
       }
     },
@@ -11751,6 +12171,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "プラグインフォルダを開く"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Открыть папку плагинов"
           }
         }
       }
@@ -11985,6 +12411,12 @@
             "state": "translated",
             "value": "オリジナルの文字起こし"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Оригинальная транскрипция"
+          }
         }
       }
     },
@@ -12027,6 +12459,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "出力形式"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Формат выводa"
           }
         }
       }
@@ -12079,6 +12517,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "オーバーレイ"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Overlay"
           }
         }
       }
@@ -12311,6 +12755,12 @@
             "state": "translated",
             "value": "権限"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Разрешения"
+          }
         }
       }
     },
@@ -12415,6 +12865,12 @@
             "state": "translated",
             "value": "平文"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Простой текст"
+          }
         }
       }
     },
@@ -12432,6 +12888,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "平文 (.txt)"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Простой текст (.txt)"
           }
         }
       }
@@ -12572,6 +13034,12 @@
             "state": "translated",
             "value": "プラグイン"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Плагины"
+          }
         }
       }
     },
@@ -12617,6 +13085,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "位置"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Позиция"
           }
         }
       }
@@ -12705,6 +13179,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "プレミアム"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Премиум"
           }
         }
       }
@@ -12952,6 +13432,12 @@
             "state": "translated",
             "value": "ホットキーを押して、どのアプリでも通常通り話してください。"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нажмите хоткей и говорите в любом приложении."
+          }
         }
       }
     },
@@ -12983,6 +13469,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "開始するには押す。再度押すと停止。"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Нажмите для начала, нажмите снова для остановки."
           }
         }
       }
@@ -13123,6 +13615,12 @@
             "state": "translated",
             "value": "優先度"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Приоритет"
+          }
         }
       }
     },
@@ -13224,6 +13722,12 @@
             "state": "translated",
             "value": "処理中..."
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обработка..."
+          }
         }
       }
     },
@@ -13281,6 +13785,12 @@
             "state": "translated",
             "value": "プロフィール"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Профиль"
+          }
         }
       }
     },
@@ -13332,6 +13842,12 @@
             "state": "translated",
             "value": "プロファイル"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Профили"
+          }
         }
       }
     },
@@ -13357,6 +13873,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "プロンプト"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Промпт"
           }
         }
       }
@@ -13413,6 +13935,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "プロンプトパレット"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Палитра промптов"
           }
         }
       }
@@ -13503,6 +14031,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "プロンプト"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Промпты"
           }
         }
       }
@@ -13599,6 +14133,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "提供者"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Провайдер"
           }
         }
       }
@@ -13708,6 +14248,12 @@
             "state": "translated",
             "value": "終了"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Выход"
+          }
         }
       }
     },
@@ -13776,6 +14322,12 @@
             "state": "translated",
             "value": "Bereit"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Готово"
+          }
         }
       }
     },
@@ -13803,6 +14355,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "音声入力準備完了？"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Готовы начать диктовку?"
           }
         }
       }
@@ -13850,6 +14408,12 @@
             "state": "translated",
             "value": "最後のテキスト履歴"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Последние транскрипции"
+          }
         }
       }
     },
@@ -13893,6 +14457,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "推奨"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Рекомендуется"
           }
         }
       }
@@ -13990,6 +14560,12 @@
             "state": "translated",
             "value": "録音"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Запись"
+          }
         }
       }
     },
@@ -14008,6 +14584,12 @@
             "state": "translated",
             "value": "録音インジケータ"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Индикатор записи"
+          }
         }
       }
     },
@@ -14023,6 +14605,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "録音開始"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Начало записи"
           }
         }
       }
@@ -14102,6 +14690,12 @@
             "state": "translated",
             "value": "録音中..."
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Запись..."
+          }
         }
       }
     },
@@ -14111,6 +14705,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "録音"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Записи"
           }
         }
       }
@@ -14583,6 +15183,12 @@
             "state": "translated",
             "value": "必須"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обязательно"
+          }
         }
       }
     },
@@ -14667,6 +15273,12 @@
             "state": "translated",
             "value": "今すぐ再起動"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Перезапустить сейчас"
+          }
         }
       }
     },
@@ -14682,6 +15294,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "再起動が必要です"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Требуется перезапуск"
           }
         }
       }
@@ -14746,6 +15364,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "再試行"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Повторить"
           }
         }
       }
@@ -15011,6 +15635,12 @@
             "state": "translated",
             "value": "SRT"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "SRT"
+          }
         }
       }
     },
@@ -15052,6 +15682,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "保存"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сохранить"
           }
         }
       }
@@ -15114,6 +15750,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "履歴を保存"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сохранять историю"
           }
         }
       }
@@ -15337,6 +15979,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "検索..."
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поиск..."
           }
         }
       }
@@ -15713,6 +16361,12 @@
             "state": "translated",
             "value": "設定"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Настройки"
+          }
         }
       }
     },
@@ -15745,6 +16399,12 @@
             "state": "translated",
             "value": "設定..."
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Настройки..."
+          }
         }
       }
     },
@@ -15760,6 +16420,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "設定"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Настройка"
           }
         }
       }
@@ -15887,6 +16553,12 @@
             "state": "translated",
             "value": "Finderで表示"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Показать в Finder"
+          }
         }
       }
     },
@@ -15929,6 +16601,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "メニューバーのアイコンを表示"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Показывать значок в строке меню"
           }
         }
       }
@@ -16010,6 +16688,12 @@
             "state": "translated",
             "value": "設定をスキップ"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пропустить настройку"
+          }
         }
       }
     },
@@ -16026,6 +16710,12 @@
             "state": "translated",
             "value": "スニペット"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сниппет"
+          }
         }
       }
     },
@@ -16041,6 +16731,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "スニペット"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сниппеты"
           }
         }
       }
@@ -16067,6 +16763,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "サウンド"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Звук"
           }
         }
       }
@@ -16132,6 +16834,12 @@
             "state": "translated",
             "value": "話す言語"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Говоримый язык"
+          }
         }
       }
     },
@@ -16177,6 +16885,12 @@
             "state": "translated",
             "value": "話す言語"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Говоримый язык"
+          }
         }
       }
     },
@@ -16192,6 +16906,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "安定版"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Стабильный"
           }
         }
       }
@@ -16492,6 +17212,12 @@
             "state": "translated",
             "value": "スタイル"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Стиль"
+          }
         }
       }
     },
@@ -16590,6 +17316,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "TypeWhisperをサポート"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Поддержать TypeWhisper"
           }
         }
       }
@@ -16761,6 +17493,12 @@
             "state": "translated",
             "value": "システム標準"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Системная настройка"
+          }
         }
       }
     },
@@ -16839,6 +17577,12 @@
             "state": "translated",
             "value": "ターゲット"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Цель"
+          }
         }
       }
     },
@@ -16865,6 +17609,12 @@
             "state": "translated",
             "value": "翻訳先の言語"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Целевой язык"
+          }
         }
       }
     },
@@ -16880,6 +17630,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "出力"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Задача"
           }
         }
       }
@@ -16900,6 +17656,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "チーム"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Команда"
           }
         }
       }
@@ -16969,6 +17731,12 @@
             "state": "translated",
             "value": "用語"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Термин"
+          }
         }
       }
     },
@@ -16985,6 +17753,12 @@
             "state": "translated",
             "value": "用語パック"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Пакеты терминов"
+          }
         }
       }
     },
@@ -17000,6 +17774,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "用語"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Термины"
           }
         }
       }
@@ -17122,6 +17902,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "マイクをテスト"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Тест микрофона"
           }
         }
       }
@@ -17326,6 +18112,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "言語の変更はTypeWhisperを再起動した後に反映されます。"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Изменение языка вступит в силу после перезапуска TypeWhisper."
           }
         }
       }
@@ -17981,6 +18773,12 @@
             "state": "translated",
             "value": "タイマー"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Таймер"
+          }
         }
       }
     },
@@ -18114,6 +18912,12 @@
             "state": "translated",
             "value": "音声認識"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Транскрибировать"
+          }
         }
       }
     },
@@ -18214,6 +19018,12 @@
             "state": "translated",
             "value": "音声認識"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Транскрибирование..."
+          }
         }
       }
     },
@@ -18246,6 +19056,12 @@
             "state": "translated",
             "value": "文字起こし"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Транскрипция"
+          }
         }
       }
     },
@@ -18261,6 +19077,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "文字起こしエンジン"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Движок транскрипции"
           }
         }
       }
@@ -18278,6 +19100,12 @@
             "state": "translated",
             "value": "文字起こしエンジン"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Движки транскрипции"
+          }
         }
       }
     },
@@ -18293,6 +19121,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "文字起こし成功"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Транскрипция успешна"
           }
         }
       }
@@ -18424,6 +19258,12 @@
             "state": "translated",
             "value": "英語に翻訳"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Перевести на английский"
+          }
         }
       }
     },
@@ -18439,6 +19279,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "翻訳"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Перевод"
           }
         }
       }
@@ -18477,6 +19323,12 @@
             "state": "translated",
             "value": "翻訳を無効"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Перевод выкл"
+          }
         }
       }
     },
@@ -18493,6 +19345,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "翻訳を有効"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Перевод вкл"
           }
         }
       }
@@ -18519,6 +19377,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "トリガー"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Триггер"
           }
         }
       }
@@ -18655,6 +19519,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "タイプ"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Тип"
           }
         }
       }
@@ -18808,6 +19678,12 @@
             "state": "translated",
             "value": "TypeWhisperは今やどのアプリでも使用可能です。"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TypeWhisper готов к использованию в любом приложении."
+          }
         }
       }
     },
@@ -18955,6 +19831,12 @@
             "state": "translated",
             "value": "Rückgängig"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Отменить"
+          }
         }
       }
     },
@@ -18970,6 +19852,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "アンインストール"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Удалить"
           }
         }
       }
@@ -19123,6 +20011,12 @@
             "state": "translated",
             "value": "更新"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обновить"
+          }
         }
       }
     },
@@ -19139,6 +20033,12 @@
             "state": "translated",
             "value": "アップデートがあります"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Доступно обновление"
+          }
         }
       }
     },
@@ -19154,6 +20054,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "アップデートチャンネル"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Канал обновлений"
           }
         }
       }
@@ -19181,6 +20087,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "アップデート"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Обновления"
           }
         }
       }
@@ -19476,6 +20388,12 @@
             "state": "translated",
             "value": "VTT"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VTT"
+          }
         }
       }
     },
@@ -19534,6 +20452,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "バージョン %@ (%@)"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Версия %@ (%@)"
           }
         }
       }
@@ -19641,6 +20565,12 @@
             "state": "translated",
             "value": "可視性"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Видимость"
+          }
         }
       }
     },
@@ -19659,6 +20589,12 @@
             "state": "translated",
             "value": "あなたのMac向けの音声で打つ"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Голосовой ввод для вашего Mac"
+          }
         }
       }
     },
@@ -19671,6 +20607,12 @@
           }
         },
         "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "WAV"
+          }
+        },
+        "ru": {
           "stringUnit": {
             "state": "translated",
             "value": "WAV"
@@ -19745,6 +20687,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Webサイト"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Сайт"
           }
         }
       }
@@ -19824,6 +20772,12 @@
             "state": "translated",
             "value": "TypeWhisperへようこそ"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Добро пожаловать в TypeWhisper"
+          }
         }
       }
     },
@@ -19839,6 +20793,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "TypeWhisperへようこそ！"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Добро пожаловать в TypeWhisper!"
           }
         }
       }
@@ -20196,6 +21156,12 @@
             "state": "translated",
             "value": "語"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Слова"
+          }
         }
       }
     },
@@ -20300,6 +21266,12 @@
             "state": "translated",
             "value": "オフラインでも動作"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Работает офлайн"
+          }
         }
       }
     },
@@ -20325,6 +21297,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "誤ったテキスト"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Неверный текст"
           }
         }
       }
@@ -20485,6 +21463,12 @@
             "state": "translated",
             "value": "すべて準備完了！"
           }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Всё готово!"
+          }
         }
       }
     },
@@ -20560,6 +21544,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "あなたの語りはすぐにテキストとして表示されます。"
+          }
+        },
+        "ru": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ваши слова мгновенно появляются текстом."
           }
         }
       }
