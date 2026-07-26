@@ -2,12 +2,27 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>CFBundlePackageType</key>
-	<string>APPL</string>
+	<key>AppGroupIdentifier</key>
+	<string>$(APP_GROUP_ID)</string>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>de</string>
+		<string>ja</string>
+		<string>ru</string>
+	</array>
+	<key>CFBundleName</key>
+	<string>TypeWhisper</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
@@ -21,50 +36,36 @@
 			</array>
 		</dict>
 	</array>
-	<key>CFBundleName</key>
-	<string>TypeWhisper</string>
-	<key>CFBundleShortVersionString</key>
-	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
-	<key>CFBundleDevelopmentRegion</key>
-	<string>en</string>
-	<key>CFBundleLocalizations</key>
-		<array>
-			<string>en</string>
-			<string>de</string>
-			<string>ja</string>
-		</array>
-	<key>LSUIElement</key>
-	<true/>
 	<key>LSApplicationCategoryType</key>
 	<string>public.app-category.productivity</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>TypeWhisper Local needs microphone access for speech-to-text transcription.</string>
-	<key>NSAppleEventsUsageDescription</key>
-	<string>TypeWhisper detects the current browser URL to apply language profiles automatically.</string>
+	<key>LSUIElement</key>
+	<true/>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
+	<key>NSAppleEventsUsageDescription</key>
+	<string>TypeWhisper detects the current browser URL to apply language profiles automatically.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>TypeWhisper Local needs microphone access for speech-to-text transcription.</string>
 	<key>SUFeedURL</key>
 	<string>https://typewhisper.github.io/typewhisper-mac/appcast.xml</string>
 	<key>SUPublicEDKey</key>
 	<string>OdAMiN136Ckglxnq4FeLagPjcrZiASYGaeUWBkK6tuc=</string>
-	<key>TypeWhisperReleaseChannel</key>
-	<string>$(TYPEWHISPER_RELEASE_CHANNEL)</string>
-	<key>TypeWhisperReleaseTag</key>
-	<string>$(TYPEWHISPER_RELEASE_TAG)</string>
+	<key>TypeWhisperAccountBaseURL</key>
+	<string>https://app.typewhisper.com</string>
 	<key>TypeWhisperDiscordClaimBaseURL</key>
 	<string>https://community.typewhisper.com</string>
-	<key>AppGroupIdentifier</key>
-	<string>$(APP_GROUP_ID)</string>
 	<key>TypeWhisperICloudContainer</key>
 	<string>$(ICLOUD_CONTAINER_ID)</string>
 	<key>TypeWhisperICloudEnabled</key>
 	<string>$(TYPEWHISPER_ICLOUD_ENABLED)</string>
-	<key>TypeWhisperAccountBaseURL</key>
-	<string>https://app.typewhisper.com</string>
+	<key>TypeWhisperReleaseChannel</key>
+	<string>$(TYPEWHISPER_RELEASE_CHANNEL)</string>
+	<key>TypeWhisperReleaseTag</key>
+	<string>$(TYPEWHISPER_RELEASE_TAG)</string>
 </dict>
 </plist>
