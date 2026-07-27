@@ -235,6 +235,15 @@ struct GeneralSettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
+
+                Toggle(
+                    String(localized: "Show indicator in screen recordings and screen shares"),
+                    isOn: $dictation.indicatorVisibleInScreenCaptures
+                )
+
+                Text(String(localized: "Turn this off to hide the indicator from supported capture apps while keeping it visible on your display."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 }
             }
             .formStyle(.grouped)

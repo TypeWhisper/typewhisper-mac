@@ -39,22 +39,40 @@ enum FloatingPanelSpacePolicy {
     static func applyIndicatorPolicy(
         to panel: NSPanel,
         displayMode: NotchIndicatorDisplay,
-        windowLevel: NSWindow.Level = notchIndicatorWindowLevel
+        windowLevel: NSWindow.Level = notchIndicatorWindowLevel,
+        isVisibleInScreenCaptures: Bool
     ) {
         panel.level = windowLevel
         panel.collectionBehavior = indicatorCollectionBehavior(for: displayMode)
-        // Best-effort: keep passive indicators visible locally while excluding the
-        // window from capture APIs that honor AppKit sharing policy.
-        panel.sharingType = .none
+        applyIndicatorCapturePolicy(
+            to: panel,
+            isVisibleInScreenCaptures: isVisibleInScreenCaptures
+        )
+    }
+
+    @MainActor
+    static func applyIndicatorCapturePolicy(
+        to panel: NSPanel,
+        isVisibleInScreenCaptures: Bool
+    ) {
+        // Best-effort: AppKit sharing policy is honored by supported capture
+        // pipelines while the passive indicator remains visible locally.
+        panel.sharingType = isVisibleInScreenCaptures ? .readOnly : .none
     }
 
     @MainActor
     static func orderIndicatorFront(
         _ panel: NSPanel,
         displayMode: NotchIndicatorDisplay,
-        windowLevel: NSWindow.Level = notchIndicatorWindowLevel
+        windowLevel: NSWindow.Level = notchIndicatorWindowLevel,
+        isVisibleInScreenCaptures: Bool
     ) {
-        applyIndicatorPolicy(to: panel, displayMode: displayMode, windowLevel: windowLevel)
+        applyIndicatorPolicy(
+            to: panel,
+            displayMode: displayMode,
+            windowLevel: windowLevel,
+            isVisibleInScreenCaptures: isVisibleInScreenCaptures
+        )
         panel.orderFrontRegardless()
     }
 }

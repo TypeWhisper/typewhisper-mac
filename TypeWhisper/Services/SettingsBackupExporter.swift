@@ -171,6 +171,7 @@ enum SettingsBackupExporter {
         var soundTranscriptionSuccess: Bool? = nil
         var soundError: Bool? = nil
         var indicatorStyle: String? = nil
+        var indicatorVisibleInScreenCaptures: Bool? = nil
         var indicatorTranscriptPreviewEnabled: Bool? = nil
         var indicatorTranscriptPreviewFontSizeOffset: Int? = nil
         var preserveClipboard: Bool? = nil
@@ -195,7 +196,7 @@ enum SettingsBackupExporter {
         /// Every field defaults to `nil`, so the synthesized memberwise init
         /// doubles as an "all preferences absent" value (used by `filtered`
         /// when the Preferences category is deselected) without hand-listing
-        /// 30 `nil` arguments.
+        /// every `nil` argument.
         static let empty = PreferencesDTO()
 
         /// Number of non-nil fields, used to show a count in the category
@@ -216,6 +217,7 @@ enum SettingsBackupExporter {
             if soundTranscriptionSuccess != nil { count += 1 }
             if soundError != nil { count += 1 }
             if indicatorStyle != nil { count += 1 }
+            if indicatorVisibleInScreenCaptures != nil { count += 1 }
             if indicatorTranscriptPreviewEnabled != nil { count += 1 }
             if indicatorTranscriptPreviewFontSizeOffset != nil { count += 1 }
             if preserveClipboard != nil { count += 1 }
@@ -559,6 +561,7 @@ enum SettingsBackupExporter {
                 soundTranscriptionSuccess: userDefaults.object(forKey: UserDefaultsKeys.soundTranscriptionSuccess) as? Bool,
                 soundError: userDefaults.object(forKey: UserDefaultsKeys.soundError) as? Bool,
                 indicatorStyle: userDefaults.string(forKey: UserDefaultsKeys.indicatorStyle),
+                indicatorVisibleInScreenCaptures: userDefaults.object(forKey: UserDefaultsKeys.indicatorVisibleInScreenCaptures) as? Bool,
                 indicatorTranscriptPreviewEnabled: userDefaults.object(forKey: UserDefaultsKeys.indicatorTranscriptPreviewEnabled) as? Bool,
                 indicatorTranscriptPreviewFontSizeOffset: userDefaults.object(forKey: UserDefaultsKeys.indicatorTranscriptPreviewFontSizeOffset) as? Int,
                 preserveClipboard: userDefaults.object(forKey: UserDefaultsKeys.preserveClipboard) as? Bool,
@@ -830,6 +833,7 @@ enum SettingsBackupExporter {
         apply(preferences.soundTranscriptionSuccess, forKey: UserDefaultsKeys.soundTranscriptionSuccess)
         apply(preferences.soundError, forKey: UserDefaultsKeys.soundError)
         apply(preferences.indicatorStyle, forKey: UserDefaultsKeys.indicatorStyle)
+        apply(preferences.indicatorVisibleInScreenCaptures, forKey: UserDefaultsKeys.indicatorVisibleInScreenCaptures)
         apply(preferences.indicatorTranscriptPreviewEnabled, forKey: UserDefaultsKeys.indicatorTranscriptPreviewEnabled)
         apply(preferences.indicatorTranscriptPreviewFontSizeOffset, forKey: UserDefaultsKeys.indicatorTranscriptPreviewFontSizeOffset)
         apply(preferences.preserveClipboard, forKey: UserDefaultsKeys.preserveClipboard)

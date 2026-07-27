@@ -41,6 +41,7 @@ class NotchIndicatorPanel: NSPanel {
 
     private let screenResolver: IndicatorScreenResolver
     private let displayModeProvider: () -> NotchIndicatorDisplay
+    private let indicatorVisibleInScreenCapturesProvider: () -> Bool
     private let notchGeometry = NotchGeometry()
     private var cancellables = Set<AnyCancellable>()
     private var cachedScreen: NSScreen?
@@ -51,6 +52,9 @@ class NotchIndicatorPanel: NSPanel {
         self.init(
             screenResolver: screenResolver,
             displayModeProvider: { DictationViewModel.shared.notchIndicatorDisplay },
+            indicatorVisibleInScreenCapturesProvider: {
+                DictationViewModel.shared.indicatorVisibleInScreenCaptures
+            },
             content: { NotchIndicatorView(geometry: $0) }
         )
     }
@@ -58,10 +62,12 @@ class NotchIndicatorPanel: NSPanel {
     init<Content: View>(
         screenResolver: IndicatorScreenResolver,
         displayModeProvider: @escaping () -> NotchIndicatorDisplay,
+        indicatorVisibleInScreenCapturesProvider: @escaping () -> Bool = { true },
         @ViewBuilder content: (NotchGeometry) -> Content
     ) {
         self.screenResolver = screenResolver
         self.displayModeProvider = displayModeProvider
+        self.indicatorVisibleInScreenCapturesProvider = indicatorVisibleInScreenCapturesProvider
         super.init(
             contentRect: NSRect(x: 0, y: 0, width: Self.panelWidth, height: Self.panelHeight),
             styleMask: [.borderless, .nonactivatingPanel, .utilityWindow, .hudWindow],
@@ -80,7 +86,8 @@ class NotchIndicatorPanel: NSPanel {
         FloatingPanelSpacePolicy.applyIndicatorPolicy(
             to: self,
             displayMode: displayModeProvider(),
-            windowLevel: FloatingPanelSpacePolicy.notchIndicatorWindowLevel
+            windowLevel: FloatingPanelSpacePolicy.notchIndicatorWindowLevel,
+            isVisibleInScreenCaptures: indicatorVisibleInScreenCapturesProvider()
         )
 
         let hostingView = FirstMouseHostingView(rootView: content(notchGeometry))
@@ -121,6 +128,18 @@ class NotchIndicatorPanel: NSPanel {
             .sink { [weak self] _ in
                 self?.cachedScreen = nil
                 self?.updateVisibility(vm: vm, recorder: recorder)
+            }
+            .store(in: &cancellables)
+
+        vm.$indicatorVisibleInScreenCaptures
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] isVisibleInScreenCaptures in
+                guard let self else { return }
+                FloatingPanelSpacePolicy.applyIndicatorCapturePolicy(
+                    to: self,
+                    isVisibleInScreenCaptures: isVisibleInScreenCaptures
+                )
             }
             .store(in: &cancellables)
 
@@ -203,7 +222,8 @@ class NotchIndicatorPanel: NSPanel {
         FloatingPanelSpacePolicy.orderIndicatorFront(
             self,
             displayMode: displayModeProvider(),
-            windowLevel: FloatingPanelSpacePolicy.notchIndicatorWindowLevel
+            windowLevel: FloatingPanelSpacePolicy.notchIndicatorWindowLevel,
+            isVisibleInScreenCaptures: indicatorVisibleInScreenCapturesProvider()
         )
     }
 

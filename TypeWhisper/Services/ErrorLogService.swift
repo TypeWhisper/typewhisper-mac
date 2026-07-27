@@ -378,6 +378,7 @@ private struct DiagnosticsReport: Encodable {
         let modelAutoUnloadSeconds: Int
         let modelAutoUnloadPolicy: String
         let indicatorStyle: String
+        let indicatorVisibleInScreenCaptures: Bool
         let indicatorSupportsTranscriptPreview: Bool
         let indicatorTranscriptPreviewEnabled: Bool
         let indicatorTranscriptPreviewAvailable: Bool
@@ -484,6 +485,7 @@ final class ErrorLogService: ObservableObject {
         let outputSnapshot = CoreAudioOutputVolumeController().defaultOutputSnapshot()
         let modelAutoUnloadSeconds = ModelAutoUnloadPolicy.effectiveSeconds(defaults: defaults)
         let indicatorStyle = DictationViewModel.loadIndicatorStyle(defaults: defaults)
+        let indicatorVisibleInScreenCaptures = DictationViewModel.loadIndicatorVisibleInScreenCaptures(defaults: defaults)
         let indicatorPreviewEnabled = DictationViewModel.loadIndicatorTranscriptPreviewEnabled(defaults: defaults)
         let indicatorPreviewOffset = DictationViewModel.loadIndicatorTranscriptPreviewFontSizeOffset(defaults: defaults)
 
@@ -646,6 +648,7 @@ final class ErrorLogService: ObservableObject {
                 modelAutoUnloadSeconds: modelAutoUnloadSeconds,
                 modelAutoUnloadPolicy: ModelAutoUnloadPolicy.policyName(seconds: modelAutoUnloadSeconds),
                 indicatorStyle: indicatorStyle.rawValue,
+                indicatorVisibleInScreenCaptures: indicatorVisibleInScreenCaptures,
                 indicatorSupportsTranscriptPreview: indicatorStyle.supportsTranscriptPreview,
                 indicatorTranscriptPreviewEnabled: indicatorPreviewEnabled,
                 indicatorTranscriptPreviewAvailable: indicatorStyle.supportsTranscriptPreview && indicatorPreviewEnabled,

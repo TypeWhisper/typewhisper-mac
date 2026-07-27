@@ -200,6 +200,9 @@ final class DictationViewModel: ObservableObject {
     @Published var indicatorTranscriptPreviewEnabled: Bool {
         didSet { Self.persistIndicatorTranscriptPreviewEnabled(indicatorTranscriptPreviewEnabled) }
     }
+    @Published var indicatorVisibleInScreenCaptures: Bool {
+        didSet { Self.persistIndicatorVisibleInScreenCaptures(indicatorVisibleInScreenCaptures) }
+    }
     @Published var indicatorTranscriptPreviewFontSizeOffset: Int {
         didSet {
             let clampedOffset = Self.clampedIndicatorTranscriptPreviewFontSizeOffset(indicatorTranscriptPreviewFontSizeOffset)
@@ -498,6 +501,7 @@ final class DictationViewModel: ObservableObject {
         self.audioDuckingLevel = UserDefaults.standard.object(forKey: UserDefaultsKeys.audioDuckingLevel) as? Double ?? 0.2
         self.soundFeedbackEnabled = UserDefaults.standard.object(forKey: UserDefaultsKeys.soundFeedbackEnabled) as? Bool ?? true
         self.indicatorTranscriptPreviewEnabled = Self.loadIndicatorTranscriptPreviewEnabled()
+        self.indicatorVisibleInScreenCaptures = Self.loadIndicatorVisibleInScreenCaptures()
         self.indicatorTranscriptPreviewFontSizeOffset = Self.loadIndicatorTranscriptPreviewFontSizeOffset()
         self.preserveClipboard = UserDefaults.standard.bool(forKey: UserDefaultsKeys.preserveClipboard)
         self.mediaPauseEnabled = UserDefaults.standard.bool(forKey: UserDefaultsKeys.mediaPauseEnabled)
@@ -582,6 +586,14 @@ final class DictationViewModel: ObservableObject {
 
     nonisolated static func persistIndicatorTranscriptPreviewEnabled(_ enabled: Bool, defaults: UserDefaults = .standard) {
         defaults.set(enabled, forKey: UserDefaultsKeys.indicatorTranscriptPreviewEnabled)
+    }
+
+    nonisolated static func loadIndicatorVisibleInScreenCaptures(defaults: UserDefaults = .standard) -> Bool {
+        defaults.object(forKey: UserDefaultsKeys.indicatorVisibleInScreenCaptures) as? Bool ?? true
+    }
+
+    nonisolated static func persistIndicatorVisibleInScreenCaptures(_ visible: Bool, defaults: UserDefaults = .standard) {
+        defaults.set(visible, forKey: UserDefaultsKeys.indicatorVisibleInScreenCaptures)
     }
 
     nonisolated static func loadIndicatorTranscriptPreviewFontSizeOffset(defaults: UserDefaults = .standard) -> Int {

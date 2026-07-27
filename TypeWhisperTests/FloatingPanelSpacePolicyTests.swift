@@ -57,7 +57,7 @@ final class FloatingPanelSpacePolicyTests: XCTestCase {
     }
 
     @MainActor
-    func testIndicatorPolicyAppliesRequestedWindowLevelAndExcludesPanelFromScreenCapture() {
+    func testIndicatorPolicyAppliesRequestedWindowLevelAndAllowsScreenCapture() {
         let panel = NSPanel(
             contentRect: .zero,
             styleMask: [.borderless],
@@ -68,10 +68,28 @@ final class FloatingPanelSpacePolicyTests: XCTestCase {
         FloatingPanelSpacePolicy.applyIndicatorPolicy(
             to: panel,
             displayMode: .activeScreen,
-            windowLevel: FloatingPanelSpacePolicy.floatingIndicatorWindowLevel
+            windowLevel: FloatingPanelSpacePolicy.floatingIndicatorWindowLevel,
+            isVisibleInScreenCaptures: true
         )
 
         XCTAssertEqual(panel.level, FloatingPanelSpacePolicy.floatingIndicatorWindowLevel)
+        XCTAssertEqual(panel.sharingType, .readOnly)
+    }
+
+    @MainActor
+    func testIndicatorCapturePolicyCanExcludePanelFromScreenCapture() {
+        let panel = NSPanel(
+            contentRect: .zero,
+            styleMask: [.borderless],
+            backing: .buffered,
+            defer: false
+        )
+
+        FloatingPanelSpacePolicy.applyIndicatorCapturePolicy(
+            to: panel,
+            isVisibleInScreenCaptures: false
+        )
+
         XCTAssertEqual(panel.sharingType, .none)
     }
 }

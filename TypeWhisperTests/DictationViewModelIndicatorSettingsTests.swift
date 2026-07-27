@@ -53,6 +53,20 @@ final class DictationViewModelIndicatorSettingsTests: XCTestCase {
         XCTAssertTrue(DictationViewModel.loadIndicatorTranscriptPreviewEnabled(defaults: defaults))
     }
 
+    func testIndicatorDefaultsToVisibleInScreenCaptures() {
+        XCTAssertTrue(DictationViewModel.loadIndicatorVisibleInScreenCaptures(defaults: defaults))
+    }
+
+    func testIndicatorScreenCaptureVisibilityPersistsWhenDisabled() {
+        DictationViewModel.persistIndicatorVisibleInScreenCaptures(false, defaults: defaults)
+
+        XCTAssertEqual(
+            defaults.object(forKey: UserDefaultsKeys.indicatorVisibleInScreenCaptures) as? Bool,
+            false
+        )
+        XCTAssertFalse(DictationViewModel.loadIndicatorVisibleInScreenCaptures(defaults: defaults))
+    }
+
     func testIndicatorTranscriptPreviewFontSizeOffsetDefaultsToZero() {
         XCTAssertEqual(DictationViewModel.loadIndicatorTranscriptPreviewFontSizeOffset(defaults: defaults), 0)
     }

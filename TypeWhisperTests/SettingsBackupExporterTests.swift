@@ -449,6 +449,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         source.userDefaults.set(0.35, forKey: UserDefaultsKeys.audioDuckingLevel)
         source.userDefaults.set(3, forKey: UserDefaultsKeys.indicatorTranscriptPreviewFontSizeOffset)
         source.userDefaults.set("overlay", forKey: UserDefaultsKeys.indicatorStyle)
+        source.userDefaults.set(false, forKey: UserDefaultsKeys.indicatorVisibleInScreenCaptures)
         source.userDefaults.set(true, forKey: UserDefaultsKeys.recorderSystemAudioEnabled)
         // Deliberately excluded: engine/model selections must not be exported.
         source.userDefaults.set("com.typewhisper.some-engine", forKey: UserDefaultsKeys.fileTranscriptionEngine)
@@ -471,6 +472,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         XCTAssertEqual(backup.preferences.audioDuckingLevel, 0.35)
         XCTAssertEqual(backup.preferences.indicatorTranscriptPreviewFontSizeOffset, 3)
         XCTAssertEqual(backup.preferences.indicatorStyle, "overlay")
+        XCTAssertEqual(backup.preferences.indicatorVisibleInScreenCaptures, false)
         XCTAssertEqual(backup.preferences.recorderSystemAudioEnabled, true)
 
         let destination = try makeFixture()
@@ -497,6 +499,10 @@ final class SettingsBackupExporterTests: XCTestCase {
         XCTAssertEqual(destination.userDefaults.bool(forKey: UserDefaultsKeys.translationEnabled), true)
         XCTAssertEqual(destination.userDefaults.bool(forKey: UserDefaultsKeys.showMenuBarIcon), false)
         XCTAssertEqual(destination.userDefaults.string(forKey: UserDefaultsKeys.indicatorStyle), "overlay")
+        XCTAssertEqual(
+            destination.userDefaults.object(forKey: UserDefaultsKeys.indicatorVisibleInScreenCaptures) as? Bool,
+            false
+        )
         XCTAssertNil(destination.userDefaults.string(forKey: UserDefaultsKeys.fileTranscriptionEngine))
     }
 

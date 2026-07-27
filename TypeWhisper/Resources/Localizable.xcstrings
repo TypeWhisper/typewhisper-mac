@@ -15890,6 +15890,22 @@
         }
       }
     },
+    "Show indicator in screen recordings and screen shares": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Indikator in Bildschirmaufnahmen und Bildschirmfreigaben anzeigen"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "画面収録と画面共有にインジケーターを表示"
+          }
+        }
+      }
+    },
     "Show live transcript preview": {
       "localizations": {
         "de": {
@@ -18627,6 +18643,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "音声入力したメモを返信メールに変換します。"
+          }
+        }
+      }
+    },
+    "Turn this off to hide the indicator from supported capture apps while keeping it visible on your display.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deaktiviere diese Option, um den Indikator in unterstützten Aufnahme-Apps auszublenden, während er auf deinem Display sichtbar bleibt."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "オフにすると、対応するキャプチャアプリではインジケーターを非表示にし、ディスプレイ上では表示したままにします。"
           }
         }
       }

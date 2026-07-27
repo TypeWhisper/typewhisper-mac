@@ -35,7 +35,8 @@ class MinimalIndicatorPanel: NSPanel {
         FloatingPanelSpacePolicy.applyIndicatorPolicy(
             to: self,
             displayMode: DictationViewModel.shared.notchIndicatorDisplay,
-            windowLevel: FloatingPanelSpacePolicy.floatingIndicatorWindowLevel
+            windowLevel: FloatingPanelSpacePolicy.floatingIndicatorWindowLevel,
+            isVisibleInScreenCaptures: DictationViewModel.shared.indicatorVisibleInScreenCaptures
         )
 
         let hostingView = MinimalFirstMouseHostingView(rootView: MinimalIndicatorView())
@@ -84,6 +85,18 @@ class MinimalIndicatorPanel: NSPanel {
             .sink { [weak self] _ in
                 guard let self, self.isVisible else { return }
                 self.show()
+            }
+            .store(in: &cancellables)
+
+        vm.$indicatorVisibleInScreenCaptures
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] isVisibleInScreenCaptures in
+                guard let self else { return }
+                FloatingPanelSpacePolicy.applyIndicatorCapturePolicy(
+                    to: self,
+                    isVisibleInScreenCaptures: isVisibleInScreenCaptures
+                )
             }
             .store(in: &cancellables)
 
@@ -149,7 +162,8 @@ class MinimalIndicatorPanel: NSPanel {
         FloatingPanelSpacePolicy.orderIndicatorFront(
             self,
             displayMode: DictationViewModel.shared.notchIndicatorDisplay,
-            windowLevel: FloatingPanelSpacePolicy.floatingIndicatorWindowLevel
+            windowLevel: FloatingPanelSpacePolicy.floatingIndicatorWindowLevel,
+            isVisibleInScreenCaptures: DictationViewModel.shared.indicatorVisibleInScreenCaptures
         )
     }
 

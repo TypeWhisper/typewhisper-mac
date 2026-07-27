@@ -11,6 +11,7 @@ enum UserDefaultsKeys {
     static let soundTranscriptionSuccess = "soundTranscriptionSuccess"
     static let soundError = "soundError"
     static let indicatorStyle = "indicatorStyle"
+    static let indicatorVisibleInScreenCaptures = "indicatorVisibleInScreenCaptures"
     static let indicatorTranscriptPreviewEnabled = "indicatorTranscriptPreviewEnabled"
     static let indicatorTranscriptPreviewFontSizeOffset = "indicatorTranscriptPreviewFontSizeOffset"
     static let preserveClipboard = "preserveClipboard"
