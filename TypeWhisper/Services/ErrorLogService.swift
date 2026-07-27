@@ -563,7 +563,7 @@ final class ErrorLogService: ObservableObject {
         }
 
         return DiagnosticsReport(
-            schemaVersion: 9,
+            schemaVersion: 10,
             exportedAt: Date(),
             app: .init(
                 version: AppConstants.appVersion,
