@@ -401,8 +401,12 @@ enum IndicatorWindowFrameLookup {
         guard let focusedWindow = focusedWindowElement() else {
             return nil
         }
-        let windowElement = focusedWindow as! AXUIElement
+        return accessibilityWindowFrame(focusedWindow as! AXUIElement)
+    }
 
+    private nonisolated static func accessibilityWindowFrame(
+        _ windowElement: AXUIElement
+    ) -> CGRect? {
         var positionValue: AnyObject?
         guard AXUIElementCopyAttributeValue(
             windowElement,
@@ -442,23 +446,31 @@ enum IndicatorWindowFrameLookup {
         guard let focusedWindow = focusedWindowElement() else {
             return nil
         }
-        let windowElement = focusedWindow as! AXUIElement
-
-        var fullScreenValue: AnyObject?
-        guard AXUIElementCopyAttributeValue(
-            windowElement,
+        return accessibilityBoolAttribute(
             "AXFullScreen" as CFString,
-            &fullScreenValue
+            on: focusedWindow as! AXUIElement
+        )
+    }
+
+    private nonisolated static func accessibilityBoolAttribute(
+        _ attribute: CFString,
+        on element: AXUIElement
+    ) -> Bool? {
+        var value: AnyObject?
+        guard AXUIElementCopyAttributeValue(
+            element,
+            attribute,
+            &value
         ) == .success,
-              let fullScreenValue else {
+              let value else {
             return nil
         }
 
-        if let isFullscreen = fullScreenValue as? Bool {
-            return isFullscreen
+        if let boolValue = value as? Bool {
+            return boolValue
         }
 
-        return (fullScreenValue as? NSNumber)?.boolValue
+        return (value as? NSNumber)?.boolValue
     }
 
     private nonisolated static func focusedWindowElement() -> AnyObject? {
@@ -501,20 +513,7 @@ enum IndicatorWindowFrameLookup {
         }
 
         return windows.compactMap { windowElement in
-            var frameValue: AnyObject?
-            guard AXUIElementCopyAttributeValue(
-                windowElement,
-                "AXFrame" as CFString,
-                &frameValue
-            ) == .success,
-                  let frameValue else {
-                return nil
-            }
-            let axFrame = frameValue as! AXValue
-
-            var frame = CGRect.zero
-            guard AXValueGetValue(axFrame, .cgRect, &frame),
-                  !frame.isEmpty else {
+            guard let frame = accessibilityWindowFrame(windowElement) else {
                 return nil
             }
 
@@ -526,21 +525,7 @@ enum IndicatorWindowFrameLookup {
     }
 
     private static func accessibilityWindowIsFullscreen(_ windowElement: AXUIElement) -> Bool? {
-        var fullScreenValue: AnyObject?
-        guard AXUIElementCopyAttributeValue(
-            windowElement,
-            "AXFullScreen" as CFString,
-            &fullScreenValue
-        ) == .success,
-              let fullScreenValue else {
-            return nil
-        }
-
-        if let isFullscreen = fullScreenValue as? Bool {
-            return isFullscreen
-        }
-
-        return (fullScreenValue as? NSNumber)?.boolValue
+        accessibilityBoolAttribute("AXFullScreen" as CFString, on: windowElement)
     }
 
     private static func framesApproximatelyMatch(_ lhs: CGRect, _ rhs: CGRect) -> Bool {
