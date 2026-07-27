@@ -599,14 +599,14 @@ final class IndicatorFullscreenSuppressionPolicyTests: XCTestCase {
         )
     }
 
-    func testSuppressesSafariFullscreenLikeWindowWhenAXReportsNotFullscreen() {
-        let safariFullscreenWindow = CGRect(x: 0, y: 0, width: 3024, height: 1964)
+    func testDoesNotSuppressSafariMaximizedWindowWhenAXReportsNotFullscreen() {
+        let safariMaximizedWindow = CGRect(x: 0, y: 33, width: 1512, height: 949)
 
-        XCTAssertTrue(
+        XCTAssertFalse(
             IndicatorFullscreenSuppressionPolicy.shouldSuppressIndicator(
-                screenFrame: notchedScreenFrame,
-                safeAreaTopInset: 74,
-                windowFrame: safariFullscreenWindow,
+                screenFrame: CGRect(x: 0, y: 0, width: 1512, height: 982),
+                safeAreaTopInset: 32,
+                windowFrame: safariMaximizedWindow,
                 focusedWindowIsFullscreen: false,
                 frontmostBundleIdentifier: "com.apple.Safari",
                 appBundleIdentifier: "com.typewhisper.mac.dev"
@@ -622,7 +622,7 @@ final class IndicatorFullscreenSuppressionPolicyTests: XCTestCase {
                 screenFrame: notchedScreenFrame,
                 safeAreaTopInset: 74,
                 windowFrame: safariFullscreenWindow,
-                focusedWindowIsFullscreen: false,
+                focusedWindowIsFullscreen: true,
                 frontmostBundleIdentifier: "com.apple.SafariTechnologyPreview",
                 appBundleIdentifier: "com.typewhisper.mac.dev"
             )
@@ -637,7 +637,7 @@ final class IndicatorFullscreenSuppressionPolicyTests: XCTestCase {
                 screenFrame: notchedScreenFrame,
                 safeAreaTopInset: 74,
                 windowFrame: safariFullscreenWindow,
-                focusedWindowIsFullscreen: false,
+                focusedWindowIsFullscreen: true,
                 frontmostBundleIdentifier: "com.apple.Safari",
                 appBundleIdentifier: "com.typewhisper.mac.dev",
                 placement: .nonNotchArea
@@ -657,7 +657,9 @@ final class IndicatorFullscreenSuppressionPolicyTests: XCTestCase {
                 frontmostBundleIdentifier: nil,
                 appBundleIdentifier: "com.typewhisper.mac.dev",
                 placement: .nonNotchArea,
-                safariWindowFrames: [safariFullscreenWindow]
+                safariWindows: [
+                    SafariWindowSnapshot(frame: safariFullscreenWindow, isFullscreen: true)
+                ]
             )
         )
     }
@@ -674,7 +676,9 @@ final class IndicatorFullscreenSuppressionPolicyTests: XCTestCase {
                 frontmostBundleIdentifier: "com.typewhisper.mac.dev",
                 appBundleIdentifier: "com.typewhisper.mac.dev",
                 placement: .nonNotchArea,
-                safariWindowFrames: [safariFullscreenWindow]
+                safariWindows: [
+                    SafariWindowSnapshot(frame: safariFullscreenWindow, isFullscreen: true)
+                ]
             )
         )
     }
@@ -692,7 +696,49 @@ final class IndicatorFullscreenSuppressionPolicyTests: XCTestCase {
                 frontmostBundleIdentifier: "com.typewhisper.mac.dev",
                 appBundleIdentifier: "com.typewhisper.mac.dev",
                 placement: .nonNotchArea,
-                safariWindowFrames: [safariContentWindowBelowNotch]
+                safariWindows: [
+                    SafariWindowSnapshot(frame: safariContentWindowBelowNotch, isFullscreen: true)
+                ]
+            )
+        )
+    }
+
+    func testDoesNotSuppressMaximizedSafariWindowScanWhenAXReportsNotFullscreen() {
+        let screenFrame = CGRect(x: 0, y: 0, width: 1512, height: 982)
+        let safariMaximizedWindow = CGRect(x: 0, y: 33, width: 1512, height: 949)
+
+        XCTAssertFalse(
+            IndicatorFullscreenSuppressionPolicy.shouldSuppressIndicator(
+                screenFrame: screenFrame,
+                safeAreaTopInset: 32,
+                windowFrame: nil,
+                focusedWindowIsFullscreen: nil,
+                frontmostBundleIdentifier: "com.typewhisper.mac.dev",
+                appBundleIdentifier: "com.typewhisper.mac.dev",
+                placement: .nonNotchArea,
+                safariWindows: [
+                    SafariWindowSnapshot(frame: safariMaximizedWindow, isFullscreen: false)
+                ]
+            )
+        )
+    }
+
+    func testKeepsSafariGeometryFallbackWhenAXFullscreenIsUnavailable() {
+        let screenFrame = CGRect(x: 0, y: 0, width: 1512, height: 982)
+        let safariFullscreenWindow = CGRect(x: 0, y: 33, width: 1512, height: 949)
+
+        XCTAssertTrue(
+            IndicatorFullscreenSuppressionPolicy.shouldSuppressIndicator(
+                screenFrame: screenFrame,
+                safeAreaTopInset: 32,
+                windowFrame: nil,
+                focusedWindowIsFullscreen: nil,
+                frontmostBundleIdentifier: "com.typewhisper.mac.dev",
+                appBundleIdentifier: "com.typewhisper.mac.dev",
+                placement: .nonNotchArea,
+                safariWindows: [
+                    SafariWindowSnapshot(frame: safariFullscreenWindow, isFullscreen: nil)
+                ]
             )
         )
     }
@@ -709,7 +755,9 @@ final class IndicatorFullscreenSuppressionPolicyTests: XCTestCase {
                 frontmostBundleIdentifier: nil,
                 appBundleIdentifier: "com.typewhisper.mac.dev",
                 placement: .nonNotchArea,
-                safariWindowFrames: [safariWindowBelowMenuBar]
+                safariWindows: [
+                    SafariWindowSnapshot(frame: safariWindowBelowMenuBar, isFullscreen: nil)
+                ]
             )
         )
     }
