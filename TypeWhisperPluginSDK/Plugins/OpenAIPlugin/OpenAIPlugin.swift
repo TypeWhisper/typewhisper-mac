@@ -58,6 +58,7 @@ private enum OpenAIOAuthConfig {
     static let clientID = "app_EMoamEEZ73f0CkXaXp7hrann"
     static let issuer = "https://auth.openai.com"
     static let codexAPIEndpoint = "https://chatgpt.com/backend-api/codex/responses"
+    static let codexModelsEndpoint = "https://chatgpt.com/backend-api/codex/models"
     static let callbackHost = "localhost"
     static let callbackPort: UInt16 = 1455
     static let callbackPath = "/auth/callback"
@@ -1622,6 +1623,7 @@ final class OpenAIPlugin: NSObject,
     fileprivate var _selectedModelId: String?
     fileprivate var _selectedLLMModelId: String?
     fileprivate var _fetchedLLMModels: [OpenAIFetchedModel] = []
+    fileprivate var _fetchedChatGPTModels: [OpenAIChatGPTModel] = []
     fileprivate var _selectedVoiceId: String?
     fileprivate var _ttsInstructions: String = ""
     fileprivate var _transcriptionContext: String = ""
@@ -1668,18 +1670,24 @@ final class OpenAIPlugin: NSObject,
         llmTemperatureMode: "llmTemperatureMode",
         llmTemperatureValue: "llmTemperatureValue",
         fetchedLLMModels: "fetchedLLMModels",
+        fetchedChatGPTModels: "fetchedChatGPTModels",
         oauthAccountID: "oauthAccountID",
         oauthPlanType: "oauthPlanType",
         oauthExpiresAt: "oauthExpiresAt"
     )
 
-    private static let chatGPTOAuthModels: [PluginModelInfo] = [
+    private static let chatGPTOAuthFallbackModels: [PluginModelInfo] = [
+        PluginModelInfo(id: "gpt-5.6-sol", displayName: "GPT-5.6 Sol"),
+        PluginModelInfo(id: "gpt-5.6-terra", displayName: "GPT-5.6 Terra"),
+        PluginModelInfo(id: "gpt-5.6-luna", displayName: "GPT-5.6 Luna"),
         PluginModelInfo(id: "gpt-5.5", displayName: "GPT-5.5"),
         PluginModelInfo(id: "gpt-5.4", displayName: "GPT-5.4"),
         PluginModelInfo(id: "gpt-5.4-mini", displayName: "GPT-5.4 Mini"),
+        PluginModelInfo(id: "gpt-5.3-codex-spark", displayName: "GPT-5.3 Codex Spark"),
+        // Keep legacy selections available while offline. A successful refresh
+        // replaces this fallback with the account-specific server catalog.
         PluginModelInfo(id: "gpt-5.4-nano", displayName: "GPT-5.4 Nano"),
         PluginModelInfo(id: "gpt-5.3-codex", displayName: "GPT-5.3 Codex"),
-        PluginModelInfo(id: "gpt-5.3-codex-spark", displayName: "GPT-5.3 Codex Spark"),
         PluginModelInfo(id: "gpt-5.2", displayName: "GPT-5.2"),
         PluginModelInfo(id: "gpt-5.2-codex", displayName: "GPT-5.2 Codex"),
         PluginModelInfo(id: "gpt-5.1-codex", displayName: "GPT-5.1 Codex"),
@@ -1717,9 +1725,18 @@ final class OpenAIPlugin: NSObject,
             _reasoningEffort = reasoningEffort
         }
 
+        _oauthAccountID = host.userDefault(forKey: Self.storageKeys.oauthAccountID) as? String
+        _oauthPlanType = host.userDefault(forKey: Self.storageKeys.oauthPlanType) as? String
+        _oauthExpiresAt = host.userDefault(forKey: Self.storageKeys.oauthExpiresAt) as? Date
+
         if let data = host.userDefault(forKey: Self.storageKeys.fetchedLLMModels) as? Data,
            let models = try? JSONDecoder().decode([OpenAIFetchedModel].self, from: data) {
             _fetchedLLMModels = models
+        }
+        if let data = host.userDefault(forKey: Self.storageKeys.fetchedChatGPTModels) as? Data,
+           let cache = try? JSONDecoder().decode(OpenAIChatGPTModelCache.self, from: data),
+           cache.accountID == _oauthAccountID {
+            _fetchedChatGPTModels = cache.models
         }
 
         _selectedModelId = host.userDefault(forKey: Self.storageKeys.selectedModel) as? String
@@ -1740,9 +1757,6 @@ final class OpenAIPlugin: NSObject,
             ?? PluginLLMTemperatureMode.providerDefault.rawValue
         _llmTemperatureValue = host.userDefault(forKey: Self.storageKeys.llmTemperatureValue) as? Double
             ?? 0.3
-        _oauthAccountID = host.userDefault(forKey: Self.storageKeys.oauthAccountID) as? String
-        _oauthPlanType = host.userDefault(forKey: Self.storageKeys.oauthPlanType) as? String
-        _oauthExpiresAt = host.userDefault(forKey: Self.storageKeys.oauthExpiresAt) as? Date
 
         normalizeSelectedLLMModel()
     }
@@ -2181,7 +2195,12 @@ final class OpenAIPlugin: NSObject,
 
     var supportedModels: [PluginModelInfo] {
         if _authMode == .chatGPT {
-            return Self.chatGPTOAuthModels
+            if !_fetchedChatGPTModels.isEmpty {
+                return _fetchedChatGPTModels.map {
+                    PluginModelInfo(id: $0.id, displayName: $0.displayName)
+                }
+            }
+            return Self.chatGPTOAuthFallbackModels
         }
         if !_fetchedLLMModels.isEmpty {
             return _fetchedLLMModels.map { PluginModelInfo(id: $0.id, displayName: $0.id) }
@@ -2423,6 +2442,16 @@ final class OpenAIPlugin: NSObject,
         host?.notifyCapabilitiesChanged()
     }
 
+    fileprivate func setFetchedChatGPTModels(_ models: [OpenAIChatGPTModel]) {
+        _fetchedChatGPTModels = models
+        let cache = OpenAIChatGPTModelCache(accountID: _oauthAccountID, models: models)
+        if let data = try? JSONEncoder().encode(cache) {
+            host?.setUserDefault(data, forKey: Self.storageKeys.fetchedChatGPTModels)
+        }
+        normalizeSelectedLLMModel()
+        host?.notifyCapabilitiesChanged()
+    }
+
     @discardableResult
     func refreshFetchedLLMModels() async -> [OpenAIFetchedModel] {
         guard _authMode == .apiKey else { return [] }
@@ -2439,9 +2468,10 @@ final class OpenAIPlugin: NSObject,
             let models = await refreshFetchedLLMModels()
             return models.map { PluginModelInfo(id: $0.id, displayName: $0.id) }
         case .chatGPT:
-            normalizeSelectedLLMModel()
-            host?.notifyCapabilitiesChanged()
-            return Self.chatGPTOAuthModels
+            let models = await fetchChatGPTModels()
+            guard !models.isEmpty else { return [] }
+            setFetchedChatGPTModels(models)
+            return models.map { PluginModelInfo(id: $0.id, displayName: $0.displayName) }
         }
     }
 
@@ -2469,6 +2499,69 @@ final class OpenAIPlugin: NSObject,
         } catch {
             return []
         }
+    }
+
+    fileprivate func fetchChatGPTModels() async -> [OpenAIChatGPTModel] {
+        do {
+            let accessToken = try await validOAuthAccessToken()
+            let request = try Self.makeChatGPTModelsRequest(
+                accessToken: accessToken,
+                accountID: _oauthAccountID,
+                clientVersion: Self.chatGPTModelsClientVersion
+            )
+            let (data, response) = try await PluginHTTPClient.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse,
+                  httpResponse.statusCode == 200 else {
+                return []
+            }
+
+            let decoded = try JSONDecoder().decode(OpenAIChatGPTModelsResponse.self, from: data)
+            let sortedModels = decoded.models.enumerated()
+                .filter { !$0.element.id.isEmpty && $0.element.isVisibleInPicker }
+                .sorted {
+                    if $0.element.priority == $1.element.priority {
+                        return $0.offset < $1.offset
+                    }
+                    return $0.element.priority < $1.element.priority
+                }
+                .map(\.element)
+
+            var seenModelIDs = Set<String>()
+            return sortedModels.filter { seenModelIDs.insert($0.id).inserted }
+        } catch {
+            return []
+        }
+    }
+
+    nonisolated static func makeChatGPTModelsRequest(
+        accessToken: String,
+        accountID: String?,
+        clientVersion: String
+    ) throws -> URLRequest {
+        guard var components = URLComponents(string: OpenAIOAuthConfig.codexModelsEndpoint) else {
+            throw OpenAIPluginError.invalidURL(OpenAIOAuthConfig.codexModelsEndpoint)
+        }
+        components.queryItems = [
+            URLQueryItem(name: "client_version", value: clientVersion),
+        ]
+        guard let url = components.url else {
+            throw OpenAIPluginError.invalidURL(OpenAIOAuthConfig.codexModelsEndpoint)
+        }
+
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Accept")
+        if let accountID, !accountID.isEmpty {
+            request.setValue(accountID, forHTTPHeaderField: "ChatGPT-Account-ID")
+        }
+        request.timeoutInterval = 10
+        return request
+    }
+
+    private static var chatGPTModelsClientVersion: String {
+        let bundle = Bundle(for: OpenAIPlugin.self)
+        return bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
+            ?? "1.3.0"
     }
 
     fileprivate var ttsInstructions: String { _ttsInstructions }
@@ -2628,6 +2721,7 @@ final class OpenAIPlugin: NSObject,
         _oauthAccountID = nil
         _oauthPlanType = nil
         _oauthExpiresAt = nil
+        _fetchedChatGPTModels = []
 
         if let host {
             do {
@@ -2641,6 +2735,8 @@ final class OpenAIPlugin: NSObject,
             host.setUserDefault(nil, forKey: Self.storageKeys.oauthAccountID)
             host.setUserDefault(nil, forKey: Self.storageKeys.oauthPlanType)
             host.setUserDefault(nil, forKey: Self.storageKeys.oauthExpiresAt)
+            host.setUserDefault(nil, forKey: Self.storageKeys.fetchedChatGPTModels)
+            normalizeSelectedLLMModel()
             host.notifyCapabilitiesChanged()
         }
     }
@@ -2657,10 +2753,17 @@ final class OpenAIPlugin: NSObject,
 
     private func storeOAuthTokens(_ tokens: OpenAIOAuthTokenResponse, preferredAccountID: String? = nil) {
         let metadata = extractOAuthMetadata(from: tokens)
+        let nextAccountID = preferredAccountID ?? metadata.accountID
+        let accountChanged = _oauthAccountID != nextAccountID
+        if accountChanged {
+            _fetchedChatGPTModels = []
+            host?.setUserDefault(nil, forKey: Self.storageKeys.fetchedChatGPTModels)
+        }
+
         _oauthAccessToken = tokens.access_token
         _oauthRefreshToken = tokens.refresh_token
         _oauthIDToken = tokens.id_token
-        _oauthAccountID = preferredAccountID ?? metadata.accountID
+        _oauthAccountID = nextAccountID
         _oauthPlanType = metadata.planType
         _oauthExpiresAt = metadata.expiresAt ?? Date().addingTimeInterval(Double(tokens.expires_in ?? 3600))
 
@@ -2939,6 +3042,60 @@ struct OpenAIFetchedModel: Codable, Sendable {
     }
 }
 
+struct OpenAIChatGPTModel: Codable, Sendable {
+    let id: String
+    let displayName: String
+    let priority: Int
+    let visibility: String?
+
+    var isVisibleInPicker: Bool {
+        visibility?.lowercased() == "list" || visibility == nil
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case id = "slug"
+        case displayName = "display_name"
+        case priority
+        case visibility
+    }
+
+    init(
+        id: String,
+        displayName: String,
+        priority: Int,
+        visibility: String?
+    ) {
+        self.id = id
+        self.displayName = displayName
+        self.priority = priority
+        self.visibility = visibility
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(String.self, forKey: .id)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let decodedDisplayName = try container.decodeIfPresent(String.self, forKey: .displayName)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if let decodedDisplayName, !decodedDisplayName.isEmpty {
+            displayName = decodedDisplayName
+        } else {
+            displayName = id
+        }
+        priority = try container.decodeIfPresent(Int.self, forKey: .priority) ?? Int.max
+        visibility = try container.decodeIfPresent(String.self, forKey: .visibility)
+    }
+}
+
+private struct OpenAIChatGPTModelsResponse: Decodable, Sendable {
+    let models: [OpenAIChatGPTModel]
+}
+
+struct OpenAIChatGPTModelCache: Codable, Sendable {
+    let accountID: String?
+    let models: [OpenAIChatGPTModel]
+}
+
 // MARK: - Settings View
 
 private struct OpenAISettingsView: View {
@@ -2982,6 +3139,9 @@ private struct OpenAISettingsView: View {
                     llmRefreshMessage = nil
                     oauthErrorMessage = nil
                     oauthStatusMessage = nil
+                    if plugin.isAvailable {
+                        refreshLLMModels(showStatus: false)
+                    }
                 }
             }
 
@@ -3081,7 +3241,7 @@ private struct OpenAISettingsView: View {
             llmTemperatureMode = plugin.llmTemperatureMode
             llmTemperatureValue = plugin.llmTemperatureValue
             fetchedLLMModels = plugin._fetchedLLMModels
-            if authMode == .apiKey, plugin.isConfigured {
+            if plugin.isAvailable {
                 refreshLLMModels(showStatus: false)
             }
         }
@@ -3435,6 +3595,7 @@ private struct OpenAISettingsView: View {
                     oauthStatusMessage = String(localized: "ChatGPT login connected.", bundle: bundle)
                     selectedLLMModel = plugin.selectedLLMModelId ?? plugin.supportedModels.first?.id ?? ""
                     selectedReasoningEffort = plugin.reasoningEffort
+                    refreshLLMModels(showStatus: false)
                 }
             } catch {
                 await MainActor.run {
@@ -3454,6 +3615,7 @@ private struct OpenAISettingsView: View {
             oauthStatusMessage = String(localized: "Imported your existing Codex login.", bundle: bundle)
             selectedLLMModel = plugin.selectedLLMModelId ?? plugin.supportedModels.first?.id ?? ""
             selectedReasoningEffort = plugin.reasoningEffort
+            refreshLLMModels(showStatus: false)
         } catch {
             oauthErrorMessage = error.localizedDescription
         }

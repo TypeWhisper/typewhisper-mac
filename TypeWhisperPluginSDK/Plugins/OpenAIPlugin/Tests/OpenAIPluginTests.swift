@@ -80,13 +80,17 @@ final class OpenAIPluginTests: XCTestCase {
         XCTAssertTrue(plugin.supportedModels.contains { $0.id == "gpt-5.5" })
     }
 
-    func testOpenAIChatGPTLoginModelsIncludeGPT55First() throws {
+    func testOpenAIChatGPTLoginFallbackIncludesCurrentGPT56Models() throws {
         let host = try PluginTestHostServices(defaults: ["authMode": "chatgpt"])
         let plugin = OpenAIPlugin()
         plugin.activate(host: host)
 
-        XCTAssertEqual(plugin.supportedModels.first?.id, "gpt-5.5")
-        XCTAssertEqual(plugin.selectedLLMModelId, "gpt-5.5")
+        XCTAssertEqual(
+            Array(plugin.supportedModels.prefix(3).map(\.id)),
+            ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"]
+        )
+        XCTAssertEqual(plugin.selectedLLMModelId, "gpt-5.6-sol")
+        XCTAssertTrue(plugin.supportedModels.contains { $0.id == "gpt-5.5" })
     }
 
     func testOpenAIChatGPTLoginOnlyMakesLLMAuthRoleAvailable() throws {
@@ -862,25 +866,177 @@ final class OpenAIPluginTests: XCTestCase {
         )
     }
 
-    func testOpenAIRefreshAvailableLLMModelsUsesChatGPTCatalogWithoutModelsEndpoint() async throws {
-        let host = try PluginTestHostServices(defaults: [
-            "authMode": "chatgpt",
-            "selectedLLMModel": "stale-model",
-        ])
+    func testOpenAIChatGPTModelsRequestUsesAccountScopedCodexEndpoint() throws {
+        let request = try OpenAIPlugin.makeChatGPTModelsRequest(
+            accessToken: "oauth-token",
+            accountID: "account-123",
+            clientVersion: "1.3.0"
+        )
+
+        XCTAssertEqual(request.httpMethod, "GET")
+        XCTAssertEqual(request.url?.host, "chatgpt.com")
+        XCTAssertEqual(request.url?.path, "/backend-api/codex/models")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer oauth-token")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "ChatGPT-Account-ID"), "account-123")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Accept"), "application/json")
+
+        let components = try XCTUnwrap(
+            URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false)
+        )
+        let query = Dictionary(
+            uniqueKeysWithValues: (components.queryItems ?? []).map { ($0.name, $0.value ?? "") }
+        )
+        XCTAssertEqual(query["client_version"], "1.3.0")
+    }
+
+    func testOpenAIRefreshAvailableLLMModelsFetchesFutureChatGPTCatalogAndPersistsSelection() async throws {
+        let host = try PluginTestHostServices(
+            defaults: [
+                "authMode": "chatgpt",
+                "selectedLLMModel": "gpt-5.6-sol",
+                "oauthAccountID": "account-123",
+                "oauthExpiresAt": Date().addingTimeInterval(3_600),
+            ],
+            secrets: [
+                "oauth-access-token": "oauth-token",
+                "oauth-refresh-token": "refresh-token",
+            ]
+        )
         let plugin = OpenAIPlugin()
         plugin.activate(host: host)
 
         let store = PluginHTTPClientSessionStore()
         PluginHTTPClientTestHarness.configure { _ in
-            store.makeSession(outcomes: [.failure(URLError(.badURL))])
+            store.makeSession(outcomes: [
+                .success(
+                    Data(
+                        """
+                        {
+                          "models": [
+                            {
+                              "slug": "gpt-hidden",
+                              "display_name": "Hidden",
+                              "priority": 0,
+                              "visibility": "hide"
+                            },
+                            {
+                              "slug": "gpt-5.6-sol",
+                              "display_name": "GPT-5.6 Sol",
+                              "priority": 2,
+                              "visibility": "list"
+                            },
+                            {
+                              "slug": "gpt-5.7",
+                              "display_name": "GPT-5.7",
+                              "priority": 1,
+                              "visibility": "list"
+                            },
+                            {
+                              "slug": "gpt-internal",
+                              "display_name": "Internal",
+                              "priority": 3,
+                              "visibility": "none"
+                            }
+                          ]
+                        }
+                        """.utf8
+                    ),
+                    Self.httpResponse(
+                        url: "https://chatgpt.com/backend-api/codex/models",
+                        statusCode: 200
+                    )
+                ),
+            ])
         }
 
         let models = await plugin.refreshAvailableLLMModels()
 
-        XCTAssertEqual(models.first?.id, "gpt-5.5")
+        XCTAssertEqual(models.map(\.id), ["gpt-5.7", "gpt-5.6-sol"])
+        XCTAssertEqual(models.map(\.displayName), ["GPT-5.7", "GPT-5.6 Sol"])
+        XCTAssertEqual(plugin.supportedModels.map(\.id), ["gpt-5.7", "gpt-5.6-sol"])
+        XCTAssertEqual(plugin.selectedLLMModelId, "gpt-5.6-sol")
+        XCTAssertEqual(host.userDefault(forKey: "selectedLLMModel") as? String, "gpt-5.6-sol")
+
+        let request = try XCTUnwrap(store.sessions.first?.requestedRequests.first)
+        XCTAssertEqual(request.url?.path, "/backend-api/codex/models")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer oauth-token")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "ChatGPT-Account-ID"), "account-123")
+        let components = try XCTUnwrap(
+            URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false)
+        )
+        XCTAssertFalse(
+            components.queryItems?
+                .first(where: { $0.name == "client_version" })?
+                .value?
+                .isEmpty ?? true
+        )
+
+        let cachedData = try XCTUnwrap(host.userDefault(forKey: "fetchedChatGPTModels") as? Data)
+        let cache = try JSONDecoder().decode(OpenAIChatGPTModelCache.self, from: cachedData)
+        XCTAssertEqual(cache.accountID, "account-123")
+        XCTAssertEqual(cache.models.map(\.id), ["gpt-5.7", "gpt-5.6-sol"])
+
+        let restoredPlugin = OpenAIPlugin()
+        restoredPlugin.activate(host: host)
+        XCTAssertEqual(restoredPlugin.supportedModels.map(\.id), ["gpt-5.7", "gpt-5.6-sol"])
+        XCTAssertEqual(restoredPlugin.selectedLLMModelId, "gpt-5.6-sol")
+    }
+
+    func testOpenAIChatGPTModelRefreshFailureKeepsFallbackAndSelection() async throws {
+        let host = try PluginTestHostServices(
+            defaults: [
+                "authMode": "chatgpt",
+                "selectedLLMModel": "gpt-5.5",
+                "oauthAccountID": "account-123",
+                "oauthExpiresAt": Date().addingTimeInterval(3_600),
+            ],
+            secrets: [
+                "oauth-access-token": "oauth-token",
+                "oauth-refresh-token": "refresh-token",
+            ]
+        )
+        let plugin = OpenAIPlugin()
+        plugin.activate(host: host)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [.failure(URLError(.cannotConnectToHost))])
+        }
+
+        let models = await plugin.refreshAvailableLLMModels()
+
+        XCTAssertTrue(models.isEmpty)
+        XCTAssertEqual(plugin.supportedModels.first?.id, "gpt-5.6-sol")
         XCTAssertEqual(plugin.selectedLLMModelId, "gpt-5.5")
         XCTAssertEqual(host.userDefault(forKey: "selectedLLMModel") as? String, "gpt-5.5")
-        XCTAssertTrue(store.sessions.isEmpty)
+        XCTAssertEqual(store.sessions.first?.requestedPaths, ["/backend-api/codex/models"])
+    }
+
+    func testOpenAIChatGPTModelCacheIsScopedToAccount() throws {
+        let cache = OpenAIChatGPTModelCache(
+            accountID: "old-account",
+            models: [
+                OpenAIChatGPTModel(
+                    id: "gpt-5.7",
+                    displayName: "GPT-5.7",
+                    priority: 1,
+                    visibility: "list"
+                ),
+            ]
+        )
+        let host = try PluginTestHostServices(defaults: [
+            "authMode": "chatgpt",
+            "selectedLLMModel": "gpt-5.5",
+            "oauthAccountID": "new-account",
+            "fetchedChatGPTModels": try JSONEncoder().encode(cache),
+        ])
+        let plugin = OpenAIPlugin()
+
+        plugin.activate(host: host)
+
+        XCTAssertEqual(plugin.supportedModels.first?.id, "gpt-5.6-sol")
+        XCTAssertFalse(plugin.supportedModels.contains { $0.id == "gpt-5.7" })
+        XCTAssertEqual(plugin.selectedLLMModelId, "gpt-5.5")
     }
 
     private static func testAudio() -> AudioData {
