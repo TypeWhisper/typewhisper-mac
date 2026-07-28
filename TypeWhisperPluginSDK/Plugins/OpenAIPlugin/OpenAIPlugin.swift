@@ -705,7 +705,7 @@ struct OpenAIRealtimeTranscriptionConfiguration: Sendable {
     let delay: OpenAILiveTranscriptionDelay?
 
     var usesContextAwareHints: Bool {
-        modelID == OpenAITranscriptionModelCapability.gptLiveTranscribeModelID
+        OpenAITranscriptionModelCapability.capability(for: modelID)?.usesContextAwareHints ?? false
     }
 
     var fallbackLanguage: String? {
@@ -751,6 +751,7 @@ private struct OpenAIContextAwareFileTranscriptionClient: Sendable {
     func transcribe(
         audio: AudioData,
         apiKey: String,
+        modelID: String,
         prompt: String?,
         keywords: [String],
         languages: [String]
@@ -759,6 +760,7 @@ private struct OpenAIContextAwareFileTranscriptionClient: Sendable {
             try await performTranscription(
                 uploadFile: uploadFile,
                 apiKey: apiKey,
+                modelID: modelID,
                 prompt: prompt,
                 keywords: keywords,
                 languages: languages
@@ -769,6 +771,7 @@ private struct OpenAIContextAwareFileTranscriptionClient: Sendable {
     private func performTranscription(
         uploadFile: PluginAudioUploadFile,
         apiKey: String,
+        modelID: String,
         prompt: String?,
         keywords: [String],
         languages: [String]
@@ -797,7 +800,7 @@ private struct OpenAIContextAwareFileTranscriptionClient: Sendable {
         body.appendOpenAIFormField(
             boundary: boundary,
             name: "model",
-            value: OpenAITranscriptionModelCapability.gptTranscribeModelID
+            value: modelID
         )
         body.appendOpenAIFormField(boundary: boundary, name: "response_format", value: "json")
 
@@ -1041,7 +1044,6 @@ private final class OpenAIRealtimeWebSocketDelegate: NSObject, URLSessionWebSock
 
 final class OpenAIRealtimeTranscriptionSession: LiveTranscriptionSession, @unchecked Sendable {
     static let modelId = OpenAITranscriptionModelCapability.legacyRealtimeModelID
-    static let liveModelId = OpenAITranscriptionModelCapability.gptLiveTranscribeModelID
     static let sourceSampleRate = 16_000
     static let targetSampleRate = 24_000
     static let socketOpenTimeoutNanoseconds: UInt64 = 10_000_000_000
@@ -2085,6 +2087,7 @@ final class OpenAIPlugin: NSObject,
             return try await contextAwareFileTranscriptionClient.transcribe(
                 audio: audio,
                 apiKey: apiKey,
+                modelID: capability.modelInfo.id,
                 prompt: normalizedTranscriptionContext,
                 keywords: Self.normalizedKeywords(from: dictionaryTermHints),
                 languages: OpenAIRealtimeTranscriptionConfiguration.normalizedLanguages(
@@ -3179,7 +3182,10 @@ private struct OpenAISettingsView: View {
                             .font(.subheadline.weight(.medium))
 
                         TextField(
-                            "Describe the recording topic, setting, or relevant context.",
+                            String(
+                                localized: "Describe the recording topic, setting, or relevant context.",
+                                bundle: bundle
+                            ),
                             text: $transcriptionContext,
                             axis: .vertical
                         )
@@ -3194,7 +3200,8 @@ private struct OpenAISettingsView: View {
                             .foregroundStyle(.secondary)
                     }
 
-                    if selectedModel == OpenAIRealtimeTranscriptionSession.liveModelId {
+                    if plugin.transcriptionModelIsRealtime(selectedModel)
+                        && plugin.transcriptionModelUsesContextAwareHints(selectedModel) {
                         Picker("Live Transcription Delay", selection: $liveTranscriptionDelay) {
                             ForEach(OpenAILiveTranscriptionDelay.allCases, id: \.self) { delay in
                                 Text(LocalizedStringKey(delay.displayName), bundle: bundle).tag(delay)
