@@ -81,6 +81,7 @@ struct PremiumSettingsView: View {
                         }
                         .disabled(premiumAccount.isWorking)
                         Button(String(localized: "Delete Account"), role: .destructive) { confirmingAccountDeletion = true }
+                            .disabled(premiumAccount.isWorking)
                     }
                 } else {
                     AppKitSignInWithAppleButton {

@@ -478,15 +478,20 @@ final class PremiumAccountService: ObservableObject {
         if let commercialLicenseProof,
            !commercialLicenseProof.key.isEmpty,
            !commercialLicenseProof.activationId.isEmpty {
-            let response: EntitlementResponse = try await request(
-                path: "/v1/entitlements/polar/device/attach",
-                method: "POST",
-                body: try encoder.encode([
-                    "licenseKey": commercialLicenseProof.key,
-                    "activationId": commercialLicenseProof.activationId,
-                ])
-            )
-            try acceptEntitlement(response.entitlement)
+            do {
+                let response: EntitlementResponse = try await request(
+                    path: "/v1/entitlements/polar/device/attach",
+                    method: "POST",
+                    body: try encoder.encode([
+                        "licenseKey": commercialLicenseProof.key,
+                        "activationId": commercialLicenseProof.activationId,
+                    ])
+                )
+                try acceptEntitlement(response.entitlement)
+            } catch {
+                clearAuthorizationState()
+                throw error
+            }
         } else {
             try await refresh()
         }

@@ -73,10 +73,15 @@ private final class InMemoryUserDataSyncStore: UserDataSyncStore, @unchecked Sen
 
 private actor PremiumAccountHTTPRecorder {
     private let responses: [String: String]
+    private let statusCodes: [String: Int]
     private(set) var requests: [URLRequest] = []
 
-    init(responses: [String: String]) {
+    init(
+        responses: [String: String],
+        statusCodes: [String: Int] = [:]
+    ) {
         self.responses = responses
+        self.statusCodes = statusCodes
     }
 
     func execute(_ request: URLRequest) throws -> (Data, URLResponse) {
@@ -86,7 +91,7 @@ private actor PremiumAccountHTTPRecorder {
               let url = request.url,
               let response = HTTPURLResponse(
                   url: url,
-                  statusCode: 200,
+                  statusCode: statusCodes[path] ?? 200,
                   httpVersion: "HTTP/1.1",
                   headerFields: ["Content-Type": "application/json"]
               ) else {
@@ -415,6 +420,71 @@ final class CloudFolderSyncTests: XCTestCase {
             "/v1/entitlements/polar/device/current"
         )
         XCTAssertEqual(finalRequests.last?.httpMethod, "DELETE")
+    }
+
+    @MainActor
+    func testPremiumAccountRollsBackSessionWhenPolarAttachmentFails() async throws {
+        let suiteName = "PremiumAppleWebAuthAttachFailure-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let recorder = PremiumAccountHTTPRecorder(
+            responses: [
+                "/v1/auth/apple/web/start": """
+                {
+                  "authorizationURL": "https://appleid.apple.com/auth/authorize?state=server-state",
+                  "state": "server-state",
+                  "expiresAt": "2099-07-19T12:10:00.000Z"
+                }
+                """,
+                "/v1/auth/apple/web/exchange": """
+                {"accessToken": "account-token", "entitlement": null}
+                """,
+                "/v1/entitlements/polar/device/attach": """
+                {"error": "Polar activation could not be attached."}
+                """,
+            ],
+            statusCodes: [
+                "/v1/entitlements/polar/device/attach": 503,
+            ]
+        )
+        let authenticator = PremiumAppleWebAuthenticator(
+            callbackURL: try XCTUnwrap(URL(
+                string: "typewhisper://premium-auth/callback?state=server-state&code=exchange-code"
+            ))
+        )
+        let service = PremiumAccountService(
+            defaults: defaults,
+            baseURL: URL(string: "https://app.typewhisper.com"),
+            requestExecutor: { request in try await recorder.execute(request) },
+            appleWebAuthenticator: authenticator,
+            keychainService: suiteName,
+            isSignedInOverride: false,
+            automaticallyRefresh: false
+        )
+        defer { service.signOut() }
+
+        await service.signInWithApple(
+            commercialLicenseProof: CommercialLicenseLinkProof(
+                key: "polar-license",
+                activationId: "polar-activation"
+            )
+        )
+
+        XCTAssertFalse(service.isSignedIn)
+        XCTAssertNil(service.entitlement)
+        XCTAssertEqual(
+            service.errorMessage,
+            "Polar activation could not be attached."
+        )
+        let requests = await recorder.recordedRequests()
+        XCTAssertEqual(
+            requests.compactMap(\.url?.path),
+            [
+                "/v1/auth/apple/web/start",
+                "/v1/auth/apple/web/exchange",
+                "/v1/entitlements/polar/device/attach",
+            ]
+        )
     }
 
     @MainActor
