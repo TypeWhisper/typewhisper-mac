@@ -119,6 +119,26 @@ struct SonioxRegion: Sendable, Hashable, Identifiable {
     }
 }
 
+private struct SonioxAsyncTranscriptionRequest: Sendable {
+    let region: SonioxRegion
+    let modelID: String
+    let language: String?
+    let languageHints: [String]
+    let translate: Bool
+    let apiKey: String
+    let prompt: String?
+}
+
+private struct SonioxUploadedAudio: Sendable {
+    let fileID: String
+    let format: String
+}
+
+private struct SonioxAsyncJobFailure: Error, Sendable {
+    let errorType: String?
+    let transcriptionError: PluginTranscriptionError
+}
+
 struct SonioxFetchedLanguage: Codable, Equatable, Sendable {
     let code: String
     let name: String?
@@ -1345,30 +1365,76 @@ final class SonioxPlugin: NSObject,
         apiKey: String,
         prompt: String?
     ) async throws -> PluginTranscriptionResult {
-        let fileId = try await PluginAudioUploadEncoder.withCompressedM4AUploadWavFallback(from: audio) { upload in
-            try await uploadFile(uploadFile: upload, apiKey: apiKey)
-        }
-        let transcriptionId = try await createTranscription(
-            fileId: fileId,
+        let request = SonioxAsyncTranscriptionRequest(
+            region: _selectedRegion,
+            modelID: effectiveAsyncModelId,
             language: language,
             languageHints: languageHints,
             translate: translate,
             apiKey: apiKey,
             prompt: prompt
         )
-        try await pollUntilCompleted(id: transcriptionId, apiKey: apiKey)
-        return try await fetchTranscript(id: transcriptionId, apiKey: apiKey, language: language)
+        let uploadAudio = PluginAudioUploadEncoder.normalizedAudioForUpload(audio)
+
+        do {
+            let uploadedAudio = try await PluginAudioUploadEncoder.withCompressedM4AUploadWavFallback(
+                from: uploadAudio
+            ) { upload in
+                SonioxUploadedAudio(
+                    fileID: try await uploadFile(uploadFile: upload, request: request),
+                    format: upload.format
+                )
+            }
+
+            do {
+                return try await completeRESTTransaction(
+                    fileID: uploadedAudio.fileID,
+                    request: request
+                )
+            } catch let failure as SonioxAsyncJobFailure
+                where uploadedAudio.format == "m4a" && failure.errorType == "invalid_audio_file" {
+                return try await transcribeRESTTransaction(
+                    uploadFile: PluginAudioUploadEncoder.wavUpload(from: uploadAudio),
+                    request: request
+                )
+            }
+        } catch let failure as SonioxAsyncJobFailure {
+            throw failure.transcriptionError
+        }
     }
 
-    private func uploadFile(uploadFile: PluginAudioUploadFile, apiKey: String) async throws -> String {
-        guard let url = URL(string: "\(_selectedRegion.apiBaseURL)/v1/files") else {
+    private func transcribeRESTTransaction(
+        uploadFile upload: PluginAudioUploadFile,
+        request configuration: SonioxAsyncTranscriptionRequest
+    ) async throws -> PluginTranscriptionResult {
+        let fileID = try await uploadFile(uploadFile: upload, request: configuration)
+        return try await completeRESTTransaction(fileID: fileID, request: configuration)
+    }
+
+    private func completeRESTTransaction(
+        fileID: String,
+        request configuration: SonioxAsyncTranscriptionRequest
+    ) async throws -> PluginTranscriptionResult {
+        let transcriptionID = try await createTranscription(
+            fileID: fileID,
+            request: configuration
+        )
+        try await pollUntilCompleted(id: transcriptionID, request: configuration)
+        return try await fetchTranscript(id: transcriptionID, request: configuration)
+    }
+
+    private func uploadFile(
+        uploadFile: PluginAudioUploadFile,
+        request configuration: SonioxAsyncTranscriptionRequest
+    ) async throws -> String {
+        guard let url = URL(string: "\(configuration.region.apiBaseURL)/v1/files") else {
             throw PluginTranscriptionError.apiError("Invalid upload URL")
         }
 
         let boundary = UUID().uuidString
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("Bearer \(configuration.apiKey)", forHTTPHeaderField: "Authorization")
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = 120
 
@@ -1405,22 +1471,18 @@ final class SonioxPlugin: NSObject,
     }
 
     private func createTranscription(
-        fileId: String,
-        language: String?,
-        languageHints: [String] = [],
-        translate: Bool,
-        apiKey: String,
-        prompt: String?
+        fileID: String,
+        request configuration: SonioxAsyncTranscriptionRequest
     ) async throws -> String {
         let request = try Self.makeCreateTranscriptionRequest(
-            fileId: fileId,
-            language: language,
-            languageHints: languageHints,
-            translate: translate,
-            apiKey: apiKey,
-            prompt: prompt,
-            modelID: effectiveAsyncModelId,
-            regionID: _selectedRegion.id
+            fileId: fileID,
+            language: configuration.language,
+            languageHints: configuration.languageHints,
+            translate: configuration.translate,
+            apiKey: configuration.apiKey,
+            prompt: configuration.prompt,
+            modelID: configuration.modelID,
+            regionID: configuration.region.id
         )
 
         let (data, response) = try await PluginHTTPClient.data(for: request)
@@ -1860,13 +1922,16 @@ final class SonioxPlugin: NSObject,
         return "en"
     }
 
-    private func pollUntilCompleted(id: String, apiKey: String) async throws {
-        guard let url = URL(string: "\(_selectedRegion.apiBaseURL)/v1/transcriptions/\(id)") else {
+    private func pollUntilCompleted(
+        id: String,
+        request configuration: SonioxAsyncTranscriptionRequest
+    ) async throws {
+        guard let url = URL(string: "\(configuration.region.apiBaseURL)/v1/transcriptions/\(id)") else {
             throw PluginTranscriptionError.apiError("Invalid poll URL")
         }
 
         var request = URLRequest(url: url)
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("Bearer \(configuration.apiKey)", forHTTPHeaderField: "Authorization")
         request.timeoutInterval = 15
 
         for _ in 0..<300 {
@@ -1901,7 +1966,10 @@ final class SonioxPlugin: NSObject,
                     logger.error("Soniox transcription failed, full response: \(responseStr)")
                     errorMsg = "Transcription failed (status: \(status))"
                 }
-                throw PluginTranscriptionError.apiError(errorMsg)
+                throw SonioxAsyncJobFailure(
+                    errorType: json["error_type"] as? String,
+                    transcriptionError: PluginTranscriptionError.apiError(errorMsg)
+                )
             default:
                 continue
             }
@@ -1910,13 +1978,16 @@ final class SonioxPlugin: NSObject,
         throw PluginTranscriptionError.apiError("Transcription timed out after 5 minutes")
     }
 
-    private func fetchTranscript(id: String, apiKey: String, language: String?) async throws -> PluginTranscriptionResult {
-        guard let url = URL(string: "\(_selectedRegion.apiBaseURL)/v1/transcriptions/\(id)/transcript") else {
+    private func fetchTranscript(
+        id: String,
+        request configuration: SonioxAsyncTranscriptionRequest
+    ) async throws -> PluginTranscriptionResult {
+        guard let url = URL(string: "\(configuration.region.apiBaseURL)/v1/transcriptions/\(id)/transcript") else {
             throw PluginTranscriptionError.apiError("Invalid transcript URL")
         }
 
         var request = URLRequest(url: url)
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("Bearer \(configuration.apiKey)", forHTTPHeaderField: "Authorization")
         request.timeoutInterval = 30
 
         let (data, response) = try await PluginHTTPClient.data(for: request)
@@ -1948,7 +2019,7 @@ final class SonioxPlugin: NSObject,
             text = json["text"] as? String ?? ""
         }
 
-        return PluginTranscriptionResult(text: text, detectedLanguage: language)
+        return PluginTranscriptionResult(text: text, detectedLanguage: configuration.language)
     }
 
     // MARK: - Audio Conversion

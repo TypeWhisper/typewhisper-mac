@@ -414,6 +414,262 @@ final class SonioxPluginTests: XCTestCase {
         XCTAssertEqual(context["terms"] as? [String], ["TypeWhisper"])
     }
 
+    func testSourceProgressTranscriptionRetriesCompleteTransactionWithWavWhenM4AJobFails() async throws {
+        let models = [
+            SonioxFetchedModel(
+                id: "stt-async-v6",
+                aliasedModelId: nil,
+                name: "STT Async v6",
+                transcriptionMode: "async",
+                languages: []
+            ),
+        ]
+        let host = try PluginTestHostServices(
+            defaults: [
+                "selectedRegion": "eu",
+                "fetchedModels": try JSONEncoder().encode(models),
+            ],
+            secrets: ["api-key": "soniox-key"]
+        )
+        let plugin = SonioxPlugin()
+        plugin.activate(host: host)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"id":"file_m4a"}"#.utf8),
+                    Self.httpResponse(url: "https://api.eu.soniox.com/v1/files", statusCode: 201)
+                ),
+                .success(
+                    Data(#"{"id":"transcription_m4a"}"#.utf8),
+                    Self.httpResponse(url: "https://api.eu.soniox.com/v1/transcriptions", statusCode: 201)
+                ),
+                .success(
+                    Data(
+                        #"{"status":"failed","error_type":"invalid_audio_file","error_message":"M4A rejected"}"#.utf8
+                    ),
+                    Self.httpResponse(
+                        url: "https://api.eu.soniox.com/v1/transcriptions/transcription_m4a",
+                        statusCode: 200
+                    )
+                ),
+                .success(
+                    Data(#"{"id":"file_wav"}"#.utf8),
+                    Self.httpResponse(url: "https://api.eu.soniox.com/v1/files", statusCode: 201)
+                ),
+                .success(
+                    Data(#"{"id":"transcription_wav"}"#.utf8),
+                    Self.httpResponse(url: "https://api.eu.soniox.com/v1/transcriptions", statusCode: 201)
+                ),
+                .success(
+                    Data(#"{"status":"completed"}"#.utf8),
+                    Self.httpResponse(
+                        url: "https://api.eu.soniox.com/v1/transcriptions/transcription_wav",
+                        statusCode: 200
+                    )
+                ),
+                .success(
+                    Data(#"{"text":"WAV transaction transcript"}"#.utf8),
+                    Self.httpResponse(
+                        url: "https://api.eu.soniox.com/v1/transcriptions/transcription_wav/transcript",
+                        statusCode: 200
+                    )
+                ),
+            ])
+        }
+
+        let samples = [Float](repeating: 0.1, count: 16_000)
+        let audio = AudioData(samples: samples, wavData: PluginWavEncoder.encode(samples), duration: 1.0)
+        let result = try await plugin.transcribe(
+            audio: audio,
+            languageSelection: PluginLanguageSelection(
+                requestedLanguage: "de",
+                languageHints: ["de", "en"]
+            ),
+            translate: true,
+            prompt: "TypeWhisper",
+            onProgress: { _ in true },
+            onSourceProgress: { _ in true }
+        )
+
+        XCTAssertEqual(result.text, "WAV transaction transcript")
+        XCTAssertEqual(result.detectedLanguage, "de")
+
+        let requests = try XCTUnwrap(store.sessions.first?.requestedRequests)
+        XCTAssertEqual(requests.map { $0.url?.path }, [
+            "/v1/files",
+            "/v1/transcriptions",
+            "/v1/transcriptions/transcription_m4a",
+            "/v1/files",
+            "/v1/transcriptions",
+            "/v1/transcriptions/transcription_wav",
+            "/v1/transcriptions/transcription_wav/transcript",
+        ])
+        XCTAssertTrue(requests.allSatisfy { $0.url?.host == "api.eu.soniox.com" })
+
+        let firstUploadBody = String(decoding: try XCTUnwrap(requests[0].httpBody), as: UTF8.self)
+        XCTAssertTrue(firstUploadBody.contains(#"filename="audio.m4a""#))
+        XCTAssertTrue(firstUploadBody.contains("Content-Type: audio/mp4"))
+
+        let retryUploadBody = String(decoding: try XCTUnwrap(requests[3].httpBody), as: UTF8.self)
+        XCTAssertTrue(retryUploadBody.contains(#"filename="audio.wav""#))
+        XCTAssertTrue(retryUploadBody.contains("Content-Type: audio/wav"))
+
+        XCTAssertEqual(requests[1].value(forHTTPHeaderField: "Authorization"), "Bearer soniox-key")
+        XCTAssertEqual(requests[4].value(forHTTPHeaderField: "Authorization"), "Bearer soniox-key")
+
+        var firstCreateBody = try Self.jsonBody(from: requests[1])
+        var retryCreateBody = try Self.jsonBody(from: requests[4])
+        XCTAssertEqual(firstCreateBody.removeValue(forKey: "file_id") as? String, "file_m4a")
+        XCTAssertEqual(retryCreateBody.removeValue(forKey: "file_id") as? String, "file_wav")
+        XCTAssertTrue(NSDictionary(dictionary: firstCreateBody).isEqual(to: retryCreateBody))
+
+        XCTAssertEqual(firstCreateBody["model"] as? String, "stt-async-v6")
+        XCTAssertEqual(firstCreateBody["language_hints"] as? [String], ["de", "en"])
+        let context = try XCTUnwrap(firstCreateBody["context"] as? [String: Any])
+        XCTAssertEqual(context["terms"] as? [String], ["TypeWhisper"])
+        let translation = try XCTUnwrap(firstCreateBody["translation"] as? [String: Any])
+        XCTAssertEqual(translation["type"] as? String, "one_way")
+        XCTAssertEqual(translation["target_language"] as? String, "en")
+    }
+
+    func testSourceProgressTranscriptionDoesNotRetryOtherAsyncJobFailures() async throws {
+        let host = try PluginTestHostServices(secrets: ["api-key": "soniox-key"])
+        let plugin = SonioxPlugin()
+        plugin.activate(host: host)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"id":"file_m4a"}"#.utf8),
+                    Self.httpResponse(url: "https://api.soniox.com/v1/files", statusCode: 201)
+                ),
+                .success(
+                    Data(#"{"id":"transcription_m4a"}"#.utf8),
+                    Self.httpResponse(url: "https://api.soniox.com/v1/transcriptions", statusCode: 201)
+                ),
+                .success(
+                    Data(
+                        #"{"status":"error","error_type":"organization_monthly_budget_exhausted","error_message":"Monthly budget exhausted"}"#.utf8
+                    ),
+                    Self.httpResponse(
+                        url: "https://api.soniox.com/v1/transcriptions/transcription_m4a",
+                        statusCode: 200
+                    )
+                ),
+            ])
+        }
+
+        do {
+            _ = try await plugin.transcribe(
+                audio: AudioData(samples: [0], wavData: Data("wav".utf8), duration: 1),
+                languageSelection: PluginLanguageSelection(languageHints: ["en"]),
+                translate: false,
+                prompt: nil,
+                onProgress: { _ in true },
+                onSourceProgress: { _ in true }
+            )
+            XCTFail("Expected the Soniox job failure")
+        } catch {
+            XCTAssertEqual(
+                (error as? PluginTranscriptionError)?.localizedDescription,
+                "API error: Monthly budget exhausted"
+            )
+        }
+
+        let requests = try XCTUnwrap(store.sessions.first?.requestedRequests)
+        XCTAssertEqual(requests.map { $0.url?.path }, [
+            "/v1/files",
+            "/v1/transcriptions",
+            "/v1/transcriptions/transcription_m4a",
+        ])
+        let uploadBody = String(decoding: try XCTUnwrap(requests[0].httpBody), as: UTF8.self)
+        XCTAssertTrue(uploadBody.contains(#"filename="audio.m4a""#))
+    }
+
+    func testSourceProgressTranscriptionSurfacesWavJobFailureWithoutThirdAttempt() async throws {
+        let host = try PluginTestHostServices(secrets: ["api-key": "soniox-key"])
+        let plugin = SonioxPlugin()
+        plugin.activate(host: host)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"id":"file_m4a"}"#.utf8),
+                    Self.httpResponse(url: "https://api.soniox.com/v1/files", statusCode: 201)
+                ),
+                .success(
+                    Data(#"{"id":"transcription_m4a"}"#.utf8),
+                    Self.httpResponse(url: "https://api.soniox.com/v1/transcriptions", statusCode: 201)
+                ),
+                .success(
+                    Data(
+                        #"{"status":"failed","error_type":"invalid_audio_file","error_message":"M4A rejected"}"#.utf8
+                    ),
+                    Self.httpResponse(
+                        url: "https://api.soniox.com/v1/transcriptions/transcription_m4a",
+                        statusCode: 200
+                    )
+                ),
+                .success(
+                    Data(#"{"id":"file_wav"}"#.utf8),
+                    Self.httpResponse(url: "https://api.soniox.com/v1/files", statusCode: 201)
+                ),
+                .success(
+                    Data(#"{"id":"transcription_wav"}"#.utf8),
+                    Self.httpResponse(url: "https://api.soniox.com/v1/transcriptions", statusCode: 201)
+                ),
+                .success(
+                    Data(
+                        #"{"status":"failed","error_type":"invalid_audio_file","error_message":"WAV rejected too"}"#.utf8
+                    ),
+                    Self.httpResponse(
+                        url: "https://api.soniox.com/v1/transcriptions/transcription_wav",
+                        statusCode: 200
+                    )
+                ),
+            ])
+        }
+
+        let samples = [Float](repeating: 0.1, count: 16_000)
+        do {
+            _ = try await plugin.transcribe(
+                audio: AudioData(
+                    samples: samples,
+                    wavData: PluginWavEncoder.encode(samples),
+                    duration: 1.0
+                ),
+                languageSelection: PluginLanguageSelection(languageHints: ["en"]),
+                translate: false,
+                prompt: nil,
+                onProgress: { _ in true },
+                onSourceProgress: { _ in true }
+            )
+            XCTFail("Expected the WAV job failure")
+        } catch {
+            XCTAssertEqual(
+                (error as? PluginTranscriptionError)?.localizedDescription,
+                "API error: WAV rejected too"
+            )
+        }
+
+        let requests = try XCTUnwrap(store.sessions.first?.requestedRequests)
+        XCTAssertEqual(requests.map { $0.url?.path }, [
+            "/v1/files",
+            "/v1/transcriptions",
+            "/v1/transcriptions/transcription_m4a",
+            "/v1/files",
+            "/v1/transcriptions",
+            "/v1/transcriptions/transcription_wav",
+        ])
+        let retryUploadBody = String(decoding: try XCTUnwrap(requests[3].httpBody), as: UTF8.self)
+        XCTAssertTrue(retryUploadBody.contains(#"filename="audio.wav""#))
+        XCTAssertTrue(retryUploadBody.contains("Content-Type: audio/wav"))
+    }
+
     func testSourceProgressTranscriptionUsesSelectedRegionalRESTPath() async throws {
         let host = try PluginTestHostServices(
             defaults: ["selectedRegion": "eu"],
