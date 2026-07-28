@@ -145,6 +145,22 @@
         }
       }
     },
+    "Describe the recording topic, setting, or relevant context.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Beschreiben Sie Thema, Umgebung oder relevanten Kontext der Aufnahme."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "録音のトピック、状況、または関連するコンテキストを説明します。"
+          }
+        }
+      }
+    },
     "GPT-4o models do not support Whisper Translate (translation to English).": {
       "localizations": {
         "de": {
@@ -157,6 +173,134 @@
           "stringUnit": {
             "state": "translated",
             "value": "GPT-4oモデルはWhisper Translate（英語への翻訳）をサポートしていません。"
+          }
+        }
+      }
+    },
+    "Language hints and dictionary terms are added automatically.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sprachhinweise und Wörterbucheinträge werden automatisch ergänzt."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "言語ヒントと辞書用語は自動的に追加されます。"
+          }
+        }
+      }
+    },
+    "Live Transcription Delay": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verzögerung der Live-Transkription"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ライブ文字起こしの遅延"
+          }
+        }
+      }
+    },
+    "Lower delay shows partial text sooner; higher delay gives the model more audio context.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eine niedrigere Verzögerung zeigt Teiltext früher; eine höhere gibt dem Modell mehr Audiokontext."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "遅延を低くすると部分テキストが早く表示され、高くするとモデルがより多くの音声コンテキストを利用できます。"
+          }
+        }
+      }
+    },
+    "Minimal": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Minimal"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最小"
+          }
+        }
+      }
+    },
+    "Realtime transcription streams 24 kHz PCM through OpenAI's Realtime API.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Echtzeittranskription streamt 24-kHz-PCM über die Realtime API von OpenAI."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "リアルタイム文字起こしは、OpenAIのRealtime APIを通じて24 kHz PCMをストリーミングします。"
+          }
+        }
+      }
+    },
+    "Transcription Context": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkriptionskontext"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文字起こしコンテキスト"
+          }
+        }
+      }
+    },
+    "Translate requires Whisper 1.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Für Übersetzungen ist Whisper 1 erforderlich."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "翻訳にはWhisper 1が必要です。"
+          }
+        }
+      }
+    },
+    "X High": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sehr hoch"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最高"
           }
         }
       }

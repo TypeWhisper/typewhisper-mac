@@ -601,6 +601,279 @@ struct OpenAIResponsesClient: Sendable {
     }
 }
 
+enum OpenAILiveTranscriptionDelay: String, CaseIterable, Sendable {
+    case minimal
+    case low
+    case medium
+    case high
+    case xhigh
+
+    var displayName: String {
+        switch self {
+        case .minimal:
+            "Minimal"
+        case .low:
+            "Low"
+        case .medium:
+            "Medium"
+        case .high:
+            "High"
+        case .xhigh:
+            "X High"
+        }
+    }
+}
+
+private struct OpenAITranscriptionModelCapability {
+    enum Transport {
+        case legacyFile(responseFormat: String)
+        case contextAwareFile
+        case legacyRealtime
+        case contextAwareRealtime
+    }
+
+    let modelInfo: PluginModelInfo
+    let transport: Transport
+    let supportsTranslation: Bool
+
+    var usesContextAwareHints: Bool {
+        switch transport {
+        case .contextAwareFile, .contextAwareRealtime:
+            true
+        case .legacyFile, .legacyRealtime:
+            false
+        }
+    }
+
+    var isRealtime: Bool {
+        switch transport {
+        case .legacyRealtime, .contextAwareRealtime:
+            true
+        case .legacyFile, .contextAwareFile:
+            false
+        }
+    }
+
+    static let gptTranscribeModelID = "gpt-transcribe"
+    static let gptLiveTranscribeModelID = "gpt-live-transcribe"
+    static let legacyRealtimeModelID = "gpt-realtime-whisper"
+
+    static let all: [OpenAITranscriptionModelCapability] = [
+        OpenAITranscriptionModelCapability(
+            modelInfo: PluginModelInfo(id: gptTranscribeModelID, displayName: "GPT Transcribe"),
+            transport: .contextAwareFile,
+            supportsTranslation: false
+        ),
+        OpenAITranscriptionModelCapability(
+            modelInfo: PluginModelInfo(id: gptLiveTranscribeModelID, displayName: "GPT Live Transcribe"),
+            transport: .contextAwareRealtime,
+            supportsTranslation: false
+        ),
+        OpenAITranscriptionModelCapability(
+            modelInfo: PluginModelInfo(id: "whisper-1", displayName: "Whisper 1"),
+            transport: .legacyFile(responseFormat: "verbose_json"),
+            supportsTranslation: true
+        ),
+        OpenAITranscriptionModelCapability(
+            modelInfo: PluginModelInfo(id: "gpt-4o-transcribe", displayName: "GPT-4o Transcribe"),
+            transport: .legacyFile(responseFormat: "json"),
+            supportsTranslation: false
+        ),
+        OpenAITranscriptionModelCapability(
+            modelInfo: PluginModelInfo(id: "gpt-4o-mini-transcribe", displayName: "GPT-4o Mini Transcribe"),
+            transport: .legacyFile(responseFormat: "json"),
+            supportsTranslation: false
+        ),
+        OpenAITranscriptionModelCapability(
+            modelInfo: PluginModelInfo(id: legacyRealtimeModelID, displayName: "GPT Realtime Whisper"),
+            transport: .legacyRealtime,
+            supportsTranslation: false
+        ),
+    ]
+
+    static func capability(for modelID: String) -> OpenAITranscriptionModelCapability? {
+        all.first { $0.modelInfo.id == modelID }
+    }
+}
+
+struct OpenAIRealtimeTranscriptionConfiguration: Sendable {
+    let modelID: String
+    let languageSelection: PluginLanguageSelection
+    let prompt: String?
+    let keywords: [String]
+    let delay: OpenAILiveTranscriptionDelay?
+
+    var usesContextAwareHints: Bool {
+        modelID == OpenAITranscriptionModelCapability.gptLiveTranscribeModelID
+    }
+
+    var fallbackLanguage: String? {
+        if let requestedLanguage = languageSelection.requestedLanguage?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+           !requestedLanguage.isEmpty {
+            return requestedLanguage
+        }
+
+        let languages = Self.normalizedLanguages(from: languageSelection)
+        return languages.count == 1 ? languages[0] : nil
+    }
+
+    static func normalizedLanguages(from selection: PluginLanguageSelection) -> [String] {
+        var seen = Set<String>()
+        var languages: [String] = []
+        let candidates = [selection.requestedLanguage].compactMap { $0 } + selection.languageHints
+
+        for candidate in candidates {
+            let language = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !language.isEmpty else { continue }
+            let dedupeKey = language.lowercased()
+            guard seen.insert(dedupeKey).inserted else { continue }
+            languages.append(language)
+        }
+
+        return languages
+    }
+}
+
+private struct OpenAIContextAwareFileTranscriptionClient: Sendable {
+    private struct APIResponse: Decodable {
+        struct Language: Decodable {
+            let code: String
+        }
+
+        let text: String
+        let languages: [Language]?
+    }
+
+    private let baseURL = "https://api.openai.com"
+
+    func transcribe(
+        audio: AudioData,
+        apiKey: String,
+        prompt: String?,
+        keywords: [String],
+        languages: [String]
+    ) async throws -> PluginTranscriptionResult {
+        try await PluginAudioUploadEncoder.withCompressedM4AUploadWavFallback(from: audio) { uploadFile in
+            try await performTranscription(
+                uploadFile: uploadFile,
+                apiKey: apiKey,
+                prompt: prompt,
+                keywords: keywords,
+                languages: languages
+            )
+        }
+    }
+
+    private func performTranscription(
+        uploadFile: PluginAudioUploadFile,
+        apiKey: String,
+        prompt: String?,
+        keywords: [String],
+        languages: [String]
+    ) async throws -> PluginTranscriptionResult {
+        let endpoint = "\(baseURL)/v1/audio/transcriptions"
+        guard let url = URL(string: endpoint) else {
+            throw OpenAIPluginError.invalidURL(endpoint)
+        }
+
+        let boundary = UUID().uuidString
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = 30
+
+        var body = Data()
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append(
+            "Content-Disposition: form-data; name=\"file\"; filename=\"\(uploadFile.filename)\"\r\n"
+                .data(using: .utf8)!
+        )
+        body.append("Content-Type: \(uploadFile.contentType)\r\n\r\n".data(using: .utf8)!)
+        body.append(uploadFile.data)
+        body.append("\r\n".data(using: .utf8)!)
+        body.appendOpenAIFormField(
+            boundary: boundary,
+            name: "model",
+            value: OpenAITranscriptionModelCapability.gptTranscribeModelID
+        )
+        body.appendOpenAIFormField(boundary: boundary, name: "response_format", value: "json")
+
+        if let prompt = prompt?.trimmingCharacters(in: .whitespacesAndNewlines), !prompt.isEmpty {
+            body.appendOpenAIFormField(boundary: boundary, name: "prompt", value: prompt)
+        }
+        for keyword in keywords {
+            body.appendOpenAIFormField(boundary: boundary, name: "keywords[]", value: keyword)
+        }
+        for language in languages {
+            body.appendOpenAIFormField(boundary: boundary, name: "languages[]", value: language)
+        }
+
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+        request.httpBody = body
+
+        let (responseData, response) = try await PluginHTTPClient.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw PluginTranscriptionError.networkError("Invalid response")
+        }
+
+        switch httpResponse.statusCode {
+        case 200:
+            break
+        case 401:
+            throw PluginTranscriptionError.invalidApiKey
+        case 413:
+            throw PluginTranscriptionError.fileTooLarge
+        case 429:
+            throw PluginTranscriptionError.rateLimited
+        default:
+            throw PluginTranscriptionError.apiError(
+                Self.errorMessage(from: responseData, statusCode: httpResponse.statusCode)
+            )
+        }
+
+        do {
+            let response = try JSONDecoder().decode(APIResponse.self, from: responseData)
+            let detectedLanguage = response.languages?
+                .lazy
+                .map(\.code)
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .first { !$0.isEmpty }
+            return PluginTranscriptionResult(
+                text: response.text,
+                detectedLanguage: detectedLanguage
+            )
+        } catch {
+            throw PluginTranscriptionError.apiError(
+                "Failed to parse response: \(error.localizedDescription)"
+            )
+        }
+    }
+
+    private static func errorMessage(from data: Data, statusCode: Int) -> String {
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let error = json["error"] as? [String: Any],
+           let message = error["message"] as? String,
+           !message.isEmpty {
+            return "HTTP \(statusCode): \(message)"
+        }
+        if let body = String(data: data, encoding: .utf8), !body.isEmpty {
+            return "HTTP \(statusCode): \(body)"
+        }
+        return "HTTP \(statusCode)"
+    }
+}
+
+private extension Data {
+    mutating func appendOpenAIFormField(boundary: String, name: String, value: String) {
+        append("--\(boundary)\r\n".data(using: .utf8)!)
+        append("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n".data(using: .utf8)!)
+        append(value.data(using: .utf8)!)
+        append("\r\n".data(using: .utf8)!)
+    }
+}
+
 // MARK: - Realtime STT
 
 actor OpenAIRealtimeTranscriptCollector {
@@ -766,7 +1039,8 @@ private final class OpenAIRealtimeWebSocketDelegate: NSObject, URLSessionWebSock
 }
 
 final class OpenAIRealtimeTranscriptionSession: LiveTranscriptionSession, @unchecked Sendable {
-    static let modelId = "gpt-realtime-whisper"
+    static let modelId = OpenAITranscriptionModelCapability.legacyRealtimeModelID
+    static let liveModelId = OpenAITranscriptionModelCapability.gptLiveTranscribeModelID
     static let sourceSampleRate = 16_000
     static let targetSampleRate = 24_000
     static let socketOpenTimeoutNanoseconds: UInt64 = 10_000_000_000
@@ -781,7 +1055,7 @@ final class OpenAIRealtimeTranscriptionSession: LiveTranscriptionSession, @unche
     private let webSocketTask: URLSessionWebSocketTask?
     private let receiveTask: Task<Void, Never>?
     private let collector: OpenAIRealtimeTranscriptCollector
-    private let language: String?
+    private let fallbackLanguage: String?
     private let onProgress: @Sendable (String) -> Bool
     private let state = OSAllocatedUnfairLock(initialState: State())
 
@@ -797,7 +1071,7 @@ final class OpenAIRealtimeTranscriptionSession: LiveTranscriptionSession, @unche
         self.webSocketTask = webSocketTask
         self.receiveTask = receiveTask
         self.collector = collector
-        self.language = language
+        self.fallbackLanguage = language
         self.onProgress = onProgress
     }
 
@@ -805,6 +1079,24 @@ final class OpenAIRealtimeTranscriptionSession: LiveTranscriptionSession, @unche
         apiKey: String,
         language: String?,
         prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> OpenAIRealtimeTranscriptionSession {
+        try await connect(
+            apiKey: apiKey,
+            configuration: OpenAIRealtimeTranscriptionConfiguration(
+                modelID: modelId,
+                languageSelection: PluginLanguageSelection(requestedLanguage: language),
+                prompt: prompt,
+                keywords: [],
+                delay: nil
+            ),
+            onProgress: onProgress
+        )
+    }
+
+    static func connect(
+        apiKey: String,
+        configuration: OpenAIRealtimeTranscriptionConfiguration,
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> OpenAIRealtimeTranscriptionSession {
         let request = try makeRequest(apiKey: apiKey)
@@ -834,7 +1126,9 @@ final class OpenAIRealtimeTranscriptionSession: LiveTranscriptionSession, @unche
         }
 
         do {
-            try await webSocketTask.send(.string(try jsonString(sessionUpdatePayload(language: language, prompt: prompt))))
+            try await webSocketTask.send(
+                .string(try jsonString(sessionUpdatePayload(configuration: configuration)))
+            )
             try await waitForSessionReady(collector)
         } catch {
             receiveTask.cancel()
@@ -851,7 +1145,7 @@ final class OpenAIRealtimeTranscriptionSession: LiveTranscriptionSession, @unche
             webSocketTask: webSocketTask,
             receiveTask: receiveTask,
             collector: collector,
-            language: language,
+            language: configuration.fallbackLanguage,
             onProgress: onProgress
         )
     }
@@ -897,10 +1191,60 @@ final class OpenAIRealtimeTranscriptionSession: LiveTranscriptionSession, @unche
     }
 
     static func sessionUpdatePayload(language: String?, prompt: String?) -> [String: Any] {
-        var transcription: [String: Any] = ["model": modelId]
-        if let language, !language.isEmpty {
+        sessionUpdatePayload(configuration: OpenAIRealtimeTranscriptionConfiguration(
+            modelID: modelId,
+            languageSelection: PluginLanguageSelection(requestedLanguage: language),
+            prompt: prompt,
+            keywords: [],
+            delay: nil
+        ))
+    }
+
+    static func sessionUpdatePayload(
+        modelID: String,
+        languageSelection: PluginLanguageSelection,
+        prompt: String?,
+        keywords: [String],
+        delay: OpenAILiveTranscriptionDelay?
+    ) -> [String: Any] {
+        sessionUpdatePayload(configuration: OpenAIRealtimeTranscriptionConfiguration(
+            modelID: modelID,
+            languageSelection: languageSelection,
+            prompt: prompt,
+            keywords: keywords,
+            delay: delay
+        ))
+    }
+
+    private static func sessionUpdatePayload(
+        configuration: OpenAIRealtimeTranscriptionConfiguration
+    ) -> [String: Any] {
+        var transcription: [String: Any] = ["model": configuration.modelID]
+
+        if configuration.usesContextAwareHints {
+            let languages = OpenAIRealtimeTranscriptionConfiguration.normalizedLanguages(
+                from: configuration.languageSelection
+            )
+            if !languages.isEmpty {
+                transcription["languages"] = languages
+            }
+            if let prompt = configuration.prompt?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+               !prompt.isEmpty {
+                transcription["prompt"] = prompt
+            }
+            if !configuration.keywords.isEmpty {
+                transcription["keywords"] = configuration.keywords
+            }
+            if let delay = configuration.delay {
+                transcription["delay"] = delay.rawValue
+            }
+        } else if let language = configuration.languageSelection.requestedLanguage?
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+                  !language.isEmpty {
             transcription["language"] = language
         }
+
         return [
             "type": "session.update",
             "session": [
@@ -974,7 +1318,7 @@ final class OpenAIRealtimeTranscriptionSession: LiveTranscriptionSession, @unche
             throw PluginTranscriptionError.apiError(error)
         }
 
-        let result = await collector.finalResult(fallbackLanguage: language)
+        let result = await collector.finalResult(fallbackLanguage: fallbackLanguage)
         if result.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, webSocketTask != nil {
             throw PluginTranscriptionError.apiError("Realtime API returned no transcript")
         }
@@ -1262,9 +1606,9 @@ private final class OpenAIAVAudioPlayback: OpenAITTSAudioPlayback, @unchecked Se
 
 @objc(OpenAIPlugin)
 final class OpenAIPlugin: NSObject,
-    TranscriptionEnginePlugin,
+    LanguageHintDictionaryTermHintTranscriptionEnginePlugin,
+    LiveLanguageHintDictionaryTermHintTranscriptionCapablePlugin,
     DictionaryTermsCapabilityProviding,
-    LiveTranscriptionCapablePlugin,
     LLMProviderPlugin,
     TTSProviderPlugin,
     PluginAuthRoleStatusProviding,
@@ -1280,6 +1624,8 @@ final class OpenAIPlugin: NSObject,
     fileprivate var _fetchedLLMModels: [OpenAIFetchedModel] = []
     fileprivate var _selectedVoiceId: String?
     fileprivate var _ttsInstructions: String = ""
+    fileprivate var _transcriptionContext: String = ""
+    fileprivate var _liveTranscriptionDelay: OpenAILiveTranscriptionDelay = .low
     fileprivate var _authMode: OpenAIAuthMode = .apiKey
     fileprivate var _reasoningEffort: OpenAIReasoningEffort = .medium
     fileprivate var _llmTemperatureModeRaw: String = PluginLLMTemperatureMode.providerDefault.rawValue
@@ -1295,6 +1641,7 @@ final class OpenAIPlugin: NSObject,
         baseURL: "https://api.openai.com",
         responseFormat: "verbose_json"
     )
+    private let contextAwareFileTranscriptionClient = OpenAIContextAwareFileTranscriptionClient()
 
     private let chatHelper = PluginOpenAIChatHelper(baseURL: "https://api.openai.com")
 
@@ -1316,6 +1663,8 @@ final class OpenAIPlugin: NSObject,
         selectedLLMModel: "selectedLLMModel",
         selectedVoice: "selectedVoice",
         ttsInstructions: "ttsInstructions",
+        transcriptionContext: "transcriptionContext",
+        liveTranscriptionDelay: "liveTranscriptionDelay",
         llmTemperatureMode: "llmTemperatureMode",
         llmTemperatureValue: "llmTemperatureValue",
         fetchedLLMModels: "fetchedLLMModels",
@@ -1380,6 +1729,13 @@ final class OpenAIPlugin: NSObject,
         _selectedVoiceId = host.userDefault(forKey: Self.storageKeys.selectedVoice) as? String
             ?? OpenAITTSConfiguration.defaultVoiceId
         _ttsInstructions = host.userDefault(forKey: Self.storageKeys.ttsInstructions) as? String ?? ""
+        _transcriptionContext = host.userDefault(forKey: Self.storageKeys.transcriptionContext) as? String ?? ""
+        if let rawDelay = host.userDefault(forKey: Self.storageKeys.liveTranscriptionDelay) as? String,
+           let delay = OpenAILiveTranscriptionDelay(rawValue: rawDelay) {
+            _liveTranscriptionDelay = delay
+        } else {
+            _liveTranscriptionDelay = .low
+        }
         _llmTemperatureModeRaw = host.userDefault(forKey: Self.storageKeys.llmTemperatureMode) as? String
             ?? PluginLLMTemperatureMode.providerDefault.rawValue
         _llmTemperatureValue = host.userDefault(forKey: Self.storageKeys.llmTemperatureValue) as? Double
@@ -1447,12 +1803,7 @@ final class OpenAIPlugin: NSObject,
     }
 
     var transcriptionModels: [PluginModelInfo] {
-        [
-            PluginModelInfo(id: "whisper-1", displayName: "Whisper 1"),
-            PluginModelInfo(id: "gpt-4o-transcribe", displayName: "GPT-4o Transcribe"),
-            PluginModelInfo(id: "gpt-4o-mini-transcribe", displayName: "GPT-4o Mini Transcribe"),
-            PluginModelInfo(id: OpenAIRealtimeTranscriptionSession.modelId, displayName: "GPT Realtime Whisper"),
-        ]
+        OpenAITranscriptionModelCapability.all.map(\.modelInfo)
     }
 
     var selectedModelId: String? { _selectedModelId }
@@ -1483,31 +1834,13 @@ final class OpenAIPlugin: NSObject,
     }
 
     func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
-        guard let apiKey = _apiKey, !apiKey.isEmpty else {
-            throw PluginTranscriptionError.notConfigured
-        }
-        guard let modelId = _selectedModelId else {
-            throw PluginTranscriptionError.noModelSelected
-        }
-
-        if modelId == OpenAIRealtimeTranscriptionSession.modelId {
-            guard !translate else {
-                throw PluginTranscriptionError.apiError("GPT Realtime Whisper does not support Whisper Translate.")
-            }
-            return try await transcribeRealtime(audio: audio, language: language, prompt: prompt, apiKey: apiKey) { _ in true }
-        }
-
-        let responseFormat = modelId.hasPrefix("gpt-4o") ? "json" : "verbose_json"
-
-        return try await transcriptionHelper.transcribeCompressedAudioWithWavFallback(
+        try await performTranscription(
             audio: audio,
-            apiKey: apiKey,
-            modelName: modelId,
-            language: language,
-            translate: translate && !modelId.hasPrefix("gpt-4o"),
+            languageSelection: PluginLanguageSelection(requestedLanguage: language),
+            translate: translate,
             prompt: prompt,
-            requestTimeout: 30,
-            responseFormat: responseFormat
+            dictionaryTermHints: [],
+            onProgress: { _ in true }
         )
     }
 
@@ -1518,17 +1851,117 @@ final class OpenAIPlugin: NSObject,
         prompt: String?,
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> PluginTranscriptionResult {
-        guard let apiKey = _apiKey, !apiKey.isEmpty else {
-            throw PluginTranscriptionError.notConfigured
-        }
-        guard _selectedModelId == OpenAIRealtimeTranscriptionSession.modelId else {
-            return try await transcribe(audio: audio, language: language, translate: translate, prompt: prompt)
-        }
-        guard !translate else {
-            throw PluginTranscriptionError.apiError("GPT Realtime Whisper does not support Whisper Translate.")
-        }
+        try await performTranscription(
+            audio: audio,
+            languageSelection: PluginLanguageSelection(requestedLanguage: language),
+            translate: translate,
+            prompt: prompt,
+            dictionaryTermHints: [],
+            onProgress: onProgress
+        )
+    }
 
-        return try await transcribeRealtime(audio: audio, language: language, prompt: prompt, apiKey: apiKey, onProgress: onProgress)
+    func transcribe(
+        audio: AudioData,
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?
+    ) async throws -> PluginTranscriptionResult {
+        try await performTranscription(
+            audio: audio,
+            languageSelection: languageSelection,
+            translate: translate,
+            prompt: prompt,
+            dictionaryTermHints: [],
+            onProgress: { _ in true }
+        )
+    }
+
+    func transcribe(
+        audio: AudioData,
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> PluginTranscriptionResult {
+        try await performTranscription(
+            audio: audio,
+            languageSelection: languageSelection,
+            translate: translate,
+            prompt: prompt,
+            dictionaryTermHints: [],
+            onProgress: onProgress
+        )
+    }
+
+    func transcribe(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        dictionaryTermHints: [PluginDictionaryTermHint]
+    ) async throws -> PluginTranscriptionResult {
+        try await performTranscription(
+            audio: audio,
+            languageSelection: PluginLanguageSelection(requestedLanguage: language),
+            translate: translate,
+            prompt: prompt,
+            dictionaryTermHints: dictionaryTermHints,
+            onProgress: { _ in true }
+        )
+    }
+
+    func transcribe(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        dictionaryTermHints: [PluginDictionaryTermHint],
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> PluginTranscriptionResult {
+        try await performTranscription(
+            audio: audio,
+            languageSelection: PluginLanguageSelection(requestedLanguage: language),
+            translate: translate,
+            prompt: prompt,
+            dictionaryTermHints: dictionaryTermHints,
+            onProgress: onProgress
+        )
+    }
+
+    func transcribe(
+        audio: AudioData,
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?,
+        dictionaryTermHints: [PluginDictionaryTermHint]
+    ) async throws -> PluginTranscriptionResult {
+        try await performTranscription(
+            audio: audio,
+            languageSelection: languageSelection,
+            translate: translate,
+            prompt: prompt,
+            dictionaryTermHints: dictionaryTermHints,
+            onProgress: { _ in true }
+        )
+    }
+
+    func transcribe(
+        audio: AudioData,
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?,
+        dictionaryTermHints: [PluginDictionaryTermHint],
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> PluginTranscriptionResult {
+        try await performTranscription(
+            audio: audio,
+            languageSelection: languageSelection,
+            translate: translate,
+            prompt: prompt,
+            dictionaryTermHints: dictionaryTermHints,
+            onProgress: onProgress
+        )
     }
 
     func createLiveTranscriptionSession(
@@ -1537,19 +1970,200 @@ final class OpenAIPlugin: NSObject,
         prompt: String?,
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> any LiveTranscriptionSession {
-        guard let apiKey = _apiKey, !apiKey.isEmpty else {
+        try await createLiveTranscriptionSession(
+            languageSelection: PluginLanguageSelection(requestedLanguage: language),
+            translate: translate,
+            prompt: prompt,
+            dictionaryTermHints: [],
+            onProgress: onProgress
+        )
+    }
+
+    func createLiveTranscriptionSession(
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> any LiveTranscriptionSession {
+        try await createLiveTranscriptionSession(
+            languageSelection: languageSelection,
+            translate: translate,
+            prompt: prompt,
+            dictionaryTermHints: [],
+            onProgress: onProgress
+        )
+    }
+
+    func createLiveTranscriptionSession(
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        dictionaryTermHints: [PluginDictionaryTermHint],
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> any LiveTranscriptionSession {
+        try await createLiveTranscriptionSession(
+            languageSelection: PluginLanguageSelection(requestedLanguage: language),
+            translate: translate,
+            prompt: prompt,
+            dictionaryTermHints: dictionaryTermHints,
+            onProgress: onProgress
+        )
+    }
+
+    func createLiveTranscriptionSession(
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?,
+        dictionaryTermHints: [PluginDictionaryTermHint],
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> any LiveTranscriptionSession {
+        guard let apiKey = normalizedAPIKey else {
             throw PluginTranscriptionError.notConfigured
         }
-        guard !translate else {
-            throw PluginTranscriptionError.apiError("GPT Realtime Whisper does not support Whisper Translate.")
+        let capability = try selectedTranscriptionCapability()
+        guard capability.isRealtime else {
+            throw PluginTranscriptionError.apiError(
+                "\(capability.modelInfo.displayName) is a file transcription model."
+            )
         }
+        try validateTranslationRequest(translate, capability: capability)
 
         return try await OpenAIRealtimeTranscriptionSession.connect(
             apiKey: apiKey,
-            language: language,
-            prompt: prompt,
+            configuration: realtimeConfiguration(
+                capability: capability,
+                languageSelection: languageSelection,
+                hostPrompt: prompt,
+                dictionaryTermHints: dictionaryTermHints
+            ),
             onProgress: onProgress
         )
+    }
+
+    private func performTranscription(
+        audio: AudioData,
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?,
+        dictionaryTermHints: [PluginDictionaryTermHint],
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> PluginTranscriptionResult {
+        guard let apiKey = normalizedAPIKey else {
+            throw PluginTranscriptionError.notConfigured
+        }
+        let capability = try selectedTranscriptionCapability()
+        try validateTranslationRequest(translate, capability: capability)
+
+        switch capability.transport {
+        case .legacyFile(let responseFormat):
+            return try await transcriptionHelper.transcribeCompressedAudioWithWavFallback(
+                audio: audio,
+                apiKey: apiKey,
+                modelName: capability.modelInfo.id,
+                language: Self.legacyLanguage(from: languageSelection),
+                translate: translate,
+                prompt: prompt,
+                requestTimeout: 30,
+                responseFormat: responseFormat
+            )
+
+        case .contextAwareFile:
+            return try await contextAwareFileTranscriptionClient.transcribe(
+                audio: audio,
+                apiKey: apiKey,
+                prompt: normalizedTranscriptionContext,
+                keywords: Self.normalizedKeywords(from: dictionaryTermHints),
+                languages: OpenAIRealtimeTranscriptionConfiguration.normalizedLanguages(
+                    from: languageSelection
+                )
+            )
+
+        case .legacyRealtime, .contextAwareRealtime:
+            return try await transcribeRealtime(
+                audio: audio,
+                apiKey: apiKey,
+                configuration: realtimeConfiguration(
+                    capability: capability,
+                    languageSelection: languageSelection,
+                    hostPrompt: prompt,
+                    dictionaryTermHints: dictionaryTermHints
+                ),
+                onProgress: onProgress
+            )
+        }
+    }
+
+    private func selectedTranscriptionCapability() throws -> OpenAITranscriptionModelCapability {
+        guard let modelID = _selectedModelId else {
+            throw PluginTranscriptionError.noModelSelected
+        }
+        guard let capability = OpenAITranscriptionModelCapability.capability(for: modelID) else {
+            throw PluginTranscriptionError.apiError(
+                "Unsupported OpenAI transcription model: \(modelID)"
+            )
+        }
+        return capability
+    }
+
+    private func validateTranslationRequest(
+        _ translate: Bool,
+        capability: OpenAITranscriptionModelCapability
+    ) throws {
+        guard !translate || capability.supportsTranslation else {
+            throw PluginTranscriptionError.apiError("Translate requires Whisper 1.")
+        }
+    }
+
+    private func realtimeConfiguration(
+        capability: OpenAITranscriptionModelCapability,
+        languageSelection: PluginLanguageSelection,
+        hostPrompt: String?,
+        dictionaryTermHints: [PluginDictionaryTermHint]
+    ) -> OpenAIRealtimeTranscriptionConfiguration {
+        switch capability.transport {
+        case .legacyRealtime:
+            return OpenAIRealtimeTranscriptionConfiguration(
+                modelID: capability.modelInfo.id,
+                languageSelection: PluginLanguageSelection(
+                    requestedLanguage: Self.legacyLanguage(from: languageSelection)
+                ),
+                prompt: hostPrompt,
+                keywords: [],
+                delay: nil
+            )
+        case .contextAwareRealtime:
+            return OpenAIRealtimeTranscriptionConfiguration(
+                modelID: capability.modelInfo.id,
+                languageSelection: languageSelection,
+                prompt: normalizedTranscriptionContext,
+                keywords: Self.normalizedKeywords(from: dictionaryTermHints),
+                delay: _liveTranscriptionDelay
+            )
+        case .legacyFile, .contextAwareFile:
+            preconditionFailure("A file model cannot create a realtime configuration.")
+        }
+    }
+
+    private static func legacyLanguage(from selection: PluginLanguageSelection) -> String? {
+        OpenAIRealtimeTranscriptionConfiguration.normalizedLanguages(from: selection).first
+    }
+
+    private static func normalizedKeywords(
+        from dictionaryTermHints: [PluginDictionaryTermHint]
+    ) -> [String] {
+        PluginDictionaryTerms.normalizedTermHints(from: dictionaryTermHints)
+            .map(\.text)
+            .filter { keyword in
+                !keyword.contains("<")
+                    && !keyword.contains(">")
+                    && !keyword.contains("\r")
+                    && !keyword.contains("\n")
+            }
+    }
+
+    private var normalizedTranscriptionContext: String? {
+        let context = _transcriptionContext.trimmingCharacters(in: .whitespacesAndNewlines)
+        return context.isEmpty ? nil : context
     }
 
     // MARK: - LLMProviderPlugin
@@ -1864,6 +2478,32 @@ final class OpenAIPlugin: NSObject,
         host?.setUserDefault(instructions, forKey: Self.storageKeys.ttsInstructions)
     }
 
+    var transcriptionContext: String { _transcriptionContext }
+
+    func setTranscriptionContext(_ context: String) {
+        _transcriptionContext = context
+        host?.setUserDefault(context, forKey: Self.storageKeys.transcriptionContext)
+    }
+
+    var liveTranscriptionDelay: OpenAILiveTranscriptionDelay { _liveTranscriptionDelay }
+
+    func setLiveTranscriptionDelay(_ delay: OpenAILiveTranscriptionDelay) {
+        _liveTranscriptionDelay = delay
+        host?.setUserDefault(delay.rawValue, forKey: Self.storageKeys.liveTranscriptionDelay)
+    }
+
+    func transcriptionModelUsesContextAwareHints(_ modelID: String) -> Bool {
+        OpenAITranscriptionModelCapability.capability(for: modelID)?.usesContextAwareHints == true
+    }
+
+    func transcriptionModelIsRealtime(_ modelID: String) -> Bool {
+        OpenAITranscriptionModelCapability.capability(for: modelID)?.isRealtime == true
+    }
+
+    func transcriptionModelSupportsTranslation(_ modelID: String) -> Bool {
+        OpenAITranscriptionModelCapability.capability(for: modelID)?.supportsTranslation == true
+    }
+
     private var normalizedAPIKey: String? {
         let trimmed = (_apiKey ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
@@ -1871,15 +2511,13 @@ final class OpenAIPlugin: NSObject,
 
     private func transcribeRealtime(
         audio: AudioData,
-        language: String?,
-        prompt: String?,
         apiKey: String,
+        configuration: OpenAIRealtimeTranscriptionConfiguration,
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> PluginTranscriptionResult {
         let session = try await OpenAIRealtimeTranscriptionSession.connect(
             apiKey: apiKey,
-            language: language,
-            prompt: prompt,
+            configuration: configuration,
             onProgress: onProgress
         )
 
@@ -2314,6 +2952,8 @@ private struct OpenAISettingsView: View {
     @State private var selectedLLMModel: String = ""
     @State private var selectedVoiceId: String = ""
     @State private var ttsInstructions: String = ""
+    @State private var transcriptionContext: String = ""
+    @State private var liveTranscriptionDelay: OpenAILiveTranscriptionDelay = .low
     @State private var selectedReasoningEffort: OpenAIReasoningEffort = .medium
     @State private var llmTemperatureMode: PluginLLMTemperatureMode = .providerDefault
     @State private var llmTemperatureValue: Double = 0.3
@@ -2368,13 +3008,48 @@ private struct OpenAISettingsView: View {
                         plugin.selectModel(selectedModel)
                     }
 
-                    if selectedModel.hasPrefix("gpt-4o") {
-                        Text("GPT-4o models do not support Whisper Translate (translation to English).", bundle: bundle)
+                    if !plugin.transcriptionModelSupportsTranslation(selectedModel) {
+                        Text("Translate requires Whisper 1.", bundle: bundle)
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
 
-                    if selectedModel == OpenAIRealtimeTranscriptionSession.modelId {
+                    if plugin.transcriptionModelUsesContextAwareHints(selectedModel) {
+                        Text("Transcription Context", bundle: bundle)
+                            .font(.subheadline.weight(.medium))
+
+                        TextField(
+                            "Describe the recording topic, setting, or relevant context.",
+                            text: $transcriptionContext,
+                            axis: .vertical
+                        )
+                        .lineLimit(3...6)
+                        .textFieldStyle(.roundedBorder)
+                        .onChange(of: transcriptionContext) {
+                            plugin.setTranscriptionContext(transcriptionContext)
+                        }
+
+                        Text("Language hints and dictionary terms are added automatically.", bundle: bundle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    if selectedModel == OpenAIRealtimeTranscriptionSession.liveModelId {
+                        Picker("Live Transcription Delay", selection: $liveTranscriptionDelay) {
+                            ForEach(OpenAILiveTranscriptionDelay.allCases, id: \.self) { delay in
+                                Text(LocalizedStringKey(delay.displayName), bundle: bundle).tag(delay)
+                            }
+                        }
+                        .onChange(of: liveTranscriptionDelay) {
+                            plugin.setLiveTranscriptionDelay(liveTranscriptionDelay)
+                        }
+
+                        Text("Lower delay shows partial text sooner; higher delay gives the model more audio context.", bundle: bundle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
+                    if plugin.transcriptionModelIsRealtime(selectedModel) {
                         Text("Realtime transcription streams 24 kHz PCM through OpenAI's Realtime API.", bundle: bundle)
                             .font(.caption)
                             .foregroundStyle(.secondary)
@@ -2400,6 +3075,8 @@ private struct OpenAISettingsView: View {
             selectedLLMModel = plugin.selectedLLMModelId ?? plugin.supportedModels.first?.id ?? ""
             selectedVoiceId = plugin.selectedVoiceId ?? OpenAITTSConfiguration.defaultVoiceId
             ttsInstructions = plugin.ttsInstructions
+            transcriptionContext = plugin.transcriptionContext
+            liveTranscriptionDelay = plugin.liveTranscriptionDelay
             selectedReasoningEffort = plugin.reasoningEffort
             llmTemperatureMode = plugin.llmTemperatureMode
             llmTemperatureValue = plugin.llmTemperatureValue
