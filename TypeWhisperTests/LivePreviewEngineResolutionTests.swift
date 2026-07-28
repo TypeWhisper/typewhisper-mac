@@ -146,14 +146,42 @@ final class LivePreviewEngineResolutionTests: XCTestCase {
 
         XCTAssertFalse(
             DictationViewModel.hasPersistedRestorableModel(
-                providerId: "com.typewhisper.parakeet", defaults: defaults
+                pluginId: "com.typewhisper.parakeet", defaults: defaults
             )
         )
         defaults.set("parakeet-tdt-0.6b-v3", forKey: "plugin.com.typewhisper.parakeet.loadedModel")
         XCTAssertTrue(
             DictationViewModel.hasPersistedRestorableModel(
-                providerId: "com.typewhisper.parakeet", defaults: defaults
+                pluginId: "com.typewhisper.parakeet", defaults: defaults
             )
+        )
+        defaults.removePersistentDomain(forName: suite)
+    }
+
+    /// `HostServicesImpl` writes `plugin.<manifest.id>.loadedModel`, and a plugin's
+    /// manifest id is NOT its engine `providerId` ("com.typewhisper.parakeet" vs
+    /// "parakeet"). Looking the key up under the provider id silently never matches,
+    /// which would make every auto-unloaded local preview engine resolve as
+    /// unavailable. Lock the distinction so the lookup cannot regress to a provider id.
+    func testPersistedRestorableModelDoesNotMatchProviderIdKey() {
+        let suite = "LivePreviewEngineResolutionTests-restore-idform"
+        let defaults = UserDefaults(suiteName: suite)!
+        defaults.removePersistentDomain(forName: suite)
+
+        // Exactly what the plugin host persists.
+        defaults.set("parakeet-tdt-0.6b-v3", forKey: "plugin.com.typewhisper.parakeet.loadedModel")
+
+        XCTAssertTrue(
+            DictationViewModel.hasPersistedRestorableModel(
+                pluginId: "com.typewhisper.parakeet", defaults: defaults
+            ),
+            "manifest-id lookup must find the key the host wrote"
+        )
+        XCTAssertFalse(
+            DictationViewModel.hasPersistedRestorableModel(
+                pluginId: "parakeet", defaults: defaults
+            ),
+            "a providerId-shaped lookup must not match — it is the regression this guards"
         )
         defaults.removePersistentDomain(forName: suite)
     }
