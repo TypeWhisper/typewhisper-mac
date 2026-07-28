@@ -428,7 +428,7 @@ final class CLISupportTests: XCTestCase {
         XCTAssertEqual(
             LicenseService.inferLicenseTier(
                 benefitID: "legacy-benefit",
-                benefitDescription: "Freelancer single-seat license for 2 devices"
+                benefitDescription: "Freelancer single-seat license for 3 devices"
             ),
             .individual
         )

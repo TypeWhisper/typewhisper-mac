@@ -200,9 +200,13 @@ final class LicenseService: ObservableObject {
 
     var isSupporter: Bool { supporterStatus == .active && supporterTier != nil }
     var hasCommercialLicense: Bool { licenseStatus == .active }
-    var commercialLicenseKeyForAccountLink: String? {
-        guard hasCommercialLicense else { return nil }
-        return loadLicenseFromKeychain()?.key
+    var commercialLicenseProofForAccountLink: CommercialLicenseLinkProof? {
+        guard hasCommercialLicense,
+              let stored = loadLicenseFromKeychain() else { return nil }
+        return CommercialLicenseLinkProof(
+            key: stored.key,
+            activationId: stored.activationId
+        )
     }
     var canUseProTranscriptionFallback: Bool { hasCommercialLicense || isSupporter }
     var supporterClaimProof: SupporterClaimProof? {
@@ -1001,6 +1005,11 @@ enum LicenseError: LocalizedError {
 }
 
 // MARK: - Discord Claim Models
+
+struct CommercialLicenseLinkProof: Equatable, Sendable {
+    let key: String
+    let activationId: String
+}
 
 struct SupporterClaimProof: Equatable, Sendable {
     let key: String

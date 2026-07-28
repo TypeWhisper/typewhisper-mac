@@ -188,7 +188,7 @@ final class CloudFolderSyncTests: XCTestCase {
         XCTAssertTrue(service.isSignedIn)
     }
 
-    func testProductionPublicKeyVerifiesBackendGeneratedEntitlement() throws {
+    func testProductionPublicKeyStillVerifiesLegacyTwoDeviceEntitlement() throws {
         let response = """
         {
           "status": "active",
@@ -296,7 +296,7 @@ final class CloudFolderSyncTests: XCTestCase {
     }
 
     @MainActor
-    func testPremiumAccountUsesAppleWebAuthWithStatePKCEAndPolarLink() async throws {
+    func testPremiumAccountUsesAppleWebAuthWithStatePKCEAndAttachesExistingPolarActivation() async throws {
         let suiteName = "PremiumAppleWebAuth-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
@@ -311,8 +311,11 @@ final class CloudFolderSyncTests: XCTestCase {
             "/v1/auth/apple/web/exchange": """
             {"accessToken": "account-token", "entitlement": null}
             """,
-            "/v1/entitlements/polar/link": """
+            "/v1/entitlements/polar/device/attach": """
             {"entitlement": null}
+            """,
+            "/v1/entitlements/polar/device/current": """
+            {"ok": true, "released": false}
             """,
         ])
         let authenticator = PremiumAppleWebAuthenticator(
@@ -331,7 +334,12 @@ final class CloudFolderSyncTests: XCTestCase {
         )
         defer { service.signOut() }
 
-        await service.signInWithApple(polarLicenseKey: "polar-license")
+        await service.signInWithApple(
+            commercialLicenseProof: CommercialLicenseLinkProof(
+                key: "polar-license",
+                activationId: "polar-activation"
+            )
+        )
 
         XCTAssertTrue(service.isSignedIn)
         XCTAssertNil(service.errorMessage)
@@ -345,7 +353,7 @@ final class CloudFolderSyncTests: XCTestCase {
             [
                 "/v1/auth/apple/web/start",
                 "/v1/auth/apple/web/exchange",
-                "/v1/entitlements/polar/link",
+                "/v1/entitlements/polar/device/attach",
             ]
         )
 
@@ -355,8 +363,10 @@ final class CloudFolderSyncTests: XCTestCase {
         let exchangeRequest = try XCTUnwrap(
             requests.first { $0.url?.path == "/v1/auth/apple/web/exchange" }
         )
-        let linkRequest = try XCTUnwrap(
-            requests.first { $0.url?.path == "/v1/entitlements/polar/link" }
+        let attachRequest = try XCTUnwrap(
+            requests.first {
+                $0.url?.path == "/v1/entitlements/polar/device/attach"
+            }
         )
 
         let startBody = try XCTUnwrap(startRequest.httpBody)
@@ -380,9 +390,31 @@ final class CloudFolderSyncTests: XCTestCase {
             .replacingOccurrences(of: "=", with: "")
         XCTAssertEqual(startJSON["codeChallenge"], expectedChallenge)
         XCTAssertEqual(
-            linkRequest.value(forHTTPHeaderField: "Authorization"),
+            attachRequest.value(forHTTPHeaderField: "Authorization"),
             "Bearer account-token"
         )
+        XCTAssertEqual(
+            attachRequest.value(
+                forHTTPHeaderField: "X-TypeWhisper-Entitlement-Version"
+            ),
+            "2"
+        )
+        let attachBody = try XCTUnwrap(attachRequest.httpBody)
+        let attachJSON = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: attachBody)
+                as? [String: String]
+        )
+        XCTAssertEqual(attachJSON["licenseKey"], "polar-license")
+        XCTAssertEqual(attachJSON["activationId"], "polar-activation")
+
+        await service.signOutFromAccount()
+        XCTAssertFalse(service.isSignedIn)
+        let finalRequests = await recorder.recordedRequests()
+        XCTAssertEqual(
+            finalRequests.last?.url?.path,
+            "/v1/entitlements/polar/device/current"
+        )
+        XCTAssertEqual(finalRequests.last?.httpMethod, "DELETE")
     }
 
     @MainActor
@@ -414,7 +446,7 @@ final class CloudFolderSyncTests: XCTestCase {
             automaticallyRefresh: false
         )
 
-        await service.signInWithApple(polarLicenseKey: nil)
+        await service.signInWithApple(commercialLicenseProof: nil)
 
         XCTAssertFalse(service.isSignedIn)
         XCTAssertNil(service.errorMessage)
@@ -451,7 +483,7 @@ final class CloudFolderSyncTests: XCTestCase {
             automaticallyRefresh: false
         )
 
-        await service.signInWithApple(polarLicenseKey: nil)
+        await service.signInWithApple(commercialLicenseProof: nil)
 
         XCTAssertFalse(service.isSignedIn)
         XCTAssertNotNil(service.errorMessage)
@@ -488,7 +520,7 @@ final class CloudFolderSyncTests: XCTestCase {
             automaticallyRefresh: false
         )
 
-        await service.signInWithApple(polarLicenseKey: nil)
+        await service.signInWithApple(commercialLicenseProof: nil)
 
         XCTAssertFalse(service.isSignedIn)
         XCTAssertNotNil(service.errorMessage)
@@ -1315,7 +1347,7 @@ final class CloudFolderSyncTests: XCTestCase {
             source: "polar",
             isLifetime: true,
             expiresAt: nil,
-            deviceLimit: 2,
+            deviceLimit: 3,
             verifiedAt: date(10),
             signature: nil
         )
@@ -1375,7 +1407,15 @@ final class CloudFolderSyncTests: XCTestCase {
 
     private static let entitlementEncoder: JSONEncoder = {
         let encoder = JSONEncoder()
-        encoder.dateEncodingStrategy = .iso8601
+        encoder.dateEncodingStrategy = .custom { date, encoder in
+            let formatter = ISO8601DateFormatter()
+            formatter.formatOptions = [
+                .withInternetDateTime,
+                .withFractionalSeconds,
+            ]
+            var container = encoder.singleValueContainer()
+            try container.encode(formatter.string(from: date))
+        }
         return encoder
     }()
 

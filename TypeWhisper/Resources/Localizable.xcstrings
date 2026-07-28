@@ -928,18 +928,18 @@
         }
       }
     },
-    "2 devices": {
+    "3 devices": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "2 Geräte"
+            "value": "3 Geräte"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "2台のデバイス"
+            "value": "3台のデバイス"
           }
         }
       }
@@ -8141,22 +8141,22 @@
         }
       }
     },
-    "Individual commercial license terms for up to 2 devices with recurring billing.": {
+    "Individual commercial license terms for up to 3 devices with recurring billing.": {
       "localizations": {
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "継続課金による最大2台のデバイス向けのIndividual商用ライセンス条件。"
+            "value": "継続課金による最大3台のデバイス向けのIndividual商用ライセンス条件。"
           }
         }
       }
     },
-    "Individual covers one person who needs non-GPL terms, procurement, support, or proprietary distribution on up to 2 devices.": {
+    "Individual covers one person who needs non-GPL terms, procurement, support, or proprietary distribution on up to 3 devices.": {
       "localizations": {
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Individualは、非GPL条件、調達、サポート、または最大2台のデバイスでの独自の配布を必要とする1人のユーザーを対象とします。"
+            "value": "Individualは、非GPL条件、調達、サポート、または最大3台のデバイスでの独自の配布を必要とする1人のユーザーを対象とします。"
           }
         }
       }
@@ -11624,12 +11624,12 @@
         }
       }
     },
-    "One payment for the same 2-device Individual tier, with no monthly renewal.": {
+    "One payment for the same 3-device Individual tier, with no monthly renewal.": {
       "localizations": {
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "月々の更新なしで、同じ2デバイスのIndividual階層への1回のお支払い。"
+            "value": "月々の更新なしで、同じ3デバイスのIndividual階層への1回のお支払い。"
           }
         }
       }
@@ -17516,12 +17516,12 @@
         }
       }
     },
-    "This Mac is covered by Individual commercial license terms on up to 2 devices.": {
+    "This Mac is covered by Individual commercial license terms on up to 3 devices.": {
       "localizations": {
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "このMacは、最大2台のデバイスを対象としたIndividual商用ライセンス条件でカバーされています。"
+            "value": "このMacは、最大3台のデバイスを対象としたIndividual商用ライセンス条件でカバーされています。"
           }
         }
       }

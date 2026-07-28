@@ -76,14 +76,17 @@ struct PremiumSettingsView: View {
                         .font(.callout)
                         .foregroundStyle(.secondary)
                     HStack {
-                        Button(String(localized: "Sign Out")) { premiumAccount.signOut() }
+                        Button(String(localized: "Sign Out")) {
+                            Task { await premiumAccount.signOutFromAccount() }
+                        }
+                        .disabled(premiumAccount.isWorking)
                         Button(String(localized: "Delete Account"), role: .destructive) { confirmingAccountDeletion = true }
                     }
                 } else {
                     AppKitSignInWithAppleButton {
                         Task {
                             await premiumAccount.signInWithApple(
-                                polarLicenseKey: license.commercialLicenseKeyForAccountLink
+                                commercialLicenseProof: license.commercialLicenseProofForAccountLink
                             )
                         }
                     }

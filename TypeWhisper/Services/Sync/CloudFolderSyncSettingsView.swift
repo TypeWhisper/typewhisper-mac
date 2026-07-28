@@ -105,7 +105,9 @@ struct CrossDevicePremiumEntitlementVerifier: Sendable {
         }
 
         let decoder = JSONDecoder()
-        decoder.dateDecodingStrategy = .iso8601
+        decoder.dateDecodingStrategy = .custom(
+            decodeISO8601DateWithOptionalFractionalSeconds
+        )
         guard let claims = try? decoder.decode(
             CrossDevicePremiumEntitlement.SignedClaims.self,
             from: payload
@@ -254,6 +256,10 @@ final class PremiumAccountService: ObservableObject {
         let entitlement: CrossDevicePremiumEntitlement?
     }
     private struct EntitlementResponse: Decodable { let entitlement: CrossDevicePremiumEntitlement? }
+    private struct DeviceDetachResponse: Decodable {
+        let ok: Bool
+        let released: Bool
+    }
     private struct ErrorResponse: Decodable { let error: String }
     private struct AppleWebStartResponse: Decodable {
         let authorizationURL: URL
@@ -352,7 +358,9 @@ final class PremiumAccountService: ObservableObject {
         }
     }
 
-    func signInWithApple(polarLicenseKey: String?) async {
+    func signInWithApple(
+        commercialLicenseProof: CommercialLicenseLinkProof?
+    ) async {
         await perform {
             let nonce = try Self.randomBase64URLToken()
             let codeVerifier = try Self.randomBase64URLToken()
@@ -414,7 +422,10 @@ final class PremiumAccountService: ObservableObject {
                 ]),
                 authenticated: false
             )
-            try await acceptAccountSession(accountSession, polarLicenseKey: polarLicenseKey)
+            try await acceptAccountSession(
+                accountSession,
+                commercialLicenseProof: commercialLicenseProof
+            )
         }
     }
 
@@ -428,6 +439,18 @@ final class PremiumAccountService: ObservableObject {
 
     func signOut() {
         clearAuthorizationState()
+    }
+
+    func signOutFromAccount() async {
+        await perform {
+            let response: DeviceDetachResponse = try await request(
+                path: "/v1/entitlements/polar/device/current",
+                method: "DELETE"
+            )
+            guard response.ok else { throw URLError(.badServerResponse) }
+            _ = response.released
+            clearAuthorizationState()
+        }
     }
 
     func deleteAccount() async {
@@ -445,18 +468,23 @@ final class PremiumAccountService: ObservableObject {
 
     private func acceptAccountSession(
         _ accountSession: AccountSession,
-        polarLicenseKey: String?
+        commercialLicenseProof: CommercialLicenseLinkProof?
     ) async throws {
         startupTokenTask?.cancel()
         startupTokenTask = nil
         try Self.saveToken(accountSession.accessToken, service: keychainService)
         isSignedIn = true
         try acceptEntitlement(accountSession.entitlement)
-        if let polarLicenseKey, !polarLicenseKey.isEmpty {
+        if let commercialLicenseProof,
+           !commercialLicenseProof.key.isEmpty,
+           !commercialLicenseProof.activationId.isEmpty {
             let response: EntitlementResponse = try await request(
-                path: "/v1/entitlements/polar/link",
+                path: "/v1/entitlements/polar/device/attach",
                 method: "POST",
-                body: try encoder.encode(["licenseKey": polarLicenseKey])
+                body: try encoder.encode([
+                    "licenseKey": commercialLicenseProof.key,
+                    "activationId": commercialLicenseProof.activationId,
+                ])
             )
             try acceptEntitlement(response.entitlement)
         } else {
@@ -502,6 +530,7 @@ final class PremiumAccountService: ObservableObject {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         request.setValue(deviceID, forHTTPHeaderField: "X-TypeWhisper-Device-ID")
         request.setValue("macos", forHTTPHeaderField: "X-TypeWhisper-Platform")
+        request.setValue("2", forHTTPHeaderField: "X-TypeWhisper-Entitlement-Version")
         if let body {
             request.setValue("application/json", forHTTPHeaderField: "Content-Type")
             request.httpBody = body

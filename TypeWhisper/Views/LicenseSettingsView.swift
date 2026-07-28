@@ -644,8 +644,8 @@ struct LicenseSettingsView: View {
             return ""
         case .workSolo:
             return localizedAppText(
-                "Individual covers one person who needs non-GPL terms, procurement, support, or proprietary distribution on up to 2 devices.",
-                de: "Der Einzelnutzer-Plan deckt eine Person ab, die Nicht-GPL-Bedingungen, Beschaffung, Support oder proprietäre Weiterverteilung auf bis zu 2 Geräten braucht."
+                "Individual covers one person who needs non-GPL terms, procurement, support, or proprietary distribution on up to 3 devices.",
+                de: "Der Einzelnutzer-Plan deckt eine Person ab, die Nicht-GPL-Bedingungen, Beschaffung, Support oder proprietäre Weiterverteilung auf bis zu 3 Geräten braucht."
             )
         case .team:
             return localizedAppText(
@@ -687,8 +687,8 @@ struct LicenseSettingsView: View {
             switch tier {
             case .individual:
                 return localizedAppText(
-                    "This Mac is covered by Individual commercial license terms on up to 2 devices.",
-                    de: "Dieser Mac ist durch kommerzielle Einzelnutzer-Bedingungen auf bis zu 2 Geräten abgedeckt."
+                    "This Mac is covered by Individual commercial license terms on up to 3 devices.",
+                    de: "Dieser Mac ist durch kommerzielle Einzelnutzer-Bedingungen auf bis zu 3 Geräten abgedeckt."
                 )
             case .team:
                 return localizedAppText(
@@ -713,8 +713,8 @@ struct LicenseSettingsView: View {
         switch tier {
         case .individual:
             return localizedAppText(
-                "Individual commercial license terms for up to 2 devices with recurring billing.",
-                de: "Kommerzielle Einzelnutzer-Bedingungen für bis zu 2 Geräte mit wiederkehrender Abrechnung."
+                "Individual commercial license terms for up to 3 devices with recurring billing.",
+                de: "Kommerzielle Einzelnutzer-Bedingungen für bis zu 3 Geräte mit wiederkehrender Abrechnung."
             )
         case .team:
             return localizedAppText(
@@ -733,8 +733,8 @@ struct LicenseSettingsView: View {
         switch tier {
         case .individual:
             return localizedAppText(
-                "One payment for the same 2-device Individual tier, with no monthly renewal.",
-                de: "Eine Zahlung für dasselbe Einzelnutzer-Paket mit 2 Geräten, ohne monatliche Verlängerung."
+                "One payment for the same 3-device Individual tier, with no monthly renewal.",
+                de: "Eine Zahlung für dasselbe Einzelnutzer-Paket mit 3 Geräten, ohne monatliche Verlängerung."
             )
         case .team:
             return localizedAppText(
