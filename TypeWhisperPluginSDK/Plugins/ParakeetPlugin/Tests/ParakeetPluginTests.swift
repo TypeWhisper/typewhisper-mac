@@ -376,6 +376,19 @@ final class ParakeetPluginTests: XCTestCase {
         XCTAssertEqual(signature, "Alpha|auto\u{1F}Beta|0.6500")
     }
 
+    func testFluidVocabularyTermReceivesIndividualThreshold() {
+        let term = ParakeetPlugin.customVocabularyTerm(
+            from: PluginDictionaryTermHint(
+                text: "Caivex",
+                ctcMinSimilarity: 0.9
+            ),
+            ctcTokenIds: [1, 2, 3]
+        )
+
+        XCTAssertEqual(term.text, "Caivex")
+        XCTAssertEqual(term.minSimilarity, 0.9)
+    }
+
     func testSettingsDismissalRequiresOnlyBaseModelReadiness() throws {
         let host = try PluginTestHostServices(defaults: ["vocabularyBoostingEnabled": true])
         let plugin = makePlugin()

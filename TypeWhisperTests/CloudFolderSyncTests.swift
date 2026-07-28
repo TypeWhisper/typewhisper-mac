@@ -31,10 +31,33 @@ private final class InMemoryUserDataSyncStore: UserDataSyncStore, @unchecked Sen
             switch mutation {
             case .upsertDictionary(let entry):
                 let itemID = UserDataSyncIdentity.dictionaryItemID(entryType: entry.entryType, original: entry.original)
+                let existing = dictionaryEntries.first {
+                    UserDataSyncIdentity.dictionaryItemID(
+                        entryType: $0.entryType,
+                        original: $0.original
+                    ) == itemID
+                }
                 dictionaryEntries.removeAll {
                     UserDataSyncIdentity.dictionaryItemID(entryType: $0.entryType, original: $0.original) == itemID
                 }
-                dictionaryEntries.append(entry)
+                if entry.entryType == .term,
+                   !entry.ctcMinSimilarityFieldPresent {
+                    dictionaryEntries.append(
+                        UserDataSyncDictionaryEntry(
+                            entryType: entry.entryType,
+                            original: entry.original,
+                            replacement: entry.replacement,
+                            caseSensitive: entry.caseSensitive,
+                            isEnabled: entry.isEnabled,
+                            source: entry.source,
+                            ctcMinSimilarity: existing?.ctcMinSimilarity,
+                            createdAt: entry.createdAt,
+                            updatedAt: entry.updatedAt
+                        )
+                    )
+                } else {
+                    dictionaryEntries.append(entry)
+                }
             case .deleteDictionary(let itemID):
                 dictionaryEntries.removeAll {
                     UserDataSyncIdentity.dictionaryItemID(entryType: $0.entryType, original: $0.original) == itemID
@@ -744,6 +767,15 @@ final class CloudFolderSyncTests: XCTestCase {
         let legacy: CloudFolderSyncOperation = try Self.decodeFixture("upsert-snippet-legacy-v1")
         XCTAssertEqual(legacy.snippet?.tags, [])
 
+        let ctc: CloudFolderSyncOperation = try Self.decodeFixture(
+            "upsert-dictionary-ctc-v1"
+        )
+        XCTAssertEqual(ctc.dictionary?.ctcMinSimilarity, 0.65)
+        XCTAssertEqual(
+            ctc.dictionary?.ctcMinSimilarityFieldPresent,
+            true
+        )
+
         let unknown: CloudFolderSyncOperation = try Self.decodeFixture("unknown-schema")
         XCTAssertEqual(unknown.schemaVersion, 2)
         XCTAssertTrue(CloudFolderSyncEngine.winningOperations(from: [unknown]).isEmpty)
@@ -1178,6 +1210,238 @@ final class CloudFolderSyncTests: XCTestCase {
         XCTAssertEqual(winner?.operationId, "tie")
     }
 
+    func testTermEncodingUsesExplicitNullAndLegacyDecodingTracksAbsence()
+        throws
+    {
+        let automatic = Self.dictionaryEntry(
+            original: "Automatic",
+            updatedAt: Self.date(10)
+        )
+        let encoded = try XCTUnwrap(
+            JSONSerialization.jsonObject(
+                with: Self.entitlementEncoder.encode(automatic)
+            ) as? [String: Any]
+        )
+        XCTAssertTrue(encoded["ctcMinSimilarity"] is NSNull)
+
+        let legacyData = Data(
+            """
+            {
+              "entryType": "term",
+              "original": "Legacy",
+              "caseSensitive": false,
+              "isEnabled": true,
+              "createdAt": "2023-11-14T22:13:21.000Z",
+              "updatedAt": "2023-11-14T22:13:30.000Z"
+            }
+            """.utf8
+        )
+        let legacy = try Self.fixtureDecoder.decode(
+            UserDataSyncDictionaryEntry.self,
+            from: legacyData
+        )
+        XCTAssertNil(legacy.ctcMinSimilarity)
+        XCTAssertFalse(legacy.ctcMinSimilarityFieldPresent)
+    }
+
+    @MainActor
+    func testExplicitCTCFieldWinsEqualTimestampBeforeDeviceID() {
+        let itemID = UserDataSyncIdentity.dictionaryItemID(
+            entryType: UserDataSyncDictionaryEntryType.term,
+            original: "TypeWhisper"
+        )
+        let explicit = CloudFolderSyncOperation.upsertDictionary(
+            Self.dictionaryEntry(
+                original: "TypeWhisper",
+                updatedAt: Self.date(20),
+                ctcMinSimilarity: 0.65
+            ),
+            itemID: itemID,
+            deviceId: "mac-a",
+            operationId: "explicit"
+        )
+        let legacy = CloudFolderSyncOperation.upsertDictionary(
+            Self.dictionaryEntry(
+                original: "TypeWhisper",
+                updatedAt: Self.date(20),
+                ctcMinSimilarityFieldPresent: false
+            ),
+            itemID: itemID,
+            deviceId: "mac-z",
+            operationId: "legacy"
+        )
+
+        XCTAssertEqual(
+            CloudFolderSyncEngine.winningOperations(
+                from: [legacy, explicit]
+            )[itemID]?.operationId,
+            "explicit"
+        )
+    }
+
+    @MainActor
+    func testCTCValueAndExplicitNullRoundTripAcrossTwoDevices()
+        async throws
+    {
+        let folder = try TestSupport.makeTemporaryDirectory(
+            prefix: "CloudFolderSyncCTCRoundTrip"
+        )
+        defer { TestSupport.remove(folder) }
+        let first = InMemoryUserDataSyncStore(dictionaryEntries: [
+            Self.dictionaryEntry(
+                original: "TypeWhisper",
+                updatedAt: Self.date(10),
+                ctcMinSimilarity: 0.65
+            )
+        ])
+        let second = InMemoryUserDataSyncStore()
+        var firstState = CloudFolderSyncState(deviceId: "mac-a")
+        var secondState = CloudFolderSyncState(deviceId: "ios-b")
+
+        _ = try await CloudFolderSyncEngine.sync(
+            folderURL: folder,
+            store: first,
+            state: &firstState,
+            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
+            now: Self.date(20)
+        )
+        _ = try await CloudFolderSyncEngine.sync(
+            folderURL: folder,
+            store: second,
+            state: &secondState,
+            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
+            now: Self.date(30)
+        )
+        XCTAssertEqual(
+            second.dictionaryEntries.first?.ctcMinSimilarity,
+            0.65
+        )
+
+        second.dictionaryEntries = [
+            Self.dictionaryEntry(
+                original: "TypeWhisper",
+                updatedAt: Self.date(40)
+            )
+        ]
+        _ = try await CloudFolderSyncEngine.sync(
+            folderURL: folder,
+            store: second,
+            state: &secondState,
+            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
+            now: Self.date(50)
+        )
+        _ = try await CloudFolderSyncEngine.sync(
+            folderURL: folder,
+            store: first,
+            state: &firstState,
+            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
+            now: Self.date(60)
+        )
+
+        XCTAssertNil(first.dictionaryEntries.first?.ctcMinSimilarity)
+        XCTAssertEqual(
+            first.dictionaryEntries.first?.ctcMinSimilarityFieldPresent,
+            true
+        )
+    }
+
+    @MainActor
+    func testLegacyCTCFieldPreservesValueAndRepublishesOnce()
+        async throws
+    {
+        let folder = try TestSupport.makeTemporaryDirectory(
+            prefix: "CloudFolderSyncLegacyCTC"
+        )
+        defer { TestSupport.remove(folder) }
+        let store = InMemoryUserDataSyncStore(dictionaryEntries: [
+            Self.dictionaryEntry(
+                original: "TypeWhisper",
+                updatedAt: Self.date(10),
+                ctcMinSimilarity: 0.8
+            )
+        ])
+        let legacy = CloudFolderSyncOperation.upsertDictionary(
+            Self.dictionaryEntry(
+                original: "TypeWhisper",
+                updatedAt: Self.date(20),
+                ctcMinSimilarityFieldPresent: false
+            ),
+            itemID: UserDataSyncIdentity.dictionaryItemID(
+                entryType: UserDataSyncDictionaryEntryType.term,
+                original: "TypeWhisper"
+            ),
+            deviceId: "legacy-ios",
+            operationId: "legacy"
+        )
+        try Self.writeLegacyOperation(legacy, to: folder)
+        var state = CloudFolderSyncState(deviceId: "mac-a")
+
+        _ = try await CloudFolderSyncEngine.sync(
+            folderURL: folder,
+            store: store,
+            state: &state,
+            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
+            now: Self.date(25)
+        )
+        XCTAssertEqual(
+            store.dictionaryEntries.first?.ctcMinSimilarity,
+            0.8
+        )
+        let itemID = UserDataSyncIdentity.dictionaryItemID(
+            entryType: UserDataSyncDictionaryEntryType.term,
+            original: "TypeWhisper"
+        )
+        XCTAssertNil(state.exportedItemVersions[itemID])
+
+        let republish = try await CloudFolderSyncEngine.sync(
+            folderURL: folder,
+            store: store,
+            state: &state,
+            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
+            now: Self.date(30)
+        )
+        let repeated = try await CloudFolderSyncEngine.sync(
+            folderURL: folder,
+            store: store,
+            state: &state,
+            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
+            now: Self.date(35)
+        )
+        XCTAssertEqual(republish.operationsWritten, 1)
+        XCTAssertEqual(repeated.operationsWritten, 0)
+    }
+
+    @MainActor
+    func testLegacyMutationDoesNotOverwriteStoredCTC() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(
+            prefix: "CloudFolderSyncStoredCTC"
+        )
+        defer { TestSupport.remove(appSupportDirectory) }
+        let service = DictionaryService(
+            appSupportDirectory: appSupportDirectory
+        )
+        service.addEntry(
+            type: .term,
+            original: "TypeWhisper",
+            ctcMinSimilarity: 0.8
+        )
+        try service.applyUserDataSyncMutations([
+            .upsertDictionary(
+                Self.dictionaryEntry(
+                    original: "TypeWhisper",
+                    updatedAt: Self.date(20),
+                    ctcMinSimilarityFieldPresent: false
+                )
+            )
+        ])
+
+        XCTAssertEqual(service.entries.first?.ctcMinSimilarity, 0.8)
+        XCTAssertTrue(
+            service.userDataSyncEntries().first?
+                .ctcMinSimilarityFieldPresent == true
+        )
+    }
+
     @MainActor
     func testHostStoreSnapshotsObserversBeforeNotifying() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "CloudFolderSyncObservers")
@@ -1375,7 +1639,9 @@ final class CloudFolderSyncTests: XCTestCase {
         original: String,
         replacement: String? = nil,
         source: DictionaryEntrySource? = nil,
-        updatedAt: Date
+        updatedAt: Date,
+        ctcMinSimilarity: Float? = nil,
+        ctcMinSimilarityFieldPresent: Bool? = nil
     ) -> UserDataSyncDictionaryEntry {
         UserDataSyncDictionaryEntry(
             entryType: entryType,
@@ -1384,8 +1650,43 @@ final class CloudFolderSyncTests: XCTestCase {
             caseSensitive: false,
             isEnabled: true,
             source: source,
+            ctcMinSimilarity: ctcMinSimilarity,
+            ctcMinSimilarityFieldPresent:
+                ctcMinSimilarityFieldPresent,
             createdAt: date(1),
             updatedAt: updatedAt
+        )
+    }
+
+    private static func writeLegacyOperation(
+        _ operation: CloudFolderSyncOperation,
+        to folder: URL
+    ) throws {
+        let directory = CloudFolderSyncEngine.packageURL(for: folder)
+            .appendingPathComponent(
+                "ops/\(operation.deviceId)",
+                isDirectory: true
+            )
+        try FileManager.default.createDirectory(
+            at: directory,
+            withIntermediateDirectories: true
+        )
+        let encoded = try entitlementEncoder.encode(operation)
+        var object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: encoded) as? [String: Any]
+        )
+        var dictionary = try XCTUnwrap(
+            object["dictionary"] as? [String: Any]
+        )
+        dictionary.removeValue(forKey: "ctcMinSimilarity")
+        object["dictionary"] = dictionary
+        let data = try JSONSerialization.data(
+            withJSONObject: object,
+            options: [.prettyPrinted, .sortedKeys]
+        )
+        try data.write(
+            to: directory.appendingPathComponent("legacy.json"),
+            options: [.atomic]
         )
     }
 

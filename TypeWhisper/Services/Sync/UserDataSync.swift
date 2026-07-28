@@ -25,6 +25,8 @@ struct UserDataSyncDictionaryEntry: Codable, Equatable, Sendable {
     let caseSensitive: Bool
     let isEnabled: Bool
     let source: DictionaryEntrySource?
+    let ctcMinSimilarity: Float?
+    let ctcMinSimilarityFieldPresent: Bool
     let createdAt: Date
     let updatedAt: Date
 
@@ -35,6 +37,8 @@ struct UserDataSyncDictionaryEntry: Codable, Equatable, Sendable {
         caseSensitive: Bool,
         isEnabled: Bool,
         source: DictionaryEntrySource? = nil,
+        ctcMinSimilarity: Float? = nil,
+        ctcMinSimilarityFieldPresent: Bool? = nil,
         createdAt: Date,
         updatedAt: Date
     ) {
@@ -44,6 +48,12 @@ struct UserDataSyncDictionaryEntry: Codable, Equatable, Sendable {
         self.caseSensitive = caseSensitive
         self.isEnabled = isEnabled
         self.source = source
+        self.ctcMinSimilarity = entryType == .term
+            ? Self.normalizedCtcMinSimilarity(ctcMinSimilarity)
+            : nil
+        self.ctcMinSimilarityFieldPresent = entryType == .term
+            ? (ctcMinSimilarityFieldPresent ?? true)
+            : false
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -55,6 +65,7 @@ struct UserDataSyncDictionaryEntry: Codable, Equatable, Sendable {
         case caseSensitive
         case isEnabled
         case source
+        case ctcMinSimilarity
         case createdAt
         case updatedAt
     }
@@ -68,6 +79,16 @@ struct UserDataSyncDictionaryEntry: Codable, Equatable, Sendable {
         isEnabled = try container.decode(Bool.self, forKey: .isEnabled)
         let sourceRawValue = try container.decodeIfPresent(String.self, forKey: .source)
         source = sourceRawValue.flatMap(DictionaryEntrySource.init(rawValue:))
+        ctcMinSimilarityFieldPresent =
+            entryType == .term && container.contains(.ctcMinSimilarity)
+        ctcMinSimilarity = entryType == .term
+            ? Self.normalizedCtcMinSimilarity(
+                try container.decodeIfPresent(
+                    Float.self,
+                    forKey: .ctcMinSimilarity
+                )
+            )
+            : nil
         createdAt = try container.decode(Date.self, forKey: .createdAt)
         updatedAt = try container.decode(Date.self, forKey: .updatedAt)
     }
@@ -80,8 +101,16 @@ struct UserDataSyncDictionaryEntry: Codable, Equatable, Sendable {
         try container.encode(caseSensitive, forKey: .caseSensitive)
         try container.encode(isEnabled, forKey: .isEnabled)
         try container.encodeIfPresent(source?.rawValue, forKey: .source)
+        if entryType == .term {
+            try container.encode(ctcMinSimilarity, forKey: .ctcMinSimilarity)
+        }
         try container.encode(createdAt, forKey: .createdAt)
         try container.encode(updatedAt, forKey: .updatedAt)
+    }
+
+    private static func normalizedCtcMinSimilarity(_ value: Float?) -> Float? {
+        guard let value, value.isFinite else { return nil }
+        return min(max(value, 0), 1)
     }
 }
 

@@ -464,13 +464,14 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
             return
         }
 
-        // FluidAudio currently exposes only vocabulary-level minSimilarity; per-term
-        // thresholds are preserved in structured hints until the upstream API exists.
         let terms = termHints.compactMap { hint -> CustomVocabularyTerm? in
             let text = hint.text
             let ids = ctcTokenizer.encode(text)
             guard !ids.isEmpty else { return nil }
-            return CustomVocabularyTerm(text: text, weight: 10.0, ctcTokenIds: ids)
+            return Self.customVocabularyTerm(
+                from: hint,
+                ctcTokenIds: ids
+            )
         }
 
         guard !terms.isEmpty else {
@@ -499,6 +500,18 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
             lastBoostingTermCount = 0
             lastConfiguredPrompt = nil
         }
+    }
+
+    static func customVocabularyTerm(
+        from hint: PluginDictionaryTermHint,
+        ctcTokenIds: [Int]
+    ) -> CustomVocabularyTerm {
+        CustomVocabularyTerm(
+            text: hint.text,
+            weight: 10.0,
+            ctcTokenIds: ctcTokenIds,
+            minSimilarity: hint.ctcMinSimilarity
+        )
     }
 
     private func applyVocabularyRescoringIfNeeded(

@@ -1094,6 +1094,9 @@ final class DictionaryService: ObservableObject {
                 caseSensitive: entry.caseSensitive,
                 isEnabled: entry.isEnabled,
                 source: entry.source == .manual ? nil : entry.source,
+                ctcMinSimilarity: entry.type == .term
+                    ? entry.ctcMinSimilarity
+                    : nil,
                 createdAt: entry.createdAt,
                 updatedAt: entry.effectiveUpdatedAt
             )
@@ -1140,6 +1143,11 @@ final class DictionaryService: ObservableObject {
             entry.caseSensitive = synced.caseSensitive
             entry.isEnabled = synced.isEnabled
             entry.source = synced.source ?? .manual
+            if targetType == .correction {
+                entry.ctcMinSimilarity = nil
+            } else if synced.ctcMinSimilarityFieldPresent {
+                entry.ctcMinSimilarity = synced.ctcMinSimilarity
+            }
             entry.updatedAt = synced.updatedAt
             return
         }
@@ -1150,6 +1158,9 @@ final class DictionaryService: ObservableObject {
             replacement: replacement,
             caseSensitive: synced.caseSensitive,
             isEnabled: synced.isEnabled,
+            ctcMinSimilarity: targetType == .term
+                ? synced.ctcMinSimilarity
+                : nil,
             source: synced.source ?? .manual,
             createdAt: synced.createdAt,
             updatedAt: synced.updatedAt

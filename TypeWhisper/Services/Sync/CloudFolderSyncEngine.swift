@@ -262,6 +262,11 @@ enum CloudFolderSyncEngine {
         let synchronizedRecords = records(afterApplying: mutations, to: initialRecords)
         state.knownLocalItemIDs = Set(synchronizedRecords.keys)
         state.exportedItemVersions = synchronizedRecords.mapValues(\.version)
+        for itemID in dictionaryItemIDsRequiringRepublish(
+            afterApplying: mutations
+        ) {
+            state.exportedItemVersions.removeValue(forKey: itemID)
+        }
         state.appliedOperationIDs.formUnion(operations.map(\.operationId))
         state.lastSyncAt = now
 
@@ -283,7 +288,7 @@ enum CloudFolderSyncEngine {
                     collection: .dictionary,
                     itemID: itemID,
                     updatedAt: entry.updatedAt,
-                    version: versionString(for: entry.updatedAt),
+                    version: dictionaryVersionString(for: entry),
                     dictionary: entry,
                     snippet: nil
                 ),
@@ -359,6 +364,9 @@ enum CloudFolderSyncEngine {
 
     private static func recordTieBreaker(_ record: CloudFolderSyncRecord) -> String {
         if let dictionary = record.dictionary {
+            let ctcValue = dictionary.ctcMinSimilarity.map {
+                String($0)
+            } ?? "null"
             return [
                 record.collection.rawValue,
                 dictionary.entryType.rawValue,
@@ -366,6 +374,8 @@ enum CloudFolderSyncEngine {
                 dictionary.replacement ?? "",
                 String(dictionary.caseSensitive),
                 String(dictionary.isEnabled),
+                String(dictionary.ctcMinSimilarityFieldPresent),
+                ctcValue,
                 versionString(for: dictionary.createdAt)
             ].joined(separator: "|")
         }
@@ -465,8 +475,14 @@ enum CloudFolderSyncEngine {
         if operation.updatedAt > local.updatedAt {
             return true
         }
-        if operation.updatedAt == local.updatedAt && operation.deviceId > localDeviceId {
-            return true
+        if operation.updatedAt == local.updatedAt {
+            if let presencePreference = ctcPresencePreference(
+                candidate: operation.dictionary,
+                existing: local.dictionary
+            ) {
+                return presencePreference
+            }
+            return operation.deviceId > localDeviceId
         }
         return false
     }
@@ -474,6 +490,12 @@ enum CloudFolderSyncEngine {
     private static func prefers(_ candidate: CloudFolderSyncOperation, over existing: CloudFolderSyncOperation) -> Bool {
         if candidate.updatedAt != existing.updatedAt {
             return candidate.updatedAt > existing.updatedAt
+        }
+        if let presencePreference = ctcPresencePreference(
+            candidate: candidate.dictionary,
+            existing: existing.dictionary
+        ) {
+            return presencePreference
         }
         if candidate.deviceId != existing.deviceId {
             return candidate.deviceId > existing.deviceId
@@ -587,6 +609,41 @@ enum CloudFolderSyncEngine {
 
     private static func versionString(for date: Date) -> String {
         iso8601String(from: date)
+    }
+
+    private static func dictionaryVersionString(
+        for entry: UserDataSyncDictionaryEntry
+    ) -> String {
+        "dictionary-v2|\(versionString(for: entry.updatedAt))"
+    }
+
+    private static func ctcPresencePreference(
+        candidate: UserDataSyncDictionaryEntry?,
+        existing: UserDataSyncDictionaryEntry?
+    ) -> Bool? {
+        guard candidate?.entryType == .term,
+              existing?.entryType == .term,
+              candidate?.ctcMinSimilarityFieldPresent
+                != existing?.ctcMinSimilarityFieldPresent else {
+            return nil
+        }
+        return candidate?.ctcMinSimilarityFieldPresent == true
+    }
+
+    private static func dictionaryItemIDsRequiringRepublish(
+        afterApplying mutations: [UserDataSyncMutation]
+    ) -> Set<String> {
+        Set(mutations.compactMap { mutation in
+            guard case .upsertDictionary(let entry) = mutation,
+                  entry.entryType == .term,
+                  !entry.ctcMinSimilarityFieldPresent else {
+                return nil
+            }
+            return UserDataSyncIdentity.dictionaryItemID(
+                entryType: entry.entryType,
+                original: entry.original
+            )
+        })
     }
 
     private static func iso8601String(from date: Date) -> String {
