@@ -194,9 +194,27 @@ final class DictationRecoveryAudioStoreTests: XCTestCase {
     ) -> DictationViewModel {
         // Unit tests must start from the documented defaults (preview enabled,
         // preview engine = match dictation engine); the test host app's persisted
-        // preferences would otherwise leak in.
-        UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.livePreviewEngineId)
-        UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.indicatorTranscriptPreviewEnabled)
+        // preferences would otherwise leak in. `DictationViewModel` reads both keys
+        // synchronously in its initializer, so restoring on exit keeps the isolation
+        // while leaving a developer's real preferences untouched.
+        let livePreviewEngineKey = UserDefaultsKeys.livePreviewEngineId
+        let previewEnabledKey = UserDefaultsKeys.indicatorTranscriptPreviewEnabled
+        let originalLivePreviewEngine = UserDefaults.standard.object(forKey: livePreviewEngineKey)
+        let originalPreviewEnabled = UserDefaults.standard.object(forKey: previewEnabledKey)
+        UserDefaults.standard.removeObject(forKey: livePreviewEngineKey)
+        UserDefaults.standard.removeObject(forKey: previewEnabledKey)
+        defer {
+            if let originalLivePreviewEngine {
+                UserDefaults.standard.set(originalLivePreviewEngine, forKey: livePreviewEngineKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: livePreviewEngineKey)
+            }
+            if let originalPreviewEnabled {
+                UserDefaults.standard.set(originalPreviewEnabled, forKey: previewEnabledKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: previewEnabledKey)
+            }
+        }
         let textInsertionService = TextInsertionService()
         let hotkeyService = HotkeyService()
         let historyService = HistoryService(appSupportDirectory: appSupportDirectory)
