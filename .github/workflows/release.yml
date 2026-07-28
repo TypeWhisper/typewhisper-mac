@@ -14,9 +14,9 @@ on:
         required: false
         type: string
       without_icloud:
-        description: Build without iCloud entitlements while the production App ID is unavailable
+        description: Keep automatic iCloud disabled (required until the production App ID is restored)
         required: false
-        default: false
+        default: true
         type: boolean
 
 env:
@@ -48,14 +48,24 @@ jobs:
           REF_NAME: ${{ github.ref_name }}
           REQUESTED_TAG: ${{ inputs.release_tag }}
           REQUESTED_WITHOUT_ICLOUD: ${{ inputs.without_icloud }}
+          ICLOUD_RELEASE_ENABLED: ${{ vars.MACOS_ICLOUD_RELEASE_ENABLED }}
           SCHEDULED_WITHOUT_ICLOUD: ${{ vars.MACOS_SCHEDULED_WITHOUT_ICLOUD }}
         run: |
-          WITHOUT_ICLOUD="false"
-          if [ "$REQUESTED_WITHOUT_ICLOUD" = "true" ] ||
+          # Automatic iCloud is fail-closed. Enabling it requires the positive
+          # repository gate as well as a run that does not request the
+          # no-iCloud override. archive_release.sh still validates the exact
+          # production App ID, container, profile type, team, and expiration.
+          WITHOUT_ICLOUD="true"
+          if [ "$ICLOUD_RELEASE_ENABLED" = "true" ]; then
+            WITHOUT_ICLOUD="false"
+          fi
+          if { [ "$EVENT_NAME" = "workflow_dispatch" ] && [ "$REQUESTED_WITHOUT_ICLOUD" = "true" ]; } ||
             { [ "$EVENT_NAME" = "schedule" ] && [ "$SCHEDULED_WITHOUT_ICLOUD" = "true" ]; }; then
             WITHOUT_ICLOUD="true"
           fi
           echo "without_icloud=$WITHOUT_ICLOUD" >> "$GITHUB_OUTPUT"
+          echo "Automatic iCloud release enabled: $ICLOUD_RELEASE_ENABLED"
+          echo "Building without iCloud: $WITHOUT_ICLOUD"
 
           if [ "$EVENT_NAME" = "push" ]; then
             printf 'tag=%s\n' "$REF_NAME" >> "$GITHUB_OUTPUT"

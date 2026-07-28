@@ -25,7 +25,15 @@ Link the successful runs instead of repeating checks already enforced by CI.
 
 - [ ] The latest release candidate ran on representative real machines for multiple days without open P0/P1 blockers.
 - [ ] Release notes and user-facing documentation match the candidate.
-- [ ] Upgrade from the previous stable version preserves History, Workflows, Dictionary, Snippets, hotkeys, enabled plugins, and the update channel.
+- [ ] Upgrade from the previous stable version through Sparkle preserves History, Workflows, Dictionary, Snippets, hotkeys, enabled plugins, the update channel, Keychain-backed credentials, and the selected sync mode/folder.
+
+## Sync and release identity
+
+- [ ] The candidate keeps the production bundle identifier `com.typewhisper.mac`; it is an update of the existing Sparkle app rather than a second app.
+- [ ] While `MACOS_ICLOUD_RELEASE_ENABLED` is unset or `false`, the candidate declares `TypeWhisperICloudEnabled=NO`, contains no provisioning profile or iCloud entitlements, and still offers Cloud Folder sync.
+- [ ] Cloud Folder sync is bidirectional between two Macs when both select the same folder in iCloud Drive.
+- [ ] If automatic iCloud is enabled, `scripts/check_release_signing.sh --require-notarization <TypeWhisper.app>` passes for team `2D8ALY3LCL`, bundle identifier `com.typewhisper.mac`, and container `iCloud.com.typewhisper.sync`.
+- [ ] If automatic iCloud is enabled, automatic sync is bidirectional between two Macs and the Daily has run for at least 48 hours with at least three users before Stable promotion.
 
 ## Recording and insertion
 

@@ -35,12 +35,56 @@ enum PremiumSyncMode: String, CaseIterable, Identifiable, Sendable {
     }
 }
 
-private enum TypeWhisperBuildCapabilities {
+enum TypeWhisperBuildCapabilities {
+    private static let enabledInfoKey = "TypeWhisperICloudEnabled"
+    private static let containerInfoKey = "TypeWhisperICloudContainer"
+    private static let iCloudContainerEntitlement = "com.apple.developer.icloud-container-identifiers"
+    private static let iCloudServicesEntitlement = "com.apple.developer.icloud-services"
+    private static let ubiquityContainerEntitlement = "com.apple.developer.ubiquity-container-identifiers"
+
     static var iCloudSyncEnabled: Bool {
-        guard let value = Bundle.main.object(forInfoDictionaryKey: "TypeWhisperICloudEnabled") as? String else {
-            return true
+        let bundle = Bundle.main
+        let profileURL = bundle.bundleURL
+            .appendingPathComponent("Contents", isDirectory: true)
+            .appendingPathComponent("embedded.provisionprofile")
+        guard let task = SecTaskCreateFromSelf(nil) else {
+            return false
         }
-        return !["no", "false", "0"].contains(value.lowercased())
+
+        return isICloudSyncEnabled(
+            infoDictionary: bundle.infoDictionary ?? [:],
+            hasProvisioningProfile: FileManager.default.fileExists(atPath: profileURL.path)
+        ) { entitlement in
+            SecTaskCopyValueForEntitlement(task, entitlement as CFString, nil) as? [String]
+        }
+    }
+
+    static func isICloudSyncEnabled(
+        infoDictionary: [String: Any],
+        hasProvisioningProfile: Bool,
+        entitlementValues: (String) -> [String]?
+    ) -> Bool {
+        guard hasProvisioningProfile,
+              infoValueIsEnabled(infoDictionary[enabledInfoKey]),
+              let container = infoDictionary[containerInfoKey] as? String,
+              container.hasPrefix("iCloud."),
+              !container.contains("$("),
+              entitlementValues(iCloudContainerEntitlement)?.contains(container) == true,
+              entitlementValues(ubiquityContainerEntitlement)?.contains(container) == true,
+              entitlementValues(iCloudServicesEntitlement)?.contains("CloudDocuments") == true else {
+            return false
+        }
+        return true
+    }
+
+    private static func infoValueIsEnabled(_ value: Any?) -> Bool {
+        if let value = value as? Bool {
+            return value
+        }
+        guard let value = value as? String else {
+            return false
+        }
+        return ["yes", "true", "1"].contains(value.lowercased())
     }
 }
 
