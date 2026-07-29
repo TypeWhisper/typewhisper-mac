@@ -1056,6 +1056,7 @@ actor OpenAIFileTranscriptionSession: LiveTranscriptionSession {
     private let onProgress: @Sendable (String) -> Bool
     private var bufferedSamples: [Float] = []
     private var lastPreviewSampleCount = 0
+    private var isPreviewInFlight = false
     private var didFinish = false
     private var isCancelled = false
 
@@ -1071,25 +1072,33 @@ actor OpenAIFileTranscriptionSession: LiveTranscriptionSession {
         guard !samples.isEmpty, !didFinish, !isCancelled else { return }
 
         bufferedSamples.append(contentsOf: samples)
-        guard bufferedSamples.count - lastPreviewSampleCount >= Self.previewIntervalSampleCount else {
-            return
-        }
-        lastPreviewSampleCount = bufferedSamples.count
+        guard !isPreviewInFlight else { return }
 
-        let previewSamples = Array(bufferedSamples.suffix(Self.previewWindowSampleCount))
-        guard Self.shouldRequestPreview(for: previewSamples) else { return }
+        isPreviewInFlight = true
+        defer { isPreviewInFlight = false }
 
-        do {
-            let result = try await transcribe(Self.audioData(from: previewSamples))
-            guard !didFinish, !isCancelled, !Task.isCancelled else { return }
-
-            let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !text.isEmpty {
-                _ = onProgress(text)
+        while !didFinish, !isCancelled, !Task.isCancelled {
+            let currentSampleCount = bufferedSamples.count
+            guard currentSampleCount - lastPreviewSampleCount >= Self.previewIntervalSampleCount else {
+                break
             }
-        } catch {
-            // A best-effort preview must not prevent the full buffered audio from
-            // being finalized when the user stops dictation.
+            lastPreviewSampleCount = currentSampleCount
+
+            let previewSamples = Array(bufferedSamples.suffix(Self.previewWindowSampleCount))
+            guard Self.shouldRequestPreview(for: previewSamples) else { continue }
+
+            do {
+                let result = try await transcribe(Self.audioData(from: previewSamples))
+                guard !didFinish, !isCancelled, !Task.isCancelled else { break }
+
+                let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+                if !text.isEmpty {
+                    _ = onProgress(text)
+                }
+            } catch {
+                // A best-effort preview must not prevent the full buffered audio from
+                // being finalized when the user stops dictation.
+            }
         }
     }
 

@@ -715,6 +715,24 @@ final class OpenAIPluginTests: XCTestCase {
         XCTAssertEqual(result.text, "64000 samples")
     }
 
+    func testFileModelLiveSessionSerializesAndCoalescesReentrantPreviews() async throws {
+        let sessionBox = OpenAIFileTranscriptionSessionBox()
+        let recorder = ReentrantOpenAIFileTranscriptionRecorder(sessionBox: sessionBox)
+        let session = OpenAIFileTranscriptionSession(
+            transcribe: { audio in
+                try await recorder.transcribe(audio)
+            },
+            onProgress: { _ in true }
+        )
+        await sessionBox.store(session)
+
+        try await session.appendAudio(samples: [Float](repeating: 0.1, count: 48_000))
+
+        let snapshot = await recorder.snapshot
+        XCTAssertEqual(snapshot.sampleCounts, [48_000, 96_000])
+        XCTAssertEqual(snapshot.maximumConcurrentRequestCount, 1)
+    }
+
     func testOpenAIRealtimePCMConversionResamples16kTo24kPCM16() {
         let samples = [Float](repeating: 0, count: 16_000)
 
@@ -1128,6 +1146,54 @@ private actor OpenAIFileTranscriptionRecorder {
 
     func record(sampleCount: Int) {
         sampleCounts.append(sampleCount)
+    }
+}
+
+private actor OpenAIFileTranscriptionSessionBox {
+    private var session: OpenAIFileTranscriptionSession?
+
+    func store(_ session: OpenAIFileTranscriptionSession) {
+        self.session = session
+    }
+
+    func appendAudio(samples: [Float]) async throws {
+        try await session?.appendAudio(samples: samples)
+    }
+}
+
+private actor ReentrantOpenAIFileTranscriptionRecorder {
+    struct Snapshot {
+        let sampleCounts: [Int]
+        let maximumConcurrentRequestCount: Int
+    }
+
+    private let sessionBox: OpenAIFileTranscriptionSessionBox
+    private var sampleCounts: [Int] = []
+    private var activeRequestCount = 0
+    private var maximumConcurrentRequestCount = 0
+
+    init(sessionBox: OpenAIFileTranscriptionSessionBox) {
+        self.sessionBox = sessionBox
+    }
+
+    func transcribe(_ audio: AudioData) async throws -> PluginTranscriptionResult {
+        activeRequestCount += 1
+        defer { activeRequestCount -= 1 }
+        maximumConcurrentRequestCount = max(maximumConcurrentRequestCount, activeRequestCount)
+        sampleCounts.append(audio.samples.count)
+
+        if sampleCounts.count == 1 {
+            try await sessionBox.appendAudio(samples: [Float](repeating: 0.1, count: 48_000))
+        }
+
+        return PluginTranscriptionResult(text: "\(audio.samples.count) samples")
+    }
+
+    var snapshot: Snapshot {
+        Snapshot(
+            sampleCounts: sampleCounts,
+            maximumConcurrentRequestCount: maximumConcurrentRequestCount
+        )
     }
 }
 
