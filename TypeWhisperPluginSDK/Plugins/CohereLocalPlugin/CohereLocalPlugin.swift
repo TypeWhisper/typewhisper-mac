@@ -70,6 +70,7 @@ final class CohereLocalPlugin: NSObject, TranscriptionEnginePlugin, Transcriptio
         var selectedModelId: String?
         var loadedModelId: String?
         var runtime: Runtime?
+        var startingServer: CrispAsrServer?
         var modelState: CohereLocalModelState = .notLoaded
         var loadGeneration = 0
         var huggingFaceToken: String?
@@ -110,17 +111,20 @@ final class CohereLocalPlugin: NSObject, TranscriptionEnginePlugin, Transcriptio
     }
 
     func deactivate() {
-        let runtime = state.withLock { state -> Runtime? in
+        let servers = state.withLock { state -> (Runtime?, CrispAsrServer?) in
             let runtime = state.runtime
+            let startingServer = state.startingServer
             state.loadGeneration += 1
             state.host = nil
             state.loadedModelId = nil
             state.runtime = nil
+            state.startingServer = nil
             state.modelState = .notLoaded
             state.huggingFaceToken = nil
-            return runtime
+            return (runtime, startingServer)
         }
-        runtime?.server.stop()
+        servers.0?.server.stop()
+        servers.1?.stop()
     }
 
     // MARK: - TranscriptionEnginePlugin
@@ -175,20 +179,27 @@ final class CohereLocalPlugin: NSObject, TranscriptionEnginePlugin, Transcriptio
             state -> (
                 host: (any HostServices)?,
                 runtime: Runtime?,
+                startingServer: CrispAsrServer?,
                 shouldRestore: Bool,
                 shouldClearLoadedPersistence: Bool
             ) in
             let shouldClearLoadedPersistence = state.loadedModelId != modelId
-            let runtime = state.loadedModelId == modelId ? nil : state.runtime
-            if runtime != nil {
+            let shouldInvalidateLoad =
+                state.selectedModelId != modelId
+                || (state.loadedModelId != nil && state.loadedModelId != modelId)
+            let runtime = shouldInvalidateLoad ? state.runtime : nil
+            let startingServer = shouldInvalidateLoad ? state.startingServer : nil
+            if shouldInvalidateLoad {
                 state.loadGeneration += 1
                 state.runtime = nil
+                state.startingServer = nil
                 state.loadedModelId = nil
                 state.modelState = .notLoaded
             }
             state.selectedModelId = modelId
             let shouldRestore =
                 state.runtime == nil
+                && state.startingServer == nil
                 && state.host.map {
                     CohereLocalModelAssets(
                         pluginDataDirectory: $0.pluginDataDirectory,
@@ -198,12 +209,14 @@ final class CohereLocalPlugin: NSObject, TranscriptionEnginePlugin, Transcriptio
             return (
                 state.host,
                 runtime,
+                startingServer,
                 shouldRestore,
                 shouldClearLoadedPersistence
             )
         }
 
         context.runtime?.server.stop()
+        context.startingServer?.stop()
         context.host?.setUserDefault(modelId, forKey: "selectedModel")
         if context.shouldClearLoadedPersistence {
             context.host?.setUserDefault(nil, forKey: "loadedModel")
@@ -287,6 +300,7 @@ final class CohereLocalPlugin: NSObject, TranscriptionEnginePlugin, Transcriptio
             pluginDataDirectory: context.host.pluginDataDirectory,
             model: context.model
         )
+        var pendingServer: CrispAsrServer?
 
         do {
             if !assets.isInstalled {
@@ -304,33 +318,56 @@ final class CohereLocalPlugin: NSObject, TranscriptionEnginePlugin, Transcriptio
             try Task.checkCancellation()
             guard transitionToPreparing(generation: context.generation) else { return }
 
+            let server = CrispAsrServer()
+            pendingServer = server
+            let didRegisterServer = state.withLock { state -> Bool in
+                guard state.loadGeneration == context.generation else { return false }
+                state.startingServer = server
+                return true
+            }
+            guard didRegisterServer else { return }
+
             let runtime = try await PluginLocalInferenceGate.shared.withLock {
                 try Task.checkCancellation()
-                let server = CrispAsrServer()
+                let isCurrent = state.withLock {
+                    $0.loadGeneration == context.generation
+                        && $0.startingServer === server
+                }
+                guard isCurrent else { throw CancellationError() }
                 try await server.start(assets: assets)
                 return Runtime(server: server)
             }
 
             let didInstall = state.withLock { state -> Bool in
-                guard state.loadGeneration == context.generation else { return false }
+                guard state.loadGeneration == context.generation,
+                      state.startingServer === server else {
+                    return false
+                }
+                state.startingServer = nil
                 state.runtime = runtime
                 state.loadedModelId = context.model.id
                 state.selectedModelId = context.model.id
                 state.modelState = .ready
                 return true
             }
-            guard didInstall else { return }
+            guard didInstall else {
+                server.stop()
+                return
+            }
+            pendingServer = nil
 
             context.host.setUserDefault(context.model.id, forKey: "selectedModel")
             context.host.setUserDefault(context.model.id, forKey: "loadedModel")
             context.host.notifyCapabilitiesChanged()
         } catch is CancellationError {
+            pendingServer?.stop()
             finishModelLoad(
                 generation: context.generation,
                 state: .notLoaded,
                 host: context.host
             )
         } catch {
+            pendingServer?.stop()
             finishModelLoad(
                 generation: context.generation,
                 state: .error(error.localizedDescription),
@@ -353,15 +390,23 @@ final class CohereLocalPlugin: NSObject, TranscriptionEnginePlugin, Transcriptio
     }
 
     func unloadModel(clearPersistence: Bool = true) {
-        let context = state.withLock { state -> (host: (any HostServices)?, runtime: Runtime?) in
+        let context = state.withLock {
+            state -> (
+                host: (any HostServices)?,
+                runtime: Runtime?,
+                startingServer: CrispAsrServer?
+            ) in
             let runtime = state.runtime
+            let startingServer = state.startingServer
             state.loadGeneration += 1
             state.runtime = nil
+            state.startingServer = nil
             state.loadedModelId = nil
             state.modelState = .notLoaded
-            return (state.host, runtime)
+            return (state.host, runtime, startingServer)
         }
         context.runtime?.server.stop()
+        context.startingServer?.stop()
         if clearPersistence {
             context.host?.setUserDefault(nil, forKey: "loadedModel")
         }
@@ -474,6 +519,7 @@ final class CohereLocalPlugin: NSObject, TranscriptionEnginePlugin, Transcriptio
         let didFinish = state.withLock { state -> Bool in
             guard state.loadGeneration == generation else { return false }
             state.runtime = nil
+            state.startingServer = nil
             state.loadedModelId = nil
             state.modelState = newState
             return true

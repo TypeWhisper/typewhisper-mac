@@ -111,6 +111,60 @@ final class CohereLocalPluginTests: XCTestCase {
         XCTAssertEqual(errno, ESRCH)
     }
 
+    func testSelectingAnotherModelStopsServerThatIsStillStarting() async throws {
+        let host = try PluginTestHostServices(shouldRestoreLoadedModelsPassively: false)
+        let plugin = CohereLocalPlugin()
+        plugin.activate(host: host)
+        defer { plugin.deactivate() }
+
+        let assets = CohereLocalModelAssets(
+            pluginDataDirectory: host.pluginDataDirectory,
+            model: CohereLocalPlugin.fastModel
+        )
+        for relativePath in [CohereLocalPlugin.fastModel.fileName]
+            + CohereLocalModelAssets.sharedRequiredRelativePaths {
+            let url = assets.rootDirectory.appendingPathComponent(relativePath)
+            try FileManager.default.createDirectory(
+                at: url.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try Data("test".utf8).write(to: url)
+        }
+
+        let childPIDFile = assets.cacheDirectory.appendingPathComponent("test-child.pid")
+        let runtimeScript = """
+            #!/bin/sh
+            echo $$ > "$CRISPASR_CACHE_DIR/test-child.pid"
+            exec /bin/sleep 60
+            """
+        try Data(runtimeScript.utf8).write(to: assets.runtimeExecutableURL)
+        try FileManager.default.setAttributes(
+            [.posixPermissions: 0o755],
+            ofItemAtPath: assets.runtimeExecutableURL.path
+        )
+
+        let loadTask = Task {
+            await plugin.loadModel(allowDownloads: false)
+        }
+        let startupDeadline = Date().addingTimeInterval(5)
+        while !FileManager.default.fileExists(atPath: childPIDFile.path),
+              Date() < startupDeadline {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: childPIDFile.path))
+
+        plugin.selectModel(CohereLocalPlugin.compactModel.id)
+        await loadTask.value
+
+        XCTAssertEqual(plugin.selectedModelId, CohereLocalPlugin.compactModel.id)
+        XCTAssertEqual(plugin.modelState, .notLoaded)
+        let childPIDText = try String(contentsOf: childPIDFile, encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let childPID = try XCTUnwrap(pid_t(childPIDText))
+        XCTAssertEqual(kill(childPID, 0), -1)
+        XCTAssertEqual(errno, ESRCH)
+    }
+
     func testDownloadedModelRequiresEveryPinnedAsset() throws {
         let host = try PluginTestHostServices(shouldRestoreLoadedModelsPassively: false)
         let assets = CohereLocalModelAssets(
