@@ -34,9 +34,6 @@ private class FirstMouseHostingView<Content: View>: NSHostingView<Content> {
 /// Panel that visually extends the MacBook notch, centered over the hardware notch.
 /// Only shown on displays with a hardware notch - hidden on non-notch displays regardless of settings.
 class NotchIndicatorPanel: NSPanel {
-    /// Large enough to accommodate the expanded (open) state. SwiftUI clips the visible area.
-    private static let panelWidth: CGFloat = 500
-    private static let panelHeight: CGFloat = 500
     private static let presentationAnimationDuration: Duration = .milliseconds(220)
 
     private let screenResolver: IndicatorScreenResolver
@@ -47,6 +44,7 @@ class NotchIndicatorPanel: NSPanel {
     private var cachedScreen: NSScreen?
     private var showTask: Task<Void, Never>?
     private var dismissTask: Task<Void, Never>?
+    private var isFeedbackInteractive = false
 
     convenience init(screenResolver: IndicatorScreenResolver) {
         self.init(
@@ -68,8 +66,12 @@ class NotchIndicatorPanel: NSPanel {
         self.screenResolver = screenResolver
         self.displayModeProvider = displayModeProvider
         self.indicatorVisibleInScreenCapturesProvider = indicatorVisibleInScreenCapturesProvider
+        let initialSize = IndicatorFeedbackPanelLayout.panelSize(
+            for: .notch,
+            isFeedbackInteractive: false
+        )
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: Self.panelWidth, height: Self.panelHeight),
+            contentRect: NSRect(origin: .zero, size: initialSize),
             styleMask: [.borderless, .nonactivatingPanel, .utilityWindow, .hudWindow],
             backing: .buffered,
             defer: false
@@ -143,10 +145,15 @@ class NotchIndicatorPanel: NSPanel {
             }
             .store(in: &cancellables)
 
-        vm.$actionFeedbackUndoTitle
+        Publishers.CombineLatest(vm.$state, vm.$actionFeedbackMessage)
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] undoTitle in
-                self?.ignoresMouseEvents = undoTitle == nil
+            .sink { [weak self] state, message in
+                self?.updateFeedbackInteraction(
+                    isInteractive: IndicatorFeedbackPanelLayout.isInteractive(
+                        state: state,
+                        message: message
+                    )
+                )
             }
             .store(in: &cancellables)
     }
@@ -215,10 +222,24 @@ class NotchIndicatorPanel: NSPanel {
         notchGeometry.update(for: screen)
 
         let screenFrame = screen.frame
-        let x = screenFrame.midX - Self.panelWidth / 2
-        let y = screenFrame.origin.y + screenFrame.height - Self.panelHeight
+        let closedWidth = NotchIndicatorLayout.closedWidth(
+            hasNotch: notchGeometry.hasNotch,
+            notchWidth: notchGeometry.notchWidth
+        )
+        let panelSize = IndicatorFeedbackPanelLayout.panelSize(
+            for: .notch,
+            isFeedbackInteractive: isFeedbackInteractive,
+            notchClosedWidth: closedWidth,
+            notchClosedHeight: notchGeometry.notchHeight
+        )
+        let panelFrame = IndicatorFeedbackPanelLayout.panelFrame(
+            for: .notch,
+            size: panelSize,
+            in: screenFrame
+        )
 
-        setFrame(NSRect(x: x, y: y, width: Self.panelWidth, height: Self.panelHeight), display: true)
+        setFrame(panelFrame, display: true)
+        ignoresMouseEvents = !isFeedbackInteractive
         FloatingPanelSpacePolicy.orderIndicatorFront(
             self,
             displayMode: displayModeProvider(),
@@ -239,7 +260,19 @@ class NotchIndicatorPanel: NSPanel {
         placePanel()
     }
 
+    func updateFeedbackInteraction(isInteractive: Bool) {
+        if !isInteractive {
+            ignoresMouseEvents = true
+        }
+        guard isFeedbackInteractive != isInteractive else { return }
+        isFeedbackInteractive = isInteractive
+        if isVisible {
+            show()
+        }
+    }
+
     func dismiss() {
+        ignoresMouseEvents = true
         cachedScreen = nil
         showTask?.cancel()
         showTask = nil

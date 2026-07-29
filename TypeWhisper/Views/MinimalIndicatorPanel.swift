@@ -8,17 +8,43 @@ private class MinimalFirstMouseHostingView<Content: View>: NSHostingView<Content
 
 /// Floating panel for the compact minimal indicator mode.
 class MinimalIndicatorPanel: NSPanel {
-    private static let panelWidth: CGFloat = 420
-    private static let panelHeight: CGFloat = 160
-
     private let screenResolver: IndicatorScreenResolver
+    private let displayModeProvider: () -> NotchIndicatorDisplay
+    private let overlayPositionProvider: () -> OverlayPosition
+    private let indicatorVisibleInScreenCapturesProvider: () -> Bool
     private var cancellables = Set<AnyCancellable>()
     private var cachedScreen: NSScreen?
+    private var isFeedbackInteractive = false
 
-    init(screenResolver: IndicatorScreenResolver) {
+    convenience init(screenResolver: IndicatorScreenResolver) {
+        self.init(
+            screenResolver: screenResolver,
+            displayModeProvider: { DictationViewModel.shared.notchIndicatorDisplay },
+            overlayPositionProvider: { DictationViewModel.shared.overlayPosition },
+            indicatorVisibleInScreenCapturesProvider: {
+                DictationViewModel.shared.indicatorVisibleInScreenCaptures
+            },
+            content: { MinimalIndicatorView() }
+        )
+    }
+
+    init<Content: View>(
+        screenResolver: IndicatorScreenResolver,
+        displayModeProvider: @escaping () -> NotchIndicatorDisplay,
+        overlayPositionProvider: @escaping () -> OverlayPosition,
+        indicatorVisibleInScreenCapturesProvider: @escaping () -> Bool = { true },
+        @ViewBuilder content: () -> Content
+    ) {
         self.screenResolver = screenResolver
+        self.displayModeProvider = displayModeProvider
+        self.overlayPositionProvider = overlayPositionProvider
+        self.indicatorVisibleInScreenCapturesProvider = indicatorVisibleInScreenCapturesProvider
+        let initialSize = IndicatorFeedbackPanelLayout.panelSize(
+            for: .minimal,
+            isFeedbackInteractive: false
+        )
         super.init(
-            contentRect: NSRect(x: 0, y: 0, width: Self.panelWidth, height: Self.panelHeight),
+            contentRect: NSRect(origin: .zero, size: initialSize),
             styleMask: [.borderless, .nonactivatingPanel, .utilityWindow, .hudWindow],
             backing: .buffered,
             defer: false
@@ -34,12 +60,12 @@ class MinimalIndicatorPanel: NSPanel {
         ignoresMouseEvents = true
         FloatingPanelSpacePolicy.applyIndicatorPolicy(
             to: self,
-            displayMode: DictationViewModel.shared.notchIndicatorDisplay,
+            displayMode: displayModeProvider(),
             windowLevel: FloatingPanelSpacePolicy.floatingIndicatorWindowLevel,
-            isVisibleInScreenCaptures: DictationViewModel.shared.indicatorVisibleInScreenCaptures
+            isVisibleInScreenCaptures: indicatorVisibleInScreenCapturesProvider()
         )
 
-        let hostingView = MinimalFirstMouseHostingView(rootView: MinimalIndicatorView())
+        let hostingView = MinimalFirstMouseHostingView(rootView: content())
         hostingView.sizingOptions = []
         contentView = hostingView
     }
@@ -100,10 +126,15 @@ class MinimalIndicatorPanel: NSPanel {
             }
             .store(in: &cancellables)
 
-        vm.$actionFeedbackUndoTitle
+        Publishers.CombineLatest(vm.$state, vm.$actionFeedbackMessage)
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] undoTitle in
-                self?.ignoresMouseEvents = undoTitle == nil
+            .sink { [weak self] state, message in
+                self?.updateFeedbackInteraction(
+                    isInteractive: IndicatorFeedbackPanelLayout.isInteractive(
+                        state: state,
+                        message: message
+                    )
+                )
             }
             .store(in: &cancellables)
     }
@@ -140,7 +171,7 @@ class MinimalIndicatorPanel: NSPanel {
             cachedScreen = screen
         }
 
-        let overlayPosition = DictationViewModel.shared.overlayPosition
+        let overlayPosition = overlayPositionProvider()
         let placement: IndicatorPlacement = overlayPosition == .top ? .notchStrip : .nonNotchArea
         if IndicatorFullscreenSuppressionPolicy.shouldSuppressIndicator(on: screen, placement: placement) {
             suppressForForeignFullscreen()
@@ -148,22 +179,24 @@ class MinimalIndicatorPanel: NSPanel {
         }
 
         let screenFrame = screen.visibleFrame
-        let x = screenFrame.midX - Self.panelWidth / 2
+        let panelSize = IndicatorFeedbackPanelLayout.panelSize(
+            for: .minimal,
+            isFeedbackInteractive: isFeedbackInteractive
+        )
+        let panelFrame = IndicatorFeedbackPanelLayout.panelFrame(
+            for: .minimal,
+            size: panelSize,
+            in: screenFrame,
+            overlayPosition: overlayPosition
+        )
 
-        let y: CGFloat
-        switch overlayPosition {
-        case .bottom:
-            y = screenFrame.origin.y + 20
-        case .top:
-            y = screenFrame.origin.y + screenFrame.height - Self.panelHeight - 20
-        }
-
-        setFrame(NSRect(x: x, y: y, width: Self.panelWidth, height: Self.panelHeight), display: true)
+        setFrame(panelFrame, display: true)
+        ignoresMouseEvents = !isFeedbackInteractive
         FloatingPanelSpacePolicy.orderIndicatorFront(
             self,
-            displayMode: DictationViewModel.shared.notchIndicatorDisplay,
+            displayMode: displayModeProvider(),
             windowLevel: FloatingPanelSpacePolicy.floatingIndicatorWindowLevel,
-            isVisibleInScreenCaptures: DictationViewModel.shared.indicatorVisibleInScreenCaptures
+            isVisibleInScreenCaptures: indicatorVisibleInScreenCapturesProvider()
         )
     }
 
@@ -173,18 +206,30 @@ class MinimalIndicatorPanel: NSPanel {
     }
 
     private func resolveScreen() -> NSScreen {
-        screenResolver.resolveScreen(for: DictationViewModel.shared.notchIndicatorDisplay)
+        screenResolver.resolveScreen(for: displayModeProvider())
     }
 
     func refreshPlacementForActiveContextChange() {
         guard isVisible else { return }
-        if DictationViewModel.shared.notchIndicatorDisplay == .activeScreen {
+        if displayModeProvider() == .activeScreen {
             cachedScreen = nil
         }
         show()
     }
 
+    func updateFeedbackInteraction(isInteractive: Bool) {
+        if !isInteractive {
+            ignoresMouseEvents = true
+        }
+        guard isFeedbackInteractive != isInteractive else { return }
+        isFeedbackInteractive = isInteractive
+        if isVisible {
+            show()
+        }
+    }
+
     func dismiss() {
+        ignoresMouseEvents = true
         cachedScreen = nil
         orderOut(nil)
     }

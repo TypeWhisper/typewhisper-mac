@@ -15,7 +15,7 @@ struct NotchIndicatorView: View {
     private let contentPadding: CGFloat = 28
     private let sizing: IndicatorSizing = .notch
     private let processingBodyHeight: CGFloat = 28
-    private let feedbackBodyHeight: CGFloat = 52
+    private let feedbackBodyHeight = IndicatorFeedbackPanelLayout.feedbackBodyHeight
 
     private var presentation: IndicatorPresentationData {
         IndicatorPresentationData.make(dictation: viewModel, recorder: recorder)
@@ -157,6 +157,10 @@ struct NotchIndicatorView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .opacity(presentationOpacity)
         .preferredColorScheme(.dark)
+        .onHover { hovered in
+            guard hasActionFeedback else { return }
+            viewModel.setActionFeedbackHovered(hovered)
+        }
         .animation(.easeOut(duration: 0.22), value: geometry.isPresented)
         .animation(.easeOut(duration: 0.24), value: currentWidth)
         .animation(.easeOut(duration: 0.24), value: expandedBodyHeight)
@@ -283,7 +287,8 @@ struct NotchIndicatorView: View {
                 actionTitle: presentation.actionFeedbackUndoTitle,
                 onAction: presentation.actionFeedbackUndoTitle == nil ? nil : {
                     viewModel.undoActionFeedback()
-                }
+                },
+                remainingFraction: presentation.actionFeedbackRemainingFraction
             )
         } else {
             Color.clear

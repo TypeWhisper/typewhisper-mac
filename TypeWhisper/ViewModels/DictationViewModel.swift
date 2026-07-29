@@ -260,8 +260,11 @@ final class DictationViewModel: ObservableObject {
     @Published var actionFeedbackIcon: String?
     @Published var actionFeedbackIsError: Bool = false
     @Published var actionFeedbackUndoTitle: String?
+    @Published private(set) var actionFeedbackRemainingFraction: Double = 0
+    @Published private(set) var actionFeedbackIsPaused = false
     @Published var activeAppIcon: NSImage?
     private var actionDisplayDuration: TimeInterval = 3.5
+    private let indicatorFeedbackLifetime = IndicatorFeedbackLifetime()
 
     @Published var indicatorStyle: IndicatorStyle {
         didSet { Self.persistIndicatorStyle(indicatorStyle) }
@@ -959,6 +962,20 @@ final class DictationViewModel: ObservableObject {
     }
 
     private func setupBindings() {
+        indicatorFeedbackLifetime.$remainingFraction
+            .removeDuplicates()
+            .sink { [weak self] remainingFraction in
+                self?.actionFeedbackRemainingFraction = remainingFraction
+            }
+            .store(in: &cancellables)
+
+        indicatorFeedbackLifetime.$isPaused
+            .removeDuplicates()
+            .sink { [weak self] isPaused in
+                self?.actionFeedbackIsPaused = isPaused
+            }
+            .store(in: &cancellables)
+
         hotkeyService.onDictationStart = { [weak self] requestTimestamp in
             guard let self else { return }
             logger.info("hotkey→onDictationStart (state=\(String(describing: self.state), privacy: .public))")
@@ -1150,6 +1167,7 @@ final class DictationViewModel: ObservableObject {
         clearPendingUndoActionFeedback()
         insertingResetTask?.cancel()
         insertingResetTask = nil
+        indicatorFeedbackLifetime.cancel()
         clearCancelWarning()
         pendingPushToTalkDiscardMessage = nil
         metadataCaptureTask?.cancel()
@@ -1281,7 +1299,11 @@ final class DictationViewModel: ObservableObject {
         }
 
         if state == .inserting {
-            scheduleInsertingReset(after: .seconds(actionDisplayDuration))
+            if actionFeedbackMessage != nil {
+                indicatorFeedbackLifetime.finishImmediately()
+            } else {
+                scheduleInsertingReset(after: .seconds(actionDisplayDuration))
+            }
         }
     }
 
@@ -1969,8 +1991,11 @@ final class DictationViewModel: ObservableObject {
                 lastTranscriptionLanguage = detectedLang
 
                 state = .inserting
-                let resetDelay: Duration = actionFeedbackMessage != nil ? .seconds(actionDisplayDuration) : .seconds(1.5)
-                scheduleInsertingReset(after: resetDelay)
+                if actionFeedbackMessage != nil {
+                    startActionFeedbackLifetime(duration: actionDisplayDuration)
+                } else {
+                    scheduleInsertingReset(after: .seconds(1.5))
+                }
             } catch {
                 guard !Task.isCancelled else { return }
                 audioRecordingService.preserveActiveRecoveryRecording()
@@ -2152,6 +2177,7 @@ final class DictationViewModel: ObservableObject {
         errorResetTask?.cancel()
         insertingResetTask?.cancel()
         insertingResetTask = nil
+        indicatorFeedbackLifetime.cancel()
         stopFinalizationTask?.cancel()
         stopFinalizationTask = nil
         transcriptionTask?.cancel()
@@ -2799,7 +2825,27 @@ final class DictationViewModel: ObservableObject {
             errorLogService.addEntry(message: message, category: errorCategory)
         }
 
-        scheduleInsertingReset(after: .seconds(duration))
+        startActionFeedbackLifetime(duration: duration)
+    }
+
+    func setActionFeedbackHovered(_ hovered: Bool) {
+        guard state == .inserting, actionFeedbackMessage != nil else {
+            indicatorFeedbackLifetime.setHovered(false)
+            return
+        }
+        indicatorFeedbackLifetime.setHovered(hovered)
+    }
+
+    private func startActionFeedbackLifetime(duration: TimeInterval) {
+        insertingResetTask?.cancel()
+        insertingResetTask = nil
+        let shouldRemainPaused = indicatorFeedbackLifetime.isPaused
+        indicatorFeedbackLifetime.start(duration: duration) { [weak self] in
+            self?.resetDictationState()
+        }
+        if shouldRemainPaused {
+            indicatorFeedbackLifetime.setHovered(true)
+        }
     }
 
     private func scheduleInsertingReset(after delay: Duration) {
