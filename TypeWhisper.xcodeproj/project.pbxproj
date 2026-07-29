@@ -4960,7 +4960,7 @@
 				INFOPLIST_KEY_NSPrincipalClass = OpenAIPlugin;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.3.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.openai;
 				PRODUCT_NAME = OpenAIPlugin;
 				SKIP_INSTALL = YES;
@@ -4983,7 +4983,7 @@
 				INFOPLIST_KEY_NSPrincipalClass = OpenAIPlugin;
 				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.0;
+				MARKETING_VERSION = 1.3.1;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.openai;
 				PRODUCT_NAME = OpenAIPlugin;
 				SKIP_INSTALL = YES;

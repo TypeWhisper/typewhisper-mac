@@ -625,8 +625,8 @@ enum OpenAILiveTranscriptionDelay: String, CaseIterable, Sendable {
     }
 }
 
-private struct OpenAITranscriptionModelCapability {
-    enum Transport {
+private struct OpenAITranscriptionModelCapability: Sendable {
+    enum Transport: Sendable {
         case legacyFile(responseFormat: String)
         case contextAwareFile
         case legacyRealtime
@@ -1039,6 +1039,108 @@ private final class OpenAIRealtimeWebSocketDelegate: NSObject, URLSessionWebSock
         if let error {
             openWaiter.markFailed(error)
         }
+    }
+}
+
+actor OpenAIFileTranscriptionSession: LiveTranscriptionSession {
+    typealias Transcribe = @Sendable (AudioData) async throws -> PluginTranscriptionResult
+
+    private static let sampleRate = 16_000
+    private static let previewIntervalSampleCount = sampleRate * 3
+    private static let previewWindowSampleCount = sampleRate * 10
+    private static let previewAnalysisFrameSampleCount = sampleRate / 10
+    private static let previewSpeechRMSFloor: Float = 0.004
+    private static let previewSustainedSilenceSampleCount = Int(Double(sampleRate) * 1.4)
+
+    private let transcribe: Transcribe
+    private let onProgress: @Sendable (String) -> Bool
+    private var bufferedSamples: [Float] = []
+    private var lastPreviewSampleCount = 0
+    private var didFinish = false
+    private var isCancelled = false
+
+    init(
+        transcribe: @escaping Transcribe,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) {
+        self.transcribe = transcribe
+        self.onProgress = onProgress
+    }
+
+    func appendAudio(samples: [Float]) async throws {
+        guard !samples.isEmpty, !didFinish, !isCancelled else { return }
+
+        bufferedSamples.append(contentsOf: samples)
+        guard bufferedSamples.count - lastPreviewSampleCount >= Self.previewIntervalSampleCount else {
+            return
+        }
+        lastPreviewSampleCount = bufferedSamples.count
+
+        let previewSamples = Array(bufferedSamples.suffix(Self.previewWindowSampleCount))
+        guard Self.shouldRequestPreview(for: previewSamples) else { return }
+
+        do {
+            let result = try await transcribe(Self.audioData(from: previewSamples))
+            guard !didFinish, !isCancelled, !Task.isCancelled else { return }
+
+            let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !text.isEmpty {
+                _ = onProgress(text)
+            }
+        } catch {
+            // A best-effort preview must not prevent the full buffered audio from
+            // being finalized when the user stops dictation.
+        }
+    }
+
+    func finish() async throws -> PluginTranscriptionResult {
+        guard !isCancelled else { throw CancellationError() }
+        guard !didFinish else {
+            throw PluginTranscriptionError.apiError("File transcription session is already finished.")
+        }
+        didFinish = true
+
+        let result = try await transcribe(Self.audioData(from: bufferedSamples))
+        try Task.checkCancellation()
+        guard !isCancelled else { throw CancellationError() }
+        return result
+    }
+
+    func cancel() async {
+        isCancelled = true
+        bufferedSamples.removeAll(keepingCapacity: false)
+    }
+
+    private static func audioData(from samples: [Float]) -> AudioData {
+        AudioData(
+            samples: samples,
+            wavData: PluginWavEncoder.encode(samples, sampleRate: sampleRate),
+            duration: Double(samples.count) / Double(sampleRate)
+        )
+    }
+
+    private static func shouldRequestPreview(for samples: [Float]) -> Bool {
+        guard !samples.isEmpty else { return false }
+
+        var containsSpeech = false
+        var trailingQuietSampleCount = 0
+        var offset = 0
+
+        while offset < samples.count {
+            let end = min(samples.count, offset + previewAnalysisFrameSampleCount)
+            let frame = samples[offset..<end]
+            let rms = sqrt(frame.reduce(Float.zero) { $0 + $1 * $1 } / Float(frame.count))
+
+            if rms >= previewSpeechRMSFloor {
+                containsSpeech = true
+                trailingQuietSampleCount = 0
+            } else {
+                trailingQuietSampleCount += frame.count
+            }
+            offset = end
+        }
+
+        return containsSpeech && trailingQuietSampleCount < previewSustainedSilenceSampleCount
     }
 }
 
@@ -2037,12 +2139,25 @@ final class OpenAIPlugin: NSObject,
             throw PluginTranscriptionError.notConfigured
         }
         let capability = try selectedTranscriptionCapability()
+        try validateTranslationRequest(translate, capability: capability)
+
         guard capability.isRealtime else {
-            throw PluginTranscriptionError.apiError(
-                "\(capability.modelInfo.displayName) is a file transcription model."
+            return OpenAIFileTranscriptionSession(
+                transcribe: { [self] audio in
+                    try await performTranscription(
+                        audio: audio,
+                        languageSelection: languageSelection,
+                        translate: translate,
+                        prompt: prompt,
+                        dictionaryTermHints: dictionaryTermHints,
+                        onProgress: { _ in true },
+                        apiKeyOverride: apiKey,
+                        capabilityOverride: capability
+                    )
+                },
+                onProgress: onProgress
             )
         }
-        try validateTranslationRequest(translate, capability: capability)
 
         return try await OpenAIRealtimeTranscriptionSession.connect(
             apiKey: apiKey,
@@ -2062,12 +2177,19 @@ final class OpenAIPlugin: NSObject,
         translate: Bool,
         prompt: String?,
         dictionaryTermHints: [PluginDictionaryTermHint],
-        onProgress: @Sendable @escaping (String) -> Bool
+        onProgress: @Sendable @escaping (String) -> Bool,
+        apiKeyOverride: String? = nil,
+        capabilityOverride: OpenAITranscriptionModelCapability? = nil
     ) async throws -> PluginTranscriptionResult {
-        guard let apiKey = normalizedAPIKey else {
+        guard let apiKey = apiKeyOverride ?? normalizedAPIKey else {
             throw PluginTranscriptionError.notConfigured
         }
-        let capability = try selectedTranscriptionCapability()
+        let capability: OpenAITranscriptionModelCapability
+        if let capabilityOverride {
+            capability = capabilityOverride
+        } else {
+            capability = try selectedTranscriptionCapability()
+        }
         try validateTranslationRequest(translate, capability: capability)
 
         switch capability.transport {
@@ -2564,7 +2686,7 @@ final class OpenAIPlugin: NSObject,
     private static var chatGPTModelsClientVersion: String {
         let bundle = Bundle(for: OpenAIPlugin.self)
         return bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
-            ?? "1.3.0"
+            ?? "1.3.1"
     }
 
     fileprivate var ttsInstructions: String { _ttsInstructions }
