@@ -111,6 +111,16 @@
         }
       }
     },
+    "Downloading Cohere model" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cohere-Modell wird heruntergeladen"
+          }
+        }
+      }
+    },
     "Error" : {
       "localizations" : {
         "de" : {
@@ -227,6 +237,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Bereit"
+          }
+        }
+      }
+    },
+    "Running Cohere locally with Metal…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cohere läuft lokal mit Metal …"
           }
         }
       }
@@ -637,6 +657,16 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "TypeWhisper konnte keinen lokalen Port für Cohere Transcribe reservieren."
+          }
+        }
+      }
+    },
+    "Starting and warming up Cohere with Metal" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cohere wird mit Metal gestartet und aufgewärmt"
           }
         }
       }

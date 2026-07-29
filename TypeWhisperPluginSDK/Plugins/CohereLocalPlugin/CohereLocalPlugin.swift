@@ -290,7 +290,7 @@ final class CohereLocalPlugin: NSObject, TranscriptionEnginePlugin, Transcriptio
 
         return try await PluginLocalInferenceGate.shared.withLock {
             try Task.checkCancellation()
-            let _ = onProgress("Running Cohere locally with Metal…")
+            let _ = onProgress(Self.localizedString("Running Cohere locally with Metal…"))
             let result = try await runtime.server.transcribe(
                 audio: audio,
                 language: cohereLanguage
@@ -569,11 +569,13 @@ final class CohereLocalPlugin: NSObject, TranscriptionEnginePlugin, Transcriptio
             return nil
         case .downloading(let progress):
             return PluginSettingsActivity(
-                message: "Downloading Cohere model",
+                message: Self.localizedString("Downloading Cohere model"),
                 progress: progress
             )
         case .preparing:
-            return PluginSettingsActivity(message: "Starting and warming up Cohere with Metal")
+            return PluginSettingsActivity(
+                message: Self.localizedString("Starting and warming up Cohere with Metal")
+            )
         case .error(let message):
             return PluginSettingsActivity(message: message, isError: true)
         }

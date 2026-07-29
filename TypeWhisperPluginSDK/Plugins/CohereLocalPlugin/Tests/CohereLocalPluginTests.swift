@@ -495,6 +495,19 @@ final class CohereLocalPluginTests: XCTestCase {
             [],
             "Missing German translations: \(incompleteGermanKeys)"
         )
+
+        let directUserFacingLiteralPatterns = [
+            #"onProgress\(\s*""#,
+            #"message:\s*""#,
+        ]
+        for pattern in directUserFacingLiteralPatterns {
+            let expression = try NSRegularExpression(pattern: pattern)
+            let range = NSRange(source.startIndex..., in: source)
+            XCTAssertNil(
+                expression.firstMatch(in: source, range: range),
+                "User-facing status strings must use the plugin localization bundle"
+            )
+        }
     }
 
 }
