@@ -180,7 +180,6 @@ final class CohereLocalPlugin: NSObject, TranscriptionEnginePlugin, Transcriptio
                 host: (any HostServices)?,
                 runtime: Runtime?,
                 startingServer: CrispAsrServer?,
-                shouldRestore: Bool,
                 shouldClearLoadedPersistence: Bool
             ) in
             let shouldClearLoadedPersistence = state.loadedModelId != modelId
@@ -197,32 +196,33 @@ final class CohereLocalPlugin: NSObject, TranscriptionEnginePlugin, Transcriptio
                 state.modelState = .notLoaded
             }
             state.selectedModelId = modelId
-            let shouldRestore =
-                state.runtime == nil
-                && state.startingServer == nil
-                && state.host.map {
-                    CohereLocalModelAssets(
-                        pluginDataDirectory: $0.pluginDataDirectory,
-                        model: model
-                    ).isInstalled
-                } == true
             return (
                 state.host,
                 runtime,
                 startingServer,
-                shouldRestore,
                 shouldClearLoadedPersistence
             )
         }
 
         context.runtime?.server.stop()
         context.startingServer?.stop()
+        let isInstalled = context.host.map {
+            CohereLocalModelAssets(
+                pluginDataDirectory: $0.pluginDataDirectory,
+                model: model
+            ).isInstalled
+        } == true
+        let shouldRestore = isInstalled && state.withLock {
+            $0.selectedModelId == modelId
+                && $0.runtime == nil
+                && $0.startingServer == nil
+        }
         context.host?.setUserDefault(modelId, forKey: "selectedModel")
         if context.shouldClearLoadedPersistence {
             context.host?.setUserDefault(nil, forKey: "loadedModel")
         }
         context.host?.notifyCapabilitiesChanged()
-        if context.shouldRestore {
+        if shouldRestore {
             Task { [weak self] in
                 await self?.loadModel(allowDownloads: false)
             }
@@ -377,14 +377,12 @@ final class CohereLocalPlugin: NSObject, TranscriptionEnginePlugin, Transcriptio
     }
 
     func restoreLoadedModel(allowDownloads: Bool = false) async {
-        let context = state.withLock { state in
-            let loadedModelId = state.host?.userDefault(forKey: "loadedModel") as? String
-            return (
-                host: state.host,
-                loadedModelId: Self.model(for: loadedModelId)?.id
-            )
+        let host = state.withLock { $0.host }
+        let persistedModelId = host?.userDefault(forKey: "loadedModel") as? String
+        guard host != nil,
+              let loadedModelId = Self.model(for: persistedModelId)?.id else {
+            return
         }
-        guard context.host != nil, let loadedModelId = context.loadedModelId else { return }
         state.withLock { $0.selectedModelId = loadedModelId }
         await loadModel(allowDownloads: allowDownloads)
     }
@@ -472,9 +470,34 @@ final class CohereLocalPlugin: NSObject, TranscriptionEnginePlugin, Transcriptio
         generation: Int,
         huggingFaceToken: String?
     )? {
-        state.withLock { state in
-            guard let host = state.host else { return nil }
-            guard let model = Self.model(for: state.selectedModelId) else { return nil }
+        let snapshot = state.withLock {
+            (
+                host: $0.host,
+                selectedModelId: $0.selectedModelId,
+                generation: $0.loadGeneration
+            )
+        }
+        guard let host = snapshot.host,
+              let model = Self.model(for: snapshot.selectedModelId) else {
+            return nil
+        }
+        let assets = CohereLocalModelAssets(
+            pluginDataDirectory: host.pluginDataDirectory,
+            model: model
+        )
+        let isInstalled = assets.isInstalled
+
+        return state.withLock { state -> (
+            host: any HostServices,
+            model: CohereLocalModelDefinition,
+            generation: Int,
+            huggingFaceToken: String?
+        )? in
+            guard state.host != nil,
+                  state.selectedModelId == model.id,
+                  state.loadGeneration == snapshot.generation else {
+                return nil
+            }
             guard state.runtime == nil else {
                 state.modelState = .ready
                 return nil
@@ -487,11 +510,7 @@ final class CohereLocalPlugin: NSObject, TranscriptionEnginePlugin, Transcriptio
             }
 
             state.loadGeneration += 1
-            let assets = CohereLocalModelAssets(
-                pluginDataDirectory: host.pluginDataDirectory,
-                model: model
-            )
-            state.modelState = assets.isInstalled ? .preparing : .downloading(progress: 0)
+            state.modelState = isInstalled ? .preparing : .downloading(progress: 0)
             return (host, model, state.loadGeneration, state.huggingFaceToken)
         }
     }
@@ -579,15 +598,17 @@ final class CohereLocalPlugin: NSObject, TranscriptionEnginePlugin, Transcriptio
     }
 
     var isModelDownloaded: Bool {
-        state.withLock { state in
-            guard let model = Self.model(for: state.selectedModelId) else { return false }
-            return state.host.map {
-                CohereLocalModelAssets(
-                    pluginDataDirectory: $0.pluginDataDirectory,
-                    model: model
-                ).isInstalled
-            } ?? false
+        let snapshot = state.withLock {
+            (host: $0.host, selectedModelId: $0.selectedModelId)
         }
+        guard let host = snapshot.host,
+              let model = Self.model(for: snapshot.selectedModelId) else {
+            return false
+        }
+        return CohereLocalModelAssets(
+            pluginDataDirectory: host.pluginDataDirectory,
+            model: model
+        ).isInstalled
     }
 
     var selectedModelDefinition: CohereLocalModelDefinition {
@@ -726,10 +747,10 @@ private struct CohereLocalSettingsView: View {
     private let bundle = Bundle(for: CohereLocalPlugin.self)
     private let pollTimer = Timer.publish(every: 0.25, on: .main, in: .common).autoconnect()
     private let cohereModelURL = URL(
-        string: "https://huggingface.co/cstr/cohere-transcribe-03-2026-GGUF"
+        string: "https://huggingface.co/\(CohereLocalModelAssets.modelRepositoryId)"
     )!
     private let crispAsrURL = URL(
-        string: "https://github.com/CrispStrobe/CrispASR/tree/v0.8.24"
+        string: "https://github.com/CrispStrobe/CrispASR/tree/v\(CohereLocalModelAssets.crispAsrVersion)"
     )!
     private let vadModelURL = URL(
         string: "https://huggingface.co/ggml-org/whisper-vad"

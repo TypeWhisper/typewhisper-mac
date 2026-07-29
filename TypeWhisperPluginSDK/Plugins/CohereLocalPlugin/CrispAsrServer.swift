@@ -14,6 +14,7 @@ final class CrispAsrServer: @unchecked Sendable {
 
     private static let startupTimeout: TimeInterval = 300
     private static let shutdownTimeout: TimeInterval = 10
+    private static let portBindingAttemptLimit = 3
     private static let logger = Logger(
         subsystem: CohereLocalPlugin.pluginId,
         category: "CrispASR"
@@ -66,6 +67,23 @@ final class CrispAsrServer: @unchecked Sendable {
     }
 
     func start(assets: CohereLocalModelAssets) async throws {
+        for attempt in 1...Self.portBindingAttemptLimit {
+            do {
+                try await startOnce(assets: assets)
+                return
+            } catch {
+                guard attempt < Self.portBindingAttemptLimit,
+                      Self.isPortBindingFailure(error) else {
+                    throw error
+                }
+                Self.logger.warning(
+                    "CrispASR loopback port was claimed before startup; retrying with a new port"
+                )
+            }
+        }
+    }
+
+    private func startOnce(assets: CohereLocalModelAssets) async throws {
         stop()
 
         let port = try Self.reserveLoopbackPort()
@@ -131,6 +149,16 @@ final class CrispAsrServer: @unchecked Sendable {
             stop()
             throw error
         }
+    }
+
+    static func isPortBindingFailure(_ error: Error) -> Bool {
+        guard case CohereLocalPluginError.runtimeExited(let output) = error else {
+            return false
+        }
+        let normalized = output.lowercased()
+        return normalized.contains("address already in use")
+            || normalized.contains("failed to bind")
+            || normalized.contains("bind() failed")
     }
 
     func transcribe(

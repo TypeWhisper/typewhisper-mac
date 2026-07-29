@@ -111,6 +111,24 @@ final class CohereLocalPluginTests: XCTestCase {
         XCTAssertEqual(errno, ESRCH)
     }
 
+    func testPortBindingFailureDetectionOnlyRetriesAddressConflicts() {
+        XCTAssertTrue(
+            CrispAsrServer.isPortBindingFailure(
+                CohereLocalPluginError.runtimeExited("bind() failed: Address already in use")
+            )
+        )
+        XCTAssertFalse(
+            CrispAsrServer.isPortBindingFailure(
+                CohereLocalPluginError.runtimeExited("Model file is invalid")
+            )
+        )
+        XCTAssertFalse(
+            CrispAsrServer.isPortBindingFailure(
+                CohereLocalPluginError.runtimeStartupTimedOut("")
+            )
+        )
+    }
+
     func testSelectingAnotherModelStopsServerThatIsStillStarting() async throws {
         let host = try PluginTestHostServices(shouldRestoreLoadedModelsPassively: false)
         let plugin = CohereLocalPlugin()
@@ -189,6 +207,32 @@ final class CohereLocalPluginTests: XCTestCase {
             at: assets.runtimeLibraryURL
         )
         XCTAssertFalse(assets.isInstalled)
+    }
+
+    func testLegacySharedModelDirectoryMigratesToNeutralDirectory() throws {
+        let host = try PluginTestHostServices(shouldRestoreLoadedModelsPassively: false)
+        let assets = CohereLocalModelAssets(
+            pluginDataDirectory: host.pluginDataDirectory,
+            model: CohereLocalPlugin.fastModel
+        )
+        try FileManager.default.createDirectory(
+            at: assets.legacyRootDirectory,
+            withIntermediateDirectories: true
+        )
+        let legacyMarker = assets.legacyRootDirectory.appendingPathComponent("marker")
+        try Data("legacy".utf8).write(to: legacyMarker)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: assets.rootDirectory.path))
+        XCTAssertFalse(assets.isInstalled)
+
+        XCTAssertTrue(
+            FileManager.default.fileExists(
+                atPath: assets.rootDirectory.appendingPathComponent("marker").path
+            )
+        )
+        XCTAssertFalse(
+            FileManager.default.fileExists(atPath: assets.legacyRootDirectory.path)
+        )
     }
 
     func testDownloadedModelCatalogAndDeletion() async throws {

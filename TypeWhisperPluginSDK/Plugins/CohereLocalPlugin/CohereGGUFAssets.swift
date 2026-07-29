@@ -26,6 +26,8 @@ struct CohereLocalModelAssets: Sendable {
         "Runtime/crispasr-macos/crispasr",
         "Runtime/crispasr-macos/libc2pa_c.dylib",
     ]
+    static let sharedDirectoryName = "cohere-transcribe-03-2026"
+    static let legacySharedDirectoryName = "cohere-transcribe-03-2026-q5_0"
 
     let pluginDataDirectory: URL
     let model: CohereLocalModelDefinition
@@ -36,7 +38,14 @@ struct CohereLocalModelAssets: Sendable {
 
     var rootDirectory: URL {
         modelsRootDirectory.appendingPathComponent(
-            "cohere-transcribe-03-2026-q5_0",
+            Self.sharedDirectoryName,
+            isDirectory: true
+        )
+    }
+
+    var legacyRootDirectory: URL {
+        modelsRootDirectory.appendingPathComponent(
+            Self.legacySharedDirectoryName,
             isDirectory: true
         )
     }
@@ -74,7 +83,8 @@ struct CohereLocalModelAssets: Sendable {
     }
 
     var isInstalled: Bool {
-        ([model.fileName] + Self.sharedRequiredRelativePaths).allSatisfy { relativePath in
+        migrateLegacyRootIfNeeded()
+        return ([model.fileName] + Self.sharedRequiredRelativePaths).allSatisfy { relativePath in
             let url = rootDirectory.appendingPathComponent(relativePath)
             var isDirectory: ObjCBool = false
             guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory),
@@ -91,6 +101,7 @@ struct CohereLocalModelAssets: Sendable {
         bearerToken: String? = nil,
         progressHandler: @Sendable @escaping (Double) -> Void
     ) async throws {
+        migrateLegacyRootIfNeeded()
         try FileManager.default.createDirectory(
             at: rootDirectory,
             withIntermediateDirectories: true
@@ -121,7 +132,7 @@ struct CohereLocalModelAssets: Sendable {
                 }
             )
         }
-        try verify(
+        try verifyOrDiscard(
             modelFileURL,
             expectedSize: model.fileSize,
             expectedSHA256: model.sha256
@@ -144,7 +155,7 @@ struct CohereLocalModelAssets: Sendable {
                 maxConcurrentDownloads: 1
             )
         }
-        try verify(
+        try verifyOrDiscard(
             vadModelURL,
             expectedSize: Self.vadSize,
             expectedSHA256: Self.vadSHA256
@@ -162,6 +173,7 @@ struct CohereLocalModelAssets: Sendable {
     }
 
     func deleteModelFiles(allModels: [CohereLocalModelDefinition]) throws {
+        migrateLegacyRootIfNeeded()
         if FileManager.default.fileExists(atPath: modelFileURL.path) {
             try FileManager.default.removeItem(at: modelFileURL)
         }
@@ -187,16 +199,23 @@ struct CohereLocalModelAssets: Sendable {
               httpResponse.statusCode == 200 else {
             throw CohereLocalPluginError.runtimeDownloadFailed
         }
-        try verify(
-            temporaryArchive,
-            expectedSize: Self.runtimeArchiveSize,
-            expectedSHA256: Self.runtimeArchiveSHA256
-        )
 
         try FileManager.default.createDirectory(
             at: runtimeRootDirectory,
             withIntermediateDirectories: true
         )
+        let ownedArchive = runtimeRootDirectory.appendingPathComponent(
+            ".download-\(UUID().uuidString)-\(Self.runtimeArchiveName)"
+        )
+        try FileManager.default.moveItem(at: temporaryArchive, to: ownedArchive)
+        defer { try? FileManager.default.removeItem(at: ownedArchive) }
+
+        try verify(
+            ownedArchive,
+            expectedSize: Self.runtimeArchiveSize,
+            expectedSHA256: Self.runtimeArchiveSHA256
+        )
+
         let stagingDirectory = runtimeRootDirectory.appendingPathComponent(
             ".staging-\(UUID().uuidString)",
             isDirectory: true
@@ -208,7 +227,7 @@ struct CohereLocalModelAssets: Sendable {
         defer { try? FileManager.default.removeItem(at: stagingDirectory) }
 
         try await extractRuntimeArchive(
-            temporaryArchive,
+            ownedArchive,
             to: stagingDirectory
         )
 
@@ -252,9 +271,9 @@ struct CohereLocalModelAssets: Sendable {
 
                 do {
                     try process.run()
+                    let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
                     process.waitUntilExit()
                     guard process.terminationStatus == 0 else {
-                        let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
                         let message = String(data: errorData, encoding: .utf8)
                             ?? "Unknown tar error"
                         continuation.resume(
@@ -267,6 +286,23 @@ struct CohereLocalModelAssets: Sendable {
                     continuation.resume(throwing: error)
                 }
             }
+        }
+    }
+
+    private func verifyOrDiscard(
+        _ file: URL,
+        expectedSize: Int64,
+        expectedSHA256: String
+    ) throws {
+        do {
+            try verify(
+                file,
+                expectedSize: expectedSize,
+                expectedSHA256: expectedSHA256
+            )
+        } catch {
+            try? FileManager.default.removeItem(at: file)
+            throw error
         }
     }
 
@@ -302,5 +338,20 @@ struct CohereLocalModelAssets: Sendable {
             return false
         }
         return size.int64Value > 0
+    }
+
+    private func migrateLegacyRootIfNeeded() {
+        guard !FileManager.default.fileExists(atPath: rootDirectory.path),
+              FileManager.default.fileExists(atPath: legacyRootDirectory.path) else {
+            return
+        }
+        try? FileManager.default.createDirectory(
+            at: modelsRootDirectory,
+            withIntermediateDirectories: true
+        )
+        try? FileManager.default.moveItem(
+            at: legacyRootDirectory,
+            to: rootDirectory
+        )
     }
 }

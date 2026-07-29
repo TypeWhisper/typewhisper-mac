@@ -11,12 +11,12 @@
         }
       }
     },
-    "A private on-device Core ML provider for Cohere Transcribe 03-2026. Audio stays on this Mac." : {
+    "A private on-device GGUF and Metal provider for Cohere Transcribe 03-2026. Audio stays on this Mac." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ein privater Core-ML-Provider auf dem Gerät für Cohere Transcribe 03-2026. Audio bleibt auf diesem Mac."
+            "value" : "Ein privater GGUF- und Metal-Provider auf dem Gerät für Cohere Transcribe 03-2026. Audio bleibt auf diesem Mac."
           }
         }
       }
@@ -211,12 +211,12 @@
         }
       }
     },
-    "Preparing Core ML models. The first load can take several minutes." : {
+    "Starting CrispASR with Metal and warming up the model. Dictation is ready when this finishes." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Core-ML-Modelle werden vorbereitet. Das erste Laden kann mehrere Minuten dauern."
+            "value" : "CrispASR wird mit Metal gestartet und das Modell wird aufgewärmt. Nach Abschluss ist die Diktierfunktion bereit."
           }
         }
       }
@@ -271,12 +271,12 @@
         }
       }
     },
-    "The first transcription after loading can take several minutes while Core ML prepares the Neural Engine. Later transcriptions are much faster." : {
+    "The model stays resident while loaded. Metal is warmed up before the provider becomes ready, keeping the first transcription responsive." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Die erste Transkription nach dem Laden kann mehrere Minuten dauern, während Core ML die Neural Engine vorbereitet. Spätere Transkriptionen sind deutlich schneller."
+            "value" : "Das Modell bleibt geladen im Arbeitsspeicher. Metal wird aufgewärmt, bevor der Provider bereit ist, damit die erste Transkription schnell reagiert."
           }
         }
       }
