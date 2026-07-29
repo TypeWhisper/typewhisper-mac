@@ -1,0 +1,21 @@
+{
+    "id": "com.typewhisper.cohere-transcribe",
+    "name": "Cohere Transcribe (Local)",
+    "version": "0.1.0",
+    "minHostVersion": "1.5.0",
+    "sdkCompatibilityVersion": "v1",
+    "minOSVersion": "14.0",
+    "supportedArchitectures": [
+        "arm64"
+    ],
+    "author": "TypeWhisper",
+    "description": "Local GGUF and Metal speech-to-text powered by Cohere Transcribe 03-2026. Q4_K, Q5_0, Q6_K, and Q8_0 models for 14 explicitly selected languages.",
+    "descriptions": {
+        "de": "Lokale GGUF- und Metal-Spracherkennung mit Cohere Transcribe 03-2026. Q4_K-, Q5_0-, Q6_K- und Q8_0-Modelle für 14 explizit ausgewählte Sprachen.",
+        "ja": "Cohere Transcribe 03-2026を使用するローカルGGUF・Metal音声認識。Q4_K、Q5_0、Q6_K、Q8_0モデルと明示的に選択した14言語に対応します。"
+    },
+    "category": "transcription",
+    "iconSystemName": "waveform.badge.mic",
+    "principalClass": "CohereLocalPlugin",
+    "detailsURL": "https://github.com/TypeWhisper/typewhisper-mac/issues/1031"
+}

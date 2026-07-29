@@ -118,6 +118,7 @@ jobs:
             sber-salutespeech) TARGET="SaluteSpeechPlugin" ;;
             reson8) TARGET="Reson8Plugin" ;;
             cohere) TARGET="CoherePlugin" ;;
+            cohere-transcribe) TARGET="CohereLocalPlugin" ;;
             speechmatics) TARGET="SpeechmaticsPlugin" ;;
             system-tts) TARGET="SystemTTSPlugin" ;;
             supertonic) TARGET="SupertonicPlugin" ;;

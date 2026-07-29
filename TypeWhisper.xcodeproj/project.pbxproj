@@ -273,6 +273,13 @@
 		AA00000000000000000166 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000158 /* manifest.json */; };
 		AA00000000000000000167 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000016 /* TypeWhisperPluginSDK */; };
 		AA00000000000000000168 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000017 /* FluidAudio */; };
+		C0E300000000000000000001 /* CohereLocalPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0E300000000000000000011 /* CohereLocalPlugin.swift */; };
+		C0E300000000000000000002 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = C0E300000000000000000012 /* manifest.json */; };
+		C0E300000000000000000003 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = C0E300000000000000000013 /* Localizable.xcstrings */; };
+		C0E300000000000000000004 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = C0E300000000000000000060 /* TypeWhisperPluginSDK */; };
+		C0E300000000000000000006 /* HuggingFace in Frameworks */ = {isa = PBXBuildFile; productRef = C0E300000000000000000061 /* HuggingFace */; };
+		C0E300000000000000000007 /* CohereGGUFAssets.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0E300000000000000000014 /* CohereGGUFAssets.swift */; };
+		C0E300000000000000000008 /* CrispAsrServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0E300000000000000000015 /* CrispAsrServer.swift */; };
 		AA00000000000000000169 /* SpeechAnalyzerPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000160 /* SpeechAnalyzerPlugin.swift */; };
 		AA00000000000000000170 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000161 /* manifest.json */; };
 		AA00000000000000000171 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000018 /* TypeWhisperPluginSDK */; };
@@ -746,6 +753,12 @@
 		BB00000000000000000156 /* ParakeetPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ParakeetPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB00000000000000000157 /* ParakeetPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ParakeetPlugin.swift; sourceTree = "<group>"; };
 		BB00000000000000000158 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
+		C0E300000000000000000010 /* CohereLocalPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CohereLocalPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
+		C0E300000000000000000011 /* CohereLocalPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CohereLocalPlugin.swift; sourceTree = "<group>"; };
+		C0E300000000000000000012 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
+		C0E300000000000000000013 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		C0E300000000000000000014 /* CohereGGUFAssets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CohereGGUFAssets.swift; sourceTree = "<group>"; };
+		C0E300000000000000000015 /* CrispAsrServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrispAsrServer.swift; sourceTree = "<group>"; };
 		BB00000000000000000159 /* SpeechAnalyzerPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SpeechAnalyzerPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB00000000000000000160 /* SpeechAnalyzerPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechAnalyzerPlugin.swift; sourceTree = "<group>"; };
 		BB00000000000000000161 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
@@ -1115,6 +1128,15 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C0E300000000000000000041 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C0E300000000000000000004 /* TypeWhisperPluginSDK in Frameworks */,
+				C0E300000000000000000006 /* HuggingFace in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		FF00000000000000000071 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -1437,6 +1459,7 @@
 				CC00000000000000000020 /* Qwen3Plugin */,
 				CC00000000000000000021 /* WhisperKitPlugin */,
 				CC00000000000000000022 /* ParakeetPlugin */,
+				C0E300000000000000000020 /* CohereLocalPlugin */,
 				CC00000000000000000023 /* SpeechAnalyzerPlugin */,
 				CC00000000000000000024 /* OpenAICompatiblePlugin */,
 				CC00000000000000000027 /* VoxtralPlugin */,
@@ -1878,6 +1901,19 @@
 			path = TypeWhisperPluginSDK/Plugins/ParakeetPlugin;
 			sourceTree = "<group>";
 		};
+		C0E300000000000000000020 /* CohereLocalPlugin */ = {
+			isa = PBXGroup;
+			children = (
+				C0E300000000000000000011 /* CohereLocalPlugin.swift */,
+				C0E300000000000000000014 /* CohereGGUFAssets.swift */,
+				C0E300000000000000000015 /* CrispAsrServer.swift */,
+				C0E300000000000000000012 /* manifest.json */,
+				C0E300000000000000000013 /* Localizable.xcstrings */,
+			);
+			name = CohereLocalPlugin;
+			path = TypeWhisperPluginSDK/Plugins/CohereLocalPlugin;
+			sourceTree = "<group>";
+		};
 		CC00000000000000000023 /* SpeechAnalyzerPlugin */ = {
 			isa = PBXGroup;
 			children = (
@@ -2295,6 +2331,7 @@
 				BB00000000000000000149 /* Qwen3Plugin.bundle */,
 				BB00000000000000000153 /* WhisperKitPlugin.bundle */,
 				BB00000000000000000156 /* ParakeetPlugin.bundle */,
+				C0E300000000000000000010 /* CohereLocalPlugin.bundle */,
 				BB00000000000000000159 /* SpeechAnalyzerPlugin.bundle */,
 				BB00000000000000000175 /* OpenAICompatiblePlugin.bundle */,
 				BB00000000000000000190 /* VoxtralPlugin.bundle */,
@@ -2654,6 +2691,27 @@
 			);
 			productName = ParakeetPlugin;
 			productReference = BB00000000000000000156 /* ParakeetPlugin.bundle */;
+			productType = "com.apple.product-type.bundle";
+		};
+		C0E300000000000000000030 /* CohereLocalPlugin */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C0E300000000000000000052 /* Build configuration list for PBXNativeTarget "CohereLocalPlugin" */;
+			buildPhases = (
+				C0E300000000000000000040 /* Sources */,
+				C0E300000000000000000041 /* Frameworks */,
+				C0E300000000000000000042 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = CohereLocalPlugin;
+			packageProductDependencies = (
+				C0E300000000000000000060 /* TypeWhisperPluginSDK */,
+				C0E300000000000000000061 /* HuggingFace */,
+			);
+			productName = CohereLocalPlugin;
+			productReference = C0E300000000000000000010 /* CohereLocalPlugin.bundle */;
 			productType = "com.apple.product-type.bundle";
 		};
 		DD00000000000000000012 /* SpeechAnalyzerPlugin */ = {
@@ -3405,6 +3463,7 @@
 				RR00000000000000000007 /* XCRemoteSwiftPackageReference "mediaremote-adapter" */,
 				RR00000000000000000008 /* XCRemoteSwiftPackageReference "mlx-swift-lm" */,
 				RR00000000000000000009 /* XCRemoteSwiftPackageReference "swift-transformers" */,
+				C0E300000000000000000070 /* XCRemoteSwiftPackageReference "swift-huggingface" */,
 				D20600000000000000000001 /* XCRemoteSwiftPackageReference "onnxruntime-swift-package-manager" */,
 			);
 			productRefGroup = CC00000000000000000090 /* Products */;
@@ -3422,6 +3481,7 @@
 				DD00000000000000000009 /* Qwen3Plugin */,
 				DD00000000000000000010 /* WhisperKitPlugin */,
 				DD00000000000000000011 /* ParakeetPlugin */,
+				C0E300000000000000000030 /* CohereLocalPlugin */,
 				DD00000000000000000012 /* SpeechAnalyzerPlugin */,
 				DD00000000000000000013 /* OpenAICompatiblePlugin */,
 				DD00000000000000000015 /* VoxtralPlugin */,
@@ -3565,6 +3625,15 @@
 			files = (
 				AA00000000000000000166 /* manifest.json in Resources */,
 				AA00000000000000000179 /* Localizable.xcstrings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C0E300000000000000000042 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C0E300000000000000000002 /* manifest.json in Resources */,
+				C0E300000000000000000003 /* Localizable.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -4234,6 +4303,16 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA00000000000000000165 /* ParakeetPlugin.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C0E300000000000000000040 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C0E300000000000000000001 /* CohereLocalPlugin.swift in Sources */,
+				C0E300000000000000000007 /* CohereGGUFAssets.swift in Sources */,
+				C0E300000000000000000008 /* CrispAsrServer.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -5262,6 +5341,52 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.parakeet;
 				PRODUCT_NAME = ParakeetPlugin;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Release;
+		};
+		C0E300000000000000000050 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Cohere Transcribe (Local)";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = CohereLocalPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.cohere-transcribe";
+				PRODUCT_NAME = CohereLocalPlugin;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Debug;
+		};
+		C0E300000000000000000051 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Cohere Transcribe (Local)";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = CohereLocalPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.cohere-transcribe";
+				PRODUCT_NAME = CohereLocalPlugin;
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
@@ -7082,6 +7207,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		C0E300000000000000000052 /* Build configuration list for PBXNativeTarget "CohereLocalPlugin" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C0E300000000000000000050 /* Debug */,
+				C0E300000000000000000051 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		FF00000000000000000073 /* Build configuration list for PBXNativeTarget "SpeechAnalyzerPlugin" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -7454,6 +7588,14 @@
 				minimumVersion = 1.1.6;
 			};
 		};
+		C0E300000000000000000070 /* XCRemoteSwiftPackageReference "swift-huggingface" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/huggingface/swift-huggingface.git";
+			requirement = {
+				kind = exactVersion;
+				version = 0.9.0;
+			};
+		};
 		D20600000000000000000001 /* XCRemoteSwiftPackageReference "onnxruntime-swift-package-manager" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/microsoft/onnxruntime-swift-package-manager.git";
@@ -7535,6 +7677,15 @@
 			isa = XCSwiftPackageProductDependency;
 			package = RR00000000000000000002 /* XCRemoteSwiftPackageReference "FluidAudio" */;
 			productName = FluidAudio;
+		};
+		C0E300000000000000000060 /* TypeWhisperPluginSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = TypeWhisperPluginSDK;
+		};
+		C0E300000000000000000061 /* HuggingFace */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = C0E300000000000000000070 /* XCRemoteSwiftPackageReference "swift-huggingface" */;
+			productName = HuggingFace;
 		};
 		PP00000000000000000018 /* TypeWhisperPluginSDK */ = {
 			isa = XCSwiftPackageProductDependency;

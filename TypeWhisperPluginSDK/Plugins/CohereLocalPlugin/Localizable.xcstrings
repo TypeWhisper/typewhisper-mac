@@ -1,0 +1,366 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "14 languages with explicit selection: English, French, German, Spanish, Italian, Portuguese, Dutch, Polish, Greek, Arabic, Japanese, Chinese, Vietnamese, and Korean." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "14 Sprachen mit expliziter Auswahl: Englisch, Französisch, Deutsch, Spanisch, Italienisch, Portugiesisch, Niederländisch, Polnisch, Griechisch, Arabisch, Japanisch, Chinesisch, Vietnamesisch und Koreanisch."
+          }
+        }
+      }
+    },
+    "A private on-device Core ML provider for Cohere Transcribe 03-2026. Audio stays on this Mac." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ein privater Core-ML-Provider auf dem Gerät für Cohere Transcribe 03-2026. Audio bleibt auf diesem Mac."
+          }
+        }
+      }
+    },
+    "Cancel" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Abbrechen"
+          }
+        }
+      }
+    },
+    "Capabilities and limits" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Funktionen und Einschränkungen"
+          }
+        }
+      }
+    },
+    "Cohere model license" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cohere-Modelllizenz"
+          }
+        }
+      }
+    },
+    "Cohere Transcribe (Local)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cohere Transcribe (Lokal)"
+          }
+        }
+      }
+    },
+    "CrispASR license and notices" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CrispASR-Lizenz und Hinweise"
+          }
+        }
+      }
+    },
+    "Done" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fertig"
+          }
+        }
+      }
+    },
+    "Download & Load" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Herunterladen & Laden"
+          }
+        }
+      }
+    },
+    "Downloaded" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Heruntergeladen"
+          }
+        }
+      }
+    },
+    "Downloading" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wird heruntergeladen"
+          }
+        }
+      }
+    },
+    "Error" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Fehler"
+          }
+        }
+      }
+    },
+    "Hugging Face Token" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hugging-Face-Token"
+          }
+        }
+      }
+    },
+    "Invalid Hugging Face Token" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ungültiger Hugging-Face-Token"
+          }
+        }
+      }
+    },
+    "Load" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Laden"
+          }
+        }
+      }
+    },
+    "LOCAL · BATCH" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "LOKAL · BATCH"
+          }
+        }
+      }
+    },
+    "No automatic language detection, streaming, timestamps, diarization, translation, or dictionary boosting." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine automatische Spracherkennung, kein Streaming, keine Zeitstempel, Diarisierung, Übersetzung oder Wörterbuchverstärkung."
+          }
+        }
+      }
+    },
+    "Model weights are downloaded from a pinned Apache-2.0 GGUF revision. CrispASR and the VAD model are MIT-licensed." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Modellgewichte werden aus einer festgeschriebenen Apache-2.0-GGUF-Revision geladen. CrispASR und das VAD-Modell stehen unter der MIT-Lizenz."
+          }
+        }
+      }
+    },
+    "Not Downloaded" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nicht heruntergeladen"
+          }
+        }
+      }
+    },
+    "Optional. Increases download rate limits and may speed up the model download. The token is stored securely in Keychain." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Optional. Erhöht die Download-Limits und kann den Modelldownload beschleunigen. Der Token wird sicher im Schlüsselbund gespeichert."
+          }
+        }
+      }
+    },
+    "Preparing" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wird vorbereitet"
+          }
+        }
+      }
+    },
+    "Preparing Core ML models. The first load can take several minutes." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Core-ML-Modelle werden vorbereitet. Das erste Laden kann mehrere Minuten dauern."
+          }
+        }
+      }
+    },
+    "Ready" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bereit"
+          }
+        }
+      }
+    },
+    "Remove" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Entfernen"
+          }
+        }
+      }
+    },
+    "Remove downloaded model?" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Heruntergeladenes Modell entfernen?"
+          }
+        }
+      }
+    },
+    "Remove Model" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modell entfernen"
+          }
+        }
+      }
+    },
+    "Save" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Speichern"
+          }
+        }
+      }
+    },
+    "The first transcription after loading can take several minutes while Core ML prepares the Neural Engine. Later transcriptions are much faster." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die erste Transkription nach dem Laden kann mehrere Minuten dauern, während Core ML die Neural Engine vorbereitet. Spätere Transkriptionen sind deutlich schneller."
+          }
+        }
+      }
+    },
+    "This removes the Cohere model and its local VAD files. You can download them again later." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dadurch werden das Cohere-Modell und seine lokalen VAD-Dateien entfernt. Du kannst sie später erneut herunterladen."
+          }
+        }
+      }
+    },
+    "This test provider has a much larger memory footprint than Parakeet and unloads through TypeWhisper's model lifecycle." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dieser Test-Provider benötigt deutlich mehr Arbeitsspeicher als Parakeet und wird über den Modell-Lebenszyklus von TypeWhisper entladen."
+          }
+        }
+      }
+    },
+    "Unload" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Entladen"
+          }
+        }
+      }
+    },
+    "Valid Hugging Face Token" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gültiger Hugging-Face-Token"
+          }
+        }
+      }
+    },
+    "Validating token…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Token wird geprüft …"
+          }
+        }
+      }
+    },
+    "VAD model license" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "VAD-Modelllizenz"
+          }
+        }
+      }
+    },
+    "Voice activity detection runs before every transcription to suppress silence and low-noise hallucinations." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vor jeder Transkription läuft eine Sprachaktivitätserkennung, um Halluzinationen bei Stille und leisem Rauschen zu unterdrücken."
+          }
+        }
+      }
+    },
+    "Working…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In Arbeit …"
+          }
+        }
+      }
+    }
+  },
+  "version" : "1.0"
+}

@@ -1,0 +1,336 @@
+import Darwin
+import TypeWhisperPluginSDK
+import TypeWhisperPluginSDKTesting
+import XCTest
+
+@testable import CohereLocalPlugin
+
+final class CohereLocalPluginTests: XCTestCase {
+    private actor RequestRecorder {
+        private var request: URLRequest?
+
+        func set(_ request: URLRequest) {
+            self.request = request
+        }
+
+        func get() -> URLRequest? {
+            request
+        }
+    }
+
+    func testPluginIdentityAndCapabilities() {
+        let plugin = CohereLocalPlugin()
+
+        XCTAssertEqual(CohereLocalPlugin.pluginId, "com.typewhisper.cohere-transcribe")
+        XCTAssertEqual(plugin.providerId, "cohere-transcribe")
+        XCTAssertEqual(plugin.providerDisplayName, "Cohere Transcribe (Local)")
+        XCTAssertFalse(plugin.supportsStreaming)
+        XCTAssertFalse(plugin.supportsTranslation)
+        XCTAssertEqual(plugin.dictionaryTermsSupport, .unsupported)
+    }
+
+    func testSupportedLanguagesMatchCohereGGUFPipeline() {
+        XCTAssertEqual(
+            CohereLocalPlugin.supportedLanguageCodes,
+            [
+                "en", "fr", "de", "es", "it", "pt", "nl",
+                "pl", "el", "ar", "ja", "zh", "vi", "ko",
+            ]
+        )
+        XCTAssertEqual(CohereLocalPlugin.supportedLanguageCodes.count, 14)
+    }
+
+    func testLanguageNormalizationAcceptsRegionAndChineseAliases() {
+        XCTAssertEqual(CohereLocalPlugin.normalizedLanguageCode(for: "de-DE"), "de")
+        XCTAssertEqual(CohereLocalPlugin.normalizedLanguageCode(for: "pt_BR"), "pt")
+        XCTAssertEqual(CohereLocalPlugin.normalizedLanguageCode(for: "zh-Hans"), "zh")
+        XCTAssertEqual(CohereLocalPlugin.normalizedLanguageCode(for: "cmn_Hans_CN"), "zh")
+    }
+
+    func testLanguageNormalizationRejectsAutoRussianAndHindi() {
+        XCTAssertNil(CohereLocalPlugin.normalizedLanguageCode(for: nil))
+        XCTAssertNil(CohereLocalPlugin.normalizedLanguageCode(for: ""))
+        XCTAssertNil(CohereLocalPlugin.normalizedLanguageCode(for: "auto"))
+        XCTAssertNil(CohereLocalPlugin.normalizedLanguageCode(for: "und"))
+        XCTAssertNil(CohereLocalPlugin.normalizedLanguageCode(for: "ru"))
+        XCTAssertNil(CohereLocalPlugin.normalizedLanguageCode(for: "hi"))
+    }
+
+    func testDigitalSilenceGuard() {
+        XCTAssertTrue(CohereLocalPlugin.isDigitalSilence([]))
+        XCTAssertTrue(CohereLocalPlugin.isDigitalSilence(Array(repeating: 0, count: 16_000)))
+        XCTAssertFalse(CohereLocalPlugin.isDigitalSilence([0, 0.001, 0]))
+    }
+
+    func testRuntimeSupervisorStopsChildWhenHostProcessDisappears() throws {
+        let temporaryDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "cohere-runtime-supervisor-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: temporaryDirectory,
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+
+        let childPIDFile = temporaryDirectory.appendingPathComponent("child.pid")
+        let temporaryParent = Process()
+        temporaryParent.executableURL = URL(fileURLWithPath: "/bin/sleep")
+        temporaryParent.arguments = ["1"]
+        try temporaryParent.run()
+
+        let process = CrispAsrServer.makeSupervisedProcess(
+            executableURL: URL(fileURLWithPath: "/bin/sh"),
+            arguments: [
+                "-c",
+                "echo $$ > \"$1\"; exec /bin/sleep 60",
+                "cohere-runtime-child",
+                childPIDFile.path,
+            ],
+            currentDirectoryURL: temporaryDirectory,
+            environment: ProcessInfo.processInfo.environment,
+            parentProcessIdentifier: temporaryParent.processIdentifier
+        )
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+
+        try process.run()
+        let deadline = Date().addingTimeInterval(5)
+        while process.isRunning, Date() < deadline {
+            Thread.sleep(forTimeInterval: 0.05)
+        }
+        if process.isRunning {
+            process.terminate()
+        }
+
+        XCTAssertFalse(process.isRunning)
+        let childPIDText = try String(contentsOf: childPIDFile, encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let childPID = try XCTUnwrap(pid_t(childPIDText))
+        XCTAssertEqual(kill(childPID, 0), -1)
+        XCTAssertEqual(errno, ESRCH)
+    }
+
+    func testDownloadedModelRequiresEveryPinnedAsset() throws {
+        let host = try PluginTestHostServices(shouldRestoreLoadedModelsPassively: false)
+        let assets = CohereLocalModelAssets(
+            pluginDataDirectory: host.pluginDataDirectory,
+            model: CohereLocalPlugin.fastModel
+        )
+        XCTAssertFalse(assets.isInstalled)
+
+        for relativePath in [CohereLocalPlugin.fastModel.fileName]
+            + CohereLocalModelAssets.sharedRequiredRelativePaths {
+            let url = assets.rootDirectory.appendingPathComponent(relativePath)
+            try FileManager.default.createDirectory(
+                at: url.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try Data("test".utf8).write(to: url)
+        }
+
+        XCTAssertTrue(assets.isInstalled)
+
+        try FileManager.default.removeItem(
+            at: assets.runtimeLibraryURL
+        )
+        XCTAssertFalse(assets.isInstalled)
+    }
+
+    func testDownloadedModelCatalogAndDeletion() async throws {
+        let host = try PluginTestHostServices(shouldRestoreLoadedModelsPassively: false)
+        let plugin = CohereLocalPlugin()
+        plugin.activate(host: host)
+        let assets = CohereLocalModelAssets(
+            pluginDataDirectory: host.pluginDataDirectory,
+            model: CohereLocalPlugin.fastModel
+        )
+
+        for relativePath in [CohereLocalPlugin.fastModel.fileName]
+            + CohereLocalModelAssets.sharedRequiredRelativePaths {
+            let url = assets.rootDirectory.appendingPathComponent(relativePath)
+            try FileManager.default.createDirectory(
+                at: url.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try Data("test".utf8).write(to: url)
+        }
+
+        XCTAssertEqual(plugin.downloadedModels.map(\.id), [CohereLocalPlugin.fastModel.id])
+
+        try await plugin.deleteDownloadedModel(CohereLocalPlugin.fastModel.id)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: assets.rootDirectory.path))
+        XCTAssertTrue(plugin.downloadedModels.isEmpty)
+        XCTAssertEqual(plugin.selectedModelId, CohereLocalPlugin.fastModel.id)
+        XCTAssertEqual(
+            host.userDefault(forKey: "selectedModel") as? String,
+            CohereLocalPlugin.fastModel.id
+        )
+        XCTAssertNil(host.userDefault(forKey: "loadedModel"))
+    }
+
+    func testCatalogOffersAllQuantizationModels() throws {
+        let host = try PluginTestHostServices(shouldRestoreLoadedModelsPassively: false)
+        let plugin = CohereLocalPlugin()
+        plugin.activate(host: host)
+
+        XCTAssertEqual(plugin.availableModels.map(\.id), CohereLocalPlugin.models.map(\.id))
+        XCTAssertEqual(plugin.selectedModelId, CohereLocalPlugin.fastModel.id)
+
+        plugin.selectModel(CohereLocalPlugin.compactModel.id)
+
+        XCTAssertEqual(plugin.selectedModelId, CohereLocalPlugin.compactModel.id)
+        XCTAssertEqual(
+            host.userDefault(forKey: "selectedModel") as? String,
+            CohereLocalPlugin.compactModel.id
+        )
+    }
+
+    func testDeletingOneVariantPreservesOtherModelAndSharedRuntime() async throws {
+        let host = try PluginTestHostServices(shouldRestoreLoadedModelsPassively: false)
+        let plugin = CohereLocalPlugin()
+        plugin.activate(host: host)
+        let fastAssets = CohereLocalModelAssets(
+            pluginDataDirectory: host.pluginDataDirectory,
+            model: CohereLocalPlugin.fastModel
+        )
+        let compactAssets = CohereLocalModelAssets(
+            pluginDataDirectory: host.pluginDataDirectory,
+            model: CohereLocalPlugin.compactModel
+        )
+
+        for relativePath in CohereLocalModelAssets.sharedRequiredRelativePaths {
+            let url = fastAssets.rootDirectory.appendingPathComponent(relativePath)
+            try FileManager.default.createDirectory(
+                at: url.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try Data("test".utf8).write(to: url)
+        }
+        try Data("fast".utf8).write(to: fastAssets.modelFileURL)
+        try Data("compact".utf8).write(to: compactAssets.modelFileURL)
+        XCTAssertTrue(fastAssets.isInstalled)
+        XCTAssertTrue(compactAssets.isInstalled)
+
+        try await plugin.deleteDownloadedModel(CohereLocalPlugin.compactModel.id)
+
+        XCTAssertTrue(fastAssets.isInstalled)
+        XCTAssertFalse(compactAssets.isInstalled)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: fastAssets.runtimeExecutableURL.path))
+    }
+
+    func testPassiveRestorePolicyIsDeclaredForExternalPlugin() throws {
+        let plugin = CohereLocalPlugin()
+        let lifecycleAwarePlugin: any HostModelLifecyclePolicyAwarePlugin = plugin
+        XCTAssertEqual(type(of: lifecycleAwarePlugin).pluginId, CohereLocalPlugin.pluginId)
+
+        let host = try PluginTestHostServices(
+            defaults: ["loadedModel": CohereLocalPlugin.fastModel.id],
+            shouldRestoreLoadedModelsPassively: false
+        )
+        plugin.activate(host: host)
+
+        XCTAssertFalse(plugin.isConfigured)
+        XCTAssertEqual(plugin.modelState, .notLoaded)
+    }
+
+    func testPinnedModelRevisionAndFiles() {
+        XCTAssertEqual(
+            CohereLocalModelAssets.modelRevision,
+            "2242638d5dfecc6f1dbe6c3a8713b97deb2e150f"
+        )
+        XCTAssertEqual(CohereLocalPlugin.models.map(\.id), [
+            "cohere-transcribe-03-2026-q4_k",
+            "cohere-transcribe-03-2026-q5_0",
+            "cohere-transcribe-03-2026-q6_k",
+            "cohere-transcribe-03-2026-q8_0",
+        ])
+        XCTAssertEqual(
+            CohereLocalPlugin.compactModel.sha256,
+            "2931fc0ac6d6708eef5389aadf1ebd5eec7b8e764bac385be585e910c0e7b410"
+        )
+        XCTAssertEqual(
+            CohereLocalPlugin.fastModel.sha256,
+            "a09696c5cc2ed5052bf290c4f2beb35abc69c0d6986842042d92bebb22c9184e"
+        )
+        XCTAssertEqual(
+            CohereLocalPlugin.q6Model.sha256,
+            "0ad2634e0ba34efa38a47d4fd4cf34d7a2d738d8486d83b8d5a178f823109c52"
+        )
+        XCTAssertEqual(
+            CohereLocalPlugin.q8Model.sha256,
+            "c8620cb182a7c04e311e6c24e478b94f7ecd7f1b5230bf39fffa8daf94644f51"
+        )
+        XCTAssertEqual(
+            CohereLocalModelAssets.vadRevision,
+            "9ffd54a1e1ee413ddf265af9913beaf518d1639b"
+        )
+        XCTAssertEqual(
+            CohereLocalModelAssets.runtimeArchiveSHA256,
+            "78397afd5aef2dbd6fa73f8d60800dd4d5725589fb4b04800efd2fb3ff88930c"
+        )
+        XCTAssertEqual(CohereLocalModelAssets.crispAsrVersion, "0.8.24")
+    }
+
+    func testLoadsStoredHuggingFaceTokenOnActivation() throws {
+        let host = try PluginTestHostServices(
+            secrets: [PluginHuggingFaceTokenHelper.storageKey: "hf_cohere_saved"],
+            shouldRestoreLoadedModelsPassively: false
+        )
+        let plugin = CohereLocalPlugin()
+
+        plugin.activate(host: host)
+
+        XCTAssertEqual(plugin.huggingFaceToken, "hf_cohere_saved")
+    }
+
+    func testStoresAndClearsHuggingFaceTokenSecret() throws {
+        let host = try PluginTestHostServices(shouldRestoreLoadedModelsPassively: false)
+        let plugin = CohereLocalPlugin()
+        plugin.activate(host: host)
+
+        plugin.setHuggingFaceToken("  hf_cohere_saved  ")
+        XCTAssertEqual(plugin.huggingFaceToken, "hf_cohere_saved")
+        XCTAssertEqual(
+            host.loadSecret(key: PluginHuggingFaceTokenHelper.storageKey),
+            "hf_cohere_saved"
+        )
+
+        plugin.clearHuggingFaceToken()
+        XCTAssertNil(plugin.huggingFaceToken)
+        XCTAssertEqual(
+            host.loadSecret(key: PluginHuggingFaceTokenHelper.storageKey),
+            ""
+        )
+    }
+
+    func testValidatesHuggingFaceTokenAgainstWhoAmIEndpoint() async throws {
+        let plugin = CohereLocalPlugin()
+        let requestRecorder = RequestRecorder()
+
+        let isValid = await plugin.validateHuggingFaceToken("hf_cohere_test") { request in
+            await requestRecorder.set(request)
+            let response = HTTPURLResponse(
+                url: try XCTUnwrap(request.url),
+                statusCode: 200,
+                httpVersion: nil,
+                headerFields: nil
+            )!
+            return (Data(#"{"name":"typewhisper","type":"user"}"#.utf8), response)
+        }
+
+        XCTAssertTrue(isValid)
+        let recordedRequest = await requestRecorder.get()
+        let request = try XCTUnwrap(recordedRequest)
+        XCTAssertEqual(
+            request.value(forHTTPHeaderField: "Authorization"),
+            "Bearer hf_cohere_test"
+        )
+        XCTAssertEqual(
+            request.url?.absoluteString,
+            "https://huggingface.co/api/whoami-v2"
+        )
+        XCTAssertEqual(request.httpMethod, "GET")
+    }
+}
