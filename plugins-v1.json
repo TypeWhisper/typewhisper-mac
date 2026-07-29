@@ -2681,6 +2681,33 @@
           "minOSVersion": "14.0"
         }
       ]
+    },
+    {
+      "id": "com.typewhisper.cohere-transcribe",
+      "name": "Cohere Transcribe (Local)",
+      "author": "TypeWhisper",
+      "description": "Local GGUF and Metal speech-to-text powered by Cohere Transcribe 03-2026. Q4_K, Q5_0, Q6_K, and Q8_0 models for 14 explicitly selected languages.",
+      "category": "transcription",
+      "downloadCount": 0,
+      "descriptions": {
+        "de": "Lokale GGUF- und Metal-Spracherkennung mit Cohere Transcribe 03-2026. Q4_K-, Q5_0-, Q6_K- und Q8_0-Modelle f\u00fcr 14 explizit ausgew\u00e4hlte Sprachen.",
+        "ja": "Cohere Transcribe 03-2026\u3092\u4f7f\u7528\u3059\u308b\u30ed\u30fc\u30ab\u30ebGGUF\u30fbMetal\u97f3\u58f0\u8a8d\u8b58\u3002Q4_K\u3001Q5_0\u3001Q6_K\u3001Q8_0\u30e2\u30c7\u30eb\u3068\u660e\u793a\u7684\u306b\u9078\u629e\u3057\u305f14\u8a00\u8a9e\u306b\u5bfe\u5fdc\u3057\u307e\u3059\u3002"
+      },
+      "iconSystemName": "waveform.badge.mic",
+      "detailsURL": "https://github.com/TypeWhisper/typewhisper-mac/issues/1031",
+      "releases": [
+        {
+          "version": "0.1.0",
+          "minHostVersion": "1.5.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 1191762,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-cohere-transcribe-v0.1.0/CohereLocalPlugin.zip",
+          "minOSVersion": "14.0",
+          "supportedArchitectures": [
+            "arm64"
+          ]
+        }
+      ]
     }
   ]
 }
