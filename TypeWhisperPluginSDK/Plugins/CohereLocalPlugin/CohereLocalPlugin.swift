@@ -11,6 +11,19 @@ final class CohereLocalPlugin: NSObject, TranscriptionEnginePlugin, Transcriptio
     static let pluginName = "Cohere Transcribe (Local)"
     static let providerIdentifier = "cohere-transcribe"
 
+    static var localizationBundle: Bundle {
+#if SWIFT_PACKAGE
+        .module
+#else
+        Bundle(for: CohereLocalPlugin.self)
+#endif
+    }
+
+    static func localizedString(_ key: String, bundle: Bundle? = nil) -> String {
+        let bundle = bundle ?? localizationBundle
+        return bundle.localizedString(forKey: key, value: key, table: nil)
+    }
+
     static let compactModel = CohereLocalModelDefinition(
         id: "cohere-transcribe-03-2026-q4_k",
         displayName: "Compact (Q4_K · Metal)",
@@ -130,7 +143,7 @@ final class CohereLocalPlugin: NSObject, TranscriptionEnginePlugin, Transcriptio
     // MARK: - TranscriptionEnginePlugin
 
     var providerId: String { Self.providerIdentifier }
-    var providerDisplayName: String { Self.pluginName }
+    var providerDisplayName: String { Self.localizedString(Self.pluginName) }
 
     var isConfigured: Bool {
         state.withLock {
@@ -156,8 +169,8 @@ final class CohereLocalPlugin: NSObject, TranscriptionEnginePlugin, Transcriptio
             } ?? false
             return PluginModelInfo(
                 id: model.id,
-                displayName: model.displayName,
-                sizeDescription: model.sizeDescription,
+                displayName: Self.localizedString(model.displayName),
+                sizeDescription: Self.localizedString(model.sizeDescription),
                 languageCount: Self.supportedLanguageCodes.count,
                 downloaded: isDownloaded,
                 loaded: snapshot.loadedModelId == model.id
@@ -678,6 +691,10 @@ struct CohereLocalModelDefinition: Sendable, Equatable {
     let fileName: String
     let fileSize: Int64
     let sha256: String
+
+    var localizationKeys: [String] {
+        [displayName, sizeDescription, ramRequirement, detail]
+    }
 }
 
 enum CohereLocalModelState: Sendable, Equatable {
@@ -707,33 +724,66 @@ enum CohereLocalPluginError: LocalizedError, Sendable {
     var errorDescription: String? {
         switch self {
         case .explicitLanguageRequired(let supportedLanguages):
-            return "Cohere Transcribe requires an explicit supported language: \(supportedLanguages.joined(separator: ", ")). Automatic language detection is not available."
+            let message = CohereLocalPlugin.localizedString(
+                "Cohere Transcribe requires an explicitly selected supported language. Automatic language detection is not available. Supported languages:"
+            )
+            return "\(message) \(supportedLanguages.joined(separator: ", "))."
         case .translationUnsupported:
-            return "Cohere Transcribe does not support translation."
+            return CohereLocalPlugin.localizedString(
+                "Cohere Transcribe does not support translation."
+            )
         case .modelNotDownloaded:
-            return "The Cohere Transcribe model is not downloaded."
+            return CohereLocalPlugin.localizedString(
+                "The Cohere Transcribe model is not downloaded."
+            )
         case .modelNotLoaded:
-            return "The Cohere Transcribe model is not loaded. Open the plugin settings and load it first."
+            return CohereLocalPlugin.localizedString(
+                "The Cohere Transcribe model is not loaded. Open the plugin settings and load it first."
+            )
         case .invalidRepositoryIdentifier:
-            return "The pinned Cohere model repository identifier is invalid."
+            return CohereLocalPlugin.localizedString(
+                "The pinned Cohere model repository identifier is invalid."
+            )
         case .incompleteModelDownload:
-            return "The Cohere model download completed without all required model files."
+            return CohereLocalPlugin.localizedString(
+                "The Cohere model download completed without all required model files."
+            )
         case .runtimeDownloadFailed:
-            return "The CrispASR runtime download failed."
+            return CohereLocalPlugin.localizedString(
+                "The CrispASR runtime download failed."
+            )
         case .invalidRuntimeArchive:
-            return "The verified CrispASR runtime archive is incomplete."
+            return CohereLocalPlugin.localizedString(
+                "The verified CrispASR runtime archive is incomplete."
+            )
         case .runtimeExtractionFailed(let message):
-            return "The CrispASR runtime could not be extracted: \(message)"
+            let description = CohereLocalPlugin.localizedString(
+                "The CrispASR runtime could not be extracted."
+            )
+            return "\(description) \(message)"
         case .assetVerificationFailed(let fileName):
-            return "Cohere asset verification failed for \(fileName)."
+            let description = CohereLocalPlugin.localizedString(
+                "Cohere asset verification failed for:"
+            )
+            return "\(description) \(fileName)."
         case .invalidLocalServerURL:
-            return "The local CrispASR server URL is invalid."
+            return CohereLocalPlugin.localizedString(
+                "The local CrispASR server URL is invalid."
+            )
         case .localPortReservationFailed:
-            return "TypeWhisper could not reserve a local port for Cohere Transcribe."
+            return CohereLocalPlugin.localizedString(
+                "TypeWhisper could not reserve a local port for Cohere Transcribe."
+            )
         case .runtimeExited(let output):
-            return "CrispASR exited while starting.\(output.isEmpty ? "" : "\n\(output)")"
+            let description = CohereLocalPlugin.localizedString(
+                "CrispASR exited while starting."
+            )
+            return "\(description)\(output.isEmpty ? "" : "\n\(output)")"
         case .runtimeStartupTimedOut(let output):
-            return "CrispASR did not become ready within five minutes.\(output.isEmpty ? "" : "\n\(output)")"
+            let description = CohereLocalPlugin.localizedString(
+                "CrispASR did not become ready within five minutes."
+            )
+            return "\(description)\(output.isEmpty ? "" : "\n\(output)")"
         }
     }
 }
@@ -744,7 +794,7 @@ enum CohereLocalPluginError: LocalizedError, Sendable {
 private struct CohereLocalSettingsView: View {
     let plugin: CohereLocalPlugin
 
-    private let bundle = Bundle(for: CohereLocalPlugin.self)
+    private let bundle = CohereLocalPlugin.localizationBundle
     private let pollTimer = Timer.publish(every: 0.25, on: .main, in: .common).autoconnect()
     private let cohereModelURL = URL(
         string: "https://huggingface.co/\(CohereLocalModelAssets.modelRepositoryId)"
@@ -860,7 +910,8 @@ private struct CohereLocalSettingsView: View {
                     selection: $selectedModelId
                 ) {
                     ForEach(CohereLocalPlugin.models, id: \.id) { model in
-                        Text(model.displayName).tag(model.id)
+                        Text(CohereLocalPlugin.localizedString(model.displayName, bundle: bundle))
+                            .tag(model.id)
                     }
                 }
                 .onChange(of: selectedModelId) { _, newValue in
@@ -871,14 +922,20 @@ private struct CohereLocalSettingsView: View {
 
                 HStack(alignment: .top) {
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(selectedModel.displayName)
+                        Text(CohereLocalPlugin.localizedString(
+                            selectedModel.displayName,
+                            bundle: bundle
+                        ))
                             .font(.headline)
                         Text(
-                            "\(selectedModel.sizeDescription) · \(selectedModel.ramRequirement)"
+                            "\(CohereLocalPlugin.localizedString(selectedModel.sizeDescription, bundle: bundle)) · \(CohereLocalPlugin.localizedString(selectedModel.ramRequirement, bundle: bundle))"
                         )
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                        Text(selectedModel.detail)
+                        Text(CohereLocalPlugin.localizedString(
+                            selectedModel.detail,
+                            bundle: bundle
+                        ))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -1071,7 +1128,7 @@ private struct CohereLocalSettingsView: View {
             capabilityRow(
                 icon: "exclamationmark.circle",
                 text: String(
-                    localized: "No automatic language detection, streaming, diarization, translation, or dictionary boosting.",
+                    localized: "No automatic language detection, streaming, timestamps, diarization, translation, or dictionary boosting.",
                     bundle: bundle
                 )
             )

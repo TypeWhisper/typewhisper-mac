@@ -1,4 +1,5 @@
 import Darwin
+import Foundation
 import TypeWhisperPluginSDK
 import TypeWhisperPluginSDKTesting
 import XCTest
@@ -23,7 +24,10 @@ final class CohereLocalPluginTests: XCTestCase {
 
         XCTAssertEqual(CohereLocalPlugin.pluginId, "com.typewhisper.cohere-transcribe")
         XCTAssertEqual(plugin.providerId, "cohere-transcribe")
-        XCTAssertEqual(plugin.providerDisplayName, "Cohere Transcribe (Local)")
+        XCTAssertEqual(
+            plugin.providerDisplayName,
+            CohereLocalPlugin.localizedString(CohereLocalPlugin.pluginName)
+        )
         XCTAssertFalse(plugin.supportsStreaming)
         XCTAssertFalse(plugin.supportsTranslation)
         XCTAssertEqual(plugin.dictionaryTermsSupport, .unsupported)
@@ -431,4 +435,66 @@ final class CohereLocalPluginTests: XCTestCase {
         )
         XCTAssertEqual(request.httpMethod, "GET")
     }
+
+    func testGermanLocalizationCoversCurrentSourceAndModelMetadata() throws {
+        let pluginDirectory = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let source = try String(
+            contentsOf: pluginDirectory.appendingPathComponent("CohereLocalPlugin.swift"),
+            encoding: .utf8
+        )
+        let catalogData = try Data(
+            contentsOf: pluginDirectory.appendingPathComponent("Localizable.xcstrings")
+        )
+        let catalog = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: catalogData) as? [String: Any]
+        )
+        let catalogStrings = try XCTUnwrap(catalog["strings"] as? [String: Any])
+
+        var requiredKeys = Set(
+            CohereLocalPlugin.models.flatMap(\.localizationKeys)
+        )
+        requiredKeys.insert(CohereLocalPlugin.pluginName)
+
+        let patterns = [
+            #"String\(localized:\s*"([^"]+)""#,
+            #"Text\(\s*"([^"]+)"\s*,\s*bundle:\s*bundle"#,
+            #"localizedString\(\s*"([^"]+)""#,
+        ]
+        for pattern in patterns {
+            let expression = try NSRegularExpression(pattern: pattern)
+            let range = NSRange(source.startIndex..., in: source)
+            for match in expression.matches(in: source, range: range) {
+                guard let captureRange = Range(match.range(at: 1), in: source) else {
+                    continue
+                }
+                requiredKeys.insert(String(source[captureRange]))
+            }
+        }
+
+        let missingKeys = requiredKeys.filter { catalogStrings[$0] == nil }.sorted()
+        XCTAssertEqual(missingKeys, [], "Missing localization keys: \(missingKeys)")
+
+        let incompleteGermanKeys = requiredKeys.filter { key in
+            guard
+                let entry = catalogStrings[key] as? [String: Any],
+                let localizations = entry["localizations"] as? [String: Any],
+                let german = localizations["de"] as? [String: Any],
+                let stringUnit = german["stringUnit"] as? [String: Any],
+                stringUnit["state"] as? String == "translated",
+                let value = stringUnit["value"] as? String,
+                !value.isEmpty
+            else {
+                return true
+            }
+            return false
+        }.sorted()
+        XCTAssertEqual(
+            incompleteGermanKeys,
+            [],
+            "Missing German translations: \(incompleteGermanKeys)"
+        )
+    }
+
 }

@@ -281,26 +281,6 @@
         }
       }
     },
-    "This removes the Cohere model and its local VAD files. You can download them again later." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dadurch werden das Cohere-Modell und seine lokalen VAD-Dateien entfernt. Du kannst sie später erneut herunterladen."
-          }
-        }
-      }
-    },
-    "This test provider has a much larger memory footprint than Parakeet and unloads through TypeWhisper's model lifecycle." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dieser Test-Provider benötigt deutlich mehr Arbeitsspeicher als Parakeet und wird über den Modell-Lebenszyklus von TypeWhisper entladen."
-          }
-        }
-      }
-    },
     "Unload" : {
       "localizations" : {
         "de" : {
@@ -347,6 +327,316 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Vor jeder Transkription läuft eine Sprachaktivitätserkennung, um Halluzinationen bei Stille und leisem Rauschen zu unterdrücken."
+          }
+        }
+      }
+    },
+    "1.51 GB" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1,51 GB"
+          }
+        }
+      }
+    },
+    "1.74 GB" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1,74 GB"
+          }
+        }
+      }
+    },
+    "1.98 GB" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1,98 GB"
+          }
+        }
+      }
+    },
+    "2.42 GB" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "2,42 GB"
+          }
+        }
+      }
+    },
+    "8 GB+ Mac" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mac mit mindestens 8 GB"
+          }
+        }
+      }
+    },
+    "16 GB+ recommended" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mindestens 16 GB empfohlen"
+          }
+        }
+      }
+    },
+    "Best tested balance of size, speed, and accuracy" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bestes getestetes Verhältnis von Größe, Geschwindigkeit und Genauigkeit"
+          }
+        }
+      }
+    },
+    "Choose Compact Q4_K for the smallest download, Fast Q5_0 for the recommended default, Q6_K for higher numeric precision, or experimental Q8_0 for maximum numeric precision. Only the selected model is loaded." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wähle Kompakt Q4_K für den kleinsten Download, Schnell Q5_0 als empfohlene Standardeinstellung, Q6_K für höhere numerische Präzision oder das experimentelle Q8_0 für maximale numerische Präzision. Nur das ausgewählte Modell wird geladen."
+          }
+        }
+      }
+    },
+    "Cohere asset verification failed for:" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cohere-Asset-Überprüfung fehlgeschlagen für:"
+          }
+        }
+      }
+    },
+    "Cohere Transcribe does not support translation." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cohere Transcribe unterstützt keine Übersetzung."
+          }
+        }
+      }
+    },
+    "Cohere Transcribe requires an explicitly selected supported language. Automatic language detection is not available. Supported languages:" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cohere Transcribe benötigt eine explizit ausgewählte unterstützte Sprache. Automatische Spracherkennung ist nicht verfügbar. Unterstützte Sprachen:"
+          }
+        }
+      }
+    },
+    "Compact (Q4_K · Metal)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kompakt (Q4_K · Metal)"
+          }
+        }
+      }
+    },
+    "CrispASR did not become ready within five minutes." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CrispASR war nicht innerhalb von fünf Minuten bereit."
+          }
+        }
+      }
+    },
+    "CrispASR exited while starting." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "CrispASR wurde während des Starts beendet."
+          }
+        }
+      }
+    },
+    "Fast (Q5_0 · Recommended)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Schnell (Q5_0 · empfohlen)"
+          }
+        }
+      }
+    },
+    "Higher precision (Q6_K · Metal)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Höhere Präzision (Q6_K · Metal)"
+          }
+        }
+      }
+    },
+    "Intermediate quantization between recommended Q5_0 and Q8_0" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mittlere Quantisierung zwischen dem empfohlenen Q5_0 und Q8_0"
+          }
+        }
+      }
+    },
+    "Largest quantization; no overall accuracy gain measured yet" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Größte Quantisierung; bisher kein allgemeiner Genauigkeitsgewinn gemessen"
+          }
+        }
+      }
+    },
+    "Maximum precision (Q8_0 · Experimental)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Maximale Präzision (Q8_0 · experimentell)"
+          }
+        }
+      }
+    },
+    "Model" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Modell"
+          }
+        }
+      }
+    },
+    "Smallest download and memory footprint" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kleinster Download und geringster Speicherbedarf"
+          }
+        }
+      }
+    },
+    "The Cohere model download completed without all required model files." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Download des Cohere-Modells wurde abgeschlossen, ohne dass alle erforderlichen Modelldateien vorhanden sind."
+          }
+        }
+      }
+    },
+    "The Cohere Transcribe model is not downloaded." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das Cohere-Transcribe-Modell wurde nicht heruntergeladen."
+          }
+        }
+      }
+    },
+    "The Cohere Transcribe model is not loaded. Open the plugin settings and load it first." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das Cohere-Transcribe-Modell ist nicht geladen. Öffne die Plugin-Einstellungen und lade es zuerst."
+          }
+        }
+      }
+    },
+    "The CrispASR runtime could not be extracted." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die CrispASR-Laufzeit konnte nicht entpackt werden."
+          }
+        }
+      }
+    },
+    "The CrispASR runtime download failed." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die CrispASR-Laufzeit konnte nicht heruntergeladen werden."
+          }
+        }
+      }
+    },
+    "The local CrispASR server URL is invalid." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die URL des lokalen CrispASR-Servers ist ungültig."
+          }
+        }
+      }
+    },
+    "The pinned Cohere model repository identifier is invalid." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Kennung des festgeschriebenen Cohere-Modell-Repositorys ist ungültig."
+          }
+        }
+      }
+    },
+    "The verified CrispASR runtime archive is incomplete." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das überprüfte CrispASR-Laufzeitarchiv ist unvollständig."
+          }
+        }
+      }
+    },
+    "This removes the selected Cohere model. Shared runtime files remain while another variant is installed." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dadurch wird das ausgewählte Cohere-Modell entfernt. Gemeinsam genutzte Laufzeitdateien bleiben erhalten, solange eine andere Variante installiert ist."
+          }
+        }
+      }
+    },
+    "TypeWhisper could not reserve a local port for Cohere Transcribe." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TypeWhisper konnte keinen lokalen Port für Cohere Transcribe reservieren."
           }
         }
       }
