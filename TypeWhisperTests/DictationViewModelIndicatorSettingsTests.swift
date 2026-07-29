@@ -1414,6 +1414,40 @@ final class IndicatorPanelInteractionTests: XCTestCase {
         XCTAssertGreaterThan(centerEdgeRed, 0.8)
     }
 
+    func testMinimalSurfaceKeepsProgressVisibleNearExpiration() throws {
+        let width = Int(IndicatorFeedbackPanelLayout.minimalFeedbackWidth)
+        let height = Int(IndicatorFeedbackPanelLayout.feedbackBodyHeight)
+        let renderer = ImageRenderer(
+            content: VStack(spacing: 0) {
+                MinimalIndicatorFeedbackProgress(remainingFraction: 0.02)
+                Color.clear
+            }
+            .frame(width: CGFloat(width), height: CGFloat(height))
+            .background(.black.opacity(0.84), in: Capsule())
+            .clipShape(Capsule())
+        )
+        renderer.proposedSize = ProposedViewSize(
+            width: CGFloat(width),
+            height: CGFloat(height)
+        )
+        renderer.scale = 1
+
+        let image = try XCTUnwrap(renderer.cgImage)
+        let bitmap = NSBitmapImageRep(cgImage: image)
+        let progressX = Int(
+            IndicatorFeedbackPanelLayout.minimalFeedbackProgressHorizontalInset
+        ) + 1
+        let progressColor = try XCTUnwrap(
+            bitmap.colorAt(x: progressX, y: 0)?.usingColorSpace(.deviceRGB)
+        )
+        let outsideColor = try XCTUnwrap(
+            bitmap.colorAt(x: 0, y: 0)?.usingColorSpace(.deviceRGB)
+        )
+
+        XCTAssertGreaterThan(progressColor.redComponent, 0.5)
+        XCTAssertLessThan(outsideColor.alphaComponent, 0.1)
+    }
+
     func testFeedbackFramePreservesStyleAnchor() {
         let screenFrame = CGRect(x: 100, y: 200, width: 1_000, height: 800)
 

@@ -4,6 +4,7 @@ enum IndicatorFeedbackPanelLayout {
     static let feedbackWidth: CGFloat = 340
     static let minimalFeedbackWidth: CGFloat = 360
     static let feedbackBodyHeight: CGFloat = 52
+    static let minimalFeedbackProgressHorizontalInset: CGFloat = feedbackBodyHeight / 2
     static let overlayStatusHeight: CGFloat = 48
     static let screenEdgeInset: CGFloat = 20
 

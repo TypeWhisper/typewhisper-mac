@@ -1,5 +1,22 @@
 import SwiftUI
 
+struct MinimalIndicatorFeedbackProgress: View {
+    let remainingFraction: Double?
+
+    var body: some View {
+        Group {
+            if let remainingFraction {
+                IndicatorFeedbackProgressBar(remainingFraction: remainingFraction)
+            } else {
+                Color.clear
+                    .frame(height: 2)
+                    .accessibilityHidden(true)
+            }
+        }
+        .padding(.horizontal, IndicatorFeedbackPanelLayout.minimalFeedbackProgressHorizontalInset)
+    }
+}
+
 /// Compact floating indicator for power users who only want essential status.
 struct MinimalIndicatorView: View {
     @ObservedObject private var viewModel = DictationViewModel.shared
@@ -146,13 +163,9 @@ struct MinimalIndicatorView: View {
     private var contentBody: some View {
         if let message = actionFeedbackMessage {
             VStack(spacing: 0) {
-                if let remainingFraction = presentation.actionFeedbackRemainingFraction {
-                    IndicatorFeedbackProgressBar(remainingFraction: remainingFraction)
-                } else {
-                    Color.clear
-                        .frame(height: 2)
-                        .accessibilityHidden(true)
-                }
+                MinimalIndicatorFeedbackProgress(
+                    remainingFraction: presentation.actionFeedbackRemainingFraction
+                )
 
                 compactMessage(
                     text: message,
