@@ -14,6 +14,12 @@
             "state": "translated",
             "value": "APIキー"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API 密钥"
+          }
         }
       }
     },
@@ -29,6 +35,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "APIキーはキーチェーンに安全に保存されます"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API 密钥安全存储在钥匙串中"
           }
         }
       }
@@ -46,6 +58,12 @@
             "state": "translated",
             "value": "ChatGPTログイン"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ChatGPT 登录"
+          }
         }
       }
     },
@@ -61,6 +79,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "ChatGPTログインが接続済み"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ChatGPT 登录已连接"
           }
         }
       }
@@ -78,6 +102,12 @@
             "state": "translated",
             "value": "ChatGPTログインが接続済み。"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ChatGPT 登录已连接。"
+          }
         }
       }
     },
@@ -93,6 +123,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "ChatGPTログインはサポートされているChatGPT/Codexモデルのみを表示します。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ChatGPT 登录仅显示支持的 ChatGPT/Codex 模型。"
           }
         }
       }
@@ -110,6 +146,12 @@
             "state": "translated",
             "value": "ブラウザでOpenAIログインを完了してください。TypeWhisperはその後自動でアカウントを接続します。"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在浏览器中完成 OpenAI 登录。TypeWhisper 会自动完成连接。"
+          }
         }
       }
     },
@@ -125,6 +167,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "接続済みプラン: %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已连接套餐：%@"
           }
         }
       }
@@ -142,6 +190,12 @@
             "state": "translated",
             "value": "接続方法"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "连接方式"
+          }
         }
       }
     },
@@ -157,6 +211,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "録音のトピック、状況、または関連するコンテキストを説明します。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "描述录音主题、环境或相关上下文。"
           }
         }
       }
@@ -174,6 +234,12 @@
             "state": "translated",
             "value": "GPT-4oモデルはWhisper Translate（英語への翻訳）をサポートしていません。"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "GPT-4o 模型不支持 Whisper 翻译（翻译为英语）。"
+          }
         }
       }
     },
@@ -189,6 +255,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "言語ヒントと辞書用語は自動的に追加されます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "语言提示和词典术语会自动添加。"
           }
         }
       }
@@ -206,6 +278,12 @@
             "state": "translated",
             "value": "ライブ文字起こしの遅延"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "实时转录延迟"
+          }
         }
       }
     },
@@ -222,6 +300,12 @@
             "state": "translated",
             "value": "遅延を低くすると部分テキストが早く表示され、高くするとモデルがより多くの音声コンテキストを利用できます。"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "较低的延迟会更快显示部分文本；较高的延迟为模型提供更多音频上下文。"
+          }
         }
       }
     },
@@ -234,6 +318,12 @@
           }
         },
         "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最小"
+          }
+        },
+        "zh-Hans": {
           "stringUnit": {
             "state": "translated",
             "value": "最小"
@@ -254,6 +344,12 @@
             "state": "translated",
             "value": "リアルタイム文字起こしは、OpenAIのRealtime APIを通じて24 kHz PCMをストリーミングします。"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "实时转录通过 OpenAI Realtime API 流式传输 24 kHz PCM 音频。"
+          }
         }
       }
     },
@@ -269,6 +365,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "文字起こしコンテキスト"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "转录上下文"
           }
         }
       }
@@ -286,6 +388,12 @@
             "state": "translated",
             "value": "翻訳にはWhisper 1が必要です。"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "翻译需要 Whisper 1。"
+          }
         }
       }
     },
@@ -298,6 +406,12 @@
           }
         },
         "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最高"
+          }
+        },
+        "zh-Hans": {
           "stringUnit": {
             "state": "translated",
             "value": "最高"
@@ -318,6 +432,12 @@
             "state": "translated",
             "value": "既存のCodexログインがインポートされました。"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已导入您现有的 Codex 登录。"
+          }
         }
       }
     },
@@ -333,6 +453,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Codexログインをインポート"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "导入 Codex 登录"
           }
         }
       }
@@ -350,6 +476,12 @@
             "state": "translated",
             "value": "無効なAPIキー"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无效的 API 密钥"
+          }
         }
       }
     },
@@ -365,6 +497,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "LLMモデル"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "LLM 模型"
           }
         }
       }
@@ -382,6 +520,12 @@
             "state": "translated",
             "value": "モデルが回答前にどのくらい考える時間を取るかを制御します。"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "控制模型在回答前花费多少思考时间。"
+          }
         }
       }
     },
@@ -394,6 +538,12 @@
           }
         },
         "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "高"
+          }
+        },
+        "zh-Hans": {
           "stringUnit": {
             "state": "translated",
             "value": "高"
@@ -414,6 +564,12 @@
             "state": "translated",
             "value": "低"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "低"
+          }
         }
       }
     },
@@ -426,6 +582,12 @@
           }
         },
         "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "中"
+          }
+        },
+        "zh-Hans": {
           "stringUnit": {
             "state": "translated",
             "value": "中"
@@ -446,6 +608,12 @@
             "state": "translated",
             "value": "更新"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "刷新"
+          }
         }
       }
     },
@@ -461,6 +629,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "削除"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除"
           }
         }
       }
@@ -478,6 +652,12 @@
             "state": "translated",
             "value": "思考負荷"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "推理力度"
+          }
         }
       }
     },
@@ -490,6 +670,12 @@
           }
         },
         "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存"
+          }
+        },
+        "zh-Hans": {
           "stringUnit": {
             "state": "translated",
             "value": "保存"
@@ -510,6 +696,12 @@
             "state": "translated",
             "value": "ブラウザでログイン"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在浏览器中登录"
+          }
         }
       }
     },
@@ -525,6 +717,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "音声認識モデル"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "转录模型"
           }
         }
       }
@@ -542,6 +740,12 @@
             "state": "translated",
             "value": "既存のChatGPT Plus/ProまたはCodexログインを使用してプロンプト処理を行います。音声認識には引き続きAPIキーが必要です。"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用您现有的 ChatGPT Plus/Pro 或 Codex 登录来处理提示词。转录仍需 API 密钥。"
+          }
         }
       }
     },
@@ -557,6 +761,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "標準モデルが使用されます。更新をクリックして利用可能なすべてのモデルを取得してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在使用默认模型。点击刷新以获取所有可用模型。"
           }
         }
       }
@@ -574,6 +784,12 @@
             "state": "translated",
             "value": "有効なAPIキー"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有效的 API 密钥"
+          }
         }
       }
     },
@@ -590,6 +806,12 @@
             "state": "translated",
             "value": "確認中..."
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "验证中..."
+          }
         }
       }
     },
@@ -605,6 +827,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "OpenAIログインを待機中..."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在等待 OpenAI 登录..."
           }
         }
       }

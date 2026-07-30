@@ -1327,7 +1327,7 @@ private struct PromptWizardResponseStep: View {
             promptWizardEditorSubsection(title: localizedAppText("Output Format", de: "Ausgabeformat")) {
                 Picker(localizedAppText("Format", de: "Format"), selection: extractFormatBinding) {
                     Text(localizedAppText("Checklist", de: "Checkliste")).tag(PromptWizardExtractFormat.checklist)
-                    Text("JSON").tag(PromptWizardExtractFormat.json)
+                    Text(String(localized: "JSON")).tag(PromptWizardExtractFormat.json)
                     Text(localizedAppText("Table", de: "Tabelle")).tag(PromptWizardExtractFormat.table)
                     Text(localizedAppText("Key Points", de: "Kernpunkte")).tag(PromptWizardExtractFormat.keyPoints)
                 }
@@ -1340,7 +1340,7 @@ private struct PromptWizardResponseStep: View {
                         Text(localizedAppText("Bullet List", de: "Bullet-Liste")).tag(PromptWizardStructureFormat.bulletList)
                         Text(localizedAppText("Meeting Notes", de: "Meeting Notes")).tag(PromptWizardStructureFormat.meetingNotes)
                         Text(localizedAppText("Table", de: "Tabelle")).tag(PromptWizardStructureFormat.table)
-                        Text("JSON").tag(PromptWizardStructureFormat.json)
+                        Text(String(localized: "JSON")).tag(PromptWizardStructureFormat.json)
                     }
                     .pickerStyle(.segmented)
                 }

@@ -503,17 +503,17 @@ struct AdvancedSettingsView: View {
             syncSpeechFeedbackAvailability()
         }
         .alert(localizedAppText("Export Failed", de: "Export fehlgeschlagen"), isPresented: $showDiagnosticsExportError) {
-            Button("OK", role: .cancel) {}
+            Button(String(localized: "OK"), role: .cancel) {}
         } message: {
             Text(diagnosticsExportErrorMessage)
         }
         .alert(localizedAppText("Backup Failed", de: "Sicherung fehlgeschlagen"), isPresented: $showBackupError) {
-            Button("OK", role: .cancel) {}
+            Button(String(localized: "OK"), role: .cancel) {}
         } message: {
             Text(backupErrorMessage)
         }
         .alert(localizedAppText("Import Complete", de: "Import abgeschlossen"), isPresented: $showBackupImportResult) {
-            Button("OK", role: .cancel) {}
+            Button(String(localized: "OK"), role: .cancel) {}
         } message: {
             Text(backupImportResultMessage)
         }

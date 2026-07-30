@@ -24,9 +24,9 @@ enum HistoryExportFormat: String, CaseIterable {
 
     var displayName: String {
         switch self {
-        case .markdown: "Markdown (.md)"
-        case .plainText: "Plain Text (.txt)"
-        case .json: "JSON (.json)"
+        case .markdown: String(localized: "Markdown (.md)")
+        case .plainText: String(localized: "Plain Text (.txt)")
+        case .json: String(localized: "JSON (.json)")
         }
     }
 }

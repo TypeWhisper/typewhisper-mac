@@ -14,6 +14,12 @@
             "state": "translated",
             "value": "CTCモデル (~100 MB) - 最初に使用するときに自動で読み込まれます。または:"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CTC 模型（约 100 MB）- 首次使用时自动下载，或："
+          }
         }
       }
     },
@@ -29,6 +35,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "読み込み & 有効化"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下载并加载"
           }
         }
       }
@@ -46,6 +58,12 @@
             "state": "translated",
             "value": "今すぐダウンロード"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "立即下载"
+          }
         }
       }
     },
@@ -61,6 +79,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "完了"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "完成"
           }
         }
       }
@@ -78,6 +102,12 @@
             "state": "translated",
             "value": "CTCモデルがダウンロード中..."
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在下载 CTC 模型..."
+          }
         }
       }
     },
@@ -93,6 +123,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "語彙ブーストを有効化"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "启用词汇增强"
           }
         }
       }
@@ -110,6 +146,12 @@
             "state": "translated",
             "value": "辞書の専門用語の認識を、セカンダリCTCモデルにより向上させます。"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用辅助 CTC 模型提高词典中自定义术语的识别率。"
+          }
         }
       }
     },
@@ -125,6 +167,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hugging Faceトークン"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hugging Face 令牌"
           }
         }
       }
@@ -142,6 +190,12 @@
             "state": "translated",
             "value": "無効なHugging Faceトークン"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无效的 Hugging Face 令牌"
+          }
         }
       }
     },
@@ -157,6 +211,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "モデルバージョン"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型版本"
           }
         }
       }
@@ -174,6 +234,12 @@
             "state": "translated",
             "value": "NVIDIA Parakeet TDT V2 - Apple Siliconで非常に高速。英語のみ、最高のRecall。APIキー不要。"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "NVIDIA Parakeet TDT V2 - 在 Apple Silicon 上极快。仅限英语，最高召回率。无需 API 密钥。"
+          }
         }
       }
     },
@@ -189,6 +255,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "NVIDIA Parakeet TDT - Apple Siliconで非常に高速。25のヨーロッパ語、APIキー不要。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "NVIDIA Parakeet TDT - 在 Apple Silicon 上极快。支持 25 种欧洲语言，无需 API 密钥。"
           }
         }
       }
@@ -206,6 +278,12 @@
             "state": "translated",
             "value": "任意です。ダウンロードのレート制限を緩和できます。huggingface.co/settings/tokens で無料作成できます"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "可选。提高下载速率限制。在 huggingface.co/settings/tokens 免费获取。"
+          }
         }
       }
     },
@@ -221,6 +299,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "準備完了 - %lld語読み込まれました"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "就绪 - 已加载 %lld 个术语"
           }
         }
       }
@@ -238,6 +322,12 @@
             "state": "translated",
             "value": "準備完了 - 辞書設定で語を追加"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "就绪 - 在词典设置中添加术语"
+          }
         }
       }
     },
@@ -253,6 +343,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "削除"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除"
           }
         }
       }
@@ -270,6 +366,12 @@
             "state": "translated",
             "value": "再試行"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重试"
+          }
         }
       }
     },
@@ -282,6 +384,12 @@
           }
         },
         "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存"
+          }
+        },
+        "zh-Hans": {
           "stringUnit": {
             "state": "translated",
             "value": "保存"
@@ -302,6 +410,12 @@
             "state": "translated",
             "value": "無効化"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "卸载"
+          }
         }
       }
     },
@@ -317,6 +431,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "有効なHugging Faceトークン"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有效的 Hugging Face 令牌"
           }
         }
       }
@@ -334,6 +454,12 @@
             "state": "translated",
             "value": "トークンを検証中..."
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在验证令牌..."
+          }
         }
       }
     },
@@ -349,6 +475,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "語彙ブースト"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "词汇增强"
           }
         }
       }

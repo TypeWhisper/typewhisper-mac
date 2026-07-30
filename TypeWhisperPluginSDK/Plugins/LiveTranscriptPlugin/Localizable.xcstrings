@@ -14,6 +14,12 @@
             "state": "translated",
             "value": "録音時に自動で開く"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "录音时自动打开"
+          }
         }
       }
     },
@@ -29,6 +35,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "新しいテキスト"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新文本"
           }
         }
       }
@@ -46,6 +58,12 @@
             "state": "translated",
             "value": "フォントサイズ"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "字号"
+          }
         }
       }
     },
@@ -61,6 +79,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "キーボードショートカットを押してください..."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按下组合键..."
           }
         }
       }
@@ -78,6 +102,12 @@
             "state": "translated",
             "value": "録音"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "录制快捷键"
+          }
         }
       }
     },
@@ -93,6 +123,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "キーボードショートカットでテキストウィンドウを表示または非表示にします。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用键盘快捷键显示或隐藏转录窗口。"
           }
         }
       }
@@ -110,6 +146,12 @@
             "state": "translated",
             "value": "録音開始時にテキストウィンドウを自動で表示します。"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "录音开始时自动显示转录窗口。"
+          }
         }
       }
     },
@@ -125,6 +167,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "キーボードショートカット"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "切换快捷键"
           }
         }
       }

@@ -698,7 +698,7 @@ struct SetupWizardView: View {
 
             recommendationCard(
                 manifestId: SetupWizardParakeetRecommendation.manifestId,
-                title: "Parakeet",
+                title: String(localized: "Parakeet"),
                 badge: localizedAppText("Recommended", de: "Empfohlen"),
                 description: SetupWizardParakeetRecommendation.description,
                 systemImage: "desktopcomputer",
@@ -1013,7 +1013,7 @@ struct SetupWizardView: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 7) {
-                        Text("Apple Speech")
+                        Text(String(localized: "Apple Speech"))
                             .font(.headline)
                         Text(localizedAppText("Built-in", de: "Integriert"))
                             .font(.caption2.weight(.semibold))
@@ -1098,7 +1098,7 @@ struct SetupWizardView: View {
 
                 VStack(alignment: .leading, spacing: 4) {
                     HStack(spacing: 7) {
-                        Text("Apple Intelligence")
+                        Text(String(localized: "Apple Intelligence"))
                             .font(.headline)
                         Text(localizedAppText("Built-in", de: "Integriert"))
                             .font(.caption2.weight(.semibold))

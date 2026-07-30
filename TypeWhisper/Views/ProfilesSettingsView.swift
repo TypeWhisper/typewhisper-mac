@@ -237,7 +237,7 @@ private struct RuleRow: View {
                             .font(.headline)
 
                         if let hotkey = profile.hotkey {
-                            Text("Manuell: \(HotkeyService.displayName(for: hotkey))")
+                            Text(String(localized: "Manual: \(HotkeyService.displayName(for: hotkey))"))
                                 .font(.caption)
                                 .foregroundStyle(.secondary)
                         }
@@ -1078,10 +1078,10 @@ private struct RuleBehaviorStep: View {
                             Text(localizedAppText("None", de: "Keins")).tag(nil as String?)
                             Divider()
                             Text(localizedAppText("Auto-Detect", de: "Automatisch erkennen")).tag("auto" as String?)
-                            Text("Markdown").tag("markdown" as String?)
-                            Text("HTML").tag("html" as String?)
-                            Text("Plain Text").tag("plaintext" as String?)
-                            Text("Code").tag("code" as String?)
+                            Text(String(localized: "Markdown")).tag("markdown" as String?)
+                            Text(String(localized: "HTML")).tag("html" as String?)
+                            Text(String(localized: "Plain Text")).tag("plaintext" as String?)
+                            Text(String(localized: "Code")).tag("code" as String?)
                         }
                     }
                     .pickerStyle(.menu)
@@ -1246,8 +1246,8 @@ private struct RuleReviewStep: View {
                             tint: .teal
                         ) {
                             VStack(alignment: .leading, spacing: 12) {
-                                Toggle("Inline Commands", isOn: $viewModel.editorInlineCommandsEnabled)
-                                Toggle("Memory", isOn: $viewModel.editorMemoryEnabled)
+                                Toggle(String(localized: "Inline Commands"), isOn: $viewModel.editorInlineCommandsEnabled)
+                                Toggle(String(localized: "Memory"), isOn: $viewModel.editorMemoryEnabled)
 
                                 HStack(spacing: 12) {
                                     VStack(alignment: .leading, spacing: 4) {

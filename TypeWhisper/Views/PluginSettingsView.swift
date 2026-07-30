@@ -1384,7 +1384,7 @@ private struct HostingBadge: View {
 
     var body: some View {
         if hosting == .cloud {
-            Text("Cloud")
+            Text(String(localized: "Cloud"))
                 .font(.caption2)
                 .fontWeight(.medium)
                 .padding(.horizontal, 5)

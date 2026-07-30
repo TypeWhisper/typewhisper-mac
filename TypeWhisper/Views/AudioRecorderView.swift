@@ -131,8 +131,8 @@ struct AudioRecorderView: View {
                 }
 
                 Picker(String(localized: "recorder.format"), selection: $viewModel.outputFormat) {
-                    Text("WAV").tag(AudioRecorderService.OutputFormat.wav)
-                    Text("M4A").tag(AudioRecorderService.OutputFormat.m4a)
+                    Text(String(localized: "WAV")).tag(AudioRecorderService.OutputFormat.wav)
+                    Text(String(localized: "M4A")).tag(AudioRecorderService.OutputFormat.m4a)
                 }
                 .disabled(isEditingLocked)
 

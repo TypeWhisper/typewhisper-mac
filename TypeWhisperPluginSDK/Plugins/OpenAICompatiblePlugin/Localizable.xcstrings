@@ -14,6 +14,12 @@
             "state": "translated",
             "value": "APIキー"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API 密钥"
+          }
         }
       }
     },
@@ -29,6 +35,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "APIキーはセキュアにキーチェーンに保存されます"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API 密钥安全存储在钥匙串中"
           }
         }
       }
@@ -46,6 +58,12 @@
             "state": "translated",
             "value": "接続済み"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已连接"
+          }
         }
       }
     },
@@ -61,6 +79,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "接続失敗"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "连接失败"
           }
         }
       }
@@ -78,6 +102,12 @@
             "state": "translated",
             "value": "例: http://localhost:11434"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "例如：http://localhost:11434"
+          }
         }
       }
     },
@@ -94,6 +124,12 @@
             "state": "translated",
             "value": "LLMモデル"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "LLM 模型"
+          }
         }
       }
     },
@@ -109,6 +145,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "LLMリクエストのタイムアウト"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "LLM 请求超时"
           }
         }
       }
@@ -132,6 +174,12 @@
             "state": "translated",
             "value": "思考モード"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "思考模式"
+          }
         }
       }
     },
@@ -147,6 +195,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "モデル名"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型名称"
           }
         }
       }
@@ -164,6 +218,12 @@
             "state": "translated",
             "value": "モデル"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型"
+          }
         }
       }
     },
@@ -179,6 +239,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "モデルが見つかりません。モデル名を手動で入力してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未找到模型。请手动输入模型名称。"
           }
         }
       }
@@ -196,6 +262,12 @@
             "state": "translated",
             "value": "なし"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无"
+          }
         }
       }
     },
@@ -211,6 +283,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "OllamaやLM Studioなどのローカルサーバー用にオプションで使用可能"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "可选，用于本地服务器如 Ollama 或 LM Studio"
           }
         }
       }
@@ -228,6 +306,12 @@
             "state": "translated",
             "value": "更新"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "刷新"
+          }
         }
       }
     },
@@ -244,6 +328,12 @@
             "state": "translated",
             "value": "削除"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除"
+          }
         }
       }
     },
@@ -256,6 +346,12 @@
           }
         },
         "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存"
+          }
+        },
+        "zh-Hans": {
           "stringUnit": {
             "state": "translated",
             "value": "保存"
@@ -276,6 +372,12 @@
             "state": "translated",
             "value": "秒"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "秒"
+          }
         }
       }
     },
@@ -291,6 +393,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "LLMの応答を待つ秒数。大きなプロンプトで処理に時間がかかるローカルサーバー（LM Studio、Ollama）では値を増やすことを推奨します。値が大きいほど、リクエストが失敗するまで待つ時間が長くなります。デフォルトは30秒です。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "等待 LLM 响应的秒数。对于处理大量提示词时较慢的本地服务器（LM Studio、Ollama），请增加此值。值越大，请求失败前等待的时间越长。默认值 30 秒。"
           }
         }
       }
@@ -308,6 +416,12 @@
             "state": "translated",
             "value": "サーバーURL"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "服务器 URL"
+          }
         }
       }
     },
@@ -323,6 +437,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "接続テスト"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "测试连接"
           }
         }
       }
@@ -340,6 +460,12 @@
             "state": "translated",
             "value": "テスト中..."
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "测试中..."
+          }
         }
       }
     },
@@ -355,6 +481,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "音声認識モデル"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "转录模型"
           }
         }
       }
