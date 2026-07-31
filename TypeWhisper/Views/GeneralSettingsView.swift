@@ -18,6 +18,9 @@ struct GeneralSettingsView: View {
         if preferredLanguage?.hasPrefix("ja") == true {
             return "ja"
         }
+        if preferredLanguage?.hasPrefix("zh") == true {
+            return "zh-Hans"
+        }
         return preferredLanguage?.hasPrefix("de") == true ? "de" : "en"
     }()
     @State private var showRestartAlert = false
@@ -132,6 +135,7 @@ struct GeneralSettingsView: View {
                     Text(String(localized: "English")).tag("en")
                     Text(String(localized: "Deutsch")).tag("de")
                     Text(String(localized: "日本語")).tag("ja")
+                    Text(String(localized: "简体中文")).tag("zh-Hans")
                 }
                 .onChange(of: appLanguage) {
                     UserDefaults.standard.set(appLanguage, forKey: UserDefaultsKeys.preferredAppLanguage)
