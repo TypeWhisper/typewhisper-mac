@@ -153,13 +153,13 @@ final class AudioRecorderViewModelTests: XCTestCase {
         let viewModel = makeViewModel(defaults: defaults)
 
         viewModel.selectedEngine = "assemblyai"
-        viewModel.selectedModel = "universal-3-pro"
+        viewModel.selectedModel = "universal-3-5-pro"
 
         XCTAssertEqual(defaults.string(forKey: UserDefaultsKeys.recorderTranscriptionEngine), "assemblyai")
-        XCTAssertEqual(defaults.string(forKey: UserDefaultsKeys.recorderTranscriptionModel), "universal-3-pro")
+        XCTAssertEqual(defaults.string(forKey: UserDefaultsKeys.recorderTranscriptionModel), "universal-3-5-pro")
         XCTAssertEqual(UserDefaults.standard.string(forKey: UserDefaultsKeys.selectedEngine), "groq")
         XCTAssertEqual(viewModel.effectiveProviderId, "assemblyai")
-        XCTAssertEqual(viewModel.effectiveModelId, "universal-3-pro")
+        XCTAssertEqual(viewModel.effectiveModelId, "universal-3-5-pro")
     }
 
     func testRecorderSelectionFallsBackToGlobalDefaultWhenUnset() throws {
@@ -556,7 +556,7 @@ final class AudioRecorderViewModelTests: XCTestCase {
             }
         )
         viewModel.selectedEngine = "assemblyai"
-        viewModel.selectedModel = "universal-3-pro"
+        viewModel.selectedModel = "universal-3-5-pro"
         viewModel.languageSelection = .exact("de")
         viewModel.selectedTask = .translate
         viewModel.loadRecordings()
@@ -581,7 +581,7 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertEqual(request.language, "de")
         XCTAssertTrue(request.translate)
         XCTAssertTrue(request.prompt?.contains("TypeWhisper") == true)
-        XCTAssertTrue(plugin.selectedModelOverrides.contains("universal-3-pro"))
+        XCTAssertTrue(plugin.selectedModelOverrides.contains("universal-3-5-pro"))
     }
 
     func testRetranscriptionAudioLoadFailurePreservesExistingTranscript() async throws {
@@ -1137,7 +1137,7 @@ final class AudioRecorderViewModelTests: XCTestCase {
                     providerId: "assemblyai",
                     displayName: "AssemblyAI",
                     models: [
-                        PluginModelInfo(id: "universal-3-pro", displayName: "Universal-3 Pro"),
+                        PluginModelInfo(id: "universal-3-5-pro", displayName: "Universal-3.5 Pro"),
                         PluginModelInfo(id: "universal-2", displayName: "Universal-2")
                     ],
                     selectedModelId: "universal-2",

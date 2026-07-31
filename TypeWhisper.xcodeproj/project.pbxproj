@@ -329,6 +329,7 @@
 		AA00000000000000000211 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000202 /* Localizable.xcstrings */; };
 		AA00000000000000000212 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000023 /* TypeWhisperPluginSDK */; };
 		AA00000000000000000213 /* AssemblyAIPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000204 /* AssemblyAIPlugin.swift */; };
+		C31042000000000000000001 /* AssemblyAIModelCatalog.swift in Sources */ = {isa = PBXBuildFile; fileRef = C31042000000000000000002 /* AssemblyAIModelCatalog.swift */; };
 		AA00000000000000000214 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000205 /* manifest.json */; };
 		AA00000000000000000215 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000206 /* Localizable.xcstrings */; };
 		AA00000000000000000216 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000024 /* TypeWhisperPluginSDK */; };
@@ -809,6 +810,7 @@
 		BB00000000000000000202 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		BB00000000000000000203 /* AssemblyAIPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AssemblyAIPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB00000000000000000204 /* AssemblyAIPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssemblyAIPlugin.swift; sourceTree = "<group>"; };
+		C31042000000000000000002 /* AssemblyAIModelCatalog.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AssemblyAIModelCatalog.swift; sourceTree = "<group>"; };
 		BB00000000000000000205 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		BB00000000000000000206 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		RESS00000000000000001 /* Reson8Plugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Reson8Plugin.swift; sourceTree = "<group>"; };
@@ -1985,6 +1987,7 @@
 			isa = PBXGroup;
 			children = (
 				BB00000000000000000204 /* AssemblyAIPlugin.swift */,
+				C31042000000000000000002 /* AssemblyAIModelCatalog.swift */,
 				BB00000000000000000205 /* manifest.json */,
 				BB00000000000000000206 /* Localizable.xcstrings */,
 			);
@@ -4366,6 +4369,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA00000000000000000213 /* AssemblyAIPlugin.swift in Sources */,
+				C31042000000000000000001 /* AssemblyAIModelCatalog.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
