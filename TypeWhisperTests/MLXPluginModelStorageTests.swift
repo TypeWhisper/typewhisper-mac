@@ -158,7 +158,7 @@ final class MLXPluginModelStorageTests: XCTestCase {
         let fixture = try Fixture()
         defer { fixture.remove() }
         let host = MockHostServices(pluginDataDirectory: fixture.root)
-        (plugin as! TypeWhisperPlugin).activate(host: host)
+        (plugin as TypeWhisperPlugin).activate(host: host)
         let legacy = fixture.legacyDirectory(repositoryID: repositoryID, usesMLXAudio: true)
         try fixture.writeModel(at: legacy, requiredFiles: requiredFiles)
         XCTAssertEqual(plugin.downloadedModels.map(\.id), [modelID])
