@@ -118,14 +118,20 @@ final class MLXPluginModelStorageTests: XCTestCase {
             requiredFiles: ["config.json", "tekken.json"]
         )
         let historicalRoot = fixture.modelsDirectory.appendingPathComponent("huggingface/hub", isDirectory: true)
-        let historicalRepository = fixture.repositoryDirectory(repositoryID: model.repoId, cacheRoot: historicalRoot)
-        try fixture.write("historical", to: historicalRepository.appendingPathComponent("refs/main"))
+        let historicalSnapshot = try fixture.writeSnapshot(
+            repositoryID: model.repoId,
+            commit: commit,
+            requiredFiles: ["config.json", "tekken.json"],
+            cacheRoot: historicalRoot
+        )
 
+        XCTAssertEqual(plugin.downloadedModels.map(\.id), [model.id])
+        try FileManager.default.removeItem(at: fixture.repositoryDirectory(repositoryID: model.repoId))
         XCTAssertEqual(plugin.downloadedModels.map(\.id), [model.id])
         try await plugin.deleteDownloadedModel(model.id)
 
         XCTAssertFalse(FileManager.default.fileExists(atPath: actualSnapshot.path))
-        XCTAssertFalse(FileManager.default.fileExists(atPath: historicalRepository.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: historicalSnapshot.path))
     }
 
     func testPassiveOfflineRestoreDoesNotCreateDownloadArtifacts() async throws {
@@ -136,10 +142,31 @@ final class MLXPluginModelStorageTests: XCTestCase {
         let granite = GranitePlugin.availableModels[0]
         let voxtral = VoxtralPlugin.availableModels[0]
         let gemma = try XCTUnwrap(Gemma4Plugin.modelDefinition(for: "gemma-4-e2b-it-4bit"))
-        Qwen3Plugin().activate(host: MockHostServices(pluginDataDirectory: fixture.root.appendingPathComponent("qwen"), defaults: ["loadedModel": qwen.id]))
-        GranitePlugin().activate(host: MockHostServices(pluginDataDirectory: fixture.root.appendingPathComponent("granite"), defaults: ["loadedModel": granite.id]))
-        VoxtralPlugin().activate(host: MockHostServices(pluginDataDirectory: fixture.root.appendingPathComponent("voxtral"), defaults: ["loadedModel": voxtral.id]))
-        Gemma4Plugin().activate(host: MockHostServices(pluginDataDirectory: fixture.root.appendingPathComponent("gemma"), defaults: ["loadedModel": gemma.id]))
+        let plugins: [(TypeWhisperPlugin, MockHostServices)] = [
+            (Qwen3Plugin(), MockHostServices(
+                pluginDataDirectory: fixture.root.appendingPathComponent("qwen"),
+                defaults: ["loadedModel": qwen.id],
+                shouldRestoreLoadedModelsPassively: true
+            )),
+            (GranitePlugin(), MockHostServices(
+                pluginDataDirectory: fixture.root.appendingPathComponent("granite"),
+                defaults: ["loadedModel": granite.id],
+                shouldRestoreLoadedModelsPassively: true
+            )),
+            (VoxtralPlugin(), MockHostServices(
+                pluginDataDirectory: fixture.root.appendingPathComponent("voxtral"),
+                defaults: ["loadedModel": voxtral.id],
+                shouldRestoreLoadedModelsPassively: true
+            )),
+            (Gemma4Plugin(), MockHostServices(
+                pluginDataDirectory: fixture.root.appendingPathComponent("gemma"),
+                defaults: ["loadedModel": gemma.id],
+                shouldRestoreLoadedModelsPassively: true
+            )),
+        ]
+        for (plugin, host) in plugins {
+            plugin.activate(host: host)
+        }
 
         try await Task.sleep(for: .milliseconds(100))
 
@@ -147,18 +174,19 @@ final class MLXPluginModelStorageTests: XCTestCase {
             let models = fixture.root.appendingPathComponent(pluginRoot).appendingPathComponent("models")
             XCTAssertFalse(FileManager.default.fileExists(atPath: models.path), "Unexpected cache for \(pluginRoot)")
         }
+        withExtendedLifetime(plugins) {}
     }
 
-    private func assertCatalogRecognizesBothLayouts<P: PluginDownloadedModelManaging & TranscriptionModelCatalogProviding>(
+    private func assertCatalogRecognizesBothLayouts<P: TypeWhisperPlugin & PluginDownloadedModelManaging & TranscriptionModelCatalogProviding>(
         plugin: P,
         modelID: String,
         repositoryID: String,
         requiredFiles: [String]
-    ) throws where P: AnyObject {
+    ) throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
         let host = MockHostServices(pluginDataDirectory: fixture.root)
-        (plugin as TypeWhisperPlugin).activate(host: host)
+        plugin.activate(host: host)
         let legacy = fixture.legacyDirectory(repositoryID: repositoryID, usesMLXAudio: true)
         try fixture.writeModel(at: legacy, requiredFiles: requiredFiles)
         XCTAssertEqual(plugin.downloadedModels.map(\.id), [modelID])
@@ -304,9 +332,10 @@ private final class Fixture {
     func writeSnapshot(
         repositoryID: String,
         commit: String,
-        requiredFiles: [String]
+        requiredFiles: [String],
+        cacheRoot: URL? = nil
     ) throws -> URL {
-        let repository = repositoryDirectory(repositoryID: repositoryID)
+        let repository = repositoryDirectory(repositoryID: repositoryID, cacheRoot: cacheRoot)
         let snapshot = repository.appendingPathComponent("snapshots/\(commit)", isDirectory: true)
         try writeModel(at: snapshot, requiredFiles: requiredFiles)
         try write(commit + "\n", to: repository.appendingPathComponent("refs/main"))

@@ -206,6 +206,7 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
             if let existing = usableModelDirectory(for: modelDef, modelsDirectory: modelsDir) {
                 modelDirectory = existing
             } else {
+                removeIncompleteModelIfNeeded(modelDef, modelsDirectory: modelsDir)
                 guard let repoID = Repo.ID(rawValue: modelDef.repoId) else {
                     throw NSError(
                         domain: "GranitePlugin",
@@ -218,19 +219,24 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
                     bearerToken: PluginHuggingFaceTokenHelper.normalizedToken(_hfToken),
                     cache: HubCache(cacheDirectory: modelsDir)
                 )
-                modelDirectory = try await client.downloadSnapshot(
-                    of: repoID,
-                    matching: Self.modelDownloadPatterns
-                )
-                guard PluginHuggingFaceModelStore(modelsDirectory: modelsDir).isUsableModelDirectory(
-                    modelDirectory,
-                    requirements: Self.modelRequirements
-                ) else {
-                    throw NSError(
-                        domain: "GranitePlugin",
-                        code: 2,
-                        userInfo: [NSLocalizedDescriptionKey: "Downloaded model is incomplete: \(modelDef.repoId)"]
+                do {
+                    modelDirectory = try await client.downloadSnapshot(
+                        of: repoID,
+                        matching: Self.modelDownloadPatterns
                     )
+                    guard PluginHuggingFaceModelStore(modelsDirectory: modelsDir).isUsableModelDirectory(
+                        modelDirectory,
+                        requirements: Self.modelRequirements
+                    ) else {
+                        throw NSError(
+                            domain: "GranitePlugin",
+                            code: 2,
+                            userInfo: [NSLocalizedDescriptionKey: "Downloaded model is incomplete: \(modelDef.repoId)"]
+                        )
+                    }
+                } catch {
+                    removeIncompleteModelIfNeeded(modelDef, modelsDirectory: modelsDir)
+                    throw error
                 }
             }
             let loaded = try await GraniteSpeechModel.fromModelDirectory(modelDirectory)
@@ -295,6 +301,16 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
         modelsDirectory
             .appendingPathComponent("mlx-audio")
             .appendingPathComponent(modelDef.repoId.replacingOccurrences(of: "/", with: "_"))
+    }
+
+    private func removeIncompleteModelIfNeeded(_ modelDef: GraniteModelDef, modelsDirectory: URL) {
+        let store = PluginHuggingFaceModelStore(modelsDirectory: modelsDirectory)
+        let legacyDirectories = [legacyModelDirectory(for: modelDef, modelsDirectory: modelsDirectory)]
+        guard usableModelDirectory(for: modelDef, modelsDirectory: modelsDirectory) == nil,
+              store.hasCachedModelFiles(for: modelDef.repoId, legacyDirectories: legacyDirectories) else {
+            return
+        }
+        try? store.deleteModelFiles(for: modelDef.repoId, legacyDirectories: legacyDirectories)
     }
 
     private func cleanupRedundantModelCopies() {
