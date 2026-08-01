@@ -234,15 +234,40 @@ final class Qwen3PluginTests: XCTestCase {
         host.setUserDefault(model.id, forKey: "loadedModel")
 
         let modelDirectory = try makeDownloadedModelDirectory(model, host: host)
+        let canonicalDirectory = try makeCanonicalModelDirectory(model, host: host)
+        let cacheRoot = canonicalDirectory.deletingLastPathComponent().deletingLastPathComponent()
+        let cacheName = "models--" + model.repoId.replacingOccurrences(of: "/", with: "--")
+        let metadataDirectory = host.pluginDataDirectory
+            .appendingPathComponent("models/.metadata/\(cacheName)", isDirectory: true)
+        let lockDirectory = host.pluginDataDirectory
+            .appendingPathComponent("models/.locks/\(cacheName)", isDirectory: true)
+        try write("metadata", to: metadataDirectory.appendingPathComponent("entry"))
+        try write("lock", to: lockDirectory.appendingPathComponent("entry.lock"))
 
         XCTAssertEqual(plugin.downloadedModels.map(\.id), [model.id])
 
         try await plugin.deleteDownloadedModel(model.id)
 
         XCTAssertFalse(FileManager.default.fileExists(atPath: modelDirectory.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: cacheRoot.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: metadataDirectory.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: lockDirectory.path))
         XCTAssertNil(plugin.selectedModelId)
         XCTAssertNil(host.userDefault(forKey: "selectedModel"))
         XCTAssertNil(host.userDefault(forKey: "loadedModel"))
+    }
+
+    func testCanonicalSnapshotIsRecognizedAndActivationRemovesEquivalentLegacyCopy() throws {
+        let model = try XCTUnwrap(Qwen3Plugin.availableModels.first)
+        let host = try PluginTestHostServices(shouldRestoreLoadedModelsPassively: false)
+        let legacyDirectory = try makeDownloadedModelDirectory(model, host: host)
+        _ = try makeCanonicalModelDirectory(model, host: host, tokenizerFormat: .vocabAndMerges)
+
+        let plugin = Qwen3Plugin()
+        plugin.activate(host: host)
+
+        XCTAssertEqual(plugin.downloadedModels.map(\.id), [model.id])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: legacyDirectory.path))
     }
 
     @discardableResult
@@ -255,7 +280,45 @@ final class Qwen3PluginTests: XCTestCase {
             .appendingPathComponent("mlx-audio", isDirectory: true)
             .appendingPathComponent(model.repoId.replacingOccurrences(of: "/", with: "_"), isDirectory: true)
         try FileManager.default.createDirectory(at: modelDirectory, withIntermediateDirectories: true)
-        try Data("partial".utf8).write(to: modelDirectory.appendingPathComponent("model.safetensors"))
+        try write("{}", to: modelDirectory.appendingPathComponent("config.json"))
+        try write("{}", to: modelDirectory.appendingPathComponent("vocab.json"))
+        try write("#version: 0.2\na b", to: modelDirectory.appendingPathComponent("merges.txt"))
+        try write("weights", to: modelDirectory.appendingPathComponent("model.safetensors"))
         return modelDirectory
+    }
+
+    private enum TokenizerFormat {
+        case tokenizerJSON
+        case vocabAndMerges
+    }
+
+    @discardableResult
+    private func makeCanonicalModelDirectory(
+        _ model: Qwen3ModelDef,
+        host: PluginTestHostServices,
+        tokenizerFormat: TokenizerFormat = .tokenizerJSON
+    ) throws -> URL {
+        let commit = String(repeating: "a", count: 40)
+        let cacheName = "models--" + model.repoId.replacingOccurrences(of: "/", with: "--")
+        let repository = host.pluginDataDirectory
+            .appendingPathComponent("models", isDirectory: true)
+            .appendingPathComponent(cacheName, isDirectory: true)
+        let snapshot = repository.appendingPathComponent("snapshots/\(commit)", isDirectory: true)
+        try write(commit + "\n", to: repository.appendingPathComponent("refs/main"))
+        try write("{}", to: snapshot.appendingPathComponent("config.json"))
+        try write("weights", to: snapshot.appendingPathComponent("model.safetensors"))
+        switch tokenizerFormat {
+        case .tokenizerJSON:
+            try write("{}", to: snapshot.appendingPathComponent("tokenizer.json"))
+        case .vocabAndMerges:
+            try write("{}", to: snapshot.appendingPathComponent("vocab.json"))
+            try write("#version: 0.2\na b", to: snapshot.appendingPathComponent("merges.txt"))
+        }
+        return snapshot
+    }
+
+    private func write(_ contents: String, to url: URL) throws {
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data(contents.utf8).write(to: url)
     }
 }

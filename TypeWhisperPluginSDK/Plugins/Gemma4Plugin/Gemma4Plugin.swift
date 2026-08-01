@@ -7,7 +7,7 @@ import MLXLMCommon
 import HuggingFace
 import Hub
 import Tokenizers
-import TypeWhisperPluginSDK
+@_spi(FirstPartyPlugins) import TypeWhisperPluginSDK
 import os
 
 private struct Gemma4DownloadProgressReport: Equatable {
@@ -155,7 +155,6 @@ private final class Gemma4DownloadProgressSampler: @unchecked Sendable {
 private struct Gemma4HubDownloader: Downloader {
     let client: HubClient
     let session: URLSession
-    let modelsDirectory: URL
 
     func download(
         id: String,
@@ -168,12 +167,6 @@ private struct Gemma4HubDownloader: Downloader {
             throw Gemma4Plugin.DownloadError.invalidRepositoryID(id)
         }
 
-        let destination = modelsDirectory.appendingPathComponent(id, isDirectory: true)
-        try FileManager.default.createDirectory(
-            at: destination.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-
         let progressSampler = Gemma4DownloadProgressSampler(
             session: session,
             progressHandler: progressHandler
@@ -183,7 +176,6 @@ private struct Gemma4HubDownloader: Downloader {
 
         return try await client.downloadSnapshot(
             of: repoID,
-            to: destination,
             revision: revision ?? "main",
             matching: patterns,
             progressHandler: { @MainActor progress in
@@ -254,6 +246,10 @@ final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemp
     private static let loadedModelPreparationProgress = 0.9
     private static let minimumVisibleDownloadProgress = 0.01
     private static let minimumVisibleProgressAdvance = 0.001
+    private static let modelRequirements = PluginHuggingFaceModelStore.Requirements(
+        requiredFiles: ["config.json", "tokenizer.json"],
+        weightFileExtensions: ["safetensors"]
+    )
 
     private enum ModelLoadPhase: Equatable {
         case downloading
@@ -300,24 +296,8 @@ final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemp
         modelsDirectory().appendingPathComponent(repoId, isDirectory: true)
     }
 
-    private func hubCacheDirectory(for repoId: String) -> URL {
-        let cacheName = "models--" + repoId.replacingOccurrences(of: "/", with: "--")
-        return modelsDirectory().appendingPathComponent(cacheName, isDirectory: true)
-    }
-
-    private func hubLockDirectory(for repoId: String) -> URL {
-        let cacheName = "models--" + repoId.replacingOccurrences(of: "/", with: "--")
-        return modelsDirectory()
-            .appendingPathComponent(".locks", isDirectory: true)
-            .appendingPathComponent(cacheName, isDirectory: true)
-    }
-
-    private func modelCacheDirectories(for modelDef: Gemma4ModelDef) -> [URL] {
-        [
-            localModelDirectory(for: modelDef.repoId),
-            hubCacheDirectory(for: modelDef.repoId),
-            hubLockDirectory(for: modelDef.repoId),
-        ]
+    private func modelStore() -> PluginHuggingFaceModelStore {
+        PluginHuggingFaceModelStore(modelsDirectory: modelsDirectory())
     }
     @Published var downloadProgress: Double = 0
 
@@ -335,6 +315,7 @@ final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemp
         if sanitizedSelection != persistedSelection {
             host.setUserDefault(sanitizedSelection, forKey: "selectedLLMModel")
         }
+        cleanupRedundantModelCopies()
 
         let shouldAutoRestoreLoadedModel: Bool
         if host.shouldRestoreLoadedModelsPassively,
@@ -587,11 +568,10 @@ final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemp
     }
 
     func hasCachedModelFiles(_ modelDef: Gemma4ModelDef) -> Bool {
-        modelCacheDirectories(for: modelDef).contains { cacheDir in
-            var isDirectory: ObjCBool = false
-            return FileManager.default.fileExists(atPath: cacheDir.path, isDirectory: &isDirectory)
-                && isDirectory.boolValue
-        }
+        modelStore().hasCachedModelFiles(
+            for: modelDef.repoId,
+            legacyDirectories: [localModelDirectory(for: modelDef.repoId)]
+        )
     }
 
     @discardableResult
@@ -618,7 +598,8 @@ final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemp
 
     func loadModel(_ modelDef: Gemma4ModelDef) async throws {
         try Task.checkCancellation()
-        let isAlreadyDownloaded = isModelDownloaded(modelDef)
+        let downloadedDirectory = usableModelDirectory(for: modelDef)
+        let isAlreadyDownloaded = downloadedDirectory != nil
         let loadGeneration = beginModelLoad(for: modelDef, isAlreadyDownloaded: isAlreadyDownloaded)
         startModelLoadTimeout(generation: loadGeneration, modelName: modelDef.displayName)
         do {
@@ -639,18 +620,20 @@ final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemp
             )
             let downloader = Gemma4HubDownloader(
                 client: hubClient,
-                session: hubSession,
-                modelsDirectory: modelsDir
+                session: hubSession
             )
-            let configuration = isAlreadyDownloaded
-                ? ModelConfiguration(
-                    directory: localModelDirectory(for: modelDef.repoId),
+            let configuration: ModelConfiguration
+            if let downloadedDirectory {
+                configuration = ModelConfiguration(
+                    directory: downloadedDirectory,
                     extraEOSTokens: ["<turn|>"]
                 )
-                : ModelConfiguration(
+            } else {
+                configuration = ModelConfiguration(
                     id: modelDef.repoId,
                     extraEOSTokens: ["<turn|>"]
                 )
+            }
             let loadTask = Task<ModelContainer, Error> {
                 try await LLMModelFactory.shared.loadContainer(
                     from: downloader,
@@ -731,17 +714,10 @@ final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemp
     }
 
     func deleteModelFiles(_ modelDef: Gemma4ModelDef) throws {
-        let fileManager = FileManager.default
-        for cacheDir in modelCacheDirectories(for: modelDef) {
-            if fileManager.fileExists(atPath: cacheDir.path) {
-                try fileManager.removeItem(at: cacheDir)
-            }
-        }
-
-        let repoNamespaceDir = localModelDirectory(for: modelDef.repoId).deletingLastPathComponent()
-        if (try? fileManager.contentsOfDirectory(atPath: repoNamespaceDir.path).isEmpty) == true {
-            try? fileManager.removeItem(at: repoNamespaceDir)
-        }
+        try modelStore().deleteModelFiles(
+            for: modelDef.repoId,
+            legacyDirectories: [localModelDirectory(for: modelDef.repoId)]
+        )
     }
 
     func resetCachedModel(_ modelDef: Gemma4ModelDef) {
@@ -964,44 +940,36 @@ final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemp
     }
 
     private func isUsableDownloadedModel(_ modelDef: Gemma4ModelDef) -> Bool {
-        let repoDir = localModelDirectory(for: modelDef.repoId)
-        return Self.isUsableDownloadedModel(at: repoDir)
+        usableModelDirectory(for: modelDef) != nil
     }
 
     static func isUsableDownloadedModel(at repoDir: URL) -> Bool {
-        let fileManager = FileManager.default
-        var isDirectory: ObjCBool = false
-        guard fileManager.fileExists(atPath: repoDir.path, isDirectory: &isDirectory),
-              isDirectory.boolValue else {
-            return false
-        }
-
-        let requiredRootFiles = [
-            "config.json",
-            "tokenizer.json",
-        ]
-        guard requiredRootFiles.allSatisfy({ fileManager.fileExists(atPath: repoDir.appendingPathComponent($0).path) }) else {
-            return false
-        }
-
-        guard let enumerator = fileManager.enumerator(
-            at: repoDir,
-            includingPropertiesForKeys: [.isRegularFileKey],
-            options: [.skipsHiddenFiles]
-        ) else {
-            return false
-        }
-
-        for case let fileURL as URL in enumerator where fileURL.pathExtension == "safetensors" {
-            return true
-        }
-        return false
+        PluginHuggingFaceModelStore(modelsDirectory: repoDir.deletingLastPathComponent())
+            .isUsableModelDirectory(repoDir, requirements: modelRequirements)
     }
 
     private func removeIncompleteModelIfNeeded(_ modelDef: Gemma4ModelDef) {
-        let repoDir = localModelDirectory(for: modelDef.repoId)
-        guard hasCachedModelFiles(modelDef), !Self.isUsableDownloadedModel(at: repoDir) else { return }
+        guard hasCachedModelFiles(modelDef), !isModelDownloaded(modelDef) else { return }
         try? deleteModelFiles(modelDef)
+    }
+
+    private func usableModelDirectory(for modelDef: Gemma4ModelDef) -> URL? {
+        modelStore().usableModelDirectory(
+            for: modelDef.repoId,
+            legacyDirectories: [localModelDirectory(for: modelDef.repoId)],
+            requirements: Self.modelRequirements
+        )
+    }
+
+    private func cleanupRedundantModelCopies() {
+        let store = modelStore()
+        for modelDef in Self.availableModels {
+            _ = try? store.removeRedundantLegacyDirectories(
+                for: modelDef.repoId,
+                legacyDirectories: [localModelDirectory(for: modelDef.repoId)],
+                requirements: Self.modelRequirements
+            )
+        }
     }
 
     #if DEBUG
