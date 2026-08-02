@@ -816,7 +816,9 @@ final class OpenAICompatiblePlugin: NSObject,
             model: modelId,
             systemPrompt: systemPrompt,
             userText: userText,
-            temperature: providerTemperatureDirective(for: profileId).resolvedTemperature(applying: temperatureDirective),            requestTimeout: profile.resolvedChatRequestTimeout,
+            temperature: providerTemperatureDirective(for: profileId)
+                .resolvedTemperature(applying: temperatureDirective),
+            requestTimeout: profile.resolvedChatRequestTimeout,
             thinkingEnabled: profile.thinkingEnabled,
             apiVersion: profile.apiVersion
         )

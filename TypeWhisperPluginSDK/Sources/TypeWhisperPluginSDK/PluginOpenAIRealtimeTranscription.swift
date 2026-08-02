@@ -101,6 +101,8 @@ public struct PluginOpenAIRealtimeTranscriptionConfiguration: Sendable {
 }
 
 public actor PluginOpenAIRealtimeTranscriptCollector {
+    private static let unidentifiedItemID = "__typewhisper_unidentified_item__"
+
     private var completedOrder: [String] = []
     private var completedTexts: [String: String] = [:]
     private var deltaTexts: [String: String] = [:]
@@ -119,12 +121,12 @@ public actor PluginOpenAIRealtimeTranscriptCollector {
 
         switch type {
         case "conversation.item.input_audio_transcription.delta":
-            let itemID = json["item_id"] as? String ?? UUID().uuidString
+            let itemID = json["item_id"] as? String ?? Self.unidentifiedItemID
             let delta = json["delta"] as? String ?? ""
             deltaTexts[itemID, default: ""].append(delta)
             return currentText()
         case "conversation.item.input_audio_transcription.completed":
-            let itemID = json["item_id"] as? String ?? UUID().uuidString
+            let itemID = json["item_id"] as? String ?? Self.unidentifiedItemID
             let transcript = (json["transcript"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
             if !transcript.isEmpty {
                 if completedTexts[itemID] == nil {
@@ -203,20 +205,24 @@ public final class PluginOpenAIRealtimeWebSocketOpenWaiter: @unchecked Sendable 
     public init() {}
 
     public func waitForOpen() async throws {
-        try await withCheckedThrowingContinuation { continuation in
-            let result = state.withLock { state -> Result<Void, Error>? in
-                if state.opened {
-                    return .success(())
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                let result = state.withLock { state -> Result<Void, Error>? in
+                    if state.opened {
+                        return .success(())
+                    }
+                    if let failure = state.failure {
+                        return .failure(failure)
+                    }
+                    state.continuations.append(continuation)
+                    return nil
                 }
-                if let failure = state.failure {
-                    return .failure(failure)
+                if let result {
+                    continuation.resume(with: result)
                 }
-                state.continuations.append(continuation)
-                return nil
             }
-            if let result {
-                continuation.resume(with: result)
-            }
+        } onCancel: {
+            markFailed(CancellationError())
         }
     }
 
@@ -309,7 +315,7 @@ public final class PluginOpenAIRealtimeTranscriptionSession: LiveTranscriptionSe
     /// Opens the WebSocket described by `request`, sends the `session.update` event
     /// derived from `configuration`, and waits for the server to confirm the session
     /// before returning. `request` must already carry provider-specific authorization
-    /// headers (e.g. `Authorization: Bearer ...` or `api-key: ...`).
+    /// headers (for example, `Authorization: Bearer <token>` or `api-key: <key>`).
     public static func connect(
         request: URLRequest,
         configuration: PluginOpenAIRealtimeTranscriptionConfiguration,
@@ -477,13 +483,15 @@ public final class PluginOpenAIRealtimeTranscriptionSession: LiveTranscriptionSe
         }
 
         if shouldFinish, let webSocketTask {
+            defer {
+                receiveTask?.cancel()
+                webSocketTask.cancel(with: .normalClosure, reason: nil)
+                urlSession?.finishTasksAndInvalidate()
+            }
             if !(await collector.hasCompletedTranscript) {
                 try? await webSocketTask.send(.string(#"{"type":"input_audio_buffer.commit"}"#))
             }
             try await waitForCompletedTranscript()
-            receiveTask?.cancel()
-            webSocketTask.cancel(with: .normalClosure, reason: nil)
-            urlSession?.finishTasksAndInvalidate()
         }
 
         if let error = await collector.error {
@@ -534,6 +542,7 @@ public final class PluginOpenAIRealtimeTranscriptionSession: LiveTranscriptionSe
             }
             try await Task.sleep(for: .milliseconds(100))
         }
+        throw PluginTranscriptionError.networkError("Realtime API did not complete the transcript.")
     }
 
     private static func resample16kTo24k(_ samples: [Float]) -> [Float] {

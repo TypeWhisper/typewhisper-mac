@@ -940,7 +940,7 @@ final class OpenAICompatiblePluginTests: XCTestCase {
     func testExplicitRealtimeTransportOverridesCustomAzureDeploymentAlias() throws {
         let host = try PluginTestHostServices(
             defaults: [
-                "baseURL": "https://foundry-krubenok.services.ai.azure.com/openai",
+                "baseURL": "https://foundry-example.services.ai.azure.com/openai",
                 "selectedModel": "my-gpt-live-transcribe-deployment",
             ]
         )
@@ -977,13 +977,13 @@ final class OpenAICompatiblePluginTests: XCTestCase {
     func testRealtimeURLConvertsHTTPSToWSSAndAppendsRealtimePathAndIntent() throws {
         let url = try XCTUnwrap(
             OpenAICompatiblePlugin.realtimeRequestURL(
-                baseURL: "https://foundry-krubenok.services.ai.azure.com/openai",
+                baseURL: "https://foundry-example.services.ai.azure.com/openai",
                 apiVersion: ""
             )
         )
 
         XCTAssertEqual(url.scheme, "wss")
-        XCTAssertEqual(url.host, "foundry-krubenok.services.ai.azure.com")
+        XCTAssertEqual(url.host, "foundry-example.services.ai.azure.com")
         XCTAssertEqual(url.path, "/openai/v1/realtime")
 
         let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
@@ -1021,7 +1021,7 @@ final class OpenAICompatiblePluginTests: XCTestCase {
     func testRealtimeURLAppliesConfiguredAPIVersionWithoutDuplication() throws {
         let url = try XCTUnwrap(
             OpenAICompatiblePlugin.realtimeRequestURL(
-                baseURL: "https://foundry-krubenok.services.ai.azure.com/openai",
+                baseURL: "https://foundry-example.services.ai.azure.com/openai",
                 apiVersion: "preview"
             )
         )
@@ -1060,7 +1060,7 @@ final class OpenAICompatiblePluginTests: XCTestCase {
     func testRealtimeRequestAppliesAzureAPIKeyHeaderAlongsideBearer() throws {
         let host = try PluginTestHostServices(
             defaults: [
-                "baseURL": "https://foundry-krubenok.services.ai.azure.com/openai",
+                "baseURL": "https://foundry-example.services.ai.azure.com/openai",
                 "apiVersion": "preview",
             ],
             secrets: ["api-key": "azure-key"]
@@ -1162,8 +1162,12 @@ final class OpenAICompatiblePluginTests: XCTestCase {
         let session = try XCTUnwrap(payload["session"] as? [String: Any])
         let audio = try XCTUnwrap(session["audio"] as? [String: Any])
         let input = try XCTUnwrap(audio["input"] as? [String: Any])
+        let format = try XCTUnwrap(input["format"] as? [String: Any])
         let transcription = try XCTUnwrap(input["transcription"] as? [String: Any])
 
+        XCTAssertEqual(format["type"] as? String, "audio/pcm")
+        XCTAssertEqual(format["rate"] as? Int, PluginOpenAIRealtimeTranscriptionSession.targetSampleRate)
+        XCTAssertTrue(input["turn_detection"] is NSNull)
         XCTAssertEqual(transcription["model"] as? String, "my-gpt-live-transcribe-deployment")
         XCTAssertEqual(transcription["languages"] as? [String], ["de", "en"])
         XCTAssertEqual(transcription["prompt"] as? String, "Interview about TypeWhisper.")
@@ -1215,5 +1219,39 @@ final class OpenAICompatiblePluginTests: XCTestCase {
 
         XCTAssertEqual(result.text, "Guten Tag")
         XCTAssertEqual(result.detectedLanguage, "de")
+    }
+
+    func testRealtimeTranscriptCollectorUsesStableFallbackForMissingItemID() async throws {
+        let collector = PluginOpenAIRealtimeTranscriptCollector()
+
+        _ = try await collector.applyEvent(Data(
+            #"{"type":"conversation.item.input_audio_transcription.delta","delta":"Guten "}"#.utf8
+        ))
+        _ = try await collector.applyEvent(Data(
+            #"{"type":"conversation.item.input_audio_transcription.delta","delta":"Tag"}"#.utf8
+        ))
+        _ = try await collector.applyEvent(Data(
+            #"{"type":"conversation.item.input_audio_transcription.completed","transcript":"Guten Tag"}"#.utf8
+        ))
+
+        let currentText = await collector.currentText()
+        XCTAssertEqual(currentText, "Guten Tag")
+    }
+
+    func testRealtimeSocketOpenWaiterResumesWhenCancelled() async throws {
+        let waiter = PluginOpenAIRealtimeWebSocketOpenWaiter()
+        let waitTask = Task {
+            try await waiter.waitForOpen()
+        }
+
+        await Task.yield()
+        waitTask.cancel()
+
+        do {
+            try await waitTask.value
+            XCTFail("Expected cancellation")
+        } catch is CancellationError {
+            // Expected.
+        }
     }
 }
