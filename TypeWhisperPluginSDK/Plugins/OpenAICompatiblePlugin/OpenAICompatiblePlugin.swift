@@ -1853,7 +1853,7 @@ private struct OpenAICompatibleSettingsView: View {
                 saveTranscriptionTransport()
             }
 
-            Text("Auto uses realtime streaming only for known realtime model IDs (gpt-live-transcribe, gpt-realtime-whisper) and batch upload otherwise. Choose Realtime to force streaming for a custom Azure/Microsoft Foundry deployment alias (e.g. a gpt-live-transcribe deployment) — Azure realtime transcription currently requires the preview API version. Choose Batch to always use /v1/audio/transcriptions.", bundle: bundle)
+            Text("Auto uses realtime streaming only for known realtime model IDs (gpt-live-transcribe, gpt-realtime-whisper) and batch upload otherwise. Choose Realtime to force streaming for any OpenAI-compatible server that supports the /v1/realtime WebSocket API, including custom deployment aliases (e.g. an Azure OpenAI or Microsoft Foundry gpt-live-transcribe deployment) — some providers, including Azure, require a preview API version for realtime transcription. Choose Batch to always use /v1/audio/transcriptions.", bundle: bundle)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
