@@ -383,7 +383,9 @@ final class OpenAICompatiblePluginTests: XCTestCase {
                     )
                 ),
                 .success(
-                    Data(#"{"text":"transcribed"}"#.utf8),
+                    Data(
+                        #"{"text":"transcribed","language":"en","segments":[{"start":0.0,"end":1.0,"text":"transcribed"}]}"#.utf8
+                    ),
                     Self.httpResponse(
                         url: "https://foundry-example.services.ai.azure.com/openai/v1/audio/transcriptions?api-version=preview",
                         statusCode: 200
@@ -402,7 +404,7 @@ final class OpenAICompatiblePluginTests: XCTestCase {
         _ = await plugin.fetchModels()
         let isConnected = await plugin.validateConnection()
         XCTAssertTrue(isConnected)
-        _ = try await plugin.transcribe(
+        let transcription = try await plugin.transcribe(
             audio: AudioData(samples: [0, 0, 0], wavData: Data("wav".utf8), duration: 1.0),
             language: nil,
             translate: false,
@@ -412,9 +414,45 @@ final class OpenAICompatiblePluginTests: XCTestCase {
 
         XCTAssertEqual(store.sessions[0].requestedRequests.count, 4)
         for request in store.sessions[0].requestedRequests {
-            XCTAssertNotNil(request.value(forHTTPHeaderField: "Authorization"))
+            XCTAssertEqual(
+                request.value(forHTTPHeaderField: "Authorization"),
+                "Bearer " + "azure-key"
+            )
             XCTAssertEqual(request.value(forHTTPHeaderField: "api-key"), "azure-key")
         }
+        let segment = try XCTUnwrap(transcription.segments.first)
+        XCTAssertEqual(transcription.segments.count, 1)
+        XCTAssertEqual(segment.text, "transcribed")
+        XCTAssertEqual(segment.start, 0)
+        XCTAssertEqual(segment.end, 1)
+    }
+
+    func testAzureSovereignEndpointUsesAzureAuthenticationHeaders() async throws {
+        let host = try PluginTestHostServices(
+            defaults: ["baseURL": "https://resource.openai.azure.us"],
+            secrets: ["api-key": "sovereign-key"]
+        )
+        let plugin = OpenAICompatiblePlugin()
+        plugin.activate(host: host)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"data":[]}"#.utf8),
+                    Self.httpResponse(url: "https://resource.openai.azure.us/v1/models", statusCode: 200)
+                )
+            ])
+        }
+
+        _ = await plugin.fetchModels()
+
+        let request = try XCTUnwrap(store.sessions[0].requestedRequests.first)
+        XCTAssertEqual(
+            request.value(forHTTPHeaderField: "Authorization"),
+            "Bearer " + "sovereign-key"
+        )
+        XCTAssertEqual(request.value(forHTTPHeaderField: "api-key"), "sovereign-key")
     }
 
     func testTranscribeRetriesWithWavWhenCompatibleServerRejectsM4A() async throws {

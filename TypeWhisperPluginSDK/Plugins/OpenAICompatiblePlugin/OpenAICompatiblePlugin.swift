@@ -506,6 +506,8 @@ final class OpenAICompatiblePlugin: NSObject,
             )
         }
 
+        // TypeWhisper 1.6 RC1 does not export the SDK's apiVersion overload.
+        // Keep this JSON request path in the plugin until that host is no longer supported.
         return try await PluginAudioUploadEncoder.withCompressedM4AUploadWavFallback(from: audio) { uploadFile in
             try await self.performVersionedTranscriptionRequest(
                 profile: profile,
@@ -560,14 +562,7 @@ final class OpenAICompatiblePlugin: NSObject,
               ) else { return [] }
 
         var request = URLRequest(url: url)
-        if let apiKey = apiKey(for: profileId), !apiKey.isEmpty {
-            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        }
-        if let apiKey = apiKey(for: profileId),
-           !apiKey.isEmpty,
-           Self.isAzureOpenAIEndpoint(request.url) {
-            request.setValue(apiKey, forHTTPHeaderField: "api-key")
-        }
+        applyAuthentication(to: &request, profileId: profileId)
         request.timeoutInterval = 10
 
         do {
@@ -600,14 +595,7 @@ final class OpenAICompatiblePlugin: NSObject,
               ) else { return false }
 
         var request = URLRequest(url: url)
-        if let apiKey = apiKey(for: profileId), !apiKey.isEmpty {
-            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        }
-        if let apiKey = apiKey(for: profileId),
-           !apiKey.isEmpty,
-           Self.isAzureOpenAIEndpoint(request.url) {
-            request.setValue(apiKey, forHTTPHeaderField: "api-key")
-        }
+        applyAuthentication(to: &request, profileId: profileId)
         request.timeoutInterval = 10
 
         do {
@@ -646,7 +634,24 @@ final class OpenAICompatiblePlugin: NSObject,
 
     private nonisolated static func isAzureOpenAIEndpoint(_ url: URL?) -> Bool {
         guard let host = url?.host?.lowercased() else { return false }
-        return host.hasSuffix(".openai.azure.com") || host.hasSuffix(".services.ai.azure.com")
+        return host.hasSuffix(".openai.azure.com")
+            || host.hasSuffix(".openai.azure.us")
+            || host.hasSuffix(".services.ai.azure.com")
+    }
+
+    private func applyAuthentication(to request: inout URLRequest, profileId: String) {
+        guard let apiKey = apiKey(for: profileId) else { return }
+        Self.applyAuthentication(to: &request, apiKey: apiKey)
+    }
+
+    private nonisolated static func applyAuthentication(to request: inout URLRequest, apiKey: String) {
+        let trimmedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedKey.isEmpty else { return }
+        let authorizationHeader = "Authorization"
+        request.setValue("Bearer " + trimmedKey, forHTTPHeaderField: authorizationHeader)
+        if isAzureOpenAIEndpoint(request.url) {
+            request.setValue(trimmedKey, forHTTPHeaderField: "api-key")
+        }
     }
 
     private func providerTemperatureDirective(for profileId: String) -> PluginLLMTemperatureDirective {
@@ -897,10 +902,7 @@ final class OpenAICompatiblePlugin: NSObject,
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        if Self.isAzureOpenAIEndpoint(request.url), !apiKey.isEmpty {
-            request.setValue(apiKey, forHTTPHeaderField: "api-key")
-        }
+        Self.applyAuthentication(to: &request, apiKey: apiKey)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = requestTimeout
         request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
@@ -954,10 +956,7 @@ final class OpenAICompatiblePlugin: NSObject,
         let boundary = UUID().uuidString
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.setValue("******", forHTTPHeaderField: "Authorization")
-        if Self.isAzureOpenAIEndpoint(request.url), !apiKey.isEmpty {
-            request.setValue(apiKey, forHTTPHeaderField: "api-key")
-        }
+        Self.applyAuthentication(to: &request, apiKey: apiKey)
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = Self.transcriptionRequestTimeout
 
@@ -1000,13 +999,26 @@ final class OpenAICompatiblePlugin: NSObject,
             throw PluginTranscriptionError.apiError("HTTP \(httpResponse.statusCode): \(errorMessage)")
         }
 
+        struct Segment: Decodable {
+            let start: Double
+            let end: Double
+            let text: String
+        }
         struct Response: Decodable {
             let text: String
             let language: String?
+            let segments: [Segment]?
         }
         do {
             let decoded = try JSONDecoder().decode(Response.self, from: responseData)
-            return PluginTranscriptionResult(text: decoded.text, detectedLanguage: decoded.language)
+            let segments = (decoded.segments ?? []).map {
+                PluginTranscriptionSegment(text: $0.text, start: $0.start, end: $0.end)
+            }
+            return PluginTranscriptionResult(
+                text: decoded.text,
+                detectedLanguage: decoded.language,
+                segments: segments
+            )
         } catch {
             throw PluginTranscriptionError.apiError("Failed to parse response: \(error.localizedDescription)")
         }
