@@ -493,16 +493,30 @@ final class OpenAICompatiblePlugin: NSObject,
             throw PluginTranscriptionError.noModelSelected
         }
 
-        return try await helper.transcribeCompressedAudioWithWavFallback(
-            audio: audio,
-            apiKey: apiKey(for: profileId) ?? "",
-            modelName: modelId,
-            language: language,
-            translate: translate,
-            prompt: prompt,
-            requestTimeout: Self.transcriptionRequestTimeout,
-            apiVersion: profile.apiVersion
-        )
+        let apiKey = apiKey(for: profileId) ?? ""
+        if profile.apiVersion.isEmpty {
+            return try await helper.transcribeCompressedAudioWithWavFallback(
+                audio: audio,
+                apiKey: apiKey,
+                modelName: modelId,
+                language: language,
+                translate: translate,
+                prompt: prompt,
+                requestTimeout: Self.transcriptionRequestTimeout
+            )
+        }
+
+        return try await PluginAudioUploadEncoder.withCompressedM4AUploadWavFallback(from: audio) { uploadFile in
+            try await self.performVersionedTranscriptionRequest(
+                profile: profile,
+                uploadFile: uploadFile,
+                apiKey: apiKey,
+                modelName: modelId,
+                language: language,
+                translate: translate,
+                prompt: prompt
+            )
+        }
     }
 
     func process(
@@ -899,6 +913,93 @@ final class OpenAICompatiblePlugin: NSObject,
         }
 
         return content.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func performVersionedTranscriptionRequest(
+        profile: OpenAICompatibleProfile,
+        uploadFile: PluginAudioUploadFile,
+        apiKey: String,
+        modelName: String,
+        language: String?,
+        translate: Bool,
+        prompt: String?
+    ) async throws -> PluginTranscriptionResult {
+        let path = translate ? "/v1/audio/translations" : "/v1/audio/transcriptions"
+        guard let url = Self.requestURL(
+            baseURL: profile.baseURL,
+            path: path,
+            apiVersion: profile.apiVersion
+        ) else {
+            throw PluginTranscriptionError.apiError("Invalid URL: \(profile.baseURL)\(path)")
+        }
+
+        let boundary = UUID().uuidString
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("******", forHTTPHeaderField: "Authorization")
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = Self.transcriptionRequestTimeout
+
+        var body = Data()
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append(
+            "Content-Disposition: form-data; name=\"file\"; filename=\"\(uploadFile.filename)\"\r\n"
+                .data(using: .utf8)!
+        )
+        body.append("Content-Type: \(uploadFile.contentType)\r\n\r\n".data(using: .utf8)!)
+        body.append(uploadFile.data)
+        body.append("\r\n".data(using: .utf8)!)
+        Self.appendMultipartField(to: &body, boundary: boundary, name: "model", value: modelName)
+        Self.appendMultipartField(to: &body, boundary: boundary, name: "response_format", value: "json")
+        if !translate, let language, !language.isEmpty {
+            Self.appendMultipartField(to: &body, boundary: boundary, name: "language", value: language)
+        }
+        if let prompt, !prompt.isEmpty {
+            Self.appendMultipartField(to: &body, boundary: boundary, name: "prompt", value: prompt)
+        }
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+        request.httpBody = body
+
+        let (responseData, response) = try await PluginHTTPClient.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw PluginTranscriptionError.networkError("Invalid response")
+        }
+
+        switch httpResponse.statusCode {
+        case 200:
+            break
+        case 401:
+            throw PluginTranscriptionError.invalidApiKey
+        case 429:
+            throw PluginTranscriptionError.rateLimited
+        case 413:
+            throw PluginTranscriptionError.fileTooLarge
+        default:
+            let errorMessage = String(data: responseData, encoding: .utf8) ?? "Unknown error"
+            throw PluginTranscriptionError.apiError("HTTP \(httpResponse.statusCode): \(errorMessage)")
+        }
+
+        struct Response: Decodable {
+            let text: String
+            let language: String?
+        }
+        do {
+            let decoded = try JSONDecoder().decode(Response.self, from: responseData)
+            return PluginTranscriptionResult(text: decoded.text, detectedLanguage: decoded.language)
+        } catch {
+            throw PluginTranscriptionError.apiError("Failed to parse response: \(error.localizedDescription)")
+        }
+    }
+
+    private static func appendMultipartField(
+        to data: inout Data,
+        boundary: String,
+        name: String,
+        value: String
+    ) {
+        data.append("--\(boundary)\r\n".data(using: .utf8)!)
+        data.append("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n".data(using: .utf8)!)
+        data.append("\(value)\r\n".data(using: .utf8)!)
     }
 
     private static func chatErrorMessage(from data: Data, statusCode: Int) -> String {
