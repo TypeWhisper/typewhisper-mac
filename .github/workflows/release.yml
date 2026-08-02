@@ -51,7 +51,11 @@ jobs:
           SCHEDULED_WITHOUT_ICLOUD: ${{ vars.MACOS_SCHEDULED_WITHOUT_ICLOUD }}
         run: |
           WITHOUT_ICLOUD="false"
-          if [ "$REQUESTED_WITHOUT_ICLOUD" = "true" ] ||
+          # Tagged app releases remain on the proven no-iCloud distribution path
+          # until the production container and Developer ID profile are approved.
+          # Scheduled and manually dispatched builds retain their existing controls.
+          if [ "$EVENT_NAME" = "push" ] ||
+            [ "$REQUESTED_WITHOUT_ICLOUD" = "true" ] ||
             { [ "$EVENT_NAME" = "schedule" ] && [ "$SCHEDULED_WITHOUT_ICLOUD" = "true" ]; }; then
             WITHOUT_ICLOUD="true"
           fi
