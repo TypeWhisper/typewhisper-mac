@@ -17,6 +17,22 @@
         }
       }
     },
+    "API Version": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API-Version"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "APIバージョン"
+          }
+        }
+      }
+    },
     "API keys are stored securely in the Keychain": {
       "localizations": {
         "de": {
@@ -29,6 +45,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "APIキーはセキュアにキーチェーンに保存されます"
+          }
+        }
+      }
+    },
+    "Azure OpenAI and Microsoft Foundry may require an API version such as preview for audio transcription. Leave blank for standard OpenAI-compatible servers.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Azure OpenAI und Microsoft Foundry benötigen für die Audiotranskription möglicherweise eine API-Version wie preview. Für standardmäßige OpenAI-kompatible Server leer lassen."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Azure OpenAI および Microsoft Foundry では、音声文字起こしに preview などの API バージョンが必要な場合があります。標準の OpenAI 互換サーバーでは空欄のままにしてください。"
           }
         }
       }
@@ -211,6 +243,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "OllamaやLM Studioなどのローカルサーバー用にオプションで使用可能"
+          }
+        }
+      }
+    },
+    "Optional, e.g. preview": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Optional, z. B. preview"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "任意（例: preview）"
           }
         }
       }
