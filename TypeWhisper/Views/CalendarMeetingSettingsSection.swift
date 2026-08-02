@@ -1,129 +1,103 @@
 import SwiftUI
 
-struct CalendarMeetingFreePreviewSection: View {
-    let onUpgrade: () -> Void
-
-    var body: some View {
-        SettingsCard {
-            VStack(alignment: .leading, spacing: 14) {
-                HStack(alignment: .top, spacing: 12) {
-                    Image(systemName: "calendar.badge.clock")
-                        .font(.title2)
-                        .foregroundStyle(.blue)
-                        .frame(width: 42, height: 42)
-                        .background(
-                            RoundedRectangle(cornerRadius: 10)
-                                .fill(.blue.opacity(0.12))
-                        )
-
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(String(localized: "calendarMeeting.settings.title"))
-                            .font(.headline)
-                        Text(String(localized: "calendarMeeting.preview.description"))
-                            .font(.callout)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Label(String(localized: "Premium"), systemImage: "lock.fill")
-                        .font(.caption.weight(.medium))
-                        .foregroundStyle(.secondary)
-                }
-
-                HStack(spacing: 12) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(String(localized: "calendarMeeting.preview.exampleTitle"))
-                            .font(.callout.weight(.semibold))
-                        Text(String(localized: "calendarMeeting.preview.exampleTime"))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    Label("Zoom", systemImage: "video.fill")
-                        .font(.caption.weight(.medium))
-                        .padding(.horizontal, 9)
-                        .padding(.vertical, 5)
-                        .background(Capsule().fill(.blue.opacity(0.11)))
-                }
-                .padding(12)
-                .background(
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(Color.secondary.opacity(0.06))
-                )
-
-                HStack {
-                    Text(String(localized: "calendarMeeting.preview.privacy"))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                    Button(String(localized: "calendarMeeting.preview.upgrade"), action: onUpgrade)
-                        .buttonStyle(.borderedProminent)
-                        .accessibilityIdentifier("calendarMeeting.preview.upgrade")
-                }
-            }
-        }
-    }
-}
-
 @MainActor
 struct CalendarMeetingSettingsSection: View {
     @ObservedObject var controller: CalendarMeetingAutomationController
 
     var body: some View {
-        PremiumControlSection(
-            icon: "calendar.badge.clock",
-            iconColor: .blue,
-            title: String(localized: "calendarMeeting.settings.title"),
-            description: String(localized: "calendarMeeting.settings.description"),
-            statusText: statusText,
-            statusColor: controller.isAutomationActive ? .green : .secondary
-        ) {
-            VStack(alignment: .leading, spacing: 14) {
-                Picker(
-                    String(localized: "calendarMeeting.settings.startMode"),
-                    selection: startModeBinding
-                ) {
-                    Text(String(localized: "calendarMeeting.mode.off"))
-                        .tag(CalendarMeetingStartMode.off)
-                    Text(String(localized: "calendarMeeting.mode.reminder"))
-                        .tag(CalendarMeetingStartMode.reminder)
-                    Text(String(localized: "calendarMeeting.mode.automatic"))
-                        .tag(CalendarMeetingStartMode.automatic)
+        VStack(alignment: .leading, spacing: 16) {
+            PremiumSettingsDetailHeader(
+                icon: "calendar.badge.clock",
+                accent: .blue,
+                title: String(localized: "calendarMeeting.settings.title"),
+                description: String(localized: "calendarMeeting.settings.description"),
+                status: statusText,
+                statusColor: statusColor
+            )
+
+            SettingsCard {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(String(localized: "calendarMeeting.settings.recordingStart"))
+                        .font(.headline)
+
+                    Picker(
+                        String(localized: "calendarMeeting.settings.startMode"),
+                        selection: startModeBinding
+                    ) {
+                        Text(String(localized: "calendarMeeting.mode.off"))
+                            .tag(CalendarMeetingStartMode.off)
+                        Text(String(localized: "calendarMeeting.mode.reminder"))
+                            .tag(CalendarMeetingStartMode.reminder)
+                        Text(String(localized: "calendarMeeting.mode.automatic"))
+                            .tag(CalendarMeetingStartMode.automatic)
+                    }
+                    .pickerStyle(.segmented)
+                    .accessibilityIdentifier("calendarMeeting.startMode")
+
+                    Text(String(localized: "calendarMeeting.settings.startModeHelp"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
-                .pickerStyle(.segmented)
-                .accessibilityIdentifier("calendarMeeting.startMode")
+            }
 
-                if controller.startMode != .off {
-                    Divider()
-                    permissionStatus
-
-                    if controller.calendarAuthorization == .fullAccess {
-                        calendarSelection
-                        providerSelection
-
-                        Toggle(
-                            String(localized: "calendarMeeting.settings.autoStop"),
-                            isOn: Binding(
-                                get: { controller.autoStopEnabled },
-                                set: { isEnabled in
-                                    controller.setAutoStopEnabled(isEnabled)
-                                }
-                            )
-                        )
-                        .toggleStyle(.switch)
-                        .accessibilityIdentifier("calendarMeeting.autoStop")
-
-                        Text(String(localized: "calendarMeeting.settings.autoStopHelp"))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
+            if controller.startMode != .off {
+                SettingsCard {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text(String(localized: "calendarMeeting.settings.permissions"))
+                            .font(.headline)
+                        permissionStatus
                     }
                 }
 
-                Label(
-                    String(localized: "calendarMeeting.settings.privacy"),
-                    systemImage: "hand.raised.fill"
-                )
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                if controller.calendarAuthorization == .fullAccess {
+                    SettingsCard {
+                        calendarSelection
+                    }
+
+                    SettingsCard {
+                        providerSelection
+                    }
+
+                    SettingsCard {
+                        VStack(alignment: .leading, spacing: 9) {
+                            Text(String(localized: "calendarMeeting.settings.stopping"))
+                                .font(.headline)
+
+                            Toggle(
+                                String(localized: "calendarMeeting.settings.autoStop"),
+                                isOn: Binding(
+                                    get: { controller.autoStopEnabled },
+                                    set: { isEnabled in
+                                        controller.setAutoStopEnabled(isEnabled)
+                                    }
+                                )
+                            )
+                            .toggleStyle(.switch)
+                            .accessibilityIdentifier("calendarMeeting.autoStop")
+
+                            Text(String(localized: "calendarMeeting.settings.autoStopHelp"))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                }
+            }
+
+            SettingsCard {
+                VStack(alignment: .leading, spacing: 10) {
+                    Label(
+                        String(localized: "calendarMeeting.settings.howItWorks"),
+                        systemImage: "waveform.badge.magnifyingglass"
+                    )
+                    .font(.callout)
+
+                    Label(
+                        String(localized: "calendarMeeting.settings.privacy"),
+                        systemImage: "hand.raised.fill"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
             }
         }
         .alert(
@@ -153,7 +127,7 @@ struct CalendarMeetingSettingsSection: View {
 
     @ViewBuilder
     private var permissionStatus: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack {
                 Label(
                     calendarStatusText,
@@ -173,6 +147,8 @@ struct CalendarMeetingSettingsSection: View {
                 }
             }
 
+            Divider()
+
             HStack {
                 Label(notificationStatusText, systemImage: "bell")
                     .foregroundStyle(.secondary)
@@ -184,6 +160,7 @@ struct CalendarMeetingSettingsSection: View {
                     .accessibilityIdentifier("calendarMeeting.permission.notificationSettings")
                 }
             }
+
             Text(String(localized: "calendarMeeting.settings.notificationHelp"))
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -191,9 +168,13 @@ struct CalendarMeetingSettingsSection: View {
     }
 
     private var calendarSelection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             Text(String(localized: "calendarMeeting.settings.calendars"))
-                .font(.callout.weight(.semibold))
+                .font(.headline)
+
+            Text(String(localized: "calendarMeeting.settings.calendarsHelp"))
+                .font(.caption)
+                .foregroundStyle(.secondary)
 
             if controller.calendars.isEmpty {
                 Text(String(localized: "calendarMeeting.settings.noCalendars"))
@@ -220,10 +201,19 @@ struct CalendarMeetingSettingsSection: View {
     }
 
     private var providerSelection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 10) {
             Text(String(localized: "calendarMeeting.settings.providers"))
-                .font(.callout.weight(.semibold))
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], alignment: .leading) {
+                .font(.headline)
+
+            Text(String(localized: "calendarMeeting.settings.providersHelp"))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            LazyVGrid(
+                columns: [GridItem(.flexible()), GridItem(.flexible())],
+                alignment: .leading,
+                spacing: 8
+            ) {
                 ForEach(MeetingProvider.allCases) { provider in
                     Toggle(
                         provider.displayName,
@@ -249,6 +239,21 @@ struct CalendarMeetingSettingsSection: View {
         return controller.startMode == .automatic
             ? String(localized: "calendarMeeting.status.automatic")
             : String(localized: "calendarMeeting.status.reminder")
+    }
+
+    private var statusColor: Color {
+        if controller.startMode != .off,
+           controller.calendarAuthorization != .fullAccess {
+            return .orange
+        }
+        switch controller.startMode {
+        case .off:
+            return .secondary
+        case .reminder:
+            return .blue
+        case .automatic:
+            return .green
+        }
     }
 
     private var calendarStatusText: String {

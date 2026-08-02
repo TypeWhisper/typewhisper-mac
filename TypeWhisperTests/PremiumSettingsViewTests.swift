@@ -19,15 +19,120 @@ final class PremiumSettingsViewTests: XCTestCase {
     }
 
     @MainActor
-    func testFreePreviewStoresOnlyUpgradeActionAndNoOSServiceController() {
-        let preview = CalendarMeetingFreePreviewSection(onUpgrade: {})
+    func testLockedOverviewStoresNoOSServiceControllerOrWindowPresenter() {
+        let preview = PremiumLockedFeatureOverview(isSupporter: false, onUnlock: {})
         let labels = Mirror(reflecting: preview).children.compactMap(\.label)
 
-        XCTAssertEqual(labels, ["onUpgrade"])
+        XCTAssertEqual(labels, ["isSupporter", "onUnlock"])
         XCTAssertFalse(labels.contains("controller"))
+        XCTAssertFalse(labels.contains("windowPresenter"))
     }
 
-    func testCalendarSettingsKeysAreLocalizedInEnglishGermanAndJapanese() throws {
+    func testFeatureAccessSnapshotPreservesExistingEntitlementRules() {
+        let free = access()
+        XCTAssertEqual(free.summary, .locked)
+        XCTAssertEqual(free.requirement(for: .calendarMeeting), .commercialOrPremiumAccount)
+        XCTAssertEqual(free.requirement(for: .correctionLearning), .commercialLicense)
+        XCTAssertEqual(free.requirement(for: .cloudSync), .premiumAccount)
+
+        let supporter = access(isSupporter: true)
+        XCTAssertEqual(supporter.summary, .supporterOnly)
+        XCTAssertFalse(supporter.hasAnyPremiumAccess)
+
+        let commercial = access(hasCommercialLicense: true)
+        XCTAssertEqual(commercial.summary, .commercialLicense)
+        XCTAssertEqual(commercial.requirement(for: .calendarMeeting), .available)
+        XCTAssertEqual(commercial.requirement(for: .correctionLearning), .available)
+        XCTAssertEqual(commercial.requirement(for: .cloudSync), .premiumAccount)
+
+        let signedInCommercial = access(
+            hasCommercialLicense: true,
+            isSignedIn: true
+        )
+        XCTAssertEqual(
+            signedInCommercial.requirement(for: .cloudSync),
+            .linkCommercialLicense
+        )
+        XCTAssertEqual(signedInCommercial.action(for: .cloudSync), .manageAccess)
+
+        let account = access(hasPremiumEntitlement: true, isSignedIn: true)
+        XCTAssertEqual(account.summary, .premiumAccount)
+        XCTAssertEqual(account.requirement(for: .calendarMeeting), .available)
+        XCTAssertEqual(account.requirement(for: .correctionLearning), .commercialLicense)
+        XCTAssertEqual(account.requirement(for: .cloudSync), .available)
+
+        let signedOutAccount = access(hasPremiumEntitlement: true, isSignedIn: false)
+        XCTAssertEqual(signedOutAccount.requirement(for: .cloudSync), .signIn)
+
+        let both = access(
+            hasCommercialLicense: true,
+            hasPremiumEntitlement: true,
+            isSignedIn: true
+        )
+        XCTAssertEqual(both.summary, .commercialAndPremiumAccount)
+        for feature in PremiumFeatureID.allCases {
+            XCTAssertEqual(both.requirement(for: feature), .available)
+        }
+    }
+
+    func testFeatureActionsOpenOnlyAvailableSettings() {
+        let free = access()
+        for feature in PremiumFeatureID.allCases {
+            XCTAssertEqual(free.action(for: feature), .none)
+        }
+
+        let commercial = access(hasCommercialLicense: true)
+        XCTAssertEqual(commercial.action(for: .calendarMeeting), .openSettings(.calendarMeeting))
+        XCTAssertEqual(commercial.action(for: .correctionLearning), .openSettings(.correctionLearning))
+        XCTAssertEqual(commercial.action(for: .cloudSync), .manageAccess)
+
+        let account = access(hasPremiumEntitlement: true, isSignedIn: true)
+        XCTAssertEqual(account.action(for: .calendarMeeting), .openSettings(.calendarMeeting))
+        XCTAssertEqual(account.action(for: .correctionLearning), .manageAccess)
+        XCTAssertEqual(account.action(for: .cloudSync), .openSettings(.cloudSync))
+    }
+
+    func testEveryLicenseAccountSignInAndSupporterCombinationUsesTheDocumentedGates() {
+        for hasCommercialLicense in [false, true] {
+            for hasPremiumEntitlement in [false, true] {
+                for isSignedIn in [false, true] {
+                    for isSupporter in [false, true] {
+                        let snapshot = access(
+                            hasCommercialLicense: hasCommercialLicense,
+                            hasPremiumEntitlement: hasPremiumEntitlement,
+                            isSignedIn: isSignedIn,
+                            isSupporter: isSupporter
+                        )
+
+                        XCTAssertEqual(
+                            snapshot.requirement(for: .calendarMeeting) == .available,
+                            hasCommercialLicense || hasPremiumEntitlement
+                        )
+                        XCTAssertEqual(
+                            snapshot.requirement(for: .correctionLearning) == .available,
+                            hasCommercialLicense
+                        )
+                        XCTAssertEqual(
+                            snapshot.requirement(for: .cloudSync) == .available,
+                            hasPremiumEntitlement && isSignedIn
+                        )
+
+                        if !hasCommercialLicense && !hasPremiumEntitlement {
+                            XCTAssertEqual(
+                                snapshot.summary,
+                                isSupporter ? .supporterOnly : .locked
+                            )
+                            XCTAssertEqual(snapshot.action(for: .calendarMeeting), .none)
+                            XCTAssertEqual(snapshot.action(for: .correctionLearning), .none)
+                            XCTAssertEqual(snapshot.action(for: .cloudSync), .none)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    func testPremiumHubAndDetailKeysAreLocalizedInEnglishGermanAndJapanese() throws {
         let root = repositoryRoot
         let data = try Data(contentsOf: root.appendingPathComponent(
             "TypeWhisper/Resources/Localizable.xcstrings"
@@ -36,21 +141,44 @@ final class PremiumSettingsViewTests: XCTestCase {
             JSONSerialization.jsonObject(with: data) as? [String: Any]
         )
         let strings = try XCTUnwrap(json["strings"] as? [String: Any])
-        let expectedKeys = [
+        let calendarKeys = [
             "calendarMeeting.settings.title",
+            "calendarMeeting.settings.description",
             "calendarMeeting.settings.startMode",
+            "calendarMeeting.settings.recordingStart",
+            "calendarMeeting.settings.startModeHelp",
+            "calendarMeeting.settings.permissions",
+            "calendarMeeting.settings.calendarsHelp",
+            "calendarMeeting.settings.providersHelp",
+            "calendarMeeting.settings.stopping",
+            "calendarMeeting.settings.howItWorks",
             "calendarMeeting.settings.autoStop",
+            "calendarMeeting.settings.autoStopHelp",
             "calendarMeeting.settings.privacy",
+            "calendarMeeting.mode.reminder",
+            "calendarMeeting.mode.automatic",
             "calendarMeeting.countdown.cancel",
             "calendarMeeting.countdown.continue",
         ]
+        let premiumKeys = strings.keys.filter {
+            $0.hasPrefix("premium.hub.")
+                || $0.hasPrefix("premium.window.")
+                || $0.hasPrefix("premium.common.")
+        }
+        XCTAssertGreaterThan(premiumKeys.count, 70)
 
-        for key in expectedKeys {
+        for key in Set(calendarKeys + premiumKeys).sorted() {
             let entry = try XCTUnwrap(strings[key] as? [String: Any], "Missing \(key)")
             let localizations = try XCTUnwrap(entry["localizations"] as? [String: Any])
-            XCTAssertNotNil(localizations["en"], "Missing English for \(key)")
-            XCTAssertNotNil(localizations["de"], "Missing German for \(key)")
-            XCTAssertNotNil(localizations["ja"], "Missing Japanese for \(key)")
+            for locale in ["en", "de", "ja"] {
+                let localization = try XCTUnwrap(
+                    localizations[locale] as? [String: Any],
+                    "Missing \(locale) for \(key)"
+                )
+                let stringUnit = try XCTUnwrap(localization["stringUnit"] as? [String: Any])
+                let value = try XCTUnwrap(stringUnit["value"] as? String)
+                XCTAssertFalse(value.isEmpty, "Empty \(locale) value for \(key)")
+            }
         }
     }
 
@@ -82,5 +210,19 @@ final class PremiumSettingsViewTests: XCTestCase {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
+    }
+
+    private func access(
+        hasCommercialLicense: Bool = false,
+        hasPremiumEntitlement: Bool = false,
+        isSignedIn: Bool = false,
+        isSupporter: Bool = false
+    ) -> PremiumFeatureAccessSnapshot {
+        PremiumFeatureAccessSnapshot(
+            hasCommercialLicense: hasCommercialLicense,
+            hasPremiumEntitlement: hasPremiumEntitlement,
+            isSignedIn: isSignedIn,
+            isSupporter: isSupporter
+        )
     }
 }

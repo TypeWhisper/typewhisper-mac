@@ -37,3 +37,13 @@ Suppression persists at most 256 SHA-256 occurrence digests. Calendar and provid
 ## Stop semantics
 
 Auto-stop is separately disabled by default and applies only to the exact calendar handle created while the option was enabled. Thirty seconds without input or output for the matched identity opens a 15-second veto panel. Signal return cancels the grace/countdown. “Continue recording” is sticky. Calendar end is never a stop signal. Gate or setting loss lets the recording continue and permanently detaches auto-stop for that recording.
+
+## Premium settings experience
+
+The Premium settings page is a native feature hub rather than one long configuration form. It always presents three equally weighted cards for meeting automation, correction learning, and dictionary/snippet sync. Each card explains the benefit, shows no more than two local status lines, and reports its actual entitlement requirement. The existing product gates remain unchanged: meeting automation accepts a Commercial license or Premium account entitlement, correction learning requires Commercial, and cloud sync requires a signed-in Premium account.
+
+Free and Supporter-only states render static preview cards plus one unlock action. They do not construct or query EventKit, notification, CoreAudio, or browser services. No calendar title or meeting URL is added to the overview.
+
+Available feature cards open separate, nonmodal, resizable AppKit windows, matching the established plugin-settings behavior. One window is retained per feature, re-opening focuses it, and frames are autosaved. The account/license controls use the same window pattern. If access is lost while a feature window is open, its controls are replaced by a locked explanation; the underlying automation and recording gate semantics remain authoritative.
+
+A signed-in account with an active local Commercial license but no linked account entitlement is shown as “Connect purchase”, not as a generic missing-account state. The access window offers an explicit link action through the existing Polar device-attachment endpoint. Missing entitlements are refreshed on launch even when a recent empty result exists; the seven-day refresh throttle applies only to an already active, cryptographically verified entitlement.

@@ -23726,19 +23726,19 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kalender-Meeting-Automation"
+            "value": "Meeting-Automation"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Calendar Meeting Automation"
+            "value": "Meeting Automation"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "カレンダーミーティングの自動化"
+            "value": "ミーティング自動化"
           }
         }
       }
@@ -23748,19 +23748,19 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Erhalte Meeting-Hinweise oder starte die Aufnahme nach einem passenden Live-Beitrittssignal."
+            "value": "Lass dich vor geplanten Meetings erinnern oder starte die Aufnahme automatisch, sobald du wirklich beitrittst."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Get meeting reminders or start recording after a matching live join signal."
+            "value": "Get reminders for scheduled meetings or start recording automatically after you actually join."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "ミーティングの通知を受け取るか、一致する参加シグナルの後に録音を開始します。"
+            "value": "予定したミーティングの通知を受け取るか、実際の参加後に自動で録音を開始します。"
           }
         }
       }
@@ -23814,19 +23814,19 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Hinweis"
+            "value": "Nur erinnern"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Reminder"
+            "value": "Reminders only"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "通知"
+            "value": "通知のみ"
           }
         }
       }
@@ -23836,19 +23836,19 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Automatisch"
+            "value": "Automatisch aufnehmen"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Automatic"
+            "value": "Automatic recording"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "自動"
+            "value": "自動録音"
           }
         }
       }
@@ -23880,19 +23880,19 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Nach 30 Sekunden ohne Meeting-Audioaktivität zeigt TypeWhisper einen abbrechbaren 15-Sekunden-Countdown."
+            "value": "Wenn das Meeting beendet scheint, wartet TypeWhisper noch 30 Sekunden und gibt dir anschließend 15 Sekunden, um weiter aufzunehmen."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "After 30 seconds without meeting audio activity, TypeWhisper shows a 15-second veto countdown."
+            "value": "When the meeting appears to have ended, TypeWhisper waits 30 seconds and then gives you 15 seconds to keep recording."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "ミーティングの音声アクティビティが30秒間ない場合、15秒のキャンセル可能なカウントダウンを表示します。"
+            "value": "ミーティングが終了したように見える場合、30秒待ってから、録音を続けるための15秒間の猶予を表示します。"
           }
         }
       }
@@ -24298,19 +24298,19 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Automatisch"
+            "value": "Automatisch aufnehmen"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Automatic"
+            "value": "Automatic recording"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "自動"
+            "value": "自動録音"
           }
         }
       }
@@ -24320,19 +24320,19 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Hinweis"
+            "value": "Nur erinnern"
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Reminder"
+            "value": "Reminders only"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "通知"
+            "value": "通知のみ"
           }
         }
       }
@@ -24447,6 +24447,128 @@
         }
       }
     },
+    "premium.hub.access.title": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Premium-Zugang"}},"en":{"stringUnit":{"state":"translated","value":"Premium access"}},"ja":{"stringUnit":{"state":"translated","value":"Premiumアクセス"}}}},
+    "premium.hub.access.locked": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Nicht freigeschaltet"}},"en":{"stringUnit":{"state":"translated","value":"Not unlocked"}},"ja":{"stringUnit":{"state":"translated","value":"未解除"}}}},
+    "premium.hub.access.supporter": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Supporter aktiv · Premium nicht freigeschaltet"}},"en":{"stringUnit":{"state":"translated","value":"Supporter active · Premium not unlocked"}},"ja":{"stringUnit":{"state":"translated","value":"サポーター有効 · Premium未解除"}}}},
+    "premium.hub.access.commercial": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Commercial-Lizenz aktiv"}},"en":{"stringUnit":{"state":"translated","value":"Commercial license active"}},"ja":{"stringUnit":{"state":"translated","value":"Commercialライセンス有効"}}}},
+    "premium.hub.access.account": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Premium-Konto aktiv"}},"en":{"stringUnit":{"state":"translated","value":"Premium account active"}},"ja":{"stringUnit":{"state":"translated","value":"Premiumアカウント有効"}}}},
+    "premium.hub.access.both": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Commercial-Lizenz und Premium-Konto aktiv"}},"en":{"stringUnit":{"state":"translated","value":"Commercial license and Premium account active"}},"ja":{"stringUnit":{"state":"translated","value":"CommercialライセンスとPremiumアカウントが有効"}}}},
+    "premium.hub.access.manage": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Zugang verwalten …"}},"en":{"stringUnit":{"state":"translated","value":"Manage Access…"}},"ja":{"stringUnit":{"state":"translated","value":"アクセスを管理…"}}}},
+    "premium.hub.locked.title": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Premium-Funktionen, die dir Arbeit abnehmen"}},"en":{"stringUnit":{"state":"translated","value":"Premium features that save you work"}},"ja":{"stringUnit":{"state":"translated","value":"作業を減らすPremium機能"}}}},
+    "premium.hub.locked.description": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Nimm geplante Meetings automatisch auf, lerne aus deinen Korrekturen und halte Wörterbuch sowie Snippets synchron."}},"en":{"stringUnit":{"state":"translated","value":"Record scheduled meetings automatically, learn from your corrections, and keep your dictionary and snippets in sync."}},"ja":{"stringUnit":{"state":"translated","value":"予定したミーティングを自動録音し、修正から学習して、辞書とスニペットを同期します。"}}}},
+    "premium.hub.unlock": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Premium freischalten"}},"en":{"stringUnit":{"state":"translated","value":"Unlock Premium"}},"ja":{"stringUnit":{"state":"translated","value":"Premiumを有効にする"}}}},
+    "premium.hub.supporter.note": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Dein Supporter-Status ist aktiv. Premium-Funktionen benötigen einen separaten Premium-Zugang."}},"en":{"stringUnit":{"state":"translated","value":"Your Supporter status is active. Premium features require separate Premium access."}},"ja":{"stringUnit":{"state":"translated","value":"サポーターステータスは有効です。Premium機能には別途Premiumアクセスが必要です。"}}}},
+    "premium.hub.active.title": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Deine Premium-Funktionen"}},"en":{"stringUnit":{"state":"translated","value":"Your Premium features"}},"ja":{"stringUnit":{"state":"translated","value":"Premium機能"}}}},
+    "premium.hub.active.description": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Sieh den aktuellen Zustand auf einen Blick und öffne nur die Einstellungen, die du gerade brauchst."}},"en":{"stringUnit":{"state":"translated","value":"See the current state at a glance and open only the settings you need."}},"ja":{"stringUnit":{"state":"translated","value":"現在の状態をひと目で確認し、必要な設定だけを開けます。"}}}},
+    "premium.hub.calendar.title": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Meeting-Automation"}},"en":{"stringUnit":{"state":"translated","value":"Meeting Automation"}},"ja":{"stringUnit":{"state":"translated","value":"ミーティング自動化"}}}},
+    "premium.hub.calendar.description": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Erinnert dich oder startet die Aufnahme automatisch, sobald du einem geplanten Meeting beitrittst."}},"en":{"stringUnit":{"state":"translated","value":"Reminds you or starts recording automatically when you join a scheduled meeting."}},"ja":{"stringUnit":{"state":"translated","value":"予定したミーティングへの参加時に通知するか、自動で録音を開始します。"}}}},
+    "premium.hub.calendar.providersPreview": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Zoom · Teams · Meet · FaceTime"}},"en":{"stringUnit":{"state":"translated","value":"Zoom · Teams · Meet · FaceTime"}},"ja":{"stringUnit":{"state":"translated","value":"Zoom · Teams · Meet · FaceTime"}}}},
+    "premium.hub.calendar.accessGranted": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Kalenderzugriff erlaubt"}},"en":{"stringUnit":{"state":"translated","value":"Calendar access granted"}},"ja":{"stringUnit":{"state":"translated","value":"カレンダーアクセス許可済み"}}}},
+    "premium.hub.calendar.accessNotRequested": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Kalenderzugriff noch nicht angefragt"}},"en":{"stringUnit":{"state":"translated","value":"Calendar access not requested yet"}},"ja":{"stringUnit":{"state":"translated","value":"カレンダーアクセス未要求"}}}},
+    "premium.hub.calendar.accessNeeded": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Kalenderzugriff erforderlich"}},"en":{"stringUnit":{"state":"translated","value":"Calendar access required"}},"ja":{"stringUnit":{"state":"translated","value":"カレンダーアクセスが必要"}}}},
+    "premium.hub.calendar.selectionFormat": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"%1$d Kalender · %2$d Anbieter"}},"en":{"stringUnit":{"state":"translated","value":"%1$d calendars · %2$d providers"}},"ja":{"stringUnit":{"state":"translated","value":"カレンダー %1$d件 · サービス %2$d件"}}}},
+    "premium.hub.learning.title": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Aus Korrekturen lernen"}},"en":{"stringUnit":{"state":"translated","value":"Learn from Corrections"}},"ja":{"stringUnit":{"state":"translated","value":"修正から学習"}}}},
+    "premium.hub.learning.description": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Merkt sich sichere Änderungen nach dem Einfügen und verbessert künftige Texte."}},"en":{"stringUnit":{"state":"translated","value":"Remembers confident edits after insertion and improves future text."}},"ja":{"stringUnit":{"state":"translated","value":"挿入後の確実な修正を記憶し、今後の文章を改善します。"}}}},
+    "premium.hub.learning.preview": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Lernt nur eindeutige Korrekturen"}},"en":{"stringUnit":{"state":"translated","value":"Learns only clear corrections"}},"ja":{"stringUnit":{"state":"translated","value":"明確な修正だけを学習"}}}},
+    "premium.hub.sync.title": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Wörterbuch & Snippets synchronisieren"}},"en":{"stringUnit":{"state":"translated","value":"Sync Dictionary & Snippets"}},"ja":{"stringUnit":{"state":"translated","value":"辞書とスニペットを同期"}}}},
+    "premium.hub.sync.description": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Hält deine persönlichen Begriffe und Textbausteine auf deinen Geräten verfügbar."}},"en":{"stringUnit":{"state":"translated","value":"Keeps your personal terms and text snippets available across your devices."}},"ja":{"stringUnit":{"state":"translated","value":"個人用の用語とテキストスニペットを複数のデバイスで利用できます。"}}}},
+    "premium.hub.sync.preview": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Wörterbuch · Snippets · Eigener Cloud-Ordner"}},"en":{"stringUnit":{"state":"translated","value":"Dictionary · Snippets · Your cloud folder"}},"ja":{"stringUnit":{"state":"translated","value":"辞書 · スニペット · 自分のクラウドフォルダ"}}}},
+    "premium.hub.sync.notConfigured": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Noch nicht eingerichtet"}},"en":{"stringUnit":{"state":"translated","value":"Not set up yet"}},"ja":{"stringUnit":{"state":"translated","value":"未設定"}}}},
+    "premium.hub.sync.neverSynced": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Noch nicht synchronisiert"}},"en":{"stringUnit":{"state":"translated","value":"Not synced yet"}},"ja":{"stringUnit":{"state":"translated","value":"未同期"}}}},
+    "premium.hub.sync.lastSyncFormat": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Zuletzt synchronisiert: %@"}},"en":{"stringUnit":{"state":"translated","value":"Last synced: %@"}},"ja":{"stringUnit":{"state":"translated","value":"最終同期：%@"}}}},
+    "premium.hub.status.off": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Aus"}},"en":{"stringUnit":{"state":"translated","value":"Off"}},"ja":{"stringUnit":{"state":"translated","value":"オフ"}}}},
+    "premium.hub.status.on": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Ein"}},"en":{"stringUnit":{"state":"translated","value":"On"}},"ja":{"stringUnit":{"state":"translated","value":"オン"}}}},
+    "premium.hub.status.remindersOnly": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Nur erinnern"}},"en":{"stringUnit":{"state":"translated","value":"Reminders only"}},"ja":{"stringUnit":{"state":"translated","value":"通知のみ"}}}},
+    "premium.hub.status.automaticRecording": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Automatisch aufnehmen"}},"en":{"stringUnit":{"state":"translated","value":"Automatic recording"}},"ja":{"stringUnit":{"state":"translated","value":"自動録音"}}}},
+    "premium.hub.status.actionRequired": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Aktion nötig"}},"en":{"stringUnit":{"state":"translated","value":"Action required"}},"ja":{"stringUnit":{"state":"translated","value":"対応が必要"}}}},
+    "premium.hub.status.signInRequired": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Anmeldung nötig"}},"en":{"stringUnit":{"state":"translated","value":"Sign-in required"}},"ja":{"stringUnit":{"state":"translated","value":"サインインが必要"}}}},
+    "premium.hub.status.commercialRequired": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Commercial-Lizenz nötig"}},"en":{"stringUnit":{"state":"translated","value":"Commercial license required"}},"ja":{"stringUnit":{"state":"translated","value":"Commercialライセンスが必要"}}}},
+    "premium.hub.status.accountRequired": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Premium-Konto nötig"}},"en":{"stringUnit":{"state":"translated","value":"Premium account required"}},"ja":{"stringUnit":{"state":"translated","value":"Premiumアカウントが必要"}}}},
+    "premium.hub.status.linkPurchase": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Kauf verknüpfen"}},"en":{"stringUnit":{"state":"translated","value":"Connect purchase"}},"ja":{"stringUnit":{"state":"translated","value":"購入を連携"}}}},
+    "premium.hub.status.premium": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Premium"}},"en":{"stringUnit":{"state":"translated","value":"Premium"}},"ja":{"stringUnit":{"state":"translated","value":"Premium"}}}},
+    "premium.hub.status.premiumRequired": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Premium-Zugang nötig"}},"en":{"stringUnit":{"state":"translated","value":"Premium access required"}},"ja":{"stringUnit":{"state":"translated","value":"Premiumアクセスが必要"}}}},
+    "premium.hub.settings": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Einstellungen …"}},"en":{"stringUnit":{"state":"translated","value":"Settings…"}},"ja":{"stringUnit":{"state":"translated","value":"設定…"}}}},
+    "premium.common.cancel": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Abbrechen"}},"en":{"stringUnit":{"state":"translated","value":"Cancel"}},"ja":{"stringUnit":{"state":"translated","value":"キャンセル"}}}},
+    "premium.window.access.title": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Premium-Zugang"}},"en":{"stringUnit":{"state":"translated","value":"Premium Access"}},"ja":{"stringUnit":{"state":"translated","value":"Premiumアクセス"}}}},
+    "premium.window.access.description": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Verwalte deine Lizenz und dein geräteübergreifendes Premium-Konto."}},"en":{"stringUnit":{"state":"translated","value":"Manage your license and cross-device Premium account."}},"ja":{"stringUnit":{"state":"translated","value":"ライセンスとデバイス間Premiumアカウントを管理します。"}}}},
+    "premium.window.access.currentAccess": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Aktueller Zugang"}},"en":{"stringUnit":{"state":"translated","value":"Current access"}},"ja":{"stringUnit":{"state":"translated","value":"現在のアクセス"}}}},
+    "premium.window.access.manageLicense": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Lizenz verwalten …"}},"en":{"stringUnit":{"state":"translated","value":"Manage License…"}},"ja":{"stringUnit":{"state":"translated","value":"ライセンスを管理…"}}}},
+    "premium.window.access.linkDescription": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Deine Commercial-Lizenz ist auf diesem Mac aktiv, aber noch nicht mit diesem Konto verknüpft. Verknüpfe sie, um die geräteübergreifende Synchronisierung freizuschalten."}},"en":{"stringUnit":{"state":"translated","value":"Your Commercial license is active on this Mac but is not linked to this account yet. Link it to enable cross-device sync."}},"ja":{"stringUnit":{"state":"translated","value":"このMacではCommercialライセンスが有効ですが、このアカウントにはまだ連携されていません。連携するとデバイス間同期を利用できます。"}}}},
+    "premium.window.access.linkLicense": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Commercial-Lizenz verknüpfen"}},"en":{"stringUnit":{"state":"translated","value":"Link Commercial License"}},"ja":{"stringUnit":{"state":"translated","value":"Commercialライセンスを連携"}}}},
+    "premium.window.access.linkFailed": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Die Commercial-Lizenz konnte nicht mit diesem Premium-Konto verknüpft werden."}},"en":{"stringUnit":{"state":"translated","value":"The Commercial license could not be linked to this Premium account."}},"ja":{"stringUnit":{"state":"translated","value":"CommercialライセンスをこのPremiumアカウントに連携できませんでした。"}}}},
+    "premium.window.access.signedInDescription": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Dein Apple-Konto hält verknüpfte Premium-Berechtigungen auf Mac und iPhone verfügbar."}},"en":{"stringUnit":{"state":"translated","value":"Your Apple account keeps linked Premium access available on Mac and iPhone."}},"ja":{"stringUnit":{"state":"translated","value":"Appleアカウントにより、リンク済みPremiumアクセスをMacとiPhoneで利用できます。"}}}},
+    "premium.window.access.signInDescription": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Melde dich an, um Premium-Zugang zu verknüpfen und Cloud-Sync auf mehreren Geräten zu verwenden."}},"en":{"stringUnit":{"state":"translated","value":"Sign in to link Premium access and use cloud sync across devices."}},"ja":{"stringUnit":{"state":"translated","value":"サインインしてPremiumアクセスをリンクし、デバイス間クラウド同期を利用します。"}}}},
+    "premium.window.access.privacy": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Synchronisierte Inhalte bleiben in deinem gewählten Cloud-Speicher und werden nicht über den TypeWhisper-Kontodienst übertragen."}},"en":{"stringUnit":{"state":"translated","value":"Synced content stays in your chosen cloud storage and does not pass through the TypeWhisper account service."}},"ja":{"stringUnit":{"state":"translated","value":"同期内容は選択したクラウドストレージに保存され、TypeWhisperのアカウントサービスを経由しません。"}}}},
+    "premium.window.access.accountTitle": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Geräteübergreifendes Premium-Konto"}},"en":{"stringUnit":{"state":"translated","value":"Cross-device Premium Account"}},"ja":{"stringUnit":{"state":"translated","value":"デバイス間Premiumアカウント"}}}},
+    "premium.window.access.accountActive": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Premium aktiv"}},"en":{"stringUnit":{"state":"translated","value":"Premium active"}},"ja":{"stringUnit":{"state":"translated","value":"Premium有効"}}}},
+    "premium.window.access.signOut": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Abmelden"}},"en":{"stringUnit":{"state":"translated","value":"Sign Out"}},"ja":{"stringUnit":{"state":"translated","value":"サインアウト"}}}},
+    "premium.window.access.deleteAccount": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Konto löschen"}},"en":{"stringUnit":{"state":"translated","value":"Delete Account"}},"ja":{"stringUnit":{"state":"translated","value":"アカウントを削除"}}}},
+    "premium.window.access.deleteConfirmationTitle": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"TypeWhisper-Konto löschen?"}},"en":{"stringUnit":{"state":"translated","value":"Delete TypeWhisper Account?"}},"ja":{"stringUnit":{"state":"translated","value":"TypeWhisperアカウントを削除しますか？"}}}},
+    "premium.window.access.deleteConfirmationMessage": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Dadurch werden das Konto und die verknüpfte Berechtigung entfernt. Lokale Einträge und private Cloud-Dateien werden nicht gelöscht."}},"en":{"stringUnit":{"state":"translated","value":"This removes the account and entitlement link. Local entries and private cloud files are not deleted."}},"ja":{"stringUnit":{"state":"translated","value":"アカウントとアクセス権のリンクが削除されます。ローカル項目とプライベートクラウドファイルは削除されません。"}}}},
+    "premium.window.calendar.title": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Meeting-Automation"}},"en":{"stringUnit":{"state":"translated","value":"Meeting Automation"}},"ja":{"stringUnit":{"state":"translated","value":"ミーティング自動化"}}}},
+    "premium.window.calendar.locked": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Meeting-Automation benötigt eine Commercial-Lizenz oder ein aktives Premium-Konto."}},"en":{"stringUnit":{"state":"translated","value":"Meeting Automation requires a Commercial license or an active Premium account."}},"ja":{"stringUnit":{"state":"translated","value":"ミーティング自動化にはCommercialライセンスまたは有効なPremiumアカウントが必要です。"}}}},
+    "premium.window.learning.title": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Aus Korrekturen lernen"}},"en":{"stringUnit":{"state":"translated","value":"Learn from Corrections"}},"ja":{"stringUnit":{"state":"translated","value":"修正から学習"}}}},
+    "premium.window.learning.description": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"TypeWhisper merkt sich nur eindeutige Änderungen und überspringt unsichere Bearbeitungen."}},"en":{"stringUnit":{"state":"translated","value":"TypeWhisper remembers only clear edits and skips uncertain changes."}},"ja":{"stringUnit":{"state":"translated","value":"TypeWhisperは明確な修正だけを記憶し、不確かな変更はスキップします。"}}}},
+    "premium.window.learning.help": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Nach dem direkten Einfügen beobachtet TypeWhisper nur, ob du den Text eindeutig korrigierst."}},"en":{"stringUnit":{"state":"translated","value":"After direct insertion, TypeWhisper only checks whether you make a clear correction."}},"ja":{"stringUnit":{"state":"translated","value":"直接挿入後、TypeWhisperは明確な修正が行われたかだけを確認します。"}}}},
+    "premium.window.learning.lastActivity": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Letzte Aktivität"}},"en":{"stringUnit":{"state":"translated","value":"Latest activity"}},"ja":{"stringUnit":{"state":"translated","value":"最新のアクティビティ"}}}},
+    "premium.window.learning.examplesHelp": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Gelernte Muster helfen TypeWhisper bei zukünftigen Einfügungen."}},"en":{"stringUnit":{"state":"translated","value":"Learned patterns help TypeWhisper with future insertions."}},"ja":{"stringUnit":{"state":"translated","value":"学習したパターンは今後の挿入に役立ちます。"}}}},
+    "premium.window.learning.locked": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Das Lernen aus Korrekturen benötigt eine aktive Commercial-Lizenz."}},"en":{"stringUnit":{"state":"translated","value":"Learning from corrections requires an active Commercial license."}},"ja":{"stringUnit":{"state":"translated","value":"修正からの学習には有効なCommercialライセンスが必要です。"}}}},
+    "premium.window.learning.toggle": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Aus Bearbeitungen nach dem Einfügen lernen"}},"en":{"stringUnit":{"state":"translated","value":"Learn from edits after insertion"}},"ja":{"stringUnit":{"state":"translated","value":"挿入後の編集から学習"}}}},
+    "premium.window.learning.noActivity": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Noch kein Lernversuch"}},"en":{"stringUnit":{"state":"translated","value":"No learning attempt yet"}},"ja":{"stringUnit":{"state":"translated","value":"学習履歴はまだありません"}}}},
+    "premium.window.learning.examplesTitle": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Korrekturbeispiele"}},"en":{"stringUnit":{"state":"translated","value":"Correction examples"}},"ja":{"stringUnit":{"state":"translated","value":"修正例"}}}},
+    "premium.window.learning.correctionsLearnedFormat": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"%d Korrekturen gelernt"}},"en":{"stringUnit":{"state":"translated","value":"%d corrections learned"}},"ja":{"stringUnit":{"state":"translated","value":"%d件の修正を学習"}}}},
+    "premium.window.learning.outcome.learned": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Korrektur gelernt"}},"en":{"stringUnit":{"state":"translated","value":"Correction learned"}},"ja":{"stringUnit":{"state":"translated","value":"修正を学習しました"}}}},
+    "premium.window.learning.outcome.unsupportedTextObservation": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Text konnte nicht beobachtet werden"}},"en":{"stringUnit":{"state":"translated","value":"Text could not be observed"}},"ja":{"stringUnit":{"state":"translated","value":"テキストを確認できませんでした"}}}},
+    "premium.window.learning.outcome.noEdit": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Keine Bearbeitung erkannt"}},"en":{"stringUnit":{"state":"translated","value":"No edit detected"}},"ja":{"stringUnit":{"state":"translated","value":"編集は検出されませんでした"}}}},
+    "premium.window.learning.outcome.ambiguousEdit": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Mehrdeutige Bearbeitung übersprungen"}},"en":{"stringUnit":{"state":"translated","value":"Ambiguous edit skipped"}},"ja":{"stringUnit":{"state":"translated","value":"不明確な編集をスキップしました"}}}},
+    "premium.window.learning.outcome.noCommitBeforeTimeout": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Kein Abschlusssignal erkannt"}},"en":{"stringUnit":{"state":"translated","value":"No completion signal detected"}},"ja":{"stringUnit":{"state":"translated","value":"完了操作を検出できませんでした"}}}},
+    "premium.window.learning.outcome.duplicateCorrection": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Korrektur ist bereits vorhanden"}},"en":{"stringUnit":{"state":"translated","value":"Correction already exists"}},"ja":{"stringUnit":{"state":"translated","value":"修正はすでに登録されています"}}}},
+    "premium.window.learning.outcome.cancelled": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Lernversuch abgebrochen"}},"en":{"stringUnit":{"state":"translated","value":"Learning attempt cancelled"}},"ja":{"stringUnit":{"state":"translated","value":"学習をキャンセルしました"}}}},
+    "premium.window.learning.outcome.failed": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Korrektur konnte nicht gespeichert werden"}},"en":{"stringUnit":{"state":"translated","value":"Correction could not be saved"}},"ja":{"stringUnit":{"state":"translated","value":"修正を保存できませんでした"}}}},
+    "premium.window.learning.signal.return": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Return"}},"en":{"stringUnit":{"state":"translated","value":"Return"}},"ja":{"stringUnit":{"state":"translated","value":"Return"}}}},
+    "premium.window.learning.signal.enter": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Enter"}},"en":{"stringUnit":{"state":"translated","value":"Enter"}},"ja":{"stringUnit":{"state":"translated","value":"Enter"}}}},
+    "premium.window.learning.signal.tab": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Tab"}},"en":{"stringUnit":{"state":"translated","value":"Tab"}},"ja":{"stringUnit":{"state":"translated","value":"Tab"}}}},
+    "premium.window.learning.signal.focusChanged": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Fokuswechsel"}},"en":{"stringUnit":{"state":"translated","value":"Focus changed"}},"ja":{"stringUnit":{"state":"translated","value":"フォーカス変更"}}}},
+    "premium.window.learning.signal.appChanged": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"App-Wechsel"}},"en":{"stringUnit":{"state":"translated","value":"App changed"}},"ja":{"stringUnit":{"state":"translated","value":"アプリ変更"}}}},
+    "premium.window.sync.title": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Wörterbuch & Snippets synchronisieren"}},"en":{"stringUnit":{"state":"translated","value":"Sync Dictionary & Snippets"}},"ja":{"stringUnit":{"state":"translated","value":"辞書とスニペットを同期"}}}},
+    "premium.window.sync.description": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Synchronisiere deine persönlichen Begriffe und Textbausteine über deinen eigenen Cloud-Speicher."}},"en":{"stringUnit":{"state":"translated","value":"Sync your personal terms and text snippets through your own cloud storage."}},"ja":{"stringUnit":{"state":"translated","value":"自分のクラウドストレージを使って個人用の用語とスニペットを同期します。"}}}},
+    "premium.window.sync.modeTitle": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Synchronisierung"}},"en":{"stringUnit":{"state":"translated","value":"Synchronization"}},"ja":{"stringUnit":{"state":"translated","value":"同期"}}}},
+    "premium.window.sync.modeHelp": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Wähle automatisches iCloud oder einen eigenen synchronisierten Ordner."}},"en":{"stringUnit":{"state":"translated","value":"Choose automatic iCloud or your own synchronized folder."}},"ja":{"stringUnit":{"state":"translated","value":"自動iCloudまたは自分の同期フォルダを選択します。"}}}},
+    "premium.window.sync.statusTitle": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Aktueller Zustand"}},"en":{"stringUnit":{"state":"translated","value":"Current status"}},"ja":{"stringUnit":{"state":"translated","value":"現在の状態"}}}},
+    "premium.window.sync.actionsTitle": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Aktionen"}},"en":{"stringUnit":{"state":"translated","value":"Actions"}},"ja":{"stringUnit":{"state":"translated","value":"操作"}}}},
+    "premium.window.sync.deleteTitle": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Synchronisierte Daten löschen"}},"en":{"stringUnit":{"state":"translated","value":"Delete synchronized data"}},"ja":{"stringUnit":{"state":"translated","value":"同期データを削除"}}}},
+    "premium.window.sync.deleteHelp": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Löscht den privaten Sync-Ordner, behält aber lokale Wörterbuch- und Snippet-Daten."}},"en":{"stringUnit":{"state":"translated","value":"Deletes the private sync folder while keeping local dictionary and snippet data."}},"ja":{"stringUnit":{"state":"translated","value":"ローカルの辞書とスニペットを残したまま、プライベート同期フォルダを削除します。"}}}},
+    "premium.window.sync.locked": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Cloud-Sync benötigt eine Anmeldung und ein aktives Premium-Konto."}},"en":{"stringUnit":{"state":"translated","value":"Cloud sync requires sign-in and an active Premium account."}},"ja":{"stringUnit":{"state":"translated","value":"クラウド同期にはサインインと有効なPremiumアカウントが必要です。"}}}},
+    "premium.window.sync.linkRequired": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Verknüpfe deine auf diesem Mac aktive Commercial-Lizenz mit dem angemeldeten Konto, um Cloud-Sync freizuschalten."}},"en":{"stringUnit":{"state":"translated","value":"Link the Commercial license active on this Mac to the signed-in account to enable cloud sync."}},"ja":{"stringUnit":{"state":"translated","value":"このMacで有効なCommercialライセンスをサインイン中のアカウントに連携すると、クラウド同期を利用できます。"}}}},
+    "premium.window.sync.mode.off": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Aus"}},"en":{"stringUnit":{"state":"translated","value":"Off"}},"ja":{"stringUnit":{"state":"translated","value":"オフ"}}}},
+    "premium.window.sync.mode.automaticICloud": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Automatisches iCloud"}},"en":{"stringUnit":{"state":"translated","value":"Automatic iCloud"}},"ja":{"stringUnit":{"state":"translated","value":"自動iCloud"}}}},
+    "premium.window.sync.mode.cloudFolder": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Cloud-Ordner"}},"en":{"stringUnit":{"state":"translated","value":"Cloud Folder"}},"ja":{"stringUnit":{"state":"translated","value":"クラウドフォルダ"}}}},
+    "premium.window.sync.privateICloudContainer": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Privater TypeWhisper-iCloud-Container"}},"en":{"stringUnit":{"state":"translated","value":"TypeWhisper private iCloud container"}},"ja":{"stringUnit":{"state":"translated","value":"TypeWhisperのプライベートiCloudコンテナ"}}}},
+    "premium.window.sync.noFolderSelected": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Kein Ordner ausgewählt"}},"en":{"stringUnit":{"state":"translated","value":"No folder selected"}},"ja":{"stringUnit":{"state":"translated","value":"フォルダが選択されていません"}}}},
+    "premium.window.sync.syncOff": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Synchronisierung ist aus"}},"en":{"stringUnit":{"state":"translated","value":"Sync is off"}},"ja":{"stringUnit":{"state":"translated","value":"同期はオフです"}}}},
+    "premium.window.sync.modePicker": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Modus"}},"en":{"stringUnit":{"state":"translated","value":"Mode"}},"ja":{"stringUnit":{"state":"translated","value":"モード"}}}},
+    "premium.window.sync.provider": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Anbieter"}},"en":{"stringUnit":{"state":"translated","value":"Provider"}},"ja":{"stringUnit":{"state":"translated","value":"プロバイダ"}}}},
+    "premium.window.sync.folder": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Ordner"}},"en":{"stringUnit":{"state":"translated","value":"Folder"}},"ja":{"stringUnit":{"state":"translated","value":"フォルダ"}}}},
+    "premium.window.sync.lastSync": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Letzter Sync"}},"en":{"stringUnit":{"state":"translated","value":"Last Sync"}},"ja":{"stringUnit":{"state":"translated","value":"最終同期"}}}},
+    "premium.window.sync.pending": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Ausstehend"}},"en":{"stringUnit":{"state":"translated","value":"Pending"}},"ja":{"stringUnit":{"state":"translated","value":"保留中"}}}},
+    "premium.window.sync.devices": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Geräte"}},"en":{"stringUnit":{"state":"translated","value":"Devices"}},"ja":{"stringUnit":{"state":"translated","value":"デバイス"}}}},
+    "premium.window.sync.chooseFolder": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Ordner wählen"}},"en":{"stringUnit":{"state":"translated","value":"Choose Folder"}},"ja":{"stringUnit":{"state":"translated","value":"フォルダを選択"}}}},
+    "premium.window.sync.syncing": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Synchronisiert …"}},"en":{"stringUnit":{"state":"translated","value":"Syncing…"}},"ja":{"stringUnit":{"state":"translated","value":"同期中…"}}}},
+    "premium.window.sync.syncNow": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Jetzt synchronisieren"}},"en":{"stringUnit":{"state":"translated","value":"Sync Now"}},"ja":{"stringUnit":{"state":"translated","value":"今すぐ同期"}}}},
+    "premium.window.sync.clear": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Auswahl aufheben"}},"en":{"stringUnit":{"state":"translated","value":"Clear"}},"ja":{"stringUnit":{"state":"translated","value":"選択を解除"}}}},
+    "premium.window.sync.deleteData": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Sync-Daten löschen"}},"en":{"stringUnit":{"state":"translated","value":"Delete Sync Data"}},"ja":{"stringUnit":{"state":"translated","value":"同期データを削除"}}}},
+    "premium.window.sync.deleteConfirmationTitle": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Privaten TypeWhisper-Sync-Ordner löschen?"}},"en":{"stringUnit":{"state":"translated","value":"Delete the private TypeWhisper sync folder?"}},"ja":{"stringUnit":{"state":"translated","value":"TypeWhisperのプライベート同期フォルダを削除しますか？"}}}},
+    "premium.window.sync.deleteConfirmationAction": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Sync-Ordner löschen"}},"en":{"stringUnit":{"state":"translated","value":"Delete Sync Folder"}},"ja":{"stringUnit":{"state":"translated","value":"同期フォルダを削除"}}}},
+    "premium.window.sync.deleteConfirmationMessage": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Cloud-Vorgänge werden gelöscht, lokale Wörterbucheinträge und Snippets bleiben auf diesem Mac erhalten."}},"en":{"stringUnit":{"state":"translated","value":"Cloud operations are deleted, but local dictionary entries and snippets stay on this Mac."}},"ja":{"stringUnit":{"state":"translated","value":"クラウド上の操作データは削除されますが、ローカルの辞書項目とスニペットはこのMacに残ります。"}}}},
+    "premium.window.sync.never": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Noch nie"}},"en":{"stringUnit":{"state":"translated","value":"Never"}},"ja":{"stringUnit":{"state":"translated","value":"未実行"}}}},
+    "premium.window.locked.title": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Premium-Zugang erforderlich"}},"en":{"stringUnit":{"state":"translated","value":"Premium access required"}},"ja":{"stringUnit":{"state":"translated","value":"Premiumアクセスが必要"}}}},
+    "calendarMeeting.settings.recordingStart": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Aufnahmebeginn"}},"en":{"stringUnit":{"state":"translated","value":"Starting recordings"}},"ja":{"stringUnit":{"state":"translated","value":"録音の開始"}}}},
+    "calendarMeeting.settings.startModeHelp": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Lass dich nur erinnern oder starte die Aufnahme automatisch, sobald du dem geplanten Meeting tatsächlich beitrittst."}},"en":{"stringUnit":{"state":"translated","value":"Choose reminders only, or start recording automatically after you actually join the scheduled meeting."}},"ja":{"stringUnit":{"state":"translated","value":"通知のみ、または予定したミーティングへの実際の参加後に自動録音を選べます。"}}}},
+    "calendarMeeting.settings.permissions": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Berechtigungen"}},"en":{"stringUnit":{"state":"translated","value":"Permissions"}},"ja":{"stringUnit":{"state":"translated","value":"アクセス権"}}}},
+    "calendarMeeting.settings.calendarsHelp": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Nur Termine aus ausgewählten Kalendern werden berücksichtigt."}},"en":{"stringUnit":{"state":"translated","value":"Only meetings from selected calendars are considered."}},"ja":{"stringUnit":{"state":"translated","value":"選択したカレンダーの予定だけが対象になります。"}}}},
+    "calendarMeeting.settings.providersHelp": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Wähle die Meeting-Apps, für die TypeWhisper Termine erkennen darf."}},"en":{"stringUnit":{"state":"translated","value":"Choose the meeting apps TypeWhisper may recognize from calendar events."}},"ja":{"stringUnit":{"state":"translated","value":"カレンダー予定から認識するミーティングアプリを選択します。"}}}},
+    "calendarMeeting.settings.stopping": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Aufnahme beenden"}},"en":{"stringUnit":{"state":"translated","value":"Stopping recordings"}},"ja":{"stringUnit":{"state":"translated","value":"録音の停止"}}}},
+    "calendarMeeting.settings.howItWorks": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"TypeWhisper startet erst, wenn dein Mac erkennt, dass du dem passenden geplanten Meeting beigetreten bist."}},"en":{"stringUnit":{"state":"translated","value":"TypeWhisper starts only after your Mac detects that you joined the matching scheduled meeting."}},"ja":{"stringUnit":{"state":"translated","value":"TypeWhisperは、対応する予定済みミーティングへの参加をMacが検出した後にのみ開始します。"}}}},
     "© 2024-2026 TypeWhisper Contributors": {
       "localizations": {
         "de": {

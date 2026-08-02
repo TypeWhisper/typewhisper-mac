@@ -28,9 +28,9 @@ enum PremiumSyncMode: String, CaseIterable, Identifiable, Sendable {
     var id: String { rawValue }
     var displayName: String {
         switch self {
-        case .off: String(localized: "Off")
-        case .automaticICloud: String(localized: "Automatic iCloud")
-        case .cloudFolder: String(localized: "Cloud Folder")
+        case .off: String(localized: "premium.window.sync.mode.off")
+        case .automaticICloud: String(localized: "premium.window.sync.mode.automaticICloud")
+        case .cloudFolder: String(localized: "premium.window.sync.mode.cloudFolder")
         }
     }
 }
@@ -132,6 +132,7 @@ struct CrossDevicePremiumEntitlementVerifier: Sendable {
 
 private enum PremiumAccountServiceError: LocalizedError {
     case invalidEntitlementSignature
+    case commercialLicenseLinkFailed
     case appleSignInCancelled
     case invalidAppleAuthorizationCallback
     case appleAuthorizationFailed
@@ -141,6 +142,8 @@ private enum PremiumAccountServiceError: LocalizedError {
         switch self {
         case .invalidEntitlementSignature:
             String(localized: "The Premium entitlement signature could not be verified.")
+        case .commercialLicenseLinkFailed:
+            String(localized: "premium.window.access.linkFailed")
         case .appleSignInCancelled:
             nil
         case .invalidAppleAuthorizationCallback:
@@ -431,7 +434,8 @@ final class PremiumAccountService: ObservableObject {
 
     func refreshIfNeeded() async {
         guard isSignedIn else { return }
-        if let last = defaults.object(forKey: Keys.lastRefresh) as? Date,
+        if hasPremiumEntitlement,
+           let last = defaults.object(forKey: Keys.lastRefresh) as? Date,
            Date().timeIntervalSince(last) < 7 * 24 * 60 * 60 { return }
         do { try await refresh() }
         catch { if entitlement == nil { errorMessage = error.localizedDescription } }
@@ -450,6 +454,17 @@ final class PremiumAccountService: ObservableObject {
             guard response.ok else { throw URLError(.badServerResponse) }
             _ = response.released
             clearAuthorizationState()
+        }
+    }
+
+    func linkCommercialLicense(_ proof: CommercialLicenseLinkProof) async {
+        await perform {
+            let entitlement = try await attachCommercialLicense(proof)
+            try acceptEntitlement(entitlement)
+            guard hasPremiumEntitlement else {
+                throw PremiumAccountServiceError.commercialLicenseLinkFailed
+            }
+            defaults.set(Date(), forKey: Keys.lastRefresh)
         }
     }
 
@@ -479,15 +494,9 @@ final class PremiumAccountService: ObservableObject {
            !commercialLicenseProof.key.isEmpty,
            !commercialLicenseProof.activationId.isEmpty {
             do {
-                let response: EntitlementResponse = try await request(
-                    path: "/v1/entitlements/polar/device/attach",
-                    method: "POST",
-                    body: try encoder.encode([
-                        "licenseKey": commercialLicenseProof.key,
-                        "activationId": commercialLicenseProof.activationId,
-                    ])
+                try acceptEntitlement(
+                    try await attachCommercialLicense(commercialLicenseProof)
                 )
-                try acceptEntitlement(response.entitlement)
             } catch {
                 clearAuthorizationState()
                 throw error
@@ -495,6 +504,20 @@ final class PremiumAccountService: ObservableObject {
         } else {
             try await refresh()
         }
+    }
+
+    private func attachCommercialLicense(
+        _ proof: CommercialLicenseLinkProof
+    ) async throws -> CrossDevicePremiumEntitlement? {
+        let response: EntitlementResponse = try await request(
+            path: "/v1/entitlements/polar/device/attach",
+            method: "POST",
+            body: try encoder.encode([
+                "licenseKey": proof.key,
+                "activationId": proof.activationId,
+            ])
+        )
+        return response.entitlement
     }
 
     private func acceptEntitlement(_ value: CrossDevicePremiumEntitlement?) throws {
@@ -668,9 +691,10 @@ final class CloudFolderSyncController: ObservableObject {
 
     var selectedFolderDisplayName: String {
         switch mode {
-        case .automaticICloud: String(localized: "TypeWhisper private iCloud container")
-        case .cloudFolder: selectedFolderURL?.path(percentEncoded: false) ?? String(localized: "No folder selected")
-        case .off: String(localized: "Sync is off")
+        case .automaticICloud: String(localized: "premium.window.sync.privateICloudContainer")
+        case .cloudFolder: selectedFolderURL?.path(percentEncoded: false)
+            ?? String(localized: "premium.window.sync.noFolderSelected")
+        case .off: String(localized: "premium.window.sync.syncOff")
         }
     }
 
@@ -1075,62 +1099,107 @@ struct CloudFolderSyncSettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            header
+            PremiumSettingsDetailHeader(
+                icon: "cloud",
+                accent: .cyan,
+                title: String(localized: "premium.hub.sync.title"),
+                description: String(localized: "premium.window.sync.description"),
+                status: statusText,
+                statusColor: statusColor
+            )
 
-            if !controller.canUseSync {
-                lockedPanel
+            SettingsCard {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(String(localized: "premium.window.sync.modeTitle"))
+                        .font(.headline)
+
+                    Picker(String(localized: "premium.window.sync.modePicker"), selection: Binding(
+                        get: { controller.mode },
+                        set: { mode in Task { await controller.setMode(mode) } }
+                    )) {
+                        ForEach(controller.availableModes) { mode in
+                            Text(mode.displayName).tag(mode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .accessibilityIdentifier("premium.sync.mode")
+
+                    Text(String(localized: "premium.window.sync.modeHelp"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
 
-            VStack(alignment: .leading, spacing: 10) {
-                Picker(String(localized: "Mode"), selection: Binding(
-                    get: { controller.mode },
-                    set: { mode in Task { await controller.setMode(mode) } }
-                )) {
-                    ForEach(controller.availableModes) { mode in
-                        Text(mode.displayName).tag(mode)
-                    }
-                }
-                .pickerStyle(.segmented)
+            SettingsCard {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(String(localized: "premium.window.sync.statusTitle"))
+                        .font(.headline)
 
-                statusRow(title: String(localized: "Provider"), value: controller.provider.displayName, systemImage: "cloud")
-                statusRow(title: String(localized: "Folder"), value: controller.selectedFolderDisplayName, systemImage: "folder")
-                statusRow(title: String(localized: "Last Sync"), value: lastSyncText, systemImage: "clock")
-                statusRow(title: String(localized: "Pending"), value: "\(controller.pendingChanges)", systemImage: "arrow.triangle.2.circlepath")
-                statusRow(title: String(localized: "Devices"), value: "\(controller.deviceCount)", systemImage: "laptopcomputer.and.iphone")
+                    statusRow(title: String(localized: "premium.window.sync.provider"), value: controller.provider.displayName, systemImage: "cloud")
+                    statusRow(title: String(localized: "premium.window.sync.folder"), value: controller.selectedFolderDisplayName, systemImage: "folder")
+                    statusRow(title: String(localized: "premium.window.sync.lastSync"), value: lastSyncText, systemImage: "clock")
+                    statusRow(title: String(localized: "premium.window.sync.pending"), value: "\(controller.pendingChanges)", systemImage: "arrow.triangle.2.circlepath")
+                    statusRow(title: String(localized: "premium.window.sync.devices"), value: "\(controller.deviceCount)", systemImage: "laptopcomputer.and.iphone")
+                }
             }
 
-            HStack(spacing: 8) {
-                Button {
-                    controller.chooseFolder()
-                } label: {
-                    Label(String(localized: "Choose Folder"), systemImage: "folder.badge.plus")
-                }
-                .disabled(!controller.canUseSync)
+            SettingsCard {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(String(localized: "premium.window.sync.actionsTitle"))
+                        .font(.headline)
 
-                Button {
-                    Task { await controller.syncNow() }
-                } label: {
-                    if controller.isSyncing {
-                        Label(String(localized: "Syncing"), systemImage: "arrow.triangle.2.circlepath")
-                    } else {
-                        Label(String(localized: "Sync Now"), systemImage: "arrow.triangle.2.circlepath")
+                    HStack(spacing: 8) {
+                        Button {
+                            controller.chooseFolder()
+                        } label: {
+                            Label(String(localized: "premium.window.sync.chooseFolder"), systemImage: "folder.badge.plus")
+                        }
+                        .disabled(!controller.canUseSync)
+                        .accessibilityIdentifier("premium.sync.chooseFolder")
+
+                        Button {
+                            Task { await controller.syncNow() }
+                        } label: {
+                            if controller.isSyncing {
+                                Label(String(localized: "premium.window.sync.syncing"), systemImage: "arrow.triangle.2.circlepath")
+                            } else {
+                                Label(String(localized: "premium.window.sync.syncNow"), systemImage: "arrow.triangle.2.circlepath")
+                            }
+                        }
+                        .disabled(!controller.canUseSync || !controller.isConfigured || controller.isSyncing)
+                        .accessibilityIdentifier("premium.sync.syncNow")
+
+                        Button {
+                            controller.clearFolder()
+                        } label: {
+                            Label(String(localized: "premium.window.sync.clear"), systemImage: "xmark.circle")
+                        }
+                        .disabled(controller.selectedFolderURL == nil)
+                        .accessibilityIdentifier("premium.sync.clearFolder")
                     }
                 }
-                .disabled(!controller.canUseSync || !controller.isConfigured || controller.isSyncing)
+            }
 
-                Button {
-                    controller.clearFolder()
-                } label: {
-                    Label(String(localized: "Clear"), systemImage: "xmark.circle")
-                }
-                .disabled(controller.selectedFolderURL == nil)
+            SettingsCard(accent: .red) {
+                HStack(alignment: .center, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(String(localized: "premium.window.sync.deleteTitle"))
+                            .font(.callout.weight(.semibold))
+                        Text(String(localized: "premium.window.sync.deleteHelp"))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
 
-                Button(role: .destructive) {
-                    confirmingSyncFolderDeletion = true
-                } label: {
-                    Label(String(localized: "Delete Sync Data"), systemImage: "trash")
+                    Spacer(minLength: 12)
+
+                    Button(role: .destructive) {
+                        confirmingSyncFolderDeletion = true
+                    } label: {
+                        Label(String(localized: "premium.window.sync.deleteData"), systemImage: "trash")
+                    }
+                    .disabled(!controller.isConfigured || controller.isSyncing)
+                    .accessibilityIdentifier("premium.sync.deleteData")
                 }
-                .disabled(!controller.isConfigured || controller.isSyncing)
             }
 
             if let status = controller.statusMessage {
@@ -1143,59 +1212,18 @@ struct CloudFolderSyncSettingsView: View {
                     .foregroundStyle(.red)
             }
         }
-        .padding(18)
         .frame(maxWidth: .infinity, alignment: .topLeading)
-        .background(RoundedRectangle(cornerRadius: 8).fill(.secondary.opacity(0.07)))
         .confirmationDialog(
-            String(localized: "Delete the private TypeWhisper sync folder?"),
+            String(localized: "premium.window.sync.deleteConfirmationTitle"),
             isPresented: $confirmingSyncFolderDeletion
         ) {
-            Button(String(localized: "Delete Sync Folder"), role: .destructive) {
+            Button(String(localized: "premium.window.sync.deleteConfirmationAction"), role: .destructive) {
                 Task { await controller.deletePrivateSyncFolder() }
             }
-            Button(String(localized: "Cancel"), role: .cancel) {}
+            Button(String(localized: "premium.common.cancel"), role: .cancel) {}
         } message: {
-            Text(String(localized: "Cloud operations are deleted, but local dictionary entries and snippets stay on this Mac."))
+            Text(String(localized: "premium.window.sync.deleteConfirmationMessage"))
         }
-    }
-
-    private var header: some View {
-        HStack(spacing: 12) {
-            Image(systemName: "cloud")
-                .font(.title2)
-                .foregroundStyle(.blue)
-                .frame(width: 36, height: 36)
-                .background(RoundedRectangle(cornerRadius: 8).fill(.blue.opacity(0.12)))
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text(String(localized: "Premium Sync"))
-                    .font(.headline)
-                Text(String(localized: "Dictionary and snippets"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-    }
-
-    private var lockedPanel: some View {
-        HStack(alignment: .center, spacing: 12) {
-            Image(systemName: "lock.fill")
-                .foregroundStyle(.yellow)
-                .frame(width: 28, height: 28)
-                .background(RoundedRectangle(cornerRadius: 8).fill(.yellow.opacity(0.12)))
-
-            VStack(alignment: .leading, spacing: 3) {
-                Text(String(localized: "Premium account required"))
-                    .font(.subheadline.weight(.semibold))
-                Text(String(localized: "Sign in with Apple above and link a license or App Store subscription to start sync."))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer(minLength: 12)
-        }
-        .padding(12)
-        .background(RoundedRectangle(cornerRadius: 8).fill(.yellow.opacity(0.08)))
     }
 
     private func statusRow(title: String, value: String, systemImage: String) -> some View {
@@ -1215,8 +1243,22 @@ struct CloudFolderSyncSettingsView: View {
 
     private var lastSyncText: String {
         guard let date = controller.lastSyncDate else {
-            return String(localized: "Never")
+            return String(localized: "premium.window.sync.never")
         }
         return date.formatted(date: .abbreviated, time: .shortened)
+    }
+
+    private var statusText: String {
+        if controller.isSyncing {
+            return String(localized: "premium.window.sync.syncing")
+        }
+        return controller.mode.displayName
+    }
+
+    private var statusColor: Color {
+        if controller.isSyncing {
+            return .blue
+        }
+        return controller.mode == .off ? .secondary : .green
     }
 }

@@ -293,6 +293,192 @@ final class CloudFolderSyncTests: XCTestCase {
     }
 
     @MainActor
+    func testPremiumAccountRefreshesRecentMissingEntitlementAfterPurchase() async throws {
+        let suiteName = "PremiumMissingEntitlementRefresh-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let privateKey = P256.Signing.PrivateKey()
+        let entitlement = try Self.signedEntitlement(privateKey: privateKey)
+        let entitlementObject = try XCTUnwrap(
+            JSONSerialization.jsonObject(
+                with: Self.entitlementEncoder.encode(entitlement)
+            ) as? [String: Any]
+        )
+        let responseData = try JSONSerialization.data(
+            withJSONObject: ["entitlement": entitlementObject]
+        )
+        let recorder = PremiumAccountHTTPRecorder(responses: [
+            "/v1/auth/apple/web/start": """
+            {
+              "authorizationURL": "https://appleid.apple.com/auth/authorize?state=server-state",
+              "state": "server-state",
+              "expiresAt": "2099-07-19T12:10:00.000Z"
+            }
+            """,
+            "/v1/auth/apple/web/exchange": """
+            {"accessToken": "account-token", "entitlement": null}
+            """,
+            "/v1/entitlements/polar/device/attach": """
+            {"entitlement": null}
+            """,
+            "/v1/entitlements/current": try XCTUnwrap(
+                String(data: responseData, encoding: .utf8)
+            ),
+        ])
+        let authenticator = PremiumAppleWebAuthenticator(
+            callbackURL: try XCTUnwrap(URL(
+                string: "typewhisper://premium-auth/callback?state=server-state&code=exchange-code"
+            ))
+        )
+
+        let service = PremiumAccountService(
+            defaults: defaults,
+            baseURL: URL(string: "https://app.typewhisper.com"),
+            requestExecutor: { request in try await recorder.execute(request) },
+            appleWebAuthenticator: authenticator,
+            keychainService: suiteName,
+            entitlementPublicKeyBase64: privateKey.publicKey.rawRepresentation.base64EncodedString(),
+            isSignedInOverride: false,
+            automaticallyRefresh: false
+        )
+        defer { service.signOut() }
+
+        await service.signInWithApple(
+            commercialLicenseProof: CommercialLicenseLinkProof(
+                key: "polar-license",
+                activationId: "polar-activation"
+            )
+        )
+        XCTAssertTrue(service.isSignedIn)
+        XCTAssertNil(service.entitlement)
+        defaults.set(Date(), forKey: "premium.account.lastRefresh")
+
+        await service.refreshIfNeeded()
+
+        XCTAssertEqual(service.entitlement, entitlement)
+        XCTAssertTrue(service.hasPremiumEntitlement)
+        let requests = await recorder.recordedRequests()
+        XCTAssertEqual(
+            requests.compactMap(\.url?.path),
+            [
+                "/v1/auth/apple/web/start",
+                "/v1/auth/apple/web/exchange",
+                "/v1/entitlements/polar/device/attach",
+                "/v1/entitlements/current",
+            ]
+        )
+    }
+
+    @MainActor
+    func testPremiumAccountKeepsRecentActiveEntitlementRefreshThrottled() async throws {
+        let suiteName = "PremiumActiveEntitlementRefresh-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let privateKey = P256.Signing.PrivateKey()
+        let entitlement = try Self.signedEntitlement(privateKey: privateKey)
+        defaults.set(
+            try Self.entitlementEncoder.encode(entitlement),
+            forKey: "premium.account.cachedEntitlement"
+        )
+        defaults.set(Date(), forKey: "premium.account.lastRefresh")
+        let recorder = PremiumAccountHTTPRecorder(responses: [:])
+        let service = PremiumAccountService(
+            defaults: defaults,
+            baseURL: URL(string: "https://app.typewhisper.com"),
+            requestExecutor: { request in try await recorder.execute(request) },
+            keychainService: suiteName,
+            entitlementPublicKeyBase64: privateKey.publicKey.rawRepresentation.base64EncodedString(),
+            isSignedInOverride: true,
+            automaticallyRefresh: false
+        )
+
+        await service.refreshIfNeeded()
+
+        XCTAssertEqual(service.entitlement, entitlement)
+        let requests = await recorder.recordedRequests()
+        XCTAssertTrue(requests.isEmpty)
+    }
+
+    @MainActor
+    func testPremiumAccountLinksCommercialLicenseAfterSignIn() async throws {
+        let suiteName = "PremiumCommercialLink-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let privateKey = P256.Signing.PrivateKey()
+        let entitlement = try Self.signedEntitlement(privateKey: privateKey)
+        let entitlementObject = try XCTUnwrap(
+            JSONSerialization.jsonObject(
+                with: Self.entitlementEncoder.encode(entitlement)
+            ) as? [String: Any]
+        )
+        let attachResponse = try JSONSerialization.data(
+            withJSONObject: ["entitlement": entitlementObject]
+        )
+        let recorder = PremiumAccountHTTPRecorder(responses: [
+            "/v1/auth/apple/web/start": """
+            {
+              "authorizationURL": "https://appleid.apple.com/auth/authorize?state=server-state",
+              "state": "server-state",
+              "expiresAt": "2099-07-19T12:10:00.000Z"
+            }
+            """,
+            "/v1/auth/apple/web/exchange": """
+            {"accessToken": "account-token", "entitlement": null}
+            """,
+            "/v1/entitlements/current": """
+            {"entitlement": null}
+            """,
+            "/v1/entitlements/polar/device/attach": try XCTUnwrap(
+                String(data: attachResponse, encoding: .utf8)
+            ),
+        ])
+        let authenticator = PremiumAppleWebAuthenticator(
+            callbackURL: try XCTUnwrap(URL(
+                string: "typewhisper://premium-auth/callback?state=server-state&code=exchange-code"
+            ))
+        )
+        let service = PremiumAccountService(
+            defaults: defaults,
+            baseURL: URL(string: "https://app.typewhisper.com"),
+            requestExecutor: { request in try await recorder.execute(request) },
+            appleWebAuthenticator: authenticator,
+            keychainService: suiteName,
+            entitlementPublicKeyBase64: privateKey.publicKey.rawRepresentation.base64EncodedString(),
+            isSignedInOverride: false,
+            automaticallyRefresh: false
+        )
+        defer { service.signOut() }
+
+        await service.signInWithApple(commercialLicenseProof: nil)
+        XCTAssertTrue(service.isSignedIn)
+        XCTAssertFalse(service.hasPremiumEntitlement)
+
+        await service.linkCommercialLicense(
+            CommercialLicenseLinkProof(
+                key: "polar-license",
+                activationId: "polar-activation"
+            )
+        )
+
+        XCTAssertEqual(service.entitlement, entitlement)
+        XCTAssertTrue(service.hasPremiumEntitlement)
+        XCTAssertNil(service.errorMessage)
+        let requests = await recorder.recordedRequests()
+        XCTAssertEqual(
+            requests.compactMap(\.url?.path),
+            [
+                "/v1/auth/apple/web/start",
+                "/v1/auth/apple/web/exchange",
+                "/v1/entitlements/current",
+                "/v1/entitlements/polar/device/attach",
+            ]
+        )
+    }
+
+    @MainActor
     func testAuthorizationFailureClearsSignedEntitlementButTransientFailureDoesNot() throws {
         let suiteName = "PremiumEntitlementAuthorization-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
