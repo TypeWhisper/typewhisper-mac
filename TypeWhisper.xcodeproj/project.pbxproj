@@ -7,6 +7,27 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		CA1E00000000000000000001 /* CalendarMeetingAutomationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA1F00000000000000000001 /* CalendarMeetingAutomationModels.swift */; };
+		CA1E00000000000000000002 /* MeetingLinkParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA1F00000000000000000002 /* MeetingLinkParser.swift */; };
+		CA1E00000000000000000003 /* BrowserURLResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA1F00000000000000000003 /* BrowserURLResolver.swift */; };
+		CA1E00000000000000000004 /* EventKitCalendarMeetingProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA1F00000000000000000004 /* EventKitCalendarMeetingProvider.swift */; };
+		CA1E00000000000000000005 /* MeetingAudioActivityCollector.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA1F00000000000000000005 /* MeetingAudioActivityCollector.swift */; };
+		CA1E00000000000000000006 /* CalendarMeetingAutomationPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA1F00000000000000000006 /* CalendarMeetingAutomationPolicy.swift */; };
+		CA1E00000000000000000007 /* CalendarMeetingNotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA1F00000000000000000007 /* CalendarMeetingNotificationService.swift */; };
+		CA1E00000000000000000008 /* CalendarMeetingAutomationController.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA1F00000000000000000008 /* CalendarMeetingAutomationController.swift */; };
+		CA1E00000000000000000009 /* CalendarMeetingRecordingFilename.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA1F00000000000000000009 /* CalendarMeetingRecordingFilename.swift */; };
+		CA1E0000000000000000000A /* CalendarMeetingSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA1F0000000000000000000A /* CalendarMeetingSettingsSection.swift */; };
+		CA1E0000000000000000000B /* MeetingAutomationCountdownPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA1F0000000000000000000B /* MeetingAutomationCountdownPanel.swift */; };
+		CA2E00000000000000000001 /* MeetingLinkParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA2F00000000000000000001 /* MeetingLinkParserTests.swift */; };
+		CA2E00000000000000000002 /* BrowserURLResolverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA2F00000000000000000002 /* BrowserURLResolverTests.swift */; };
+		CA2E00000000000000000003 /* CalendarMeetingEventProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA2F00000000000000000003 /* CalendarMeetingEventProviderTests.swift */; };
+		CA2E00000000000000000004 /* MeetingAudioActivityCollectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA2F00000000000000000004 /* MeetingAudioActivityCollectorTests.swift */; };
+		CA2E00000000000000000005 /* CalendarMeetingAutomationPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA2F00000000000000000005 /* CalendarMeetingAutomationPolicyTests.swift */; };
+		CA2E00000000000000000006 /* CalendarMeetingAutomationControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA2F00000000000000000006 /* CalendarMeetingAutomationControllerTests.swift */; };
+		CA2E00000000000000000007 /* CalendarMeetingNotificationServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA2F00000000000000000007 /* CalendarMeetingNotificationServiceTests.swift */; };
+		CA2E00000000000000000008 /* CalendarMeetingRecordingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA2F00000000000000000008 /* CalendarMeetingRecordingTests.swift */; };
+		CA2E00000000000000000009 /* MeetingAutomationCountdownPanelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA2F00000000000000000009 /* MeetingAutomationCountdownPanelTests.swift */; };
+		CA2E0000000000000000000A /* PremiumSettingsViewTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA2F0000000000000000000A /* PremiumSettingsViewTests.swift */; };
 		AA9400000000000000000001 /* SettingsVisualComponents.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB9400000000000000000001 /* SettingsVisualComponents.swift */; };
 		1834537D0CCC21190DB68EBD /* Cocoa.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = D8AA5F3DBFD9010D09311C40 /* Cocoa.framework */; };
 		1E6EDB8B0D1573A05A610078 /* PluginManifestValidationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BDF548E65340A17A3A16590B /* PluginManifestValidationTests.swift */; };
@@ -568,6 +589,27 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		CA1F00000000000000000001 /* CalendarMeetingAutomationModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarMeetingAutomationModels.swift; sourceTree = "<group>"; };
+		CA1F00000000000000000002 /* MeetingLinkParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingLinkParser.swift; sourceTree = "<group>"; };
+		CA1F00000000000000000003 /* BrowserURLResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserURLResolver.swift; sourceTree = "<group>"; };
+		CA1F00000000000000000004 /* EventKitCalendarMeetingProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventKitCalendarMeetingProvider.swift; sourceTree = "<group>"; };
+		CA1F00000000000000000005 /* MeetingAudioActivityCollector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingAudioActivityCollector.swift; sourceTree = "<group>"; };
+		CA1F00000000000000000006 /* CalendarMeetingAutomationPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarMeetingAutomationPolicy.swift; sourceTree = "<group>"; };
+		CA1F00000000000000000007 /* CalendarMeetingNotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarMeetingNotificationService.swift; sourceTree = "<group>"; };
+		CA1F00000000000000000008 /* CalendarMeetingAutomationController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarMeetingAutomationController.swift; sourceTree = "<group>"; };
+		CA1F00000000000000000009 /* CalendarMeetingRecordingFilename.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarMeetingRecordingFilename.swift; sourceTree = "<group>"; };
+		CA1F0000000000000000000A /* CalendarMeetingSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarMeetingSettingsSection.swift; sourceTree = "<group>"; };
+		CA1F0000000000000000000B /* MeetingAutomationCountdownPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingAutomationCountdownPanel.swift; sourceTree = "<group>"; };
+		CA2F00000000000000000001 /* MeetingLinkParserTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingLinkParserTests.swift; sourceTree = "<group>"; };
+		CA2F00000000000000000002 /* BrowserURLResolverTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BrowserURLResolverTests.swift; sourceTree = "<group>"; };
+		CA2F00000000000000000003 /* CalendarMeetingEventProviderTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CalendarMeetingEventProviderTests.swift; sourceTree = "<group>"; };
+		CA2F00000000000000000004 /* MeetingAudioActivityCollectorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingAudioActivityCollectorTests.swift; sourceTree = "<group>"; };
+		CA2F00000000000000000005 /* CalendarMeetingAutomationPolicyTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CalendarMeetingAutomationPolicyTests.swift; sourceTree = "<group>"; };
+		CA2F00000000000000000006 /* CalendarMeetingAutomationControllerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CalendarMeetingAutomationControllerTests.swift; sourceTree = "<group>"; };
+		CA2F00000000000000000007 /* CalendarMeetingNotificationServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CalendarMeetingNotificationServiceTests.swift; sourceTree = "<group>"; };
+		CA2F00000000000000000008 /* CalendarMeetingRecordingTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CalendarMeetingRecordingTests.swift; sourceTree = "<group>"; };
+		CA2F00000000000000000009 /* MeetingAutomationCountdownPanelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingAutomationCountdownPanelTests.swift; sourceTree = "<group>"; };
+		CA2F0000000000000000000A /* PremiumSettingsViewTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PremiumSettingsViewTests.swift; sourceTree = "<group>"; };
 		BB9400000000000000000001 /* SettingsVisualComponents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsVisualComponents.swift; sourceTree = "<group>"; };
 		05313C25F9E79BCFC02899F2 /* TextDiffServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TextDiffServiceTests.swift; sourceTree = "<group>"; };
 			3A4B5C6D7E8F901234567891 /* AudioEngineRecoverySupportTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AudioEngineRecoverySupportTests.swift; sourceTree = "<group>"; };
@@ -1538,6 +1580,7 @@
 		CC00000000000000000004 /* Models */ = {
 			isa = PBXGroup;
 			children = (
+				CA1F00000000000000000001 /* CalendarMeetingAutomationModels.swift */,
 				BB00000000000000000005 /* TranscriptionResult.swift */,
 				BB00000000000000000330 /* DictationPunctuationProfile.swift */,
 				BB00000000000000000331 /* PunctuationRules.swift */,
@@ -1578,6 +1621,14 @@
 				BB00000000000000000196 /* IndicatorCoordinator.swift */,
 				BB00000000000000000361 /* ClipboardContentFormatter.swift */,
 				BB00000000000000000032 /* TextInsertionService.swift */,
+				CA1F00000000000000000002 /* MeetingLinkParser.swift */,
+				CA1F00000000000000000003 /* BrowserURLResolver.swift */,
+				CA1F00000000000000000004 /* EventKitCalendarMeetingProvider.swift */,
+				CA1F00000000000000000005 /* MeetingAudioActivityCollector.swift */,
+				CA1F00000000000000000006 /* CalendarMeetingAutomationPolicy.swift */,
+				CA1F00000000000000000007 /* CalendarMeetingNotificationService.swift */,
+				CA1F00000000000000000008 /* CalendarMeetingAutomationController.swift */,
+				CA1F00000000000000000009 /* CalendarMeetingRecordingFilename.swift */,
 				BB00000000000000000050 /* SubtitleExporter.swift */,
 				BB00000000000000000148 /* HistoryExporter.swift */,
 				BB00000000000000000061 /* HistoryService.swift */,
@@ -1700,6 +1751,8 @@
 				BB00000000000000000017 /* SettingsView.swift */,
 				BB9400000000000000000001 /* SettingsVisualComponents.swift */,
 				C1F000000000000000000008 /* PremiumSettingsView.swift */,
+				CA1F0000000000000000000A /* CalendarMeetingSettingsSection.swift */,
+				CA1F0000000000000000000B /* MeetingAutomationCountdownPanel.swift */,
 				BB00000000000000000359 /* WorkflowsSettingsView.swift */,
 				BB00000000000000000046 /* AdvancedSettingsView.swift */,
 				80D4B3EC073903070769CBC4 /* BackupRestoreSheets.swift */,
@@ -2380,6 +2433,16 @@
 		D310CE5CC61C8F01487BBDF4 /* TypeWhisperTests */ = {
 			isa = PBXGroup;
 			children = (
+				CA2F00000000000000000001 /* MeetingLinkParserTests.swift */,
+				CA2F00000000000000000002 /* BrowserURLResolverTests.swift */,
+				CA2F00000000000000000003 /* CalendarMeetingEventProviderTests.swift */,
+				CA2F00000000000000000004 /* MeetingAudioActivityCollectorTests.swift */,
+				CA2F00000000000000000005 /* CalendarMeetingAutomationPolicyTests.swift */,
+				CA2F00000000000000000006 /* CalendarMeetingAutomationControllerTests.swift */,
+				CA2F00000000000000000007 /* CalendarMeetingNotificationServiceTests.swift */,
+				CA2F00000000000000000008 /* CalendarMeetingRecordingTests.swift */,
+				CA2F00000000000000000009 /* MeetingAutomationCountdownPanelTests.swift */,
+				CA2F0000000000000000000A /* PremiumSettingsViewTests.swift */,
 				E6D200DCDD6580F443C5CE0A /* TypeWhisperIntegrationTests.swift */,
 				3A4B5C6D7E8F901234567891 /* AudioEngineRecoverySupportTests.swift */,
 				CE5852D6767C5FA955B84C52 /* AppFormatterServiceTests.swift */,
@@ -3957,6 +4020,16 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CA2E00000000000000000001 /* MeetingLinkParserTests.swift in Sources */,
+				CA2E00000000000000000002 /* BrowserURLResolverTests.swift in Sources */,
+				CA2E00000000000000000003 /* CalendarMeetingEventProviderTests.swift in Sources */,
+				CA2E00000000000000000004 /* MeetingAudioActivityCollectorTests.swift in Sources */,
+				CA2E00000000000000000005 /* CalendarMeetingAutomationPolicyTests.swift in Sources */,
+				CA2E00000000000000000006 /* CalendarMeetingAutomationControllerTests.swift in Sources */,
+				CA2E00000000000000000007 /* CalendarMeetingNotificationServiceTests.swift in Sources */,
+				CA2E00000000000000000008 /* CalendarMeetingRecordingTests.swift in Sources */,
+				CA2E00000000000000000009 /* MeetingAutomationCountdownPanelTests.swift in Sources */,
+				CA2E0000000000000000000A /* PremiumSettingsViewTests.swift in Sources */,
 				7EC0EFA7DA6597CAEA640448 /* TypeWhisperIntegrationTests.swift in Sources */,
 				24FFE19AC026C48AE32BCD7C /* AppFormatterServiceTests.swift in Sources */,
 				8E4B0A32C5D96F7B1E203C4D /* LivePreviewEngineResolutionTests.swift in Sources */,
@@ -4055,6 +4128,17 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				CA1E00000000000000000001 /* CalendarMeetingAutomationModels.swift in Sources */,
+				CA1E00000000000000000002 /* MeetingLinkParser.swift in Sources */,
+				CA1E00000000000000000003 /* BrowserURLResolver.swift in Sources */,
+				CA1E00000000000000000004 /* EventKitCalendarMeetingProvider.swift in Sources */,
+				CA1E00000000000000000005 /* MeetingAudioActivityCollector.swift in Sources */,
+				CA1E00000000000000000006 /* CalendarMeetingAutomationPolicy.swift in Sources */,
+				CA1E00000000000000000007 /* CalendarMeetingNotificationService.swift in Sources */,
+				CA1E00000000000000000008 /* CalendarMeetingAutomationController.swift in Sources */,
+				CA1E00000000000000000009 /* CalendarMeetingRecordingFilename.swift in Sources */,
+				CA1E0000000000000000000A /* CalendarMeetingSettingsSection.swift in Sources */,
+				CA1E0000000000000000000B /* MeetingAutomationCountdownPanel.swift in Sources */,
 				AA00000000000000000001 /* TypeWhisperApp.swift in Sources */,
 				AA00000000000000000002 /* ServiceContainer.swift in Sources */,
 				AA00000000000000000005 /* TranscriptionResult.swift in Sources */,

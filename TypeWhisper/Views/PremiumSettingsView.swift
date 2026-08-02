@@ -36,7 +36,10 @@ struct PremiumSettingsView: View {
                 VStack(alignment: .leading, spacing: SettingsLayoutMetrics.sectionSpacing) {
                     premiumAccountCard
 
-                    if license.hasCommercialLicense || premiumAccount.hasPremiumEntitlement {
+                    if CalendarMeetingPremiumAccess.isGranted(
+                        hasCommercialLicense: license.hasCommercialLicense,
+                        hasPremiumEntitlement: premiumAccount.hasPremiumEntitlement
+                    ) {
                         premiumControlCenter
                     } else {
                         lockedPremiumLanding
@@ -149,6 +152,10 @@ struct PremiumSettingsView: View {
                         String(localized: "Custom folder")
                     ]
                 )
+            }
+
+            CalendarMeetingFreePreviewSection {
+                settingsNavigation.navigateToLicense(target: .top)
             }
 
             premiumLicenseCallout
@@ -319,6 +326,10 @@ struct PremiumSettingsView: View {
             }
 
             targetAppCorrectionLearningSection
+
+            CalendarMeetingSettingsSection(
+                controller: ServiceContainer.shared.calendarMeetingAutomationController
+            )
 
             CloudFolderSyncSettingsView(controller: syncController)
         }
@@ -651,7 +662,7 @@ private struct PremiumCorrectionExample: Identifiable {
     }
 }
 
-private struct PremiumControlSection<Content: View>: View {
+struct PremiumControlSection<Content: View>: View {
     let icon: String
     let iconColor: Color
     let title: String

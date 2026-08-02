@@ -10,6 +10,7 @@ private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhis
 /// Inserts transcribed text into the active application via clipboard + simulated Cmd+V.
 @MainActor
 final class TextInsertionService {
+    private let browserURLResolver: BrowserURLResolver
     private let syntheticPastePreferredBundleIdentifiers: Set<String> = [
         "com.apple.Terminal",
         "com.googlecode.iterm2",
@@ -49,6 +50,10 @@ final class TextInsertionService {
     var verifiedRestoreGraceDelay: Duration = .milliseconds(150)
     var copySelectionRetryDelay: Duration = .milliseconds(120)
     var copySelectionReadSettleDelay: Duration = .milliseconds(20)
+
+    init(browserURLResolver: BrowserURLResolver = BrowserURLResolver()) {
+        self.browserURLResolver = browserURLResolver
+    }
 
     enum InsertionResult: Equatable {
         case insertedViaAccessibility
@@ -104,170 +109,12 @@ final class TextInsertionService {
     }
 
     func resolveBrowserURL(bundleId: String) async -> String? {
-        await Task.detached(priority: .utility) {
-            Self.getBrowserURL(bundleId: bundleId)
-        }.value
+        await browserURLResolver.activeURL(for: bundleId)?.absoluteString
     }
 
     func resolveBrowserInfo(bundleId: String) async -> (url: String?, title: String?) {
-        await Task.detached(priority: .utility) {
-            Self.getBrowserURLAndTitle(bundleId: bundleId)
-        }.value
-    }
-
-    // MARK: - Browser URL Detection
-
-    private enum BrowserType: String {
-        case safari, arc, chromiumBased, firefox, notABrowser
-    }
-
-    nonisolated private static func identifyBrowser(_ bundleId: String) -> BrowserType {
-        let normalized = bundleId.lowercased()
-        if normalized.contains("wavebox") {
-            return .chromiumBased
-        }
-        if normalized == "org.mozilla.firefox"
-            || normalized == "org.mozilla.firefoxdeveloperedition"
-            || normalized == "org.mozilla.nightly"
-            || normalized == "app.zen-browser.zen" {
-            return .firefox
-        }
-
-        switch bundleId {
-        case "com.apple.Safari":
-            return .safari
-        case "company.thebrowser.Browser":
-            return .arc
-        case "com.google.Chrome",
-             "com.google.Chrome.canary",
-             "com.brave.Browser",
-             "com.microsoft.edgemac",
-             "com.operasoftware.Opera",
-             "com.vivaldi.Vivaldi",
-             "org.chromium.Chromium":
-            return .chromiumBased
-        default:
-            return .notABrowser
-        }
-    }
-
-    nonisolated private static func getBrowserURL(bundleId: String) -> String? {
-        let browserType = identifyBrowser(bundleId)
-        guard browserType != .notABrowser else { return nil }
-
-        // Firefox doesn't support AppleScript for URL access
-        guard browserType != .firefox else { return nil }
-
-        // Resolve app name for AppleScript (required in sandbox - "tell application id" doesn't work)
-        let appName = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleId)
-            .flatMap { Bundle(url: $0)?.infoDictionary?["CFBundleName"] as? String }
-            ?? bundleId
-
-
-        let script: String
-        switch browserType {
-        case .safari:
-            script = """
-            tell application "\(appName)"
-                if (count of windows) > 0 then
-                    return URL of current tab of front window
-                end if
-            end tell
-            return ""
-            """
-        case .arc, .chromiumBased:
-            script = """
-            tell application "\(appName)"
-                if (count of windows) > 0 then
-                    return URL of active tab of front window
-                end if
-            end tell
-            return ""
-            """
-        default:
-            return nil
-        }
-
-        return executeAppleScript(script, timeout: 2.5)
-    }
-
-    nonisolated private static func getBrowserURLAndTitle(bundleId: String) -> (url: String?, title: String?) {
-        let browserType = identifyBrowser(bundleId)
-        guard browserType != .notABrowser, browserType != .firefox else { return (nil, nil) }
-
-        let appName = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleId)
-            .flatMap { Bundle(url: $0)?.infoDictionary?["CFBundleName"] as? String }
-            ?? bundleId
-
-        let script: String
-        switch browserType {
-        case .safari:
-            script = """
-            tell application "\(appName)"
-                if (count of windows) > 0 then
-                    set tabURL to URL of current tab of front window
-                    set tabTitle to name of current tab of front window
-                    return tabURL & "\\n" & tabTitle
-                end if
-            end tell
-            return ""
-            """
-        case .arc, .chromiumBased:
-            script = """
-            tell application "\(appName)"
-                if (count of windows) > 0 then
-                    set tabURL to URL of active tab of front window
-                    set tabTitle to title of active tab of front window
-                    return tabURL & "\\n" & tabTitle
-                end if
-            end tell
-            return ""
-            """
-        default:
-            return (nil, nil)
-        }
-
-        guard let result = executeAppleScript(script, timeout: 2.5, validateURL: false) else { return (nil, nil) }
-        let parts = result.components(separatedBy: "\n")
-        let url = parts.first.flatMap { isValidURL($0) ? $0 : nil }
-        let title = parts.count > 1 ? parts.dropFirst().joined(separator: "\n") : nil
-        return (url, title?.isEmpty == true ? nil : title)
-    }
-
-    nonisolated private static func executeAppleScript(_ source: String, timeout: TimeInterval, validateURL: Bool = true) -> String? {
-        let resultState = OSAllocatedUnfairLock(initialState: Optional<String>.none)
-        let semaphore = DispatchSemaphore(value: 0)
-
-        DispatchQueue.global(qos: .userInitiated).async {
-            var error: NSDictionary?
-            let script = NSAppleScript(source: source)
-            let descriptor = script?.executeAndReturnError(&error)
-            if let errorDict = error {
-                logger.warning("NSAppleScript error: \(errorDict)")
-            }
-            if let stringValue = descriptor?.stringValue {
-                resultState.withLock { $0 = stringValue }
-            }
-            semaphore.signal()
-        }
-
-        let waitResult = semaphore.wait(timeout: .now() + timeout)
-        if waitResult == .timedOut {
-            logger.warning("NSAppleScript timed out after \(timeout)s")
-            return nil
-        }
-
-        guard let result = resultState.withLock({ $0 }), !result.isEmpty else { return nil }
-        if validateURL {
-            guard isValidURL(result) else { return nil }
-        }
-        return result
-    }
-
-    nonisolated private static func isValidURL(_ string: String) -> Bool {
-        let trimmed = string.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard trimmed.count > 3, trimmed.count < 2048 else { return false }
-        return trimmed.hasPrefix("http://") || trimmed.hasPrefix("https://") || trimmed.hasPrefix("file://")
+        let info = await browserURLResolver.activeBrowserInfo(for: bundleId)
+        return (info.url?.absoluteString, info.title)
     }
 
     /// Captures the selected text and the AXUIElement it belongs to.
@@ -557,7 +404,9 @@ final class TextInsertionService {
         let appName = activeApp.name
         let bundleId = activeApp.bundleId
         let isTerminalApp = bundleId.map { syntheticPastePreferredBundleIdentifiers.contains($0) } ?? false
-        let isFirefoxBasedBrowser = bundleId.map { Self.identifyBrowser($0) == .firefox } ?? false
+        let isFirefoxBasedBrowser = bundleId.map {
+            SupportedMeetingBrowser.reminderOnlyBundleIdentifiers.contains($0)
+        } ?? false
         let prefersSyntheticPaste = isTerminalApp || isFirefoxBasedBrowser
 
         logger.info(

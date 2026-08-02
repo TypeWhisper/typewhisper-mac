@@ -45,6 +45,7 @@ final class AudioRecorderViewModel: ObservableObject {
         case finalizing
         case retranscribing
         case notRecording
+        case calendarRecordingHandleMismatch
 
         var errorDescription: String? {
             switch self {
@@ -58,6 +59,8 @@ final class AudioRecorderViewModel: ObservableObject {
                 "Recorder is transcribing an existing recording"
             case .notRecording:
                 "Not recording"
+            case .calendarRecordingHandleMismatch:
+                "The calendar-started recording is no longer active."
             }
         }
     }
@@ -227,6 +230,7 @@ final class AudioRecorderViewModel: ObservableObject {
     private let livePreviewStartObserver: (() -> Void)?
     private var cancellables = Set<AnyCancellable>()
     private var currentOutputURL: URL?
+    private var activeCalendarMeetingHandle: CalendarMeetingRecordingHandle?
     private var activeRecorderAPISessionID: UUID?
     private var recorderAPISessions: [UUID: RecorderAPISessionSnapshot] = [:]
     private var transientTranscriptionFailures: [String: RecordingTranscriptionFailure] = [:]
@@ -450,7 +454,8 @@ final class AudioRecorderViewModel: ObservableObject {
                 _ = try await beginRecording(
                     micEnabled: micEnabled,
                     systemAudioEnabled: systemAudioEnabled,
-                    apiSessionID: nil
+                    apiSessionID: nil,
+                    preferredBaseName: nil
                 )
             } catch {
                 errorMessage = error.localizedDescription
@@ -466,7 +471,8 @@ final class AudioRecorderViewModel: ObservableObject {
     private func beginRecording(
         micEnabled requestedMicEnabled: Bool,
         systemAudioEnabled requestedSystemAudioEnabled: Bool,
-        apiSessionID: UUID?
+        apiSessionID: UUID?,
+        preferredBaseName: String?
     ) async throws -> URL {
         guard retranscribingRecordingURL == nil else {
             throw RecorderAPIError.retranscribing
@@ -500,7 +506,8 @@ final class AudioRecorderViewModel: ObservableObject {
                 micEnabled: requestedMicEnabled,
                 systemAudioEnabled: requestedSystemAudioEnabled,
                 format: outputFormat,
-                microphoneSelection: microphoneSelection
+                microphoneSelection: microphoneSelection,
+                preferredBaseName: preferredBaseName
             )
         } catch {
             if let selectionError = error as? SelectedInputDeviceError,
@@ -543,6 +550,7 @@ final class AudioRecorderViewModel: ObservableObject {
     }
 
     private func stopRecording(apiSessionID: UUID?) {
+        activeCalendarMeetingHandle = nil
         let recordingDuration = duration
         let shouldTranscribe = transcriptionEnabled
 
@@ -639,7 +647,8 @@ final class AudioRecorderViewModel: ObservableObject {
         _ = try await beginRecording(
             micEnabled: resolvedMicEnabled,
             systemAudioEnabled: resolvedSystemAudioEnabled,
-            apiSessionID: sessionID
+            apiSessionID: sessionID,
+            preferredBaseName: nil
         )
         return sessionID
     }
@@ -661,6 +670,39 @@ final class AudioRecorderViewModel: ObservableObject {
 
     func apiRecorderSession(id: UUID) -> RecorderAPISessionSnapshot? {
         recorderAPISessions[id]
+    }
+
+    // MARK: - Calendar Meeting Automation
+
+    func startCalendarMeetingRecording(
+        preferredBaseName: String
+    ) async throws -> CalendarMeetingRecordingHandle {
+        let outputURL = try await beginRecording(
+            micEnabled: micEnabled,
+            systemAudioEnabled: systemAudioEnabled,
+            apiSessionID: nil,
+            preferredBaseName: preferredBaseName
+        )
+        guard state == .recording else {
+            activeCalendarMeetingHandle = nil
+            throw RecorderAPIError.notRecording
+        }
+        let handle = CalendarMeetingRecordingHandle(id: UUID(), outputURL: outputURL)
+        activeCalendarMeetingHandle = handle
+        return handle
+    }
+
+    func stopCalendarMeetingRecording(
+        handle: CalendarMeetingRecordingHandle
+    ) throws {
+        guard state == .recording else {
+            activeCalendarMeetingHandle = nil
+            throw RecorderAPIError.notRecording
+        }
+        guard activeCalendarMeetingHandle == handle else {
+            throw RecorderAPIError.calendarRecordingHandleMismatch
+        }
+        stopRecording(apiSessionID: nil)
     }
 
     private func storeRecorderAPISession(_ session: RecorderAPISessionSnapshot) {

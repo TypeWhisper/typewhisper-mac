@@ -48,6 +48,7 @@ final class ServiceContainer: ObservableObject {
     let licenseService: LicenseService
     let premiumAccountService: PremiumAccountService
     let supporterDiscordService: SupporterDiscordService
+    let calendarMeetingAutomationController: CalendarMeetingAutomationController
 
     // HTTP API
     let httpServer: HTTPServer
@@ -206,6 +207,12 @@ final class ServiceContainer: ObservableObject {
             audioFileService: audioFileService,
             audioDeviceService: audioDeviceService
         )
+        calendarMeetingAutomationController = CalendarMeetingAutomationController(
+            licenseService: licenseService,
+            premiumAccountService: premiumAccountService,
+            recorderViewModel: audioRecorderViewModel,
+            dictationViewModel: dictationViewModel
+        )
 
 
         // HTTP API
@@ -295,6 +302,8 @@ final class ServiceContainer: ObservableObject {
 
     func initialize() async {
         guard !AppConstants.isRunningTests else { return }
+
+        calendarMeetingAutomationController.initialize()
 
         hotkeyService.setup()
         dictationViewModel.registerInitialTriggerHotkeys()

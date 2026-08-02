@@ -624,7 +624,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
             UserDefaultsKeys.updateChannel: AppConstants.defaultReleaseChannel.rawValue,
             UserDefaultsKeys.appFormattingEnabled: true,
             UserDefaultsKeys.transcriptionNumberNormalizationEnabled: true,
-            UserDefaultsKeys.targetAppCorrectionLearningEnabled: false
+            UserDefaultsKeys.targetAppCorrectionLearningEnabled: false,
+            UserDefaultsKeys.calendarMeetingStartMode: CalendarMeetingStartMode.off.rawValue,
+            UserDefaultsKeys.calendarMeetingAutoStopEnabled: false,
+            UserDefaultsKeys.calendarMeetingEnabledProviderIDs: MeetingProvider.allCases.map(\.rawValue),
+            UserDefaultsKeys.calendarMeetingSuppressedOccurrenceDigests: [String](),
+            UserDefaultsKeys.calendarMeetingNotificationsConfigured: false
         ])
     }
 
@@ -634,6 +639,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
         guard !AppConstants.isRunningTests else {
             return
         }
+
+        ServiceContainer.shared.calendarMeetingAutomationController
+            .installNotificationRouterIfNeeded()
 
         UpdateChecker.shared = updateChecker
         applyActivationPolicy()
@@ -713,6 +721,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
             queue: .main
         ) { _ in
             PluginHTTPClient.resetSharedSession(reason: "macOS wake")
+            Task { @MainActor in
+                ServiceContainer.shared.calendarMeetingAutomationController.handleWake()
+            }
         }
 
         // Observe settings window lifecycle
@@ -734,7 +745,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
 
     func applicationDidBecomeActive(_ notification: Notification) {
         guard !AppConstants.isRunningTests else { return }
+        ServiceContainer.shared.calendarMeetingAutomationController.handleApplicationBecameActive()
         Task { await ServiceContainer.shared.cloudFolderSyncController.syncNow() }
+    }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        guard !AppConstants.isRunningTests else { return }
+        ServiceContainer.shared.calendarMeetingAutomationController.shutdown()
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {

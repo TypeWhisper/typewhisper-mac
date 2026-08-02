@@ -75,6 +75,15 @@ enum UserDefaultsKeys {
     static let targetAppCorrectionLearningEnabled = "targetAppCorrectionLearningEnabled"
     static let targetAppCorrectionLearningLatestAttempt = "targetAppCorrectionLearningLatestAttempt"
 
+    // MARK: - Calendar Meeting Automation (machine-local; intentionally not synced/exported)
+    static let calendarMeetingStartMode = "calendarMeetingStartMode"
+    static let calendarMeetingAutoStopEnabled = "calendarMeetingAutoStopEnabled"
+    static let calendarMeetingSelectedCalendarIDs = "calendarMeetingSelectedCalendarIDs"
+    static let calendarMeetingCalendarSelectionInitialized = "calendarMeetingCalendarSelectionInitialized"
+    static let calendarMeetingEnabledProviderIDs = "calendarMeetingEnabledProviderIDs"
+    static let calendarMeetingSuppressedOccurrenceDigests = "calendarMeetingSuppressedOccurrenceDigests"
+    static let calendarMeetingNotificationsConfigured = "calendarMeetingNotificationsConfigured"
+
     // MARK: - History
     static let historyEnabled = "historyEnabled"
     static let historyRetentionDays = "historyRetentionDays"
