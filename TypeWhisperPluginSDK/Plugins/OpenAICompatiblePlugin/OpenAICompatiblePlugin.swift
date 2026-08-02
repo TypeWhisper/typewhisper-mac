@@ -339,7 +339,7 @@ final class OpenAICompatiblePlugin: NSObject,
 
     func setApiVersion(_ apiVersion: String, for profileId: String) {
         updateProfile(profileId) { profile in
-            profile.apiVersion = apiVersion.trimmingCharacters(in: .whitespacesAndNewlines)
+            profile.apiVersion = Self.normalizedAPIVersion(apiVersion)
         }
     }
 
@@ -694,7 +694,9 @@ final class OpenAICompatiblePlugin: NSObject,
         return [
             .defaultProfile(
                 baseURL: Self.normalizedBaseURL(host.userDefault(forKey: "baseURL") as? String ?? ""),
-                apiVersion: host.userDefault(forKey: "apiVersion") as? String ?? "",
+                apiVersion: Self.normalizedAPIVersion(
+                    host.userDefault(forKey: "apiVersion") as? String ?? ""
+                ),
                 selectedModelId: host.userDefault(forKey: "selectedModel") as? String ?? "",
                 selectedLLMModelId: host.userDefault(forKey: "selectedLLMModel") as? String ?? "",
                 llmTemperatureModeRaw: host.userDefault(forKey: "llmTemperatureMode") as? String
@@ -721,7 +723,7 @@ final class OpenAICompatiblePlugin: NSObject,
                 profile.name = profile.isDefault ? OpenAICompatibleProfile.defaultName : "Custom Server"
             }
             profile.baseURL = Self.normalizedBaseURL(profile.baseURL)
-            profile.apiVersion = profile.apiVersion.trimmingCharacters(in: .whitespacesAndNewlines)
+            profile.apiVersion = Self.normalizedAPIVersion(profile.apiVersion)
             seenIds.insert(profile.id)
             result.append(profile)
         }
@@ -730,7 +732,9 @@ final class OpenAICompatiblePlugin: NSObject,
             result.insert(
                 .defaultProfile(
                     baseURL: Self.normalizedBaseURL(host.userDefault(forKey: "baseURL") as? String ?? ""),
-                    apiVersion: host.userDefault(forKey: "apiVersion") as? String ?? "",
+                    apiVersion: Self.normalizedAPIVersion(
+                        host.userDefault(forKey: "apiVersion") as? String ?? ""
+                    ),
                     selectedModelId: host.userDefault(forKey: "selectedModel") as? String ?? "",
                     selectedLLMModelId: host.userDefault(forKey: "selectedLLMModel") as? String ?? ""
                 ),
@@ -1083,6 +1087,10 @@ final class OpenAICompatiblePlugin: NSObject,
         return components.string ?? trimmed
     }
 
+    private static func normalizedAPIVersion(_ apiVersion: String) -> String {
+        apiVersion.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
     private static func requestURL(baseURL: String, path: String, apiVersion: String) -> URL? {
         guard var components = URLComponents(string: baseURL) else { return nil }
         let basePath = components.percentEncodedPath.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
@@ -1091,7 +1099,7 @@ final class OpenAICompatiblePlugin: NSObject,
             .filter { !$0.isEmpty }
             .joined(separator: "/")
 
-        let trimmedVersion = apiVersion.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedVersion = normalizedAPIVersion(apiVersion)
         if !trimmedVersion.isEmpty {
             var queryItems = components.queryItems ?? []
             queryItems.removeAll { $0.name.caseInsensitiveCompare("api-version") == .orderedSame }

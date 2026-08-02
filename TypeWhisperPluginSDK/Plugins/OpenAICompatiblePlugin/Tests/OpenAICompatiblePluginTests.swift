@@ -46,7 +46,7 @@ final class OpenAICompatiblePluginTests: XCTestCase {
         let host = try PluginTestHostServices(
             defaults: [
                 "baseURL": "https://legacy.test/v1/",
-                "apiVersion": "preview",
+                "apiVersion": " preview\n",
                 "selectedModel": "whisper-legacy",
                 "selectedLLMModel": "chat-legacy",
                 "llmTemperatureMode": PluginLLMTemperatureMode.custom.rawValue,
@@ -73,6 +73,31 @@ final class OpenAICompatiblePluginTests: XCTestCase {
         XCTAssertEqual(profile.fetchedModels.map(\.id), ["legacy-model"])
         XCTAssertEqual(plugin.apiKey(for: profile.id), "legacy-token")
         XCTAssertNotNil(host.userDefault(forKey: "profiles") as? Data)
+    }
+
+    func testMissingDefaultProfileRestoresTrimmedLegacyAPIVersion() throws {
+        let savedProfiles = try JSONEncoder().encode([
+            OpenAICompatibleProfile(
+                id: "openai-compatible:custom",
+                name: "Custom Server",
+                baseURL: "https://custom.test",
+                apiVersion: "custom-version"
+            )
+        ])
+        let host = try PluginTestHostServices(
+            defaults: [
+                "profiles": savedProfiles,
+                "baseURL": "https://legacy.test/openai",
+                "apiVersion": " preview\n",
+            ]
+        )
+        let plugin = OpenAICompatiblePlugin()
+
+        plugin.activate(host: host)
+
+        let defaultProfile = try XCTUnwrap(plugin.profileSnapshot(for: plugin.providerId))
+        XCTAssertEqual(defaultProfile.apiVersion, "preview")
+        XCTAssertEqual(host.userDefault(forKey: "apiVersion") as? String, "preview")
     }
 
     func testSavedProfilesWithoutThinkingModeDecodeAsDisabled() throws {
