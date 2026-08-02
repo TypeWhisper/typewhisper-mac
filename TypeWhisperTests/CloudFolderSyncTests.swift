@@ -181,6 +181,69 @@ private final class PremiumAppleWebAuthenticator: AppleWebAuthenticating {
 }
 
 final class CloudFolderSyncTests: XCTestCase {
+    func testAutomaticICloudAvailabilityRequiresProvisionedSignedBuild() {
+        let container = "iCloud.com.typewhisper.sync.dev"
+        let infoDictionary: [String: Any] = [
+            "TypeWhisperICloudEnabled": "YES",
+            "TypeWhisperICloudContainer": container,
+        ]
+        let entitlements = [
+            "com.apple.developer.icloud-container-identifiers": [container],
+            "com.apple.developer.ubiquity-container-identifiers": [container],
+            "com.apple.developer.icloud-services": ["CloudDocuments"],
+        ]
+
+        XCTAssertTrue(TypeWhisperBuildCapabilities.isICloudSyncEnabled(
+            infoDictionary: infoDictionary,
+            hasProvisioningProfile: true,
+            entitlementValues: { entitlements[$0] }
+        ))
+        XCTAssertFalse(TypeWhisperBuildCapabilities.isICloudSyncEnabled(
+            infoDictionary: infoDictionary,
+            hasProvisioningProfile: false,
+            entitlementValues: { entitlements[$0] }
+        ))
+        XCTAssertFalse(TypeWhisperBuildCapabilities.isICloudSyncEnabled(
+            infoDictionary: ["TypeWhisperICloudContainer": container],
+            hasProvisioningProfile: true,
+            entitlementValues: { entitlements[$0] }
+        ))
+        XCTAssertFalse(TypeWhisperBuildCapabilities.isICloudSyncEnabled(
+            infoDictionary: [
+                "TypeWhisperICloudEnabled": "NO",
+                "TypeWhisperICloudContainer": container,
+            ],
+            hasProvisioningProfile: true,
+            entitlementValues: { entitlements[$0] }
+        ))
+        XCTAssertFalse(TypeWhisperBuildCapabilities.isICloudSyncEnabled(
+            infoDictionary: [
+                "TypeWhisperICloudEnabled": "YES",
+                "TypeWhisperICloudContainer": "$(ICLOUD_CONTAINER_ID)",
+            ],
+            hasProvisioningProfile: true,
+            entitlementValues: { entitlements[$0] }
+        ))
+        XCTAssertFalse(TypeWhisperBuildCapabilities.isICloudSyncEnabled(
+            infoDictionary: infoDictionary,
+            hasProvisioningProfile: true,
+            entitlementValues: { entitlement in
+                entitlement == "com.apple.developer.icloud-container-identifiers"
+                    ? ["iCloud.com.typewhisper.wrong"]
+                    : entitlements[entitlement]
+            }
+        ))
+        XCTAssertFalse(TypeWhisperBuildCapabilities.isICloudSyncEnabled(
+            infoDictionary: infoDictionary,
+            hasProvisioningProfile: true,
+            entitlementValues: { entitlement in
+                entitlement == "com.apple.developer.icloud-services"
+                    ? nil
+                    : entitlements[entitlement]
+            }
+        ))
+    }
+
     @MainActor
     func testPremiumAccountDefersStartupTokenReadOffMainThread() async throws {
         let suiteName = "PremiumStartupToken-\(UUID().uuidString)"
@@ -651,7 +714,8 @@ final class CloudFolderSyncTests: XCTestCase {
         let controller = CloudFolderSyncController(
             premiumAccountService: account,
             syncStore: store,
-            defaults: defaults
+            defaults: defaults,
+            automaticICloudAvailable: true
         )
         defer { controller.deactivate() }
 

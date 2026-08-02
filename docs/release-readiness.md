@@ -82,6 +82,46 @@ These surfaces remain part of `1.x`, but they are positioned as advanced or auto
 - `1.6.0-rc*` and daily builds are distributed as GitHub prereleases, appear in the shared Sparkle appcast only on their own channels, and do not update Homebrew.
 - The appcast entry for preview builds advertises `minimumSystemVersion` `14.0`.
 
+### Automatic iCloud release gate
+
+The production identity remains `com.typewhisper.mac`. Do not migrate the
+Sparkle app to another bundle identifier to enable automatic iCloud sync.
+Ask Apple Developer Support to release that existing explicit App ID from the
+previous or Personal Team so it can be registered unchanged in team
+`2D8ALY3LCL`. This is an ownership transfer or release request, not a request to
+rename the App ID. Keep `com.typewhisper.typewhisper-mac` registered but unused
+as a fallback while that request is open.
+
+Automatic iCloud is fail-closed in `release.yml`. Keep the repository variable
+`MACOS_ICLOUD_RELEASE_ENABLED` unset or `false` until all of the following are
+true:
+
+- Apple has released `com.typewhisper.mac` to team `2D8ALY3LCL`.
+- The App ID has the `iCloud.com.typewhisper.sync` container assigned.
+- `MACOS_DEVELOPER_ID_PROVISIONING_PROFILE` contains a current Developer ID
+  profile for `2D8ALY3LCL.com.typewhisper.mac`.
+- A local Developer ID build with that profile passes:
+
+  ```bash
+  scripts/build-release-local.sh \
+    --profile /absolute/path/to/TypeWhisper.provisionprofile \
+    --skip-dmg
+  ```
+
+Only then set `MACOS_ICLOUD_RELEASE_ENABLED=true`. The existing
+`MACOS_SCHEDULED_WITHOUT_ICLOUD=true` variable remains an emergency override
+for scheduled builds and must be removed or set to `false` before automatic
+iCloud can appear in a scheduled Daily.
+
+Until this gate opens, Sparkle releases remove the iCloud entitlements and
+embedded profile, declare `TypeWhisperICloudEnabled=NO`, and continue to expose
+Cloud Folder sync. After the gate opens, run the automatic mode on the Daily
+channel for at least 48 hours with three users before promoting it to Stable.
+Record the two-Mac automatic-iCloud test, the two-Mac Cloud Folder test using a
+selected iCloud Drive folder, and the Sparkle upgrade/persistence test in the
+release checklist issue. Do not treat simulated-device unit tests as real-Mac
+acceptance evidence.
+
 ## Manual Release Validation
 
 Manual, user-visible acceptance checks are tracked for each candidate in a
