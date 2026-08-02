@@ -563,6 +563,11 @@ final class OpenAICompatiblePlugin: NSObject,
         if let apiKey = apiKey(for: profileId), !apiKey.isEmpty {
             request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         }
+        if let apiKey = apiKey(for: profileId),
+           !apiKey.isEmpty,
+           Self.isAzureOpenAIEndpoint(request.url) {
+            request.setValue(apiKey, forHTTPHeaderField: "api-key")
+        }
         request.timeoutInterval = 10
 
         do {
@@ -598,6 +603,11 @@ final class OpenAICompatiblePlugin: NSObject,
         if let apiKey = apiKey(for: profileId), !apiKey.isEmpty {
             request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
         }
+        if let apiKey = apiKey(for: profileId),
+           !apiKey.isEmpty,
+           Self.isAzureOpenAIEndpoint(request.url) {
+            request.setValue(apiKey, forHTTPHeaderField: "api-key")
+        }
         request.timeoutInterval = 10
 
         do {
@@ -632,6 +642,11 @@ final class OpenAICompatiblePlugin: NSObject,
             return match.id
         }
         return trimmed
+    }
+
+    private nonisolated static func isAzureOpenAIEndpoint(_ url: URL?) -> Bool {
+        guard let host = url?.host?.lowercased() else { return false }
+        return host.hasSuffix(".openai.azure.com") || host.hasSuffix(".services.ai.azure.com")
     }
 
     private func providerTemperatureDirective(for profileId: String) -> PluginLLMTemperatureDirective {
@@ -883,6 +898,9 @@ final class OpenAICompatiblePlugin: NSObject,
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        if Self.isAzureOpenAIEndpoint(request.url), !apiKey.isEmpty {
+            request.setValue(apiKey, forHTTPHeaderField: "api-key")
+        }
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = requestTimeout
         request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
@@ -937,6 +955,9 @@ final class OpenAICompatiblePlugin: NSObject,
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("******", forHTTPHeaderField: "Authorization")
+        if Self.isAzureOpenAIEndpoint(request.url), !apiKey.isEmpty {
+            request.setValue(apiKey, forHTTPHeaderField: "api-key")
+        }
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = Self.transcriptionRequestTimeout
 

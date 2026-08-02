@@ -170,6 +170,7 @@ final class OpenAICompatiblePluginTests: XCTestCase {
             store.sessions[0].requestedRequests.first?.value(forHTTPHeaderField: "Authorization"),
             "Bearer secret-token"
         )
+        XCTAssertNil(store.sessions[0].requestedRequests.first?.value(forHTTPHeaderField: "api-key"))
     }
 
     func testValidateConnectionReturnsTrueForHTTP200() async throws {
@@ -348,6 +349,71 @@ final class OpenAICompatiblePluginTests: XCTestCase {
                     URLQueryItem(name: "api-version", value: "preview"),
                 ]
             )
+        }
+    }
+
+    func testAzureEndpointsSendAPIKeyHeaderAlongsideBearerAuthentication() async throws {
+        let host = try PluginTestHostServices(
+            defaults: [
+                "baseURL": "https://foundry-example.services.ai.azure.com/openai",
+                "selectedModel": "gpt-transcribe",
+                "selectedLLMModel": "gpt-chat",
+            ],
+            secrets: ["api-key": "azure-key"]
+        )
+        let plugin = OpenAICompatiblePlugin()
+        plugin.activate(host: host)
+        plugin.setApiVersion("preview", for: plugin.providerId)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"data":[{"id":"gpt-transcribe"}]}"#.utf8),
+                    Self.httpResponse(
+                        url: "https://foundry-example.services.ai.azure.com/openai/v1/models?api-version=preview",
+                        statusCode: 200
+                    )
+                ),
+                .success(
+                    Data(),
+                    Self.httpResponse(
+                        url: "https://foundry-example.services.ai.azure.com/openai/v1/models?api-version=preview",
+                        statusCode: 200
+                    )
+                ),
+                .success(
+                    Data(#"{"text":"transcribed"}"#.utf8),
+                    Self.httpResponse(
+                        url: "https://foundry-example.services.ai.azure.com/openai/v1/audio/transcriptions?api-version=preview",
+                        statusCode: 200
+                    )
+                ),
+                .success(
+                    Data(#"{"choices":[{"message":{"content":"completed"}}]}"#.utf8),
+                    Self.httpResponse(
+                        url: "https://foundry-example.services.ai.azure.com/openai/v1/chat/completions?api-version=preview",
+                        statusCode: 200
+                    )
+                ),
+            ])
+        }
+
+        _ = await plugin.fetchModels()
+        let isConnected = await plugin.validateConnection()
+        XCTAssertTrue(isConnected)
+        _ = try await plugin.transcribe(
+            audio: AudioData(samples: [0, 0, 0], wavData: Data("wav".utf8), duration: 1.0),
+            language: nil,
+            translate: false,
+            prompt: nil
+        )
+        _ = try await plugin.process(systemPrompt: "Fix", userText: "hello", model: nil)
+
+        XCTAssertEqual(store.sessions[0].requestedRequests.count, 4)
+        for request in store.sessions[0].requestedRequests {
+            XCTAssertNotNil(request.value(forHTTPHeaderField: "Authorization"))
+            XCTAssertEqual(request.value(forHTTPHeaderField: "api-key"), "azure-key")
         }
     }
 
