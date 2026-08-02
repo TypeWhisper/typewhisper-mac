@@ -104,17 +104,18 @@ final class PluginManifestValidationTests: XCTestCase {
     }
 
     func testMLXStoragePluginReleasesRequireHost16() throws {
-        let manifestPaths = [
-            "TypeWhisperPluginSDK/Plugins/Qwen3Plugin/manifest.json",
-            "TypeWhisperPluginSDK/Plugins/VoxtralPlugin/manifest.json",
-            "TypeWhisperPluginSDK/Plugins/GranitePlugin/manifest.json",
-            "TypeWhisperPluginSDK/Plugins/Gemma4Plugin/manifest.json",
+        let manifestExpectations = [
+            ("TypeWhisperPluginSDK/Plugins/Qwen3Plugin/manifest.json", "1.1.6"),
+            ("TypeWhisperPluginSDK/Plugins/VoxtralPlugin/manifest.json", "1.0.13"),
+            ("TypeWhisperPluginSDK/Plugins/GranitePlugin/manifest.json", "1.0.9"),
+            ("TypeWhisperPluginSDK/Plugins/Gemma4Plugin/manifest.json", "1.1.4"),
         ]
 
-        for relativePath in manifestPaths {
+        for (relativePath, expectedVersion) in manifestExpectations {
             let manifestURL = TestSupport.repoRoot.appendingPathComponent(relativePath)
             let data = try Data(contentsOf: manifestURL)
             let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
+            XCTAssertEqual(manifest.version, expectedVersion, relativePath)
             XCTAssertEqual(manifest.minHostVersion, "1.6.0", relativePath)
         }
     }
