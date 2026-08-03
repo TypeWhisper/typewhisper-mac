@@ -874,8 +874,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         switch registration.target {
         case let .meetingCountdown(registrationID):
             guard phase == .down,
-                  let countdownAction = meetingCountdownAction.withLock({ $0 }),
-                  countdownAction.id == registrationID,
+                  meetingCountdownAction.withLock({ $0?.id }) == registrationID,
                   shouldDispatch(
                       target: .meetingCountdown(registrationID),
                       phase: phase,
@@ -884,9 +883,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
                   ) else {
                 return
             }
-            Task { @MainActor in
-                countdownAction.action()
-            }
+            enqueueMeetingCountdownAction(registrationID: registrationID)
 
         case let .slot(slotType):
             guard !(dictationHotkeysPaused && slotType.startsDictation) else { return }
@@ -912,6 +909,19 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
                 behavior: behavior,
                 phase: phase
             )
+        }
+    }
+
+    @discardableResult
+    private func enqueueMeetingCountdownAction(
+        registrationID: UUID
+    ) -> Task<Void, Never> {
+        Task { @MainActor [weak self] in
+            guard let countdownAction = self?.meetingCountdownAction.withLock({ $0 }),
+                  countdownAction.id == registrationID else {
+                return
+            }
+            countdownAction.action()
         }
     }
 
@@ -1696,6 +1706,13 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
 
     func hasMeetingCountdownActionForTesting() -> Bool {
         meetingCountdownAction.withLock { $0 != nil }
+    }
+
+    func queueMeetingCountdownActionForTesting() -> Task<Void, Never>? {
+        guard let registrationID = meetingCountdownAction.withLock({ $0?.id }) else {
+            return nil
+        }
+        return enqueueMeetingCountdownAction(registrationID: registrationID)
     }
 
     func processCarbonHotkeyForTesting(

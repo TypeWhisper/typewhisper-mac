@@ -80,4 +80,33 @@ final class MeetingAutomationCountdownPanelTests: XCTestCase {
         XCTAssertFalse(hotkeyService.hasMeetingCountdownActionForTesting())
         XCTAssertEqual(startCancellations, 1)
     }
+
+    func testQueuedKeyboardShortcutCannotInvokeReplacementCountdown() async throws {
+        let hotkeyService = HotkeyService()
+        let presenter = MeetingAutomationCountdownPanelController(hotkeyService: hotkeyService)
+        var startCancellations = 0
+        var stopVetos = 0
+        defer { presenter.dismiss() }
+
+        presenter.showStart(
+            title: "Planning",
+            deadline: Date().addingTimeInterval(5),
+            onCancel: { startCancellations += 1 }
+        )
+        let queuedAction = try XCTUnwrap(
+            hotkeyService.queueMeetingCountdownActionForTesting()
+        )
+
+        presenter.showStop(
+            deadline: Date().addingTimeInterval(15),
+            onContinue: { stopVetos += 1 }
+        )
+        await queuedAction.value
+
+        XCTAssertEqual(startCancellations, 0)
+        XCTAssertEqual(stopVetos, 0)
+
+        hotkeyService.performMeetingCountdownActionForTesting()
+        XCTAssertEqual(stopVetos, 1)
+    }
 }
