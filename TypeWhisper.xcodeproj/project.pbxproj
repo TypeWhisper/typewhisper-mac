@@ -298,6 +298,7 @@
 		AA00000000000000000183 /* PromptPaletteHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000173 /* PromptPaletteHandler.swift */; };
 		AA00000000000000000184 /* DictationSettingsHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000174 /* DictationSettingsHandler.swift */; };
 		AA00000000000000000185 /* OpenAICompatiblePlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000176 /* OpenAICompatiblePlugin.swift */; };
+		A1B2C3D4E5F60718293A4B5C /* OpenAIRealtimeTranscription.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1E2F3A4B5C60718293A4B5C /* OpenAIRealtimeTranscription.swift */; };
 		AA00000000000000000186 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000177 /* manifest.json */; };
 		AA00000000000000000187 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000178 /* Localizable.xcstrings */; };
 		AA00000000000000000188 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000019 /* TypeWhisperPluginSDK */; };
@@ -779,6 +780,7 @@
 		BB00000000000000000174 /* DictationSettingsHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationSettingsHandler.swift; sourceTree = "<group>"; };
 		BB00000000000000000175 /* OpenAICompatiblePlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = OpenAICompatiblePlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB00000000000000000176 /* OpenAICompatiblePlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAICompatiblePlugin.swift; sourceTree = "<group>"; };
+		D1E2F3A4B5C60718293A4B5C /* OpenAIRealtimeTranscription.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OpenAIRealtimeTranscription.swift; sourceTree = "<group>"; };
 		BB00000000000000000177 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		BB00000000000000000178 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		BB00000000000000000179 /* WidgetData.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WidgetData.swift; sourceTree = "<group>"; };
@@ -1933,6 +1935,7 @@
 			isa = PBXGroup;
 			children = (
 				BB00000000000000000176 /* OpenAICompatiblePlugin.swift */,
+				D1E2F3A4B5C60718293A4B5C /* OpenAIRealtimeTranscription.swift */,
 				BB00000000000000000177 /* manifest.json */,
 				BB00000000000000000178 /* Localizable.xcstrings */,
 			);
@@ -4336,6 +4339,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA00000000000000000185 /* OpenAICompatiblePlugin.swift in Sources */,
+				A1B2C3D4E5F60718293A4B5C /* OpenAIRealtimeTranscription.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

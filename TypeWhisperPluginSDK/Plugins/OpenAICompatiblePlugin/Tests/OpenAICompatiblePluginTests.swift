@@ -305,7 +305,7 @@ final class OpenAICompatiblePluginTests: XCTestCase {
         let host = try PluginTestHostServices(
             defaults: [
                 "baseURL": "https://example.test/openai?tenant=contoso",
-                "selectedModel": "gpt-live-transcribe",
+                "selectedModel": "gpt-transcribe",
                 "selectedLLMModel": "gpt-chat",
             ]
         )
@@ -1143,7 +1143,73 @@ final class OpenAICompatiblePluginTests: XCTestCase {
         }
     }
 
-    // MARK: - Realtime Session Configuration Payload (shared SDK types)
+    func testRegularTranscriptionStreamsRealtimeAudioWithoutLivePreview() async throws {
+        let host = try PluginTestHostServices(
+            defaults: [
+                "baseURL": "https://example.test",
+                "selectedModel": "gpt-live-transcribe",
+            ]
+        )
+        let plugin = OpenAICompatiblePlugin()
+        plugin.activate(host: host)
+        let session = RealtimeSessionSpy(
+            result: PluginTranscriptionResult(text: "Direct realtime result", detectedLanguage: "en")
+        )
+        let connector = RealtimeSessionConnectorSpy(session: session)
+        plugin.realtimeSessionConnector = connector
+        let samples = Array(repeating: Float(0.25), count: 16_001)
+
+        let result = try await plugin.transcribe(
+            audio: AudioData(
+                samples: samples,
+                wavData: PluginWavEncoder.encode(samples),
+                duration: Double(samples.count) / 16_000
+            ),
+            language: "en",
+            translate: false,
+            prompt: "Direct transcription"
+        )
+
+        let recordedConnection = await connector.snapshot()
+        let connection = try XCTUnwrap(recordedConnection)
+        let sessionSnapshot = await session.snapshot()
+        XCTAssertEqual(connection.request.url?.path, "/v1/realtime")
+        XCTAssertEqual(connection.configuration.modelID, "gpt-live-transcribe")
+        XCTAssertEqual(connection.configuration.languageSelection.requestedLanguage, "en")
+        XCTAssertEqual(connection.configuration.prompt, "Direct transcription")
+        XCTAssertEqual(sessionSnapshot.chunkSizes, [16_000, 1])
+        XCTAssertEqual(sessionSnapshot.samples, samples)
+        XCTAssertEqual(sessionSnapshot.finishCount, 1)
+        XCTAssertEqual(sessionSnapshot.cancelCount, 0)
+        XCTAssertEqual(result.text, "Direct realtime result")
+    }
+
+    func testRealtimeHelperIsCompiledIntoPluginModule() {
+        XCTAssertTrue(
+            String(reflecting: PluginOpenAIRealtimeTranscriptionSession.self)
+                .hasPrefix("OpenAICompatiblePlugin.")
+        )
+    }
+
+    func testTransportSettingsHaveGermanAndJapaneseLocalizations() throws {
+        let catalogURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Localizable.xcstrings")
+        let catalogData = try Data(contentsOf: catalogURL)
+        let catalog = try XCTUnwrap(JSONSerialization.jsonObject(with: catalogData) as? [String: Any])
+        let strings = try XCTUnwrap(catalog["strings"] as? [String: Any])
+        let helpText = "Auto uses realtime streaming only for known realtime model IDs (gpt-live-transcribe, gpt-realtime-whisper) and batch upload otherwise. Choose Realtime to force streaming for any OpenAI-compatible server that supports the /v1/realtime WebSocket API, including custom deployment aliases (e.g. an Azure OpenAI or Microsoft Foundry gpt-live-transcribe deployment) — some providers, including Azure, require a preview API version for realtime transcription. Choose Batch to always use /v1/audio/transcriptions."
+
+        for key in ["Transcription Transport", "Auto", "Batch", "Realtime", helpText] {
+            let entry = try XCTUnwrap(strings[key] as? [String: Any], "Missing localization key: \(key)")
+            let localizations = try XCTUnwrap(entry["localizations"] as? [String: Any])
+            XCTAssertNotNil(localizations["de"], "Missing German localization for \(key)")
+            XCTAssertNotNil(localizations["ja"], "Missing Japanese localization for \(key)")
+        }
+    }
+
+    // MARK: - Realtime Session Configuration Payload
 
     func testContextAwareRealtimeSessionPayloadIncludesLanguagesKeywordsAndDelay() throws {
         let configuration = PluginOpenAIRealtimeTranscriptionConfiguration(
@@ -1252,6 +1318,73 @@ final class OpenAICompatiblePluginTests: XCTestCase {
             XCTFail("Expected cancellation")
         } catch is CancellationError {
             // Expected.
+        }
+    }
+
+    private actor RealtimeSessionConnectorSpy: OpenAICompatibleRealtimeSessionConnecting {
+        struct Connection: Sendable {
+            let request: URLRequest
+            let configuration: PluginOpenAIRealtimeTranscriptionConfiguration
+        }
+
+        private let session: any LiveTranscriptionSession
+        private var connection: Connection?
+
+        init(session: any LiveTranscriptionSession) {
+            self.session = session
+        }
+
+        func connect(
+            request: URLRequest,
+            configuration: PluginOpenAIRealtimeTranscriptionConfiguration,
+            onProgress: @Sendable @escaping (String) -> Bool
+        ) async throws -> any LiveTranscriptionSession {
+            connection = Connection(request: request, configuration: configuration)
+            return session
+        }
+
+        func snapshot() -> Connection? {
+            connection
+        }
+    }
+
+    private actor RealtimeSessionSpy: LiveTranscriptionSession {
+        struct Snapshot: Sendable {
+            let samples: [Float]
+            let chunkSizes: [Int]
+            let finishCount: Int
+            let cancelCount: Int
+        }
+
+        private let result: PluginTranscriptionResult
+        private var chunks: [[Float]] = []
+        private var finishCount = 0
+        private var cancelCount = 0
+
+        init(result: PluginTranscriptionResult) {
+            self.result = result
+        }
+
+        func appendAudio(samples: [Float]) async throws {
+            chunks.append(samples)
+        }
+
+        func finish() async throws -> PluginTranscriptionResult {
+            finishCount += 1
+            return result
+        }
+
+        func cancel() async {
+            cancelCount += 1
+        }
+
+        func snapshot() -> Snapshot {
+            Snapshot(
+                samples: chunks.flatMap { $0 },
+                chunkSizes: chunks.map(\.count),
+                finishCount: finishCount,
+                cancelCount: cancelCount
+            )
         }
     }
 }

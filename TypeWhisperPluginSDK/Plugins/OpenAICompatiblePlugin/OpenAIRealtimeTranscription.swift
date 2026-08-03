@@ -1,5 +1,6 @@
 import Foundation
 import os
+import TypeWhisperPluginSDK
 
 // MARK: - Shared OpenAI-Compatible Realtime Transcription
 
@@ -326,33 +327,43 @@ public final class PluginOpenAIRealtimeTranscriptionSession: LiveTranscriptionSe
         let urlSession = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
         let webSocketTask = urlSession.webSocketTask(with: request)
         let collector = PluginOpenAIRealtimeTranscriptCollector()
-
-        webSocketTask.resume()
-        try await waitForSocketOpen(openWaiter)
-
-        let receiveTask = Task { [webSocketTask, collector, onProgress] in
-            do {
-                while !Task.isCancelled {
-                    let message = try await webSocketTask.receive()
-                    guard let data = Self.data(from: message) else { continue }
-                    if let text = try await collector.applyEvent(data), !text.isEmpty {
-                        _ = onProgress(text)
-                    }
-                }
-            } catch is CancellationError {
-                return
-            } catch {
-                await collector.recordConnectionFailure(realtimeErrorDescription(error))
-            }
-        }
+        var receiveTask: Task<Void, Never>?
 
         do {
+            webSocketTask.resume()
+            try await waitForSocketOpen(openWaiter)
+
+            receiveTask = Task { [webSocketTask, collector, onProgress] in
+                do {
+                    while !Task.isCancelled {
+                        let message = try await webSocketTask.receive()
+                        guard let data = Self.data(from: message) else { continue }
+                        if let text = try await collector.applyEvent(data), !text.isEmpty {
+                            _ = onProgress(text)
+                        }
+                    }
+                } catch is CancellationError {
+                    return
+                } catch {
+                    await collector.recordConnectionFailure(realtimeErrorDescription(error))
+                }
+            }
+
             try await webSocketTask.send(
                 .string(try jsonString(sessionUpdatePayload(configuration: configuration)))
             )
             try await waitForSessionReady(collector)
+
+            return PluginOpenAIRealtimeTranscriptionSession(
+                urlSession: urlSession,
+                webSocketTask: webSocketTask,
+                receiveTask: receiveTask,
+                collector: collector,
+                language: configuration.fallbackLanguage,
+                onProgress: onProgress
+            )
         } catch {
-            receiveTask.cancel()
+            receiveTask?.cancel()
             webSocketTask.cancel(with: .goingAway, reason: nil)
             urlSession.finishTasksAndInvalidate()
             if let collectorError = await collector.error {
@@ -360,15 +371,6 @@ public final class PluginOpenAIRealtimeTranscriptionSession: LiveTranscriptionSe
             }
             throw error
         }
-
-        return PluginOpenAIRealtimeTranscriptionSession(
-            urlSession: urlSession,
-            webSocketTask: webSocketTask,
-            receiveTask: receiveTask,
-            collector: collector,
-            language: configuration.fallbackLanguage,
-            onProgress: onProgress
-        )
     }
 
     private static func waitForSessionReady(_ collector: PluginOpenAIRealtimeTranscriptCollector) async throws {

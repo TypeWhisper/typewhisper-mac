@@ -2,6 +2,28 @@ import Foundation
 import SwiftUI
 import TypeWhisperPluginSDK
 
+protocol OpenAICompatibleRealtimeSessionConnecting: Sendable {
+    func connect(
+        request: URLRequest,
+        configuration: PluginOpenAIRealtimeTranscriptionConfiguration,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> any LiveTranscriptionSession
+}
+
+private struct DefaultOpenAICompatibleRealtimeSessionConnector: OpenAICompatibleRealtimeSessionConnecting {
+    func connect(
+        request: URLRequest,
+        configuration: PluginOpenAIRealtimeTranscriptionConfiguration,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> any LiveTranscriptionSession {
+        try await PluginOpenAIRealtimeTranscriptionSession.connect(
+            request: request,
+            configuration: configuration,
+            onProgress: onProgress
+        )
+    }
+}
+
 // MARK: - Transcription Transport
 
 /// Per-profile transport selection for transcription requests.
@@ -233,6 +255,9 @@ final class OpenAICompatiblePlugin: NSObject,
     private static let profilesKey = "profiles"
     private static let legacyProviderName = "OpenAI Compatible"
     private static let transcriptionRequestTimeout: TimeInterval = 600
+    private static let realtimeAudioChunkSampleCount = 16_000
+    var realtimeSessionConnector: any OpenAICompatibleRealtimeSessionConnecting =
+        DefaultOpenAICompatibleRealtimeSessionConnector()
 
     required override init() {
         super.init()
@@ -640,8 +665,7 @@ final class OpenAICompatiblePlugin: NSObject,
         prompt: String?,
         profileId: String
     ) async throws -> PluginTranscriptionResult {
-        guard let profile = profile(for: profileId),
-              let helper = makeTranscriptionHelper(for: profile) else {
+        guard let profile = profile(for: profileId), !profile.baseURL.isEmpty else {
             throw PluginTranscriptionError.notConfigured
         }
         let modelId = profile.selectedModelId.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -649,6 +673,34 @@ final class OpenAICompatiblePlugin: NSObject,
             throw PluginTranscriptionError.noModelSelected
         }
 
+        if profile.resolvedTranscriptionTransport() == .realtime {
+            let session = try await createLiveTranscriptionSession(
+                languageSelection: PluginLanguageSelection(requestedLanguage: language),
+                translate: translate,
+                prompt: prompt,
+                dictionaryTermHints: [],
+                onProgress: { _ in true },
+                profileId: profileId
+            )
+            do {
+                for startIndex in stride(
+                    from: audio.samples.startIndex,
+                    to: audio.samples.endIndex,
+                    by: Self.realtimeAudioChunkSampleCount
+                ) {
+                    let endIndex = min(startIndex + Self.realtimeAudioChunkSampleCount, audio.samples.endIndex)
+                    try await session.appendAudio(samples: Array(audio.samples[startIndex..<endIndex]))
+                }
+                return try await session.finish()
+            } catch {
+                await session.cancel()
+                throw error
+            }
+        }
+
+        guard let helper = makeTranscriptionHelper(for: profile) else {
+            throw PluginTranscriptionError.notConfigured
+        }
         let apiKey = apiKey(for: profileId) ?? ""
         if profile.apiVersion.isEmpty {
             return try await helper.transcribeCompressedAudioWithWavFallback(
@@ -752,7 +804,7 @@ final class OpenAICompatiblePlugin: NSObject,
             usesContextAwareHints: usesContextAwareHints
         )
 
-        return try await PluginOpenAIRealtimeTranscriptionSession.connect(
+        return try await realtimeSessionConnector.connect(
             request: request,
             configuration: configuration,
             onProgress: onProgress

@@ -49,6 +49,38 @@
         }
       }
     },
+    "Auto": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatisch"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自動"
+          }
+        }
+      }
+    },
+    "Auto uses realtime streaming only for known realtime model IDs (gpt-live-transcribe, gpt-realtime-whisper) and batch upload otherwise. Choose Realtime to force streaming for any OpenAI-compatible server that supports the /v1/realtime WebSocket API, including custom deployment aliases (e.g. an Azure OpenAI or Microsoft Foundry gpt-live-transcribe deployment) — some providers, including Azure, require a preview API version for realtime transcription. Choose Batch to always use /v1/audio/transcriptions.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatisch verwendet Echtzeit-Streaming nur für bekannte Echtzeit-Modell-IDs (gpt-live-transcribe, gpt-realtime-whisper) und ansonsten den Batch-Upload. Wählen Sie Echtzeit, um Streaming für jeden OpenAI-kompatiblen Server zu erzwingen, der die WebSocket-API /v1/realtime unterstützt, einschließlich benutzerdefinierter Bereitstellungsaliase (z. B. eine gpt-live-transcribe-Bereitstellung in Azure OpenAI oder Microsoft Foundry). Einige Anbieter, darunter Azure, erfordern für die Echtzeittranskription eine Vorschau-API-Version. Wählen Sie Batch, um immer /v1/audio/transcriptions zu verwenden."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自動では、既知のリアルタイムモデル ID（gpt-live-transcribe、gpt-realtime-whisper）のみリアルタイムストリーミングを使用し、それ以外はバッチアップロードを使用します。/v1/realtime WebSocket API をサポートする任意の OpenAI 互換サーバーでストリーミングを強制するには、リアルタイムを選択します。これには、カスタムデプロイ名（Azure OpenAI または Microsoft Foundry の gpt-live-transcribe デプロイなど）も含まれます。Azure など一部のプロバイダーでは、リアルタイム文字起こしにプレビュー API バージョンが必要です。常に /v1/audio/transcriptions を使用するには、バッチを選択します。"
+          }
+        }
+      }
+    },
     "Azure OpenAI and Microsoft Foundry may require an API version such as preview for audio transcription. Leave blank for standard OpenAI-compatible servers.": {
       "localizations": {
         "de": {
@@ -61,6 +93,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "Azure OpenAI および Microsoft Foundry では、音声文字起こしに preview などの API バージョンが必要な場合があります。標準の OpenAI 互換サーバーでは空欄のままにしてください。"
+          }
+        }
+      }
+    },
+    "Batch": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Batch"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "バッチ"
           }
         }
       }
@@ -279,6 +327,22 @@
         }
       }
     },
+    "Realtime": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Echtzeit"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "リアルタイム"
+          }
+        }
+      }
+    },
     "Remove": {
       "localizations": {
         "de": {
@@ -403,6 +467,22 @@
           "stringUnit": {
             "state": "translated",
             "value": "音声認識モデル"
+          }
+        }
+      }
+    },
+    "Transcription Transport": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkriptionsmodus"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文字起こし方式"
           }
         }
       }
