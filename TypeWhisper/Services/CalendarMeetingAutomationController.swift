@@ -72,6 +72,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
     private var refreshTask: Task<Void, Never>?
     private var horizonRefreshTask: Task<Void, Never>?
     private var eventChangesTask: Task<Void, Never>?
+    private var eventChangesSessionID: UUID?
     private var collectorTask: Task<Void, Never>?
     private var collectorSessionID: UUID?
     private var collectorShouldBeRunning = false
@@ -312,15 +313,27 @@ final class CalendarMeetingAutomationController: ObservableObject {
     }
 
     func shutdown() {
+        cancellables.removeAll()
+        initialized = false
         refreshTask?.cancel()
+        refreshTask = nil
+        refreshGeneration += 1
         horizonRefreshTask?.cancel()
+        horizonRefreshTask = nil
         eventChangesTask?.cancel()
+        eventChangesTask = nil
+        eventChangesSessionID = nil
         collectorTask?.cancel()
+        collectorTask = nil
         collectorSessionID = nil
         collectorShouldBeRunning = false
+        activityGeneration += 1
         policyTimerTask?.cancel()
+        policyTimerTask = nil
         recordingStartTask?.cancel()
+        recordingStartTask = nil
         notificationTask?.cancel()
+        notificationTask = nil
         invalidatePendingRecordingStart()
         countdownPresenter?.dismiss()
         if let audioCollector {
@@ -1007,13 +1020,19 @@ final class CalendarMeetingAutomationController: ObservableObject {
         provider: any CalendarMeetingEventProviding
     ) {
         guard eventChangesTask == nil else { return }
+        let sessionID = UUID()
+        eventChangesSessionID = sessionID
         eventChangesTask = Task { @MainActor [weak self] in
             let stream = await provider.changes()
             for await _ in stream {
-                guard !Task.isCancelled, let self else { break }
+                guard !Task.isCancelled,
+                      let self,
+                      self.eventChangesSessionID == sessionID else { break }
                 self.requestRefresh()
             }
-            self?.eventChangesTask = nil
+            guard let self, self.eventChangesSessionID == sessionID else { return }
+            self.eventChangesTask = nil
+            self.eventChangesSessionID = nil
         }
     }
 
@@ -1048,6 +1067,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
         horizonRefreshTask = nil
         eventChangesTask?.cancel()
         eventChangesTask = nil
+        eventChangesSessionID = nil
         eventProvider = nil
         browserResolver = nil
         collectorShouldBeRunning = false

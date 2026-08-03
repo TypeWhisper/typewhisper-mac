@@ -6,6 +6,32 @@ private let browserURLResolverLogger = Logger(
     subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper",
     category: "BrowserURLResolver"
 )
+private let browserURLResolutionQueue = DispatchQueue(
+    label: "com.typewhisper.browser-url-resolution",
+    qos: .utility
+)
+
+private final class BrowserResolutionCompletion: @unchecked Sendable {
+    private struct State {
+        var continuation: CheckedContinuation<BrowserResolution, Never>?
+    }
+
+    private let state: OSAllocatedUnfairLock<State>
+
+    init(continuation: CheckedContinuation<BrowserResolution, Never>) {
+        state = OSAllocatedUnfairLock(initialState: State(continuation: continuation))
+    }
+
+    @discardableResult
+    func resume(returning resolution: BrowserResolution) -> Bool {
+        let continuation = state.withLock { state -> CheckedContinuation<BrowserResolution, Never>? in
+            defer { state.continuation = nil }
+            return state.continuation
+        }
+        continuation?.resume(returning: resolution)
+        return continuation != nil
+    }
+}
 
 struct BrowserResolution: Equatable, Sendable {
     let url: URL?
@@ -24,17 +50,29 @@ final class BrowserURLResolver: BrowserURLResolving, @unchecked Sendable {
     }
 
     func activeURL(for bundleIdentifier: String) async -> URL? {
-        let resolutionProvider = resolutionProvider
-        return await Task.detached(priority: .utility) {
-            resolutionProvider(bundleIdentifier, false).url
-        }.value
+        await resolve(bundleIdentifier: bundleIdentifier, includeTitle: false).url
     }
 
     func activeBrowserInfo(for bundleIdentifier: String) async -> BrowserResolution {
+        await resolve(bundleIdentifier: bundleIdentifier, includeTitle: true)
+    }
+
+    private func resolve(
+        bundleIdentifier: String,
+        includeTitle: Bool
+    ) async -> BrowserResolution {
         let resolutionProvider = resolutionProvider
-        return await Task.detached(priority: .utility) {
-            resolutionProvider(bundleIdentifier, true)
-        }.value
+        return await withCheckedContinuation { continuation in
+            let completion = BrowserResolutionCompletion(continuation: continuation)
+            browserURLResolutionQueue.async {
+                completion.resume(returning: resolutionProvider(bundleIdentifier, includeTitle))
+            }
+            DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2.5) {
+                if completion.resume(returning: BrowserResolution(url: nil, title: nil)) {
+                    browserURLResolverLogger.warning("Browser URL AppleScript timed out")
+                }
+            }
+        }
     }
 
     private enum BrowserType {
@@ -46,9 +84,6 @@ final class BrowserURLResolver: BrowserURLResolving, @unchecked Sendable {
     }
 
     nonisolated private static func identifyBrowser(_ bundleIdentifier: String) -> BrowserType {
-        if bundleIdentifier.lowercased().contains("wavebox") {
-            return .chromiumBased
-        }
         if SupportedMeetingBrowser.reminderOnlyBundleIdentifiers.contains(bundleIdentifier) {
             return .unsupportedURLBrowser
         }
@@ -63,7 +98,8 @@ final class BrowserURLResolver: BrowserURLResolving, @unchecked Sendable {
              SupportedMeetingBrowser.edge,
              SupportedMeetingBrowser.opera,
              SupportedMeetingBrowser.vivaldi,
-             SupportedMeetingBrowser.chromium:
+             SupportedMeetingBrowser.chromium,
+             SupportedMeetingBrowser.wavebox:
             return .chromiumBased
         default:
             return .notABrowser
@@ -88,7 +124,7 @@ final class BrowserURLResolver: BrowserURLResolving, @unchecked Sendable {
             includeTitle: includeTitle
         )
         guard let script,
-              let result = executeAppleScript(script, timeout: 2.5) else {
+              let result = executeAppleScript(script) else {
             return BrowserResolution(url: nil, title: nil)
         }
 
@@ -145,30 +181,13 @@ final class BrowserURLResolver: BrowserURLResolving, @unchecked Sendable {
         """
     }
 
-    nonisolated private static func executeAppleScript(
-        _ source: String,
-        timeout: TimeInterval
-    ) -> String? {
-        let resultState = OSAllocatedUnfairLock(initialState: Optional<String>.none)
-        let semaphore = DispatchSemaphore(value: 0)
-
-        DispatchQueue.global(qos: .utility).async {
-            var error: NSDictionary?
-            let descriptor = NSAppleScript(source: source)?.executeAndReturnError(&error)
-            if error != nil {
-                browserURLResolverLogger.warning("Browser URL AppleScript failed")
-            }
-            if let value = descriptor?.stringValue {
-                resultState.withLock { $0 = value }
-            }
-            semaphore.signal()
+    nonisolated private static func executeAppleScript(_ source: String) -> String? {
+        var error: NSDictionary?
+        let descriptor = NSAppleScript(source: source)?.executeAndReturnError(&error)
+        if error != nil {
+            browserURLResolverLogger.warning("Browser URL AppleScript failed")
         }
-
-        guard semaphore.wait(timeout: .now() + timeout) == .success else {
-            browserURLResolverLogger.warning("Browser URL AppleScript timed out")
-            return nil
-        }
-        return resultState.withLock { $0?.nilIfEmpty }
+        return descriptor?.stringValue?.nilIfEmpty
     }
 
     nonisolated private static func validURL(_ value: String) -> URL? {

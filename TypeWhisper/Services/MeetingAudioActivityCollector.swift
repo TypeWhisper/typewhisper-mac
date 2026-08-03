@@ -164,7 +164,9 @@ private final class CoreAudioMeetingProcessClient: MeetingAudioProcessClient, @u
                 bytes.baseAddress!
             )
         }
-        return status == noErr ? values : nil
+        guard status == noErr else { return nil }
+        let returnedCount = min(values.count, Int(byteCount) / MemoryLayout<AudioObjectID>.size)
+        return Array(values.prefix(returnedCount))
     }
 
     private func readProcess(objectID: AudioObjectID) -> MeetingAudioProcess? {
@@ -353,7 +355,8 @@ private func makeMeetingAudioPropertyListenerBlock(
 private func makeMeetingAudioCollectorChangeHandler(
     _ collector: MeetingAudioActivityCollector
 ) -> @Sendable (Bool) -> Void {
-    { requiresRebuild in
+    { [weak collector] requiresRebuild in
+        guard let collector else { return }
         Task {
             await collector.audioPropertiesDidChange(requiresRebuild: requiresRebuild)
         }
@@ -371,6 +374,10 @@ actor MeetingAudioActivityCollector: MeetingAudioActivityCollecting {
 
     init(client: any MeetingAudioProcessClient) {
         self.client = client
+    }
+
+    deinit {
+        client.stop()
     }
 
     func startCollecting() -> AsyncStream<MeetingActivitySnapshot> {

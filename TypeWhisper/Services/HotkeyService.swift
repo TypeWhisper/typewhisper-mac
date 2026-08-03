@@ -158,6 +158,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     private struct HotkeyDispatchKey: Hashable {
         enum Target: Hashable {
             case cancel
+            case meetingCountdown(UUID)
             case slot(HotkeySlotType)
             case profile(UUID)
             case workflow(UUID)
@@ -170,6 +171,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
 
     private struct CarbonHotkeyRegistration {
         enum Target {
+            case meetingCountdown(UUID)
             case slot(HotkeySlotType)
             case profile(UUID)
             case workflow(UUID, WorkflowHotkeyBehavior)
@@ -241,6 +243,11 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     private static let monitorDedupWindow: TimeInterval = 0.12
     private static let escapeKeyCode: UInt16 = 0x35
     private static let escapeHotkey = UnifiedHotkey(keyCode: escapeKeyCode, modifierFlags: 0, isFn: false)
+    private static let meetingCountdownHotkey = UnifiedHotkey(
+        keyCode: 0x2F,
+        modifierFlags: NSEvent.ModifierFlags.command.rawValue,
+        isFn: false
+    )
     private static let capsLockKeyCode: UInt16 = 0x39
     private static let capsLockSuppressionWindow: TimeInterval = 0.25
     private static let carbonHotkeySignature: OSType = "tywh".utf16.reduce(0) { ($0 << 8) + OSType($1) }
@@ -330,6 +337,15 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
 
     private var workflowSlots: [UUID: [WorkflowHotkeyState]] = [:]
 
+    private struct MeetingCountdownActionRegistration: Sendable {
+        let id: UUID
+        let action: @MainActor @Sendable () -> Void
+    }
+
+    private let meetingCountdownAction = OSAllocatedUnfairLock<MeetingCountdownActionRegistration?>(
+        initialState: nil
+    )
+
     private var globalMonitor: Any?
     private var localMonitor: Any?
     private var eventTap: CFMachPort?
@@ -362,6 +378,27 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     func setup() {
         loadHotkeys()
         setupMonitor()
+    }
+
+    func registerMeetingCountdownAction(
+        id: UUID,
+        action: @escaping @MainActor @Sendable () -> Void
+    ) {
+        meetingCountdownAction.withLock {
+            $0 = MeetingCountdownActionRegistration(id: id, action: action)
+        }
+        installCarbonHotkeys()
+    }
+
+    func unregisterMeetingCountdownAction(id: UUID) {
+        let removed = meetingCountdownAction.withLock { registration -> Bool in
+            guard registration?.id == id else { return false }
+            registration = nil
+            return true
+        }
+        if removed {
+            installCarbonHotkeys()
+        }
     }
 
     func hotkeys(for slotType: HotkeySlotType) -> [UnifiedHotkey] {
@@ -687,6 +724,14 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         tearDownCarbonHotkeys()
 
         var nextId: UInt32 = 1
+        if let registration = meetingCountdownAction.withLock({ $0 }) {
+            registerCarbonHotkeyIfSupported(
+                id: nextId,
+                target: .meetingCountdown(registration.id),
+                hotkey: Self.meetingCountdownHotkey
+            )
+            nextId &+= 1
+        }
         for slotType in HotkeySlotType.allCases {
             for state in slots[slotType] ?? [] {
                 guard let hotkey = state.hotkey else { continue }
@@ -827,6 +872,22 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         phase: HotkeyDispatchPhase
     ) {
         switch registration.target {
+        case let .meetingCountdown(registrationID):
+            guard phase == .down,
+                  let countdownAction = meetingCountdownAction.withLock({ $0 }),
+                  countdownAction.id == registrationID,
+                  shouldDispatch(
+                      target: .meetingCountdown(registrationID),
+                      phase: phase,
+                      hotkey: registration.hotkey,
+                      source: .carbon
+                  ) else {
+                return
+            }
+            Task { @MainActor in
+                countdownAction.action()
+            }
+
         case let .slot(slotType):
             guard !(dictationHotkeysPaused && slotType.startsDictation) else { return }
             dispatchCarbonGlobalMatch(
@@ -1626,6 +1687,15 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
 
     static func carbonModifierFlagsForTesting(_ hotkey: UnifiedHotkey) -> UInt32 {
         carbonModifierFlags(for: hotkey)
+    }
+
+    @MainActor
+    func performMeetingCountdownActionForTesting() {
+        meetingCountdownAction.withLock { $0 }?.action()
+    }
+
+    func hasMeetingCountdownActionForTesting() -> Bool {
+        meetingCountdownAction.withLock { $0 != nil }
     }
 
     func processCarbonHotkeyForTesting(

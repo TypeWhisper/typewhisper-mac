@@ -138,4 +138,21 @@ final class MeetingAudioActivityCollectorTests: XCTestCase {
         XCTAssertEqual(client.counts.restart, 1)
         XCTAssertEqual(client.counts.stop, 1)
     }
+
+    func testReleasingCollectorStopsClientWithoutExplicitStop() async {
+        let client = FakeMeetingAudioProcessClient()
+        client.configure(snapshot: MeetingActivitySnapshot(
+            capturedAt: .distantPast,
+            availability: .available,
+            processes: []
+        ))
+        var collector: MeetingAudioActivityCollector? = MeetingAudioActivityCollector(client: client)
+        weak var weakCollector = collector
+        _ = await collector?.startCollecting()
+
+        collector = nil
+
+        XCTAssertNil(weakCollector)
+        XCTAssertEqual(client.counts.stop, 1)
+    }
 }

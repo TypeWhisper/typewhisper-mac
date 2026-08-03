@@ -149,8 +149,15 @@ struct CalendarMeetingAutomationPolicy: Sendable {
         case .configure(let configuration, let occurrences, let now):
             let previousConfiguration = self.configuration
             let wasOperational = previousConfiguration.isOperational
-            let settingsChangedDuringRecording = activeRecording != nil
-                && previousConfiguration != configuration
+            let autoStopSettingsChangedDuringRecording = activeRecording != nil
+                && (
+                    previousConfiguration.hasPremiumAccess != configuration.hasPremiumAccess
+                        || previousConfiguration.startMode != configuration.startMode
+                        || previousConfiguration.autoStopEnabled != configuration.autoStopEnabled
+                        || previousConfiguration.calendarAuthorization != configuration.calendarAuthorization
+                        || previousConfiguration.selectedCalendarIDs != configuration.selectedCalendarIDs
+                        || previousConfiguration.enabledProviders != configuration.enabledProviders
+                )
             self.configuration = configuration
             self.occurrences = occurrences
                 .filter { configuration.selectedCalendarIDs.contains($0.calendarID) }
@@ -166,7 +173,7 @@ struct CalendarMeetingAutomationPolicy: Sendable {
             }
             if (wasOperational && !configuration.isOperational)
                 || !configuration.autoStopEnabled
-                || settingsChangedDuringRecording {
+                || autoStopSettingsChangedDuringRecording {
                 disarmAutoStop(effects: &effects)
             }
             updateCollector(at: now, effects: &effects)

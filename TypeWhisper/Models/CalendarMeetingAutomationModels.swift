@@ -84,11 +84,29 @@ struct CalendarMeetingOccurrence: Identifiable, Equatable, Sendable {
     let calendarID: String
     let participationStatus: CalendarMeetingParticipationStatus
     let meetingLinks: [CalendarMeetingCanonicalLink]
+    let occurrenceDigest: String
 
     var id: String { occurrenceDigest }
 
-    var occurrenceDigest: String {
-        CalendarMeetingOccurrenceDigest.make(
+    init(
+        eventIdentifier: String,
+        occurrenceStart: Date,
+        startDate: Date,
+        endDate: Date,
+        title: String,
+        calendarID: String,
+        participationStatus: CalendarMeetingParticipationStatus,
+        meetingLinks: [CalendarMeetingCanonicalLink]
+    ) {
+        self.eventIdentifier = eventIdentifier
+        self.occurrenceStart = occurrenceStart
+        self.startDate = startDate
+        self.endDate = endDate
+        self.title = title
+        self.calendarID = calendarID
+        self.participationStatus = participationStatus
+        self.meetingLinks = meetingLinks
+        occurrenceDigest = CalendarMeetingOccurrenceDigest.make(
             eventIdentifier: eventIdentifier,
             occurrenceStart: occurrenceStart
         )
@@ -193,13 +211,14 @@ enum SupportedMeetingBrowser {
     static let opera = "com.operasoftware.Opera"
     static let vivaldi = "com.vivaldi.Vivaldi"
     static let chromium = "org.chromium.Chromium"
+    static let wavebox = "com.bookry.wavebox"
     static let firefox = "org.mozilla.firefox"
     static let firefoxDeveloperEdition = "org.mozilla.firefoxdeveloperedition"
     static let firefoxNightly = "org.mozilla.nightly"
     static let zen = "app.zen-browser.zen"
 
     static let automaticURLBundleIdentifiers: Set<String> = [
-        safari, arc, chrome, chromeCanary, brave, edge, opera, vivaldi, chromium
+        safari, arc, chrome, chromeCanary, brave, edge, opera, vivaldi, chromium, wavebox
     ]
 
     static let reminderOnlyBundleIdentifiers: Set<String> = [
@@ -208,7 +227,6 @@ enum SupportedMeetingBrowser {
 
     static func supportsAutomaticURLResolution(_ bundleIdentifier: String) -> Bool {
         automaticURLBundleIdentifiers.contains(bundleIdentifier)
-            || bundleIdentifier.lowercased().contains("wavebox")
     }
 
     static func isKnownBrowser(_ bundleIdentifier: String) -> Bool {

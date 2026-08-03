@@ -385,10 +385,51 @@ final class CalendarMeetingAutomationPolicyTests: XCTestCase {
         XCTAssertFalse(policy.reduce(.timeAdvanced(now.addingTimeInterval(100))).contains(.stopRecording(handle)))
     }
 
+    func testSuppressingAnotherOccurrenceDoesNotDisarmActiveRecordingAutoStop() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let activeOccurrence = makeCalendarMeetingTestOccurrence(eventID: "active", start: now)
+        let otherOccurrence = makeCalendarMeetingTestOccurrence(eventID: "other", start: now)
+        let handle = CalendarMeetingRecordingHandle(
+            id: UUID(),
+            outputURL: URL(fileURLWithPath: "/tmp/suppression.wav")
+        )
+        var policy = CalendarMeetingAutomationPolicy()
+        _ = policy.reduce(.configure(
+            configuration(mode: .automatic, autoStop: true),
+            occurrences: [activeOccurrence, otherOccurrence],
+            now: now
+        ))
+        _ = policy.reduce(.recordingStarted(
+            handle: handle,
+            occurrenceDigest: activeOccurrence.id,
+            identity: identity,
+            autoStopArmed: true,
+            now: now
+        ))
+        _ = policy.reduce(.activity([signal(for: activeOccurrence)], now: now))
+
+        let reconfigured = policy.reduce(.configure(
+            configuration(
+                mode: .automatic,
+                autoStop: true,
+                suppressedDigests: [otherOccurrence.occurrenceDigest]
+            ),
+            occurrences: [activeOccurrence, otherOccurrence],
+            now: now
+        ))
+        XCTAssertFalse(reconfigured.contains(.stopActivityCollector))
+
+        _ = policy.reduce(.activity([], now: now))
+        XCTAssertTrue(policy.reduce(.timeAdvanced(now.addingTimeInterval(30))).contains(
+            .showStopCountdown(handle, deadline: now.addingTimeInterval(45))
+        ))
+    }
+
     private func configuration(
         mode: CalendarMeetingStartMode,
         autoStop: Bool = false,
-        premium: Bool = true
+        premium: Bool = true,
+        suppressedDigests: Set<String> = []
     ) -> CalendarMeetingAutomationConfiguration {
         CalendarMeetingAutomationConfiguration(
             hasPremiumAccess: premium,
@@ -397,7 +438,7 @@ final class CalendarMeetingAutomationPolicyTests: XCTestCase {
             calendarAuthorization: .fullAccess,
             selectedCalendarIDs: ["calendar-1"],
             enabledProviders: Set(MeetingProvider.allCases),
-            suppressedOccurrenceDigests: []
+            suppressedOccurrenceDigests: suppressedDigests
         )
     }
 

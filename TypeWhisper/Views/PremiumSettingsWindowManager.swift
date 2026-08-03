@@ -76,6 +76,9 @@ struct PremiumSettingsWindowFactories {
                             premiumAccount: ServiceContainer.shared.premiumAccountService,
                             controllerFactory: {
                                 ServiceContainer.shared.calendarMeetingAutomationController
+                            },
+                            onManageAccess: {
+                                PremiumSettingsWindowManager.shared.present(.access)
                             }
                         )
                     )
@@ -108,7 +111,10 @@ struct PremiumSettingsWindowFactories {
                         PremiumCloudSyncSettingsWindow(
                             licenseService: .shared,
                             premiumAccount: ServiceContainer.shared.premiumAccountService,
-                            syncController: ServiceContainer.shared.cloudFolderSyncController
+                            syncController: ServiceContainer.shared.cloudFolderSyncController,
+                            onManageAccess: {
+                                PremiumSettingsWindowManager.shared.present(.access)
+                            }
                         )
                     )
                 )
@@ -246,15 +252,18 @@ private struct PremiumCalendarMeetingSettingsWindow: View {
     @ObservedObject private var license: LicenseService
     @ObservedObject private var premiumAccount: PremiumAccountService
     private let controllerFactory: @MainActor () -> CalendarMeetingAutomationController
+    private let onManageAccess: () -> Void
 
     init(
         licenseService: LicenseService,
         premiumAccount: PremiumAccountService,
-        controllerFactory: @escaping @MainActor () -> CalendarMeetingAutomationController
+        controllerFactory: @escaping @MainActor () -> CalendarMeetingAutomationController,
+        onManageAccess: @escaping () -> Void
     ) {
         self.license = licenseService
         self.premiumAccount = premiumAccount
         self.controllerFactory = controllerFactory
+        self.onManageAccess = onManageAccess
     }
 
     var body: some View {
@@ -266,9 +275,7 @@ private struct PremiumCalendarMeetingSettingsWindow: View {
         } else {
             PremiumLockedDetailView(
                 message: String(localized: "premium.window.calendar.locked"),
-                onManageAccess: {
-                    PremiumSettingsWindowManager.shared.present(.access)
-                }
+                onManageAccess: onManageAccess
             )
         }
     }
@@ -279,15 +286,18 @@ private struct PremiumCloudSyncSettingsWindow: View {
     @ObservedObject private var license: LicenseService
     @ObservedObject private var premiumAccount: PremiumAccountService
     @ObservedObject private var syncController: CloudFolderSyncController
+    private let onManageAccess: () -> Void
 
     init(
         licenseService: LicenseService,
         premiumAccount: PremiumAccountService,
-        syncController: CloudFolderSyncController
+        syncController: CloudFolderSyncController,
+        onManageAccess: @escaping () -> Void
     ) {
         self.license = licenseService
         self.premiumAccount = premiumAccount
         self.syncController = syncController
+        self.onManageAccess = onManageAccess
     }
 
     var body: some View {
@@ -298,9 +308,7 @@ private struct PremiumCloudSyncSettingsWindow: View {
         } else {
             PremiumLockedDetailView(
                 message: lockedMessage,
-                onManageAccess: {
-                    PremiumSettingsWindowManager.shared.present(.access)
-                }
+                onManageAccess: onManageAccess
             )
         }
     }

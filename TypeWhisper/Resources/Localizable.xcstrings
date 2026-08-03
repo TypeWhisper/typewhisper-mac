@@ -23540,7 +23540,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "まもなくミーティング"
+            "value": "ミーティングがまもなく始まります"
           }
         }
       }
@@ -23629,6 +23629,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "録音を続ける"
+          }
+        }
+      }
+    },
+    "calendarMeeting.countdown.keyboardHint": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mit Befehl-Punkt ausführen."
+          }
+        },
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Press Command-period to perform this action."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Command＋ピリオドでこの操作を実行します。"
           }
         }
       }
@@ -24342,19 +24364,19 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Meetings können dich erinnern oder nach bestätigtem Live-Beitritt die Aufnahme starten."
+            "value": "Lass dich vor einem geplanten Meeting erinnern oder starte die Aufnahme nach bestätigtem Beitritt."
           }
         },
         "en": {
           "stringUnit": {
             "state": "translated",
-            "value": "Meetings can remind you or start recording after TypeWhisper confirms a live join."
+            "value": "Get a reminder for a scheduled meeting, or start recording after TypeWhisper confirms that you joined."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "参加を確認した後に、通知または録音の開始ができます。"
+            "value": "予定したミーティングの前に通知を受け取るか、参加確認後に録音を開始します。"
           }
         }
       }
@@ -24461,12 +24483,12 @@
     "premium.hub.active.title": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Deine Premium-Funktionen"}},"en":{"stringUnit":{"state":"translated","value":"Your Premium features"}},"ja":{"stringUnit":{"state":"translated","value":"Premium機能"}}}},
     "premium.hub.active.description": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Sieh den aktuellen Zustand auf einen Blick und öffne nur die Einstellungen, die du gerade brauchst."}},"en":{"stringUnit":{"state":"translated","value":"See the current state at a glance and open only the settings you need."}},"ja":{"stringUnit":{"state":"translated","value":"現在の状態をひと目で確認し、必要な設定だけを開けます。"}}}},
     "premium.hub.calendar.title": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Meeting-Automation"}},"en":{"stringUnit":{"state":"translated","value":"Meeting Automation"}},"ja":{"stringUnit":{"state":"translated","value":"ミーティング自動化"}}}},
-    "premium.hub.calendar.description": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Erinnert dich oder startet die Aufnahme automatisch, sobald du einem geplanten Meeting beitrittst."}},"en":{"stringUnit":{"state":"translated","value":"Reminds you or starts recording automatically when you join a scheduled meeting."}},"ja":{"stringUnit":{"state":"translated","value":"予定したミーティングへの参加時に通知するか、自動で録音を開始します。"}}}},
+    "premium.hub.calendar.description": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Erinnert dich vor einem geplanten Meeting oder startet die Aufnahme automatisch, sobald du beitrittst."}},"en":{"stringUnit":{"state":"translated","value":"Reminds you before a scheduled meeting or starts recording automatically when you join."}},"ja":{"stringUnit":{"state":"translated","value":"予定したミーティングの前に通知するか、参加時に自動で録音を開始します。"}}}},
     "premium.hub.calendar.providersPreview": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Zoom · Teams · Meet · FaceTime"}},"en":{"stringUnit":{"state":"translated","value":"Zoom · Teams · Meet · FaceTime"}},"ja":{"stringUnit":{"state":"translated","value":"Zoom · Teams · Meet · FaceTime"}}}},
     "premium.hub.calendar.accessGranted": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Kalenderzugriff erlaubt"}},"en":{"stringUnit":{"state":"translated","value":"Calendar access granted"}},"ja":{"stringUnit":{"state":"translated","value":"カレンダーアクセス許可済み"}}}},
     "premium.hub.calendar.accessNotRequested": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Kalenderzugriff noch nicht angefragt"}},"en":{"stringUnit":{"state":"translated","value":"Calendar access not requested yet"}},"ja":{"stringUnit":{"state":"translated","value":"カレンダーアクセス未要求"}}}},
     "premium.hub.calendar.accessNeeded": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Kalenderzugriff erforderlich"}},"en":{"stringUnit":{"state":"translated","value":"Calendar access required"}},"ja":{"stringUnit":{"state":"translated","value":"カレンダーアクセスが必要"}}}},
-    "premium.hub.calendar.selectionFormat": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"%1$d Kalender · %2$d Anbieter"}},"en":{"stringUnit":{"state":"translated","value":"%1$d calendars · %2$d providers"}},"ja":{"stringUnit":{"state":"translated","value":"カレンダー %1$d件 · サービス %2$d件"}}}},
+    "premium.hub.calendar.selectionFormat": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Kalender: %1$lld · Anbieter: %2$lld"}},"en":{"stringUnit":{"state":"translated","value":"Calendars: %1$lld · Providers: %2$lld"}},"ja":{"stringUnit":{"state":"translated","value":"カレンダー：%1$lld件 · サービス：%2$lld件"}}}},
     "premium.hub.learning.title": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Aus Korrekturen lernen"}},"en":{"stringUnit":{"state":"translated","value":"Learn from Corrections"}},"ja":{"stringUnit":{"state":"translated","value":"修正から学習"}}}},
     "premium.hub.learning.description": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Merkt sich sichere Änderungen nach dem Einfügen und verbessert künftige Texte."}},"en":{"stringUnit":{"state":"translated","value":"Remembers confident edits after insertion and improves future text."}},"ja":{"stringUnit":{"state":"translated","value":"挿入後の確実な修正を記憶し、今後の文章を改善します。"}}}},
     "premium.hub.learning.preview": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Lernt nur eindeutige Korrekturen"}},"en":{"stringUnit":{"state":"translated","value":"Learns only clear corrections"}},"ja":{"stringUnit":{"state":"translated","value":"明確な修正だけを学習"}}}},
@@ -24533,7 +24555,7 @@
     "premium.window.sync.title": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Wörterbuch & Snippets synchronisieren"}},"en":{"stringUnit":{"state":"translated","value":"Sync Dictionary & Snippets"}},"ja":{"stringUnit":{"state":"translated","value":"辞書とスニペットを同期"}}}},
     "premium.window.sync.description": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Synchronisiere deine persönlichen Begriffe und Textbausteine über deinen eigenen Cloud-Speicher."}},"en":{"stringUnit":{"state":"translated","value":"Sync your personal terms and text snippets through your own cloud storage."}},"ja":{"stringUnit":{"state":"translated","value":"自分のクラウドストレージを使って個人用の用語とスニペットを同期します。"}}}},
     "premium.window.sync.modeTitle": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Synchronisierung"}},"en":{"stringUnit":{"state":"translated","value":"Synchronization"}},"ja":{"stringUnit":{"state":"translated","value":"同期"}}}},
-    "premium.window.sync.modeHelp": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Wähle automatisches iCloud oder einen eigenen synchronisierten Ordner."}},"en":{"stringUnit":{"state":"translated","value":"Choose automatic iCloud or your own synchronized folder."}},"ja":{"stringUnit":{"state":"translated","value":"自動iCloudまたは自分の同期フォルダを選択します。"}}}},
+    "premium.window.sync.modeHelp": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Wähle automatische iCloud-Synchronisierung oder einen eigenen synchronisierten Ordner."}},"en":{"stringUnit":{"state":"translated","value":"Choose automatic iCloud sync or your own synchronized folder."}},"ja":{"stringUnit":{"state":"translated","value":"iCloud自動同期または自分の同期フォルダを選択します。"}}}},
     "premium.window.sync.statusTitle": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Aktueller Zustand"}},"en":{"stringUnit":{"state":"translated","value":"Current status"}},"ja":{"stringUnit":{"state":"translated","value":"現在の状態"}}}},
     "premium.window.sync.actionsTitle": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Aktionen"}},"en":{"stringUnit":{"state":"translated","value":"Actions"}},"ja":{"stringUnit":{"state":"translated","value":"操作"}}}},
     "premium.window.sync.deleteTitle": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Synchronisierte Daten löschen"}},"en":{"stringUnit":{"state":"translated","value":"Delete synchronized data"}},"ja":{"stringUnit":{"state":"translated","value":"同期データを削除"}}}},
@@ -24541,7 +24563,7 @@
     "premium.window.sync.locked": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Cloud-Sync benötigt eine Anmeldung und ein aktives Premium-Konto."}},"en":{"stringUnit":{"state":"translated","value":"Cloud sync requires sign-in and an active Premium account."}},"ja":{"stringUnit":{"state":"translated","value":"クラウド同期にはサインインと有効なPremiumアカウントが必要です。"}}}},
     "premium.window.sync.linkRequired": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Verknüpfe deine auf diesem Mac aktive Commercial-Lizenz mit dem angemeldeten Konto, um Cloud-Sync freizuschalten."}},"en":{"stringUnit":{"state":"translated","value":"Link the Commercial license active on this Mac to the signed-in account to enable cloud sync."}},"ja":{"stringUnit":{"state":"translated","value":"このMacで有効なCommercialライセンスをサインイン中のアカウントに連携すると、クラウド同期を利用できます。"}}}},
     "premium.window.sync.mode.off": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Aus"}},"en":{"stringUnit":{"state":"translated","value":"Off"}},"ja":{"stringUnit":{"state":"translated","value":"オフ"}}}},
-    "premium.window.sync.mode.automaticICloud": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Automatisches iCloud"}},"en":{"stringUnit":{"state":"translated","value":"Automatic iCloud"}},"ja":{"stringUnit":{"state":"translated","value":"自動iCloud"}}}},
+    "premium.window.sync.mode.automaticICloud": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Automatische iCloud-Synchronisierung"}},"en":{"stringUnit":{"state":"translated","value":"Automatic iCloud Sync"}},"ja":{"stringUnit":{"state":"translated","value":"iCloud自動同期"}}}},
     "premium.window.sync.mode.cloudFolder": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Cloud-Ordner"}},"en":{"stringUnit":{"state":"translated","value":"Cloud Folder"}},"ja":{"stringUnit":{"state":"translated","value":"クラウドフォルダ"}}}},
     "premium.window.sync.privateICloudContainer": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Privater TypeWhisper-iCloud-Container"}},"en":{"stringUnit":{"state":"translated","value":"TypeWhisper private iCloud container"}},"ja":{"stringUnit":{"state":"translated","value":"TypeWhisperのプライベートiCloudコンテナ"}}}},
     "premium.window.sync.noFolderSelected": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Kein Ordner ausgewählt"}},"en":{"stringUnit":{"state":"translated","value":"No folder selected"}},"ja":{"stringUnit":{"state":"translated","value":"フォルダが選択されていません"}}}},
@@ -24563,7 +24585,7 @@
     "premium.window.sync.never": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Noch nie"}},"en":{"stringUnit":{"state":"translated","value":"Never"}},"ja":{"stringUnit":{"state":"translated","value":"未実行"}}}},
     "premium.window.locked.title": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Premium-Zugang erforderlich"}},"en":{"stringUnit":{"state":"translated","value":"Premium access required"}},"ja":{"stringUnit":{"state":"translated","value":"Premiumアクセスが必要"}}}},
     "calendarMeeting.settings.recordingStart": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Aufnahmebeginn"}},"en":{"stringUnit":{"state":"translated","value":"Starting recordings"}},"ja":{"stringUnit":{"state":"translated","value":"録音の開始"}}}},
-    "calendarMeeting.settings.startModeHelp": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Lass dich nur erinnern oder starte die Aufnahme automatisch, sobald du dem geplanten Meeting tatsächlich beitrittst."}},"en":{"stringUnit":{"state":"translated","value":"Choose reminders only, or start recording automatically after you actually join the scheduled meeting."}},"ja":{"stringUnit":{"state":"translated","value":"通知のみ、または予定したミーティングへの実際の参加後に自動録音を選べます。"}}}},
+    "calendarMeeting.settings.startModeHelp": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Lass dich vor dem Meeting erinnern oder starte die Aufnahme automatisch, sobald du dem geplanten Meeting tatsächlich beitrittst."}},"en":{"stringUnit":{"state":"translated","value":"Get a reminder before the meeting, or start recording automatically after you actually join the scheduled meeting."}},"ja":{"stringUnit":{"state":"translated","value":"ミーティングの前に通知を受け取るか、予定したミーティングへの実際の参加後に自動録音を開始します。"}}}},
     "calendarMeeting.settings.permissions": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Berechtigungen"}},"en":{"stringUnit":{"state":"translated","value":"Permissions"}},"ja":{"stringUnit":{"state":"translated","value":"アクセス権"}}}},
     "calendarMeeting.settings.calendarsHelp": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Nur Termine aus ausgewählten Kalendern werden berücksichtigt."}},"en":{"stringUnit":{"state":"translated","value":"Only meetings from selected calendars are considered."}},"ja":{"stringUnit":{"state":"translated","value":"選択したカレンダーの予定だけが対象になります。"}}}},
     "calendarMeeting.settings.providersHelp": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Wähle die Meeting-Apps, für die TypeWhisper Termine erkennen darf."}},"en":{"stringUnit":{"state":"translated","value":"Choose the meeting apps TypeWhisper may recognize from calendar events."}},"ja":{"stringUnit":{"state":"translated","value":"カレンダー予定から認識するミーティングアプリを選択します。"}}}},

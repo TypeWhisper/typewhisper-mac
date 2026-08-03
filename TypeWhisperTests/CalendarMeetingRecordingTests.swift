@@ -24,10 +24,28 @@ final class CalendarMeetingRecordingTests: XCTestCase {
             date: date
         ).hasPrefix("Recording "))
 
-        let longTitle = String(repeating: "👩🏽‍💻", count: 140)
+        let longTitle = String(repeating: "A", count: 140)
         let result = CalendarMeetingRecordingFilename.preferredBaseName(title: longTitle, date: date)
         let title = result.components(separatedBy: " — ").first ?? ""
         XCTAssertEqual(title.count, 120)
+    }
+
+    func testMultibyteTitleAndFinalFilenameStayWithinFilesystemByteLimit() {
+        let date = Date(timeIntervalSince1970: 2_000_000_000)
+        let preferredBaseName = CalendarMeetingRecordingFilename.preferredBaseName(
+            title: String(repeating: "会", count: 140),
+            date: date
+        )
+        let title = preferredBaseName.components(separatedBy: " — ").first ?? ""
+        XCTAssertLessThanOrEqual(title.utf8.count, 200)
+
+        let result = CalendarMeetingRecordingFilename.availableURL(
+            in: URL(fileURLWithPath: "/tmp/calendar-recordings", isDirectory: true),
+            preferredBaseName: String(repeating: "会", count: 200),
+            fileExtension: "m4a",
+            fileExists: { _ in false }
+        )
+        XCTAssertLessThanOrEqual(result.lastPathComponent.utf8.count, 255)
     }
 
     func testCollisionSuffixAppearsBeforeExtension() {

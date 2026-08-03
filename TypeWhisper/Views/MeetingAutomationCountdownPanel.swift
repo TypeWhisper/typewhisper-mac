@@ -62,12 +62,21 @@ private struct MeetingAutomationCountdownView: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                Button(actionTitle) {
+                Button {
                     action()
+                } label: {
+                    HStack(spacing: 6) {
+                        Text(actionTitle)
+                        Text("⌘.")
+                            .font(.caption.monospaced())
+                            .foregroundStyle(.secondary)
+                    }
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.regular)
                 .accessibilityIdentifier(actionAccessibilityIdentifier)
+                .accessibilityLabel(actionTitle)
+                .accessibilityHint(String(localized: "calendarMeeting.countdown.keyboardHint"))
             }
             .padding(.horizontal, 18)
             .padding(.vertical, 14)
@@ -138,7 +147,20 @@ private struct MeetingAutomationCountdownView: View {
 
 @MainActor
 final class MeetingAutomationCountdownPanelController: MeetingAutomationCountdownPresenting {
+    private let hotkeyService: HotkeyService?
     private var panel: MeetingAutomationCountdownPanel?
+    private var activeAction: (@MainActor () -> Void)?
+    private var hotkeyRegistrationID: UUID?
+
+    init(hotkeyService: HotkeyService? = nil) {
+        self.hotkeyService = hotkeyService
+    }
+
+    deinit {
+        if let hotkeyRegistrationID {
+            hotkeyService?.unregisterMeetingCountdownAction(id: hotkeyRegistrationID)
+        }
+    }
 
     func showStart(
         title: String,
@@ -158,6 +180,8 @@ final class MeetingAutomationCountdownPanelController: MeetingAutomationCountdow
     func dismiss() {
         panel?.orderOut(nil)
         panel = nil
+        activeAction = nil
+        removeKeyboardAction()
     }
 
     private func show(
@@ -165,6 +189,12 @@ final class MeetingAutomationCountdownPanelController: MeetingAutomationCountdow
         action: @escaping @MainActor () -> Void
     ) {
         dismiss()
+        activeAction = action
+        let hotkeyRegistrationID = UUID()
+        self.hotkeyRegistrationID = hotkeyRegistrationID
+        hotkeyService?.registerMeetingCountdownAction(id: hotkeyRegistrationID) { [weak self] in
+            self?.performActiveAction()
+        }
         let panel = MeetingAutomationCountdownPanel(
             contentRect: NSRect(x: 0, y: 0, width: 520, height: 78),
             styleMask: [.borderless, .nonactivatingPanel, .utilityWindow, .hudWindow],
@@ -183,7 +213,7 @@ final class MeetingAutomationCountdownPanelController: MeetingAutomationCountdow
         let hostingView = MeetingAutomationFirstMouseHostingView(
             rootView: MeetingAutomationCountdownView(
                 presentation: presentation,
-                action: action
+                action: { [weak self] in self?.performActiveAction() }
             )
         )
         hostingView.sizingOptions = []
@@ -191,6 +221,19 @@ final class MeetingAutomationCountdownPanelController: MeetingAutomationCountdow
         position(panel)
         panel.orderFrontRegardless()
         self.panel = panel
+    }
+
+    private func performActiveAction() {
+        guard let action = activeAction else { return }
+        activeAction = nil
+        removeKeyboardAction()
+        action()
+    }
+
+    private func removeKeyboardAction() {
+        guard let hotkeyRegistrationID else { return }
+        hotkeyService?.unregisterMeetingCountdownAction(id: hotkeyRegistrationID)
+        self.hotkeyRegistrationID = nil
     }
 
     private func position(_ panel: NSPanel) {

@@ -76,6 +76,7 @@ final class PremiumSettingsWindowManagerTests: XCTestCase {
             factories: makeFactories { self.definition(for: .access) },
             activationHandler: {}
         )
+        defer { manager.closeAll() }
 
         manager.present(.access)
         let window = try XCTUnwrap(manager.managedWindow(for: .access))
@@ -90,8 +91,6 @@ final class PremiumSettingsWindowManagerTests: XCTestCase {
         XCTAssertEqual(window.identifier?.rawValue, "premium.window.access")
         XCTAssertFalse(window.isReleasedWhenClosed)
         XCTAssertEqual(window.tabbingMode, .disallowed)
-
-        manager.closeAll()
     }
 
     func testClosingWindowRemovesManagedReference() throws {
@@ -103,6 +102,7 @@ final class PremiumSettingsWindowManagerTests: XCTestCase {
             },
             activationHandler: {}
         )
+        defer { manager.closeAll() }
 
         manager.present(.cloudSync)
         let window = try XCTUnwrap(manager.managedWindow(for: .cloudSync))
@@ -112,7 +112,6 @@ final class PremiumSettingsWindowManagerTests: XCTestCase {
 
         manager.present(.cloudSync)
         XCTAssertEqual(factoryCalls, 2)
-        manager.closeAll()
     }
 
     func testCloseAllClosesEveryDestination() {

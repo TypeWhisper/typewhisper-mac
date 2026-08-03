@@ -40,5 +40,44 @@ final class MeetingAutomationCountdownPanelTests: XCTestCase {
         XCTAssertFalse(panel?.canBecomeMain ?? true)
         XCTAssertTrue(panel?.collectionBehavior.contains(.canJoinAllSpaces) == true)
         XCTAssertTrue(panel?.collectionBehavior.contains(.fullScreenAuxiliary) == true)
+
+        presenter.dismiss()
+        XCTAssertFalse(panel?.isVisible ?? true)
+    }
+
+    func testKeyboardShortcutInvokesBothActionsAndIsRemovedWithCountdown() {
+        let hotkeyService = HotkeyService()
+        let presenter = MeetingAutomationCountdownPanelController(hotkeyService: hotkeyService)
+        var startCancellations = 0
+        var stopVetos = 0
+        defer { presenter.dismiss() }
+
+        presenter.showStart(
+            title: "Planning",
+            deadline: Date().addingTimeInterval(5),
+            onCancel: { startCancellations += 1 }
+        )
+        XCTAssertTrue(hotkeyService.hasMeetingCountdownActionForTesting())
+        hotkeyService.performMeetingCountdownActionForTesting()
+        XCTAssertEqual(startCancellations, 1)
+        XCTAssertFalse(hotkeyService.hasMeetingCountdownActionForTesting())
+
+        presenter.showStop(
+            deadline: Date().addingTimeInterval(15),
+            onContinue: { stopVetos += 1 }
+        )
+        XCTAssertTrue(hotkeyService.hasMeetingCountdownActionForTesting())
+        hotkeyService.performMeetingCountdownActionForTesting()
+        XCTAssertEqual(stopVetos, 1)
+        XCTAssertFalse(hotkeyService.hasMeetingCountdownActionForTesting())
+
+        presenter.showStart(
+            title: "Planning",
+            deadline: Date().addingTimeInterval(5),
+            onCancel: { startCancellations += 1 }
+        )
+        presenter.dismiss()
+        XCTAssertFalse(hotkeyService.hasMeetingCountdownActionForTesting())
+        XCTAssertEqual(startCancellations, 1)
     }
 }

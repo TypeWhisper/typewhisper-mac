@@ -196,9 +196,10 @@ actor EventKitCalendarMeetingProvider: CalendarMeetingEventProviding {
     nonisolated private static func participationStatus(
         for event: EKEvent
     ) -> CalendarMeetingParticipationStatus {
-        guard let attendee = event.attendees?.first(where: \.isCurrentUser) else {
+        guard let attendees = event.attendees, !attendees.isEmpty else {
             return .noCurrentUser
         }
+        guard let attendee = attendees.first(where: \.isCurrentUser) else { return .unknown }
         return switch attendee.participantStatus {
         case .accepted: .accepted
         case .tentative: .tentative

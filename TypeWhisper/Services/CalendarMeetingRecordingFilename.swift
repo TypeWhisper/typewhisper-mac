@@ -1,6 +1,10 @@
 import Foundation
 
 enum CalendarMeetingRecordingFilename {
+    private static let maximumTitleGraphemes = 120
+    private static let maximumTitleUTF8Bytes = 200
+    private static let maximumFilenameUTF8Bytes = 255
+
     static func preferredBaseName(title: String, date: Date = Date()) -> String {
         let timestamp = timestampString(for: date)
         let sanitizedTitle = sanitizeTitle(title)
@@ -25,7 +29,17 @@ enum CalendarMeetingRecordingFilename {
         let baseName = sanitizedBaseName(preferredBaseName, fallbackDate: fallbackDate)
         var suffix = 1
         while true {
-            let candidateName = suffix == 1 ? baseName : "\(baseName) \(suffix)"
+            let collisionSuffix = suffix == 1 ? "" : " \(suffix)"
+            let extensionByteCount = fileExtension.isEmpty ? 0 : fileExtension.utf8.count + 1
+            let baseNameByteLimit = max(
+                1,
+                maximumFilenameUTF8Bytes - extensionByteCount - collisionSuffix.utf8.count
+            )
+            let truncatedBaseName = prefix(
+                baseName,
+                fittingUTF8ByteCount: baseNameByteLimit
+            )
+            let candidateName = truncatedBaseName + collisionSuffix
             let candidate = directory
                 .appendingPathComponent(candidateName)
                 .appendingPathExtension(fileExtension)
@@ -37,8 +51,24 @@ enum CalendarMeetingRecordingFilename {
     }
 
     private static func sanitizeTitle(_ title: String) -> String {
-        String(normalize(title).prefix(120))
+        let graphemeLimited = String(normalize(title).prefix(maximumTitleGraphemes))
+        return prefix(graphemeLimited, fittingUTF8ByteCount: maximumTitleUTF8Bytes)
             .trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func prefix(
+        _ value: String,
+        fittingUTF8ByteCount maximumByteCount: Int
+    ) -> String {
+        var byteCount = 0
+        var result = ""
+        for character in value {
+            let characterByteCount = String(character).utf8.count
+            guard byteCount + characterByteCount <= maximumByteCount else { break }
+            result.append(character)
+            byteCount += characterByteCount
+        }
+        return result
     }
 
     private static func normalize(_ value: String) -> String {

@@ -23,6 +23,21 @@ enum PremiumAccessSummary: Equatable, Sendable {
     case commercialLicense
     case premiumAccount
     case commercialAndPremiumAccount
+
+    var localizedTitle: String {
+        switch self {
+        case .locked:
+            String(localized: "premium.hub.access.locked")
+        case .supporterOnly:
+            String(localized: "premium.hub.access.supporter")
+        case .commercialLicense:
+            String(localized: "premium.hub.access.commercial")
+        case .premiumAccount:
+            String(localized: "premium.hub.access.account")
+        case .commercialAndPremiumAccount:
+            String(localized: "premium.hub.access.both")
+        }
+    }
 }
 
 enum PremiumFeatureCardAction: Equatable, Sendable {
@@ -102,21 +117,6 @@ struct PremiumAccessStatusBar: View {
         }
     }
 
-    private var title: String {
-        switch summary {
-        case .locked:
-            String(localized: "premium.hub.access.locked")
-        case .supporterOnly:
-            String(localized: "premium.hub.access.supporter")
-        case .commercialLicense:
-            String(localized: "premium.hub.access.commercial")
-        case .premiumAccount:
-            String(localized: "premium.hub.access.account")
-        case .commercialAndPremiumAccount:
-            String(localized: "premium.hub.access.both")
-        }
-    }
-
     var body: some View {
         SettingsCard(accent: isActive ? .green : .yellow) {
             HStack(spacing: 12) {
@@ -134,7 +134,7 @@ struct PremiumAccessStatusBar: View {
                     Text(String(localized: "premium.hub.access.title"))
                         .font(.caption.weight(.semibold))
                         .foregroundStyle(.secondary)
-                    Text(title)
+                    Text(summary.localizedTitle)
                         .font(.callout.weight(.semibold))
                         .fixedSize(horizontal: false, vertical: true)
                         .accessibilityIdentifier("premium.access.status")
@@ -372,6 +372,7 @@ struct PremiumActiveFeatureOverview: View {
     }
 
     private var calendarStatusTone: PremiumFeatureStatusTone {
+        guard access.requirement(for: .calendarMeeting) == .available else { return .warning }
         if calendarController.startMode != .off,
            calendarController.calendarAuthorization != .fullAccess {
             return .warning
@@ -398,8 +399,8 @@ struct PremiumActiveFeatureOverview: View {
         }
         let selection = String.localizedStringWithFormat(
             String(localized: "premium.hub.calendar.selectionFormat"),
-            calendarController.selectedCalendarIDs.count,
-            calendarController.enabledProviders.count
+            Int64(calendarController.selectedCalendarIDs.count),
+            Int64(calendarController.enabledProviders.count)
         )
         return [permission, selection]
     }
@@ -713,7 +714,7 @@ private struct PremiumFeatureCard: View {
             }
         }
         .padding(16)
-        .frame(maxWidth: .infinity, minHeight: 270, maxHeight: 270, alignment: .topLeading)
+        .frame(maxWidth: .infinity, minHeight: 270, maxHeight: .infinity, alignment: .topLeading)
         .background(
             RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius, style: .continuous)
                 .fill(

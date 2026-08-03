@@ -809,10 +809,8 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         try createDirectoryIfNeeded(dir)
 
         // Generate output filename
-        let formatter = DateFormatter()
-        formatter.dateFormat = "yyyy-MM-dd HH.mm.ss"
-        let timestamp = formatter.string(from: Date())
-        let baseName = preferredBaseName ?? "Recording \(timestamp)"
+        let baseName = preferredBaseName
+            ?? CalendarMeetingRecordingFilename.preferredBaseName(title: "")
         let outputURL = CalendarMeetingRecordingFilename.availableURL(
             in: dir,
             preferredBaseName: baseName,

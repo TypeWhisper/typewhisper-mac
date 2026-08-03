@@ -181,7 +181,7 @@ struct CalendarMeetingSettingsSection: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {
-                ForEach(Array(controller.calendars.enumerated()), id: \.element.id) { index, calendar in
+                ForEach(controller.calendars) { calendar in
                     Toggle(isOn: Binding(
                         get: { controller.selectedCalendarIDs.contains(calendar.id) },
                         set: { controller.setCalendar(calendar.id, enabled: $0) }
@@ -194,7 +194,7 @@ struct CalendarMeetingSettingsSection: View {
                         }
                     }
                     .toggleStyle(.checkbox)
-                    .accessibilityIdentifier("calendarMeeting.calendar.\(index)")
+                    .accessibilityIdentifier("calendarMeeting.calendar.\(calendar.id)")
                 }
             }
         }

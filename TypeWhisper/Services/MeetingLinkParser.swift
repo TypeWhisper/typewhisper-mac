@@ -1,6 +1,10 @@
 import Foundation
 
 struct MeetingLinkParser: Sendable {
+    private static let candidateExpression = try? NSRegularExpression(
+        pattern: #"(?i)(?:(?:https?|zoommtg|msteams|facetime):(?://)?[^\s<>\"']+|(?:[a-z0-9-]+\.)*(?:zoom\.us|zoomgov\.com|teams\.microsoft\.com|teams\.live\.com|meet\.google\.com|facetime\.apple\.com)/[^\s<>\"']+)"#
+    )
+
     func parse(
         eventURL: URL?,
         location: String?,
@@ -35,8 +39,7 @@ struct MeetingLinkParser: Sendable {
     }
 
     private func candidateStrings(in text: String) -> [String] {
-        let pattern = #"(?i)(?:(?:https?|zoommtg|msteams|facetime):(?://)?[^\s<>\"']+|(?:[a-z0-9-]+\.)*(?:zoom\.us|zoomgov\.com|teams\.microsoft\.com|teams\.live\.com|meet\.google\.com|facetime\.apple\.com)/[^\s<>\"']+)"#
-        guard let expression = try? NSRegularExpression(pattern: pattern) else { return [] }
+        guard let expression = Self.candidateExpression else { return [] }
         let range = NSRange(text.startIndex..<text.endIndex, in: text)
         return expression.matches(in: text, range: range).compactMap { match in
             guard let swiftRange = Range(match.range, in: text) else { return nil }
@@ -124,27 +127,29 @@ struct MeetingLinkParser: Sendable {
     private func parseTeamsWebLink(_ components: URLComponents) -> CalendarMeetingCanonicalLink? {
         guard let host = components.host?.lowercased() else { return nil }
         let path = normalizedDecodedPath(components)
-        if host == "teams.microsoft.com", path.lowercased().hasPrefix("/l/meetup-join/") {
-            return CalendarMeetingCanonicalLink(provider: .teams, identity: host + path)
+        if host == "teams.microsoft.com",
+           let canonicalPath = canonicalTeamsPath(path, routePrefix: "/l/meetup-join/") {
+            return CalendarMeetingCanonicalLink(provider: .teams, identity: host + canonicalPath)
         }
-        if host == "teams.live.com", path.lowercased().hasPrefix("/meet/") {
-            return CalendarMeetingCanonicalLink(provider: .teams, identity: host + path)
+        if host == "teams.live.com",
+           let canonicalPath = canonicalTeamsPath(path, routePrefix: "/meet/") {
+            return CalendarMeetingCanonicalLink(provider: .teams, identity: host + canonicalPath)
         }
         return nil
     }
 
     private func parseTeamsDeepLink(_ components: URLComponents) -> CalendarMeetingCanonicalLink? {
         let path = normalizedDecodedPath(components)
-        if path.lowercased().hasPrefix("/l/meetup-join/") {
+        if let canonicalPath = canonicalTeamsPath(path, routePrefix: "/l/meetup-join/") {
             return CalendarMeetingCanonicalLink(
                 provider: .teams,
-                identity: "teams.microsoft.com" + path
+                identity: "teams.microsoft.com" + canonicalPath
             )
         }
-        if path.lowercased().hasPrefix("/meet/") {
+        if let canonicalPath = canonicalTeamsPath(path, routePrefix: "/meet/") {
             return CalendarMeetingCanonicalLink(
                 provider: .teams,
-                identity: "teams.live.com" + path
+                identity: "teams.live.com" + canonicalPath
             )
         }
         let query = queryDictionary(components)
@@ -155,6 +160,17 @@ struct MeetingLinkParser: Sendable {
             )
         }
         return nil
+    }
+
+    private func canonicalTeamsPath(
+        _ path: String,
+        routePrefix: String
+    ) -> String? {
+        guard path.lowercased().hasPrefix(routePrefix) else { return nil }
+        let identityStart = path.index(path.startIndex, offsetBy: routePrefix.count)
+        let identity = path[identityStart...]
+        guard !identity.isEmpty else { return nil }
+        return routePrefix + identity
     }
 
     private func parseGoogleMeetLink(_ components: URLComponents) -> CalendarMeetingCanonicalLink? {

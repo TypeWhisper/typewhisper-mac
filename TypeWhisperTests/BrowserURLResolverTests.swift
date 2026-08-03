@@ -23,6 +23,27 @@ private final class BrowserResolutionProbe: @unchecked Sendable {
     var calls: [(String, Bool)] { state.withLock { $0.calls } }
 }
 
+private final class SerializedBrowserResolutionProbe: @unchecked Sendable {
+    private struct State {
+        var activeCalls = 0
+        var maximumActiveCalls = 0
+    }
+
+    private let state = OSAllocatedUnfairLock(initialState: State())
+
+    func resolve(bundleIdentifier: String, includeTitle: Bool) -> BrowserResolution {
+        state.withLock {
+            $0.activeCalls += 1
+            $0.maximumActiveCalls = max($0.maximumActiveCalls, $0.activeCalls)
+        }
+        Thread.sleep(forTimeInterval: 0.05)
+        state.withLock { $0.activeCalls -= 1 }
+        return BrowserResolution(url: URL(string: "https://example.com"), title: nil)
+    }
+
+    var maximumActiveCalls: Int { state.withLock { $0.maximumActiveCalls } }
+}
+
 final class BrowserURLResolverTests: XCTestCase {
     func testSupportedAutomaticAndReminderOnlyBrowsersAreDistinct() {
         let automatic = [
@@ -34,7 +55,7 @@ final class BrowserURLResolverTests: XCTestCase {
             SupportedMeetingBrowser.opera,
             SupportedMeetingBrowser.vivaldi,
             SupportedMeetingBrowser.chromium,
-            "com.bookry.wavebox"
+            SupportedMeetingBrowser.wavebox
         ]
         XCTAssertTrue(automatic.allSatisfy(SupportedMeetingBrowser.supportsAutomaticURLResolution))
 
@@ -43,6 +64,9 @@ final class BrowserURLResolverTests: XCTestCase {
         XCTAssertTrue(reminderOnly.allSatisfy {
             !SupportedMeetingBrowser.supportsAutomaticURLResolution($0)
         })
+        XCTAssertFalse(SupportedMeetingBrowser.supportsAutomaticURLResolution(
+            "com.example.wavebox-lookalike"
+        ))
     }
 
     func testResolverDelegatesURLAndTitleRequestsToInjectedProvider() async {
@@ -64,5 +88,18 @@ final class BrowserURLResolverTests: XCTestCase {
         XCTAssertFalse(probe.calls[0].1)
         XCTAssertEqual(probe.calls[1].0, SupportedMeetingBrowser.chrome)
         XCTAssertTrue(probe.calls[1].1)
+    }
+
+    func testResolverSerializesConcurrentResolutionRequests() async {
+        let probe = SerializedBrowserResolutionProbe()
+        let resolver = BrowserURLResolver { bundleIdentifier, includeTitle in
+            probe.resolve(bundleIdentifier: bundleIdentifier, includeTitle: includeTitle)
+        }
+
+        async let first = resolver.activeURL(for: SupportedMeetingBrowser.safari)
+        async let second = resolver.activeURL(for: SupportedMeetingBrowser.chrome)
+        _ = await (first, second)
+
+        XCTAssertEqual(probe.maximumActiveCalls, 1)
     }
 }

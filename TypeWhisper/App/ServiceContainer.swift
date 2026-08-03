@@ -207,11 +207,17 @@ final class ServiceContainer: ObservableObject {
             audioFileService: audioFileService,
             audioDeviceService: audioDeviceService
         )
+        let meetingCountdownHotkeyService = hotkeyService
         calendarMeetingAutomationController = CalendarMeetingAutomationController(
             licenseService: licenseService,
             premiumAccountService: premiumAccountService,
             recorderViewModel: audioRecorderViewModel,
-            dictationViewModel: dictationViewModel
+            dictationViewModel: dictationViewModel,
+            countdownPresenterFactory: {
+                MeetingAutomationCountdownPanelController(
+                    hotkeyService: meetingCountdownHotkeyService
+                )
+            }
         )
 
 

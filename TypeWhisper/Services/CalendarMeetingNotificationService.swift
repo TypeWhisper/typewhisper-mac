@@ -181,11 +181,17 @@ private final class UserNotificationCenterClient: CalendarMeetingNotificationCli
             CalendarMeetingNotificationService.digestUserInfoKey: request.occurrenceDigest,
             CalendarMeetingNotificationService.kindUserInfoKey: request.kind.rawValue
         ]
-        let components = Calendar.current.dateComponents(
-            [.year, .month, .day, .hour, .minute, .second],
-            from: request.fireDate
-        )
-        let trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+        let trigger: UNNotificationTrigger
+        switch request.kind {
+        case .upcoming:
+            let components = Calendar.current.dateComponents(
+                [.year, .month, .day, .hour, .minute, .second],
+                from: request.fireDate
+            )
+            trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
+        case .detected:
+            trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+        }
         try await center.add(UNNotificationRequest(
             identifier: request.identifier,
             content: content,

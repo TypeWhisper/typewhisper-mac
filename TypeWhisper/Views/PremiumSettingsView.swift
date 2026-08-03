@@ -254,18 +254,7 @@ struct PremiumAccessSettingsView: View {
     }
 
     private var accessTitle: String {
-        switch access.summary {
-        case .locked:
-            String(localized: "premium.hub.access.locked")
-        case .supporterOnly:
-            String(localized: "premium.hub.access.supporter")
-        case .commercialLicense:
-            String(localized: "premium.hub.access.commercial")
-        case .premiumAccount:
-            String(localized: "premium.hub.access.account")
-        case .commercialAndPremiumAccount:
-            String(localized: "premium.hub.access.both")
-        }
+        access.summary.localizedTitle
     }
 }
 

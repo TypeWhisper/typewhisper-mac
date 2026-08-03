@@ -1122,6 +1122,7 @@ struct CloudFolderSyncSettingsView: View {
                         }
                     }
                     .pickerStyle(.segmented)
+                    .disabled(controller.isSyncing)
                     .accessibilityIdentifier("premium.sync.mode")
 
                     Text(String(localized: "premium.window.sync.modeHelp"))
@@ -1154,7 +1155,7 @@ struct CloudFolderSyncSettingsView: View {
                         } label: {
                             Label(String(localized: "premium.window.sync.chooseFolder"), systemImage: "folder.badge.plus")
                         }
-                        .disabled(!controller.canUseSync)
+                        .disabled(!controller.canUseSync || controller.isSyncing)
                         .accessibilityIdentifier("premium.sync.chooseFolder")
 
                         Button {
@@ -1174,7 +1175,7 @@ struct CloudFolderSyncSettingsView: View {
                         } label: {
                             Label(String(localized: "premium.window.sync.clear"), systemImage: "xmark.circle")
                         }
-                        .disabled(controller.selectedFolderURL == nil)
+                        .disabled(controller.selectedFolderURL == nil || controller.isSyncing)
                         .accessibilityIdentifier("premium.sync.clearFolder")
                     }
                 }

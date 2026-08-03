@@ -47,6 +47,21 @@ final class MeetingLinkParserTests: XCTestCase {
         XCTAssertEqual(deep.first?.identity, "teams.microsoft.com/l/meetup-join/19:meeting_ABC@thread.v2/0")
     }
 
+    func testTeamsRouteCasingDoesNotChangeCanonicalIdentity() {
+        let lowercase = parser.parse(
+            text: "https://teams.microsoft.com/l/meetup-join/19%3ameeting_ABC%40thread.v2/0"
+        )
+        let mixedCase = parser.parse(
+            text: "https://teams.microsoft.com/L/MEETUP-JOIN/19%3ameeting_ABC%40thread.v2/0"
+        )
+        let deepLink = parser.parse(
+            text: "msteams:/L/MEETUP-JOIN/19%3ameeting_ABC%40thread.v2/0"
+        )
+
+        XCTAssertEqual(mixedCase, lowercase)
+        XCTAssertEqual(deepLink, lowercase)
+    }
+
     func testGoogleMeetCodeAndLookupCanonicalize() {
         XCTAssertEqual(
             parser.parse(text: "Join https://meet.google.com/ABC-defg-HIJ?authuser=1.").first,
