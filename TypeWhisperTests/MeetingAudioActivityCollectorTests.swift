@@ -147,7 +147,7 @@ final class MeetingAudioActivityCollectorTests: XCTestCase {
             processes: []
         ))
         var collector: MeetingAudioActivityCollector? = MeetingAudioActivityCollector(client: client)
-        weak var weakCollector = collector
+        weak let weakCollector = collector
         _ = await collector?.startCollecting()
 
         collector = nil
