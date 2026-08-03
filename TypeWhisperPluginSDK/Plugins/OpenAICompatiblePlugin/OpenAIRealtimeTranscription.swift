@@ -2,15 +2,12 @@ import Foundation
 import os
 import TypeWhisperPluginSDK
 
-// MARK: - Shared OpenAI-Compatible Realtime Transcription
+// MARK: - OpenAI-Compatible Realtime Transcription
 
-// Provider-agnostic support for the OpenAI Realtime transcription protocol
-// (`GET wss://<host>/v1/realtime?intent=transcription`), reused by any plugin that
-// talks to an OpenAI-compatible realtime endpoint (OpenAI itself, Azure OpenAI /
-// Microsoft Foundry, or other BYO deployments). Callers are responsible for
-// building the provider-specific `URLRequest` (host, path, query, and
-// authorization headers); this type owns the WebSocket lifecycle, session
-// configuration payload, PCM resampling/encoding, and transcript assembly.
+// Provider-agnostic protocol support scoped to this plugin bundle so it remains
+// loadable against released v1 host SDKs. The caller builds the endpoint-specific
+// request; these types own the WebSocket lifecycle, session configuration, PCM
+// resampling/encoding, and transcript assembly.
 
 public enum PluginOpenAILiveTranscriptionDelay: String, CaseIterable, Sendable {
     case minimal
@@ -274,10 +271,8 @@ private final class PluginOpenAIRealtimeWebSocketDelegate: NSObject, URLSessionW
 }
 
 /// A `LiveTranscriptionSession` that streams 24 kHz PCM audio to an OpenAI-compatible
-/// realtime transcription endpoint over a WebSocket. Callers supply a fully-formed
-/// `URLRequest` (scheme/host/path/query and authorization headers), so this type can
-/// be reused for OpenAI itself, Azure OpenAI / Microsoft Foundry, or any other
-/// OpenAI-compatible BYO deployment.
+/// realtime transcription endpoint over a WebSocket. The plugin supplies a fully
+/// formed `URLRequest` containing the endpoint path, query, and authorization.
 public final class PluginOpenAIRealtimeTranscriptionSession: LiveTranscriptionSession, @unchecked Sendable {
     public static let sourceSampleRate = 16_000
     public static let targetSampleRate = 24_000
