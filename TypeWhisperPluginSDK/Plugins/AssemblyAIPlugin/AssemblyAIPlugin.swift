@@ -56,8 +56,12 @@ final class AssemblyAIPlugin: NSObject, StructuredTranscriptionEnginePlugin, Dic
     func activate(host: HostServices) {
         self.host = host
         _apiKey = host.loadSecret(key: "api-key")
-        _selectedModelId = host.userDefault(forKey: "selectedModel") as? String
-            ?? transcriptionModels.first?.id
+        let storedModelId = host.userDefault(forKey: "selectedModel") as? String
+        let resolvedModel = AssemblyAIModelCatalog.resolve(storedModelId)
+        _selectedModelId = resolvedModel.id
+        if storedModelId != resolvedModel.id {
+            host.setUserDefault(resolvedModel.id, forKey: "selectedModel")
+        }
         _speakerDiarizationEnabled = host.userDefault(forKey: Self.speakerDiarizationEnabledKey) as? Bool ?? false
     }
 
@@ -76,37 +80,28 @@ final class AssemblyAIPlugin: NSObject, StructuredTranscriptionEnginePlugin, Dic
     }
 
     var transcriptionModels: [PluginModelInfo] {
-        [
-            PluginModelInfo(id: "universal-3-pro", displayName: "Universal-3 Pro"),
-            PluginModelInfo(id: "universal-2", displayName: "Universal-2"),
-        ]
+        AssemblyAIModelCatalog.all.map(\.modelInfo)
     }
 
     var selectedModelId: String? { _selectedModelId }
 
     func selectModel(_ modelId: String) {
-        _selectedModelId = modelId
-        host?.setUserDefault(modelId, forKey: "selectedModel")
+        let resolvedModel = AssemblyAIModelCatalog.resolve(modelId)
+        _selectedModelId = resolvedModel.id
+        host?.setUserDefault(resolvedModel.id, forKey: "selectedModel")
     }
 
     var supportsTranslation: Bool { false }
     // AssemblyAI's streaming API does not return the speaker metadata preserved by the structured REST path.
     var supportsStreaming: Bool { !_speakerDiarizationEnabled }
     var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
-    var dictionaryTermsBudget: DictionaryTermsBudget { Self.dictionaryTermsBudget(for: _selectedModelId) }
+    var dictionaryTermsBudget: DictionaryTermsBudget {
+        AssemblyAIModelCatalog.resolve(_selectedModelId).dictionaryTermsBudget
+    }
     var isSpeakerDiarizationEnabled: Bool { _speakerDiarizationEnabled }
 
     var supportedLanguages: [String] {
-        if _selectedModelId == "universal-2" {
-            return [
-                "bg", "ca", "cs", "da", "de", "el", "en", "es", "et", "fi",
-                "fr", "hi", "hr", "hu", "id", "it", "ja", "ko", "lt", "lv",
-                "ms", "nl", "no", "pl", "pt", "ro", "ru", "sk", "sl", "sq",
-                "sr", "sv", "th", "tr", "uk", "vi", "zh",
-            ]
-        }
-        // Universal-3 Pro: 6 languages
-        return ["de", "en", "es", "fr", "it", "pt"]
+        AssemblyAIModelCatalog.resolve(_selectedModelId).supportedLanguages
     }
 
     // MARK: - Transcription (REST Fallback)
@@ -286,13 +281,6 @@ final class AssemblyAIPlugin: NSObject, StructuredTranscriptionEnginePlugin, Dic
         return transcriptId
     }
 
-    private static func dictionaryTermsBudget(for modelId: String?) -> DictionaryTermsBudget {
-        if modelId == "universal-3-pro" {
-            return DictionaryTermsBudget(maxTerms: 1_000, maxWordsPerTerm: 6)
-        }
-        return DictionaryTermsBudget(maxTerms: 100, maxCharsPerTerm: 50)
-    }
-
     static func makeSubmitTranscriptionBody(
         audioURL: String,
         modelId: String,
@@ -300,9 +288,10 @@ final class AssemblyAIPlugin: NSObject, StructuredTranscriptionEnginePlugin, Dic
         prompt: String?,
         speakerDiarizationEnabled: Bool
     ) -> [String: Any] {
+        let model = AssemblyAIModelCatalog.resolve(modelId)
         var body: [String: Any] = [
             "audio_url": audioURL,
-            "speech_models": [modelId],
+            "speech_models": [model.restModelId],
         ]
 
         if let lang = language, !lang.isEmpty {
@@ -315,22 +304,24 @@ final class AssemblyAIPlugin: NSObject, StructuredTranscriptionEnginePlugin, Dic
             body["speaker_labels"] = true
         }
 
-        applyDictionaryTerms(prompt: prompt, modelId: modelId, to: &body)
+        applyDictionaryTerms(prompt: prompt, modelId: model.id, to: &body)
         return body
     }
 
     static func applyDictionaryTerms(prompt: String?, modelId: String, to body: inout [String: Any]) {
+        let model = AssemblyAIModelCatalog.resolve(modelId)
         let terms = PluginDictionaryTerms.clippedTerms(
             from: PluginDictionaryTerms.terms(fromPrompt: prompt),
-            budget: dictionaryTermsBudget(for: modelId)
+            budget: model.dictionaryTermsBudget
         )
         guard !terms.isEmpty else { return }
 
-        if modelId == "universal-3-pro" {
+        switch model.dictionaryPayload {
+        case .keytermsPrompt:
             body["keyterms_prompt"] = terms
-        } else {
+        case .wordBoost(let boostParam):
             body["word_boost"] = terms
-            body["boost_param"] = "high"
+            body["boost_param"] = boostParam
         }
     }
 
@@ -478,23 +469,12 @@ final class AssemblyAIPlugin: NSObject, StructuredTranscriptionEnginePlugin, Dic
         apiKey: String,
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> PluginTranscriptionResult {
-        var queryItems = [
-            URLQueryItem(name: "sample_rate", value: "16000"),
-            URLQueryItem(name: "format_turns", value: "true"),
-        ]
-
-        if let lang = language, !lang.isEmpty, lang != "en" {
-            queryItems.append(URLQueryItem(name: "speech_model", value: "universal-streaming-multilingual"))
-        }
-
-        if let keytermsPrompt = streamingKeytermsPromptJSON(from: prompt, modelId: modelId) {
-            queryItems.append(URLQueryItem(name: "keyterms_prompt", value: keytermsPrompt))
-        }
-
-        var components = URLComponents(string: "wss://streaming.assemblyai.com/v3/ws")
-        components?.queryItems = queryItems
-
-        guard let url = components?.url else {
+        let keytermsPrompt = streamingKeytermsPromptJSON(from: prompt, modelId: modelId)
+        guard let url = Self.makeStreamingURL(
+            modelId: modelId,
+            language: language,
+            keytermsPromptJSON: keytermsPrompt
+        ) else {
             throw PluginTranscriptionError.apiError("Invalid streaming URL")
         }
 
@@ -568,10 +548,53 @@ final class AssemblyAIPlugin: NSObject, StructuredTranscriptionEnginePlugin, Dic
         return PluginTranscriptionResult(text: finalText, detectedLanguage: language)
     }
 
+    static func makeStreamingURL(
+        modelId: String,
+        language: String?,
+        keytermsPromptJSON: String?
+    ) -> URL? {
+        let model = AssemblyAIModelCatalog.resolve(modelId)
+        let normalizedLanguage = language?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .lowercased()
+        var queryItems = [URLQueryItem(name: "sample_rate", value: "16000")]
+
+        switch model.streamingConfiguration {
+        case .universal2(let englishSpeechModelId, let multilingualSpeechModelId):
+            let streamingModel = normalizedLanguage == nil
+                || normalizedLanguage?.isEmpty == true
+                || normalizedLanguage == "en"
+                ? englishSpeechModelId
+                : multilingualSpeechModelId
+            queryItems.append(URLQueryItem(name: "speech_model", value: streamingModel))
+            queryItems.append(URLQueryItem(name: "format_turns", value: "true"))
+        case .universal35Pro(let speechModelId, let supportedLanguageCodes):
+            queryItems.append(URLQueryItem(name: "speech_model", value: speechModelId))
+            if let normalizedLanguage,
+               supportedLanguageCodes.contains(normalizedLanguage),
+               let languageCodesJSON = jsonString(from: [normalizedLanguage]) {
+                queryItems.append(URLQueryItem(name: "language_codes", value: languageCodesJSON))
+            }
+        }
+
+        if let keytermsPromptJSON {
+            queryItems.append(URLQueryItem(name: "keyterms_prompt", value: keytermsPromptJSON))
+        }
+
+        var components = URLComponents(string: "wss://streaming.assemblyai.com/v3/ws")
+        components?.queryItems = queryItems
+        return components?.url
+    }
+
+    private static func jsonString(from values: [String]) -> String? {
+        guard let data = try? JSONSerialization.data(withJSONObject: values) else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
     private func streamingKeytermsPromptJSON(from prompt: String?, modelId: String) -> String? {
         let rawTerms = PluginDictionaryTerms.clippedTerms(
             from: PluginDictionaryTerms.terms(fromPrompt: prompt),
-            budget: Self.dictionaryTermsBudget(for: modelId)
+            budget: AssemblyAIModelCatalog.resolve(modelId).dictionaryTermsBudget
         )
         guard !rawTerms.isEmpty else { return nil }
 

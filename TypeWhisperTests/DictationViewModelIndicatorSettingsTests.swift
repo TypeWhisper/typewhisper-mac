@@ -1015,6 +1015,33 @@ final class IndicatorPresentationStateTests: XCTestCase {
             actionFeedbackIcon: nil,
             actionFeedbackIsError: false,
             actionFeedbackUndoTitle: nil,
+            actionFeedbackRemainingFraction: nil,
+            actionFeedbackIsPaused: false,
+            externalStreamingDisplayCount: 0
+        )
+    }
+
+    private func makeFeedbackPresentation(
+        remainingFraction: Double,
+        isPaused: Bool
+    ) -> IndicatorPresentationData {
+        IndicatorPresentationData(
+            source: .dictation,
+            state: .inserting,
+            recordingDuration: 0,
+            audioLevel: 0,
+            partialText: "",
+            activeRuleName: nil,
+            activeAppIcon: nil,
+            isRecordingInputReady: false,
+            cancelWarningMessage: nil,
+            processingPhase: nil,
+            actionFeedbackMessage: "Saved",
+            actionFeedbackIcon: "checkmark.circle.fill",
+            actionFeedbackIsError: false,
+            actionFeedbackUndoTitle: "Undo",
+            actionFeedbackRemainingFraction: remainingFraction,
+            actionFeedbackIsPaused: isPaused,
             externalStreamingDisplayCount: 0
         )
     }
@@ -1109,6 +1136,403 @@ final class IndicatorPresentationStateTests: XCTestCase {
             visibility: .never,
             presentation: preparing
         ))
+    }
+
+    func testFeedbackPresentationCarriesCountdownAndPauseState() {
+        let presentation = makeFeedbackPresentation(
+            remainingFraction: 0.625,
+            isPaused: true
+        )
+
+        XCTAssertEqual(presentation.actionFeedbackRemainingFraction, 0.625)
+        XCTAssertTrue(presentation.actionFeedbackIsPaused)
+    }
+
+    func testRegularRecordingPresentationDoesNotExposeFeedbackCountdown() {
+        XCTAssertNil(
+            makeRecordingPresentation(isInputReady: true)
+                .actionFeedbackRemainingFraction
+        )
+    }
+}
+
+@MainActor
+final class IndicatorFeedbackLifetimeTests: XCTestCase {
+    func testCountdownUsesElapsedContinuousTimeAndExpiresOnce() {
+        let clock = IndicatorFeedbackTestClock(now: 100)
+        var expirationCount = 0
+        let lifetime = makeLifetime(clock: clock)
+        defer { lifetime.cancel() }
+
+        lifetime.start(duration: 10) {
+            expirationCount += 1
+        }
+        XCTAssertEqual(lifetime.remainingFraction, 1)
+
+        clock.now = 102.5
+        lifetime.updateRemainingTime()
+        XCTAssertEqual(lifetime.remainingFraction, 0.75, accuracy: 0.0001)
+
+        clock.now = 110
+        lifetime.updateRemainingTime()
+        lifetime.updateRemainingTime()
+        XCTAssertEqual(lifetime.remainingFraction, 0)
+        XCTAssertEqual(expirationCount, 1)
+    }
+
+    func testHoverPausesAndResumesFromRemainingTime() {
+        let clock = IndicatorFeedbackTestClock()
+        let lifetime = makeLifetime(clock: clock)
+        defer { lifetime.cancel() }
+
+        lifetime.start(duration: 10) {}
+        clock.now = 2
+        lifetime.setHovered(true)
+        lifetime.setHovered(true)
+        XCTAssertTrue(lifetime.isPaused)
+        XCTAssertEqual(lifetime.remainingFraction, 0.8, accuracy: 0.0001)
+
+        clock.now = 8
+        lifetime.updateRemainingTime()
+        XCTAssertEqual(lifetime.remainingFraction, 0.8, accuracy: 0.0001)
+
+        lifetime.setHovered(false)
+        lifetime.setHovered(false)
+        clock.now = 10
+        lifetime.updateRemainingTime()
+        XCTAssertFalse(lifetime.isPaused)
+        XCTAssertEqual(lifetime.remainingFraction, 0.6, accuracy: 0.0001)
+    }
+
+    func testRestartCancelsPreviousExpiration() {
+        let clock = IndicatorFeedbackTestClock()
+        var firstExpirationCount = 0
+        var secondExpirationCount = 0
+        let lifetime = makeLifetime(clock: clock)
+        defer { lifetime.cancel() }
+
+        lifetime.start(duration: 10) {
+            firstExpirationCount += 1
+        }
+        clock.now = 3
+        lifetime.updateRemainingTime()
+
+        lifetime.start(duration: 4) {
+            secondExpirationCount += 1
+        }
+        XCTAssertEqual(lifetime.remainingFraction, 1)
+
+        clock.now = 7
+        lifetime.updateRemainingTime()
+        XCTAssertEqual(firstExpirationCount, 0)
+        XCTAssertEqual(secondExpirationCount, 1)
+    }
+
+    func testCancelPreventsExpiration() {
+        let clock = IndicatorFeedbackTestClock()
+        var expirationCount = 0
+        let lifetime = makeLifetime(clock: clock)
+
+        lifetime.start(duration: 2) {
+            expirationCount += 1
+        }
+        lifetime.cancel()
+        clock.now = 5
+        lifetime.updateRemainingTime()
+
+        XCTAssertEqual(expirationCount, 0)
+        XCTAssertEqual(lifetime.remainingFraction, 0)
+        XCTAssertFalse(lifetime.isPaused)
+    }
+
+    func testFinishImmediatelyOverridesHoverPause() {
+        let clock = IndicatorFeedbackTestClock()
+        var expirationCount = 0
+        let lifetime = makeLifetime(clock: clock)
+        defer { lifetime.cancel() }
+
+        lifetime.start(duration: 12) {
+            expirationCount += 1
+        }
+        clock.now = 1
+        lifetime.setHovered(true)
+        lifetime.finishImmediately()
+        lifetime.finishImmediately()
+
+        XCTAssertEqual(expirationCount, 1)
+        XCTAssertEqual(lifetime.remainingFraction, 0)
+        XCTAssertFalse(lifetime.isPaused)
+    }
+
+    func testKnownFeedbackDurationsRetainTheirOwnCountdownScale() {
+        for duration in [2.5, 3.0, 12.0, 7.25] {
+            let clock = IndicatorFeedbackTestClock()
+            let lifetime = makeLifetime(clock: clock)
+
+            lifetime.start(duration: duration) {}
+            clock.now = duration / 2
+            lifetime.updateRemainingTime()
+
+            XCTAssertEqual(
+                lifetime.remainingFraction,
+                0.5,
+                accuracy: 0.0001,
+                "Unexpected progress for duration \(duration)"
+            )
+            lifetime.cancel()
+        }
+    }
+
+    private func makeLifetime(
+        clock: IndicatorFeedbackTestClock
+    ) -> IndicatorFeedbackLifetime {
+        IndicatorFeedbackLifetime(
+            tickInterval: .seconds(60),
+            now: { clock.now },
+            sleep: { _ in
+                try await Task.sleep(for: .seconds(60))
+            }
+        )
+    }
+}
+
+@MainActor
+private final class IndicatorFeedbackTestClock {
+    var now: TimeInterval
+
+    init(now: TimeInterval = 0) {
+        self.now = now
+    }
+}
+
+@MainActor
+final class IndicatorPanelInteractionTests: XCTestCase {
+    func testOnlyVisibleInsertingFeedbackIsInteractive() {
+        XCTAssertTrue(IndicatorFeedbackPanelLayout.isInteractive(
+            state: .inserting,
+            message: "Saved"
+        ))
+        XCTAssertFalse(IndicatorFeedbackPanelLayout.isInteractive(
+            state: .inserting,
+            message: nil
+        ))
+        XCTAssertFalse(IndicatorFeedbackPanelLayout.isInteractive(
+            state: .recording,
+            message: "Stale"
+        ))
+        XCTAssertFalse(IndicatorFeedbackPanelLayout.isInteractive(
+            state: .processing,
+            message: "Stale"
+        ))
+    }
+
+    func testInteractiveFramesMatchVisibleFeedbackSurfaces() {
+        XCTAssertEqual(
+            IndicatorFeedbackPanelLayout.panelSize(
+                for: .notch,
+                isFeedbackInteractive: true,
+                notchClosedWidth: 305,
+                notchClosedHeight: 30
+            ),
+            CGSize(width: 340, height: 82)
+        )
+        XCTAssertEqual(
+            IndicatorFeedbackPanelLayout.panelSize(
+                for: .overlay,
+                isFeedbackInteractive: true
+            ),
+            CGSize(width: 340, height: 100)
+        )
+        XCTAssertEqual(
+            IndicatorFeedbackPanelLayout.panelSize(
+                for: .minimal,
+                isFeedbackInteractive: true
+            ),
+            CGSize(width: 360, height: 52)
+        )
+
+        XCTAssertEqual(
+            IndicatorFeedbackPanelLayout.panelSize(
+                for: .notch,
+                isFeedbackInteractive: false
+            ),
+            CGSize(width: 500, height: 500)
+        )
+        XCTAssertEqual(
+            IndicatorFeedbackPanelLayout.panelSize(
+                for: .overlay,
+                isFeedbackInteractive: false
+            ),
+            CGSize(width: 500, height: 300)
+        )
+        XCTAssertEqual(
+            IndicatorFeedbackPanelLayout.panelSize(
+                for: .minimal,
+                isFeedbackInteractive: false
+            ),
+            CGSize(width: 420, height: 160)
+        )
+    }
+
+    func testOverlaySurfaceClipsFeedbackProgressToRoundedWindow() throws {
+        let width = Int(IndicatorFeedbackPanelLayout.feedbackWidth)
+        let height = Int(
+            IndicatorFeedbackPanelLayout.overlayStatusHeight
+                + IndicatorFeedbackPanelLayout.feedbackBodyHeight
+        )
+        let renderer = ImageRenderer(
+            content: OverlayIndicatorSurface {
+                Color.clear
+                    .frame(width: CGFloat(width), height: CGFloat(height))
+                    .overlay(alignment: .top) {
+                        Color.red.frame(height: 2)
+                    }
+            }
+        )
+        renderer.proposedSize = ProposedViewSize(
+            width: CGFloat(width),
+            height: CGFloat(height)
+        )
+        renderer.scale = 1
+
+        let image = try XCTUnwrap(renderer.cgImage)
+        let bitmap = NSBitmapImageRep(cgImage: image)
+        let leftEdgeRed = try XCTUnwrap([
+            XCTUnwrap(bitmap.colorAt(x: 0, y: 0)),
+            XCTUnwrap(bitmap.colorAt(x: 0, y: height - 1))
+        ]
+        .map(\.redComponent)
+        .max())
+        let centerEdgeRed = try XCTUnwrap([
+            XCTUnwrap(bitmap.colorAt(x: width / 2, y: 0)),
+            XCTUnwrap(bitmap.colorAt(x: width / 2, y: height - 1))
+        ]
+        .map(\.redComponent)
+        .max())
+
+        XCTAssertLessThan(leftEdgeRed, 0.2)
+        XCTAssertGreaterThan(centerEdgeRed, 0.8)
+    }
+
+    func testMinimalSurfaceKeepsProgressVisibleNearExpiration() throws {
+        let width = Int(IndicatorFeedbackPanelLayout.minimalFeedbackWidth)
+        let height = Int(IndicatorFeedbackPanelLayout.feedbackBodyHeight)
+        let renderer = ImageRenderer(
+            content: VStack(spacing: 0) {
+                MinimalIndicatorFeedbackProgress(remainingFraction: 0.02)
+                Color.clear
+            }
+            .frame(width: CGFloat(width), height: CGFloat(height))
+            .background(.black.opacity(0.84), in: Capsule())
+            .clipShape(Capsule())
+        )
+        renderer.proposedSize = ProposedViewSize(
+            width: CGFloat(width),
+            height: CGFloat(height)
+        )
+        renderer.scale = 1
+
+        let image = try XCTUnwrap(renderer.cgImage)
+        let bitmap = NSBitmapImageRep(cgImage: image)
+        let progressX = Int(
+            IndicatorFeedbackPanelLayout.minimalFeedbackProgressHorizontalInset
+        ) + 1
+        let progressColor = try XCTUnwrap(
+            bitmap.colorAt(x: progressX, y: 0)?.usingColorSpace(.deviceRGB)
+        )
+        let outsideColor = try XCTUnwrap(
+            bitmap.colorAt(x: 0, y: 0)?.usingColorSpace(.deviceRGB)
+        )
+
+        XCTAssertGreaterThan(progressColor.redComponent, 0.5)
+        XCTAssertLessThan(outsideColor.alphaComponent, 0.1)
+    }
+
+    func testFeedbackFramePreservesStyleAnchor() {
+        let screenFrame = CGRect(x: 100, y: 200, width: 1_000, height: 800)
+
+        let passiveNotch = frame(for: .notch, interactive: false, in: screenFrame)
+        let feedbackNotch = frame(for: .notch, interactive: true, in: screenFrame)
+        XCTAssertEqual(passiveNotch.maxY, feedbackNotch.maxY)
+        XCTAssertEqual(feedbackNotch.maxY, screenFrame.maxY)
+
+        let passiveTop = frame(for: .overlay, interactive: false, in: screenFrame, position: .top)
+        let feedbackTop = frame(for: .overlay, interactive: true, in: screenFrame, position: .top)
+        XCTAssertEqual(passiveTop.maxY, feedbackTop.maxY)
+        XCTAssertEqual(feedbackTop.maxY, screenFrame.maxY - 20)
+
+        let passiveBottom = frame(for: .minimal, interactive: false, in: screenFrame, position: .bottom)
+        let feedbackBottom = frame(for: .minimal, interactive: true, in: screenFrame, position: .bottom)
+        XCTAssertEqual(passiveBottom.minY, feedbackBottom.minY)
+        XCTAssertEqual(feedbackBottom.minY, screenFrame.minY + 20)
+    }
+
+    func testAllPanelsRemainNonactivatingAndPassiveWhenHidden() throws {
+        guard let screen = NSScreen.screens.first else {
+            throw XCTSkip("Indicator panel tests require an available screen")
+        }
+        let resolver = makeResolver(screen: screen)
+        let notch = NotchIndicatorPanel(
+            screenResolver: resolver,
+            displayModeProvider: { .activeScreen },
+            content: { _ in EmptyView() }
+        )
+        let overlay = OverlayIndicatorPanel(
+            screenResolver: resolver,
+            displayModeProvider: { .activeScreen },
+            overlayPositionProvider: { .top },
+            content: { EmptyView() }
+        )
+        let minimal = MinimalIndicatorPanel(
+            screenResolver: resolver,
+            displayModeProvider: { .activeScreen },
+            overlayPositionProvider: { .top },
+            content: { EmptyView() }
+        )
+        let panels: [NSPanel] = [notch, overlay, minimal]
+        defer { panels.forEach { $0.orderOut(nil) } }
+
+        notch.updateFeedbackInteraction(isInteractive: true)
+        overlay.updateFeedbackInteraction(isInteractive: true)
+        minimal.updateFeedbackInteraction(isInteractive: true)
+
+        for panel in panels {
+            XCTAssertFalse(panel.canBecomeKey)
+            XCTAssertFalse(panel.canBecomeMain)
+            XCTAssertTrue(panel.ignoresMouseEvents)
+        }
+    }
+
+    private func frame(
+        for style: IndicatorStyle,
+        interactive: Bool,
+        in screenFrame: CGRect,
+        position: OverlayPosition = .top
+    ) -> CGRect {
+        let size = IndicatorFeedbackPanelLayout.panelSize(
+            for: style,
+            isFeedbackInteractive: interactive,
+            notchClosedWidth: 305,
+            notchClosedHeight: 30
+        )
+        return IndicatorFeedbackPanelLayout.panelFrame(
+            for: style,
+            size: size,
+            in: screenFrame,
+            overlayPosition: position
+        )
+    }
+
+    private func makeResolver(screen: NSScreen) -> IndicatorScreenResolver {
+        IndicatorScreenResolver(
+            focusedElementPositionProvider: { nil },
+            focusedWindowFrameProvider: { nil },
+            frontmostApplicationProvider: { nil },
+            mouseLocationProvider: { CGPoint(x: screen.frame.midX, y: screen.frame.midY) },
+            screensProvider: { [screen] },
+            mainScreenProvider: { screen },
+            windowFrameProvider: { _ in nil }
+        )
     }
 }
 

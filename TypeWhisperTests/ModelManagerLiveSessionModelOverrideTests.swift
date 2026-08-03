@@ -59,6 +59,36 @@ final class ModelManagerLiveSessionModelOverrideTests: XCTestCase {
         XCTAssertEqual(plugin.selectedModelId, "alpha")
     }
 
+    func testLiveSessionWaitsForNormalizedModelOverride() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let plugin = LiveModelOverrideTranscriptionPlugin(modelAliases: ["legacy-beta": "beta"])
+        let modelManager = installLivePlugin(plugin, appSupportDirectory: appSupportDirectory)
+        modelManager.setPluginRestoreWaitConfigurationForTesting(
+            initialAttempts: 1,
+            busyAttempts: 0,
+            pollInterval: .seconds(1)
+        )
+
+        let clock = ContinuousClock()
+        let start = clock.now
+        let sessionHandle = try await modelManager.createLiveTranscriptionSession(
+            languageSelection: .auto,
+            task: .transcribe,
+            cloudModelOverride: "legacy-beta",
+            onProgress: { _ in true }
+        )
+        let elapsed = start.duration(to: clock.now)
+        let handle = try XCTUnwrap(sessionHandle)
+
+        XCTAssertLessThan(elapsed, .milliseconds(500))
+        XCTAssertEqual(plugin.selectedModelId, "beta")
+
+        await modelManager.cancelLiveTranscriptionSession(handle)
+        XCTAssertEqual(plugin.selectedModelId, "alpha")
+    }
+
     func testLiveSessionForwardsDictionaryTermHints() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
@@ -694,8 +724,18 @@ private final class LiveModelOverrideTranscriptionPlugin: NSObject, Transcriptio
         PluginModelInfo(id: "alpha", displayName: "Alpha"),
         PluginModelInfo(id: "beta", displayName: "Beta")
     ]
+    private var modelAliases: [String: String] = [:]
     private var currentModelId: String? = "alpha"
     private(set) var receivedDictionaryHints: [PluginDictionaryTermHint] = []
+
+    required override init() {
+        super.init()
+    }
+
+    convenience init(modelAliases: [String: String]) {
+        self.init()
+        self.modelAliases = modelAliases
+    }
 
     var providerId: String { "mock-live-model-override" }
     var providerDisplayName: String { Self.pluginName }
@@ -711,7 +751,8 @@ private final class LiveModelOverrideTranscriptionPlugin: NSObject, Transcriptio
     func deactivate() {}
 
     func selectModel(_ modelId: String) {
-        currentModelId = models.contains { $0.id == modelId } ? modelId : nil
+        let resolvedModelId = modelAliases[modelId] ?? modelId
+        currentModelId = models.contains { $0.id == resolvedModelId } ? resolvedModelId : nil
     }
 
     func transcribe(

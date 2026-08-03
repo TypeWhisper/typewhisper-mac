@@ -1,5 +1,78 @@
 import AppKit
 
+enum IndicatorFeedbackPanelLayout {
+    static let feedbackWidth: CGFloat = 340
+    static let minimalFeedbackWidth: CGFloat = 360
+    static let feedbackBodyHeight: CGFloat = 52
+    static let minimalFeedbackProgressHorizontalInset: CGFloat = feedbackBodyHeight / 2
+    static let overlayStatusHeight: CGFloat = 48
+    static let screenEdgeInset: CGFloat = 20
+
+    static func isInteractive(
+        state: DictationViewModel.State,
+        message: String?
+    ) -> Bool {
+        state == .inserting && message != nil
+    }
+
+    static func panelSize(
+        for style: IndicatorStyle,
+        isFeedbackInteractive: Bool,
+        notchClosedWidth: CGFloat = 0,
+        notchClosedHeight: CGFloat = NotchIndicatorLayout.notchedClosedHeight
+    ) -> CGSize {
+        guard isFeedbackInteractive else {
+            switch style {
+            case .notch:
+                return CGSize(width: 500, height: 500)
+            case .overlay:
+                return CGSize(width: 500, height: 300)
+            case .minimal:
+                return CGSize(width: 420, height: 160)
+            }
+        }
+
+        switch style {
+        case .notch:
+            return CGSize(
+                width: max(notchClosedWidth, feedbackWidth),
+                height: notchClosedHeight + feedbackBodyHeight
+            )
+        case .overlay:
+            return CGSize(
+                width: feedbackWidth,
+                height: overlayStatusHeight + feedbackBodyHeight
+            )
+        case .minimal:
+            return CGSize(width: minimalFeedbackWidth, height: feedbackBodyHeight)
+        }
+    }
+
+    static func panelFrame(
+        for style: IndicatorStyle,
+        size: CGSize,
+        in screenFrame: CGRect,
+        overlayPosition: OverlayPosition = .top
+    ) -> CGRect {
+        let x = screenFrame.midX - (size.width / 2)
+        let y: CGFloat
+
+        switch style {
+        case .notch:
+            y = screenFrame.maxY - size.height
+        case .overlay, .minimal:
+            switch overlayPosition {
+            case .bottom:
+                y = screenFrame.minY + screenEdgeInset
+            case .top:
+                y = screenFrame.maxY - size.height - screenEdgeInset
+            }
+        }
+
+        return CGRect(origin: CGPoint(x: x, y: y), size: size)
+    }
+}
+
 enum NotchExpansionMode {
     case closed
     case transcript
@@ -149,7 +222,7 @@ enum NotchIndicatorLayout {
         case .transcript:
             return max(closedWidth, 400)
         case .feedback:
-            return max(closedWidth, 340)
+            return max(closedWidth, IndicatorFeedbackPanelLayout.feedbackWidth)
         case .processing:
             return closedWidth + 80
         }

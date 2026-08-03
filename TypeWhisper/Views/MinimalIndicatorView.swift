@@ -1,5 +1,22 @@
 import SwiftUI
 
+struct MinimalIndicatorFeedbackProgress: View {
+    let remainingFraction: Double?
+
+    var body: some View {
+        Group {
+            if let remainingFraction {
+                IndicatorFeedbackProgressBar(remainingFraction: remainingFraction)
+            } else {
+                Color.clear
+                    .frame(height: 2)
+                    .accessibilityHidden(true)
+            }
+        }
+        .padding(.horizontal, IndicatorFeedbackPanelLayout.minimalFeedbackProgressHorizontalInset)
+    }
+}
+
 /// Compact floating indicator for power users who only want essential status.
 struct MinimalIndicatorView: View {
     @ObservedObject private var viewModel = DictationViewModel.shared
@@ -10,7 +27,7 @@ struct MinimalIndicatorView: View {
     private let idleWidth: CGFloat = 42
     private let processingWidth: CGFloat = 76
     private let insertingWidth: CGFloat = 44
-    private let messageWidth: CGFloat = 360
+    private let messageWidth = IndicatorFeedbackPanelLayout.minimalFeedbackWidth
 
     private var presentation: IndicatorPresentationData {
         IndicatorPresentationData.make(dictation: viewModel, recorder: recorder)
@@ -132,20 +149,24 @@ struct MinimalIndicatorView: View {
     }
 
     private var content: some View {
-        HStack(spacing: 8) {
-            if let message = errorMessage {
-                compactMessage(
-                    text: message,
-                    icon: "xmark.circle.fill",
-                    iconColor: .red
+        contentBody
+            .background(.black.opacity(0.84), in: Capsule())
+            .overlay(
+                Capsule()
+                    .stroke(strokeColor, lineWidth: 1)
+            )
+            .clipShape(Capsule())
+            .shadow(color: shadowColor, radius: 10, y: 4)
+    }
+
+    @ViewBuilder
+    private var contentBody: some View {
+        if let message = actionFeedbackMessage {
+            VStack(spacing: 0) {
+                MinimalIndicatorFeedbackProgress(
+                    remainingFraction: presentation.actionFeedbackRemainingFraction
                 )
-            } else if let message = cancelWarningMessage {
-                compactMessage(
-                    text: message,
-                    icon: "exclamationmark.triangle.fill",
-                    iconColor: .yellow
-                )
-            } else if let message = actionFeedbackMessage {
+
                 compactMessage(
                     text: message,
                     icon: presentation.actionFeedbackIcon ?? (presentation.actionFeedbackIsError ? "xmark.circle.fill" : "checkmark.circle.fill"),
@@ -155,18 +176,35 @@ struct MinimalIndicatorView: View {
                         viewModel.undoActionFeedback()
                     }
                 )
-            } else {
-                compactStatus
+                .padding(.horizontal, 14)
+                .frame(maxHeight: .infinity)
             }
+            .frame(height: IndicatorFeedbackPanelLayout.feedbackBodyHeight)
+            .contentShape(Rectangle())
+            .onHover { hovered in
+                viewModel.setActionFeedbackHovered(hovered)
+            }
+        } else {
+            HStack(spacing: 8) {
+                if let message = errorMessage {
+                    compactMessage(
+                        text: message,
+                        icon: "xmark.circle.fill",
+                        iconColor: .red
+                    )
+                } else if let message = cancelWarningMessage {
+                    compactMessage(
+                        text: message,
+                        icon: "exclamationmark.triangle.fill",
+                        iconColor: .yellow
+                    )
+                } else {
+                    compactStatus
+                }
+            }
+            .padding(.horizontal, showsExpandedMessage ? 14 : 12)
+            .padding(.vertical, showsExpandedMessage ? 9 : 10)
         }
-        .padding(.horizontal, showsExpandedMessage ? 14 : 12)
-        .padding(.vertical, showsExpandedMessage ? 9 : 10)
-        .background(.black.opacity(0.84), in: Capsule())
-        .overlay(
-            Capsule()
-                .stroke(strokeColor, lineWidth: 1)
-        )
-        .shadow(color: shadowColor, radius: 10, y: 4)
     }
 
     @ViewBuilder

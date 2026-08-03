@@ -2,6 +2,88 @@ import Foundation
 import SwiftUI
 import TypeWhisperPluginSDK
 
+protocol OpenAICompatibleRealtimeSessionConnecting: Sendable {
+    func connect(
+        request: URLRequest,
+        configuration: PluginOpenAIRealtimeTranscriptionConfiguration,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> any LiveTranscriptionSession
+}
+
+private struct DefaultOpenAICompatibleRealtimeSessionConnector: OpenAICompatibleRealtimeSessionConnecting {
+    func connect(
+        request: URLRequest,
+        configuration: PluginOpenAIRealtimeTranscriptionConfiguration,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> any LiveTranscriptionSession {
+        try await PluginOpenAIRealtimeTranscriptionSession.connect(
+            request: request,
+            configuration: configuration,
+            onProgress: onProgress
+        )
+    }
+}
+
+// MARK: - Transcription Transport
+
+/// Per-profile transport selection for transcription requests.
+///
+/// `auto` keeps existing batch behavior for every model except a small set of
+/// known realtime-only model IDs (see `OpenAICompatibleRealtimeModel`), which
+/// is the safe default for profiles migrated from before realtime support
+/// existed. `batch` and `realtime` let a user force one transport regardless
+/// of the selected model name, which is required for custom Azure/BYO
+/// deployment aliases that don't match the well-known IDs.
+enum OpenAICompatibleTranscriptTransport: String, Codable, CaseIterable, Sendable {
+    case auto
+    case batch
+    case realtime
+
+    var displayName: String {
+        switch self {
+        case .auto:
+            "Auto"
+        case .batch:
+            "Batch"
+        case .realtime:
+            "Realtime"
+        }
+    }
+}
+
+/// Resolved (non-`auto`) transport for a single transcription request.
+enum OpenAICompatibleResolvedTranscriptionTransport: Sendable, Equatable {
+    case batch
+    case realtime
+}
+
+/// Knowledge about the well-known OpenAI/Azure realtime transcription model
+/// IDs, mirroring the classification `OpenAIPlugin` uses for `gpt-live-transcribe`
+/// (context-aware) and `gpt-realtime-whisper` (legacy). Custom Azure/Foundry
+/// deployment aliases won't match these names, so callers must opt in
+/// explicitly via `OpenAICompatibleTranscriptTransport.realtime`.
+enum OpenAICompatibleRealtimeModel {
+    static let contextAwareModelID = "gpt-live-transcribe"
+    static let legacyModelID = "gpt-realtime-whisper"
+    static let knownRealtimeModelIDs: Set<String> = [contextAwareModelID, legacyModelID]
+
+    static func isKnownRealtimeModelID(_ modelId: String) -> Bool {
+        knownRealtimeModelIDs.contains(normalized(modelId))
+    }
+
+    /// Custom Azure/BYO deployment aliases are assumed to use the modern,
+    /// context-aware realtime transcription protocol (languages/keywords/delay)
+    /// unless the alias itself signals the legacy Whisper-based protocol by
+    /// containing "whisper", matching Azure's own `gpt-realtime-whisper` name.
+    static func usesContextAwareRealtimeHints(modelId: String) -> Bool {
+        !normalized(modelId).contains("whisper")
+    }
+
+    private static func normalized(_ modelId: String) -> String {
+        modelId.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+    }
+}
+
 // MARK: - Profile Model
 
 struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
@@ -11,6 +93,7 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
     var id: String
     var name: String
     var baseURL: String
+    var apiVersion: String
     var selectedModelId: String
     var selectedLLMModelId: String
     var llmTemperatureModeRaw: String
@@ -18,6 +101,7 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
     var fetchedModels: [FetchedModel]
     var chatRequestTimeoutSeconds: TimeInterval?
     var thinkingEnabled: Bool
+    var transcriptionTransportRaw: String
 
     static let defaultChatRequestTimeout: TimeInterval = 30
     static let minChatRequestTimeout: TimeInterval = 5
@@ -27,6 +111,7 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
         case id
         case name
         case baseURL
+        case apiVersion
         case selectedModelId
         case selectedLLMModelId
         case llmTemperatureModeRaw
@@ -34,23 +119,27 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
         case fetchedModels
         case chatRequestTimeoutSeconds
         case thinkingEnabled
+        case transcriptionTransportRaw
     }
 
     init(
         id: String,
         name: String,
         baseURL: String = "",
+        apiVersion: String = "",
         selectedModelId: String = "",
         selectedLLMModelId: String = "",
         llmTemperatureModeRaw: String = PluginLLMTemperatureMode.providerDefault.rawValue,
         llmTemperatureValue: Double = 0.3,
         fetchedModels: [FetchedModel] = [],
         chatRequestTimeoutSeconds: TimeInterval? = nil,
-        thinkingEnabled: Bool = false
+        thinkingEnabled: Bool = false,
+        transcriptionTransportRaw: String = OpenAICompatibleTranscriptTransport.auto.rawValue
     ) {
         self.id = id
         self.name = name
         self.baseURL = baseURL
+        self.apiVersion = apiVersion
         self.selectedModelId = selectedModelId
         self.selectedLLMModelId = selectedLLMModelId
         self.llmTemperatureModeRaw = llmTemperatureModeRaw
@@ -58,6 +147,7 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
         self.fetchedModels = fetchedModels
         self.chatRequestTimeoutSeconds = chatRequestTimeoutSeconds
         self.thinkingEnabled = thinkingEnabled
+        self.transcriptionTransportRaw = transcriptionTransportRaw
     }
 
     init(from decoder: Decoder) throws {
@@ -65,6 +155,7 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
         id = try container.decode(String.self, forKey: .id)
         name = try container.decode(String.self, forKey: .name)
         baseURL = try container.decode(String.self, forKey: .baseURL)
+        apiVersion = try container.decodeIfPresent(String.self, forKey: .apiVersion) ?? ""
         selectedModelId = try container.decode(String.self, forKey: .selectedModelId)
         selectedLLMModelId = try container.decode(String.self, forKey: .selectedLLMModelId)
         llmTemperatureModeRaw = try container.decode(String.self, forKey: .llmTemperatureModeRaw)
@@ -72,6 +163,11 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
         fetchedModels = try container.decode([FetchedModel].self, forKey: .fetchedModels)
         chatRequestTimeoutSeconds = try container.decodeIfPresent(TimeInterval.self, forKey: .chatRequestTimeoutSeconds)
         thinkingEnabled = try container.decodeIfPresent(Bool.self, forKey: .thinkingEnabled) ?? false
+        // Profiles saved before realtime support existed have no stored value;
+        // default to `auto` so previously-working batch models keep working
+        // and only the known realtime model IDs switch transport.
+        transcriptionTransportRaw = try container.decodeIfPresent(String.self, forKey: .transcriptionTransportRaw)
+            ?? OpenAICompatibleTranscriptTransport.auto.rawValue
     }
 
     var isDefault: Bool { id == Self.defaultId }
@@ -88,27 +184,48 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
         return trimmed.isEmpty ? Self.defaultName : trimmed
     }
 
+    var transcriptionTransport: OpenAICompatibleTranscriptTransport {
+        OpenAICompatibleTranscriptTransport(rawValue: transcriptionTransportRaw) ?? .auto
+    }
+
+    /// Resolves the effective (non-`auto`) transport for the currently
+    /// selected transcription model.
+    func resolvedTranscriptionTransport() -> OpenAICompatibleResolvedTranscriptionTransport {
+        switch transcriptionTransport {
+        case .batch:
+            .batch
+        case .realtime:
+            .realtime
+        case .auto:
+            OpenAICompatibleRealtimeModel.isKnownRealtimeModelID(selectedModelId) ? .realtime : .batch
+        }
+    }
+
     static func defaultProfile(
         baseURL: String = "",
+        apiVersion: String = "",
         selectedModelId: String = "",
         selectedLLMModelId: String = "",
         llmTemperatureModeRaw: String = PluginLLMTemperatureMode.providerDefault.rawValue,
         llmTemperatureValue: Double = 0.3,
         fetchedModels: [FetchedModel] = [],
         chatRequestTimeoutSeconds: TimeInterval? = nil,
-        thinkingEnabled: Bool = false
+        thinkingEnabled: Bool = false,
+        transcriptionTransportRaw: String = OpenAICompatibleTranscriptTransport.auto.rawValue
     ) -> OpenAICompatibleProfile {
         OpenAICompatibleProfile(
             id: defaultId,
             name: defaultName,
             baseURL: baseURL,
+            apiVersion: apiVersion,
             selectedModelId: selectedModelId,
             selectedLLMModelId: selectedLLMModelId,
             llmTemperatureModeRaw: llmTemperatureModeRaw,
             llmTemperatureValue: llmTemperatureValue,
             fetchedModels: fetchedModels,
             chatRequestTimeoutSeconds: chatRequestTimeoutSeconds,
-            thinkingEnabled: thinkingEnabled
+            thinkingEnabled: thinkingEnabled,
+            transcriptionTransportRaw: transcriptionTransportRaw
         )
     }
 }
@@ -125,6 +242,7 @@ final class OpenAICompatiblePlugin: NSObject,
     LLMModelSelectable,
     AdditionalTranscriptionEnginesProviding,
     AdditionalLLMProvidersProviding,
+    LiveLanguageHintDictionaryTermHintTranscriptionCapablePlugin,
     @unchecked Sendable
 {
     static let pluginId = "com.typewhisper.openai-compatible"
@@ -137,6 +255,9 @@ final class OpenAICompatiblePlugin: NSObject,
     private static let profilesKey = "profiles"
     private static let legacyProviderName = "OpenAI Compatible"
     private static let transcriptionRequestTimeout: TimeInterval = 600
+    private static let realtimeAudioChunkSampleCount = 16_000
+    var realtimeSessionConnector: any OpenAICompatibleRealtimeSessionConnecting =
+        DefaultOpenAICompatibleRealtimeSessionConnector()
 
     required override init() {
         super.init()
@@ -212,6 +333,73 @@ final class OpenAICompatiblePlugin: NSObject,
             language: language,
             translate: translate,
             prompt: prompt,
+            profileId: providerId
+        )
+    }
+
+    var supportsStreaming: Bool {
+        supportsStreaming(for: providerId)
+    }
+
+    func createLiveTranscriptionSession(
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> any LiveTranscriptionSession {
+        try await createLiveTranscriptionSession(
+            languageSelection: PluginLanguageSelection(requestedLanguage: language),
+            translate: translate,
+            prompt: prompt,
+            dictionaryTermHints: [],
+            onProgress: onProgress
+        )
+    }
+
+    func createLiveTranscriptionSession(
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> any LiveTranscriptionSession {
+        try await createLiveTranscriptionSession(
+            languageSelection: languageSelection,
+            translate: translate,
+            prompt: prompt,
+            dictionaryTermHints: [],
+            onProgress: onProgress
+        )
+    }
+
+    func createLiveTranscriptionSession(
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        dictionaryTermHints: [PluginDictionaryTermHint],
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> any LiveTranscriptionSession {
+        try await createLiveTranscriptionSession(
+            languageSelection: PluginLanguageSelection(requestedLanguage: language),
+            translate: translate,
+            prompt: prompt,
+            dictionaryTermHints: dictionaryTermHints,
+            onProgress: onProgress
+        )
+    }
+
+    func createLiveTranscriptionSession(
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?,
+        dictionaryTermHints: [PluginDictionaryTermHint],
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> any LiveTranscriptionSession {
+        try await createLiveTranscriptionSession(
+            languageSelection: languageSelection,
+            translate: translate,
+            prompt: prompt,
+            dictionaryTermHints: dictionaryTermHints,
+            onProgress: onProgress,
             profileId: providerId
         )
     }
@@ -327,6 +515,12 @@ final class OpenAICompatiblePlugin: NSObject,
     func setBaseURL(_ url: String, for profileId: String) {
         updateProfile(profileId) { profile in
             profile.baseURL = Self.normalizedBaseURL(url)
+        }
+    }
+
+    func setApiVersion(_ apiVersion: String, for profileId: String) {
+        updateProfile(profileId) { profile in
+            profile.apiVersion = Self.normalizedAPIVersion(apiVersion)
         }
     }
 
@@ -471,8 +665,7 @@ final class OpenAICompatiblePlugin: NSObject,
         prompt: String?,
         profileId: String
     ) async throws -> PluginTranscriptionResult {
-        guard let profile = profile(for: profileId),
-              let helper = makeTranscriptionHelper(for: profile) else {
+        guard let profile = profile(for: profileId), !profile.baseURL.isEmpty else {
             throw PluginTranscriptionError.notConfigured
         }
         let modelId = profile.selectedModelId.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -480,15 +673,179 @@ final class OpenAICompatiblePlugin: NSObject,
             throw PluginTranscriptionError.noModelSelected
         }
 
-        return try await helper.transcribeCompressedAudioWithWavFallback(
-            audio: audio,
-            apiKey: apiKey(for: profileId) ?? "",
-            modelName: modelId,
-            language: language,
-            translate: translate,
+        if profile.resolvedTranscriptionTransport() == .realtime {
+            let session = try await createLiveTranscriptionSession(
+                languageSelection: PluginLanguageSelection(requestedLanguage: language),
+                translate: translate,
+                prompt: prompt,
+                dictionaryTermHints: [],
+                onProgress: { _ in true },
+                profileId: profileId
+            )
+            do {
+                for startIndex in stride(
+                    from: audio.samples.startIndex,
+                    to: audio.samples.endIndex,
+                    by: Self.realtimeAudioChunkSampleCount
+                ) {
+                    let endIndex = min(startIndex + Self.realtimeAudioChunkSampleCount, audio.samples.endIndex)
+                    try await session.appendAudio(samples: Array(audio.samples[startIndex..<endIndex]))
+                }
+                return try await session.finish()
+            } catch {
+                await session.cancel()
+                throw error
+            }
+        }
+
+        guard let helper = makeTranscriptionHelper(for: profile) else {
+            throw PluginTranscriptionError.notConfigured
+        }
+        let apiKey = apiKey(for: profileId) ?? ""
+        if profile.apiVersion.isEmpty {
+            return try await helper.transcribeCompressedAudioWithWavFallback(
+                audio: audio,
+                apiKey: apiKey,
+                modelName: modelId,
+                language: language,
+                translate: translate,
+                prompt: prompt,
+                requestTimeout: Self.transcriptionRequestTimeout
+            )
+        }
+
+        // TypeWhisper 1.6 RC1 does not export the SDK's apiVersion overload.
+        // Keep this JSON request path in the plugin until that host is no longer supported.
+        return try await PluginAudioUploadEncoder.withCompressedM4AUploadWavFallback(from: audio) { uploadFile in
+            try await self.performVersionedTranscriptionRequest(
+                profile: profile,
+                uploadFile: uploadFile,
+                apiKey: apiKey,
+                modelName: modelId,
+                language: language,
+                translate: translate,
+                prompt: prompt
+            )
+        }
+    }
+
+    // MARK: - Realtime Transport
+
+    func transcriptionTransport(for profileId: String) -> OpenAICompatibleTranscriptTransport {
+        profile(for: profileId)?.transcriptionTransport ?? .auto
+    }
+
+    func setTranscriptionTransport(_ transport: OpenAICompatibleTranscriptTransport, for profileId: String) {
+        updateProfile(profileId) { profile in
+            profile.transcriptionTransportRaw = transport.rawValue
+        }
+    }
+
+    /// Resolves the effective transport for the profile's *currently selected*
+    /// transcription model, applying the `auto` heuristic (known realtime IDs
+    /// use realtime, everything else stays batch) when the profile hasn't
+    /// forced an explicit transport.
+    func resolvedTranscriptionTransport(for profileId: String) -> OpenAICompatibleResolvedTranscriptionTransport {
+        profile(for: profileId)?.resolvedTranscriptionTransport() ?? .batch
+    }
+
+    func supportsStreaming(for profileId: String) -> Bool {
+        resolvedTranscriptionTransport(for: profileId) == .realtime
+    }
+
+    func createLiveTranscriptionSession(
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?,
+        dictionaryTermHints: [PluginDictionaryTermHint],
+        onProgress: @Sendable @escaping (String) -> Bool,
+        profileId: String
+    ) async throws -> any LiveTranscriptionSession {
+        guard let profile = profile(for: profileId), !profile.baseURL.isEmpty else {
+            throw PluginTranscriptionError.notConfigured
+        }
+        let modelId = profile.selectedModelId.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !modelId.isEmpty else {
+            throw PluginTranscriptionError.noModelSelected
+        }
+        guard profile.resolvedTranscriptionTransport() == .realtime else {
+            // Batch-routed models: don't fake streaming with a repeated-REST-upload
+            // loop here. Throwing lets the host fall back to its own generic
+            // polling-based transcript preview loop over the regular `transcribe()`
+            // call, which is exactly the behavior a batch-only model already had.
+            throw PluginTranscriptionError.apiError(
+                "\"\(modelId)\" is routed through batch transcription; live streaming is unavailable for it."
+            )
+        }
+        guard !translate else {
+            throw PluginTranscriptionError.apiError(
+                "Realtime transcription does not support translation. Disable translation or switch to batch transport."
+            )
+        }
+        guard let request = realtimeRequest(for: profile, profileId: profileId) else {
+            throw PluginTranscriptionError.notConfigured
+        }
+
+        let usesContextAwareHints = OpenAICompatibleRealtimeModel.usesContextAwareRealtimeHints(modelId: modelId)
+        let configuration = PluginOpenAIRealtimeTranscriptionConfiguration(
+            modelID: modelId,
+            languageSelection: usesContextAwareHints
+                ? languageSelection
+                : PluginLanguageSelection(
+                    requestedLanguage: PluginOpenAIRealtimeTranscriptionConfiguration.normalizedLanguages(
+                        from: languageSelection
+                    ).first
+                ),
             prompt: prompt,
-            requestTimeout: Self.transcriptionRequestTimeout
+            keywords: usesContextAwareHints
+                ? PluginOpenAIRealtimeTranscriptionConfiguration.normalizedRealtimeKeywords(from: dictionaryTermHints)
+                : [],
+            delay: nil,
+            usesContextAwareHints: usesContextAwareHints
         )
+
+        return try await realtimeSessionConnector.connect(
+            request: request,
+            configuration: configuration,
+            onProgress: onProgress
+        )
+    }
+
+    /// Builds the WebSocket request for the realtime transcription endpoint:
+    /// scheme swapped to ws/wss, the profile's configured base path preserved,
+    /// `/v1/realtime` appended, `intent=transcription` and the configured
+    /// api-version applied without duplicating any existing query items, and
+    /// the same Bearer/api-key authentication used by REST requests.
+    func realtimeRequest(for profile: OpenAICompatibleProfile, profileId: String) -> URLRequest? {
+        guard let url = Self.realtimeRequestURL(baseURL: profile.baseURL, apiVersion: profile.apiVersion) else {
+            return nil
+        }
+        var request = URLRequest(url: url)
+        applyAuthentication(to: &request, profileId: profileId)
+        return request
+    }
+
+    static func realtimeRequestURL(baseURL: String, apiVersion: String) -> URL? {
+        guard let restURL = requestURL(baseURL: baseURL, path: "/v1/realtime", apiVersion: apiVersion),
+              var components = URLComponents(url: restURL, resolvingAgainstBaseURL: false) else {
+            return nil
+        }
+
+        switch components.scheme?.lowercased() {
+        case "https":
+            components.scheme = "wss"
+        case "http":
+            components.scheme = "ws"
+        default:
+            break
+        }
+
+        var queryItems = components.queryItems ?? []
+        queryItems.removeAll { $0.name.caseInsensitiveCompare("intent") == .orderedSame }
+        queryItems.append(URLQueryItem(name: "intent", value: "transcription"))
+        components.queryItems = queryItems
+
+        return components.url
     }
 
     func process(
@@ -511,9 +868,11 @@ final class OpenAICompatiblePlugin: NSObject,
             model: modelId,
             systemPrompt: systemPrompt,
             userText: userText,
-            temperature: providerTemperatureDirective(for: profileId).resolvedTemperature(applying: temperatureDirective),
+            temperature: providerTemperatureDirective(for: profileId)
+                .resolvedTemperature(applying: temperatureDirective),
             requestTimeout: profile.resolvedChatRequestTimeout,
-            thinkingEnabled: profile.thinkingEnabled
+            thinkingEnabled: profile.thinkingEnabled,
+            apiVersion: profile.apiVersion
         )
     }
 
@@ -524,12 +883,14 @@ final class OpenAICompatiblePlugin: NSObject,
     func fetchModels(for profileId: String) async -> [FetchedModel] {
         guard let profile = profile(for: profileId),
               !profile.baseURL.isEmpty,
-              let url = URL(string: "\(profile.baseURL)/v1/models") else { return [] }
+              let url = Self.requestURL(
+                baseURL: profile.baseURL,
+                path: "/v1/models",
+                apiVersion: profile.apiVersion
+              ) else { return [] }
 
         var request = URLRequest(url: url)
-        if let apiKey = apiKey(for: profileId), !apiKey.isEmpty {
-            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        }
+        applyAuthentication(to: &request, profileId: profileId)
         request.timeoutInterval = 10
 
         do {
@@ -555,12 +916,14 @@ final class OpenAICompatiblePlugin: NSObject,
     func validateConnection(for profileId: String) async -> Bool {
         guard let profile = profile(for: profileId),
               !profile.baseURL.isEmpty,
-              let url = URL(string: "\(profile.baseURL)/v1/models") else { return false }
+              let url = Self.requestURL(
+                baseURL: profile.baseURL,
+                path: "/v1/models",
+                apiVersion: profile.apiVersion
+              ) else { return false }
 
         var request = URLRequest(url: url)
-        if let apiKey = apiKey(for: profileId), !apiKey.isEmpty {
-            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
-        }
+        applyAuthentication(to: &request, profileId: profileId)
         request.timeoutInterval = 10
 
         do {
@@ -595,6 +958,28 @@ final class OpenAICompatiblePlugin: NSObject,
             return match.id
         }
         return trimmed
+    }
+
+    private nonisolated static func isAzureOpenAIEndpoint(_ url: URL?) -> Bool {
+        guard let host = url?.host?.lowercased() else { return false }
+        return host.hasSuffix(".openai.azure.com")
+            || host.hasSuffix(".openai.azure.us")
+            || host.hasSuffix(".services.ai.azure.com")
+    }
+
+    private func applyAuthentication(to request: inout URLRequest, profileId: String) {
+        guard let apiKey = apiKey(for: profileId) else { return }
+        Self.applyAuthentication(to: &request, apiKey: apiKey)
+    }
+
+    private nonisolated static func applyAuthentication(to request: inout URLRequest, apiKey: String) {
+        let trimmedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedKey.isEmpty else { return }
+        let authorizationHeader = "Authorization"
+        request.setValue("Bearer " + trimmedKey, forHTTPHeaderField: authorizationHeader)
+        if isAzureOpenAIEndpoint(request.url) {
+            request.setValue(trimmedKey, forHTTPHeaderField: "api-key")
+        }
     }
 
     private func providerTemperatureDirective(for profileId: String) -> PluginLLMTemperatureDirective {
@@ -637,6 +1022,9 @@ final class OpenAICompatiblePlugin: NSObject,
         return [
             .defaultProfile(
                 baseURL: Self.normalizedBaseURL(host.userDefault(forKey: "baseURL") as? String ?? ""),
+                apiVersion: Self.normalizedAPIVersion(
+                    host.userDefault(forKey: "apiVersion") as? String ?? ""
+                ),
                 selectedModelId: host.userDefault(forKey: "selectedModel") as? String ?? "",
                 selectedLLMModelId: host.userDefault(forKey: "selectedLLMModel") as? String ?? "",
                 llmTemperatureModeRaw: host.userDefault(forKey: "llmTemperatureMode") as? String
@@ -663,6 +1051,7 @@ final class OpenAICompatiblePlugin: NSObject,
                 profile.name = profile.isDefault ? OpenAICompatibleProfile.defaultName : "Custom Server"
             }
             profile.baseURL = Self.normalizedBaseURL(profile.baseURL)
+            profile.apiVersion = Self.normalizedAPIVersion(profile.apiVersion)
             seenIds.insert(profile.id)
             result.append(profile)
         }
@@ -671,6 +1060,9 @@ final class OpenAICompatiblePlugin: NSObject,
             result.insert(
                 .defaultProfile(
                     baseURL: Self.normalizedBaseURL(host.userDefault(forKey: "baseURL") as? String ?? ""),
+                    apiVersion: Self.normalizedAPIVersion(
+                        host.userDefault(forKey: "apiVersion") as? String ?? ""
+                    ),
                     selectedModelId: host.userDefault(forKey: "selectedModel") as? String ?? "",
                     selectedLLMModelId: host.userDefault(forKey: "selectedLLMModel") as? String ?? ""
                 ),
@@ -702,6 +1094,7 @@ final class OpenAICompatiblePlugin: NSObject,
         guard let defaultProfile = profiles.first(where: \.isDefault) else { return }
 
         host.setUserDefault(defaultProfile.baseURL, forKey: "baseURL")
+        host.setUserDefault(defaultProfile.apiVersion, forKey: "apiVersion")
         host.setUserDefault(defaultProfile.selectedModelId, forKey: "selectedModel")
         host.setUserDefault(defaultProfile.selectedLLMModelId, forKey: "selectedLLMModel")
         host.setUserDefault(defaultProfile.llmTemperatureModeRaw, forKey: "llmTemperatureMode")
@@ -770,11 +1163,12 @@ final class OpenAICompatiblePlugin: NSObject,
         userText: String,
         temperature: Double?,
         requestTimeout: TimeInterval,
-        thinkingEnabled: Bool
+        thinkingEnabled: Bool,
+        apiVersion: String
     ) async throws -> String {
-        let endpoint = "\(baseURL)/v1/chat/completions"
-        guard let url = URL(string: endpoint) else {
-            throw PluginChatError.apiError("Invalid URL: \(endpoint)")
+        let path = "/v1/chat/completions"
+        guard let url = Self.requestURL(baseURL: baseURL, path: path, apiVersion: apiVersion) else {
+            throw PluginChatError.apiError("Invalid URL: \(baseURL)\(path)")
         }
 
         let outputTokenParameter = OutputTokenParameter.maxTokens
@@ -840,7 +1234,7 @@ final class OpenAICompatiblePlugin: NSObject,
 
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
-        request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        Self.applyAuthentication(to: &request, apiKey: apiKey)
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         request.timeoutInterval = requestTimeout
         request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
@@ -871,6 +1265,106 @@ final class OpenAICompatiblePlugin: NSObject,
         }
 
         return content.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func performVersionedTranscriptionRequest(
+        profile: OpenAICompatibleProfile,
+        uploadFile: PluginAudioUploadFile,
+        apiKey: String,
+        modelName: String,
+        language: String?,
+        translate: Bool,
+        prompt: String?
+    ) async throws -> PluginTranscriptionResult {
+        let path = translate ? "/v1/audio/translations" : "/v1/audio/transcriptions"
+        guard let url = Self.requestURL(
+            baseURL: profile.baseURL,
+            path: path,
+            apiVersion: profile.apiVersion
+        ) else {
+            throw PluginTranscriptionError.apiError("Invalid URL: \(profile.baseURL)\(path)")
+        }
+
+        let boundary = UUID().uuidString
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        Self.applyAuthentication(to: &request, apiKey: apiKey)
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = Self.transcriptionRequestTimeout
+
+        var body = Data()
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append(
+            "Content-Disposition: form-data; name=\"file\"; filename=\"\(uploadFile.filename)\"\r\n"
+                .data(using: .utf8)!
+        )
+        body.append("Content-Type: \(uploadFile.contentType)\r\n\r\n".data(using: .utf8)!)
+        body.append(uploadFile.data)
+        body.append("\r\n".data(using: .utf8)!)
+        Self.appendMultipartField(to: &body, boundary: boundary, name: "model", value: modelName)
+        Self.appendMultipartField(to: &body, boundary: boundary, name: "response_format", value: "json")
+        if !translate, let language, !language.isEmpty {
+            Self.appendMultipartField(to: &body, boundary: boundary, name: "language", value: language)
+        }
+        if let prompt, !prompt.isEmpty {
+            Self.appendMultipartField(to: &body, boundary: boundary, name: "prompt", value: prompt)
+        }
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+        request.httpBody = body
+
+        let (responseData, response) = try await PluginHTTPClient.data(for: request)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw PluginTranscriptionError.networkError("Invalid response")
+        }
+
+        switch httpResponse.statusCode {
+        case 200:
+            break
+        case 401:
+            throw PluginTranscriptionError.invalidApiKey
+        case 429:
+            throw PluginTranscriptionError.rateLimited
+        case 413:
+            throw PluginTranscriptionError.fileTooLarge
+        default:
+            let errorMessage = String(data: responseData, encoding: .utf8) ?? "Unknown error"
+            throw PluginTranscriptionError.apiError("HTTP \(httpResponse.statusCode): \(errorMessage)")
+        }
+
+        struct Segment: Decodable {
+            let start: Double
+            let end: Double
+            let text: String
+        }
+        struct Response: Decodable {
+            let text: String
+            let language: String?
+            let segments: [Segment]?
+        }
+        do {
+            let decoded = try JSONDecoder().decode(Response.self, from: responseData)
+            let segments = (decoded.segments ?? []).map {
+                PluginTranscriptionSegment(text: $0.text, start: $0.start, end: $0.end)
+            }
+            return PluginTranscriptionResult(
+                text: decoded.text,
+                detectedLanguage: decoded.language,
+                segments: segments
+            )
+        } catch {
+            throw PluginTranscriptionError.apiError("Failed to parse response: \(error.localizedDescription)")
+        }
+    }
+
+    private static func appendMultipartField(
+        to data: inout Data,
+        boundary: String,
+        name: String,
+        value: String
+    ) {
+        data.append("--\(boundary)\r\n".data(using: .utf8)!)
+        data.append("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n".data(using: .utf8)!)
+        data.append("\(value)\r\n".data(using: .utf8)!)
     }
 
     private static func chatErrorMessage(from data: Data, statusCode: Int) -> String {
@@ -907,14 +1401,40 @@ final class OpenAICompatiblePlugin: NSObject,
     }
 
     private static func normalizedBaseURL(_ url: String) -> String {
-        var normalized = url.trimmingCharacters(in: .whitespacesAndNewlines)
-        while normalized.hasSuffix("/") {
-            normalized = String(normalized.dropLast())
+        let trimmed = url.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard var components = URLComponents(string: trimmed) else { return trimmed }
+
+        var path = components.percentEncodedPath
+        while path.hasSuffix("/") {
+            path.removeLast()
         }
-        if normalized.hasSuffix("/v1") {
-            normalized = String(normalized.dropLast(3))
+        if path.hasSuffix("/v1") {
+            path.removeLast(3)
         }
-        return normalized
+        components.percentEncodedPath = path
+        return components.string ?? trimmed
+    }
+
+    private static func normalizedAPIVersion(_ apiVersion: String) -> String {
+        apiVersion.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func requestURL(baseURL: String, path: String, apiVersion: String) -> URL? {
+        guard var components = URLComponents(string: baseURL) else { return nil }
+        let basePath = components.percentEncodedPath.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let requestPath = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        components.percentEncodedPath = "/" + [basePath, requestPath]
+            .filter { !$0.isEmpty }
+            .joined(separator: "/")
+
+        let trimmedVersion = normalizedAPIVersion(apiVersion)
+        if !trimmedVersion.isEmpty {
+            var queryItems = components.queryItems ?? []
+            queryItems.removeAll { $0.name.caseInsensitiveCompare("api-version") == .orderedSame }
+            queryItems.append(URLQueryItem(name: "api-version", value: trimmedVersion))
+            components.queryItems = queryItems
+        }
+        return components.url
     }
 }
 
@@ -927,6 +1447,7 @@ private final class OpenAICompatibleProfileRole: NSObject,
     LLMProviderIdentityProviding,
     LLMTemperatureControllableProvider,
     LLMModelSelectable,
+    LiveLanguageHintDictionaryTermHintTranscriptionCapablePlugin,
     @unchecked Sendable
 {
     static let pluginId = OpenAICompatiblePlugin.pluginId
@@ -972,6 +1493,73 @@ private final class OpenAICompatibleProfileRole: NSObject,
             language: language,
             translate: translate,
             prompt: prompt,
+            profileId: profileId
+        )
+    }
+
+    var supportsStreaming: Bool {
+        plugin.supportsStreaming(for: profileId)
+    }
+
+    func createLiveTranscriptionSession(
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> any LiveTranscriptionSession {
+        try await createLiveTranscriptionSession(
+            languageSelection: PluginLanguageSelection(requestedLanguage: language),
+            translate: translate,
+            prompt: prompt,
+            dictionaryTermHints: [],
+            onProgress: onProgress
+        )
+    }
+
+    func createLiveTranscriptionSession(
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> any LiveTranscriptionSession {
+        try await createLiveTranscriptionSession(
+            languageSelection: languageSelection,
+            translate: translate,
+            prompt: prompt,
+            dictionaryTermHints: [],
+            onProgress: onProgress
+        )
+    }
+
+    func createLiveTranscriptionSession(
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        dictionaryTermHints: [PluginDictionaryTermHint],
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> any LiveTranscriptionSession {
+        try await createLiveTranscriptionSession(
+            languageSelection: PluginLanguageSelection(requestedLanguage: language),
+            translate: translate,
+            prompt: prompt,
+            dictionaryTermHints: dictionaryTermHints,
+            onProgress: onProgress
+        )
+    }
+
+    func createLiveTranscriptionSession(
+        languageSelection: PluginLanguageSelection,
+        translate: Bool,
+        prompt: String?,
+        dictionaryTermHints: [PluginDictionaryTermHint],
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> any LiveTranscriptionSession {
+        try await plugin.createLiveTranscriptionSession(
+            languageSelection: languageSelection,
+            translate: translate,
+            prompt: prompt,
+            dictionaryTermHints: dictionaryTermHints,
+            onProgress: onProgress,
             profileId: profileId
         )
     }
@@ -1033,6 +1621,7 @@ private struct OpenAICompatibleSettingsView: View {
     @State private var selectedProfileId = OpenAICompatibleProfile.defaultId
     @State private var nameInput = ""
     @State private var baseURLInput = ""
+    @State private var apiVersionInput = ""
     @State private var apiKeyInput = ""
     @State private var showApiKey = false
     @State private var isTesting = false
@@ -1045,6 +1634,7 @@ private struct OpenAICompatibleSettingsView: View {
     @State private var llmTemperatureValue: Double = 0.3
     @State private var thinkingEnabled = false
     @State private var chatTimeoutInput = ""
+    @State private var transcriptionTransport: OpenAICompatibleTranscriptTransport = .auto
 
     private let bundle = pluginModuleBundle
 
@@ -1188,6 +1778,26 @@ private struct OpenAICompatibleSettingsView: View {
             }
 
             VStack(alignment: .leading, spacing: 8) {
+                Text("API Version", bundle: bundle)
+                    .font(.headline)
+
+                TextField(
+                    String(localized: "Optional, e.g. preview", bundle: bundle),
+                    text: $apiVersionInput
+                )
+                .textFieldStyle(.roundedBorder)
+                .font(.system(.body, design: .monospaced))
+                .onSubmit(saveApiVersion)
+                .onChange(of: apiVersionInput) {
+                    saveApiVersion()
+                }
+
+                Text("Azure OpenAI and Microsoft Foundry may require an API version such as preview for audio transcription. Leave blank for standard OpenAI-compatible servers.", bundle: bundle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
                 Text("API Key", bundle: bundle)
                     .font(.headline)
 
@@ -1275,6 +1885,31 @@ private struct OpenAICompatibleSettingsView: View {
             } else {
                 manualModelSection
             }
+
+            transportSection
+        }
+    }
+
+    private var transportSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Transcription Transport", bundle: bundle)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            Picker("Transcription Transport", selection: $transcriptionTransport) {
+                Text("Auto", bundle: bundle).tag(OpenAICompatibleTranscriptTransport.auto)
+                Text("Batch", bundle: bundle).tag(OpenAICompatibleTranscriptTransport.batch)
+                Text("Realtime", bundle: bundle).tag(OpenAICompatibleTranscriptTransport.realtime)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .onChange(of: transcriptionTransport) {
+                saveTranscriptionTransport()
+            }
+
+            Text("Auto uses realtime streaming only for known realtime model IDs (gpt-live-transcribe, gpt-realtime-whisper) and batch upload otherwise. Choose Realtime to force streaming for any OpenAI-compatible server that supports the /v1/realtime WebSocket API, including custom deployment aliases (e.g. an Azure OpenAI or Microsoft Foundry gpt-live-transcribe deployment) — some providers, including Azure, require a preview API version for realtime transcription. Choose Batch to always use /v1/audio/transcriptions.", bundle: bundle)
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -1472,6 +2107,7 @@ private struct OpenAICompatibleSettingsView: View {
 
         nameInput = profile.displayName
         baseURLInput = profile.baseURL
+        apiVersionInput = profile.apiVersion
         apiKeyInput = plugin.apiKey(for: profile.id) ?? ""
         selectedTranscriptionModel = profile.selectedModelId
         selectedLLMModel = profile.selectedLLMModelId
@@ -1481,6 +2117,7 @@ private struct OpenAICompatibleSettingsView: View {
         llmTemperatureValue = profile.llmTemperatureValue
         thinkingEnabled = profile.thinkingEnabled
         chatTimeoutInput = String(Int(profile.resolvedChatRequestTimeout))
+        transcriptionTransport = profile.transcriptionTransport
         connectionResult = nil
     }
 
@@ -1498,6 +2135,21 @@ private struct OpenAICompatibleSettingsView: View {
         }
     }
 
+    private func saveApiVersion() {
+        guard let selectedProfile else { return }
+        let trimmed = apiVersionInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed != selectedProfile.apiVersion else { return }
+        plugin.setApiVersion(trimmed, for: selectedProfile.id)
+        reloadProfiles(selecting: selectedProfile.id, preserveInputs: true)
+    }
+
+    private func saveTranscriptionTransport() {
+        guard let selectedProfile else { return }
+        guard transcriptionTransport != selectedProfile.transcriptionTransport else { return }
+        plugin.setTranscriptionTransport(transcriptionTransport, for: selectedProfile.id)
+        reloadProfiles(selecting: selectedProfile.id, preserveInputs: true)
+    }
+
     private func saveProfileName() {
         guard let selectedProfile else { return }
         let trimmed = nameInput.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1509,6 +2161,7 @@ private struct OpenAICompatibleSettingsView: View {
 
     private func saveServerFields(for profileId: String) {
         plugin.setBaseURL(baseURLInput, for: profileId)
+        plugin.setApiVersion(apiVersionInput, for: profileId)
         let trimmedKey = apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedKey.isEmpty {
             plugin.setApiKey(trimmedKey, for: profileId)

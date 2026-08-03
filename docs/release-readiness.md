@@ -39,6 +39,7 @@ These surfaces remain part of `1.x`, but they are positioned as advanced or auto
 - Preserve the `1.x` stability contracts for the HTTP API, CLI, plugin SDK, widgets, and watch folders.
 - Avoid raising plugin `minHostVersion` values to `1.6.0` unless a plugin genuinely requires new host APIs.
 - Keep release-channel behavior stable: RC and daily builds are prereleases, while Homebrew and stable website messaging update only at the final stable tag.
+- Keep tagged app releases on the no-iCloud distribution path until the production container and Developer ID provisioning profile are approved and validated. Tag pushes matching `v*` therefore build without automatic private iCloud sync; scheduled builds continue to use `MACOS_SCHEDULED_WITHOUT_ICLOUD`, and manual dispatches continue to use the explicit `without_icloud` input.
 
 ## Stability Contracts for `1.x`
 
@@ -81,6 +82,7 @@ These surfaces remain part of `1.x`, but they are positioned as advanced or auto
 - The default channel remains `stable`; `release-candidate` and `daily` exist as Sparkle channels for preview builds.
 - `1.6.0-rc*` and daily builds are distributed as GitHub prereleases, appear in the shared Sparkle appcast only on their own channels, and do not update Homebrew.
 - The appcast entry for preview builds advertises `minimumSystemVersion` `14.0`.
+- Automatic private iCloud sync remains hidden in no-iCloud builds. Enabling it for a future release requires the explicit build flag, an embedded Developer ID provisioning profile, matching signed iCloud entitlements, Sparkle upgrade proof, and a real two-Mac sync validation.
 
 ## Manual Release Validation
 

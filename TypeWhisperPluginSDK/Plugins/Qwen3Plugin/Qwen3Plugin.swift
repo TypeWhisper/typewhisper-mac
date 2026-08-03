@@ -3,7 +3,7 @@ import SwiftUI
 import HuggingFace
 import MLX
 import MLXAudioSTT
-import TypeWhisperPluginSDK
+@_spi(FirstPartyPlugins) import TypeWhisperPluginSDK
 
 // MARK: - Plugin Entry Point
 
@@ -37,6 +37,13 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
         minChunkDuration: 1.0
     )
 
+    private static let modelRequirements = PluginHuggingFaceModelStore.Requirements(
+        requiredFiles: ["config.json"],
+        alternativeFileGroups: [["tokenizer.json"], ["vocab.json", "merges.txt"]],
+        weightFileExtensions: ["safetensors"]
+    )
+    private static let modelDownloadPatterns = ["*.safetensors", "*.json", "*.txt", "*.wav"]
+
     required override init() {
         super.init()
     }
@@ -45,6 +52,7 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
         self.host = host
         _selectedModelId = host.userDefault(forKey: "selectedModel") as? String
         _hfToken = PluginHuggingFaceTokenHelper.loadToken(from: host)
+        cleanupRedundantModelCopies()
 
         if shouldRestoreLoadedModelsPassively {
             Task { await restoreLoadedModel(allowDownloads: false) }
@@ -230,9 +238,44 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
                 ?? FileManager.default.temporaryDirectory
             try? FileManager.default.createDirectory(at: modelsDir, withIntermediateDirectories: true)
 
-            let cache = HubCache(cacheDirectory: modelsDir)
-            PluginHuggingFaceTokenHelper.applyTokenToEnvironment(_hfToken)
-            let loaded = try await Qwen3ASRModel.fromPretrained(modelDef.repoId, cache: cache)
+            let modelDirectory: URL
+            if let existing = usableModelDirectory(for: modelDef, modelsDirectory: modelsDir) {
+                modelDirectory = existing
+            } else {
+                removeIncompleteModelIfNeeded(modelDef, modelsDirectory: modelsDir)
+                guard let repoID = Repo.ID(rawValue: modelDef.repoId) else {
+                    throw NSError(
+                        domain: "Qwen3Plugin",
+                        code: 1,
+                        userInfo: [NSLocalizedDescriptionKey: "Invalid repository ID: \(modelDef.repoId)"]
+                    )
+                }
+                let client = HubClient(
+                    host: HubClient.defaultHost,
+                    bearerToken: PluginHuggingFaceTokenHelper.normalizedToken(_hfToken),
+                    cache: HubCache(cacheDirectory: modelsDir)
+                )
+                do {
+                    modelDirectory = try await client.downloadSnapshot(
+                        of: repoID,
+                        matching: Self.modelDownloadPatterns
+                    )
+                    guard PluginHuggingFaceModelStore(modelsDirectory: modelsDir).isUsableModelDirectory(
+                        modelDirectory,
+                        requirements: Self.modelRequirements
+                    ) else {
+                        throw NSError(
+                            domain: "Qwen3Plugin",
+                            code: 2,
+                            userInfo: [NSLocalizedDescriptionKey: "Downloaded model is incomplete: \(modelDef.repoId)"]
+                        )
+                    }
+                } catch {
+                    removeIncompleteModelIfNeeded(modelDef, modelsDirectory: modelsDir)
+                    throw error
+                }
+            }
+            let loaded = try await Qwen3ASRModel.fromModelDirectory(modelDirectory)
 
             model = loaded
             loadedModelId = modelDef.id
@@ -267,13 +310,10 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
 
     fileprivate func deleteModelFiles(_ modelDef: Qwen3ModelDef) throws {
         guard let modelsDir = host?.pluginDataDirectory.appendingPathComponent("models") else { return }
-        let subdirectory = modelDef.repoId.replacingOccurrences(of: "/", with: "_")
-        let modelDir = modelsDir
-            .appendingPathComponent("mlx-audio")
-            .appendingPathComponent(subdirectory)
-        if FileManager.default.fileExists(atPath: modelDir.path) {
-            try FileManager.default.removeItem(at: modelDir)
-        }
+        try PluginHuggingFaceModelStore(modelsDirectory: modelsDir).deleteModelFiles(
+            for: modelDef.repoId,
+            legacyDirectories: [legacyModelDirectory(for: modelDef, modelsDirectory: modelsDir)]
+        )
     }
 
     func restoreLoadedModel(allowDownloads: Bool = false) async {
@@ -342,14 +382,44 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
 
     private func hasDownloadedModel(_ modelDef: Qwen3ModelDef) -> Bool {
         guard let modelsDir = host?.pluginDataDirectory.appendingPathComponent("models") else { return false }
-        let subdirectory = modelDef.repoId.replacingOccurrences(of: "/", with: "_")
-        let modelDir = modelsDir
-            .appendingPathComponent("mlx-audio")
-            .appendingPathComponent(subdirectory)
+        return usableModelDirectory(for: modelDef, modelsDirectory: modelsDir) != nil
+    }
 
-        var isDirectory: ObjCBool = false
-        return FileManager.default.fileExists(atPath: modelDir.path, isDirectory: &isDirectory)
-            && isDirectory.boolValue
+    private func usableModelDirectory(for modelDef: Qwen3ModelDef, modelsDirectory: URL) -> URL? {
+        PluginHuggingFaceModelStore(modelsDirectory: modelsDirectory).usableModelDirectory(
+            for: modelDef.repoId,
+            legacyDirectories: [legacyModelDirectory(for: modelDef, modelsDirectory: modelsDirectory)],
+            requirements: Self.modelRequirements
+        )
+    }
+
+    private func legacyModelDirectory(for modelDef: Qwen3ModelDef, modelsDirectory: URL) -> URL {
+        modelsDirectory
+            .appendingPathComponent("mlx-audio")
+            .appendingPathComponent(modelDef.repoId.replacingOccurrences(of: "/", with: "_"))
+    }
+
+    private func removeIncompleteModelIfNeeded(_ modelDef: Qwen3ModelDef, modelsDirectory: URL) {
+        let store = PluginHuggingFaceModelStore(modelsDirectory: modelsDirectory)
+        let legacyDirectories = [legacyModelDirectory(for: modelDef, modelsDirectory: modelsDirectory)]
+        guard usableModelDirectory(for: modelDef, modelsDirectory: modelsDirectory) == nil,
+              store.hasCachedModelFiles(for: modelDef.repoId, legacyDirectories: legacyDirectories) else {
+            return
+        }
+        try? store.deleteModelFiles(for: modelDef.repoId, legacyDirectories: legacyDirectories)
+    }
+
+    private func cleanupRedundantModelCopies() {
+        guard let modelsDirectory = host?.pluginDataDirectory.appendingPathComponent("models") else { return }
+        let store = PluginHuggingFaceModelStore(modelsDirectory: modelsDirectory)
+        for modelDef in Self.availableModels {
+            _ = try? store.removeRedundantLegacyDirectories(
+                for: modelDef.repoId,
+                legacyDirectories: [legacyModelDirectory(for: modelDef, modelsDirectory: modelsDirectory)],
+                requirements: Self.modelRequirements,
+                reproducibleRelativePaths: ["tokenizer.json"]
+            )
+        }
     }
 
     // MARK: - Settings View

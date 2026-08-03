@@ -3,6 +3,141 @@ import AppKit
 import Combine
 import ApplicationServices
 
+private let indicatorFeedbackClockOrigin = ContinuousClock.now
+
+private func indicatorFeedbackContinuousTime() -> TimeInterval {
+    let elapsed = indicatorFeedbackClockOrigin.duration(to: ContinuousClock.now).components
+    return TimeInterval(elapsed.seconds) + (TimeInterval(elapsed.attoseconds) / 1_000_000_000_000_000_000)
+}
+
+@MainActor
+final class IndicatorFeedbackLifetime: ObservableObject {
+    typealias Now = @MainActor () -> TimeInterval
+    typealias Sleep = @MainActor (Duration) async throws -> Void
+
+    @Published private(set) var remainingFraction: Double = 0
+    @Published private(set) var isPaused = false
+
+    private let tickInterval: Duration
+    private let now: Now
+    private let sleep: Sleep
+    private var tickerTask: Task<Void, Never>?
+    private var totalDuration: TimeInterval = 0
+    private var remainingDuration: TimeInterval = 0
+    private var lastUpdateTime: TimeInterval?
+    private var onExpire: (() -> Void)?
+
+    init(
+        tickInterval: Duration = .milliseconds(33),
+        now: @escaping Now = indicatorFeedbackContinuousTime,
+        sleep: @escaping Sleep = { duration in
+            try await Task.sleep(for: duration)
+        }
+    ) {
+        self.tickInterval = tickInterval
+        self.now = now
+        self.sleep = sleep
+    }
+
+    func start(duration: TimeInterval, onExpire: @escaping () -> Void) {
+        cancel()
+
+        totalDuration = max(0, duration)
+        remainingDuration = totalDuration
+        remainingFraction = totalDuration > 0 ? 1 : 0
+        isPaused = false
+        lastUpdateTime = now()
+        self.onExpire = onExpire
+
+        guard totalDuration > 0 else {
+            expire()
+            return
+        }
+
+        tickerTask = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                guard let tickInterval = self?.tickInterval,
+                      let sleep = self?.sleep else {
+                    return
+                }
+                do {
+                    try await sleep(tickInterval)
+                } catch {
+                    return
+                }
+                guard !Task.isCancelled else { return }
+                self?.updateRemainingTime()
+            }
+        }
+    }
+
+    func setHovered(_ hovered: Bool) {
+        guard onExpire != nil, isPaused != hovered else { return }
+
+        if hovered {
+            updateRemainingTime()
+            guard onExpire != nil else { return }
+            isPaused = true
+            lastUpdateTime = nil
+        } else {
+            isPaused = false
+            lastUpdateTime = now()
+        }
+    }
+
+    func cancel() {
+        tickerTask?.cancel()
+        tickerTask = nil
+        totalDuration = 0
+        remainingDuration = 0
+        remainingFraction = 0
+        isPaused = false
+        lastUpdateTime = nil
+        onExpire = nil
+    }
+
+    func finishImmediately() {
+        guard onExpire != nil else {
+            cancel()
+            return
+        }
+        expire()
+    }
+
+    func updateRemainingTime() {
+        guard onExpire != nil,
+              !isPaused,
+              let lastUpdateTime else {
+            return
+        }
+
+        let currentTime = now()
+        let elapsed = max(0, currentTime - lastUpdateTime)
+        self.lastUpdateTime = currentTime
+        remainingDuration = max(0, remainingDuration - elapsed)
+        remainingFraction = totalDuration > 0
+            ? min(max(remainingDuration / totalDuration, 0), 1)
+            : 0
+
+        if remainingDuration <= 0 {
+            expire()
+        }
+    }
+
+    private func expire() {
+        let expiration = onExpire
+        tickerTask?.cancel()
+        tickerTask = nil
+        totalDuration = 0
+        remainingDuration = 0
+        remainingFraction = 0
+        isPaused = false
+        lastUpdateTime = nil
+        onExpire = nil
+        expiration?()
+    }
+}
+
 struct IndicatorPresentationState: Equatable {
     enum Source: Equatable {
         case dictation
@@ -66,6 +201,8 @@ struct IndicatorPresentationData {
     let actionFeedbackIcon: String?
     let actionFeedbackIsError: Bool
     let actionFeedbackUndoTitle: String?
+    let actionFeedbackRemainingFraction: Double?
+    let actionFeedbackIsPaused: Bool
     let externalStreamingDisplayCount: Int
 
     var isRecorder: Bool {
@@ -109,6 +246,11 @@ struct IndicatorPresentationData {
                 actionFeedbackIcon: dictation.actionFeedbackIcon,
                 actionFeedbackIsError: dictation.actionFeedbackIsError,
                 actionFeedbackUndoTitle: dictation.actionFeedbackUndoTitle,
+                actionFeedbackRemainingFraction: presentation.state == .inserting
+                    && dictation.actionFeedbackMessage != nil
+                    ? dictation.actionFeedbackRemainingFraction
+                    : nil,
+                actionFeedbackIsPaused: dictation.actionFeedbackIsPaused,
                 externalStreamingDisplayCount: dictation.externalStreamingDisplayCount
             )
         case .recorder:
@@ -127,6 +269,8 @@ struct IndicatorPresentationData {
                 actionFeedbackIcon: nil,
                 actionFeedbackIsError: false,
                 actionFeedbackUndoTitle: nil,
+                actionFeedbackRemainingFraction: nil,
+                actionFeedbackIsPaused: false,
                 externalStreamingDisplayCount: dictation.externalStreamingDisplayCount
             )
         }

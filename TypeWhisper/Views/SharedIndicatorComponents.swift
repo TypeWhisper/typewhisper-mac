@@ -269,6 +269,24 @@ struct IndicatorExpandableText: View {
 
 // MARK: - Action Feedback Banner
 
+struct IndicatorFeedbackProgressBar: View {
+    let remainingFraction: Double
+
+    var body: some View {
+        GeometryReader { geometry in
+            Rectangle()
+                .fill(Color.white.opacity(0.65))
+                .frame(
+                    width: geometry.size.width * CGFloat(min(max(remainingFraction, 0), 1)),
+                    height: 2
+                )
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .frame(height: 2)
+        .accessibilityHidden(true)
+    }
+}
+
 struct IndicatorActionFeedback: View {
     let message: String
     let icon: String?
@@ -277,33 +295,45 @@ struct IndicatorActionFeedback: View {
     let contentPadding: CGFloat
     var actionTitle: String? = nil
     var onAction: (() -> Void)? = nil
+    var remainingFraction: Double? = nil
 
     var body: some View {
-        HStack(spacing: 8) {
-            Image(systemName: icon ?? (isError ? "xmark.circle.fill" : "checkmark.circle.fill"))
-                .foregroundStyle(iconColor ?? (isError ? .red : .green))
-                .font(.system(size: 16))
-                .accessibilityHidden(true)
-            Text(message)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundStyle(.white.opacity(0.9))
-                .lineLimit(2)
-
-            if let actionTitle, let onAction {
-                Spacer(minLength: 8)
-                Button(actionTitle, action: onAction)
-                    .buttonStyle(.borderless)
-                    .controlSize(.small)
-                    .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(Color.white.opacity(0.12), in: Capsule())
+        VStack(spacing: 0) {
+            if let remainingFraction {
+                IndicatorFeedbackProgressBar(remainingFraction: remainingFraction)
+            } else {
+                Color.clear
+                    .frame(height: 2)
+                    .accessibilityHidden(true)
             }
+
+            HStack(spacing: 8) {
+                Image(systemName: icon ?? (isError ? "xmark.circle.fill" : "checkmark.circle.fill"))
+                    .foregroundStyle(iconColor ?? (isError ? .red : .green))
+                    .font(.system(size: 16))
+                    .accessibilityHidden(true)
+                Text(message)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.9))
+                    .lineLimit(2)
+
+                if let actionTitle, let onAction {
+                    Spacer(minLength: 8)
+                    Button(actionTitle, action: onAction)
+                        .buttonStyle(.borderless)
+                        .controlSize(.small)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(Color.white.opacity(0.12), in: Capsule())
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .padding(.horizontal, contentPadding)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 10)
-        .padding(.horizontal, contentPadding)
+        .frame(height: IndicatorFeedbackPanelLayout.feedbackBodyHeight)
         .accessibilityElement(children: actionTitle == nil ? .combine : .contain)
         .accessibilityLabel(message)
     }

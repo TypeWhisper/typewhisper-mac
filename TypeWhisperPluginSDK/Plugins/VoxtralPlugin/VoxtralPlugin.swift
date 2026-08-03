@@ -4,7 +4,7 @@ import HuggingFace
 import MLX
 import MLXAudioCore
 import MLXAudioSTT
-import TypeWhisperPluginSDK
+@_spi(FirstPartyPlugins) import TypeWhisperPluginSDK
 
 // MARK: - Plugin Entry Point
 
@@ -37,6 +37,12 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
         minChunkDuration: 1.0
     )
 
+    private static let modelRequirements = PluginHuggingFaceModelStore.Requirements(
+        requiredFiles: ["config.json", "tekken.json"],
+        weightFileExtensions: ["safetensors"]
+    )
+    private static let modelDownloadPatterns = ["*.safetensors", "*.json", "*.txt", "*.wav"]
+
     required override init() {
         super.init()
     }
@@ -46,6 +52,7 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
         _selectedModelId = host.userDefault(forKey: "selectedModel") as? String
             ?? Self.availableModels.first?.id
         _hfToken = PluginHuggingFaceTokenHelper.loadToken(from: host)
+        cleanupRedundantModelCopies()
 
         if shouldRestoreLoadedModelsPassively {
             Task { await restoreLoadedModel(allowDownloads: false) }
@@ -203,22 +210,43 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
                 ?? FileManager.default.temporaryDirectory
             try? FileManager.default.createDirectory(at: modelsDir, withIntermediateDirectories: true)
 
-            let cache = HubCache(cacheDirectory: modelsDir)
-            PluginHuggingFaceTokenHelper.applyTokenToEnvironment(_hfToken)
-            guard let repoID = Repo.ID(rawValue: modelDef.repoId) else {
-                throw NSError(
-                    domain: "VoxtralPlugin", code: 1,
-                    userInfo: [NSLocalizedDescriptionKey: "Invalid repository ID: \(modelDef.repoId)"]
+            let modelDirectory: URL
+            if let existing = usableModelDirectory(for: modelDef, modelsDirectory: modelsDir) {
+                modelDirectory = existing
+            } else {
+                removeIncompleteModelIfNeeded(modelDef, modelsDirectory: modelsDir)
+                guard let repoID = Repo.ID(rawValue: modelDef.repoId) else {
+                    throw NSError(
+                        domain: "VoxtralPlugin", code: 1,
+                        userInfo: [NSLocalizedDescriptionKey: "Invalid repository ID: \(modelDef.repoId)"]
+                    )
+                }
+                let client = HubClient(
+                    host: HubClient.defaultHost,
+                    bearerToken: PluginHuggingFaceTokenHelper.normalizedToken(_hfToken),
+                    cache: HubCache(cacheDirectory: modelsDir)
                 )
+                do {
+                    modelDirectory = try await client.downloadSnapshot(
+                        of: repoID,
+                        matching: Self.modelDownloadPatterns
+                    )
+                    guard PluginHuggingFaceModelStore(modelsDirectory: modelsDir).isUsableModelDirectory(
+                        modelDirectory,
+                        requirements: Self.modelRequirements
+                    ) else {
+                        throw NSError(
+                            domain: "VoxtralPlugin", code: 2,
+                            userInfo: [NSLocalizedDescriptionKey: "Downloaded model is incomplete: \(modelDef.repoId)"]
+                        )
+                    }
+                } catch {
+                    removeIncompleteModelIfNeeded(modelDef, modelsDirectory: modelsDir)
+                    throw error
+                }
             }
 
-            let modelDir = try await ModelUtils.resolveOrDownloadModel(
-                repoID: repoID,
-                requiredExtension: "safetensors",
-                cache: cache
-            )
-
-            let loaded = try VoxtralRealtimeModel.fromDirectory(modelDir)
+            let loaded = try VoxtralRealtimeModel.fromDirectory(modelDirectory)
 
             model = loaded
             loadedModelId = modelDef.id
@@ -248,14 +276,11 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
 
     fileprivate func deleteModelFiles(_ modelDef: VoxtralModelDef) throws {
         guard let modelsDir = host?.pluginDataDirectory.appendingPathComponent("models") else { return }
-        let repoDir = modelsDir.appendingPathComponent("huggingface")
-            .appendingPathComponent("hub")
-        // HubCache stores repos under models--org--name pattern
-        let subdirectory = "models--" + modelDef.repoId.replacingOccurrences(of: "/", with: "--")
-        let modelDir = repoDir.appendingPathComponent(subdirectory)
-        if FileManager.default.fileExists(atPath: modelDir.path) {
-            try FileManager.default.removeItem(at: modelDir)
-        }
+        try PluginHuggingFaceModelStore(modelsDirectory: modelsDir).deleteModelFiles(
+            for: modelDef.repoId,
+            legacyDirectories: [legacyModelDirectory(for: modelDef, modelsDirectory: modelsDir)],
+            additionalCacheRoots: [historicalCacheRoot(modelsDirectory: modelsDir)]
+        )
     }
 
     func restoreLoadedModel(allowDownloads: Bool = true) async {
@@ -269,15 +294,66 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
 
     private func hasDownloadedModel(_ modelDef: VoxtralModelDef) -> Bool {
         guard let modelsDir = host?.pluginDataDirectory.appendingPathComponent("models") else { return false }
-        let repoDir = modelsDir
-            .appendingPathComponent("huggingface")
-            .appendingPathComponent("hub")
-        let subdirectory = "models--" + modelDef.repoId.replacingOccurrences(of: "/", with: "--")
-        let modelDir = repoDir.appendingPathComponent(subdirectory)
+        return usableModelDirectory(for: modelDef, modelsDirectory: modelsDir) != nil
+    }
 
-        var isDirectory: ObjCBool = false
-        return FileManager.default.fileExists(atPath: modelDir.path, isDirectory: &isDirectory)
-            && isDirectory.boolValue
+    private func usableModelDirectory(for modelDef: VoxtralModelDef, modelsDirectory: URL) -> URL? {
+        let store = PluginHuggingFaceModelStore(modelsDirectory: modelsDirectory)
+        if let current = store.usableModelDirectory(
+            for: modelDef.repoId,
+            legacyDirectories: [legacyModelDirectory(for: modelDef, modelsDirectory: modelsDirectory)],
+            requirements: Self.modelRequirements
+        ) {
+            return current
+        }
+        return store.snapshotDirectory(
+            for: modelDef.repoId,
+            cacheRoot: historicalCacheRoot(modelsDirectory: modelsDirectory),
+            requirements: Self.modelRequirements
+        )
+    }
+
+    private func legacyModelDirectory(for modelDef: VoxtralModelDef, modelsDirectory: URL) -> URL {
+        modelsDirectory
+            .appendingPathComponent("mlx-audio")
+            .appendingPathComponent(modelDef.repoId.replacingOccurrences(of: "/", with: "_"))
+    }
+
+    private func historicalCacheRoot(modelsDirectory: URL) -> URL {
+        modelsDirectory
+            .appendingPathComponent("huggingface", isDirectory: true)
+            .appendingPathComponent("hub", isDirectory: true)
+    }
+
+    private func removeIncompleteModelIfNeeded(_ modelDef: VoxtralModelDef, modelsDirectory: URL) {
+        let store = PluginHuggingFaceModelStore(modelsDirectory: modelsDirectory)
+        let legacyDirectories = [legacyModelDirectory(for: modelDef, modelsDirectory: modelsDirectory)]
+        let additionalCacheRoots = [historicalCacheRoot(modelsDirectory: modelsDirectory)]
+        guard usableModelDirectory(for: modelDef, modelsDirectory: modelsDirectory) == nil,
+              store.hasCachedModelFiles(
+                for: modelDef.repoId,
+                legacyDirectories: legacyDirectories,
+                additionalCacheRoots: additionalCacheRoots
+              ) else {
+            return
+        }
+        try? store.deleteModelFiles(
+            for: modelDef.repoId,
+            legacyDirectories: legacyDirectories,
+            additionalCacheRoots: additionalCacheRoots
+        )
+    }
+
+    private func cleanupRedundantModelCopies() {
+        guard let modelsDirectory = host?.pluginDataDirectory.appendingPathComponent("models") else { return }
+        let store = PluginHuggingFaceModelStore(modelsDirectory: modelsDirectory)
+        for modelDef in Self.availableModels {
+            _ = try? store.removeRedundantLegacyDirectories(
+                for: modelDef.repoId,
+                legacyDirectories: [legacyModelDirectory(for: modelDef, modelsDirectory: modelsDirectory)],
+                requirements: Self.modelRequirements
+            )
+        }
     }
 
     // MARK: - Settings View

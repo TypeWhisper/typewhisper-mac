@@ -572,6 +572,28 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
         prompt: String?,
         responseFormat: String? = nil
     ) async throws -> PluginTranscriptionResult {
+        try await transcribe(
+            audio: audio,
+            apiKey: apiKey,
+            modelName: modelName,
+            language: language,
+            translate: translate,
+            prompt: prompt,
+            responseFormat: responseFormat,
+            apiVersion: nil
+        )
+    }
+
+    public func transcribe(
+        audio: AudioData,
+        apiKey: String,
+        modelName: String,
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        responseFormat: String? = nil,
+        apiVersion: String?
+    ) async throws -> PluginTranscriptionResult {
         try await performTranscribe(
             audio: audio,
             apiKey: apiKey,
@@ -580,7 +602,8 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
             translate: translate,
             prompt: prompt,
             responseFormat: responseFormat,
-            requestTimeout: Self.defaultRequestTimeout
+            requestTimeout: Self.defaultRequestTimeout,
+            apiVersion: apiVersion
         )
     }
 
@@ -594,6 +617,30 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
         requestTimeout: TimeInterval,
         responseFormat: String? = nil
     ) async throws -> PluginTranscriptionResult {
+        try await transcribe(
+            audio: audio,
+            apiKey: apiKey,
+            modelName: modelName,
+            language: language,
+            translate: translate,
+            prompt: prompt,
+            requestTimeout: requestTimeout,
+            responseFormat: responseFormat,
+            apiVersion: nil
+        )
+    }
+
+    public func transcribe(
+        audio: AudioData,
+        apiKey: String,
+        modelName: String,
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        requestTimeout: TimeInterval,
+        responseFormat: String? = nil,
+        apiVersion: String?
+    ) async throws -> PluginTranscriptionResult {
         try await performTranscribe(
             audio: audio,
             apiKey: apiKey,
@@ -602,7 +649,8 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
             translate: translate,
             prompt: prompt,
             responseFormat: responseFormat,
-            requestTimeout: requestTimeout
+            requestTimeout: requestTimeout,
+            apiVersion: apiVersion
         )
     }
 
@@ -615,6 +663,30 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
         prompt: String?,
         requestTimeout: TimeInterval,
         responseFormat: String? = nil
+    ) async throws -> PluginTranscriptionResult {
+        try await transcribeCompressedAudio(
+            audio: audio,
+            apiKey: apiKey,
+            modelName: modelName,
+            language: language,
+            translate: translate,
+            prompt: prompt,
+            requestTimeout: requestTimeout,
+            responseFormat: responseFormat,
+            apiVersion: nil
+        )
+    }
+
+    public func transcribeCompressedAudio(
+        audio: AudioData,
+        apiKey: String,
+        modelName: String,
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        requestTimeout: TimeInterval,
+        responseFormat: String? = nil,
+        apiVersion: String?
     ) async throws -> PluginTranscriptionResult {
         let uploadAudio = normalizedAudioForUpload(audio)
         let uploadFile: PluginAudioUploadFile
@@ -635,7 +707,8 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
             prompt: prompt,
             responseFormat: responseFormat,
             requestTimeout: requestTimeout,
-            uploadFile: uploadFile
+            uploadFile: uploadFile,
+            apiVersion: apiVersion
         )
     }
 
@@ -649,6 +722,30 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
         requestTimeout: TimeInterval,
         responseFormat: String? = nil
     ) async throws -> PluginTranscriptionResult {
+        try await transcribeCompressedAudioWithWavFallback(
+            audio: audio,
+            apiKey: apiKey,
+            modelName: modelName,
+            language: language,
+            translate: translate,
+            prompt: prompt,
+            requestTimeout: requestTimeout,
+            responseFormat: responseFormat,
+            apiVersion: nil
+        )
+    }
+
+    public func transcribeCompressedAudioWithWavFallback(
+        audio: AudioData,
+        apiKey: String,
+        modelName: String,
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        requestTimeout: TimeInterval,
+        responseFormat: String? = nil,
+        apiVersion: String?
+    ) async throws -> PluginTranscriptionResult {
         do {
             return try await transcribeCompressedAudio(
                 audio: audio,
@@ -658,7 +755,8 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
                 translate: translate,
                 prompt: prompt,
                 requestTimeout: requestTimeout,
-                responseFormat: responseFormat
+                responseFormat: responseFormat,
+                apiVersion: apiVersion
             )
         } catch {
             guard PluginAudioUploadEncoder.shouldRetryWithWavUpload(error: error) else {
@@ -673,7 +771,8 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
                 translate: translate,
                 prompt: prompt,
                 requestTimeout: requestTimeout,
-                responseFormat: responseFormat
+                responseFormat: responseFormat,
+                apiVersion: apiVersion
             )
         }
     }
@@ -689,6 +788,32 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
         responseFormat: String? = nil,
         uploadFile: PluginAudioUploadFile
     ) async throws -> PluginTranscriptionResult {
+        try await transcribeWithUploadFallback(
+            audio: audio,
+            apiKey: apiKey,
+            modelName: modelName,
+            language: language,
+            translate: translate,
+            prompt: prompt,
+            requestTimeout: requestTimeout,
+            responseFormat: responseFormat,
+            uploadFile: uploadFile,
+            apiVersion: nil
+        )
+    }
+
+    public func transcribeWithUploadFallback(
+        audio: AudioData,
+        apiKey: String,
+        modelName: String,
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        requestTimeout: TimeInterval,
+        responseFormat: String? = nil,
+        uploadFile: PluginAudioUploadFile,
+        apiVersion: String?
+    ) async throws -> PluginTranscriptionResult {
         do {
             return try await performTranscribe(
                 audio: audio,
@@ -699,7 +824,8 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
                 prompt: prompt,
                 responseFormat: responseFormat,
                 requestTimeout: requestTimeout,
-                uploadFile: uploadFile
+                uploadFile: uploadFile,
+                apiVersion: apiVersion
             )
         } catch {
             guard uploadFile.format != "wav",
@@ -716,7 +842,8 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
                 prompt: prompt,
                 responseFormat: responseFormat,
                 requestTimeout: requestTimeout,
-                uploadFile: PluginAudioUploadEncoder.wavUpload(from: normalizedAudioForUpload(audio))
+                uploadFile: PluginAudioUploadEncoder.wavUpload(from: normalizedAudioForUpload(audio)),
+                apiVersion: apiVersion
             )
         }
     }
@@ -732,6 +859,32 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
         responseFormat: String? = nil,
         uploadFile: PluginAudioUploadFile
     ) async throws -> PluginTranscriptionResult {
+        try await transcribe(
+            audio: audio,
+            apiKey: apiKey,
+            modelName: modelName,
+            language: language,
+            translate: translate,
+            prompt: prompt,
+            requestTimeout: requestTimeout,
+            responseFormat: responseFormat,
+            uploadFile: uploadFile,
+            apiVersion: nil
+        )
+    }
+
+    public func transcribe(
+        audio: AudioData,
+        apiKey: String,
+        modelName: String,
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        requestTimeout: TimeInterval,
+        responseFormat: String? = nil,
+        uploadFile: PluginAudioUploadFile,
+        apiVersion: String?
+    ) async throws -> PluginTranscriptionResult {
         try await performTranscribe(
             audio: audio,
             apiKey: apiKey,
@@ -741,7 +894,8 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
             prompt: prompt,
             responseFormat: responseFormat,
             requestTimeout: requestTimeout,
-            uploadFile: uploadFile
+            uploadFile: uploadFile,
+            apiVersion: apiVersion
         )
     }
 
@@ -754,17 +908,12 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
         prompt: String?,
         responseFormat: String?,
         requestTimeout: TimeInterval,
-        uploadFile: PluginAudioUploadFile? = nil
+        uploadFile: PluginAudioUploadFile? = nil,
+        apiVersion: String? = nil
     ) async throws -> PluginTranscriptionResult {
-        let endpoint: String
-        if translate {
-            endpoint = "\(baseURL)/v1/audio/translations"
-        } else {
-            endpoint = "\(baseURL)/v1/audio/transcriptions"
-        }
-
-        guard let url = URL(string: endpoint) else {
-            throw PluginTranscriptionError.apiError("Invalid URL: \(endpoint)")
+        let path = translate ? "/v1/audio/translations" : "/v1/audio/transcriptions"
+        guard let url = requestURL(path: path, apiVersion: apiVersion) else {
+            throw PluginTranscriptionError.apiError("Invalid URL: \(baseURL)\(path)")
         }
 
         let boundary = UUID().uuidString
@@ -829,8 +978,12 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
     }
 
     public func validateApiKey(_ apiKey: String) async -> Bool {
+        await validateApiKey(apiKey, apiVersion: nil)
+    }
+
+    public func validateApiKey(_ apiKey: String, apiVersion: String?) async -> Bool {
         guard !apiKey.isEmpty else { return false }
-        guard let url = URL(string: "\(baseURL)/v1/models") else { return false }
+        guard let url = requestURL(path: "/v1/models", apiVersion: apiVersion) else { return false }
 
         var request = URLRequest(url: url)
         request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
@@ -843,6 +996,24 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
         } catch {
             return false
         }
+    }
+
+    private func requestURL(path: String, apiVersion: String?) -> URL? {
+        guard var components = URLComponents(string: baseURL) else { return nil }
+        let basePath = components.percentEncodedPath.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        let requestPath = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        components.percentEncodedPath = "/" + [basePath, requestPath]
+            .filter { !$0.isEmpty }
+            .joined(separator: "/")
+
+        let trimmedVersion = apiVersion?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !trimmedVersion.isEmpty {
+            var queryItems = components.queryItems ?? []
+            queryItems.removeAll { $0.name.caseInsensitiveCompare("api-version") == .orderedSame }
+            queryItems.append(URLQueryItem(name: "api-version", value: trimmedVersion))
+            components.queryItems = queryItems
+        }
+        return components.url
     }
 
     private struct APISegment: Decodable {

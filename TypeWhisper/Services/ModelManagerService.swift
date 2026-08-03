@@ -1345,7 +1345,8 @@ final class ModelManagerService: ObservableObject {
         let overrideRestoreId = applyCloudModelOverride(plugin: plugin, override: cloudModelOverride)
 
         if let cloudModelOverride {
-            _ = await waitForPluginConfigured(plugin, selectedModelId: cloudModelOverride)
+            let selectedModelId = plugin.selectedModelId ?? cloudModelOverride
+            _ = await waitForPluginConfigured(plugin, selectedModelId: selectedModelId)
             return overrideRestoreId
         }
 

@@ -4273,6 +4273,44 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testHoveredFeedbackDoesNotDelayBufferedHotkeyStart() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        let context = try XCTUnwrap(dictationContext)
+        var startCount = 0
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {
+            startCount += 1
+        }
+        context.dictationViewModel.requireSecondEscapeToCancelRecording = false
+        context.dictationViewModel.state = .recording
+        context.dictationViewModel.handleCancelHotkey()
+        context.dictationViewModel.setActionFeedbackHovered(true)
+
+        XCTAssertEqual(context.dictationViewModel.state, .inserting)
+        XCTAssertTrue(context.dictationViewModel.actionFeedbackIsPaused)
+
+        context.hotkeyService.onDictationStart?(DispatchTime.now().uptimeNanoseconds)
+
+        for _ in 0..<100 {
+            if context.dictationViewModel.state == .recording { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        XCTAssertEqual(context.dictationViewModel.state, .recording)
+        XCTAssertEqual(startCount, 1)
+        XCTAssertNil(context.dictationViewModel.actionFeedbackMessage)
+        XCTAssertFalse(context.dictationViewModel.actionFeedbackIsPaused)
+    }
+
+    @MainActor
     func testBufferedHotkeyStartIsCancelledWhenPushToTalkStops() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         var dictationContext: DictationContext?

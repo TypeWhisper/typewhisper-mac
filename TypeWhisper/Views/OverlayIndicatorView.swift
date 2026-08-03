@@ -29,6 +29,30 @@ struct OverlayTranscriptPreviewState: Equatable {
     }
 }
 
+struct OverlayIndicatorSurface<Content: View>: View {
+    let content: Content
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    private var shape: RoundedRectangle {
+        RoundedRectangle(cornerRadius: 24, style: .continuous)
+    }
+
+    var body: some View {
+        content
+            .background(.black.opacity(0.85), in: shape)
+            // The hosting panel itself is rectangular. Clip all rendered content,
+            // especially the feedback progress bar, to the visible pill.
+            .clipShape(shape)
+            .overlay(
+                shape
+                    .stroke(Color.white.opacity(0.15), lineWidth: 1)
+            )
+    }
+}
+
 /// Pill-shaped overlay indicator that appears centered on the screen.
 /// Supports top and bottom positioning.
 struct OverlayIndicatorView: View {
@@ -77,9 +101,9 @@ struct OverlayIndicatorView: View {
     }
 
     private var currentWidth: CGFloat {
-        if hasCancelWarning { return max(closedWidth, 340) }
+        if hasCancelWarning { return max(closedWidth, IndicatorFeedbackPanelLayout.feedbackWidth) }
         if transcriptBodyVisible { return max(closedWidth, 400) }
-        if hasActionFeedback { return max(closedWidth, 340) }
+        if hasActionFeedback { return max(closedWidth, IndicatorFeedbackPanelLayout.feedbackWidth) }
         return closedWidth
     }
 
@@ -96,28 +120,29 @@ struct OverlayIndicatorView: View {
     }
 
     var body: some View {
-        VStack(alignment: .center, spacing: 0) {
-            if isTop {
-                statusBar
-                    .frame(height: 48)
-                    .frame(maxWidth: .infinity)
-                expandableContent
-            } else {
-                expandableContent
-                statusBar
-                    .frame(height: 48)
-                    .frame(maxWidth: .infinity)
+        OverlayIndicatorSurface {
+            VStack(alignment: .center, spacing: 0) {
+                if isTop {
+                    statusBar
+                        .frame(height: IndicatorFeedbackPanelLayout.overlayStatusHeight)
+                        .frame(maxWidth: .infinity)
+                    expandableContent
+                } else {
+                    expandableContent
+                    statusBar
+                        .frame(height: IndicatorFeedbackPanelLayout.overlayStatusHeight)
+                        .frame(maxWidth: .infinity)
+                }
             }
+            .frame(width: currentWidth)
         }
-        .frame(width: currentWidth)
-        .background(.black.opacity(0.85), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(Color.white.opacity(0.15), lineWidth: 1)
-        )
         .shadow(color: .black.opacity(0.3), radius: 10, y: 5)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: isTop ? .top : .bottom)
         .preferredColorScheme(.dark)
+        .onHover { hovered in
+            guard hasActionFeedback else { return }
+            viewModel.setActionFeedbackHovered(hovered)
+        }
         .animation(.easeInOut(duration: 0.3), value: textExpanded)
         .animation(.easeInOut(duration: 0.2), value: presentation.state)
         // Matches the ~30 Hz (33ms) level-publish throttle shared by both
@@ -218,7 +243,6 @@ struct OverlayIndicatorView: View {
             }
 
             if hasActionFeedback {
-                Divider().background(Color.white.opacity(0.1))
                 IndicatorActionFeedback(
                     message: presentation.actionFeedbackMessage ?? "",
                     icon: presentation.actionFeedbackIcon,
@@ -228,8 +252,12 @@ struct OverlayIndicatorView: View {
                     actionTitle: presentation.actionFeedbackUndoTitle,
                     onAction: presentation.actionFeedbackUndoTitle == nil ? nil : {
                         viewModel.undoActionFeedback()
-                    }
+                    },
+                    remainingFraction: presentation.actionFeedbackRemainingFraction
                 )
+                .overlay(alignment: .top) {
+                    Divider().background(Color.white.opacity(0.1))
+                }
             }
         } else {
             // Bottom position: action feedback on top, text above status bar
@@ -243,9 +271,12 @@ struct OverlayIndicatorView: View {
                     actionTitle: presentation.actionFeedbackUndoTitle,
                     onAction: presentation.actionFeedbackUndoTitle == nil ? nil : {
                         viewModel.undoActionFeedback()
-                    }
+                    },
+                    remainingFraction: presentation.actionFeedbackRemainingFraction
                 )
-                Divider().background(Color.white.opacity(0.1))
+                .overlay(alignment: .bottom) {
+                    Divider().background(Color.white.opacity(0.1))
+                }
             }
 
             if hasTranscriptSection {

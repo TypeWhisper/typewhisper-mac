@@ -51,7 +51,11 @@ jobs:
           SCHEDULED_WITHOUT_ICLOUD: ${{ vars.MACOS_SCHEDULED_WITHOUT_ICLOUD }}
         run: |
           WITHOUT_ICLOUD="false"
-          if [ "$REQUESTED_WITHOUT_ICLOUD" = "true" ] ||
+          # Tagged app releases remain on the proven no-iCloud distribution path
+          # until the production container and Developer ID profile are approved.
+          # Scheduled and manually dispatched builds retain their existing controls.
+          if [ "$EVENT_NAME" = "push" ] ||
+            [ "$REQUESTED_WITHOUT_ICLOUD" = "true" ] ||
             { [ "$EVENT_NAME" = "schedule" ] && [ "$SCHEDULED_WITHOUT_ICLOUD" = "true" ]; }; then
             WITHOUT_ICLOUD="true"
           fi
@@ -414,8 +418,37 @@ jobs:
               gh release edit "$TAG" --draft=false
             fi
           elif [ "$EXISTING_DRAFT" = "false" ]; then
-            echo "Published release found for $TAG. Uploading assets..."
-            gh release upload "$TAG" "$ASSET_DMG" "$ASSET_ZIP" --clobber
+            echo "Published release found for $TAG. Verifying immutable assets..."
+
+            verify_or_upload_published_asset() {
+              local asset_path="$1"
+              local asset_name
+              local local_digest
+              local remote_digest
+
+              asset_name=$(basename "$asset_path")
+              local_digest="sha256:$(shasum -a 256 "$asset_path" | awk '{print $1}')"
+              remote_digest=$(
+                gh release view "$TAG" --json assets \
+                  --jq ".assets[] | select(.name == \"$asset_name\") | .digest // \"MISSING_DIGEST\""
+              )
+
+              if [ -z "$remote_digest" ]; then
+                echo "Published release is missing $asset_name. Uploading it without replacing existing assets..."
+                gh release upload "$TAG" "$asset_path"
+              elif [ "$remote_digest" = "MISSING_DIGEST" ]; then
+                echo "Published asset $asset_name has no GitHub digest; refusing to replace it" >&2
+                exit 1
+              elif [ "$remote_digest" = "$local_digest" ]; then
+                echo "Published asset $asset_name already matches $local_digest"
+              else
+                echo "Published asset $asset_name has digest $remote_digest, expected $local_digest; refusing to replace it" >&2
+                exit 1
+              fi
+            }
+
+            verify_or_upload_published_asset "$ASSET_DMG"
+            verify_or_upload_published_asset "$ASSET_ZIP"
             if [ "$IS_PRERELEASE" = "true" ]; then
               gh release edit "$TAG" --prerelease
             fi
