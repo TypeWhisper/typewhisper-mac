@@ -14,6 +14,12 @@
             "state": "translated",
             "value": "各メモにメタデータ（日付、アプリ、言語、タグ）を追加します。"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "向每条笔记添加元数据（日期、应用、语言、标签）。"
+          }
         }
       }
     },
@@ -29,6 +35,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "すべてのテキストを1日のファイルに追加し、個別のメモを作成しません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将所有转录内容追加到单个每日文件中，而不是创建单独的笔记。"
           }
         }
       }
@@ -46,6 +58,12 @@
             "state": "translated",
             "value": "追記形式:"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "追加格式："
+          }
         }
       }
     },
@@ -61,6 +79,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "自動エクスポート"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自动导出"
           }
         }
       }
@@ -78,6 +102,12 @@
             "state": "translated",
             "value": "各テキストを自動的にObsidianに保存します。"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自动将每次转录保存到 Obsidian。"
+          }
         }
       }
     },
@@ -93,6 +123,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "検索..."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "浏览..."
           }
         }
       }
@@ -110,6 +146,12 @@
             "state": "translated",
             "value": "指示をコピー"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "复制指令"
+          }
         }
       }
     },
@@ -125,6 +167,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "独自のワークフローを作成し、これを指示に追加し、アクションの目標を「Obsidianに保存」に設定してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "创建自定义工作流，将其粘贴到指令中，并将操作目标设置为「保存到 Obsidian」。"
           }
         }
       }
@@ -142,6 +190,12 @@
             "state": "translated",
             "value": "箇条書き"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "项目符号列表"
+          }
         }
       }
     },
@@ -157,6 +211,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "カスタム"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自定义"
           }
         }
       }
@@ -174,6 +234,12 @@
             "state": "translated",
             "value": "日記メモモード"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每日笔记模式"
+          }
         }
       }
     },
@@ -189,6 +255,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "認識されたVault"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "检测到的 Vault"
           }
         }
       }
@@ -206,6 +278,12 @@
             "state": "translated",
             "value": "ファイル構成"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文件组织"
+          }
         }
       }
     },
@@ -221,6 +299,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "ファイル名:"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文件名："
           }
         }
       }
@@ -238,6 +322,12 @@
             "state": "translated",
             "value": "そのまま追記"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "纯文本追加"
+          }
         }
       }
     },
@@ -253,6 +343,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "選択されたVaultなし"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未选择 Vault"
           }
         }
       }
@@ -270,6 +366,12 @@
             "state": "translated",
             "value": "プレースホルダー: {{DATE}}, {{TIME}}, {{APP}}, {{LANGUAGE}}"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "占位符：{{DATE}}, {{TIME}}, {{APP}}, {{LANGUAGE}}"
+          }
         }
       }
     },
@@ -285,6 +387,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "プレースホルダー: {{TEXT}}, {{TIME}}, {{DATE}}, {{APP}}, {{LANGUAGE}}, {{URL}}"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "占位符：{{TEXT}}, {{TIME}}, {{DATE}}, {{APP}}, {{LANGUAGE}}, {{URL}}"
           }
         }
       }
@@ -302,6 +410,12 @@
             "state": "translated",
             "value": "プレビュー: %@.md"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "预览：%@.md"
+          }
         }
       }
     },
@@ -317,6 +431,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "ワークフロー指示"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "工作流指令"
           }
         }
       }
@@ -334,6 +454,12 @@
             "state": "translated",
             "value": "Vaultを選択..."
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "选择 Vault..."
+          }
         }
       }
     },
@@ -349,6 +475,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "ObsidianのVaultフォルダを選択してください"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "选择您的 Obsidian Vault 文件夹"
           }
         }
       }
@@ -366,6 +498,12 @@
             "state": "translated",
             "value": "サブフォルダ:"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "子文件夹："
+          }
         }
       }
     },
@@ -381,6 +519,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "タグ:"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "标签："
           }
         }
       }
@@ -398,6 +542,12 @@
             "state": "translated",
             "value": "時刻付きセクション"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "时间戳分段"
+          }
         }
       }
     },
@@ -410,6 +560,12 @@
           }
         },
         "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vault"
+          }
+        },
+        "zh-Hans": {
           "stringUnit": {
             "state": "translated",
             "value": "Vault"
@@ -429,6 +585,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "YAMLフロントマター"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "YAML 前置元数据"
           }
         }
       }

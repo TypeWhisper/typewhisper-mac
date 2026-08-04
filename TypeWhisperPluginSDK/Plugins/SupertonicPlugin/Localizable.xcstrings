@@ -1,28 +1,358 @@
 {
   "sourceLanguage": "en",
   "strings": {
-    "Balanced": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "バランス" } } } },
-    "Delete cached model": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "キャッシュ済みモデルを削除" } } } },
-    "Download & Load": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "ダウンロードして読み込む" } } } },
-    "Fast": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "高速" } } } },
-    "High": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "高品質" } } } },
-    "Hugging Face Token": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "Hugging Faceトークン" } } } },
-    "I have read and accept the Supertonic 3 model license terms": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "Supertonic 3モデルのライセンス条項を読み、同意します" } } } },
-    "Invalid Hugging Face token": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "無効なHugging Faceトークン" } } } },
-    "Local text-to-speech powered by Supertonic 3 ONNX models. Model assets are downloaded only after you accept the model license.": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "Supertonic 3 ONNXモデルによるローカル音声合成です。モデルアセットは、モデルライセンスに同意した後にのみダウンロードされます。" } } } },
-    "Model": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "モデル" } } } },
-    "Model License": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "モデルライセンス" } } } },
-    "Open Supertonic 3 OpenRAIL-M license": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "Supertonic 3 OpenRAIL-Mライセンスを開く" } } } },
-    "Optional. It can increase download rate limits for the model download.": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "任意です。モデルダウンロード時のレート制限を緩和できる場合があります。" } } } },
-    "Quality": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "品質" } } } },
-    "Ready": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "準備完了" } } } },
-    "Remove": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "削除" } } } },
-    "Save": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "保存" } } } },
-    "Speed": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "速度" } } } },
-    "Supertonic (Experimental)": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "Supertonic（実験的）" } } } },
-    "Supertonic 3 model assets are licensed under OpenRAIL-M and include use restrictions. Review the full license before downloading the model.": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "Supertonic 3のモデルアセットはOpenRAIL-Mライセンスで提供され、利用制限があります。モデルをダウンロードする前にライセンス全文を確認してください。" } } } },
-    "Valid Hugging Face token": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "有効なHugging Faceトークン" } } } },
-    "Voice": { "localizations": { "ja": { "stringUnit": { "state": "translated", "value": "音声" } } } }
+    "Balanced": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "バランス"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "平衡"
+          }
+        }
+      }
+    },
+    "Delete cached model": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "キャッシュ済みモデルを削除"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "删除缓存的模型"
+          }
+        }
+      }
+    },
+    "Download & Load": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ダウンロードして読み込む"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下载并加载"
+          }
+        }
+      }
+    },
+    "Fast": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "高速"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "快速"
+          }
+        }
+      }
+    },
+    "High": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "高品質"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "高"
+          }
+        }
+      }
+    },
+    "Hugging Face Token": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hugging Faceトークン"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hugging Face 令牌"
+          }
+        }
+      }
+    },
+    "I have read and accept the Supertonic 3 model license terms": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supertonic 3モデルのライセンス条項を読み、同意します"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "我已阅读并接受 Supertonic 3 模型许可条款"
+          }
+        }
+      }
+    },
+    "Invalid Hugging Face token": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無効なHugging Faceトークン"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无效的 Hugging Face 令牌"
+          }
+        }
+      }
+    },
+    "Local text-to-speech powered by Supertonic 3 ONNX models. Model assets are downloaded only after you accept the model license.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supertonic 3 ONNXモデルによるローカル音声合成です。モデルアセットは、モデルライセンスに同意した後にのみダウンロードされます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "由 Supertonic 3 ONNX 模型驱动的本地语音合成。模型资源仅在您接受模型许可后下载。"
+          }
+        }
+      }
+    },
+    "Model": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "モデル"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型"
+          }
+        }
+      }
+    },
+    "Model License": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "モデルライセンス"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型许可"
+          }
+        }
+      }
+    },
+    "Open Supertonic 3 OpenRAIL-M license": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supertonic 3 OpenRAIL-Mライセンスを開く"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "打开 Supertonic 3 OpenRAIL-M 许可"
+          }
+        }
+      }
+    },
+    "Optional. It can increase download rate limits for the model download.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "任意です。モデルダウンロード時のレート制限を緩和できる場合があります。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "可选。可以提高模型下载的速率限制。"
+          }
+        }
+      }
+    },
+    "Quality": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "品質"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "质量"
+          }
+        }
+      }
+    },
+    "Ready": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "準備完了"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "就绪"
+          }
+        }
+      }
+    },
+    "Remove": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "削除"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除"
+          }
+        }
+      }
+    },
+    "Save": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存"
+          }
+        }
+      }
+    },
+    "Speed": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "速度"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "速度"
+          }
+        }
+      }
+    },
+    "Supertonic (Experimental)": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supertonic（実験的）"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supertonic（实验性）"
+          }
+        }
+      }
+    },
+    "Supertonic 3 model assets are licensed under OpenRAIL-M and include use restrictions. Review the full license before downloading the model.": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supertonic 3のモデルアセットはOpenRAIL-Mライセンスで提供され、利用制限があります。モデルをダウンロードする前にライセンス全文を確認してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supertonic 3 模型资源采用 OpenRAIL-M 许可，包含使用限制。下载模型前请查看完整许可。"
+          }
+        }
+      }
+    },
+    "Valid Hugging Face token": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有効なHugging Faceトークン"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有效的 Hugging Face 令牌"
+          }
+        }
+      }
+    },
+    "Voice": {
+      "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "音声"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "声音"
+          }
+        }
+      }
+    }
   },
   "version": "1.0"
 }

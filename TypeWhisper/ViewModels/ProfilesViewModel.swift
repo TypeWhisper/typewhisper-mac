@@ -31,6 +31,13 @@ func localizedAppText(_ english: String, de german: String, ja japanese: String?
         }
     }
 
+    if language.hasPrefix("zh") {
+        let localized = Bundle.main.localizedString(forKey: english, value: nil, table: nil)
+        if localized != english {
+            return localized
+        }
+    }
+
     return english
 }
 

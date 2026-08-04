@@ -14,6 +14,12 @@
             "state": "translated",
             "value": "APIキー"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API 密钥"
+          }
         }
       }
     },
@@ -29,6 +35,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "APIキーはキーチェーンに安全に保存されます"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API 密钥安全存储在钥匙串中"
           }
         }
       }
@@ -46,6 +58,12 @@
             "state": "translated",
             "value": "無効なAPIキー"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无效的 API 密钥"
+          }
         }
       }
     },
@@ -61,6 +79,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "最終更新: %@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最后更新：%@"
           }
         }
       }
@@ -78,6 +102,12 @@
             "state": "translated",
             "value": "LLMモデル"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "LLM 模型"
+          }
         }
       }
     },
@@ -93,6 +123,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "モデルを更新"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "刷新模型"
           }
         }
       }
@@ -110,6 +146,12 @@
             "state": "translated",
             "value": "削除"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除"
+          }
         }
       }
     },
@@ -122,6 +164,12 @@
           }
         },
         "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存"
+          }
+        },
+        "zh-Hans": {
           "stringUnit": {
             "state": "translated",
             "value": "保存"
@@ -142,6 +190,12 @@
             "state": "translated",
             "value": "モデルを更新できませんでした。接続を確認して、もう一度お試しください。"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法刷新模型。请检查连接后重试。"
+          }
         }
       }
     },
@@ -157,6 +211,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "有効なAPIキー"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有效的 API 密钥"
           }
         }
       }
@@ -174,6 +234,12 @@
             "state": "translated",
             "value": "デフォルトのモデルを使用しています。完全なリストを取得するには更新してください。"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在使用默认模型。刷新以获取完整列表。"
+          }
         }
       }
     },
@@ -189,6 +255,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "確認中..."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "验证中..."
           }
         }
       }

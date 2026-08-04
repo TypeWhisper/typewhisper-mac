@@ -37,13 +37,13 @@ struct WorkflowOutputFormatPreset: Identifiable, Equatable {
     var id: String { value }
 
     static let all: [WorkflowOutputFormatPreset] = [
-        WorkflowOutputFormatPreset(title: "Auto-Detect", value: "auto"),
-        WorkflowOutputFormatPreset(title: "Markdown", value: "markdown"),
-        WorkflowOutputFormatPreset(title: "HTML", value: "html"),
-        WorkflowOutputFormatPreset(title: "RTF", value: "rtf"),
-        WorkflowOutputFormatPreset(title: "Plain Text", value: "plaintext"),
-        WorkflowOutputFormatPreset(title: "Code", value: "code"),
-        WorkflowOutputFormatPreset(title: "JSON", value: "json")
+        WorkflowOutputFormatPreset(title: String(localized: "Auto-Detect"), value: "auto"),
+        WorkflowOutputFormatPreset(title: String(localized: "Markdown"), value: "markdown"),
+        WorkflowOutputFormatPreset(title: String(localized: "HTML"), value: "html"),
+        WorkflowOutputFormatPreset(title: String(localized: "RTF"), value: "rtf"),
+        WorkflowOutputFormatPreset(title: String(localized: "Plain Text"), value: "plaintext"),
+        WorkflowOutputFormatPreset(title: String(localized: "Code"), value: "code"),
+        WorkflowOutputFormatPreset(title: String(localized: "JSON"), value: "json")
     ]
 }
 
@@ -1757,7 +1757,7 @@ private struct WorkflowEditorPage: View {
             }
 
             HStack(alignment: .top, spacing: 10) {
-                TextField("docs.github.com", text: $websiteInput)
+                TextField(String(localized: "docs.github.com"), text: $websiteInput)
                     .textFieldStyle(.roundedBorder)
                     .onSubmit {
                         addWebsiteInput()

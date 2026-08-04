@@ -169,9 +169,9 @@ struct HistoryView: View {
             Button(String(localized: "Cancel"), role: .cancel) {}
         } message: {
             if viewModel.hasActiveFilters || !viewModel.searchQuery.isEmpty {
-                Text("Delete \(viewModel.visibleRecordCount) entries matching current filters?")
+                Text(String(localized: "Delete \(viewModel.visibleRecordCount) entries matching current filters?"))
             } else {
-                Text("Delete all \(viewModel.visibleRecordCount) entries? This cannot be undone.")
+                Text(String(localized: "Delete all \(viewModel.visibleRecordCount) entries? This cannot be undone."))
             }
         }
     }
@@ -220,13 +220,13 @@ struct HistoryView: View {
             }
 
             Menu(String(localized: "Export \(count) entries as...")) {
-                Button("Markdown (.md)") {
+                Button(String(localized: "Markdown (.md)")) {
                     viewModel.exportSelectedRecords(format: .markdown)
                 }
-                Button("Plain Text (.txt)") {
+                Button(String(localized: "Plain Text (.txt)")) {
                     viewModel.exportSelectedRecords(format: .plainText)
                 }
-                Button("JSON (.json)") {
+                Button(String(localized: "JSON (.json)")) {
                     viewModel.exportSelectedRecords(format: .json)
                 }
             }
@@ -241,13 +241,13 @@ struct HistoryView: View {
             }
 
             Menu(String(localized: "Export as...")) {
-                Button("Markdown (.md)") {
+                Button(String(localized: "Markdown (.md)")) {
                     viewModel.exportRecord(record, format: .markdown)
                 }
-                Button("Plain Text (.txt)") {
+                Button(String(localized: "Plain Text (.txt)")) {
                     viewModel.exportRecord(record, format: .plainText)
                 }
-                Button("JSON (.json)") {
+                Button(String(localized: "JSON (.json)")) {
                     viewModel.exportRecord(record, format: .json)
                 }
             }

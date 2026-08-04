@@ -14,6 +14,12 @@
             "state": "translated",
             "value": "Webhookを追加して、文字起こしデータを外部サービスに送信します。"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "添加 Webhook 以将转录数据发送到外部服务。"
+          }
         }
       }
     },
@@ -29,6 +35,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Webhookを追加"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "添加 Webhook"
           }
         }
       }
@@ -46,6 +58,12 @@
             "state": "translated",
             "value": "すべての文字起こし"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "所有转录"
+          }
         }
       }
     },
@@ -61,6 +79,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "キャンセル"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取消"
           }
         }
       }
@@ -78,6 +102,12 @@
             "state": "translated",
             "value": "配信履歴"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "投递日志"
+          }
         }
       }
     },
@@ -93,6 +123,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "完了"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "完成"
           }
         }
       }
@@ -110,6 +146,12 @@
             "state": "translated",
             "value": "Webhookを編集"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "编辑 Webhook"
+          }
         }
       }
     },
@@ -125,6 +167,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "一般"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "通用"
           }
         }
       }
@@ -142,6 +190,12 @@
             "state": "translated",
             "value": "メソッド"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "方法"
+          }
         }
       }
     },
@@ -157,6 +211,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "名前"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "名称"
           }
         }
       }
@@ -174,6 +234,12 @@
             "state": "translated",
             "value": "Webhookなし"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无 Webhook"
+          }
         }
       }
     },
@@ -189,6 +255,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "ワークフローが設定されていません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未配置工作流。"
           }
         }
       }
@@ -206,6 +278,12 @@
             "state": "translated",
             "value": "利用できなくなりました"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "不再可用"
+          }
         }
       }
     },
@@ -218,6 +296,12 @@
           }
         },
         "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存"
+          }
+        },
+        "zh-Hans": {
           "stringUnit": {
             "state": "translated",
             "value": "保存"
@@ -238,6 +322,12 @@
             "state": "translated",
             "value": "1つ以上のワークフローを選択してください。"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请至少选择一个工作流。"
+          }
         }
       }
     },
@@ -253,6 +343,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "選択したワークフロー"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "选定的工作流"
           }
         }
       }
@@ -270,6 +366,12 @@
             "state": "translated",
             "value": "Webhookの送信対象"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "发送 Webhook 至"
+          }
         }
       }
     },
@@ -285,6 +387,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "ワークフローを使用しない場合も含め、すべての文字起こし後にWebhookを送信します。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每次转录后都会发送 Webhook，包括没有工作流的转录。"
           }
         }
       }
@@ -302,6 +410,12 @@
             "state": "translated",
             "value": "選択したワークフローに対してのみWebhookを送信します。"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "仅对选定的工作流发送 Webhook。"
+          }
         }
       }
     },
@@ -314,6 +428,12 @@
           }
         },
         "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "URL"
+          }
+        },
+        "zh-Hans": {
           "stringUnit": {
             "state": "translated",
             "value": "URL"
@@ -334,6 +454,12 @@
             "state": "translated",
             "value": "Webhook通知"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Webhook 通知"
+          }
         }
       }
     },
@@ -350,6 +476,12 @@
             "state": "translated",
             "value": "ワークフロー"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "工作流"
+          }
         }
       }
     },
@@ -365,6 +497,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "ワークフロー：%@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "工作流：%@"
           }
         }
       }

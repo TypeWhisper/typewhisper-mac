@@ -247,7 +247,7 @@ struct FileTranscriptionView: View {
             }
             .buttonStyle(.bordered)
 
-            Text("WAV, MP3, M4A, FLAC, MP4, MOV")
+            Text(String(localized: "WAV, MP3, M4A, FLAC, MP4, MOV"))
                 .font(.caption2)
                 .foregroundStyle(.tertiary)
             Spacer()
@@ -417,8 +417,8 @@ struct FileTranscriptionView: View {
 
             if let result = item.result, !result.segments.isEmpty {
                 Menu {
-                    Button("SRT") { viewModel.exportSubtitles(for: item, format: .srt) }
-                    Button("VTT") { viewModel.exportSubtitles(for: item, format: .vtt) }
+                    Button(String(localized: "SRT")) { viewModel.exportSubtitles(for: item, format: .srt) }
+                    Button(String(localized: "VTT")) { viewModel.exportSubtitles(for: item, format: .vtt) }
                 } label: {
                     Image(systemName: "square.and.arrow.up")
                 }

@@ -14,6 +14,12 @@
             "state": "translated",
             "value": "APIキー"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API 密钥"
+          }
         }
       }
     },
@@ -29,6 +35,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "APIキーはキーチェーンに安全に保存されます"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API 密钥安全存储在钥匙串中"
           }
         }
       }
@@ -46,6 +58,12 @@
             "state": "translated",
             "value": "APIキーの検証に失敗しました。接続を確認し、再度試してください。"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法验证 API 密钥。请检查连接后重试。"
+          }
         }
       }
     },
@@ -61,6 +79,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "無効なAPIキー"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无效的 API 密钥"
           }
         }
       }
@@ -78,6 +102,12 @@
             "state": "translated",
             "value": "言語モード"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "语言模式"
+          }
         }
       }
     },
@@ -94,6 +124,12 @@
             "state": "translated",
             "value": "削除"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除"
+          }
         }
       }
     },
@@ -106,6 +142,12 @@
           }
         },
         "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存"
+          }
+        },
+        "zh-Hans": {
           "stringUnit": {
             "state": "translated",
             "value": "保存"
@@ -126,6 +168,12 @@
             "state": "translated",
             "value": "有効なAPIキー"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有效的 API 密钥"
+          }
         }
       }
     },
@@ -141,6 +189,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "検証中..."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "验证中..."
           }
         }
       }

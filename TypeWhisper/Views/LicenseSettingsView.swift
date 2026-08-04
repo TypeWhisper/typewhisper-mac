@@ -111,7 +111,7 @@ struct LicenseSettingsView: View {
                 }
 
                 planSelectionButton(
-                    title: "Team",
+                    title: String(localized: "Team"),
                     price: localizedAppText("from 19 EUR/mo", de: "ab 19 EUR/Monat"),
                     description: localizedAppText(
                         "Procurement, support, managed seats, and up to 10 devices.",

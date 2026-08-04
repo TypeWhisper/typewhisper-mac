@@ -14,6 +14,34 @@
             "state": "translated",
             "value": "APIキー"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API 密钥"
+          }
+        }
+      }
+    },
+    "API Version": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API-Version"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "APIバージョン"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API 版本"
+          }
         }
       }
     },
@@ -29,6 +57,100 @@
           "stringUnit": {
             "state": "translated",
             "value": "APIキーはセキュアにキーチェーンに保存されます"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API 密钥安全存储在钥匙串中"
+          }
+        }
+      }
+    },
+    "Auto": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatisch"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自動"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自动"
+          }
+        }
+      }
+    },
+    "Auto uses realtime streaming only for known realtime model IDs (gpt-live-transcribe, gpt-realtime-whisper) and batch upload otherwise. Choose Realtime to force streaming for any OpenAI-compatible server that supports the /v1/realtime WebSocket API, including custom deployment aliases (e.g. an Azure OpenAI or Microsoft Foundry gpt-live-transcribe deployment) — some providers, including Azure, require a preview API version for realtime transcription. Choose Batch to always use /v1/audio/transcriptions.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatisch verwendet Echtzeit-Streaming nur für bekannte Echtzeit-Modell-IDs (gpt-live-transcribe, gpt-realtime-whisper) und ansonsten den Batch-Upload. Wählen Sie Echtzeit, um Streaming für jeden OpenAI-kompatiblen Server zu erzwingen, der die WebSocket-API /v1/realtime unterstützt, einschließlich benutzerdefinierter Bereitstellungsaliase (z. B. eine gpt-live-transcribe-Bereitstellung in Azure OpenAI oder Microsoft Foundry). Einige Anbieter, darunter Azure, erfordern für die Echtzeittranskription eine Vorschau-API-Version. Wählen Sie Batch, um immer /v1/audio/transcriptions zu verwenden."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自動では、既知のリアルタイムモデル ID（gpt-live-transcribe、gpt-realtime-whisper）のみリアルタイムストリーミングを使用し、それ以外はバッチアップロードを使用します。/v1/realtime WebSocket API をサポートする任意の OpenAI 互換サーバーでストリーミングを強制するには、リアルタイムを選択します。これには、カスタムデプロイ名（Azure OpenAI または Microsoft Foundry の gpt-live-transcribe デプロイなど）も含まれます。Azure など一部のプロバイダーでは、リアルタイム文字起こしにプレビュー API バージョンが必要です。常に /v1/audio/transcriptions を使用するには、バッチを選択します。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“自动”仅对已知的实时模型 ID（gpt-live-transcribe、gpt-realtime-whisper）使用实时流式传输，其他模型则使用批量上传。选择“实时”可强制任何支持 /v1/realtime WebSocket API 的 OpenAI 兼容服务器使用流式传输，包括自定义部署别名（例如 Azure OpenAI 或 Microsoft Foundry 的 gpt-live-transcribe 部署）。部分提供商（包括 Azure）需要预览版 API 版本才能进行实时转写。选择“批量”则始终使用 /v1/audio/transcriptions。"
+          }
+        }
+      }
+    },
+    "Azure OpenAI and Microsoft Foundry may require an API version such as preview for audio transcription. Leave blank for standard OpenAI-compatible servers.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Azure OpenAI und Microsoft Foundry benötigen für die Audiotranskription möglicherweise eine API-Version wie preview. Für standardmäßige OpenAI-kompatible Server leer lassen."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Azure OpenAI および Microsoft Foundry では、音声文字起こしに preview などの API バージョンが必要な場合があります。標準の OpenAI 互換サーバーでは空欄のままにしてください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Azure OpenAI 和 Microsoft Foundry 进行音频转写时可能需要指定 API 版本，例如 preview。标准 OpenAI 兼容服务器请留空。"
+          }
+        }
+      }
+    },
+    "Batch": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Batch"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "バッチ"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "批量"
           }
         }
       }
@@ -46,6 +168,12 @@
             "state": "translated",
             "value": "接続済み"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已连接"
+          }
         }
       }
     },
@@ -61,6 +189,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "接続失敗"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "连接失败"
           }
         }
       }
@@ -78,6 +212,12 @@
             "state": "translated",
             "value": "例: http://localhost:11434"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "例如：http://localhost:11434"
+          }
         }
       }
     },
@@ -94,6 +234,12 @@
             "state": "translated",
             "value": "LLMモデル"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "LLM 模型"
+          }
         }
       }
     },
@@ -109,6 +255,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "LLMリクエストのタイムアウト"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "LLM 请求超时"
           }
         }
       }
@@ -132,6 +284,12 @@
             "state": "translated",
             "value": "思考モード"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "思考模式"
+          }
         }
       }
     },
@@ -147,6 +305,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "モデル名"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型名称"
           }
         }
       }
@@ -164,6 +328,12 @@
             "state": "translated",
             "value": "モデル"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型"
+          }
         }
       }
     },
@@ -179,6 +349,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "モデルが見つかりません。モデル名を手動で入力してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未找到模型。请手动输入模型名称。"
           }
         }
       }
@@ -196,6 +372,12 @@
             "state": "translated",
             "value": "なし"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无"
+          }
         }
       }
     },
@@ -211,6 +393,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "OllamaやLM Studioなどのローカルサーバー用にオプションで使用可能"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "可选，用于本地服务器如 Ollama 或 LM Studio"
+          }
+        }
+      }
+    },
+    "Optional, e.g. preview": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Optional, z. B. preview"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "任意（例: preview）"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "可选，例如 preview"
           }
         }
       }
@@ -228,6 +438,34 @@
             "state": "translated",
             "value": "更新"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "刷新"
+          }
+        }
+      }
+    },
+    "Realtime": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Echtzeit"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "リアルタイム"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "实时"
+          }
         }
       }
     },
@@ -244,6 +482,12 @@
             "state": "translated",
             "value": "削除"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除"
+          }
         }
       }
     },
@@ -256,6 +500,12 @@
           }
         },
         "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存"
+          }
+        },
+        "zh-Hans": {
           "stringUnit": {
             "state": "translated",
             "value": "保存"
@@ -276,6 +526,12 @@
             "state": "translated",
             "value": "秒"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "秒"
+          }
         }
       }
     },
@@ -291,6 +547,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "LLMの応答を待つ秒数。大きなプロンプトで処理に時間がかかるローカルサーバー（LM Studio、Ollama）では値を増やすことを推奨します。値が大きいほど、リクエストが失敗するまで待つ時間が長くなります。デフォルトは30秒です。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "等待 LLM 响应的秒数。对于处理大量提示词时较慢的本地服务器（LM Studio、Ollama），请增加此值。值越大，请求失败前等待的时间越长。默认值 30 秒。"
           }
         }
       }
@@ -308,6 +570,12 @@
             "state": "translated",
             "value": "サーバーURL"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "服务器 URL"
+          }
         }
       }
     },
@@ -323,6 +591,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "接続テスト"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "测试连接"
           }
         }
       }
@@ -340,6 +614,12 @@
             "state": "translated",
             "value": "テスト中..."
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "测试中..."
+          }
         }
       }
     },
@@ -355,6 +635,34 @@
           "stringUnit": {
             "state": "translated",
             "value": "音声認識モデル"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "转录模型"
+          }
+        }
+      }
+    },
+    "Transcription Transport": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkriptionsmodus"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文字起こし方式"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "转写传输方式"
           }
         }
       }

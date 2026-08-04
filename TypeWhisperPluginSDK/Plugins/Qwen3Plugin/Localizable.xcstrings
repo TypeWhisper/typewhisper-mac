@@ -14,6 +14,12 @@
             "state": "translated",
             "value": "読み込み & 有効化"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下载并加载"
+          }
         }
       }
     },
@@ -29,6 +35,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Apple Silicon用MLXによるローカルQwen3-ASR音声認識。30言語＋中国語方言対応、APIキー不要。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "基于 Apple Silicon 上 MLX 的本地 Qwen3-ASR 语音转文字。支持 30 种语言及中文方言，无需 API 密钥。"
           }
         }
       }
@@ -46,6 +58,12 @@
             "state": "translated",
             "value": "モデル"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型"
+          }
         }
       }
     },
@@ -61,6 +79,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "クイック選択"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "快速选择"
           }
         }
       }
@@ -78,6 +102,12 @@
             "state": "translated",
             "value": "8-GB-ヒント"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "8 GB 选择"
+          }
         }
       }
     },
@@ -93,6 +123,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "推奨"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "推荐"
           }
         }
       }
@@ -110,6 +146,12 @@
             "state": "translated",
             "value": "32-GB-品質"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "32 GB 品质"
+          }
         }
       }
     },
@@ -125,6 +167,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "高速 / 8 GB"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "快速 / 8 GB"
           }
         }
       }
@@ -142,6 +190,12 @@
             "state": "translated",
             "value": "最適な設定"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最佳默认"
+          }
         }
       }
     },
@@ -157,6 +211,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "品質 / 32 GB"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "品质 / 32 GB"
           }
         }
       }
@@ -174,6 +234,12 @@
             "state": "translated",
             "value": "最小のダウンロード；保存容量が品質より重要である場合に使用。"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最小下载量；当内存比质量更重要时使用。"
+          }
         }
       }
     },
@@ -189,6 +255,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "4-bitと同等のメモリ使用量で少し正確性が向上。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "比 4 位略高精度，占用空间相似。"
           }
         }
       }
@@ -206,6 +278,12 @@
             "state": "translated",
             "value": "8-GB-Mac向けの高速選択、または簡単な音声入力に最適。"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "8 GB Mac 和日常听写的快速选择。"
+          }
         }
       }
     },
@@ -221,6 +299,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "0.6B品質が重要である場合に、より高い精度を持つ小さなモデル。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "当 0.6B 质量重要时的高精度小模型。"
           }
         }
       }
@@ -238,6 +322,12 @@
             "state": "translated",
             "value": "非量子化された小さなモデル；比較や検証に有用。"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未量化的小模型；用于比较或验证。"
+          }
         }
       }
     },
@@ -253,6 +343,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "最小の1.7Bオプション；6-bitが重すぎる場合に使用。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最小的 1.7B 选项；当 6 位过重时使用。"
           }
         }
       }
@@ -270,6 +366,12 @@
             "state": "translated",
             "value": "6-bit標準モデルがメモリ不足になる場合に中間選択。"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "默认 6 位模型内存紧张时的折中选择。"
+          }
         }
       }
     },
@@ -285,6 +387,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "16 GB以上のMacのほとんどに最適な設定。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "大多数 16 GB 以上 Mac 的最佳默认选择。"
           }
         }
       }
@@ -302,6 +410,12 @@
             "state": "translated",
             "value": "32 GB以上のMac向けの品質選択。"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "32 GB 以上 Mac 的高品质选择。"
+          }
         }
       }
     },
@@ -317,6 +431,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "最大の非量子化モデル；最大の再生精度を求める検証に最適。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最大的未量化模型；用于最高保真度验证。"
           }
         }
       }
@@ -334,6 +454,12 @@
             "state": "translated",
             "value": "HuggingFaceトークン"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HuggingFace 令牌"
+          }
         }
       }
     },
@@ -349,6 +475,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "無効なHuggingFace Token"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无效的 HuggingFace 令牌"
           }
         }
       }
@@ -366,6 +498,12 @@
             "state": "translated",
             "value": "オプション。ダウンロード速度制限を解除します。huggingface.co/settings/tokensで無料で取得可能です。"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "可选。提高下载速率限制。在 huggingface.co/settings/tokens 免费获取。"
+          }
         }
       }
     },
@@ -382,6 +520,12 @@
             "state": "translated",
             "value": "削除"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除"
+          }
         }
       }
     },
@@ -394,6 +538,12 @@
           }
         },
         "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存"
+          }
+        },
+        "zh-Hans": {
           "stringUnit": {
             "state": "translated",
             "value": "保存"
@@ -414,6 +564,12 @@
             "state": "translated",
             "value": "有効なHuggingFace Token"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有效的 HuggingFace 令牌"
+          }
         }
       }
     },
@@ -430,6 +586,12 @@
             "state": "translated",
             "value": "Tokenの検証中..."
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在验证令牌..."
+          }
         }
       }
     },
@@ -445,6 +607,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "無効化"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "卸载"
           }
         }
       }

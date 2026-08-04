@@ -8,6 +8,12 @@
             "state": "translated",
             "value": "API-Schlüssel"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API 密钥"
+          }
         }
       }
     },
@@ -17,6 +23,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Gilt nur für die Workflow-Verarbeitung (LLM)."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "仅适用于工作流（LLM）处理。"
           }
         }
       }
@@ -28,6 +40,12 @@
             "state": "translated",
             "value": "Cloud-API-Integration für Mistral-LLMs und Voxtral-STT."
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mistral LLM 和 Voxtral STT 的云端 API 集成。"
+          }
         }
       }
     },
@@ -37,6 +55,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Benutzerdefiniert"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自定义"
           }
         }
       }
@@ -48,6 +72,12 @@
             "state": "translated",
             "value": "Standard"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "默认"
+          }
         }
       }
     },
@@ -57,6 +87,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ungültiger API-Schlüssel"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无效的 API 密钥"
           }
         }
       }
@@ -68,12 +104,24 @@
             "state": "translated",
             "value": "LLM-Modell"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "LLM 模型"
+          }
         }
       }
     },
     "Mistral AI": {
       "localizations": {
         "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mistral AI"
+          }
+        },
+        "zh-Hans": {
           "stringUnit": {
             "state": "translated",
             "value": "Mistral AI"
@@ -88,6 +136,12 @@
             "state": "translated",
             "value": "Anbieter-Standard"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "提供程序默认"
+          }
         }
       }
     },
@@ -97,6 +151,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Entfernen"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除"
           }
         }
       }
@@ -108,6 +168,12 @@
             "state": "translated",
             "value": "Speichern"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存"
+          }
         }
       }
     },
@@ -117,6 +183,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Temperatur"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "温度"
           }
         }
       }
@@ -128,6 +200,12 @@
             "state": "translated",
             "value": "Temperaturmodus"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "温度模式"
+          }
         }
       }
     },
@@ -137,6 +215,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Transkriptionsmodell"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "转录模型"
           }
         }
       }
@@ -148,6 +232,12 @@
             "state": "translated",
             "value": "Gültiger API-Schlüssel"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有效的 API 密钥"
+          }
         }
       }
     },
@@ -158,6 +248,12 @@
             "state": "translated",
             "value": "Überprüfung..."
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "验证中..."
+          }
         }
       }
     },
@@ -167,6 +263,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "z. B. LFztgP5WA..."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "例如：LFztgP5WA..."
           }
         }
       }

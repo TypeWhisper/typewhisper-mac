@@ -335,8 +335,8 @@ struct LanguageChip: View {
             }
             .buttonStyle(.plain)
             .disabled(!canMoveEarlier)
-            .help("Move earlier")
-            .accessibilityLabel("Move \(title) earlier")
+            .help(String(localized: "Move earlier"))
+            .accessibilityLabel(String(localized: "Move \(title) earlier"))
 
             Button(action: moveLaterAction) {
                 Image(systemName: "chevron.right")
@@ -344,16 +344,16 @@ struct LanguageChip: View {
             }
             .buttonStyle(.plain)
             .disabled(!canMoveLater)
-            .help("Move later")
-            .accessibilityLabel("Move \(title) later")
+            .help(String(localized: "Move later"))
+            .accessibilityLabel(String(localized: "Move \(title) later"))
 
             Button(action: removeAction) {
                 Image(systemName: "xmark.circle.fill")
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
-            .help("Remove")
-            .accessibilityLabel("Remove \(title)")
+            .help(String(localized: "Remove"))
+            .accessibilityLabel(String(localized: "Remove \(title)"))
         }
         .padding(.leading, 7)
         .padding(.trailing, 9)

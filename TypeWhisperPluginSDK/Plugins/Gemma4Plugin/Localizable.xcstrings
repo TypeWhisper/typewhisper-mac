@@ -14,6 +14,12 @@
             "state": "translated",
             "value": "読み込み & 有効化"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下载并加载"
+          }
         }
       }
     },
@@ -29,6 +35,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "キャンセル"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取消"
           }
         }
       }
@@ -46,6 +58,12 @@
             "state": "translated",
             "value": "キャッシュされたモデルを削除"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "删除缓存的模型"
+          }
         }
       }
     },
@@ -61,6 +79,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Hugging FaceからGemma 4のダウンロードが長すぎました。再度試してください。このプラグインでオプションのHuggingFaceトークンを使用すると、ダウンロードレート制限を高めることができます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "从 Hugging Face 获取 Gemma 4 时下载超时。请重试。在此插件中添加可选的 HuggingFace 令牌也可以提高下载速率限制。"
           }
         }
       }
@@ -78,6 +102,12 @@
             "state": "translated",
             "value": "%1$@ のダウンロードは %2$@ で停止し、5 分間新しいバイトを受信しませんでした。もう一度お試しください。問題が続く場合は、キャッシュされたモデルを削除して再度ダウンロードしてください。"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下载 %1$@ 在 %2$@ 处停滞，因为五分钟内未收到更多字节。请重试。如果问题仍然存在，请删除缓存模型并重新下载。"
+          }
         }
       }
     },
@@ -93,6 +123,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "%1$@ の準備は 15 分後にタイムアウトしました（最後のダウンロード進捗: %2$@）。ダウンロード済みモデルは保持されています。もう一度読み込んでください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "准备 %1$@ 在 15 分钟后超时（上次下载进度：%2$@）。已保留下载的模型，请尝试重新加载。"
           }
         }
       }
@@ -110,6 +146,12 @@
             "state": "translated",
             "value": "ダウンロードされたGemmaモデルキャッシュは不完全または互換性がないようです。キャッシュされたモデルを削除し、再度ダウンロードしてください。"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下载的 Gemma 模型缓存不完整或不兼容。请删除缓存模型并重新下载。"
+          }
         }
       }
     },
@@ -125,6 +167,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "HuggingFace トークン"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "HuggingFace 令牌"
           }
         }
       }
@@ -142,6 +190,12 @@
             "state": "translated",
             "value": "プロンプトでGemma 4モデルを使用する前に、統合からGemma 4モデルをまず読み込みます。"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在使用 Gemma 4 模型处理提示词前，请在集成中加载该模型。"
+          }
         }
       }
     },
@@ -157,6 +211,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Apple Silicon上でGoogle Gemma 4を使用したローカルLLM。APIキー不要。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "由 Apple Silicon 上 Google Gemma 4 驱动的本地 LLM。无需 API 密钥。"
           }
         }
       }
@@ -174,6 +234,12 @@
             "state": "translated",
             "value": "モデル"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型"
+          }
         }
       }
     },
@@ -189,6 +255,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "無効なHuggingFaceトークン"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无效的 HuggingFace 令牌"
           }
         }
       }
@@ -206,6 +278,12 @@
             "state": "translated",
             "value": "実験的"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "实验性"
+          }
         }
       }
     },
@@ -221,6 +299,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "実験的です。ご自身の責任で試してみてください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "实验性功能。您可以自行尝试，风险自负。"
           }
         }
       }
@@ -238,6 +322,12 @@
             "state": "translated",
             "value": "有効なHuggingFaceトークン"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有效的 HuggingFace 令牌"
+          }
         }
       }
     },
@@ -253,6 +343,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "トークンの検証中..."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在验证令牌..."
           }
         }
       }
@@ -270,6 +366,12 @@
             "state": "translated",
             "value": "オプション。ダウンロードレート制限を高めます。huggingface.co/settings/tokensで無料で取得可能です。"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "可选。提高下载速率限制。在 huggingface.co/settings/tokens 免费获取。"
+          }
         }
       }
     },
@@ -286,6 +388,12 @@
             "state": "translated",
             "value": "削除"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除"
+          }
         }
       }
     },
@@ -298,6 +406,12 @@
           }
         },
         "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存"
+          }
+        },
+        "zh-Hans": {
           "stringUnit": {
             "state": "translated",
             "value": "保存"
@@ -318,6 +432,12 @@
             "state": "translated",
             "value": "Gemma 4 E2B/E4B 4-bitモデルが推奨されます。より大きいバリアントは実験的であり、ハードウェアによっては失敗する可能性があります。"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "建议使用 Gemma 4 E2B/E4B 4 位模型。较大变体为实验性，可能因硬件配置而失败。"
+          }
         }
       }
     },
@@ -334,6 +454,12 @@
             "state": "translated",
             "value": "それでも試す"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "仍要尝试"
+          }
         }
       }
     },
@@ -349,6 +475,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "無効化"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "卸载"
           }
         }
       }

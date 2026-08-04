@@ -14,6 +14,12 @@
             "state": "translated",
             "value": "APIキー"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API 密钥"
+          }
         }
       }
     },
@@ -29,6 +35,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "APIキーはセキュアにキーチェーンに保存されます"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API 密钥安全存储在钥匙串中"
           }
         }
       }
@@ -46,6 +58,12 @@
             "state": "translated",
             "value": "指示をコピー"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "复制指令"
+          }
         }
       }
     },
@@ -61,6 +79,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "独自のワークフローを作成し、これを指示に追加し、アクションの目標を\"Create Linear Issue\"に設定してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "创建自定义工作流，将其粘贴到指令中，并将操作目标设置为「创建 Linear Issue」。"
           }
         }
       }
@@ -78,6 +102,12 @@
             "state": "translated",
             "value": "linear.app/settings/apiで独自のAPIキーを作成してください"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 linear.app/settings/api 创建个人 API 密钥"
+          }
         }
       }
     },
@@ -93,6 +123,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "デフォルト値"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "默认值"
           }
         }
       }
@@ -110,6 +146,12 @@
             "state": "translated",
             "value": "無効なAPIキー"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无效的 API 密钥"
+          }
         }
       }
     },
@@ -125,6 +167,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "ラベル"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "标签"
           }
         }
       }
@@ -142,6 +190,12 @@
             "state": "translated",
             "value": "プロジェクトとラベルの読み込み中..."
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在加载项目和标签..."
+          }
         }
       }
     },
@@ -157,6 +211,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "チームの読み込み中..."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在加载团队..."
           }
         }
       }
@@ -174,6 +234,12 @@
             "state": "translated",
             "value": "なし"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无"
+          }
         }
       }
     },
@@ -189,6 +255,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "プロジェクト"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "项目"
           }
         }
       }
@@ -206,6 +278,12 @@
             "state": "translated",
             "value": "ワークフローの指示"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "工作流指令"
+          }
         }
       }
     },
@@ -222,6 +300,12 @@
             "state": "translated",
             "value": "削除"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除"
+          }
         }
       }
     },
@@ -234,6 +318,12 @@
           }
         },
         "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存"
+          }
+        },
+        "zh-Hans": {
           "stringUnit": {
             "state": "translated",
             "value": "保存"
@@ -254,6 +344,12 @@
             "state": "translated",
             "value": "チームを選択..."
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "选择团队..."
+          }
         }
       }
     },
@@ -269,6 +365,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "チーム"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "团队"
           }
         }
       }
@@ -286,6 +388,12 @@
             "state": "translated",
             "value": "有効なAPIキー"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有效的 API 密钥"
+          }
         }
       }
     },
@@ -301,6 +409,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "確認中..."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "验证中..."
           }
         }
       }

@@ -1,686 +1,1094 @@
 {
-  "sourceLanguage" : "en",
-  "strings" : {
-    "14 languages with explicit selection: English, French, German, Spanish, Italian, Portuguese, Dutch, Polish, Greek, Arabic, Japanese, Chinese, Vietnamese, and Korean." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "14 Sprachen mit expliziter Auswahl: Englisch, Französisch, Deutsch, Spanisch, Italienisch, Portugiesisch, Niederländisch, Polnisch, Griechisch, Arabisch, Japanisch, Chinesisch, Vietnamesisch und Koreanisch."
+  "sourceLanguage": "en",
+  "strings": {
+    "14 languages with explicit selection: English, French, German, Spanish, Italian, Portuguese, Dutch, Polish, Greek, Arabic, Japanese, Chinese, Vietnamese, and Korean.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "14 Sprachen mit expliziter Auswahl: Englisch, Französisch, Deutsch, Spanisch, Italienisch, Portugiesisch, Niederländisch, Polnisch, Griechisch, Arabisch, Japanisch, Chinesisch, Vietnamesisch und Koreanisch."
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "14 种语言需明确选择：英语、法语、德语、西班牙语、意大利语、葡萄牙语、荷兰语、波兰语、希腊语、阿拉伯语、日语、中文、越南语和韩语。"
+          }
         }
       }
     },
-    "A private on-device GGUF and Metal provider for Cohere Transcribe 03-2026. Audio stays on this Mac." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ein privater GGUF- und Metal-Provider auf dem Gerät für Cohere Transcribe 03-2026. Audio bleibt auf diesem Mac."
+    "A private on-device GGUF and Metal provider for Cohere Transcribe 03-2026. Audio stays on this Mac.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein privater GGUF- und Metal-Provider auf dem Gerät für Cohere Transcribe 03-2026. Audio bleibt auf diesem Mac."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cohere Transcribe 03-2026 的本地 GGUF 和 Metal 私有提供程序。音频数据保留在此 Mac 上。"
           }
         }
       }
     },
-    "Cancel" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Abbrechen"
+    "Cancel": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abbrechen"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取消"
+          }
         }
       }
     },
-    "Capabilities and limits" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Funktionen und Einschränkungen"
+    "Capabilities and limits": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Funktionen und Einschränkungen"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "功能与限制"
           }
         }
       }
     },
-    "Cohere model license" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Cohere-Modelllizenz"
+    "Cohere model license": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cohere-Modelllizenz"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cohere 模型许可"
+          }
         }
       }
     },
-    "Cohere Transcribe (Local)" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Cohere Transcribe (Lokal)"
+    "Cohere Transcribe (Local)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cohere Transcribe (Lokal)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cohere Transcribe（本地）"
           }
         }
       }
     },
-    "CrispASR license and notices" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "CrispASR-Lizenz und Hinweise"
+    "CrispASR license and notices": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CrispASR-Lizenz und Hinweise"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CrispASR 许可与声明"
+          }
         }
       }
     },
-    "Done" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Fertig"
+    "Done": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fertig"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "完成"
           }
         }
       }
     },
-    "Download & Load" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Herunterladen & Laden"
+    "Download & Load": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Herunterladen & Laden"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下载并加载"
+          }
         }
       }
     },
-    "Downloaded" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Heruntergeladen"
+    "Downloaded": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Heruntergeladen"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已下载"
           }
         }
       }
     },
-    "Downloading" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Wird heruntergeladen"
+    "Downloading": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wird heruntergeladen"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在下载"
+          }
         }
       }
     },
-    "Downloading Cohere model" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Cohere-Modell wird heruntergeladen"
+    "Downloading Cohere model": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cohere-Modell wird heruntergeladen"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在下载 Cohere 模型"
           }
         }
       }
     },
-    "Error" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Fehler"
+    "Error": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fehler"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "错误"
+          }
         }
       }
     },
-    "Hugging Face Token" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Hugging-Face-Token"
+    "Hugging Face Token": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hugging-Face-Token"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hugging Face 令牌"
           }
         }
       }
     },
-    "Invalid Hugging Face Token" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ungültiger Hugging-Face-Token"
+    "Invalid Hugging Face Token": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ungültiger Hugging-Face-Token"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无效的 Hugging Face 令牌"
+          }
         }
       }
     },
-    "Load" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Laden"
+    "Load": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Laden"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "加载"
+          }
         }
       }
     },
-    "LOCAL · BATCH" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "LOKAL · BATCH"
+    "LOCAL · BATCH": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "LOKAL · BATCH"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本地 · 批量"
           }
         }
       }
     },
-    "No automatic language detection, streaming, timestamps, diarization, translation, or dictionary boosting." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Keine automatische Spracherkennung, kein Streaming, keine Zeitstempel, Diarisierung, Übersetzung oder Wörterbuchverstärkung."
+    "No automatic language detection, streaming, timestamps, diarization, translation, or dictionary boosting.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine automatische Spracherkennung, kein Streaming, keine Zeitstempel, Diarisierung, Übersetzung oder Wörterbuchverstärkung."
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "不支持自动语言检测、流式传输、时间戳、说话人分离、翻译或词典增强。"
+          }
         }
       }
     },
-    "Model weights are downloaded from a pinned Apache-2.0 GGUF revision. CrispASR and the VAD model are MIT-licensed." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Die Modellgewichte werden aus einer festgeschriebenen Apache-2.0-GGUF-Revision geladen. CrispASR und das VAD-Modell stehen unter der MIT-Lizenz."
+    "Model weights are downloaded from a pinned Apache-2.0 GGUF revision. CrispASR and the VAD model are MIT-licensed.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Modellgewichte werden aus einer festgeschriebenen Apache-2.0-GGUF-Revision geladen. CrispASR und das VAD-Modell stehen unter der MIT-Lizenz."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型权重从固定的 Apache-2.0 GGUF 版本下载。CrispASR 和 VAD 模型采用 MIT 许可。"
           }
         }
       }
     },
-    "Not Downloaded" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nicht heruntergeladen"
+    "Not Downloaded": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht heruntergeladen"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未下载"
+          }
         }
       }
     },
-    "Optional. Increases download rate limits and may speed up the model download. The token is stored securely in Keychain." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Optional. Erhöht die Download-Limits und kann den Modelldownload beschleunigen. Der Token wird sicher im Schlüsselbund gespeichert."
+    "Optional. Increases download rate limits and may speed up the model download. The token is stored securely in Keychain.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Optional. Erhöht die Download-Limits und kann den Modelldownload beschleunigen. Der Token wird sicher im Schlüsselbund gespeichert."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "可选。提高下载速率限制并可能加速模型下载。令牌安全存储在钥匙串中。"
           }
         }
       }
     },
-    "Preparing" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Wird vorbereitet"
+    "Preparing": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wird vorbereitet"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "准备中"
+          }
         }
       }
     },
-    "Starting CrispASR with Metal and warming up the model. Dictation is ready when this finishes." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "CrispASR wird mit Metal gestartet und das Modell wird aufgewärmt. Nach Abschluss ist die Diktierfunktion bereit."
+    "Starting CrispASR with Metal and warming up the model. Dictation is ready when this finishes.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CrispASR wird mit Metal gestartet und das Modell wird aufgewärmt. Nach Abschluss ist die Diktierfunktion bereit."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在使用 Metal 启动 CrispASR 并预热模型。完成后即可开始听写。"
           }
         }
       }
     },
-    "Ready" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Bereit"
+    "Ready": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bereit"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "就绪"
+          }
         }
       }
     },
-    "Running Cohere locally with Metal…" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Cohere läuft lokal mit Metal …"
+    "Running Cohere locally with Metal…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cohere läuft lokal mit Metal …"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在本地使用 Metal 运行 Cohere..."
           }
         }
       }
     },
-    "Remove" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Entfernen"
+    "Remove": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entfernen"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除"
+          }
         }
       }
     },
-    "Remove downloaded model?" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Heruntergeladenes Modell entfernen?"
+    "Remove downloaded model?": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Heruntergeladenes Modell entfernen?"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除已下载的模型？"
           }
         }
       }
     },
-    "Remove Model" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Modell entfernen"
+    "Remove Model": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modell entfernen"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "移除模型"
+          }
         }
       }
     },
-    "Save" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Speichern"
+    "Save": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speichern"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存"
           }
         }
       }
     },
-    "The model stays resident while loaded. Metal is warmed up before the provider becomes ready, keeping the first transcription responsive." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Das Modell bleibt geladen im Arbeitsspeicher. Metal wird aufgewärmt, bevor der Provider bereit ist, damit die erste Transkription schnell reagiert."
+    "The model stays resident while loaded. Metal is warmed up before the provider becomes ready, keeping the first transcription responsive.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Modell bleibt geladen im Arbeitsspeicher. Metal wird aufgewärmt, bevor der Provider bereit ist, damit die erste Transkription schnell reagiert."
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型加载后将常驻内存。Metal 在提供程序就绪前完成预热，确保首次转录响应迅速。"
+          }
         }
       }
     },
-    "Unload" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Entladen"
+    "Unload": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entladen"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "卸载"
           }
         }
       }
     },
-    "Valid Hugging Face Token" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Gültiger Hugging-Face-Token"
+    "Valid Hugging Face Token": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gültiger Hugging-Face-Token"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有效的 Hugging Face 令牌"
+          }
         }
       }
     },
-    "Validating token…" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Token wird geprüft …"
+    "Validating token…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Token wird geprüft …"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在验证令牌..."
+          }
         }
       }
     },
-    "VAD model license" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "VAD-Modelllizenz"
+    "VAD model license": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VAD-Modelllizenz"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VAD 模型许可"
           }
         }
       }
     },
-    "Voice activity detection runs before every transcription to suppress silence and low-noise hallucinations." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Vor jeder Transkription läuft eine Sprachaktivitätserkennung, um Halluzinationen bei Stille und leisem Rauschen zu unterdrücken."
+    "Voice activity detection runs before every transcription to suppress silence and low-noise hallucinations.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Vor jeder Transkription läuft eine Sprachaktivitätserkennung, um Halluzinationen bei Stille und leisem Rauschen zu unterdrücken."
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每次转录前运行语音活动检测，以抑制静音和低噪声幻听。"
+          }
         }
       }
     },
-    "1.51 GB" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "1,51 GB"
+    "1.51 GB": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1,51 GB"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1.51 GB"
           }
         }
       }
     },
-    "1.74 GB" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "1,74 GB"
+    "1.74 GB": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1,74 GB"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1.74 GB"
+          }
         }
       }
     },
-    "1.98 GB" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "1,98 GB"
+    "1.98 GB": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1,98 GB"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "1.98 GB"
           }
         }
       }
     },
-    "2.42 GB" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "2,42 GB"
+    "2.42 GB": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "2,42 GB"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "2.42 GB"
+          }
         }
       }
     },
-    "8 GB+ Mac" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mac mit mindestens 8 GB"
+    "8 GB+ Mac": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mac mit mindestens 8 GB"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "8 GB 以上 Mac"
           }
         }
       }
     },
-    "16 GB+ recommended" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mindestens 16 GB empfohlen"
+    "16 GB+ recommended": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mindestens 16 GB empfohlen"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "建议 16 GB 以上"
+          }
         }
       }
     },
-    "Best tested balance of size, speed, and accuracy" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Bestes getestetes Verhältnis von Größe, Geschwindigkeit und Genauigkeit"
+    "Best tested balance of size, speed, and accuracy": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bestes getestetes Verhältnis von Größe, Geschwindigkeit und Genauigkeit"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "经过测试的大小、速度和准确度的最佳平衡"
           }
         }
       }
     },
-    "Choose Compact Q4_K for the smallest download, Fast Q5_0 for the recommended default, Q6_K for higher numeric precision, or experimental Q8_0 for maximum numeric precision. Only the selected model is loaded." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Wähle Kompakt Q4_K für den kleinsten Download, Schnell Q5_0 als empfohlene Standardeinstellung, Q6_K für höhere numerische Präzision oder das experimentelle Q8_0 für maximale numerische Präzision. Nur das ausgewählte Modell wird geladen."
+    "Choose Compact Q4_K for the smallest download, Fast Q5_0 for the recommended default, Q6_K for higher numeric precision, or experimental Q8_0 for maximum numeric precision. Only the selected model is loaded.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wähle Kompakt Q4_K für den kleinsten Download, Schnell Q5_0 als empfohlene Standardeinstellung, Q6_K für höhere numerische Präzision oder das experimentelle Q8_0 für maximale numerische Präzision. Nur das ausgewählte Modell wird geladen."
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "选择 Compact Q4_K 获得最小下载量，Fast Q5_0 作为推荐默认选项，Q6_K 获得更高数值精度，或实验性 Q8_0 获得最高数值精度。仅加载选定的模型。"
+          }
         }
       }
     },
-    "Cohere asset verification failed for:" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Cohere-Asset-Überprüfung fehlgeschlagen für:"
+    "Cohere asset verification failed for:": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cohere-Asset-Überprüfung fehlgeschlagen für:"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cohere 资源验证失败："
           }
         }
       }
     },
-    "Cohere Transcribe does not support translation." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Cohere Transcribe unterstützt keine Übersetzung."
+    "Cohere Transcribe does not support translation.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cohere Transcribe unterstützt keine Übersetzung."
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cohere Transcribe 不支持翻译。"
+          }
         }
       }
     },
-    "Cohere Transcribe requires an explicitly selected supported language. Automatic language detection is not available. Supported languages:" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Cohere Transcribe benötigt eine explizit ausgewählte unterstützte Sprache. Automatische Spracherkennung ist nicht verfügbar. Unterstützte Sprachen:"
+    "Cohere Transcribe requires an explicitly selected supported language. Automatic language detection is not available. Supported languages:": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cohere Transcribe benötigt eine explizit ausgewählte unterstützte Sprache. Automatische Spracherkennung ist nicht verfügbar. Unterstützte Sprachen:"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cohere Transcribe 需要明确选择支持的语言。不支持自动语言检测。支持的语言："
           }
         }
       }
     },
-    "Compact (Q4_K · Metal)" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Kompakt (Q4_K · Metal)"
+    "Compact (Q4_K · Metal)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kompakt (Q4_K · Metal)"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "紧凑型（Q4_K · Metal）"
+          }
         }
       }
     },
-    "CrispASR did not become ready within five minutes." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "CrispASR war nicht innerhalb von fünf Minuten bereit."
+    "CrispASR did not become ready within five minutes.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CrispASR war nicht innerhalb von fünf Minuten bereit."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CrispASR 未能在五分钟内就绪。"
           }
         }
       }
     },
-    "CrispASR exited while starting." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "CrispASR wurde während des Starts beendet."
+    "CrispASR exited while starting.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CrispASR wurde während des Starts beendet."
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CrispASR 在启动时退出。"
+          }
         }
       }
     },
-    "Fast (Q5_0 · Recommended)" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Schnell (Q5_0 · empfohlen)"
+    "Fast (Q5_0 · Recommended)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schnell (Q5_0 · empfohlen)"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "快速型（Q5_0 · 推荐）"
+          }
         }
       }
     },
-    "Higher precision (Q6_K · Metal)" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Höhere Präzision (Q6_K · Metal)"
+    "Higher precision (Q6_K · Metal)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Höhere Präzision (Q6_K · Metal)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更高精度（Q6_K · Metal）"
           }
         }
       }
     },
-    "Intermediate quantization between recommended Q5_0 and Q8_0" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Mittlere Quantisierung zwischen dem empfohlenen Q5_0 und Q8_0"
+    "Intermediate quantization between recommended Q5_0 and Q8_0": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mittlere Quantisierung zwischen dem empfohlenen Q5_0 und Q8_0"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "推荐 Q5_0 与 Q8_0 之间的中间量化级别"
+          }
         }
       }
     },
-    "Largest quantization; no overall accuracy gain measured yet" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Größte Quantisierung; bisher kein allgemeiner Genauigkeitsgewinn gemessen"
+    "Largest quantization; no overall accuracy gain measured yet": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Größte Quantisierung; bisher kein allgemeiner Genauigkeitsgewinn gemessen"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最大量化；尚未测得整体准确度提升"
           }
         }
       }
     },
-    "Maximum precision (Q8_0 · Experimental)" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Maximale Präzision (Q8_0 · experimentell)"
+    "Maximum precision (Q8_0 · Experimental)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Maximale Präzision (Q8_0 · experimentell)"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最高精度（Q8_0 · 实验性）"
+          }
         }
       }
     },
-    "Model" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Modell"
+    "Model": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modell"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型"
           }
         }
       }
     },
-    "Smallest download and memory footprint" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Kleinster Download und geringster Speicherbedarf"
+    "Smallest download and memory footprint": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kleinster Download und geringster Speicherbedarf"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最小下载量和内存占用"
+          }
         }
       }
     },
-    "The Cohere model download completed without all required model files." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Der Download des Cohere-Modells wurde abgeschlossen, ohne dass alle erforderlichen Modelldateien vorhanden sind."
+    "The Cohere model download completed without all required model files.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Download des Cohere-Modells wurde abgeschlossen, ohne dass alle erforderlichen Modelldateien vorhanden sind."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cohere 模型下载已完成，但缺少部分必需的模型文件。"
           }
         }
       }
     },
-    "The Cohere Transcribe model is not downloaded." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Das Cohere-Transcribe-Modell wurde nicht heruntergeladen."
+    "The Cohere Transcribe model is not downloaded.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Cohere-Transcribe-Modell wurde nicht heruntergeladen."
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cohere Transcribe 模型尚未下载。"
+          }
         }
       }
     },
-    "The Cohere Transcribe model is not loaded. Open the plugin settings and load it first." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Das Cohere-Transcribe-Modell ist nicht geladen. Öffne die Plugin-Einstellungen und lade es zuerst."
+    "The Cohere Transcribe model is not loaded. Open the plugin settings and load it first.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das Cohere-Transcribe-Modell ist nicht geladen. Öffne die Plugin-Einstellungen und lade es zuerst."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cohere Transcribe 模型尚未加载。请打开插件设置并先加载模型。"
           }
         }
       }
     },
-    "The CrispASR runtime could not be extracted." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Die CrispASR-Laufzeit konnte nicht entpackt werden."
+    "The CrispASR runtime could not be extracted.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die CrispASR-Laufzeit konnte nicht entpackt werden."
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法解压 CrispASR 运行时。"
+          }
         }
       }
     },
-    "The CrispASR runtime download failed." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Die CrispASR-Laufzeit konnte nicht heruntergeladen werden."
+    "The CrispASR runtime download failed.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die CrispASR-Laufzeit konnte nicht heruntergeladen werden."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CrispASR 运行时下载失败。"
           }
         }
       }
     },
-    "The local CrispASR server URL is invalid." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Die URL des lokalen CrispASR-Servers ist ungültig."
+    "The local CrispASR server URL is invalid.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die URL des lokalen CrispASR-Servers ist ungültig."
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本地 CrispASR 服务器 URL 无效。"
+          }
         }
       }
     },
-    "The pinned Cohere model repository identifier is invalid." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Die Kennung des festgeschriebenen Cohere-Modell-Repositorys ist ungültig."
+    "The pinned Cohere model repository identifier is invalid.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Kennung des festgeschriebenen Cohere-Modell-Repositorys ist ungültig."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "固定的 Cohere 模型仓库标识符无效。"
           }
         }
       }
     },
-    "The verified CrispASR runtime archive is incomplete." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Das überprüfte CrispASR-Laufzeitarchiv ist unvollständig."
+    "The verified CrispASR runtime archive is incomplete.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das überprüfte CrispASR-Laufzeitarchiv ist unvollständig."
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已验证的 CrispASR 运行时归档不完整。"
+          }
         }
       }
     },
-    "This removes the selected Cohere model. Shared runtime files remain while another variant is installed." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Dadurch wird das ausgewählte Cohere-Modell entfernt. Gemeinsam genutzte Laufzeitdateien bleiben erhalten, solange eine andere Variante installiert ist."
+    "This removes the selected Cohere model. Shared runtime files remain while another variant is installed.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dadurch wird das ausgewählte Cohere-Modell entfernt. Gemeinsam genutzte Laufzeitdateien bleiben erhalten, solange eine andere Variante installiert ist."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "这将移除选定的 Cohere 模型。如果安装了其他变体，共享运行时文件将保留。"
           }
         }
       }
     },
-    "TypeWhisper could not reserve a local port for Cohere Transcribe." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "TypeWhisper konnte keinen lokalen Port für Cohere Transcribe reservieren."
+    "TypeWhisper could not reserve a local port for Cohere Transcribe.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TypeWhisper konnte keinen lokalen Port für Cohere Transcribe reservieren."
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TypeWhisper 无法为 Cohere Transcribe 预留本地端口。"
+          }
         }
       }
     },
-    "Starting and warming up Cohere with Metal" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Cohere wird mit Metal gestartet und aufgewärmt"
+    "Starting and warming up Cohere with Metal": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cohere wird mit Metal gestartet und aufgewärmt"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在使用 Metal 启动并预热 Cohere"
+          }
         }
       }
     },
-    "Working…" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "In Arbeit …"
+    "Working…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "In Arbeit …"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在运行..."
           }
         }
       }
     }
   },
-  "version" : "1.0"
+  "version": "1.0"
 }

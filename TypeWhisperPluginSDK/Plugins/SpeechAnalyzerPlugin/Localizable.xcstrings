@@ -14,6 +14,12 @@
             "state": "translated",
             "value": "アクティブ: %@"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "活跃：%@"
+          }
         }
       }
     },
@@ -29,6 +35,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "音声モデルをダウンロード中..."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在下载语言模型..."
           }
         }
       }
@@ -46,6 +58,12 @@
             "state": "translated",
             "value": "利用可能な言語を読み込み中..."
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在加载可用语言..."
+          }
         }
       }
     },
@@ -61,6 +79,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "デバイスベースの音声認識は、AppleのSpeech-Frameworkを使用し、ストリーミングをサポートしています。下から音声モデルを選択してください。一度に1つしかアクティブにできません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "通过 Apple Speech 框架实现设备端语音识别，支持流式传输。请从下方选择一个语言模型——一次仅可激活一个。"
           }
         }
       }
@@ -78,6 +102,12 @@
             "state": "translated",
             "value": "言語を検索..."
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "搜索语言..."
+          }
         }
       }
     },
@@ -94,6 +124,12 @@
             "state": "translated",
             "value": "選択"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "选择"
+          }
         }
       }
     },
@@ -109,6 +145,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "無効化"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "卸载"
           }
         }
       }

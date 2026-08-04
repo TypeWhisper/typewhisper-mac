@@ -243,6 +243,84 @@ final class OpenAITranscriptionHelperTests: XCTestCase {
 
         XCTAssertEqual(result.text, "ok")
         XCTAssertEqual(store.sessions.first?.requestedRequests.first?.timeoutInterval, 600)
+        XCTAssertNil(store.sessions.first?.requestedRequests.first?.url?.query)
+    }
+
+    func testTranscribeWithAPIVersionPreservesExistingQueryItems() async throws {
+        let store = OpenAITranscriptionMockSessionStore()
+        PluginHTTPClient.configureForTesting { _ in
+            store.makeSession()
+        }
+
+        let helper = PluginOpenAITranscriptionHelper(
+            baseURL: "https://example.test/openai?tenant=contoso",
+            responseFormat: "json"
+        )
+        let samples = [Float](repeating: 0.1, count: 16_000)
+        let audio = AudioData(
+            samples: samples,
+            wavData: PluginWavEncoder.encode(samples),
+            duration: 1.0
+        )
+
+        let result = try await helper.transcribeCompressedAudioWithWavFallback(
+            audio: audio,
+            apiKey: "test-key",
+            modelName: "gpt-live-transcribe",
+            language: "en",
+            translate: false,
+            prompt: nil,
+            requestTimeout: 600,
+            apiVersion: " preview "
+        )
+
+        XCTAssertEqual(result.text, "ok")
+        let requestURL = try XCTUnwrap(store.sessions.first?.requestedRequests.first?.url)
+        let components = try XCTUnwrap(URLComponents(url: requestURL, resolvingAgainstBaseURL: false))
+        XCTAssertEqual(components.path, "/openai/v1/audio/transcriptions")
+        XCTAssertEqual(
+            components.queryItems,
+            [
+                URLQueryItem(name: "tenant", value: "contoso"),
+                URLQueryItem(name: "api-version", value: "preview"),
+            ]
+        )
+    }
+
+    func testTranscribeWithAPIVersionReplacesExistingVersion() async throws {
+        let store = OpenAITranscriptionMockSessionStore()
+        PluginHTTPClient.configureForTesting { _ in
+            store.makeSession()
+        }
+
+        let helper = PluginOpenAITranscriptionHelper(
+            baseURL: "https://example.test/openai?api-version=2024-06-01",
+            responseFormat: "json"
+        )
+        let samples = [Float](repeating: 0.1, count: 16_000)
+        let audio = AudioData(
+            samples: samples,
+            wavData: PluginWavEncoder.encode(samples),
+            duration: 1.0
+        )
+
+        _ = try await helper.transcribeCompressedAudioWithWavFallback(
+            audio: audio,
+            apiKey: "test-key",
+            modelName: "gpt-live-transcribe",
+            language: "en",
+            translate: false,
+            prompt: nil,
+            requestTimeout: 600,
+            apiVersion: " preview "
+        )
+
+        let requestURL = try XCTUnwrap(store.sessions.first?.requestedRequests.first?.url)
+        let components = try XCTUnwrap(URLComponents(url: requestURL, resolvingAgainstBaseURL: false))
+        let apiVersionItems = components.queryItems?.filter {
+            $0.name.caseInsensitiveCompare("api-version") == .orderedSame
+        }
+        XCTAssertEqual(apiVersionItems, [URLQueryItem(name: "api-version", value: "preview")])
     }
 
     func testTranscribeCompressedAudioRejectsEmptySamplesBeforeUpload() async throws {
