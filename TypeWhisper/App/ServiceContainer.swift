@@ -74,7 +74,10 @@ final class ServiceContainer: ObservableObject {
         modelManagerService = ModelManagerService()
         audioFileService = AudioFileService()
         audioRecordingService = AudioRecordingService(
-            inputActivationGuard: inputActivationGuard
+            inputActivationGuard: inputActivationGuard,
+            recoveryAudioStore: DictationRecoveryAudioStore(
+                retentionPolicy: DictationRecoveryRetentionPolicy.load(from: .standard)
+            )
         )
         hotkeyService = HotkeyService()
         textInsertionService = TextInsertionService()

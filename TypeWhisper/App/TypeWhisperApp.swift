@@ -624,7 +624,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
             UserDefaultsKeys.updateChannel: AppConstants.defaultReleaseChannel.rawValue,
             UserDefaultsKeys.appFormattingEnabled: true,
             UserDefaultsKeys.transcriptionNumberNormalizationEnabled: true,
-            UserDefaultsKeys.targetAppCorrectionLearningEnabled: false
+            UserDefaultsKeys.targetAppCorrectionLearningEnabled: false,
+            UserDefaultsKeys.dictationRecoveryRetentionDays: DictationRecoveryRetentionPolicy.defaultPolicy.rawValue
         ])
     }
 

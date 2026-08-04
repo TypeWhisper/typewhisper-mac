@@ -4049,6 +4049,160 @@
         }
       }
     },
+    "Auto-delete recovery recordings" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wiederherstellungsaufnahmen automatisch löschen"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "復元用録音を自動削除"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动删除恢复录音"
+          }
+        }
+      }
+    },
+    "Immediately (disable recovery)" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sofort (Wiederherstellung deaktivieren)"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "すぐに（復元を無効化）"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "立即（停用恢复）"
+          }
+        }
+      }
+    },
+    "1 day" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 Tag"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 日"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 天"
+          }
+        }
+      }
+    },
+    "7 days" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "7 Tage"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "7 日"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "7 天"
+          }
+        }
+      }
+    },
+    "Recovery recordings are stored only on this Mac. Immediately prevents TypeWhisper from creating local recovery WAV files. History audio is controlled separately, and cloud engines may still receive audio for transcription." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wiederherstellungsaufnahmen werden nur auf diesem Mac gespeichert. „Sofort“ verhindert, dass TypeWhisper lokale Wiederherstellungs-WAV-Dateien erstellt. Verlaufs-Audio wird separat gesteuert und Cloud-Engines können weiterhin Audio zur Transkription erhalten."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "復元用録音はこのMacにのみ保存されます。「すぐに」を選ぶと、TypeWhisperはローカルの復元用WAVファイルを作成しません。履歴の音声保存は別に管理され、クラウドエンジンは文字起こしのために音声を受信する場合があります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "恢复录音仅存储在这台 Mac 上。选择“立即”后，TypeWhisper 不会创建本地恢复 WAV 文件。历史记录中的音频由单独的设置控制，云端引擎仍可能接收音频以进行转录。"
+          }
+        }
+      }
+    },
+    "Recovery recording is disabled" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wiederherstellungsaufnahme ist deaktiviert"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "復元用録音は無効です"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "恢复录音已停用"
+          }
+        }
+      }
+    },
+    "Storage" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Speicher"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ストレージ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "存储"
+          }
+        }
+      }
+    },
     "Auto-detect" : {
       "extractionState" : "stale",
       "localizations" : {

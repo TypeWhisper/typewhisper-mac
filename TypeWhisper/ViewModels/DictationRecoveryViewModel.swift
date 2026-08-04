@@ -76,6 +76,13 @@ final class DictationRecoveryViewModel: ObservableObject {
             defaults.set(automaticFallbackEnabled, forKey: UserDefaultsKeys.dictationRecoveryAutomaticFallbackEnabled)
         }
     }
+    @Published var retentionPolicy: DictationRecoveryRetentionPolicy {
+        didSet {
+            defaults.set(retentionPolicy.rawValue, forKey: UserDefaultsKeys.dictationRecoveryRetentionDays)
+            guard isInitialized, oldValue != retentionPolicy else { return }
+            updateRecoveryURLs(audioRecordingService.updateRecoveryRetentionPolicy(retentionPolicy))
+        }
+    }
 
     private let audioRecordingService: AudioRecordingService
     private let modelManager: ModelManagerService
@@ -120,7 +127,8 @@ final class DictationRecoveryViewModel: ObservableObject {
             )
         }
         self.engineReadinessChecker = engineReadinessChecker
-        let initialRecoveryURLs = audioRecordingService.recoveryRecordingURLs
+        let retentionPolicy = DictationRecoveryRetentionPolicy.load(from: defaults)
+        let initialRecoveryURLs = audioRecordingService.updateRecoveryRetentionPolicy(retentionPolicy)
         self.recoveries = initialRecoveryURLs.map { RecoveryItem(url: $0) }
         self.selectedRecoveryID = initialRecoveryURLs.first?.path
         self.languageSelection = LanguageSelection(
@@ -130,6 +138,7 @@ final class DictationRecoveryViewModel: ObservableObject {
         self.selectedEngine = defaults.string(forKey: UserDefaultsKeys.dictationRecoveryEngine)
         self.selectedModel = defaults.string(forKey: UserDefaultsKeys.dictationRecoveryModel)
         self.automaticFallbackEnabled = defaults.bool(forKey: UserDefaultsKeys.dictationRecoveryAutomaticFallbackEnabled)
+        self.retentionPolicy = retentionPolicy
         self.isInitialized = true
 
         audioRecordingService.$recoverableRecordingURLs
@@ -155,6 +164,10 @@ final class DictationRecoveryViewModel: ObservableObject {
 
     var hasRecoveryContent: Bool {
         hasRecovery || lastSavedHistoryRecordID != nil
+    }
+
+    var isRecoveryStorageDisabled: Bool {
+        retentionPolicy == .immediately
     }
 
     var selectedRecovery: RecoveryItem? {
@@ -302,6 +315,7 @@ final class DictationRecoveryViewModel: ObservableObject {
                 )
 
                 let historyID = UUID()
+                let historyAudioSamples = defaults.bool(forKey: UserDefaultsKeys.saveAudioWithHistory) ? samples : nil
                 historyService.addRecord(
                     id: historyID,
                     rawText: result.text,
@@ -312,7 +326,7 @@ final class DictationRecoveryViewModel: ObservableObject {
                     language: result.detectedLanguage ?? languageSelection.requestedLanguage,
                     engineUsed: result.engineUsed,
                     modelUsed: historyModelDisplayName(result: result),
-                    audioSamples: samples,
+                    audioSamples: historyAudioSamples,
                     pipelineSteps: [localizedAppText("Recovered recording", de: "Wiederhergestellte Aufnahme")]
                 )
                 lastSavedRecoveryFileName = url.lastPathComponent
@@ -340,6 +354,10 @@ final class DictationRecoveryViewModel: ObservableObject {
     func discardRecovery(_ recovery: RecoveryItem) {
         audioRecordingService.discardRecoveryRecording(at: recovery.url)
         updateRecoveryURLs(audioRecordingService.recoveryRecordingURLs)
+    }
+
+    func refreshRecoveries() {
+        updateRecoveryURLs(audioRecordingService.refreshRecoveryRecordings())
     }
 
     private func updateRecoveryURLs(_ urls: [URL]) {

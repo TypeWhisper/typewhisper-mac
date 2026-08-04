@@ -451,6 +451,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         source.userDefaults.set("overlay", forKey: UserDefaultsKeys.indicatorStyle)
         source.userDefaults.set(false, forKey: UserDefaultsKeys.indicatorVisibleInScreenCaptures)
         source.userDefaults.set(true, forKey: UserDefaultsKeys.recorderSystemAudioEnabled)
+        source.userDefaults.set(7, forKey: UserDefaultsKeys.dictationRecoveryRetentionDays)
         // Deliberately excluded: engine/model selections must not be exported.
         source.userDefaults.set("com.typewhisper.some-engine", forKey: UserDefaultsKeys.fileTranscriptionEngine)
 
@@ -474,6 +475,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         XCTAssertEqual(backup.preferences.indicatorStyle, "overlay")
         XCTAssertEqual(backup.preferences.indicatorVisibleInScreenCaptures, false)
         XCTAssertEqual(backup.preferences.recorderSystemAudioEnabled, true)
+        XCTAssertEqual(backup.preferences.dictationRecoveryRetentionDays, 7)
 
         let destination = try makeFixture()
         defer { teardown(destination) }
@@ -503,6 +505,7 @@ final class SettingsBackupExporterTests: XCTestCase {
             destination.userDefaults.object(forKey: UserDefaultsKeys.indicatorVisibleInScreenCaptures) as? Bool,
             false
         )
+        XCTAssertEqual(destination.userDefaults.integer(forKey: UserDefaultsKeys.dictationRecoveryRetentionDays), 7)
         XCTAssertNil(destination.userDefaults.string(forKey: UserDefaultsKeys.fileTranscriptionEngine))
     }
 

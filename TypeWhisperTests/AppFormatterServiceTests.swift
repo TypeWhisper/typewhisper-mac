@@ -194,5 +194,9 @@ final class AppFormatterServiceTests: XCTestCase {
 
         XCTAssertEqual(defaults.object(forKey: UserDefaultsKeys.appFormattingEnabled) as? Bool, true)
         XCTAssertEqual(defaults.object(forKey: UserDefaultsKeys.transcriptionNumberNormalizationEnabled) as? Bool, true)
+        XCTAssertEqual(
+            defaults.object(forKey: UserDefaultsKeys.dictationRecoveryRetentionDays) as? Int,
+            DictationRecoveryRetentionPolicy.thirtyDays.rawValue
+        )
     }
 }

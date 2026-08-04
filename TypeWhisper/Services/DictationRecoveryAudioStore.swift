@@ -1,5 +1,35 @@
 import Foundation
 
+enum DictationRecoveryRetentionPolicy: Int, CaseIterable, Sendable {
+    case immediately = -1
+    case oneDay = 1
+    case sevenDays = 7
+    case thirtyDays = 30
+    case sixtyDays = 60
+    case ninetyDays = 90
+    case oneHundredEightyDays = 180
+    case never = 0
+
+    static let defaultPolicy: Self = .thirtyDays
+
+    static func load(from defaults: UserDefaults) -> Self {
+        guard let storedValue = defaults.object(forKey: UserDefaultsKeys.dictationRecoveryRetentionDays) as? NSNumber,
+              let policy = Self(rawValue: storedValue.intValue)
+        else {
+            return defaultPolicy
+        }
+        return policy
+    }
+
+    var keepsRecoveryFiles: Bool {
+        self != .immediately
+    }
+
+    var retentionDays: Int? {
+        rawValue > 0 ? rawValue : nil
+    }
+}
+
 /// Persists the active dictation as a temporary 16 kHz mono PCM WAV so the
 /// audio can be recovered if transcription fails after recording has stopped.
 final class DictationRecoveryAudioStore: @unchecked Sendable {
@@ -18,34 +48,58 @@ final class DictationRecoveryAudioStore: @unchecked Sendable {
     private let directory: URL
     private let activeFileURL: URL
     private let fileManager: FileManager
+    private let now: @Sendable () -> Date
     private let queue = DispatchQueue(label: "com.typewhisper.dictation-recovery-audio", qos: .utility)
 
     private var activeHandle: FileHandle?
     private var activeSampleCount = 0
     private var hasActiveRecording = false
     private var recoverySerialNumber: UInt64 = 0
+    private var retentionPolicy: DictationRecoveryRetentionPolicy
 
     init(
         directory: URL = AppConstants.appSupportDirectory
             .appendingPathComponent("dictation-recovery", isDirectory: true),
-        fileManager: FileManager = .default
+        fileManager: FileManager = .default,
+        retentionPolicy: DictationRecoveryRetentionPolicy = .defaultPolicy,
+        now: @escaping @Sendable () -> Date = Date.init
     ) {
-        try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
-        let standardizedDirectory = directory.resolvingSymlinksInPath().standardizedFileURL
+        let standardizedInput = directory.standardizedFileURL
+        let standardizedDirectory: URL
+        if fileManager.fileExists(atPath: standardizedInput.path) {
+            standardizedDirectory = standardizedInput.resolvingSymlinksInPath().standardizedFileURL
+        } else {
+            let resolvedParent = standardizedInput
+                .deletingLastPathComponent()
+                .resolvingSymlinksInPath()
+                .standardizedFileURL
+            standardizedDirectory = resolvedParent
+                .appendingPathComponent(standardizedInput.lastPathComponent, isDirectory: true)
+                .standardizedFileURL
+        }
         self.directory = standardizedDirectory
         self.activeFileURL = standardizedDirectory.appendingPathComponent(Constants.activeFileName)
         self.fileManager = fileManager
+        self.retentionPolicy = retentionPolicy
+        self.now = now
+
+        // An active file cannot be recovered safely because its WAV header is
+        // finalized only after recording stops. Never leave crash residue on disk.
+        removeItemIfExists(at: activeFileURL)
+        applyRetentionPolicy()
     }
 
     var recoveryURLs: [URL] {
         queue.sync {
-            storedRecoveryURLs()
+            applyRetentionPolicy()
+            return storedRecoveryURLs()
         }
     }
 
     var latestRecoveryURL: URL? {
         queue.sync {
-            storedRecoveryURLs().first
+            applyRetentionPolicy()
+            return storedRecoveryURLs().first
         }
     }
 
@@ -53,7 +107,13 @@ final class DictationRecoveryAudioStore: @unchecked Sendable {
         queue.sync {
             closeActiveHandle()
             removeItemIfExists(at: activeFileURL)
+            activeSampleCount = 0
+            hasActiveRecording = false
+            applyRetentionPolicy()
+
+            guard retentionPolicy.keepsRecoveryFiles else { return }
             try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
+            guard !itemExists(at: activeFileURL) else { return }
 
             fileManager.createFile(
                 atPath: activeFileURL.path,
@@ -69,10 +129,10 @@ final class DictationRecoveryAudioStore: @unchecked Sendable {
 
     func append(_ samples: [Float]) {
         guard !samples.isEmpty else { return }
-        let data = Self.pcm16Data(from: samples)
 
-        queue.async { [weak self] in
+        queue.async { [weak self, samples] in
             guard let self, self.hasActiveRecording, let activeHandle = self.activeHandle else { return }
+            let data = Self.pcm16Data(from: samples)
             do {
                 try activeHandle.write(contentsOf: data)
                 self.activeSampleCount += samples.count
@@ -88,6 +148,15 @@ final class DictationRecoveryAudioStore: @unchecked Sendable {
     @discardableResult
     func preserveActiveRecording() -> URL? {
         queue.sync {
+            guard retentionPolicy.keepsRecoveryFiles else {
+                closeActiveHandle()
+                activeSampleCount = 0
+                hasActiveRecording = false
+                removeItemIfExists(at: activeFileURL)
+                removeStoredRecoveries()
+                return nil
+            }
+
             guard hasActiveRecording else {
                 return storedRecoveryURLs().first
             }
@@ -113,6 +182,23 @@ final class DictationRecoveryAudioStore: @unchecked Sendable {
                 removeItemIfExists(at: activeFileURL)
                 return storedRecoveryURLs().first
             }
+        }
+    }
+
+    @discardableResult
+    func updateRetentionPolicy(_ policy: DictationRecoveryRetentionPolicy) -> [URL] {
+        queue.sync {
+            retentionPolicy = policy
+            applyRetentionPolicy()
+            return storedRecoveryURLs()
+        }
+    }
+
+    @discardableResult
+    func refreshRetention() -> [URL] {
+        queue.sync {
+            applyRetentionPolicy()
+            return storedRecoveryURLs()
         }
     }
 
@@ -175,9 +261,34 @@ final class DictationRecoveryAudioStore: @unchecked Sendable {
     private func isStoredRecoveryFile(_ url: URL) -> Bool {
         let canonicalURL = canonicalFileURL(url)
         guard canonicalURL.deletingLastPathComponent() == directory else { return false }
-        guard url.pathExtension.lowercased() == Constants.recoveryFileExtension else { return false }
+        guard isRegularNonSymlinkFile(url) else { return false }
         let fileName = url.lastPathComponent
-        return fileName == Constants.legacyLatestFileName || fileName.hasPrefix(Constants.recoveryFilePrefix)
+        return fileName == Constants.legacyLatestFileName || isGeneratedRecoveryFileName(fileName)
+    }
+
+    private func isGeneratedRecoveryFileName(_ fileName: String) -> Bool {
+        let suffix = ".\(Constants.recoveryFileExtension)"
+        guard fileName.hasPrefix(Constants.recoveryFilePrefix), fileName.hasSuffix(suffix) else { return false }
+
+        let stemStart = fileName.index(fileName.startIndex, offsetBy: Constants.recoveryFilePrefix.count)
+        let stemEnd = fileName.index(fileName.endIndex, offsetBy: -suffix.count)
+        let components = fileName[stemStart..<stemEnd].split(separator: "-", omittingEmptySubsequences: false)
+        guard components.count == 4 || components.count == 5 else { return false }
+        guard hasASCIIDigits(components[0], count: 8),
+              hasASCIIDigits(components[1], count: 6),
+              hasASCIIDigits(components[2], count: 3),
+              components[3].count >= 4,
+              hasASCIIDigits(components[3])
+        else {
+            return false
+        }
+
+        return components.count == 4 || hasASCIIDigits(components[4])
+    }
+
+    private func hasASCIIDigits(_ value: Substring, count: Int? = nil) -> Bool {
+        guard !value.isEmpty, count == nil || value.count == count else { return false }
+        return value.utf8.allSatisfy { (48...57).contains($0) }
     }
 
     private func contentModificationDate(for url: URL) -> Date {
@@ -188,10 +299,24 @@ final class DictationRecoveryAudioStore: @unchecked Sendable {
         url.resolvingSymlinksInPath().standardizedFileURL
     }
 
+    private func isRegularNonSymlinkFile(_ url: URL) -> Bool {
+        guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey]) else {
+            return false
+        }
+        return values.isRegularFile == true && values.isSymbolicLink != true
+    }
+
+    private func itemExists(at url: URL) -> Bool {
+        if fileManager.fileExists(atPath: url.path) {
+            return true
+        }
+        return (try? url.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) == true
+    }
+
     private func makeUniqueRecoveryFileURL() -> URL {
         try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
         recoverySerialNumber += 1
-        let baseName = "\(Constants.recoveryFilePrefix)\(Self.recoveryTimestamp(from: Date()))-\(String(format: "%04llu", recoverySerialNumber))"
+        let baseName = "\(Constants.recoveryFilePrefix)\(Self.recoveryTimestamp(from: now()))-\(String(format: "%04llu", recoverySerialNumber))"
         var candidate = directory
             .appendingPathComponent(baseName)
             .appendingPathExtension(Constants.recoveryFileExtension)
@@ -209,6 +334,24 @@ final class DictationRecoveryAudioStore: @unchecked Sendable {
 
     private func removeStoredRecoveries() {
         for url in storedRecoveryURLs() {
+            removeItemIfExists(at: url)
+        }
+    }
+
+    private func applyRetentionPolicy() {
+        guard retentionPolicy.keepsRecoveryFiles else {
+            closeActiveHandle()
+            activeSampleCount = 0
+            hasActiveRecording = false
+            removeItemIfExists(at: activeFileURL)
+            removeStoredRecoveries()
+            return
+        }
+
+        guard let retentionDays = retentionPolicy.retentionDays else { return }
+        let currentDate = now()
+        let cutoff = Calendar.current.date(byAdding: .day, value: -retentionDays, to: currentDate) ?? currentDate
+        for url in storedRecoveryURLs() where contentModificationDate(for: url) < cutoff {
             removeItemIfExists(at: url)
         }
     }
@@ -232,7 +375,7 @@ final class DictationRecoveryAudioStore: @unchecked Sendable {
     }
 
     private func removeItemIfExists(at url: URL) {
-        guard fileManager.fileExists(atPath: url.path) else { return }
+        guard fileManager.fileExists(atPath: url.path), isRegularNonSymlinkFile(url) else { return }
         try? fileManager.removeItem(at: url)
     }
 

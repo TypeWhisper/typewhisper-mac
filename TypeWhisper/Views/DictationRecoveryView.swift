@@ -15,10 +15,29 @@ struct DictationRecoveryView: View {
                 .padding(.bottom, SettingsLayoutMetrics.pagePadding)
         }
         .frame(minWidth: 500, minHeight: 400)
+        .onAppear {
+            viewModel.refreshRecoveries()
+        }
     }
 
     private var recoveryForm: some View {
         Form {
+            Section(String(localized: "Storage")) {
+                Picker(
+                    String(localized: "Auto-delete recovery recordings"),
+                    selection: $viewModel.retentionPolicy
+                ) {
+                    ForEach(DictationRecoveryRetentionPolicy.allCases, id: \.self) { policy in
+                        Text(retentionLabel(for: policy)).tag(policy)
+                    }
+                }
+                .disabled(viewModel.isProcessing)
+
+                Text(String(localized: "Recovery recordings are stored only on this Mac. Immediately prevents TypeWhisper from creating local recovery WAV files. History audio is controlled separately, and cloud engines may still receive audio for transcription."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             if let lastSavedRecoveryFileName = viewModel.lastSavedRecoveryFileName {
                 Section(String(localized: "History")) {
                     HStack(spacing: 10) {
@@ -63,6 +82,14 @@ struct DictationRecoveryView: View {
                     if let recovery = viewModel.selectedRecovery {
                         recoveryRow(recovery)
                     }
+                }
+            } else if viewModel.isRecoveryStorageDisabled {
+                Section {
+                    Label(
+                        String(localized: "Recovery recording is disabled"),
+                        systemImage: "lock"
+                    )
+                    .foregroundStyle(.secondary)
                 }
             } else if !viewModel.hasRecoveryContent {
                 Section {
@@ -197,6 +224,27 @@ struct DictationRecoveryView: View {
         return localizedAppLanguageOptions(for: supportedLanguages)
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
             .map { (code: $0.code, name: $0.name) }
+    }
+
+    private func retentionLabel(for policy: DictationRecoveryRetentionPolicy) -> String {
+        switch policy {
+        case .immediately:
+            String(localized: "Immediately (disable recovery)")
+        case .oneDay:
+            String(localized: "1 day")
+        case .sevenDays:
+            String(localized: "7 days")
+        case .thirtyDays:
+            String(localized: "30 days")
+        case .sixtyDays:
+            String(localized: "60 days")
+        case .ninetyDays:
+            String(localized: "90 days")
+        case .oneHundredEightyDays:
+            String(localized: "180 days")
+        case .never:
+            String(localized: "Never")
+        }
     }
 
     private func statusSystemImage(for state: DictationRecoveryViewModel.RecoveryState) -> String {

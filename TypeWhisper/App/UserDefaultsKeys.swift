@@ -135,6 +135,7 @@ enum UserDefaultsKeys {
     static let dictationRecoveryModel = "dictationRecoveryModel"
     static let dictationRecoveryLanguage = "dictationRecoveryLanguage"
     static let dictationRecoveryAutomaticFallbackEnabled = "dictationRecoveryAutomaticFallbackEnabled"
+    static let dictationRecoveryRetentionDays = "dictationRecoveryRetentionDays"
 
     // MARK: - Watch Folder
     static let watchFolderBookmark = "watchFolderBookmark"

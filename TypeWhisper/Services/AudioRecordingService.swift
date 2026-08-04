@@ -1605,6 +1605,22 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         recoveryAudioStore.recoveryURLs
     }
 
+    @MainActor
+    @discardableResult
+    func updateRecoveryRetentionPolicy(_ policy: DictationRecoveryRetentionPolicy) -> [URL] {
+        let urls = recoveryAudioStore.updateRetentionPolicy(policy)
+        publishRecoverableRecordingURLs(urls)
+        return urls
+    }
+
+    @MainActor
+    @discardableResult
+    func refreshRecoveryRecordings() -> [URL] {
+        let urls = recoveryAudioStore.refreshRetention()
+        publishRecoverableRecordingURLs(urls)
+        return urls
+    }
+
     @discardableResult
     func preserveActiveRecoveryRecording() -> URL? {
         let url = recoveryAudioStore.preserveActiveRecording()
