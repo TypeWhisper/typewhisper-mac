@@ -480,27 +480,40 @@ final class CalendarMeetingNotificationService: ObservableObject, CalendarMeetin
         await removeScheduledMeetingRequests()
         guard startMode != .off else { return }
         let upperBound = now.addingTimeInterval(7 * 24 * 60 * 60)
-        let requestedDigests = Set(
+        let requestedDigests: Set<String> = Set(
             defaults.stringArray(
                 forKey: UserDefaultsKeys.calendarMeetingReminderRequestDigests
             ) ?? []
         )
-        let candidates = occurrences
-            .map { ($0, $0.startDate.addingTimeInterval(-5 * 60)) }
-            .filter {
-                $0.1 <= upperBound
-                    && $0.0.endDate.addingTimeInterval(30 * 60) >= now
-            }
-            .filter { occurrence, fireDate in
-                fireDate > now || !requestedDigests.contains(occurrence.occurrenceDigest)
-            }
-            .sorted { max($0.1, now) < max($1.1, now) }
-            .prefix(48)
+        typealias ReminderCandidate = (
+            occurrence: CalendarMeetingOccurrence,
+            fireDate: Date
+        )
+        let datedOccurrences: [ReminderCandidate] = occurrences.map { occurrence in
+            (
+                occurrence: occurrence,
+                fireDate: occurrence.startDate.addingTimeInterval(-5 * 60)
+            )
+        }
+        let activeCandidates: [ReminderCandidate] = datedOccurrences.filter { candidate in
+            candidate.fireDate <= upperBound
+                && candidate.occurrence.endDate.addingTimeInterval(30 * 60) >= now
+        }
+        let pendingCandidates: [ReminderCandidate] = activeCandidates.filter { candidate in
+            candidate.fireDate > now
+                || !requestedDigests.contains(candidate.occurrence.occurrenceDigest)
+        }
+        let sortedCandidates: [ReminderCandidate] = pendingCandidates.sorted { lhs, rhs in
+            max(lhs.fireDate, now) < max(rhs.fireDate, now)
+        }
+        let candidates = sortedCandidates.prefix(48)
 
         for (occurrence, fireDate) in candidates {
             guard !Task.isCancelled else { return }
             let isCatchUp = fireDate <= now
-            let title = occurrence.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            let title = occurrence.title.trimmingCharacters(
+                in: CharacterSet.whitespacesAndNewlines
+            )
             let category: CalendarMeetingNotificationCategory
             let notificationTitle: String
             let body: String
