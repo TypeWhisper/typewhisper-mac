@@ -12,6 +12,18 @@ enum CalendarMeetingCountdownKind: Equatable, Sendable {
     }
 
     var isAutoStop: Bool { self == .autoStop }
+
+    var headline: String {
+        switch self {
+        case .start(let title):
+            let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty
+                ? String(localized: "calendarMeeting.countdown.untitled")
+                : trimmed
+        case .autoStop:
+            return String(localized: "calendarMeeting.notification.autoStopTitle")
+        }
+    }
 }
 
 struct CalendarMeetingCountdownPresentation: Equatable, Sendable {
@@ -290,15 +302,7 @@ struct MeetingAutomationCountdownIndicator: View {
     }
 
     private var headline: String {
-        switch presentation.kind {
-        case .start(let title):
-            let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-            return trimmed.isEmpty
-                ? String(localized: "calendarMeeting.countdown.untitled")
-                : trimmed
-        case .autoStop:
-            return String(localized: "calendarMeeting.notification.autoStopTitle")
-        }
+        presentation.kind.headline
     }
 
     private func countdownText(_ seconds: Int) -> String {

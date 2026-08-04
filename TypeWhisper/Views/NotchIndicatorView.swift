@@ -233,15 +233,7 @@ struct NotchIndicatorView: View {
 
     private var notchAccessibilityLabel: String {
         if let countdownPresentation {
-            switch countdownPresentation.kind {
-            case .start(let title):
-                let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-                return trimmed.isEmpty
-                    ? String(localized: "calendarMeeting.countdown.untitled")
-                    : trimmed
-            case .autoStop:
-                return String(localized: "calendarMeeting.notification.autoStopTitle")
-            }
+            return countdownPresentation.kind.headline
         }
         switch presentation.state {
         case .idle, .promptSelection, .promptProcessing:

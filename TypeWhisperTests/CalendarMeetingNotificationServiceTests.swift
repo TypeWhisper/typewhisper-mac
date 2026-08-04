@@ -209,7 +209,14 @@ final class CalendarMeetingNotificationServiceTests: XCTestCase {
         XCTAssertEqual(client.removed.last, [request.identifier])
         XCTAssertEqual(client.removedDelivered.last, [request.identifier])
 
+        let removedCountBeforeExplicitCall = client.removed.count
+        let removedDeliveredCountBeforeExplicitCall = client.removedDelivered.count
         service.removeAutoStopWarning(occurrenceDigest: digest)
+        XCTAssertEqual(client.removed.count, removedCountBeforeExplicitCall + 1)
+        XCTAssertEqual(
+            client.removedDelivered.count,
+            removedDeliveredCountBeforeExplicitCall + 1
+        )
         XCTAssertEqual(client.removed.last, [request.identifier])
         XCTAssertEqual(client.removedDelivered.last, [request.identifier])
     }

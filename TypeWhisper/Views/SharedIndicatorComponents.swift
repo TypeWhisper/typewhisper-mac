@@ -285,8 +285,7 @@ struct IndicatorFeedbackProgressBar: View {
             .transaction { transaction in
                 transaction.animation = nil
             }
-        .frame(height: 2)
-        .accessibilityHidden(true)
+            .accessibilityHidden(true)
     }
 }
 

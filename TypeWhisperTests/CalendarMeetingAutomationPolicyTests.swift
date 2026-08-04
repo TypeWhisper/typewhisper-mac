@@ -348,6 +348,43 @@ final class CalendarMeetingAutomationPolicyTests: XCTestCase {
         })
     }
 
+    func testSuppressingAnotherOccurrencePreservesPendingIdleRetry() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let pendingOccurrence = makeCalendarMeetingTestOccurrence(
+            eventID: "pending",
+            start: now
+        )
+        let suppressedOccurrence = makeCalendarMeetingTestOccurrence(
+            eventID: "suppressed",
+            start: now
+        )
+        var policy = CalendarMeetingAutomationPolicy()
+        _ = policy.reduce(.configure(
+            configuration(mode: .automatic),
+            occurrences: [pendingOccurrence, suppressedOccurrence],
+            now: now
+        ))
+        _ = policy.reduce(.recorderReadiness(.recorderBusy, now: now))
+        _ = policy.reduce(.activity([signal(for: pendingOccurrence)], now: now))
+        _ = policy.reduce(.timeAdvanced(now.addingTimeInterval(3)))
+
+        XCTAssertEqual(
+            policy.reduce(.userAction(
+                .suppressOccurrence(suppressedOccurrence.id),
+                now: now.addingTimeInterval(3.5)
+            )),
+            [.persistSuppression(suppressedOccurrence.id)]
+        )
+
+        let idle = policy.reduce(.recorderReadiness(.idle, now: now.addingTimeInterval(4)))
+        XCTAssertTrue(idle.contains {
+            if case .showStartCountdown(let occurrence, _) = $0 {
+                return occurrence.id == pendingOccurrence.id
+            }
+            return false
+        })
+    }
+
     func testStartRaceDeferredByBusyRecorderGetsOneIdleRetry() {
         let now = Date(timeIntervalSince1970: 2_000_000_000)
         let occurrence = makeCalendarMeetingTestOccurrence(start: now)

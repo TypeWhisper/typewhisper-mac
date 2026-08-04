@@ -530,7 +530,9 @@ struct CalendarMeetingAutomationPolicy: Sendable {
                 clearPendingStart(effects: &effects)
             }
             dwellStates.removeValue(forKey: digest)
-            pendingIdleCandidate = nil
+            if pendingIdleCandidate?.digest == digest {
+                pendingIdleCandidate = nil
+            }
             effects.append(.persistSuppression(digest))
 
         case .continueRecording(let handle):

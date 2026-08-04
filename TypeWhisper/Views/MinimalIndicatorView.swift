@@ -142,15 +142,7 @@ struct MinimalIndicatorView: View {
 
     private var accessibilityLabel: String {
         if let countdownPresentation {
-            switch countdownPresentation.kind {
-            case .start(let title):
-                let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-                return trimmed.isEmpty
-                    ? String(localized: "calendarMeeting.countdown.untitled")
-                    : trimmed
-            case .autoStop:
-                return String(localized: "calendarMeeting.notification.autoStopTitle")
-            }
+            return countdownPresentation.kind.headline
         }
         if let message = cancelWarningMessage {
             return message
