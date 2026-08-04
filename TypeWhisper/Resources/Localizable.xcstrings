@@ -944,37 +944,37 @@
               "few" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "%lld dictations"
+                  "value" : "%lld 次听写"
                 }
               },
               "many" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "%lld dictations"
+                  "value" : "%lld 次听写"
                 }
               },
               "one" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "%lld dictations"
+                  "value" : "%lld 次听写"
                 }
               },
               "other" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "%lld dictations"
+                  "value" : "%lld 次听写"
                 }
               },
               "two" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "%lld dictations"
+                  "value" : "%lld 次听写"
                 }
               },
               "zero" : {
                 "stringUnit" : {
                   "state" : "translated",
-                  "value" : "%lld dictations"
+                  "value" : "%lld 次听写"
                 }
               }
             }
