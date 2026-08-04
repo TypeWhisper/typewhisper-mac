@@ -404,10 +404,13 @@ final class DictationRecoveryAudioStoreTests: XCTestCase {
         // while leaving a developer's real preferences untouched.
         let livePreviewEngineKey = UserDefaultsKeys.livePreviewEngineId
         let previewEnabledKey = UserDefaultsKeys.indicatorTranscriptPreviewEnabled
+        let recoveryRetentionKey = UserDefaultsKeys.dictationRecoveryRetentionDays
         let originalLivePreviewEngine = UserDefaults.standard.object(forKey: livePreviewEngineKey)
         let originalPreviewEnabled = UserDefaults.standard.object(forKey: previewEnabledKey)
+        let originalRecoveryRetention = UserDefaults.standard.object(forKey: recoveryRetentionKey)
         UserDefaults.standard.removeObject(forKey: livePreviewEngineKey)
         UserDefaults.standard.removeObject(forKey: previewEnabledKey)
+        UserDefaults.standard.removeObject(forKey: recoveryRetentionKey)
         defer {
             if let originalLivePreviewEngine {
                 UserDefaults.standard.set(originalLivePreviewEngine, forKey: livePreviewEngineKey)
@@ -418,6 +421,11 @@ final class DictationRecoveryAudioStoreTests: XCTestCase {
                 UserDefaults.standard.set(originalPreviewEnabled, forKey: previewEnabledKey)
             } else {
                 UserDefaults.standard.removeObject(forKey: previewEnabledKey)
+            }
+            if let originalRecoveryRetention {
+                UserDefaults.standard.set(originalRecoveryRetention, forKey: recoveryRetentionKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: recoveryRetentionKey)
             }
         }
         let textInsertionService = TextInsertionService()

@@ -657,7 +657,10 @@ struct AdvancedSettingsView: View {
             pluginManager: container.pluginManager,
             pluginRegistryService: container.pluginRegistryService,
             historyService: container.historyService,
-            usageStatisticsService: container.usageStatisticsService
+            usageStatisticsService: container.usageStatisticsService,
+            recoveryRetentionPolicyDidChange: { policy in
+                _ = container.audioRecordingService.updateRecoveryRetentionPolicy(policy)
+            }
         )
 
         backupImportResultMessage = backupImportSummary(result)

@@ -623,7 +623,8 @@ enum SettingsBackupExporter {
         pluginRegistryService: PluginRegistryService,
         historyService: HistoryService,
         usageStatisticsService: UsageStatisticsService,
-        userDefaults: UserDefaults = .standard
+        userDefaults: UserDefaults = .standard,
+        recoveryRetentionPolicyDidChange: ((DictationRecoveryRetentionPolicy) -> Void)? = nil
     ) async -> ImportResult {
         var result = ImportResult()
 
@@ -849,6 +850,9 @@ enum SettingsBackupExporter {
         apply(preferences.dictationRecoveryLanguage, forKey: UserDefaultsKeys.dictationRecoveryLanguage)
         apply(preferences.dictationRecoveryAutomaticFallbackEnabled, forKey: UserDefaultsKeys.dictationRecoveryAutomaticFallbackEnabled)
         apply(preferences.dictationRecoveryRetentionDays, forKey: UserDefaultsKeys.dictationRecoveryRetentionDays)
+        if preferences.dictationRecoveryRetentionDays != nil {
+            recoveryRetentionPolicyDidChange?(DictationRecoveryRetentionPolicy.load(from: userDefaults))
+        }
         apply(preferences.fileTranscriptionLanguage, forKey: UserDefaultsKeys.fileTranscriptionLanguage)
         apply(preferences.recorderMicEnabled, forKey: UserDefaultsKeys.recorderMicEnabled)
         apply(preferences.recorderSystemAudioEnabled, forKey: UserDefaultsKeys.recorderSystemAudioEnabled)
