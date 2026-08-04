@@ -16,6 +16,7 @@ private final class FakeMeetingAudioProcessClient: MeetingAudioProcessClient, @u
         var startCount = 0
         var restartCount = 0
         var stopCount = 0
+        var snapshotCount = 0
     }
 
     private let state = OSAllocatedUnfairLock(initialState: State())
@@ -50,7 +51,8 @@ private final class FakeMeetingAudioProcessClient: MeetingAudioProcessClient, @u
 
     func snapshot(at date: Date) -> MeetingActivitySnapshot {
         state.withLock {
-            MeetingActivitySnapshot(
+            $0.snapshotCount += 1
+            return MeetingActivitySnapshot(
                 capturedAt: date,
                 availability: $0.snapshot.availability,
                 processes: $0.snapshot.processes
@@ -70,12 +72,44 @@ private final class FakeMeetingAudioProcessClient: MeetingAudioProcessClient, @u
         handler?(requiresRebuild)
     }
 
-    var counts: (start: Int, restart: Int, stop: Int) {
-        state.withLock { ($0.startCount, $0.restartCount, $0.stopCount) }
+    var counts: (start: Int, restart: Int, stop: Int, snapshot: Int) {
+        state.withLock {
+            ($0.startCount, $0.restartCount, $0.stopCount, $0.snapshotCount)
+        }
     }
 }
 
 final class MeetingAudioActivityCollectorTests: XCTestCase {
+    func testCoreAudioClientStartsWithoutRequiringOptionalServiceRestartListener() {
+        let client = CoreAudioMeetingProcessClient()
+
+        XCTAssertTrue(client.start { _ in })
+        XCTAssertEqual(client.snapshot(at: Date()).availability, .available)
+
+        client.stop()
+    }
+
+    func testNativeProcessRegistryMapsFaceTimeAudioServices() {
+        XCTAssertEqual(
+            NativeMeetingAudioProcessRegistry.provider(for: "com.apple.FaceTime"),
+            .faceTime
+        )
+        XCTAssertEqual(
+            NativeMeetingAudioProcessRegistry.provider(
+                for: "com.apple.FaceTime.FTConversationService"
+            ),
+            .faceTime
+        )
+        XCTAssertEqual(
+            NativeMeetingAudioProcessRegistry.provider(for: "com.apple.avconferenced"),
+            .faceTime
+        )
+        XCTAssertEqual(
+            NativeMeetingAudioProcessRegistry.provider(for: "com.apple.TelephonyUtilities"),
+            .faceTime
+        )
+    }
+
     func testUnsupportedClientFailsClosedAndFinishesStream() async {
         let client = FakeMeetingAudioProcessClient()
         client.configure(
@@ -117,6 +151,52 @@ final class MeetingAudioActivityCollectorTests: XCTestCase {
 
         await collector.stopCollecting()
         XCTAssertEqual(client.counts.stop, 1)
+    }
+
+    func testPeriodicReconciliationRecoversMissedProcessPropertyCallbacks() async throws {
+        let inactiveProcess = MeetingAudioProcess(
+            audioObjectID: 42,
+            processID: 900,
+            bundleIdentifier: "com.apple.avconferenced",
+            isRunningInput: false,
+            isRunningOutput: false
+        )
+        let activeProcess = MeetingAudioProcess(
+            audioObjectID: inactiveProcess.audioObjectID,
+            processID: inactiveProcess.processID,
+            bundleIdentifier: inactiveProcess.bundleIdentifier,
+            isRunningInput: true,
+            isRunningOutput: true
+        )
+        let client = FakeMeetingAudioProcessClient()
+        client.configure(snapshot: MeetingActivitySnapshot(
+            capturedAt: .distantPast,
+            availability: .available,
+            processes: [inactiveProcess]
+        ))
+        let collector = MeetingAudioActivityCollector(
+            client: client,
+            reconciliationInterval: .milliseconds(10)
+        )
+        let stream = await collector.startCollecting()
+        try await Task.sleep(for: .milliseconds(20))
+
+        client.configure(snapshot: MeetingActivitySnapshot(
+            capturedAt: .distantPast,
+            availability: .available,
+            processes: [activeProcess]
+        ))
+        try await Task.sleep(for: .milliseconds(30))
+
+        var iterator = stream.makeAsyncIterator()
+        let reconciled = await iterator.next()
+        XCTAssertEqual(reconciled?.processes, [activeProcess])
+        XCTAssertGreaterThanOrEqual(client.counts.snapshot, 2)
+
+        await collector.stopCollecting()
+        let snapshotsAfterStop = client.counts.snapshot
+        try await Task.sleep(for: .milliseconds(30))
+        XCTAssertEqual(client.counts.snapshot, snapshotsAfterStop)
     }
 
     func testHALRestartRebuildFailurePublishesUnsupportedAndTearsDown() async {

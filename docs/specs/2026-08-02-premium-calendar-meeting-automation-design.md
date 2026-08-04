@@ -2,6 +2,8 @@
 
 Date: 2026-08-02
 
+Last updated: 2026-08-04
+
 ## Scope
 
 TypeWhisper adds a premium, local-only automation for EventKit meetings from Zoom, Microsoft Teams, Google Meet, and FaceTime. Users explicitly choose Off, Reminder, or Automatic. Calendar access is never requested at launch or for users without a commercial license or active Premium account entitlement.
@@ -21,11 +23,13 @@ The previous TypeWhisper experiment remains untouched at `/Users/marco/.codex/wo
 - `EventKitCalendarMeetingProvider` owns one `EKEventStore` actor-isolated and emits detached calendars and occurrences.
 - `MeetingLinkParser` canonicalizes only links found in EventKit URL, location, and notes fields.
 - `BrowserURLResolver` centralizes the existing Safari/Chromium/Arc active-tab resolution; Firefox and Zen remain reminder-only.
-- `MeetingAudioActivityCollector` listens to public CoreAudio process properties only while a join window is relevant and fails closed when unsupported.
+- `MeetingAudioActivityCollector` listens to public CoreAudio process properties only while a join window is relevant. Process-list and per-process activity properties are required and fail closed when unsupported; the HAL service-restart listener is optional and installed only when advertised by the current system. While those listeners are installed, a deduplicated one-second snapshot reconciliation recovers process activity transitions that some macOS versions do not deliver through the per-process callback. It is stopped together with the collector and never runs in Free, Off, or outside relevant join/auto-stop windows.
+- Native process attribution includes Zoom and both Teams bundle identifiers. For FaceTime it accepts the app process plus Apple's `com.apple.FaceTime.FTConversationService`, `com.apple.avconferenced`, and `com.apple.TelephonyUtilities` call services because recent macOS versions attribute FaceTime I/O to those services. These processes become a meeting signal only while a matching FaceTime calendar occurrence is already inside its join window.
 - `CalendarMeetingAutomationPolicy` is a pure reducer for reminders, dwell, candidate ambiguity, start countdowns, idle retry, signal loss, and auto-stop.
 - `CalendarMeetingAutomationController` is the MainActor coordinator and guards asynchronous work with generations and single-flight state.
-- `CalendarMeetingNotificationService` stores only occurrence digests in notification metadata.
-- `MeetingAutomationCountdownPanelController` presents nonactivating start and stop veto panels.
+- `CalendarMeetingNotificationService` stores only occurrence digests in notification metadata and owns both scheduled meeting reminders and the immediate auto-stop warning.
+- `CalendarMeetingCountdownModel` exposes one generation-guarded start-or-stop presentation to the existing recording indicators. Start presentations may contain the local event title; stop presentations remain title-free. Neither presentation contains URLs, participants, recorder handles, or output paths.
+- The selected Notch, Overlay, or Minimal indicator is the only five-second start-countdown surface. No separate AppKit countdown panel or start-countdown notification is created.
 - `AudioRecorderViewModel` exposes one narrow calendar handle while preserving the existing capture, finalization, transcription, plugin-event, and API paths.
 
 ## Privacy and persistence
@@ -34,9 +38,25 @@ The calendar title is used only in local settings UI, local notifications, and t
 
 Suppression persists at most 256 SHA-256 occurrence digests. Calendar and provider selections remain local. Reminder requests are bounded to seven days and 48 occurrences.
 
+## Start semantics
+
+Upcoming notifications never start the recorder directly. In Reminder mode, the explicit “Start When I Join” action stores only the occurrence digest in the in-memory policy state. TypeWhisper must remain running after that action. The arm is discarded on process shutdown and is never written to defaults, sync, backup data, telemetry, or notification metadata.
+
+An armed occurrence starts only after its matching live input signal remains stable for three seconds and the cancellable five-second countdown in the selected recording indicator completes. The indicator shows the local event title, remaining time, deadline-based progress, and Cancel. A real join before the scheduled start is valid inside the existing window from ten minutes before start through thirty minutes after end. Signal loss dismisses the current countdown but preserves the arm so a later stable rejoin may try again. Explicit countdown cancellation, including Command-Period, suppresses and disarms the occurrence. Firefox, Zen, unsupported CoreAudio, missing browser URL attribution, and ambiguous armed candidates fail closed without a calendar-time fallback.
+
+In Automatic mode, the five-minute notification is status-only and offers suppression rather than a redundant start action. Its body explains that recording begins after the user joins. In Reminder mode, the later detected-meeting notification retains “Start Recording”, but that action also maps to the in-memory arm and the same countdown instead of bypassing live detection. A single armed occurrence may disambiguate overlapping unarmed candidates; equally ranked armed candidates never auto-start.
+
+The legacy notification start identifier remains registered for requests scheduled by older builds, but its response is mapped to the same arm behavior. Default notification clicks still open Premium settings and never arm or start a recording. User info remains limited to the occurrence digest and notification kind.
+
 ## Stop semantics
 
-Auto-stop is separately disabled by default and applies only to the exact calendar handle created while the option was enabled. Thirty seconds without input or output for the matched identity opens a 15-second veto panel. Signal return cancels the grace/countdown. “Continue recording” is sticky. Calendar end is never a stop signal. Gate or setting loss lets the recording continue and permanently detaches auto-stop for that recording.
+Auto-stop is separately disabled by default and applies only to the exact calendar handle created while the option was enabled. It can be enabled and armed only while macOS notification authorization permits alerts. If that permission is unavailable or later revoked, the persisted auto-stop option is switched off; an existing recording continues and is permanently detached from auto-stop.
+
+The first snapshot without input or output for the matched identity immediately expands the currently selected Notch, Overlay, or Minimal recording indicator with “Meeting seems to have ended”, the live 15-second countdown, progress, and “Continue recording”. Start and stop use the same system font metrics throughout the shared countdown surface. The warning temporarily overrides the user's Never visibility setting and normal fullscreen suppression, but does not activate TypeWhisper or create a separate window. The original indicator visibility, placement, and capture settings resume as soon as the warning ends.
+
+At the same time, TypeWhisper publishes the same warning as a time-sensitive native notification. macOS can still suppress its banner while the display is shared, so this notification is an additional surface and the recording indicator is the reliable warning surface. The indicator button, notification action, and notification default click all enter the same validated sticky-veto path. Explicitly dismissing the notification does not veto the stop. A returned meeting signal must remain present for three uninterrupted seconds before both warning surfaces are removed. This prevents brief post-call CoreAudio activity from dismissing and immediately restarting the countdown, while a genuine rejoin still cancels the stop. Continue responses are accepted only while the occurrence digest and calendar recording handle match the currently presented warning; the presentation model rejects actions from replaced generations.
+
+Without a veto, the existing pure policy deadline requests exactly one stop after another 15 seconds. The indicator and notification are presentation only and do not own or pause the timer; hover and focus do not extend it. Focus modes, display sharing, and other system policy may delay or hide the native notification. Calendar end is never a stop signal. Gate or setting loss removes both warning surfaces, lets the recording continue, and permanently detaches auto-stop for that recording.
 
 ## Premium settings experience
 
@@ -47,3 +67,21 @@ Free and Supporter-only states render static preview cards plus one unlock actio
 Available feature cards open separate, nonmodal, resizable AppKit windows, matching the established plugin-settings behavior. One window is retained per feature, re-opening focuses it, and frames are autosaved. The account/license controls use the same window pattern. If access is lost while a feature window is open, its controls are replaced by a locked explanation; the underlying automation and recording gate semantics remain authoritative.
 
 A signed-in account with an active local Commercial license but no linked account entitlement is shown as “Connect purchase”, not as a generic missing-account state. The access window offers an explicit link action through the existing Polar device-attachment endpoint. Missing entitlements are refreshed on launch even when a recent empty result exists; the seven-day refresh throttle applies only to an already active, cryptographically verified entitlement.
+
+The meeting automation window communicates that auto-stop requires macOS notifications. The option cannot remain enabled when that permission is missing. It offers the existing notification-settings action rather than silently falling back to a custom window.
+
+## Auto-stop warning verification
+
+- Notification categories include a dedicated auto-stop category and a non-foreground “Continue recording” action.
+- Only the auto-stop notification uses the time-sensitive interruption level; foreground presentation requests banner, list, and sound.
+- The notification payload contains only the occurrence digest and action kind; it contains no title, URL, participant, recorder path, or public handle.
+- Notch, Overlay, and Minimal reuse one warning view and one MainActor presentation model. Only the selected style is shown.
+- The warning temporarily overrides Never visibility and fullscreen suppression, accepts first-mouse interaction, and remains a nonactivating panel that cannot become key or main.
+- Default click and “Continue recording” veto only the matching active occurrence.
+- Dismissal leaves the 15-second stop deadline active.
+- Three seconds of uninterrupted signal return remove the indicator plus pending and delivered notifications and prevent the stop; shorter activity flaps leave the original countdown untouched.
+- Missing or revoked notification permission turns auto-stop off and never stops the current recording.
+- Start and auto-stop share the same generation-protected indicator presentation model. Typed dismissal prevents a late start dismissal from removing a newer stop warning and vice versa.
+- Both countdown kinds temporarily override Never visibility and fullscreen suppression while preserving nonactivating panels and first-mouse button interaction.
+- Countdown progress is calculated from start time, deadline, and the current timeline date. Normal motion uses at most a 30 Hz animation timeline and a fixed-width scale transform; Reduce Motion updates once per second. No countdown ticker exists without an active presentation.
+- Overlay start countdowns use a standalone indicator pill without an empty recorder-status row. Auto-stop retains the active recorder row and warning content.

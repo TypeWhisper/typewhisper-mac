@@ -645,7 +645,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
         UpdateChecker.shared = updateChecker
         applyActivationPolicy()
 
-        let coordinator = IndicatorCoordinator()
+        let coordinator = IndicatorCoordinator(
+            countdownModel: ServiceContainer.shared.calendarMeetingCountdownModel
+        )
         coordinator.startObserving()
         indicatorCoordinator = coordinator
 

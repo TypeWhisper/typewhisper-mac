@@ -48,6 +48,7 @@ final class ServiceContainer: ObservableObject {
     let licenseService: LicenseService
     let premiumAccountService: PremiumAccountService
     let supporterDiscordService: SupporterDiscordService
+    let calendarMeetingCountdownModel: CalendarMeetingCountdownModel
     let calendarMeetingAutomationController: CalendarMeetingAutomationController
 
     // HTTP API
@@ -207,17 +208,15 @@ final class ServiceContainer: ObservableObject {
             audioFileService: audioFileService,
             audioDeviceService: audioDeviceService
         )
-        let meetingCountdownHotkeyService = hotkeyService
+        calendarMeetingCountdownModel = CalendarMeetingCountdownModel(
+            hotkeyService: hotkeyService
+        )
         calendarMeetingAutomationController = CalendarMeetingAutomationController(
             licenseService: licenseService,
             premiumAccountService: premiumAccountService,
             recorderViewModel: audioRecorderViewModel,
             dictationViewModel: dictationViewModel,
-            countdownPresenterFactory: {
-                MeetingAutomationCountdownPanelController(
-                    hotkeyService: meetingCountdownHotkeyService
-                )
-            }
+            countdownModel: calendarMeetingCountdownModel
         )
 
 

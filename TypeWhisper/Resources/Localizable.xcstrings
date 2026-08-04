@@ -34622,6 +34622,34 @@
         }
       }
     },
+    "calendarMeeting.notification.armWhenJoinedAction" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Beim Beitritt starten"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Start When I Join"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "参加したら開始"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "加入会议时开始"
+          }
+        }
+      }
+    },
     "calendarMeeting.notification.startAction" : {
       "localizations" : {
         "de" : {
@@ -34702,6 +34730,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "会议即将开始"
+          }
+        }
+      }
+    },
+    "calendarMeeting.notification.upcomingAutomaticBody" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TypeWhisper startet die Aufnahme, sobald du diesem Meeting beitrittst."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "TypeWhisper will start recording when you join this meeting."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このミーティングに参加すると、TypeWhisperが録音を開始します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "加入此会议后，TypeWhisper 会开始录音。"
           }
         }
       }
@@ -34790,7 +34846,7 @@
         }
       }
     },
-    "calendarMeeting.countdown.continue" : {
+    "calendarMeeting.notification.continueAction" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -34874,35 +34930,91 @@
         }
       }
     },
-    "calendarMeeting.countdown.stopDetail" : {
+    "calendarMeeting.autoStopIndicator.countdown.one" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Stoppt in %d Sekunden"
+            "value" : "Aufnahme stoppt in 1 Sekunde"
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Stops in %d seconds"
+            "value" : "Recording stops in 1 second"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%d秒後に停止します"
+            "value" : "録音は1秒後に停止します"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%d 秒后停止"
+            "value" : "录音将在 1 秒后停止"
           }
         }
       }
     },
-    "calendarMeeting.countdown.stopHeadline" : {
+    "calendarMeeting.autoStopIndicator.countdown.other" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aufnahme stoppt in %lld Sekunden"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recording stops in %lld seconds"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "録音は%lld秒後に停止します"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "录音将在 %lld 秒后停止"
+          }
+        }
+      }
+    },
+    "calendarMeeting.notification.autoStopBody" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aufnahme stoppt in 15 Sekunden."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recording stops in 15 seconds."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "録音は15秒後に停止します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "录音将在 15 秒后停止。"
+          }
+        }
+      }
+    },
+    "calendarMeeting.notification.autoStopTitle" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
@@ -35159,25 +35271,53 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Wenn das Meeting beendet scheint, wartet TypeWhisper noch 30 Sekunden und gibt dir anschließend 15 Sekunden, um weiter aufzunehmen."
+            "value" : "Wenn das Meeting beendet scheint, warnt dich TypeWhisper sofort und stoppt die Aufnahme 15 Sekunden später, sofern du sie nicht fortsetzt."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "When the meeting appears to have ended, TypeWhisper waits 30 seconds and then gives you 15 seconds to keep recording."
+            "value" : "When the meeting appears to have ended, TypeWhisper warns you immediately and stops the recording 15 seconds later unless you continue it."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "ミーティングが終了したように見える場合、30秒待ってから、録音を続けるための15秒間の猶予を表示します。"
+            "value" : "ミーティングが終了したように見えると、TypeWhisperはすぐに警告し、「録音を続ける」を選ばない限り15秒後に録音を停止します。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "当会议似乎已结束时，TypeWhisper 会等待 30 秒，然后给你 15 秒选择继续录音。"
+            "value" : "当会议似乎已结束时，TypeWhisper 会立即发出警告，并在 15 秒后停止录音，除非你选择继续录音。"
+          }
+        }
+      }
+    },
+    "calendarMeeting.settings.autoStopNotificationsRequired" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auto-Stop benötigt erlaubte macOS-Mitteilungen und bleibt sonst ausgeschaltet."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auto-stop requires macOS notifications and stays off when they are unavailable."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自動停止にはmacOSの通知許可が必要です。通知を利用できない場合はオフのままになります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "自动停止需要允许 macOS 通知；通知不可用时将保持关闭。"
           }
         }
       }
@@ -35299,25 +35439,25 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Die Mitteilungsberechtigung betrifft nur Hinweise; automatische Countdowns funktionieren weiterhin."
+            "value" : "Mitteilungen werden für Meeting-Hinweise und für die Warnung vor dem automatischen Stopp verwendet."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Notification permission affects reminders only; automatic countdowns still work."
+            "value" : "Notifications are used for meeting reminders and the warning before an automatic stop."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "通知権限はリマインダーのみに影響し、自動カウントダウンは引き続き動作します。"
+            "value" : "通知はミーティングのリマインダーと、自動停止前の警告に使用されます。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "通知权限只影响提醒；自动倒计时仍可正常使用。"
+            "value" : "通知用于会议提醒和自动停止前的警告。"
           }
         }
       }

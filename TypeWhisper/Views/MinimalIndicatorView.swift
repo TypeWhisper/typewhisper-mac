@@ -21,6 +21,7 @@ struct MinimalIndicatorFeedbackProgress: View {
 struct MinimalIndicatorView: View {
     @ObservedObject private var viewModel = DictationViewModel.shared
     @ObservedObject private var recorder = AudioRecorderViewModel.shared
+    @ObservedObject private var countdownModel: CalendarMeetingCountdownModel
     @State private var dotPulse = false
 
     private let sizing: IndicatorSizing = .minimal
@@ -29,8 +30,16 @@ struct MinimalIndicatorView: View {
     private let insertingWidth: CGFloat = 44
     private let messageWidth = IndicatorFeedbackPanelLayout.minimalFeedbackWidth
 
+    init(countdownModel: CalendarMeetingCountdownModel) {
+        _countdownModel = ObservedObject(wrappedValue: countdownModel)
+    }
+
     private var presentation: IndicatorPresentationData {
         IndicatorPresentationData.make(dictation: viewModel, recorder: recorder)
+    }
+
+    private var countdownPresentation: CalendarMeetingCountdownPresentation? {
+        countdownModel.presentation
     }
 
     private var recordingWidth: CGFloat {
@@ -74,7 +83,10 @@ struct MinimalIndicatorView: View {
     }
 
     private var showsExpandedMessage: Bool {
-        cancelWarningMessage != nil || actionFeedbackMessage != nil || errorMessage != nil
+        countdownPresentation != nil
+            || cancelWarningMessage != nil
+            || actionFeedbackMessage != nil
+            || errorMessage != nil
     }
 
     private var currentWidth: CGFloat {
@@ -121,11 +133,25 @@ struct MinimalIndicatorView: View {
                     dotPulse = false
                 }
             }
-            .accessibilityElement(children: presentation.actionFeedbackUndoTitle == nil ? .combine : .contain)
+            .accessibilityElement(
+                children: countdownPresentation != nil
+                    || presentation.actionFeedbackUndoTitle != nil ? .contain : .combine
+            )
             .accessibilityLabel(accessibilityLabel)
         }
 
     private var accessibilityLabel: String {
+        if let countdownPresentation {
+            switch countdownPresentation.kind {
+            case .start(let title):
+                let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed.isEmpty
+                    ? String(localized: "calendarMeeting.countdown.untitled")
+                    : trimmed
+            case .autoStop:
+                return String(localized: "calendarMeeting.notification.autoStopTitle")
+            }
+        }
         if let message = cancelWarningMessage {
             return message
         }
@@ -161,7 +187,13 @@ struct MinimalIndicatorView: View {
 
     @ViewBuilder
     private var contentBody: some View {
-        if let message = actionFeedbackMessage {
+        if let countdownPresentation {
+            MeetingAutomationCountdownIndicator(
+                model: countdownModel,
+                presentation: countdownPresentation,
+                contentPadding: 14
+            )
+        } else if let message = actionFeedbackMessage {
             VStack(spacing: 0) {
                 MinimalIndicatorFeedbackProgress(
                     remainingFraction: presentation.actionFeedbackRemainingFraction

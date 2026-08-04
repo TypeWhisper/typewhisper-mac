@@ -5,6 +5,195 @@ import XCTest
 final class CalendarMeetingAutomationPolicyTests: XCTestCase {
     private let identity = CalendarMeetingCanonicalLink(provider: .zoom, identity: "j/123456789")
 
+    func testReminderActionArmsOccurrenceWithoutStartingUntilStableJoinAndCountdown() throws {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let occurrence = makeCalendarMeetingTestOccurrence(start: now.addingTimeInterval(5 * 60))
+        var policy = CalendarMeetingAutomationPolicy()
+        _ = policy.reduce(.configure(
+            configuration(mode: .reminder),
+            occurrences: [occurrence],
+            now: now
+        ))
+
+        let armed = policy.reduce(.userAction(.armOccurrence(occurrence.id), now: now))
+        XCTAssertFalse(armed.contains {
+            if case .showStartCountdown = $0 { return true }
+            if case .startRecording = $0 { return true }
+            return false
+        })
+
+        _ = policy.reduce(.activity([signal(for: occurrence)], now: now))
+        let joined = policy.reduce(.timeAdvanced(now.addingTimeInterval(3)))
+        let deadline = try XCTUnwrap(joined.compactMap { effect -> Date? in
+            guard case .showStartCountdown(let candidate, let deadline) = effect else { return nil }
+            XCTAssertEqual(candidate.id, occurrence.id)
+            return deadline
+        }.first)
+        XCTAssertEqual(deadline, now.addingTimeInterval(8))
+        XCTAssertTrue(policy.reduce(.timeAdvanced(deadline)).contains(
+            .startRecording(occurrence, identity)
+        ))
+    }
+
+    func testDetectedReminderActionUsesExistingStableDwellButStillShowsCountdown() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let occurrence = makeCalendarMeetingTestOccurrence(start: now)
+        var policy = CalendarMeetingAutomationPolicy()
+        _ = policy.reduce(.configure(
+            configuration(mode: .reminder),
+            occurrences: [occurrence],
+            now: now
+        ))
+        _ = policy.reduce(.activity([signal(for: occurrence)], now: now))
+        XCTAssertEqual(
+            policy.reduce(.timeAdvanced(now.addingTimeInterval(3))),
+            [.publishDetectedMeeting(occurrence)]
+        )
+
+        let armed = policy.reduce(.userAction(
+            .armOccurrence(occurrence.id),
+            now: now.addingTimeInterval(3)
+        ))
+        XCTAssertTrue(armed.contains {
+            if case .showStartCountdown(let candidate, _) = $0 {
+                return candidate.id == occurrence.id
+            }
+            return false
+        })
+        XCTAssertFalse(armed.contains {
+            if case .startRecording = $0 { return true }
+            return false
+        })
+    }
+
+    func testArmedReminderSurvivesSignalLossAndRetriesAfterNewStableJoin() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let occurrence = makeCalendarMeetingTestOccurrence(start: now)
+        var policy = CalendarMeetingAutomationPolicy()
+        _ = policy.reduce(.configure(
+            configuration(mode: .reminder),
+            occurrences: [occurrence],
+            now: now
+        ))
+        _ = policy.reduce(.userAction(.armOccurrence(occurrence.id), now: now))
+        _ = policy.reduce(.activity([signal(for: occurrence)], now: now))
+        _ = policy.reduce(.timeAdvanced(now.addingTimeInterval(3)))
+
+        XCTAssertEqual(
+            policy.reduce(.activity([], now: now.addingTimeInterval(4))),
+            [.dismissStartCountdown]
+        )
+        _ = policy.reduce(.activity([signal(for: occurrence)], now: now.addingTimeInterval(5)))
+        XCTAssertTrue(policy.reduce(.timeAdvanced(now.addingTimeInterval(8))).contains {
+            if case .showStartCountdown(let candidate, _) = $0 {
+                return candidate.id == occurrence.id
+            }
+            return false
+        })
+    }
+
+    func testCancellingArmedReminderSuppressesOccurrenceAndPreventsRetry() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let occurrence = makeCalendarMeetingTestOccurrence(start: now)
+        var policy = CalendarMeetingAutomationPolicy()
+        _ = policy.reduce(.configure(
+            configuration(mode: .reminder),
+            occurrences: [occurrence],
+            now: now
+        ))
+        _ = policy.reduce(.userAction(.armOccurrence(occurrence.id), now: now))
+        _ = policy.reduce(.activity([signal(for: occurrence)], now: now))
+        _ = policy.reduce(.timeAdvanced(now.addingTimeInterval(3)))
+
+        let cancelled = policy.reduce(.userAction(
+            .cancelStartCountdown(occurrence.id),
+            now: now.addingTimeInterval(4)
+        ))
+        XCTAssertTrue(cancelled.contains(.persistSuppression(occurrence.id)))
+        _ = policy.reduce(.activity([], now: now.addingTimeInterval(5)))
+        _ = policy.reduce(.activity([signal(for: occurrence)], now: now.addingTimeInterval(6)))
+        XCTAssertFalse(policy.reduce(.timeAdvanced(now.addingTimeInterval(20))).contains {
+            if case .showStartCountdown = $0 { return true }
+            if case .startRecording = $0 { return true }
+            return false
+        })
+    }
+
+    func testSingleArmedReminderDisambiguatesOverlappingUnarmedOccurrence() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let armedOccurrence = makeCalendarMeetingTestOccurrence(eventID: "armed", start: now)
+        let otherOccurrence = makeCalendarMeetingTestOccurrence(eventID: "other", start: now)
+        var policy = CalendarMeetingAutomationPolicy()
+        _ = policy.reduce(.configure(
+            configuration(mode: .reminder),
+            occurrences: [armedOccurrence, otherOccurrence],
+            now: now
+        ))
+        _ = policy.reduce(.userAction(.armOccurrence(armedOccurrence.id), now: now))
+        _ = policy.reduce(.activity(
+            [signal(for: armedOccurrence), signal(for: otherOccurrence)],
+            now: now
+        ))
+
+        let effects = policy.reduce(.timeAdvanced(now.addingTimeInterval(3)))
+        XCTAssertTrue(effects.contains {
+            if case .showStartCountdown(let candidate, _) = $0 {
+                return candidate.id == armedOccurrence.id
+            }
+            return false
+        })
+        XCTAssertFalse(effects.contains(.publishDetectedMeeting(otherOccurrence)))
+    }
+
+    func testEquivalentOverlappingArmedRemindersFailClosed() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let first = makeCalendarMeetingTestOccurrence(eventID: "one", start: now)
+        let second = makeCalendarMeetingTestOccurrence(eventID: "two", start: now)
+        var policy = CalendarMeetingAutomationPolicy()
+        _ = policy.reduce(.configure(
+            configuration(mode: .reminder),
+            occurrences: [first, second],
+            now: now
+        ))
+        _ = policy.reduce(.userAction(.armOccurrence(first.id), now: now))
+        _ = policy.reduce(.userAction(.armOccurrence(second.id), now: now))
+        _ = policy.reduce(.activity([signal(for: first), signal(for: second)], now: now))
+
+        XCTAssertFalse(policy.reduce(.timeAdvanced(now.addingTimeInterval(10))).contains {
+            if case .showStartCountdown = $0 { return true }
+            if case .startRecording = $0 { return true }
+            return false
+        })
+    }
+
+    func testModeChangeDiscardsInMemoryReminderArm() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let occurrence = makeCalendarMeetingTestOccurrence(start: now)
+        var policy = CalendarMeetingAutomationPolicy()
+        _ = policy.reduce(.configure(
+            configuration(mode: .reminder),
+            occurrences: [occurrence],
+            now: now
+        ))
+        _ = policy.reduce(.userAction(.armOccurrence(occurrence.id), now: now))
+        _ = policy.reduce(.configure(
+            configuration(mode: .off),
+            occurrences: [occurrence],
+            now: now
+        ))
+        _ = policy.reduce(.configure(
+            configuration(mode: .reminder),
+            occurrences: [occurrence],
+            now: now
+        ))
+        _ = policy.reduce(.activity([signal(for: occurrence)], now: now))
+
+        XCTAssertEqual(
+            policy.reduce(.timeAdvanced(now.addingTimeInterval(3))),
+            [.publishDetectedMeeting(occurrence)]
+        )
+    }
+
     func testAutomaticStartRequiresThreeSecondDwellAndFiveSecondCountdown() throws {
         let now = Date(timeIntervalSince1970: 2_000_000_000)
         let occurrence = makeCalendarMeetingTestOccurrence(start: now)
@@ -223,7 +412,7 @@ final class CalendarMeetingAutomationPolicyTests: XCTestCase {
         })
     }
 
-    func testAutoStopUsesThirtySecondLossAndFifteenSecondVeto() {
+    func testAutoStopRequiresStableSignalReturnBeforeDismissingWarning() {
         let now = Date(timeIntervalSince1970: 2_000_000_000)
         let occurrence = makeCalendarMeetingTestOccurrence(start: now)
         let handle = CalendarMeetingRecordingHandle(
@@ -245,21 +434,101 @@ final class CalendarMeetingAutomationPolicyTests: XCTestCase {
         ))
 
         _ = policy.reduce(.activity([signal(for: occurrence)], now: now))
-        _ = policy.reduce(.activity([], now: now))
-        XCTAssertTrue(policy.reduce(.timeAdvanced(now.addingTimeInterval(29))).isEmpty)
-        let grace = policy.reduce(.timeAdvanced(now.addingTimeInterval(30)))
-        XCTAssertEqual(grace, [.showStopCountdown(handle, deadline: now.addingTimeInterval(45))])
+        let warning = policy.reduce(.activity([], now: now))
+        XCTAssertEqual(warning, [.showStopCountdown(handle, deadline: now.addingTimeInterval(15))])
+        XCTAssertTrue(policy.reduce(.timeAdvanced(now.addingTimeInterval(14))).isEmpty)
 
-        let returned = policy.reduce(.activity([
+        let returnStarted = policy.reduce(.activity([
             signal(for: occurrence, input: false, output: true)
-        ], now: now.addingTimeInterval(35)))
-        XCTAssertEqual(returned, [.dismissStopCountdown])
+        ], now: now.addingTimeInterval(5)))
+        XCTAssertTrue(returnStarted.isEmpty)
+        XCTAssertTrue(policy.reduce(.timeAdvanced(now.addingTimeInterval(7.9))).isEmpty)
+        XCTAssertEqual(
+            policy.reduce(.timeAdvanced(now.addingTimeInterval(8))),
+            [.dismissStopCountdown]
+        )
 
-        _ = policy.reduce(.activity([], now: now.addingTimeInterval(36)))
-        _ = policy.reduce(.timeAdvanced(now.addingTimeInterval(66)))
-        let veto = policy.reduce(.userAction(.continueRecording(handle), now: now.addingTimeInterval(67)))
+        let repeatedWarning = policy.reduce(.activity([], now: now.addingTimeInterval(9)))
+        XCTAssertEqual(
+            repeatedWarning,
+            [.showStopCountdown(handle, deadline: now.addingTimeInterval(24))]
+        )
+        let veto = policy.reduce(.userAction(.continueRecording(handle), now: now.addingTimeInterval(10)))
         XCTAssertEqual(veto, [.dismissStopCountdown, .stopActivityCollector])
         XCTAssertTrue(policy.reduce(.timeAdvanced(now.addingTimeInterval(200))).isEmpty)
+    }
+
+    func testAutoStopIgnoresBriefSignalReturnWithoutRestartingCountdown() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let occurrence = makeCalendarMeetingTestOccurrence(start: now)
+        let handle = CalendarMeetingRecordingHandle(
+            id: UUID(),
+            outputURL: URL(fileURLWithPath: "/tmp/flapping-stop.wav")
+        )
+        var policy = CalendarMeetingAutomationPolicy()
+        _ = policy.reduce(.configure(
+            configuration(mode: .automatic, autoStop: true),
+            occurrences: [occurrence],
+            now: now
+        ))
+        _ = policy.reduce(.recordingStarted(
+            handle: handle,
+            occurrenceDigest: occurrence.id,
+            identity: identity,
+            autoStopArmed: true,
+            now: now
+        ))
+        _ = policy.reduce(.activity([signal(for: occurrence)], now: now))
+        XCTAssertEqual(
+            policy.reduce(.activity([], now: now)),
+            [.showStopCountdown(handle, deadline: now.addingTimeInterval(15))]
+        )
+
+        XCTAssertTrue(policy.reduce(.activity([
+            signal(for: occurrence, input: false, output: true)
+        ], now: now.addingTimeInterval(1))).isEmpty)
+        XCTAssertTrue(policy.reduce(.activity([], now: now.addingTimeInterval(2))).isEmpty)
+        XCTAssertTrue(policy.reduce(.timeAdvanced(now.addingTimeInterval(14.9))).isEmpty)
+        XCTAssertEqual(
+            policy.reduce(.timeAdvanced(now.addingTimeInterval(15))),
+            [.stopRecording(handle)]
+        )
+    }
+
+    func testAutoStopStopsAtImmediateWarningDeadlineWithoutVeto() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let occurrence = makeCalendarMeetingTestOccurrence(start: now)
+        let handle = CalendarMeetingRecordingHandle(
+            id: UUID(),
+            outputURL: URL(fileURLWithPath: "/tmp/immediate-stop.wav")
+        )
+        var policy = CalendarMeetingAutomationPolicy()
+        _ = policy.reduce(.configure(
+            configuration(mode: .automatic, autoStop: true),
+            occurrences: [occurrence],
+            now: now
+        ))
+        _ = policy.reduce(.recordingStarted(
+            handle: handle,
+            occurrenceDigest: occurrence.id,
+            identity: identity,
+            autoStopArmed: true,
+            now: now
+        ))
+        _ = policy.reduce(.activity([signal(for: occurrence)], now: now))
+
+        XCTAssertEqual(
+            policy.reduce(.activity([], now: now)),
+            [.showStopCountdown(handle, deadline: now.addingTimeInterval(15))]
+        )
+        XCTAssertTrue(policy.reduce(.timeAdvanced(now.addingTimeInterval(14.9))).isEmpty)
+        XCTAssertEqual(
+            policy.reduce(.timeAdvanced(now.addingTimeInterval(15))),
+            [.stopRecording(handle)]
+        )
+        XCTAssertFalse(
+            policy.reduce(.timeAdvanced(now.addingTimeInterval(30))).contains(.stopRecording(handle))
+        )
     }
 
     func testAutoStopWaitsUntilMeetingSignalWasObserved() {
@@ -372,13 +641,15 @@ final class CalendarMeetingAutomationPolicyTests: XCTestCase {
             now: now
         ))
         _ = policy.reduce(.activity([signal(for: occurrence)], now: now))
-        _ = policy.reduce(.activity([], now: now))
-        _ = policy.reduce(.timeAdvanced(now.addingTimeInterval(30)))
+        XCTAssertEqual(
+            policy.reduce(.activity([], now: now)),
+            [.showStopCountdown(handle, deadline: now.addingTimeInterval(15))]
+        )
 
         let effects = policy.reduce(.configure(
             configuration(mode: .off, autoStop: false, premium: false),
             occurrences: [],
-            now: now.addingTimeInterval(31)
+            now: now.addingTimeInterval(1)
         ))
         XCTAssertTrue(effects.contains(.dismissStopCountdown))
         XCTAssertFalse(effects.contains(.stopRecording(handle)))
@@ -419,9 +690,8 @@ final class CalendarMeetingAutomationPolicyTests: XCTestCase {
         ))
         XCTAssertFalse(reconfigured.contains(.stopActivityCollector))
 
-        _ = policy.reduce(.activity([], now: now))
-        XCTAssertTrue(policy.reduce(.timeAdvanced(now.addingTimeInterval(30))).contains(
-            .showStopCountdown(handle, deadline: now.addingTimeInterval(45))
+        XCTAssertTrue(policy.reduce(.activity([], now: now)).contains(
+            .showStopCountdown(handle, deadline: now.addingTimeInterval(15))
         ))
     }
 

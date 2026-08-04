@@ -73,11 +73,26 @@ struct CalendarMeetingSettingsSection: View {
                                 )
                             )
                             .toggleStyle(.switch)
+                            .disabled(!controller.canEnableAutoStop)
                             .accessibilityIdentifier("calendarMeeting.autoStop")
 
-                            Text(String(localized: "calendarMeeting.settings.autoStopHelp"))
+                            Text(controller.canEnableAutoStop
+                                ? String(localized: "calendarMeeting.settings.autoStopHelp")
+                                : String(localized: "calendarMeeting.settings.autoStopNotificationsRequired"))
                                 .font(.caption)
-                                .foregroundStyle(.secondary)
+                                .foregroundStyle(
+                                    controller.canEnableAutoStop ? Color.secondary : Color.orange
+                                )
+
+                            if !controller.canEnableAutoStop,
+                               controller.notificationAuthorization != .notDetermined {
+                                Button(String(localized: "calendarMeeting.settings.openNotificationSettings")) {
+                                    controller.openNotificationSettings()
+                                }
+                                .accessibilityIdentifier(
+                                    "calendarMeeting.autoStop.notificationSettings"
+                                )
+                            }
                         }
                     }
                 }
@@ -269,11 +284,11 @@ struct CalendarMeetingSettingsSection: View {
 
     private var notificationStatusText: String {
         switch controller.notificationAuthorization {
-        case .authorized, .provisional, .ephemeral:
+        case .authorized:
             String(localized: "calendarMeeting.permission.notificationsGranted")
         case .notDetermined:
             String(localized: "calendarMeeting.permission.notificationsNotDetermined")
-        case .denied, .unknown:
+        case .denied, .provisional, .ephemeral, .unknown:
             String(localized: "calendarMeeting.permission.notificationsDenied")
         }
     }

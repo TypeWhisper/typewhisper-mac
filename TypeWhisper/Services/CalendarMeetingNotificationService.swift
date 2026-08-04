@@ -9,44 +9,121 @@ enum CalendarMeetingNotificationAuthorization: String, Equatable, Sendable {
     case provisional
     case ephemeral
     case unknown
+
+    var permitsAutoStop: Bool {
+        self == .authorized
+    }
 }
 
 enum CalendarMeetingNotificationKind: String, Equatable, Sendable {
     case upcoming
     case detected
+    case autoStop
+}
+
+enum CalendarMeetingNotificationCategory: Equatable, Sendable {
+    case upcomingReminder
+    case upcomingAutomatic
+    case detected
+    case autoStop
+
+    var identifier: String {
+        switch self {
+        case .upcomingReminder:
+            CalendarMeetingNotificationService.upcomingReminderCategoryIdentifier
+        case .upcomingAutomatic:
+            CalendarMeetingNotificationService.upcomingAutomaticCategoryIdentifier
+        case .detected:
+            CalendarMeetingNotificationService.detectedCategoryIdentifier
+        case .autoStop:
+            CalendarMeetingNotificationService.autoStopCategoryIdentifier
+        }
+    }
 }
 
 struct CalendarMeetingNotificationRequest: Equatable, Sendable {
     let identifier: String
     let occurrenceDigest: String
     let kind: CalendarMeetingNotificationKind
+    let category: CalendarMeetingNotificationCategory
     let title: String
     let body: String
     let fireDate: Date
 }
 
 enum CalendarMeetingNotificationResponse: Equatable, Sendable {
-    case start(String)
+    case armStart(String)
     case suppress(String)
+    case continueRecording(String)
     case openPremiumSettings
 }
 
 enum CalendarMeetingNotificationResponseMapper {
+    static func actionOptions(for actionIdentifier: String) -> UNNotificationActionOptions {
+        switch actionIdentifier {
+        case CalendarMeetingNotificationService.suppressActionIdentifier:
+            [.destructive]
+        case CalendarMeetingNotificationService.startActionIdentifier,
+             CalendarMeetingNotificationService.armWhenJoinedActionIdentifier,
+             CalendarMeetingNotificationService.continueRecordingActionIdentifier:
+            // The action must wake the app without activating it. Foreground activation is
+            // interpreted as a normal app reopen and would open the Settings window.
+            []
+        default:
+            []
+        }
+    }
+
     static func response(
         actionIdentifier: String,
-        occurrenceDigest: String?
+        occurrenceDigest: String?,
+        kind: CalendarMeetingNotificationKind? = nil
     ) -> CalendarMeetingNotificationResponse? {
         switch actionIdentifier {
-        case CalendarMeetingNotificationService.startActionIdentifier:
-            occurrenceDigest.map(CalendarMeetingNotificationResponse.start)
-        case CalendarMeetingNotificationService.suppressActionIdentifier,
-             UNNotificationDismissActionIdentifier:
+        case CalendarMeetingNotificationService.startActionIdentifier,
+             CalendarMeetingNotificationService.armWhenJoinedActionIdentifier:
+            occurrenceDigest.map(CalendarMeetingNotificationResponse.armStart)
+        case CalendarMeetingNotificationService.suppressActionIdentifier:
             occurrenceDigest.map(CalendarMeetingNotificationResponse.suppress)
+        case CalendarMeetingNotificationService.continueRecordingActionIdentifier:
+            occurrenceDigest.map(CalendarMeetingNotificationResponse.continueRecording)
+        case UNNotificationDismissActionIdentifier:
+            kind == .autoStop
+                ? nil
+                : occurrenceDigest.map(CalendarMeetingNotificationResponse.suppress)
         case UNNotificationDefaultActionIdentifier:
-            .openPremiumSettings
+            if kind == .autoStop {
+                occurrenceDigest.map(CalendarMeetingNotificationResponse.continueRecording)
+            } else {
+                .openPremiumSettings
+            }
         default:
             nil
         }
+    }
+}
+
+enum CalendarMeetingNotificationPresentationPolicy {
+    static func foregroundOptions(
+        for kind: CalendarMeetingNotificationKind?
+    ) -> UNNotificationPresentationOptions {
+        kind == .autoStop ? [.banner, .list, .sound] : [.banner, .sound]
+    }
+
+    static func interruptionLevel(
+        for kind: CalendarMeetingNotificationKind
+    ) -> UNNotificationInterruptionLevel? {
+        kind == .autoStop ? .timeSensitive : nil
+    }
+
+    static func userInfo(
+        occurrenceDigest: String,
+        kind: CalendarMeetingNotificationKind
+    ) -> [AnyHashable: Any] {
+        [
+            CalendarMeetingNotificationService.digestUserInfoKey: occurrenceDigest,
+            CalendarMeetingNotificationService.kindUserInfoKey: kind.rawValue
+        ]
     }
 }
 
@@ -61,6 +138,7 @@ protocol CalendarMeetingNotificationClient: AnyObject {
     func pendingRequestIdentifiers() async -> [String]
     func add(_ request: CalendarMeetingNotificationRequest) async throws
     func removePendingRequests(withIdentifiers identifiers: [String])
+    func removeDeliveredNotifications(withIdentifiers identifiers: [String])
 }
 
 private final class CalendarMeetingNotificationDelegateBridge:
@@ -79,7 +157,12 @@ private final class CalendarMeetingNotificationDelegateBridge:
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        completionHandler([.banner, .sound])
+        let kind = (notification.request.content.userInfo[
+            CalendarMeetingNotificationService.kindUserInfoKey
+        ] as? String).flatMap(CalendarMeetingNotificationKind.init(rawValue:))
+        completionHandler(
+            CalendarMeetingNotificationPresentationPolicy.foregroundOptions(for: kind)
+        )
     }
 
     nonisolated func userNotificationCenter(
@@ -89,9 +172,12 @@ private final class CalendarMeetingNotificationDelegateBridge:
     ) {
         let userInfo = response.notification.request.content.userInfo
         let digest = userInfo[CalendarMeetingNotificationService.digestUserInfoKey] as? String
+        let kind = (userInfo[CalendarMeetingNotificationService.kindUserInfoKey] as? String)
+            .flatMap(CalendarMeetingNotificationKind.init(rawValue:))
         let action = CalendarMeetingNotificationResponseMapper.response(
             actionIdentifier: response.actionIdentifier,
-            occurrenceDigest: digest
+            occurrenceDigest: digest,
+            kind: kind
         )
 
         if let action {
@@ -123,30 +209,71 @@ private final class UserNotificationCenterClient: CalendarMeetingNotificationCli
     }
 
     func registerCategories() {
-        let start = UNNotificationAction(
+        let legacyStart = UNNotificationAction(
             identifier: CalendarMeetingNotificationService.startActionIdentifier,
             title: String(localized: "calendarMeeting.notification.startAction"),
-            options: [.foreground]
+            options: CalendarMeetingNotificationResponseMapper.actionOptions(
+                for: CalendarMeetingNotificationService.startActionIdentifier
+            )
+        )
+        let armWhenJoined = UNNotificationAction(
+            identifier: CalendarMeetingNotificationService.armWhenJoinedActionIdentifier,
+            title: String(localized: "calendarMeeting.notification.armWhenJoinedAction"),
+            options: CalendarMeetingNotificationResponseMapper.actionOptions(
+                for: CalendarMeetingNotificationService.armWhenJoinedActionIdentifier
+            )
         )
         let suppress = UNNotificationAction(
             identifier: CalendarMeetingNotificationService.suppressActionIdentifier,
             title: String(localized: "calendarMeeting.notification.suppressAction"),
-            options: [.destructive]
+            options: CalendarMeetingNotificationResponseMapper.actionOptions(
+                for: CalendarMeetingNotificationService.suppressActionIdentifier
+            )
         )
-        let actions = [start, suppress]
-        let upcoming = UNNotificationCategory(
+        let continueRecording = UNNotificationAction(
+            identifier: CalendarMeetingNotificationService.continueRecordingActionIdentifier,
+            title: String(localized: "calendarMeeting.notification.continueAction"),
+            options: CalendarMeetingNotificationResponseMapper.actionOptions(
+                for: CalendarMeetingNotificationService.continueRecordingActionIdentifier
+            )
+        )
+        let legacyUpcoming = UNNotificationCategory(
             identifier: CalendarMeetingNotificationService.upcomingCategoryIdentifier,
-            actions: actions,
+            actions: [legacyStart, suppress],
+            intentIdentifiers: [],
+            options: [.customDismissAction]
+        )
+        let upcomingReminder = UNNotificationCategory(
+            identifier: CalendarMeetingNotificationService.upcomingReminderCategoryIdentifier,
+            actions: [armWhenJoined, suppress],
+            intentIdentifiers: [],
+            options: [.customDismissAction]
+        )
+        let upcomingAutomatic = UNNotificationCategory(
+            identifier: CalendarMeetingNotificationService.upcomingAutomaticCategoryIdentifier,
+            actions: [suppress],
             intentIdentifiers: [],
             options: [.customDismissAction]
         )
         let detected = UNNotificationCategory(
             identifier: CalendarMeetingNotificationService.detectedCategoryIdentifier,
-            actions: actions,
+            actions: [legacyStart, suppress],
             intentIdentifiers: [],
             options: [.customDismissAction]
         )
-        center.setNotificationCategories([upcoming, detected])
+        let autoStop = UNNotificationCategory(
+            identifier: CalendarMeetingNotificationService.autoStopCategoryIdentifier,
+            actions: [continueRecording],
+            intentIdentifiers: [],
+            options: [.customDismissAction]
+        )
+        center.setNotificationCategories([
+            legacyUpcoming,
+            upcomingReminder,
+            upcomingAutomatic,
+            detected,
+            autoStop,
+        ])
     }
 
     func authorizationStatus() async -> CalendarMeetingNotificationAuthorization {
@@ -154,7 +281,8 @@ private final class UserNotificationCenterClient: CalendarMeetingNotificationCli
         return switch settings.authorizationStatus {
         case .notDetermined: .notDetermined
         case .denied: .denied
-        case .authorized: .authorized
+        case .authorized:
+            settings.alertSetting == .enabled ? .authorized : .denied
         case .provisional: .provisional
         case .ephemeral: .ephemeral
         @unknown default: .unknown
@@ -174,14 +302,16 @@ private final class UserNotificationCenterClient: CalendarMeetingNotificationCli
         content.title = request.title
         content.body = request.body
         content.sound = .default
-        content.categoryIdentifier = request.kind == .upcoming
-            ? CalendarMeetingNotificationService.upcomingCategoryIdentifier
-            : CalendarMeetingNotificationService.detectedCategoryIdentifier
-        content.userInfo = [
-            CalendarMeetingNotificationService.digestUserInfoKey: request.occurrenceDigest,
-            CalendarMeetingNotificationService.kindUserInfoKey: request.kind.rawValue
-        ]
-        let trigger: UNNotificationTrigger
+        if let interruptionLevel = CalendarMeetingNotificationPresentationPolicy
+            .interruptionLevel(for: request.kind) {
+            content.interruptionLevel = interruptionLevel
+        }
+        content.categoryIdentifier = request.category.identifier
+        content.userInfo = CalendarMeetingNotificationPresentationPolicy.userInfo(
+            occurrenceDigest: request.occurrenceDigest,
+            kind: request.kind
+        )
+        let trigger: UNNotificationTrigger?
         switch request.kind {
         case .upcoming:
             let components = Calendar.current.dateComponents(
@@ -191,6 +321,8 @@ private final class UserNotificationCenterClient: CalendarMeetingNotificationCli
             trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
         case .detected:
             trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
+        case .autoStop:
+            trigger = nil
         }
         try await center.add(UNNotificationRequest(
             identifier: request.identifier,
@@ -201,6 +333,10 @@ private final class UserNotificationCenterClient: CalendarMeetingNotificationCli
 
     func removePendingRequests(withIdentifiers identifiers: [String]) {
         center.removePendingNotificationRequests(withIdentifiers: identifiers)
+    }
+
+    func removeDeliveredNotifications(withIdentifiers identifiers: [String]) {
+        center.removeDeliveredNotifications(withIdentifiers: identifiers)
     }
 }
 
@@ -214,22 +350,39 @@ protocol CalendarMeetingNotifying: AnyObject {
     func refreshAuthorizationStatus() async
     func replaceScheduledReminders(
         _ occurrences: [CalendarMeetingOccurrence],
+        startMode: CalendarMeetingStartMode,
         now: Date
     ) async
     func publishDetectedMeeting(
         _ occurrence: CalendarMeetingOccurrence,
         now: Date
     ) async
+    func publishAutoStopWarning(
+        occurrenceDigest: String,
+        now: Date
+    ) async -> Bool
+    func removeAutoStopWarning(occurrenceDigest: String)
     func removeScheduledMeetingRequests() async
 }
 
 @MainActor
 final class CalendarMeetingNotificationService: ObservableObject, CalendarMeetingNotifying {
     nonisolated static let requestIdentifierPrefix = "com.typewhisper.calendar-meeting."
+    // Kept registered so notifications scheduled by earlier builds remain actionable. Its
+    // former direct-start action now maps to the same in-memory arm behavior as new requests.
     nonisolated static let upcomingCategoryIdentifier = "TYPEWHISPER_CALENDAR_MEETING_UPCOMING"
+    nonisolated static let upcomingReminderCategoryIdentifier =
+        "TYPEWHISPER_CALENDAR_MEETING_UPCOMING_REMINDER"
+    nonisolated static let upcomingAutomaticCategoryIdentifier =
+        "TYPEWHISPER_CALENDAR_MEETING_UPCOMING_AUTOMATIC"
     nonisolated static let detectedCategoryIdentifier = "TYPEWHISPER_CALENDAR_MEETING_DETECTED"
+    nonisolated static let autoStopCategoryIdentifier = "TYPEWHISPER_CALENDAR_MEETING_AUTO_STOP"
     nonisolated static let startActionIdentifier = "TYPEWHISPER_CALENDAR_MEETING_START"
+    nonisolated static let armWhenJoinedActionIdentifier =
+        "TYPEWHISPER_CALENDAR_MEETING_ARM_WHEN_JOINED"
     nonisolated static let suppressActionIdentifier = "TYPEWHISPER_CALENDAR_MEETING_SUPPRESS"
+    nonisolated static let continueRecordingActionIdentifier =
+        "TYPEWHISPER_CALENDAR_MEETING_CONTINUE_RECORDING"
     nonisolated static let digestUserInfoKey = "occurrenceDigest"
     nonisolated static let kindUserInfoKey = "actionType"
 
@@ -286,9 +439,11 @@ final class CalendarMeetingNotificationService: ObservableObject, CalendarMeetin
 
     func replaceScheduledReminders(
         _ occurrences: [CalendarMeetingOccurrence],
+        startMode: CalendarMeetingStartMode = .reminder,
         now: Date = Date()
     ) async {
         await removeScheduledMeetingRequests()
+        guard startMode != .off else { return }
         let upperBound = now.addingTimeInterval(7 * 24 * 60 * 60)
         let candidates = occurrences
             .map { ($0, $0.startDate.addingTimeInterval(-5 * 60)) }
@@ -299,6 +454,25 @@ final class CalendarMeetingNotificationService: ObservableObject, CalendarMeetin
         for (occurrence, fireDate) in candidates {
             guard !Task.isCancelled else { return }
             let title = occurrence.title.trimmingCharacters(in: .whitespacesAndNewlines)
+            let category: CalendarMeetingNotificationCategory
+            let notificationTitle: String
+            let body: String
+            switch startMode {
+            case .off:
+                continue
+            case .reminder:
+                category = .upcomingReminder
+                notificationTitle = String(localized: "calendarMeeting.notification.upcomingTitle")
+                body = title.isEmpty
+                    ? String(localized: "calendarMeeting.notification.untitledBody")
+                    : title
+            case .automatic:
+                category = .upcomingAutomatic
+                notificationTitle = title.isEmpty
+                    ? String(localized: "calendarMeeting.notification.upcomingTitle")
+                    : title
+                body = String(localized: "calendarMeeting.notification.upcomingAutomaticBody")
+            }
             let request = CalendarMeetingNotificationRequest(
                 identifier: Self.requestIdentifier(
                     digest: occurrence.occurrenceDigest,
@@ -306,10 +480,9 @@ final class CalendarMeetingNotificationService: ObservableObject, CalendarMeetin
                 ),
                 occurrenceDigest: occurrence.occurrenceDigest,
                 kind: .upcoming,
-                title: String(localized: "calendarMeeting.notification.upcomingTitle"),
-                body: title.isEmpty
-                    ? String(localized: "calendarMeeting.notification.untitledBody")
-                    : title,
+                category: category,
+                title: notificationTitle,
+                body: body,
                 fireDate: fireDate
             )
             try? await client.add(request)
@@ -331,6 +504,7 @@ final class CalendarMeetingNotificationService: ObservableObject, CalendarMeetin
             ),
             occurrenceDigest: occurrence.occurrenceDigest,
             kind: .detected,
+            category: .detected,
             title: String(localized: "calendarMeeting.notification.detectedTitle"),
             body: title.isEmpty
                 ? String(localized: "calendarMeeting.notification.untitledBody")
@@ -340,9 +514,44 @@ final class CalendarMeetingNotificationService: ObservableObject, CalendarMeetin
         try? await client.add(request)
     }
 
+    func publishAutoStopWarning(
+        occurrenceDigest: String,
+        now: Date = Date()
+    ) async -> Bool {
+        authorization = await client.authorizationStatus()
+        guard authorization.permitsAutoStop else { return false }
+        removeAutoStopWarning(occurrenceDigest: occurrenceDigest)
+        let request = CalendarMeetingNotificationRequest(
+            identifier: Self.requestIdentifier(
+                digest: occurrenceDigest,
+                kind: .autoStop
+            ),
+            occurrenceDigest: occurrenceDigest,
+            kind: .autoStop,
+            category: .autoStop,
+            title: String(localized: "calendarMeeting.notification.autoStopTitle"),
+            body: String(localized: "calendarMeeting.notification.autoStopBody"),
+            fireDate: now
+        )
+        do {
+            try await client.add(request)
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    func removeAutoStopWarning(occurrenceDigest: String) {
+        let identifiers = [Self.requestIdentifier(digest: occurrenceDigest, kind: .autoStop)]
+        client.removePendingRequests(withIdentifiers: identifiers)
+        client.removeDeliveredNotifications(withIdentifiers: identifiers)
+    }
+
     func removeScheduledMeetingRequests() async {
         let identifiers = await client.pendingRequestIdentifiers().filter {
             $0.hasPrefix(Self.requestIdentifierPrefix)
+                && ($0.hasSuffix(".\(CalendarMeetingNotificationKind.upcoming.rawValue)")
+                    || $0.hasSuffix(".\(CalendarMeetingNotificationKind.detected.rawValue)"))
         }
         guard !identifiers.isEmpty else { return }
         client.removePendingRequests(withIdentifiers: identifiers)

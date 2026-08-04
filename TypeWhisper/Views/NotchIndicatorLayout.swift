@@ -18,6 +18,7 @@ enum IndicatorFeedbackPanelLayout {
     static func panelSize(
         for style: IndicatorStyle,
         isFeedbackInteractive: Bool,
+        countdownKind: CalendarMeetingCountdownKind? = nil,
         notchClosedWidth: CGFloat = 0,
         notchClosedHeight: CGFloat = NotchIndicatorLayout.notchedClosedHeight
     ) -> CGSize {
@@ -39,6 +40,9 @@ enum IndicatorFeedbackPanelLayout {
                 height: notchClosedHeight + feedbackBodyHeight
             )
         case .overlay:
+            if countdownKind?.isStart == true {
+                return CGSize(width: feedbackWidth, height: feedbackBodyHeight)
+            }
             return CGSize(
                 width: feedbackWidth,
                 height: overlayStatusHeight + feedbackBodyHeight

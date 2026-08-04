@@ -9,6 +9,28 @@ protocol MeetingAudioProcessClient: Sendable {
     func stop()
 }
 
+enum NativeMeetingAudioProcessRegistry {
+    nonisolated static func provider(for bundleIdentifier: String) -> MeetingProvider? {
+        switch bundleIdentifier {
+        case "us.zoom.xos":
+            .zoom
+        case "com.microsoft.teams2", "com.microsoft.teams":
+            .teams
+        case "com.apple.FaceTime",
+             "com.apple.FaceTime.FTConversationService",
+             "com.apple.avconferenced",
+             "com.apple.TelephonyUtilities":
+            // Recent macOS versions attribute FaceTime audio I/O to these Apple services
+            // instead of the FaceTime application process itself. TelephonyUtilities is
+            // treated only as a FaceTime signal by the controller when a matching FaceTime
+            // calendar occurrence is already inside its join window.
+            .faceTime
+        default:
+            nil
+        }
+    }
+}
+
 private final class CoreAudioChangeCallbackBridge: @unchecked Sendable {
     private let handler = OSAllocatedUnfairLock<(@Sendable (Bool) -> Void)?>(initialState: nil)
 
@@ -47,7 +69,7 @@ private struct CoreAudioProcessClientState {
     var started = false
 }
 
-private final class CoreAudioMeetingProcessClient: MeetingAudioProcessClient, @unchecked Sendable {
+final class CoreAudioMeetingProcessClient: MeetingAudioProcessClient, @unchecked Sendable {
     private let systemObjectID = AudioObjectID(kAudioObjectSystemObject)
     private let callbackQueue = DispatchQueue(
         label: "com.typewhisper.calendar-meeting-audio",
@@ -70,25 +92,29 @@ private final class CoreAudioMeetingProcessClient: MeetingAudioProcessClient, @u
         stop()
         callbackBridge.setHandler(changeHandler)
 
-        let addresses = [
-            propertyAddress(kAudioHardwarePropertyProcessObjectList),
-            propertyAddress(kAudioHardwarePropertyServiceRestarted)
-        ]
-        guard addresses.allSatisfy({ hasProperty(objectID: systemObjectID, address: $0) }) else {
+        let processListAddress = propertyAddress(kAudioHardwarePropertyProcessObjectList)
+        guard hasProperty(objectID: systemObjectID, address: processListAddress),
+              let processListRegistration = addListener(
+                  objectID: systemObjectID,
+                  address: processListAddress
+              ) else {
             callbackBridge.setHandler(nil)
             return false
         }
 
-        let registrations = addresses.compactMap { address in
-            addListener(objectID: systemObjectID, address: address)
+        var registrations = [processListRegistration]
+        let serviceRestartedAddress = propertyAddress(kAudioHardwarePropertyServiceRestarted)
+        // This resilience hook is not advertised on every supported macOS version.
+        if hasProperty(objectID: systemObjectID, address: serviceRestartedAddress),
+           let serviceRestartedRegistration = addListener(
+               objectID: systemObjectID,
+               address: serviceRestartedAddress
+           ) {
+            registrations.append(serviceRestartedRegistration)
         }
-        guard registrations.count == addresses.count else {
-            registrations.forEach(removeListener)
-            callbackBridge.setHandler(nil)
-            return false
-        }
+        let installedRegistrations = registrations
         state.withLock {
-            $0.systemRegistrations = registrations
+            $0.systemRegistrations = installedRegistrations
             $0.started = true
         }
         return true
@@ -322,12 +348,8 @@ private final class CoreAudioMeetingProcessClient: MeetingAudioProcessClient, @u
     }
 
     nonisolated private static func isRelevantProcess(_ bundleIdentifier: String) -> Bool {
-        switch bundleIdentifier {
-        case "us.zoom.xos", "com.microsoft.teams2", "com.microsoft.teams", "com.apple.FaceTime":
-            true
-        default:
-            SupportedMeetingBrowser.supportsAutomaticURLResolution(bundleIdentifier)
-        }
+        NativeMeetingAudioProcessRegistry.provider(for: bundleIdentifier) != nil
+            || SupportedMeetingBrowser.supportsAutomaticURLResolution(bundleIdentifier)
     }
 }
 
@@ -365,18 +387,27 @@ private func makeMeetingAudioCollectorChangeHandler(
 
 actor MeetingAudioActivityCollector: MeetingAudioActivityCollecting {
     private let client: any MeetingAudioProcessClient
+    private let reconciliationInterval: Duration?
     private var continuation: AsyncStream<MeetingActivitySnapshot>.Continuation?
+    private var reconciliationTask: Task<Void, Never>?
+    private var lastPublishedSnapshot: MeetingActivitySnapshot?
     private var isCollecting = false
 
     init() {
         client = CoreAudioMeetingProcessClient()
+        reconciliationInterval = .seconds(1)
     }
 
-    init(client: any MeetingAudioProcessClient) {
+    init(
+        client: any MeetingAudioProcessClient,
+        reconciliationInterval: Duration? = .seconds(1)
+    ) {
         self.client = client
+        self.reconciliationInterval = reconciliationInterval
     }
 
     deinit {
+        reconciliationTask?.cancel()
         client.stop()
     }
 
@@ -395,16 +426,20 @@ actor MeetingAudioActivityCollector: MeetingAudioActivityCollecting {
             return pair.stream
         }
         isCollecting = true
-        pair.continuation.yield(client.snapshot(at: Date()))
+        publishCurrentSnapshot(force: true)
+        startPeriodicReconciliation()
         return pair.stream
     }
 
     func stopCollecting() {
+        reconciliationTask?.cancel()
+        reconciliationTask = nil
         guard isCollecting || continuation != nil else { return }
         isCollecting = false
         client.stop()
         continuation?.finish()
         continuation = nil
+        lastPublishedSnapshot = nil
     }
 
     fileprivate func audioPropertiesDidChange(requiresRebuild: Bool) {
@@ -417,6 +452,38 @@ actor MeetingAudioActivityCollector: MeetingAudioActivityCollecting {
                 return
             }
         }
-        continuation?.yield(client.snapshot(at: Date()))
+        // A CoreAudio callback represents a real property event even when the
+        // resulting values happen to compare equal. Preserve that event-driven
+        // behavior; only the periodic reconciliation path suppresses duplicates.
+        publishCurrentSnapshot(force: true)
+    }
+
+    private func startPeriodicReconciliation() {
+        reconciliationTask?.cancel()
+        guard let reconciliationInterval else { return }
+        reconciliationTask = Task { [weak self] in
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(for: reconciliationInterval)
+                } catch {
+                    return
+                }
+                guard !Task.isCancelled, let self else { return }
+                await self.publishCurrentSnapshot()
+            }
+        }
+    }
+
+    private func publishCurrentSnapshot(force: Bool = false) {
+        guard isCollecting else { return }
+        let snapshot = client.snapshot(at: Date())
+        if !force,
+           let lastPublishedSnapshot,
+           lastPublishedSnapshot.availability == snapshot.availability,
+           lastPublishedSnapshot.processes == snapshot.processes {
+            return
+        }
+        lastPublishedSnapshot = snapshot
+        continuation?.yield(snapshot)
     }
 }

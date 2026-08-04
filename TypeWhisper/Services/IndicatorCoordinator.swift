@@ -289,10 +289,19 @@ final class IndicatorCoordinator {
     private var deferredRefreshTask: Task<Void, Never>?
     private var isObserving = false
 
-    init() {
-        notchPanel = NotchIndicatorPanel(screenResolver: screenResolver)
-        overlayPanel = OverlayIndicatorPanel(screenResolver: screenResolver)
-        minimalPanel = MinimalIndicatorPanel(screenResolver: screenResolver)
+    init(countdownModel: CalendarMeetingCountdownModel) {
+        notchPanel = NotchIndicatorPanel(
+            screenResolver: screenResolver,
+            countdownModel: countdownModel
+        )
+        overlayPanel = OverlayIndicatorPanel(
+            screenResolver: screenResolver,
+            countdownModel: countdownModel
+        )
+        minimalPanel = MinimalIndicatorPanel(
+            screenResolver: screenResolver,
+            countdownModel: countdownModel
+        )
     }
 
     func startObserving() {

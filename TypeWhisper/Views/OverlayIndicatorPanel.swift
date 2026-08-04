@@ -12,11 +12,24 @@ class OverlayIndicatorPanel: NSPanel {
     private let displayModeProvider: () -> NotchIndicatorDisplay
     private let overlayPositionProvider: () -> OverlayPosition
     private let indicatorVisibleInScreenCapturesProvider: () -> Bool
+    private let countdownModel: CalendarMeetingCountdownModel
     private var cancellables = Set<AnyCancellable>()
     private var cachedScreen: NSScreen?
-    private var isFeedbackInteractive = false
+    private var isActionFeedbackInteractive = false
+    private var meetingCountdownKind: CalendarMeetingCountdownKind?
 
-    convenience init(screenResolver: IndicatorScreenResolver) {
+    private var isMeetingCountdownPresented: Bool {
+        meetingCountdownKind != nil
+    }
+
+    private var isFeedbackInteractive: Bool {
+        isActionFeedbackInteractive || isMeetingCountdownPresented
+    }
+
+    convenience init(
+        screenResolver: IndicatorScreenResolver,
+        countdownModel: CalendarMeetingCountdownModel
+    ) {
         self.init(
             screenResolver: screenResolver,
             displayModeProvider: { DictationViewModel.shared.notchIndicatorDisplay },
@@ -24,7 +37,10 @@ class OverlayIndicatorPanel: NSPanel {
             indicatorVisibleInScreenCapturesProvider: {
                 DictationViewModel.shared.indicatorVisibleInScreenCaptures
             },
-            content: { OverlayIndicatorView() }
+            countdownModel: countdownModel,
+            content: {
+                OverlayIndicatorView(countdownModel: countdownModel)
+            }
         )
     }
 
@@ -33,12 +49,14 @@ class OverlayIndicatorPanel: NSPanel {
         displayModeProvider: @escaping () -> NotchIndicatorDisplay,
         overlayPositionProvider: @escaping () -> OverlayPosition,
         indicatorVisibleInScreenCapturesProvider: @escaping () -> Bool = { true },
+        countdownModel: CalendarMeetingCountdownModel = .init(),
         @ViewBuilder content: () -> Content
     ) {
         self.screenResolver = screenResolver
         self.displayModeProvider = displayModeProvider
         self.overlayPositionProvider = overlayPositionProvider
         self.indicatorVisibleInScreenCapturesProvider = indicatorVisibleInScreenCapturesProvider
+        self.countdownModel = countdownModel
         let initialSize = IndicatorFeedbackPanelLayout.panelSize(
             for: .overlay,
             isFeedbackInteractive: false
@@ -137,6 +155,18 @@ class OverlayIndicatorPanel: NSPanel {
                 )
             }
             .store(in: &cancellables)
+
+        countdownModel.$presentation
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] presentation in
+                self?.updateMeetingCountdownPresentation(
+                    kind: presentation?.kind,
+                    vm: vm,
+                    recorder: recorder
+                )
+            }
+            .store(in: &cancellables)
     }
 
     func updateVisibility(
@@ -152,9 +182,13 @@ class OverlayIndicatorPanel: NSPanel {
             dictationState: vm.state,
             recorderState: recorder.state
         )
-        if IndicatorPresentationState.shouldShow(
+        let normallyVisible = IndicatorPresentationState.shouldShow(
             visibility: vm.notchIndicatorVisibility,
             presentation: presentation
+        )
+        if CalendarMeetingCountdownIndicatorPolicy.shouldShow(
+            normalVisibilityAllowsPresentation: normallyVisible,
+            countdownPresented: isMeetingCountdownPresented
         ) {
             show()
         } else {
@@ -173,7 +207,13 @@ class OverlayIndicatorPanel: NSPanel {
 
         let overlayPosition = overlayPositionProvider()
         let placement: IndicatorPlacement = overlayPosition == .top ? .notchStrip : .nonNotchArea
-        if IndicatorFullscreenSuppressionPolicy.shouldSuppressIndicator(on: screen, placement: placement) {
+        if CalendarMeetingCountdownIndicatorPolicy.shouldSuppressForFullscreen(
+            normallySuppressed: IndicatorFullscreenSuppressionPolicy.shouldSuppressIndicator(
+                on: screen,
+                placement: placement
+            ),
+            countdownPresented: isMeetingCountdownPresented
+        ) {
             suppressForForeignFullscreen()
             return
         }
@@ -181,7 +221,8 @@ class OverlayIndicatorPanel: NSPanel {
         let screenFrame = screen.visibleFrame
         let panelSize = IndicatorFeedbackPanelLayout.panelSize(
             for: .overlay,
-            isFeedbackInteractive: isFeedbackInteractive
+            isFeedbackInteractive: isFeedbackInteractive,
+            countdownKind: meetingCountdownKind
         )
         let panelFrame = IndicatorFeedbackPanelLayout.panelFrame(
             for: .overlay,
@@ -218,14 +259,24 @@ class OverlayIndicatorPanel: NSPanel {
     }
 
     func updateFeedbackInteraction(isInteractive: Bool) {
-        if !isInteractive {
+        if !isInteractive && !isMeetingCountdownPresented {
             ignoresMouseEvents = true
         }
-        guard isFeedbackInteractive != isInteractive else { return }
-        isFeedbackInteractive = isInteractive
+        guard isActionFeedbackInteractive != isInteractive else { return }
+        isActionFeedbackInteractive = isInteractive
         if isVisible {
             show()
         }
+    }
+
+    private func updateMeetingCountdownPresentation(
+        kind: CalendarMeetingCountdownKind?,
+        vm: DictationViewModel,
+        recorder: AudioRecorderViewModel
+    ) {
+        guard meetingCountdownKind != kind else { return }
+        meetingCountdownKind = kind
+        updateVisibility(vm: vm, recorder: recorder)
     }
 
     func dismiss() {

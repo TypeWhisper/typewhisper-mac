@@ -132,7 +132,7 @@ final class PremiumSettingsViewTests: XCTestCase {
         }
     }
 
-    func testPremiumHubAndDetailKeysAreLocalizedInEnglishGermanAndJapanese() throws {
+    func testPremiumHubAndDetailKeysAreLocalizedInAllSupportedLanguages() throws {
         let root = repositoryRoot
         let data = try Data(contentsOf: root.appendingPathComponent(
             "TypeWhisper/Resources/Localizable.xcstrings"
@@ -154,11 +154,17 @@ final class PremiumSettingsViewTests: XCTestCase {
             "calendarMeeting.settings.howItWorks",
             "calendarMeeting.settings.autoStop",
             "calendarMeeting.settings.autoStopHelp",
+            "calendarMeeting.settings.autoStopNotificationsRequired",
+            "calendarMeeting.settings.notificationHelp",
             "calendarMeeting.settings.privacy",
             "calendarMeeting.mode.reminder",
             "calendarMeeting.mode.automatic",
             "calendarMeeting.countdown.cancel",
-            "calendarMeeting.countdown.continue",
+            "calendarMeeting.notification.armWhenJoinedAction",
+            "calendarMeeting.notification.upcomingAutomaticBody",
+            "calendarMeeting.notification.autoStopTitle",
+            "calendarMeeting.notification.autoStopBody",
+            "calendarMeeting.notification.continueAction",
         ]
         let premiumKeys = strings.keys.filter {
             $0.hasPrefix("premium.hub.")
@@ -170,7 +176,7 @@ final class PremiumSettingsViewTests: XCTestCase {
         for key in Set(calendarKeys + premiumKeys).sorted() {
             let entry = try XCTUnwrap(strings[key] as? [String: Any], "Missing \(key)")
             let localizations = try XCTUnwrap(entry["localizations"] as? [String: Any])
-            for locale in ["en", "de", "ja"] {
+            for locale in ["en", "de", "ja", "zh-Hans"] {
                 let localization = try XCTUnwrap(
                     localizations[locale] as? [String: Any],
                     "Missing \(locale) for \(key)"

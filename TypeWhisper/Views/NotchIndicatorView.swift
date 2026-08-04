@@ -8,6 +8,7 @@ import SwiftUI
 struct NotchIndicatorView: View {
     @ObservedObject private var viewModel = DictationViewModel.shared
     @ObservedObject private var recorder = AudioRecorderViewModel.shared
+    @ObservedObject private var countdownModel: CalendarMeetingCountdownModel
     @ObservedObject var geometry: NotchGeometry
     @State private var textExpanded = false
     @State private var dotPulse = false
@@ -17,8 +18,20 @@ struct NotchIndicatorView: View {
     private let processingBodyHeight: CGFloat = 28
     private let feedbackBodyHeight = IndicatorFeedbackPanelLayout.feedbackBodyHeight
 
+    init(
+        geometry: NotchGeometry,
+        countdownModel: CalendarMeetingCountdownModel
+    ) {
+        self.geometry = geometry
+        _countdownModel = ObservedObject(wrappedValue: countdownModel)
+    }
+
     private var presentation: IndicatorPresentationData {
         IndicatorPresentationData.make(dictation: viewModel, recorder: recorder)
+    }
+
+    private var countdownPresentation: CalendarMeetingCountdownPresentation? {
+        countdownModel.presentation
     }
 
     private var closedWidth: CGFloat {
@@ -88,6 +101,7 @@ struct NotchIndicatorView: View {
     }
 
     private var expansionMode: NotchExpansionMode {
+        if countdownPresentation != nil { return .feedback }
         if hasCancelWarning { return .feedback }
         if transcriptBodyVisible { return .transcript }
         if hasActionFeedback { return .feedback }
@@ -119,6 +133,9 @@ struct NotchIndicatorView: View {
     }
 
     private var expandedBodyHeight: CGFloat {
+        if countdownPresentation != nil {
+            return feedbackBodyHeight
+        }
         if hasCancelWarning {
             return feedbackBodyHeight
         }
@@ -207,11 +224,25 @@ struct NotchIndicatorView: View {
             }
         }
         .animation(.easeInOut(duration: 1.0), value: dotPulse)
-        .accessibilityElement(children: presentation.actionFeedbackUndoTitle == nil ? .combine : .contain)
+        .accessibilityElement(
+            children: countdownPresentation != nil
+                || presentation.actionFeedbackUndoTitle != nil ? .contain : .combine
+        )
         .accessibilityLabel(notchAccessibilityLabel)
     }
 
     private var notchAccessibilityLabel: String {
+        if let countdownPresentation {
+            switch countdownPresentation.kind {
+            case .start(let title):
+                let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed.isEmpty
+                    ? String(localized: "calendarMeeting.countdown.untitled")
+                    : trimmed
+            case .autoStop:
+                return String(localized: "calendarMeeting.notification.autoStopTitle")
+            }
+        }
         switch presentation.state {
         case .idle, .promptSelection, .promptProcessing:
             return String(localized: "Idle")
@@ -254,7 +285,13 @@ struct NotchIndicatorView: View {
 
     @ViewBuilder
     private var expandedBodyContent: some View {
-        if hasCancelWarning {
+        if let countdownPresentation {
+            MeetingAutomationCountdownIndicator(
+                model: countdownModel,
+                presentation: countdownPresentation,
+                contentPadding: contentPadding
+            )
+        } else if hasCancelWarning {
             IndicatorActionFeedback(
                 message: presentation.cancelWarningMessage ?? "",
                 icon: "exclamationmark.triangle.fill",

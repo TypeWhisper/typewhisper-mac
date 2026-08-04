@@ -17,11 +17,29 @@ final class CalendarMeetingAutomationController: ObservableObject {
             && SupportedMeetingBrowser.supportsAutomaticURLResolution(process.bundleIdentifier)
     }
 
+    nonisolated static func canUseAutoStopNotifications(
+        authorization: CalendarMeetingNotificationAuthorization
+    ) -> Bool {
+        authorization.permitsAutoStop
+    }
+
+    nonisolated static func automationUserAction(
+        for response: CalendarMeetingNotificationResponse
+    ) -> CalendarMeetingAutomationUserAction? {
+        switch response {
+        case .armStart(let digest):
+            .armOccurrence(digest)
+        case .suppress(let digest):
+            .suppressOccurrence(digest)
+        case .continueRecording, .openPremiumSettings:
+            nil
+        }
+    }
+
     typealias EventProviderFactory = @MainActor () -> any CalendarMeetingEventProviding
     typealias AudioCollectorFactory = @MainActor () -> any MeetingAudioActivityCollecting
     typealias BrowserResolverFactory = @MainActor () -> any BrowserURLResolving
     typealias NotificationServiceFactory = @MainActor () -> any CalendarMeetingNotifying
-    typealias CountdownPresenterFactory = @MainActor () -> any MeetingAutomationCountdownPresenting
 
     @Published private(set) var hasPremiumAccess: Bool
     @Published private(set) var startMode: CalendarMeetingStartMode
@@ -34,6 +52,10 @@ final class CalendarMeetingAutomationController: ObservableObject {
     @Published private(set) var isAutomationActive = false
     @Published var permissionExplanationPresented = false
 
+    var canEnableAutoStop: Bool {
+        Self.canUseAutoStopNotifications(authorization: notificationAuthorization)
+    }
+
     private struct ActiveCalendarRecordingContext {
         let handle: CalendarMeetingRecordingHandle
         let occurrenceDigest: String
@@ -44,12 +66,12 @@ final class CalendarMeetingAutomationController: ObservableObject {
     private let premiumAccountService: PremiumAccountService
     private let recorderViewModel: AudioRecorderViewModel
     private let dictationViewModel: DictationViewModel
+    private let countdownModel: CalendarMeetingCountdownModel
     private let defaults: UserDefaults
     private let eventProviderFactory: EventProviderFactory
     private let audioCollectorFactory: AudioCollectorFactory
     private let browserResolverFactory: BrowserResolverFactory
     private let notificationServiceFactory: NotificationServiceFactory
-    private let countdownPresenterFactory: CountdownPresenterFactory
     private let premiumAccessProvider: @MainActor () -> Bool
     private let nowProvider: @MainActor () -> Date
 
@@ -59,8 +81,9 @@ final class CalendarMeetingAutomationController: ObservableObject {
     private var audioCollector: (any MeetingAudioActivityCollecting)?
     private var browserResolver: (any BrowserURLResolving)?
     private var notificationService: (any CalendarMeetingNotifying)?
-    private var countdownPresenter: (any MeetingAutomationCountdownPresenting)?
     private var activeCalendarRecording: ActiveCalendarRecordingContext?
+    private var activeAutoStopWarningDigest: String?
+    private var activeAutoStopWarningHandle: CalendarMeetingRecordingHandle?
     private var browserMeetingIdentityByProcessID: [pid_t: CalendarMeetingCanonicalLink] = [:]
     private var calendarAutoStopTrackingActive = false
     private var pendingStartMode: CalendarMeetingStartMode?
@@ -87,15 +110,13 @@ final class CalendarMeetingAutomationController: ObservableObject {
         premiumAccountService: PremiumAccountService,
         recorderViewModel: AudioRecorderViewModel,
         dictationViewModel: DictationViewModel,
+        countdownModel: CalendarMeetingCountdownModel,
         defaults: UserDefaults = .standard,
         eventProviderFactory: @escaping EventProviderFactory = { EventKitCalendarMeetingProvider() },
         audioCollectorFactory: @escaping AudioCollectorFactory = { MeetingAudioActivityCollector() },
         browserResolverFactory: @escaping BrowserResolverFactory = { BrowserURLResolver() },
         notificationServiceFactory: @escaping NotificationServiceFactory = {
             CalendarMeetingNotificationService()
-        },
-        countdownPresenterFactory: @escaping CountdownPresenterFactory = {
-            MeetingAutomationCountdownPanelController()
         },
         premiumAccessProvider: (@MainActor () -> Bool)? = nil,
         nowProvider: @escaping @MainActor () -> Date = Date.init
@@ -104,12 +125,12 @@ final class CalendarMeetingAutomationController: ObservableObject {
         self.premiumAccountService = premiumAccountService
         self.recorderViewModel = recorderViewModel
         self.dictationViewModel = dictationViewModel
+        self.countdownModel = countdownModel
         self.defaults = defaults
         self.eventProviderFactory = eventProviderFactory
         self.audioCollectorFactory = audioCollectorFactory
         self.browserResolverFactory = browserResolverFactory
         self.notificationServiceFactory = notificationServiceFactory
-        self.countdownPresenterFactory = countdownPresenterFactory
         self.nowProvider = nowProvider
 
         let accessProvider = premiumAccessProvider ?? {
@@ -205,6 +226,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
         invalidatePendingRecordingStart()
         if activeCalendarRecording != nil {
             calendarAutoStopTrackingActive = false
+            dismissAutoStopWarning()
         }
         if mode == .off {
             pendingStartMode = nil
@@ -243,10 +265,12 @@ final class CalendarMeetingAutomationController: ObservableObject {
     }
 
     func setAutoStopEnabled(_ enabled: Bool) {
+        guard !enabled || canEnableAutoStop else { return }
         guard autoStopEnabled != enabled else { return }
         autoStopEnabled = enabled
         if !enabled {
             calendarAutoStopTrackingActive = false
+            dismissAutoStopWarning()
         }
         defaults.set(enabled, forKey: UserDefaultsKeys.calendarMeetingAutoStopEnabled)
         applyPolicyConfiguration(now: nowProvider())
@@ -256,6 +280,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
         invalidatePendingRecordingStart()
         if activeCalendarRecording != nil {
             calendarAutoStopTrackingActive = false
+            dismissAutoStopWarning()
         }
         if enabled {
             selectedCalendarIDs.insert(calendarID)
@@ -277,6 +302,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
         invalidatePendingRecordingStart()
         if activeCalendarRecording != nil {
             calendarAutoStopTrackingActive = false
+            dismissAutoStopWarning()
         }
         if enabled {
             enabledProviders.insert(provider)
@@ -334,8 +360,15 @@ final class CalendarMeetingAutomationController: ObservableObject {
         recordingStartTask = nil
         notificationTask?.cancel()
         notificationTask = nil
+        if let activeAutoStopWarningDigest, let notificationService {
+            notificationService.removeAutoStopWarning(
+                occurrenceDigest: activeAutoStopWarningDigest
+            )
+        }
+        activeAutoStopWarningDigest = nil
+        activeAutoStopWarningHandle = nil
+        countdownModel.dismissAll()
         invalidatePendingRecordingStart()
-        countdownPresenter?.dismiss()
         if let audioCollector {
             Task { await audioCollector.stopCollecting() }
         }
@@ -344,6 +377,8 @@ final class CalendarMeetingAutomationController: ObservableObject {
         browserResolver = nil
         browserMeetingIdentityByProcessID.removeAll()
         calendarAutoStopTrackingActive = false
+        currentOccurrences = []
+        policy = CalendarMeetingAutomationPolicy()
         environmentObserverTokens.forEach(NotificationCenter.default.removeObserver)
         environmentObserverTokens.removeAll()
     }
@@ -357,6 +392,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
         invalidatePendingRecordingStart()
         if !access {
             calendarAutoStopTrackingActive = false
+            dismissAutoStopWarning()
         }
         hasPremiumAccess = access
         requestRefresh()
@@ -380,6 +416,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
         let notificationService = notificationServiceInstance()
         ensureNotificationRouterInstalled()
         notificationAuthorization = await notificationService.configureAndRequestAuthorization()
+        disableAutoStopIfNotificationsUnavailable()
         requestRefresh()
     }
 
@@ -460,6 +497,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
                 notificationAuthorization = notificationService.authorization
             }
             guard generation == refreshGeneration else { return }
+            disableAutoStopIfNotificationsUnavailable()
             applyPolicyConfiguration(now: now)
             scheduleRollingHorizonRefresh()
         } catch {
@@ -501,10 +539,11 @@ final class CalendarMeetingAutomationController: ObservableObject {
     }
 
     private func applyPolicyConfiguration(now: Date) {
+        let effectiveAutoStopEnabled = autoStopEnabled && canEnableAutoStop
         let configuration = CalendarMeetingAutomationConfiguration(
             hasPremiumAccess: hasPremiumAccess,
             startMode: startMode,
-            autoStopEnabled: autoStopEnabled,
+            autoStopEnabled: effectiveAutoStopEnabled,
             calendarAuthorization: calendarAuthorization,
             selectedCalendarIDs: selectedCalendarIDs,
             enabledProviders: enabledProviders,
@@ -531,8 +570,13 @@ final class CalendarMeetingAutomationController: ObservableObject {
             guard notificationService != nil || isAutomationActive else { return }
             let service = notificationServiceInstance()
             let now = nowProvider()
+            let scheduledStartMode = startMode
             enqueueNotificationOperation {
-                await service.replaceScheduledReminders(occurrences, now: now)
+                await service.replaceScheduledReminders(
+                    occurrences,
+                    startMode: scheduledStartMode,
+                    now: now
+                )
             }
 
         case .startActivityCollector:
@@ -554,16 +598,22 @@ final class CalendarMeetingAutomationController: ObservableObject {
             }
 
         case .showStartCountdown(let occurrence, let deadline):
-            let presenter = countdownPresenterInstance()
-            presenter.showStart(title: occurrence.title, deadline: deadline) { [weak self] in
+            countdownModel.presentStart(
+                title: occurrence.title,
+                startedAt: nowProvider(),
+                deadline: deadline
+            ) { [weak self] in
                 self?.applyPolicy(.userAction(
                     .cancelStartCountdown(occurrence.occurrenceDigest),
                     now: self?.nowProvider() ?? Date()
                 ))
             }
 
-        case .dismissStartCountdown, .dismissStopCountdown:
-            countdownPresenter?.dismiss()
+        case .dismissStartCountdown:
+            countdownModel.dismissStart()
+
+        case .dismissStopCountdown:
+            dismissAutoStopWarning()
 
         case .startRecording(let occurrence, let identity):
             startRecording(occurrence: occurrence, identity: identity)
@@ -573,14 +623,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
             requestRefresh()
 
         case .showStopCountdown(let handle, let deadline):
-            let presenter = countdownPresenterInstance()
-            presenter.showStop(deadline: deadline) { [weak self] in
-                self?.calendarAutoStopTrackingActive = false
-                self?.applyPolicy(.userAction(
-                    .continueRecording(handle),
-                    now: self?.nowProvider() ?? Date()
-                ))
-            }
+            presentAutoStopWarning(handle: handle, deadline: deadline)
 
         case .stopRecording(let handle):
             do {
@@ -590,6 +633,111 @@ final class CalendarMeetingAutomationController: ObservableObject {
                 applyPolicy(.recordingStopped(handle, now: nowProvider()))
             }
         }
+    }
+
+    private func presentAutoStopWarning(
+        handle: CalendarMeetingRecordingHandle,
+        deadline: Date
+    ) {
+        guard let activeCalendarRecording,
+              activeCalendarRecording.handle == handle else {
+            return
+        }
+        guard canEnableAutoStop else {
+            disableAutoStop()
+            applyPolicyConfiguration(now: nowProvider())
+            return
+        }
+
+        let digest = activeCalendarRecording.occurrenceDigest
+        activeAutoStopWarningDigest = digest
+        activeAutoStopWarningHandle = handle
+        let startedAt = nowProvider()
+        countdownModel.presentAutoStop(
+            startedAt: startedAt,
+            deadline: deadline
+        ) { [weak self] in
+            self?.continueRecordingAfterAutoStopWarning(
+                handle: handle,
+                occurrenceDigest: digest
+            )
+        }
+        let service = notificationServiceInstance()
+        ensureNotificationRouterInstalled()
+        let now = startedAt
+        enqueueNotificationOperation { [weak self] in
+            let published = await service.publishAutoStopWarning(
+                occurrenceDigest: digest,
+                now: now
+            )
+            guard !Task.isCancelled else { return }
+            guard let self else {
+                if published {
+                    service.removeAutoStopWarning(occurrenceDigest: digest)
+                }
+                return
+            }
+            self.notificationAuthorization = service.authorization
+            guard self.activeAutoStopWarningDigest == digest,
+                  self.activeAutoStopWarningHandle == handle else {
+                if published {
+                    service.removeAutoStopWarning(occurrenceDigest: digest)
+                }
+                return
+            }
+            guard published else {
+                self.activeAutoStopWarningDigest = nil
+                self.activeAutoStopWarningHandle = nil
+                self.countdownModel.dismissAutoStop()
+                self.disableAutoStop()
+                self.applyPolicyConfiguration(now: self.nowProvider())
+                return
+            }
+        }
+    }
+
+    private func dismissAutoStopWarning() {
+        countdownModel.dismissAutoStop()
+        guard let digest = activeAutoStopWarningDigest else {
+            activeAutoStopWarningHandle = nil
+            return
+        }
+        activeAutoStopWarningDigest = nil
+        activeAutoStopWarningHandle = nil
+        guard let notificationService else { return }
+        enqueueNotificationOperation {
+            notificationService.removeAutoStopWarning(occurrenceDigest: digest)
+        }
+    }
+
+    private func continueRecordingAfterAutoStopWarning(
+        handle: CalendarMeetingRecordingHandle,
+        occurrenceDigest: String
+    ) {
+        guard let activeCalendarRecording,
+              activeCalendarRecording.handle == handle,
+              activeCalendarRecording.occurrenceDigest == occurrenceDigest,
+              activeAutoStopWarningHandle == handle,
+              activeAutoStopWarningDigest == occurrenceDigest else {
+            return
+        }
+        calendarAutoStopTrackingActive = false
+        applyPolicy(.userAction(
+            .continueRecording(handle),
+            now: nowProvider()
+        ))
+    }
+
+    private func disableAutoStopIfNotificationsUnavailable() {
+        guard !canEnableAutoStop else { return }
+        disableAutoStop()
+    }
+
+    private func disableAutoStop() {
+        guard autoStopEnabled else { return }
+        autoStopEnabled = false
+        calendarAutoStopTrackingActive = false
+        defaults.set(false, forKey: UserDefaultsKeys.calendarMeetingAutoStopEnabled)
     }
 
     private func startRecording(
@@ -656,6 +804,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
                     identity: identity
                 )
                 let autoStopArmed = self.autoStopEnabled
+                    && self.canEnableAutoStop
                     && self.hasPremiumAccess
                     && self.startMode != .off
                     && self.calendarAuthorization == .fullAccess
@@ -921,12 +1070,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
     }
 
     private func nativeProvider(for bundleIdentifier: String) -> MeetingProvider? {
-        switch bundleIdentifier {
-        case "us.zoom.xos": .zoom
-        case "com.microsoft.teams2", "com.microsoft.teams": .teams
-        case "com.apple.FaceTime": .faceTime
-        default: nil
-        }
+        NativeMeetingAudioProcessRegistry.provider(for: bundleIdentifier)
     }
 
     private func scheduleNextPolicyTick() {
@@ -992,7 +1136,18 @@ final class CalendarMeetingAutomationController: ObservableObject {
         case .openPremiumSettings:
             SettingsNavigationCoordinator.shared.navigate(to: .premium)
             ManagedAppWindowOpener.shared.open(id: "settings")
-        case .start(let digest), .suppress(let digest):
+        case .continueRecording(let digest):
+            guard let activeCalendarRecording,
+                  activeCalendarRecording.occurrenceDigest == digest,
+                  activeAutoStopWarningDigest == digest,
+                  activeAutoStopWarningHandle == activeCalendarRecording.handle else {
+                return
+            }
+            continueRecordingAfterAutoStopWarning(
+                handle: activeCalendarRecording.handle,
+                occurrenceDigest: digest
+            )
+        case .armStart(let digest), .suppress(let digest):
             Task { @MainActor [weak self] in
                 guard let self else { return }
                 await self.refreshAndWaitForCurrentGeneration()
@@ -1002,13 +1157,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
                 }) else {
                     return
                 }
-                let action: CalendarMeetingAutomationUserAction
-                switch response {
-                case .start:
-                    action = .startOccurrence(digest)
-                case .suppress:
-                    action = .suppressOccurrence(digest)
-                case .openPremiumSettings:
+                guard let action = Self.automationUserAction(for: response) else {
                     return
                 }
                 self.applyPolicy(.userAction(action, now: self.nowProvider()))
@@ -1072,11 +1221,18 @@ final class CalendarMeetingAutomationController: ObservableObject {
         browserResolver = nil
         collectorShouldBeRunning = false
         await stopCollector()
-        countdownPresenter?.dismiss()
+        countdownModel.dismissAll()
         let pendingNotificationTask = notificationTask
         pendingNotificationTask?.cancel()
         await pendingNotificationTask?.value
         notificationTask = nil
+        if let activeAutoStopWarningDigest, let notificationService {
+            notificationService.removeAutoStopWarning(
+                occurrenceDigest: activeAutoStopWarningDigest
+            )
+            self.activeAutoStopWarningDigest = nil
+        }
+        activeAutoStopWarningHandle = nil
         if removeReminders, let notificationService {
             await notificationService.removeScheduledMeetingRequests()
         }
@@ -1108,13 +1264,6 @@ final class CalendarMeetingAutomationController: ObservableObject {
         let service = notificationServiceFactory()
         notificationService = service
         return service
-    }
-
-    private func countdownPresenterInstance() -> any MeetingAutomationCountdownPresenting {
-        if let countdownPresenter { return countdownPresenter }
-        let presenter = countdownPresenterFactory()
-        countdownPresenter = presenter
-        return presenter
     }
 
     private func openSystemSettings(_ value: String) {

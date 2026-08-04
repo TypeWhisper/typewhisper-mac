@@ -45,7 +45,7 @@ enum CalendarMeetingRecordingStartFailure: Equatable, Sendable {
 }
 
 enum CalendarMeetingAutomationUserAction: Equatable, Sendable {
-    case startOccurrence(String)
+    case armOccurrence(String)
     case suppressOccurrence(String)
     case cancelStartCountdown(String)
     case continueRecording(CalendarMeetingRecordingHandle)
@@ -97,6 +97,8 @@ enum CalendarMeetingAutomationEffect: Equatable, Sendable {
 }
 
 struct CalendarMeetingAutomationPolicy: Sendable {
+    private static let autoStopSignalReturnDwell: TimeInterval = 3
+
     private struct DwellState: Equatable, Sendable {
         let identity: CalendarMeetingCanonicalLink
         let startedAt: Date
@@ -115,6 +117,7 @@ struct CalendarMeetingAutomationPolicy: Sendable {
         var autoStopArmed: Bool
         var missingSince: Date?
         var stopDeadline: Date?
+        var signalReturnSince: Date?
         var stickyVeto = false
         var stopRequested = false
         var hasObservedSignal = false
@@ -134,6 +137,7 @@ struct CalendarMeetingAutomationPolicy: Sendable {
     private var recorderReadiness: CalendarMeetingRecorderReadiness = .idle
     private var dwellStates: [String: DwellState] = [:]
     private var detectedNotificationDigests = Set<String>()
+    private var armedOccurrenceDigests = Set<String>()
     private var permanentStartFailureDigests = Set<String>()
     private var recordedOccurrenceDigests = Set<String>()
     private var idleRetryDigests = Set<String>()
@@ -162,6 +166,7 @@ struct CalendarMeetingAutomationPolicy: Sendable {
             self.occurrences = occurrences
                 .filter { configuration.selectedCalendarIDs.contains($0.calendarID) }
                 .filter { !$0.providers.isDisjoint(with: configuration.enabledProviders) }
+            pruneArmedOccurrences(at: now)
             effects.append(.replaceScheduledReminders(reminderOccurrences(at: now)))
 
             if !configuration.isOperational
@@ -235,6 +240,7 @@ struct CalendarMeetingAutomationPolicy: Sendable {
         ):
             startRequestedDigest = nil
             clearPendingStart(effects: &effects)
+            armedOccurrenceDigests.remove(occurrenceDigest)
             activeRecording = ActiveRecording(
                 handle: handle,
                 occurrenceDigest: occurrenceDigest,
@@ -242,6 +248,7 @@ struct CalendarMeetingAutomationPolicy: Sendable {
                 autoStopArmed: autoStopArmed && configuration.autoStopEnabled,
                 missingSince: nil,
                 stopDeadline: nil,
+                signalReturnSince: nil,
                 hasObservedSignal: false
             )
             recordedOccurrenceDigests.insert(occurrenceDigest)
@@ -253,6 +260,7 @@ struct CalendarMeetingAutomationPolicy: Sendable {
             if startRequestedDigest == digest {
                 startRequestedDigest = nil
             }
+            armedOccurrenceDigests.remove(digest)
             permanentStartFailureDigests.insert(digest)
             clearPendingStart(effects: &effects)
 
@@ -266,6 +274,7 @@ struct CalendarMeetingAutomationPolicy: Sendable {
                     pendingIdleCandidate = (digest, identity)
                 }
             case .noAudioSource, .microphoneDenied:
+                armedOccurrenceDigests.remove(digest)
                 permanentStartFailureDigests.insert(digest)
             case .idle:
                 break
@@ -322,6 +331,7 @@ struct CalendarMeetingAutomationPolicy: Sendable {
         at now: Date,
         effects: inout [CalendarMeetingAutomationEffect]
     ) {
+        pruneArmedOccurrences(at: now)
         guard configuration.isOperational, activeRecording == nil else {
             clearPendingStart(effects: &effects)
             return
@@ -382,26 +392,23 @@ struct CalendarMeetingAutomationPolicy: Sendable {
         case .off:
             break
         case .reminder:
-            if detectedNotificationDigests.insert(digest).inserted {
-                effects.append(.publishDetectedMeeting(candidate.occurrence))
-            }
-        case .automatic:
-            guard !permanentStartFailureDigests.contains(digest) else { return }
-            switch recorderReadiness {
-            case .idle:
-                beginStartCountdown(
+            if armedOccurrenceDigests.contains(digest) {
+                handleStableStartCandidate(
                     digest: digest,
                     identity: candidate.signal.meetingIdentity,
                     at: now,
                     effects: &effects
                 )
-            case .recorderBusy, .dictationBusy, .finalizing:
-                if !idleRetryDigests.contains(digest) {
-                    pendingIdleCandidate = (digest, candidate.signal.meetingIdentity)
-                }
-            case .noAudioSource, .microphoneDenied:
-                permanentStartFailureDigests.insert(digest)
+            } else if detectedNotificationDigests.insert(digest).inserted {
+                effects.append(.publishDetectedMeeting(candidate.occurrence))
             }
+        case .automatic:
+            handleStableStartCandidate(
+                digest: digest,
+                identity: candidate.signal.meetingIdentity,
+                at: now,
+                effects: &effects
+            )
         }
     }
 
@@ -423,11 +430,45 @@ struct CalendarMeetingAutomationPolicy: Sendable {
             }
             return (occurrence, signal)
         }
-        guard let bestQuality = eligible.map({ $0.1.quality.rawValue }).max() else { return nil }
-        let best = eligible.filter { $0.1.quality.rawValue == bestQuality }
+        let ranked: [(CalendarMeetingOccurrence, CalendarMeetingJoinSignal)]
+        if configuration.startMode == .reminder {
+            let armed = eligible.filter {
+                armedOccurrenceDigests.contains($0.0.occurrenceDigest)
+            }
+            ranked = armed.isEmpty ? eligible : armed
+        } else {
+            ranked = eligible
+        }
+        guard let bestQuality = ranked.map({ $0.1.quality.rawValue }).max() else { return nil }
+        let best = ranked.filter { $0.1.quality.rawValue == bestQuality }
         let digests = Set(best.map { $0.0.occurrenceDigest })
         guard digests.count == 1 else { return nil }
         return best.sorted { $0.1.meetingIdentity.id < $1.1.meetingIdentity.id }.first
+    }
+
+    private mutating func handleStableStartCandidate(
+        digest: String,
+        identity: CalendarMeetingCanonicalLink,
+        at now: Date,
+        effects: inout [CalendarMeetingAutomationEffect]
+    ) {
+        guard !permanentStartFailureDigests.contains(digest) else { return }
+        switch recorderReadiness {
+        case .idle:
+            beginStartCountdown(
+                digest: digest,
+                identity: identity,
+                at: now,
+                effects: &effects
+            )
+        case .recorderBusy, .dictationBusy, .finalizing:
+            if !idleRetryDigests.contains(digest) {
+                pendingIdleCandidate = (digest, identity)
+            }
+        case .noAudioSource, .microphoneDenied:
+            armedOccurrenceDigests.remove(digest)
+            permanentStartFailureDigests.insert(digest)
+        }
     }
 
     private mutating func beginStartCountdown(
@@ -464,24 +505,27 @@ struct CalendarMeetingAutomationPolicy: Sendable {
         effects: inout [CalendarMeetingAutomationEffect]
     ) {
         switch action {
-        case .startOccurrence(let digest):
+        case .armOccurrence(let digest):
             guard configuration.isOperational,
-                  recorderReadiness.isIdle,
-                  startRequestedDigest == nil,
+                  configuration.startMode == .reminder,
                   let occurrence = occurrence(for: digest),
                   occurrence.isInsideJoinWindow(at: now),
+                  occurrence.participationStatus.permitsReminder,
                   !configuration.suppressedOccurrenceDigests.contains(digest),
                   !recordedOccurrenceDigests.contains(digest),
-                  let identity = occurrence.meetingLinks.first(where: {
+                  !permanentStartFailureDigests.contains(digest),
+                  occurrence.meetingLinks.contains(where: {
                       configuration.enabledProviders.contains($0.provider)
                   }) else {
                 return
             }
-            startRequestedDigest = digest
-            effects.append(.startRecording(occurrence, identity))
+            armedOccurrenceDigests.insert(digest)
+            updateCollector(at: now, effects: &effects)
+            evaluateStart(at: now, effects: &effects)
 
         case .suppressOccurrence(let digest), .cancelStartCountdown(let digest):
             guard occurrence(for: digest) != nil else { return }
+            armedOccurrenceDigests.remove(digest)
             if pendingStart?.occurrenceDigest == digest {
                 clearPendingStart(effects: &effects)
             }
@@ -493,6 +537,7 @@ struct CalendarMeetingAutomationPolicy: Sendable {
             guard activeRecording?.handle == handle else { return }
             activeRecording?.stickyVeto = true
             activeRecording?.missingSince = nil
+            activeRecording?.signalReturnSince = nil
             if activeRecording?.stopDeadline != nil {
                 effects.append(.dismissStopCountdown)
             }
@@ -519,33 +564,42 @@ struct CalendarMeetingAutomationPolicy: Sendable {
                 && ($0.isRunningInput || $0.isRunningOutput)
         }
         if signalPresent {
-            if recording.stopDeadline != nil {
-                effects.append(.dismissStopCountdown)
+            recording.hasObservedSignal = true
+            guard recording.stopDeadline != nil else {
+                recording.missingSince = nil
+                recording.signalReturnSince = nil
+                activeRecording = recording
+                return
             }
+
+            if recording.signalReturnSince == nil {
+                recording.signalReturnSince = now
+                activeRecording = recording
+                return
+            }
+            guard let signalReturnSince = recording.signalReturnSince,
+                  now.timeIntervalSince(signalReturnSince) >= Self.autoStopSignalReturnDwell else {
+                activeRecording = recording
+                return
+            }
+
+            effects.append(.dismissStopCountdown)
             recording.missingSince = nil
             recording.stopDeadline = nil
-            recording.hasObservedSignal = true
+            recording.signalReturnSince = nil
             activeRecording = recording
             return
         }
+
+        recording.signalReturnSince = nil
+        activeRecording = recording
 
         guard recording.hasObservedSignal else {
-            activeRecording = recording
-            return
-        }
-
-        if recording.missingSince == nil {
-            recording.missingSince = now
-            activeRecording = recording
-            return
-        }
-        guard let missingSince = recording.missingSince,
-              now.timeIntervalSince(missingSince) >= 30 else {
-            activeRecording = recording
             return
         }
 
         if recording.stopDeadline == nil {
+            recording.missingSince = now
             let deadline = now.addingTimeInterval(15)
             recording.stopDeadline = deadline
             activeRecording = recording
@@ -569,6 +623,7 @@ struct CalendarMeetingAutomationPolicy: Sendable {
         activeRecording?.autoStopArmed = false
         activeRecording?.missingSince = nil
         activeRecording?.stopDeadline = nil
+        activeRecording?.signalReturnSince = nil
     }
 
     private mutating func clearPendingStart(
@@ -577,6 +632,28 @@ struct CalendarMeetingAutomationPolicy: Sendable {
         guard pendingStart != nil else { return }
         pendingStart = nil
         effects.append(.dismissStartCountdown)
+    }
+
+    private mutating func pruneArmedOccurrences(at now: Date) {
+        guard configuration.isOperational, configuration.startMode == .reminder else {
+            armedOccurrenceDigests.removeAll()
+            return
+        }
+        let suppressedDigests = configuration.suppressedOccurrenceDigests
+        let enabledProviders = configuration.enabledProviders
+        let recordedDigests = recordedOccurrenceDigests
+        let failedDigests = permanentStartFailureDigests
+        let validDigests = Set(occurrences.filter {
+            $0.isInsideJoinWindow(at: now)
+                && $0.participationStatus.permitsReminder
+                && !suppressedDigests.contains($0.occurrenceDigest)
+                && !recordedDigests.contains($0.occurrenceDigest)
+                && !failedDigests.contains($0.occurrenceDigest)
+                && $0.meetingLinks.contains(where: {
+                    enabledProviders.contains($0.provider)
+                })
+        }.map(\.occurrenceDigest))
+        armedOccurrenceDigests.formIntersection(validDigests)
     }
 
     private func occurrence(for digest: String) -> CalendarMeetingOccurrence? {

@@ -58,6 +58,7 @@ struct OverlayIndicatorSurface<Content: View>: View {
 struct OverlayIndicatorView: View {
     @ObservedObject private var viewModel = DictationViewModel.shared
     @ObservedObject private var recorder = AudioRecorderViewModel.shared
+    @ObservedObject private var countdownModel: CalendarMeetingCountdownModel
     @State private var textExpanded = false
     @State private var dotPulse = false
 
@@ -65,8 +66,16 @@ struct OverlayIndicatorView: View {
     private let sizing: IndicatorSizing = .overlay
     private var closedWidth: CGFloat { 280 }
 
+    init(countdownModel: CalendarMeetingCountdownModel) {
+        _countdownModel = ObservedObject(wrappedValue: countdownModel)
+    }
+
     private var presentation: IndicatorPresentationData {
         IndicatorPresentationData.make(dictation: viewModel, recorder: recorder)
+    }
+
+    private var countdownPresentation: CalendarMeetingCountdownPresentation? {
+        countdownModel.presentation
     }
 
     private var hasActionFeedback: Bool {
@@ -101,6 +110,9 @@ struct OverlayIndicatorView: View {
     }
 
     private var currentWidth: CGFloat {
+        if countdownPresentation != nil {
+            return max(closedWidth, IndicatorFeedbackPanelLayout.feedbackWidth)
+        }
         if hasCancelWarning { return max(closedWidth, IndicatorFeedbackPanelLayout.feedbackWidth) }
         if transcriptBodyVisible { return max(closedWidth, 400) }
         if hasActionFeedback { return max(closedWidth, IndicatorFeedbackPanelLayout.feedbackWidth) }
@@ -121,17 +133,24 @@ struct OverlayIndicatorView: View {
 
     var body: some View {
         OverlayIndicatorSurface {
-            VStack(alignment: .center, spacing: 0) {
-                if isTop {
-                    statusBar
-                        .frame(height: IndicatorFeedbackPanelLayout.overlayStatusHeight)
-                        .frame(maxWidth: .infinity)
-                    expandableContent
+            Group {
+                if let countdownPresentation,
+                   countdownPresentation.kind.isStart {
+                    countdownIndicator(countdownPresentation)
                 } else {
-                    expandableContent
-                    statusBar
-                        .frame(height: IndicatorFeedbackPanelLayout.overlayStatusHeight)
-                        .frame(maxWidth: .infinity)
+                    VStack(alignment: .center, spacing: 0) {
+                        if isTop {
+                            statusBar
+                                .frame(height: IndicatorFeedbackPanelLayout.overlayStatusHeight)
+                                .frame(maxWidth: .infinity)
+                            expandableContent
+                        } else {
+                            expandableContent
+                            statusBar
+                                .frame(height: IndicatorFeedbackPanelLayout.overlayStatusHeight)
+                                .frame(maxWidth: .infinity)
+                        }
+                    }
                 }
             }
             .frame(width: currentWidth)
@@ -184,7 +203,10 @@ struct OverlayIndicatorView: View {
             }
         }
         .animation(.easeInOut(duration: 1.0), value: dotPulse)
-        .accessibilityElement(children: presentation.actionFeedbackUndoTitle == nil ? .combine : .contain)
+        .accessibilityElement(
+            children: countdownPresentation != nil
+                || presentation.actionFeedbackUndoTitle != nil ? .contain : .combine
+        )
         .accessibilityLabel(accessibilityLabel)
     }
 
@@ -196,6 +218,17 @@ struct OverlayIndicatorView: View {
     }
 
     private var accessibilityLabel: String {
+        if let countdownPresentation {
+            switch countdownPresentation.kind {
+            case .start(let title):
+                let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+                return trimmed.isEmpty
+                    ? String(localized: "calendarMeeting.countdown.untitled")
+                    : trimmed
+            case .autoStop:
+                return String(localized: "calendarMeeting.notification.autoStopTitle")
+            }
+        }
         if let warning = presentation.cancelWarningMessage {
             return warning
         }
@@ -222,7 +255,9 @@ struct OverlayIndicatorView: View {
 
     @ViewBuilder
     private var expandableContent: some View {
-        if hasCancelWarning {
+        if let countdownPresentation {
+            countdownIndicator(countdownPresentation)
+        } else if hasCancelWarning {
             IndicatorActionFeedback(
                 message: presentation.cancelWarningMessage ?? "",
                 icon: "exclamationmark.triangle.fill",
@@ -289,6 +324,16 @@ struct OverlayIndicatorView: View {
                 )
             }
         }
+    }
+
+    private func countdownIndicator(
+        _ countdownPresentation: CalendarMeetingCountdownPresentation
+    ) -> some View {
+        MeetingAutomationCountdownIndicator(
+            model: countdownModel,
+            presentation: countdownPresentation,
+            contentPadding: contentPadding
+        )
     }
 
     // MARK: - Status bar

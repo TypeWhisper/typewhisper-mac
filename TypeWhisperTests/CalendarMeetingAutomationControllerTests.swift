@@ -4,6 +4,26 @@ import XCTest
 
 @MainActor
 final class CalendarMeetingAutomationControllerTests: XCTestCase {
+    func testNotificationStartResponseOnlyArmsOccurrence() {
+        let digest = String(repeating: "a", count: 64)
+
+        XCTAssertEqual(
+            CalendarMeetingAutomationController.automationUserAction(
+                for: .armStart(digest)
+            ),
+            .armOccurrence(digest)
+        )
+        XCTAssertEqual(
+            CalendarMeetingAutomationController.automationUserAction(
+                for: .suppress(digest)
+            ),
+            .suppressOccurrence(digest)
+        )
+        XCTAssertNil(CalendarMeetingAutomationController.automationUserAction(
+            for: .openPremiumSettings
+        ))
+    }
+
     func testFreeAndOffStatesNeverActivateOSServices() {
         XCTAssertFalse(CalendarMeetingAutomationController.shouldActivateOSServices(
             hasPremiumAccess: false,
@@ -17,6 +37,23 @@ final class CalendarMeetingAutomationControllerTests: XCTestCase {
             hasPremiumAccess: true,
             startMode: .reminder
         ))
+    }
+
+    func testAutoStopRequiresFullyAuthorizedNotifications() {
+        XCTAssertTrue(CalendarMeetingAutomationController.canUseAutoStopNotifications(
+            authorization: .authorized
+        ))
+        for authorization in [
+            CalendarMeetingNotificationAuthorization.notDetermined,
+            .denied,
+            .provisional,
+            .ephemeral,
+            .unknown
+        ] {
+            XCTAssertFalse(CalendarMeetingAutomationController.canUseAutoStopNotifications(
+                authorization: authorization
+            ))
+        }
     }
 
     func testCommercialOrPremiumAccountUnlocksButSupporterDoesNotParticipate() {
