@@ -12,8 +12,14 @@ enum CalendarMeetingRecorderReadiness: Equatable, Sendable {
 }
 
 enum CalendarMeetingJoinMatchQuality: Int, Equatable, Sendable {
+    case cameraPresence = 0
     case nativeProvider = 1
     case exactBrowserIdentity = 2
+}
+
+enum CalendarMeetingJoinEvidence: Equatable, Sendable {
+    case attributedAudio
+    case cameraPresence
 }
 
 struct CalendarMeetingJoinSignal: Equatable, Sendable {
@@ -22,6 +28,31 @@ struct CalendarMeetingJoinSignal: Equatable, Sendable {
     let quality: CalendarMeetingJoinMatchQuality
     let isRunningInput: Bool
     let isRunningOutput: Bool
+    let evidence: CalendarMeetingJoinEvidence
+
+    init(
+        occurrenceDigest: String,
+        meetingIdentity: CalendarMeetingCanonicalLink,
+        quality: CalendarMeetingJoinMatchQuality,
+        isRunningInput: Bool,
+        isRunningOutput: Bool,
+        evidence: CalendarMeetingJoinEvidence = .attributedAudio
+    ) {
+        self.occurrenceDigest = occurrenceDigest
+        self.meetingIdentity = meetingIdentity
+        self.quality = quality
+        self.isRunningInput = isRunningInput
+        self.isRunningOutput = isRunningOutput
+        self.evidence = evidence
+    }
+
+    var permitsStart: Bool {
+        isRunningInput || evidence == .cameraPresence
+    }
+
+    var countsForAutoStop: Bool {
+        evidence == .attributedAudio && (isRunningInput || isRunningOutput)
+    }
 }
 
 struct CalendarMeetingAutomationConfiguration: Equatable, Sendable {
@@ -59,6 +90,8 @@ enum CalendarMeetingAutomationEvent: Equatable, Sendable {
     )
     case activity([CalendarMeetingJoinSignal], now: Date)
     case activityUnavailable(now: Date)
+    case cameraActivity(isRunning: Bool, now: Date)
+    case cameraActivityUnavailable(now: Date)
     case recorderReadiness(CalendarMeetingRecorderReadiness, now: Date)
     case timeAdvanced(Date)
     case userAction(CalendarMeetingAutomationUserAction, now: Date)
@@ -86,6 +119,8 @@ enum CalendarMeetingAutomationEffect: Equatable, Sendable {
     case replaceScheduledReminders([CalendarMeetingOccurrence])
     case startActivityCollector
     case stopActivityCollector
+    case startCameraActivityCollector
+    case stopCameraActivityCollector
     case publishDetectedMeeting(CalendarMeetingOccurrence)
     case showStartCountdown(CalendarMeetingOccurrence, deadline: Date)
     case dismissStartCountdown
@@ -134,6 +169,8 @@ struct CalendarMeetingAutomationPolicy: Sendable {
     )
     private var occurrences: [CalendarMeetingOccurrence] = []
     private var signals: [CalendarMeetingJoinSignal] = []
+    private var isCameraRunning = false
+    private var cameraActivityAvailable = false
     private var recorderReadiness: CalendarMeetingRecorderReadiness = .idle
     private var dwellStates: [String: DwellState] = [:]
     private var detectedNotificationDigests = Set<String>()
@@ -146,6 +183,7 @@ struct CalendarMeetingAutomationPolicy: Sendable {
     private var startRequestedDigest: String?
     private var activeRecording: ActiveRecording?
     private var collectorRequested = false
+    private var cameraCollectorRequested = false
 
     mutating func reduce(_ event: CalendarMeetingAutomationEvent) -> [CalendarMeetingAutomationEffect] {
         var effects: [CalendarMeetingAutomationEffect] = []
@@ -175,6 +213,10 @@ struct CalendarMeetingAutomationPolicy: Sendable {
                 dwellStates.removeAll()
                 pendingIdleCandidate = nil
                 startRequestedDigest = nil
+                if !configuration.isOperational {
+                    isCameraRunning = false
+                    cameraActivityAvailable = false
+                }
             }
             if (wasOperational && !configuration.isOperational)
                 || !configuration.autoStopEnabled
@@ -188,11 +230,11 @@ struct CalendarMeetingAutomationPolicy: Sendable {
         case .activity(let signals, let now):
             self.signals = signals
             if let candidate = pendingIdleCandidate,
-               !signals.contains(where: {
-                   $0.occurrenceDigest == candidate.digest
-                       && $0.meetingIdentity == candidate.identity
-                       && $0.isRunningInput
-               }) {
+               !startEvidenceIsPresent(
+                   digest: candidate.digest,
+                   identity: candidate.identity,
+                   at: now
+               ) {
                 pendingIdleCandidate = nil
             }
             evaluateStart(at: now, effects: &effects)
@@ -200,11 +242,27 @@ struct CalendarMeetingAutomationPolicy: Sendable {
 
         case .activityUnavailable(let now):
             signals = []
-            dwellStates.removeAll()
-            pendingIdleCandidate = nil
-            clearPendingStart(effects: &effects)
             disarmAutoStop(effects: &effects)
             updateCollector(at: now, effects: &effects)
+            evaluateStart(at: now, effects: &effects)
+
+        case .cameraActivity(let isRunning, let now):
+            cameraActivityAvailable = true
+            isCameraRunning = isRunning
+            if let candidate = pendingIdleCandidate,
+               !startEvidenceIsPresent(
+                   digest: candidate.digest,
+                   identity: candidate.identity,
+                   at: now
+               ) {
+                pendingIdleCandidate = nil
+            }
+            evaluateStart(at: now, effects: &effects)
+
+        case .cameraActivityUnavailable(let now):
+            cameraActivityAvailable = false
+            isCameraRunning = false
+            evaluateStart(at: now, effects: &effects)
 
         case .recorderReadiness(let readiness, let now):
             let becameIdle = !recorderReadiness.isIdle && readiness.isIdle
@@ -321,10 +379,24 @@ struct CalendarMeetingAutomationPolicy: Sendable {
                 && !recordedOccurrenceDigests.contains($0.occurrenceDigest)
                 && !permanentStartFailureDigests.contains($0.occurrenceDigest)
         }
-        let shouldCollect = configuration.isOperational && (needsAutoStopSignal || hasOpenJoinWindow)
-        guard shouldCollect != collectorRequested else { return }
-        collectorRequested = shouldCollect
-        effects.append(shouldCollect ? .startActivityCollector : .stopActivityCollector)
+        let shouldCollectAudio = configuration.isOperational
+            && (needsAutoStopSignal || hasOpenJoinWindow)
+        if shouldCollectAudio != collectorRequested {
+            collectorRequested = shouldCollectAudio
+            effects.append(
+                shouldCollectAudio ? .startActivityCollector : .stopActivityCollector
+            )
+        }
+
+        let shouldCollectCamera = configuration.isOperational && hasOpenJoinWindow
+        if shouldCollectCamera != cameraCollectorRequested {
+            cameraCollectorRequested = shouldCollectCamera
+            effects.append(
+                shouldCollectCamera
+                    ? .startCameraActivityCollector
+                    : .stopCameraActivityCollector
+            )
+        }
     }
 
     private mutating func evaluateStart(
@@ -338,11 +410,11 @@ struct CalendarMeetingAutomationPolicy: Sendable {
         }
 
         if let pendingStart {
-            let signalStillPresent = signals.contains {
-                $0.occurrenceDigest == pendingStart.occurrenceDigest
-                    && $0.meetingIdentity == pendingStart.identity
-                    && $0.isRunningInput
-            }
+            let signalStillPresent = startEvidenceIsPresent(
+                digest: pendingStart.occurrenceDigest,
+                identity: pendingStart.identity,
+                at: now
+            )
             guard signalStillPresent,
                   occurrence(for: pendingStart.occurrenceDigest)?.isInsideJoinWindow(at: now) == true,
                   !configuration.suppressedOccurrenceDigests.contains(
@@ -415,20 +487,63 @@ struct CalendarMeetingAutomationPolicy: Sendable {
     private func uniqueAutomaticCandidate(
         at now: Date
     ) -> (occurrence: CalendarMeetingOccurrence, signal: CalendarMeetingJoinSignal)? {
-        let eligible = signals.compactMap { signal -> (CalendarMeetingOccurrence, CalendarMeetingJoinSignal)? in
-            guard signal.isRunningInput,
-                  let occurrence = occurrence(for: signal.occurrenceDigest),
-                  occurrence.isInsideJoinWindow(at: now),
-                  occurrence.meetingLinks.contains(signal.meetingIdentity),
-                  configuration.startMode == .automatic
-                    ? occurrence.participationStatus.permitsAutomaticStart
-                    : occurrence.participationStatus.permitsReminder,
-                  !configuration.suppressedOccurrenceDigests.contains(signal.occurrenceDigest),
-                  !recordedOccurrenceDigests.contains(signal.occurrenceDigest),
-                  !permanentStartFailureDigests.contains(signal.occurrenceDigest) else {
+        var eligible = signals.compactMap {
+            signal -> (CalendarMeetingOccurrence, CalendarMeetingJoinSignal)? in
+            guard signal.permitsStart,
+                  let occurrence = eligibleStartOccurrence(
+                      digest: signal.occurrenceDigest,
+                      identity: signal.meetingIdentity,
+                      at: now
+                  ) else {
                 return nil
             }
             return (occurrence, signal)
+        }
+        if cameraActivityAvailable && isCameraRunning {
+            eligible.append(contentsOf: signals.compactMap { signal in
+                guard !signal.permitsStart,
+                      signal.isRunningOutput,
+                      let occurrence = eligibleStartOccurrence(
+                          digest: signal.occurrenceDigest,
+                          identity: signal.meetingIdentity,
+                          at: now
+                      ) else {
+                    return nil
+                }
+                return (
+                    occurrence,
+                    CalendarMeetingJoinSignal(
+                        occurrenceDigest: signal.occurrenceDigest,
+                        meetingIdentity: signal.meetingIdentity,
+                        quality: signal.quality,
+                        isRunningInput: false,
+                        isRunningOutput: signal.isRunningOutput,
+                        evidence: .cameraPresence
+                    )
+                )
+            })
+            eligible.append(contentsOf: occurrences.compactMap { occurrence in
+                guard occurrence.meetingLinks.count == 1,
+                      let identity = occurrence.meetingLinks.first,
+                      eligibleStartOccurrence(
+                          digest: occurrence.occurrenceDigest,
+                          identity: identity,
+                          at: now
+                      ) != nil else {
+                    return nil
+                }
+                return (
+                    occurrence,
+                    CalendarMeetingJoinSignal(
+                        occurrenceDigest: occurrence.occurrenceDigest,
+                        meetingIdentity: identity,
+                        quality: .cameraPresence,
+                        isRunningInput: false,
+                        isRunningOutput: false,
+                        evidence: .cameraPresence
+                    )
+                )
+            })
         }
         let ranked: [(CalendarMeetingOccurrence, CalendarMeetingJoinSignal)]
         if configuration.startMode == .reminder {
@@ -444,6 +559,46 @@ struct CalendarMeetingAutomationPolicy: Sendable {
         let digests = Set(best.map { $0.0.occurrenceDigest })
         guard digests.count == 1 else { return nil }
         return best.sorted { $0.1.meetingIdentity.id < $1.1.meetingIdentity.id }.first
+    }
+
+    private func eligibleStartOccurrence(
+        digest: String,
+        identity: CalendarMeetingCanonicalLink,
+        at now: Date
+    ) -> CalendarMeetingOccurrence? {
+        guard let occurrence = occurrence(for: digest),
+              occurrence.isInsideJoinWindow(at: now),
+              occurrence.meetingLinks.contains(identity),
+              configuration.startMode == .automatic
+                ? occurrence.participationStatus.permitsAutomaticStart
+                : occurrence.participationStatus.permitsReminder,
+              !configuration.suppressedOccurrenceDigests.contains(digest),
+              !recordedOccurrenceDigests.contains(digest),
+              !permanentStartFailureDigests.contains(digest) else {
+            return nil
+        }
+        return occurrence
+    }
+
+    private func startEvidenceIsPresent(
+        digest: String,
+        identity: CalendarMeetingCanonicalLink,
+        at now: Date
+    ) -> Bool {
+        if signals.contains(where: {
+            $0.occurrenceDigest == digest
+                && $0.meetingIdentity == identity
+                && $0.permitsStart
+        }) {
+            return true
+        }
+        guard cameraActivityAvailable,
+              isCameraRunning,
+              let candidate = uniqueAutomaticCandidate(at: now) else {
+            return false
+        }
+        return candidate.occurrence.occurrenceDigest == digest
+            && candidate.signal.meetingIdentity == identity
     }
 
     private mutating func handleStableStartCandidate(
@@ -483,11 +638,7 @@ struct CalendarMeetingAutomationPolicy: Sendable {
               !configuration.suppressedOccurrenceDigests.contains(digest),
               !recordedOccurrenceDigests.contains(digest),
               !permanentStartFailureDigests.contains(digest),
-              signals.contains(where: {
-                  $0.occurrenceDigest == digest
-                      && $0.meetingIdentity == identity
-                      && $0.isRunningInput
-              }) else {
+              startEvidenceIsPresent(digest: digest, identity: identity, at: now) else {
             return
         }
         let deadline = now.addingTimeInterval(5)
@@ -563,7 +714,7 @@ struct CalendarMeetingAutomationPolicy: Sendable {
         let signalPresent = signals.contains {
             $0.occurrenceDigest == recording.occurrenceDigest
                 && $0.meetingIdentity == recording.identity
-                && ($0.isRunningInput || $0.isRunningOutput)
+                && $0.countsForAutoStop
         }
         if signalPresent {
             recording.hasObservedSignal = true

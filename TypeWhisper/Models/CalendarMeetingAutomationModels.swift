@@ -29,6 +29,19 @@ enum CalendarMeetingSuppressionList {
     }
 }
 
+enum CalendarMeetingReminderRequestLedger {
+    static let capacity = 256
+
+    static func appending(_ digest: String, to existing: [String]) -> [String] {
+        var result = existing.filter { $0 != digest }
+        result.append(digest)
+        if result.count > capacity {
+            result.removeFirst(result.count - capacity)
+        }
+        return result
+    }
+}
+
 enum MeetingProvider: String, Codable, Sendable, CaseIterable, Identifiable {
     case zoom
     case teams
@@ -176,6 +189,28 @@ struct MeetingActivitySnapshot: Equatable, Sendable {
     }
 }
 
+struct MeetingCameraActivitySnapshot: Equatable, Sendable {
+    let capturedAt: Date
+    let availability: MeetingActivityAvailability
+    let isAnyCameraRunning: Bool
+
+    static func unsupported(at date: Date = Date()) -> Self {
+        Self(
+            capturedAt: date,
+            availability: .unsupported,
+            isAnyCameraRunning: false
+        )
+    }
+
+    static func failed(at date: Date = Date()) -> Self {
+        Self(
+            capturedAt: date,
+            availability: .failed,
+            isAnyCameraRunning: false
+        )
+    }
+}
+
 struct CalendarMeetingRecordingHandle: Equatable, Sendable {
     let id: UUID
     let outputURL: URL
@@ -194,6 +229,11 @@ protocol CalendarMeetingEventProviding: Sendable {
 
 protocol MeetingAudioActivityCollecting: Sendable {
     func startCollecting() async -> AsyncStream<MeetingActivitySnapshot>
+    func stopCollecting() async
+}
+
+protocol MeetingCameraActivityCollecting: Sendable {
+    func startCollecting() async -> AsyncStream<MeetingCameraActivitySnapshot>
     func stopCollecting() async
 }
 
@@ -232,5 +272,31 @@ enum SupportedMeetingBrowser {
     static func isKnownBrowser(_ bundleIdentifier: String) -> Bool {
         supportsAutomaticURLResolution(bundleIdentifier)
             || reminderOnlyBundleIdentifiers.contains(bundleIdentifier)
+    }
+}
+
+enum BrowserAudioProcessAttribution {
+    private static let supportedHelperSuffixes = [
+        ".helper",
+        ".helper.renderer"
+    ]
+
+    static func canonicalBrowserBundleIdentifier(
+        for audioProcessBundleIdentifier: String
+    ) -> String? {
+        if SupportedMeetingBrowser.supportsAutomaticURLResolution(
+            audioProcessBundleIdentifier
+        ) {
+            return audioProcessBundleIdentifier
+        }
+
+        return SupportedMeetingBrowser.automaticURLBundleIdentifiers
+            .subtracting([SupportedMeetingBrowser.safari])
+            .sorted { $0.count > $1.count }
+            .first { browserBundleIdentifier in
+                supportedHelperSuffixes.contains { suffix in
+                    audioProcessBundleIdentifier == browserBundleIdentifier + suffix
+                }
+            }
     }
 }

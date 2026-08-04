@@ -161,6 +161,7 @@ final class PremiumSettingsViewTests: XCTestCase {
             "calendarMeeting.mode.automatic",
             "calendarMeeting.countdown.cancel",
             "calendarMeeting.notification.armWhenJoinedAction",
+            "calendarMeeting.notification.inProgressTitle",
             "calendarMeeting.notification.upcomingAutomaticBody",
             "calendarMeeting.notification.autoStopTitle",
             "calendarMeeting.notification.autoStopBody",
@@ -210,6 +211,7 @@ final class PremiumSettingsViewTests: XCTestCase {
         XCTAssertFalse(exporter.contains(UserDefaultsKeys.calendarMeetingStartMode))
         XCTAssertFalse(exporter.contains(UserDefaultsKeys.calendarMeetingSelectedCalendarIDs))
         XCTAssertFalse(exporter.contains(UserDefaultsKeys.calendarMeetingSuppressedOccurrenceDigests))
+        XCTAssertFalse(exporter.contains(UserDefaultsKeys.calendarMeetingReminderRequestDigests))
     }
 
     private var repositoryRoot: URL {

@@ -45,6 +45,57 @@ private final class SerializedBrowserResolutionProbe: @unchecked Sendable {
 }
 
 final class BrowserURLResolverTests: XCTestCase {
+    func testBrowserAudioProcessAttributionAcceptsExactMainBundleIdentifiers() {
+        for bundleIdentifier in SupportedMeetingBrowser.automaticURLBundleIdentifiers {
+            XCTAssertEqual(
+                BrowserAudioProcessAttribution.canonicalBrowserBundleIdentifier(
+                    for: bundleIdentifier
+                ),
+                bundleIdentifier
+            )
+        }
+    }
+
+    func testBrowserAudioProcessAttributionCanonicalizesSupportedHelpers() {
+        let helperCapableBrowsers = SupportedMeetingBrowser.automaticURLBundleIdentifiers
+            .subtracting([SupportedMeetingBrowser.safari])
+
+        for bundleIdentifier in helperCapableBrowsers {
+            for suffix in [".helper", ".helper.renderer"] {
+                XCTAssertEqual(
+                    BrowserAudioProcessAttribution.canonicalBrowserBundleIdentifier(
+                        for: bundleIdentifier + suffix
+                    ),
+                    bundleIdentifier,
+                    "Expected \(bundleIdentifier + suffix) to map to \(bundleIdentifier)"
+                )
+            }
+        }
+    }
+
+    func testBrowserAudioProcessAttributionRejectsServicesAndLookalikes() {
+        let rejected = [
+            "com.google.Chrome.updater",
+            "com.google.Chrome.helper.alert",
+            "com.google.Chrome.fake.helper",
+            "com.brave.Browser.helper.updater",
+            "com.microsoft.edgemac.framework",
+            "com.apple.Safari.helper",
+            "com.apple.WebKit.WebContent",
+            SupportedMeetingBrowser.firefox + ".helper",
+            SupportedMeetingBrowser.zen + ".helper"
+        ]
+
+        for bundleIdentifier in rejected {
+            XCTAssertNil(
+                BrowserAudioProcessAttribution.canonicalBrowserBundleIdentifier(
+                    for: bundleIdentifier
+                ),
+                "Unexpected attribution for \(bundleIdentifier)"
+            )
+        }
+    }
+
     func testSupportedAutomaticAndReminderOnlyBrowsersAreDistinct() {
         let automatic = [
             SupportedMeetingBrowser.safari,

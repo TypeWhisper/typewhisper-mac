@@ -135,14 +135,24 @@ final class CoreAudioMeetingProcessClient: MeetingAudioProcessClient, @unchecked
         var processes: [MeetingAudioProcess] = []
         var relevantObjectIDs = Set<AudioObjectID>()
         for objectID in objectIDs {
-            guard let process = readProcess(objectID: objectID) else { continue }
-            guard process.processID != ownProcessID,
-                  process.bundleIdentifier != ownBundleIdentifier else {
+            guard let rawProcess = readProcess(objectID: objectID) else { continue }
+            guard rawProcess.processID != ownProcessID,
+                  rawProcess.bundleIdentifier != ownBundleIdentifier else {
                 continue
             }
-            guard Self.isRelevantProcess(process.bundleIdentifier) else { continue }
+            guard let bundleIdentifier = Self.canonicalBundleIdentifier(
+                for: rawProcess.bundleIdentifier
+            ) else {
+                continue
+            }
             relevantObjectIDs.insert(objectID)
-            processes.append(process)
+            processes.append(MeetingAudioProcess(
+                audioObjectID: rawProcess.audioObjectID,
+                processID: rawProcess.processID,
+                bundleIdentifier: bundleIdentifier,
+                isRunningInput: rawProcess.isRunningInput,
+                isRunningOutput: rawProcess.isRunningOutput
+            ))
         }
 
         guard reconcileProcessListeners(objectIDs: relevantObjectIDs) else {
@@ -347,9 +357,15 @@ final class CoreAudioMeetingProcessClient: MeetingAudioProcessClient, @unchecked
         return AudioObjectHasProperty(objectID, &address)
     }
 
-    nonisolated private static func isRelevantProcess(_ bundleIdentifier: String) -> Bool {
-        NativeMeetingAudioProcessRegistry.provider(for: bundleIdentifier) != nil
-            || SupportedMeetingBrowser.supportsAutomaticURLResolution(bundleIdentifier)
+    nonisolated private static func canonicalBundleIdentifier(
+        for bundleIdentifier: String
+    ) -> String? {
+        if NativeMeetingAudioProcessRegistry.provider(for: bundleIdentifier) != nil {
+            return bundleIdentifier
+        }
+        return BrowserAudioProcessAttribution.canonicalBrowserBundleIdentifier(
+            for: bundleIdentifier
+        )
     }
 }
 

@@ -3,6 +3,12 @@ import AVFoundation
 import Combine
 import Foundation
 
+enum CalendarMeetingBrowserURLResolution: Equatable, Sendable {
+    case unavailable
+    case nonMeeting
+    case meeting(CalendarMeetingCanonicalLink)
+}
+
 @MainActor
 final class CalendarMeetingAutomationController: ObservableObject {
     nonisolated static func shouldActivateOSServices(
@@ -13,8 +19,58 @@ final class CalendarMeetingAutomationController: ObservableObject {
     }
 
     nonisolated static func shouldResolveBrowserURL(for process: MeetingAudioProcess) -> Bool {
-        process.isRunningInput
+        (process.isRunningInput || process.isRunningOutput)
             && SupportedMeetingBrowser.supportsAutomaticURLResolution(process.bundleIdentifier)
+    }
+
+    nonisolated static func browserURLResolution(
+        for resolvedURL: URL?
+    ) -> CalendarMeetingBrowserURLResolution {
+        guard let resolvedURL else { return .unavailable }
+        guard let link = MeetingLinkParser().parse(url: resolvedURL) else {
+            return .nonMeeting
+        }
+        return .meeting(link)
+    }
+
+    nonisolated static func aggregatedBrowserProcesses(
+        _ processes: [MeetingAudioProcess]
+    ) -> [MeetingAudioProcess] {
+        let canonicalProcesses = processes.compactMap { process -> MeetingAudioProcess? in
+            guard let bundleIdentifier = BrowserAudioProcessAttribution
+                .canonicalBrowserBundleIdentifier(for: process.bundleIdentifier) else {
+                return nil
+            }
+            return MeetingAudioProcess(
+                audioObjectID: process.audioObjectID,
+                processID: process.processID,
+                bundleIdentifier: bundleIdentifier,
+                isRunningInput: process.isRunningInput,
+                isRunningOutput: process.isRunningOutput
+            )
+        }
+        return Dictionary(grouping: canonicalProcesses) { $0.bundleIdentifier }
+            .compactMap { bundleIdentifier, groupedProcesses in
+                guard SupportedMeetingBrowser.supportsAutomaticURLResolution(
+                    bundleIdentifier
+                ),
+                let representative = groupedProcesses.min(by: {
+                    if $0.processID != $1.processID {
+                        return $0.processID < $1.processID
+                    }
+                    return $0.audioObjectID < $1.audioObjectID
+                }) else {
+                    return nil
+                }
+                return MeetingAudioProcess(
+                    audioObjectID: representative.audioObjectID,
+                    processID: representative.processID,
+                    bundleIdentifier: bundleIdentifier,
+                    isRunningInput: groupedProcesses.contains { $0.isRunningInput },
+                    isRunningOutput: groupedProcesses.contains { $0.isRunningOutput }
+                )
+            }
+            .sorted { $0.bundleIdentifier < $1.bundleIdentifier }
     }
 
     nonisolated static func canUseAutoStopNotifications(
@@ -38,6 +94,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
 
     typealias EventProviderFactory = @MainActor () -> any CalendarMeetingEventProviding
     typealias AudioCollectorFactory = @MainActor () -> any MeetingAudioActivityCollecting
+    typealias CameraCollectorFactory = @MainActor () -> any MeetingCameraActivityCollecting
     typealias BrowserResolverFactory = @MainActor () -> any BrowserURLResolving
     typealias NotificationServiceFactory = @MainActor () -> any CalendarMeetingNotifying
 
@@ -70,6 +127,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
     private let defaults: UserDefaults
     private let eventProviderFactory: EventProviderFactory
     private let audioCollectorFactory: AudioCollectorFactory
+    private let cameraCollectorFactory: CameraCollectorFactory
     private let browserResolverFactory: BrowserResolverFactory
     private let notificationServiceFactory: NotificationServiceFactory
     private let premiumAccessProvider: @MainActor () -> Bool
@@ -79,18 +137,21 @@ final class CalendarMeetingAutomationController: ObservableObject {
     private var currentOccurrences: [CalendarMeetingOccurrence] = []
     private var eventProvider: (any CalendarMeetingEventProviding)?
     private var audioCollector: (any MeetingAudioActivityCollecting)?
+    private var cameraCollector: (any MeetingCameraActivityCollecting)?
     private var browserResolver: (any BrowserURLResolving)?
     private var notificationService: (any CalendarMeetingNotifying)?
     private var activeCalendarRecording: ActiveCalendarRecordingContext?
     private var activeAutoStopWarningDigest: String?
     private var activeAutoStopWarningHandle: CalendarMeetingRecordingHandle?
-    private var browserMeetingIdentityByProcessID: [pid_t: CalendarMeetingCanonicalLink] = [:]
+    private var browserMeetingIdentityByBundleIdentifier:
+        [String: CalendarMeetingCanonicalLink] = [:]
     private var calendarAutoStopTrackingActive = false
     private var pendingStartMode: CalendarMeetingStartMode?
     private var notificationRouterInstalled = false
     private var initialized = false
     private var refreshGeneration = 0
     private var activityGeneration = 0
+    private var cameraActivityGeneration = 0
     private var recordingStartGeneration = 0
     private var refreshTask: Task<Void, Never>?
     private var horizonRefreshTask: Task<Void, Never>?
@@ -99,6 +160,9 @@ final class CalendarMeetingAutomationController: ObservableObject {
     private var collectorTask: Task<Void, Never>?
     private var collectorSessionID: UUID?
     private var collectorShouldBeRunning = false
+    private var cameraCollectorTask: Task<Void, Never>?
+    private var cameraCollectorSessionID: UUID?
+    private var cameraCollectorShouldBeRunning = false
     private var policyTimerTask: Task<Void, Never>?
     private var recordingStartTask: Task<Void, Never>?
     private var notificationTask: Task<Void, Never>?
@@ -114,6 +178,9 @@ final class CalendarMeetingAutomationController: ObservableObject {
         defaults: UserDefaults = .standard,
         eventProviderFactory: @escaping EventProviderFactory = { EventKitCalendarMeetingProvider() },
         audioCollectorFactory: @escaping AudioCollectorFactory = { MeetingAudioActivityCollector() },
+        cameraCollectorFactory: @escaping CameraCollectorFactory = {
+            MeetingCameraActivityCollector()
+        },
         browserResolverFactory: @escaping BrowserResolverFactory = { BrowserURLResolver() },
         notificationServiceFactory: @escaping NotificationServiceFactory = {
             CalendarMeetingNotificationService()
@@ -129,6 +196,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
         self.defaults = defaults
         self.eventProviderFactory = eventProviderFactory
         self.audioCollectorFactory = audioCollectorFactory
+        self.cameraCollectorFactory = cameraCollectorFactory
         self.browserResolverFactory = browserResolverFactory
         self.notificationServiceFactory = notificationServiceFactory
         self.nowProvider = nowProvider
@@ -354,6 +422,11 @@ final class CalendarMeetingAutomationController: ObservableObject {
         collectorSessionID = nil
         collectorShouldBeRunning = false
         activityGeneration += 1
+        cameraCollectorTask?.cancel()
+        cameraCollectorTask = nil
+        cameraCollectorSessionID = nil
+        cameraCollectorShouldBeRunning = false
+        cameraActivityGeneration += 1
         policyTimerTask?.cancel()
         policyTimerTask = nil
         recordingStartTask?.cancel()
@@ -373,9 +446,13 @@ final class CalendarMeetingAutomationController: ObservableObject {
             Task { await audioCollector.stopCollecting() }
         }
         self.audioCollector = nil
+        if let cameraCollector {
+            Task { await cameraCollector.stopCollecting() }
+        }
+        self.cameraCollector = nil
         eventProvider = nil
         browserResolver = nil
-        browserMeetingIdentityByProcessID.removeAll()
+        browserMeetingIdentityByBundleIdentifier.removeAll()
         calendarAutoStopTrackingActive = false
         currentOccurrences = []
         policy = CalendarMeetingAutomationPolicy()
@@ -459,7 +536,9 @@ final class CalendarMeetingAutomationController: ObservableObject {
             invalidatePendingRecordingStart()
             calendarAutoStopTrackingActive = false
             collectorShouldBeRunning = false
+            cameraCollectorShouldBeRunning = false
             await stopCollector()
+            await stopCameraCollector()
             currentOccurrences = []
             calendars = []
             isAutomationActive = false
@@ -589,6 +668,14 @@ final class CalendarMeetingAutomationController: ObservableObject {
                 calendarAutoStopTrackingActive = false
             }
             Task { @MainActor [weak self] in await self?.stopCollector() }
+
+        case .startCameraActivityCollector:
+            cameraCollectorShouldBeRunning = true
+            startCameraCollector()
+
+        case .stopCameraActivityCollector:
+            cameraCollectorShouldBeRunning = false
+            Task { @MainActor [weak self] in await self?.stopCameraCollector() }
 
         case .publishDetectedMeeting(let occurrence):
             let service = notificationServiceInstance()
@@ -920,7 +1007,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
         let collectorToStop = audioCollector
         audioCollector = nil
         browserResolver = nil
-        browserMeetingIdentityByProcessID.removeAll()
+        browserMeetingIdentityByBundleIdentifier.removeAll()
         if let collectorToStop {
             await collectorToStop.stopCollecting()
         }
@@ -931,60 +1018,114 @@ final class CalendarMeetingAutomationController: ObservableObject {
         }
     }
 
+    private func startCameraCollector() {
+        guard cameraCollectorTask == nil else { return }
+        cameraActivityGeneration += 1
+        let collector = cameraCollectorInstance()
+        let sessionID = UUID()
+        cameraCollectorSessionID = sessionID
+        cameraCollectorTask = Task { @MainActor [weak self] in
+            let stream = await collector.startCollecting()
+            for await snapshot in stream {
+                guard !Task.isCancelled, let self else { break }
+                self.processCameraActivitySnapshot(snapshot)
+            }
+            guard let self, self.cameraCollectorSessionID == sessionID else { return }
+            self.cameraCollectorTask = nil
+            self.cameraCollectorSessionID = nil
+            self.cameraCollectorShouldBeRunning = false
+            self.scheduleNextPolicyTick()
+        }
+    }
+
+    private func stopCameraCollector() async {
+        cameraActivityGeneration += 1
+        let generation = cameraActivityGeneration
+        cameraCollectorTask?.cancel()
+        cameraCollectorTask = nil
+        cameraCollectorSessionID = nil
+        let collectorToStop = cameraCollector
+        cameraCollector = nil
+        if let collectorToStop {
+            await collectorToStop.stopCollecting()
+        }
+        guard generation == cameraActivityGeneration else { return }
+        applyPolicy(.cameraActivityUnavailable(now: nowProvider()))
+        if cameraCollectorShouldBeRunning {
+            startCameraCollector()
+        }
+    }
+
+    private func processCameraActivitySnapshot(_ snapshot: MeetingCameraActivitySnapshot) {
+        cameraActivityGeneration += 1
+        guard snapshot.availability == .available else {
+            applyPolicy(.cameraActivityUnavailable(now: snapshot.capturedAt))
+            return
+        }
+        applyPolicy(.cameraActivity(
+            isRunning: snapshot.isAnyCameraRunning,
+            now: snapshot.capturedAt
+        ))
+    }
+
     private func processActivitySnapshot(_ snapshot: MeetingActivitySnapshot) async {
         activityGeneration += 1
         let generation = activityGeneration
         guard snapshot.availability == .available else {
-            browserMeetingIdentityByProcessID.removeAll()
+            browserMeetingIdentityByBundleIdentifier.removeAll()
             applyPolicy(.activityUnavailable(now: snapshot.capturedAt))
             return
         }
 
-        let presentProcessIDs = Set(snapshot.processes.map(\.processID))
-        browserMeetingIdentityByProcessID = browserMeetingIdentityByProcessID.filter {
-            presentProcessIDs.contains($0.key)
-        }
-        for process in snapshot.processes
-        where !process.isRunningInput && !process.isRunningOutput {
-            browserMeetingIdentityByProcessID.removeValue(forKey: process.processID)
-        }
         var signals: [CalendarMeetingJoinSignal] = []
         var activeBrowserResolutionFailed = false
-        for process in snapshot.processes where process.isRunningInput || process.isRunningOutput {
+        let activeProcesses = snapshot.processes.filter {
+            $0.isRunningInput || $0.isRunningOutput
+        }
+        for process in activeProcesses {
             if let provider = nativeProvider(for: process.bundleIdentifier) {
                 appendNativeSignals(process: process, provider: provider, to: &signals)
-                continue
             }
-            guard SupportedMeetingBrowser.supportsAutomaticURLResolution(process.bundleIdentifier) else {
-                continue
+        }
+
+        let browserProcesses = Self.aggregatedBrowserProcesses(activeProcesses)
+        let activeBrowserBundleIdentifiers = Set(browserProcesses.map(\.bundleIdentifier))
+        browserMeetingIdentityByBundleIdentifier =
+            browserMeetingIdentityByBundleIdentifier.filter {
+                activeBrowserBundleIdentifiers.contains($0.key)
             }
-            if !Self.shouldResolveBrowserURL(for: process) {
-                if let link = browserMeetingIdentityByProcessID[process.processID] {
-                    appendBrowserSignals(process: process, link: link, to: &signals)
-                }
-                continue
-            }
+        for process in browserProcesses {
+            guard Self.shouldResolveBrowserURL(for: process) else { continue }
             let resolver = browserResolverInstance()
-            guard let url = await resolver.activeURL(for: process.bundleIdentifier),
-                  generation == activityGeneration,
-                  let link = MeetingLinkParser().parse(url: url) else {
-                if generation == activityGeneration {
-                    browserMeetingIdentityByProcessID.removeValue(forKey: process.processID)
-                    if activeCalendarRecording != nil {
-                        activeBrowserResolutionFailed = true
-                    }
+            let resolvedURL = await resolver.activeURL(for: process.bundleIdentifier)
+            guard generation == activityGeneration else { return }
+            switch Self.browserURLResolution(for: resolvedURL) {
+            case .unavailable:
+                browserMeetingIdentityByBundleIdentifier.removeValue(
+                    forKey: process.bundleIdentifier
+                )
+                if activeCalendarRecording != nil {
+                    activeBrowserResolutionFailed = true
                 }
                 continue
+
+            case .nonMeeting:
+                browserMeetingIdentityByBundleIdentifier.removeValue(
+                    forKey: process.bundleIdentifier
+                )
+                continue
+
+            case .meeting(let link):
+                browserMeetingIdentityByBundleIdentifier[process.bundleIdentifier] = link
+                appendBrowserSignals(process: process, link: link, to: &signals)
             }
-            browserMeetingIdentityByProcessID[process.processID] = link
-            appendBrowserSignals(process: process, link: link, to: &signals)
         }
         guard generation == activityGeneration else { return }
         let activeIdentitySignalPresent = activeCalendarRecording.map { active in
             signals.contains {
                 $0.occurrenceDigest == active.occurrenceDigest
                     && $0.meetingIdentity == active.identity
-                    && ($0.isRunningInput || $0.isRunningOutput)
+                    && $0.countsForAutoStop
             }
         } ?? false
         if activeBrowserResolutionFailed && !activeIdentitySignalPresent {
@@ -1087,7 +1228,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
         if activeCalendarRecording != nil {
             guard calendarAutoStopTrackingActive else { return }
             delay = 1
-        } else if collectorTask != nil {
+        } else if collectorTask != nil || cameraCollectorTask != nil {
             delay = 1
         } else {
             delay = currentOccurrences
@@ -1220,7 +1361,9 @@ final class CalendarMeetingAutomationController: ObservableObject {
         eventProvider = nil
         browserResolver = nil
         collectorShouldBeRunning = false
+        cameraCollectorShouldBeRunning = false
         await stopCollector()
+        await stopCameraCollector()
         countdownModel.dismissAll()
         let pendingNotificationTask = notificationTask
         pendingNotificationTask?.cancel()
@@ -1249,6 +1392,13 @@ final class CalendarMeetingAutomationController: ObservableObject {
         if let audioCollector { return audioCollector }
         let collector = audioCollectorFactory()
         audioCollector = collector
+        return collector
+    }
+
+    private func cameraCollectorInstance() -> any MeetingCameraActivityCollecting {
+        if let cameraCollector { return cameraCollector }
+        let collector = cameraCollectorFactory()
+        cameraCollector = collector
         return collector
     }
 

@@ -68,6 +68,164 @@ final class CalendarMeetingNotificationServiceTests: XCTestCase {
             CalendarMeetingNotificationService.requestIdentifierPrefix
         ) })
         XCTAssertTrue(client.added.allSatisfy { $0.category == .upcomingReminder })
+        XCTAssertTrue(client.added.allSatisfy {
+            if case .scheduled(let fireDate) = $0.delivery {
+                return fireDate == $0.fireDate
+            }
+            return false
+        })
+    }
+
+    func testLateCreatedOccurrenceGetsOneImmediateCatchUpReminder() async throws {
+        let suiteName = "CalendarMeetingCatchUpTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let client = FakeCalendarMeetingNotificationClient()
+        let service = CalendarMeetingNotificationService(client: client, defaults: defaults)
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let occurrence = makeCalendarMeetingTestOccurrence(
+            eventID: "late-created",
+            start: now.addingTimeInterval(-10 * 60)
+        )
+
+        await service.replaceScheduledReminders([occurrence], now: now)
+
+        let request = try XCTUnwrap(client.added.first)
+        XCTAssertEqual(client.added.count, 1)
+        XCTAssertEqual(request.delivery, .immediate)
+        XCTAssertEqual(request.fireDate, now)
+        XCTAssertEqual(
+            request.title,
+            String(localized: "calendarMeeting.notification.inProgressTitle")
+        )
+        XCTAssertEqual(
+            defaults.stringArray(
+                forKey: UserDefaultsKeys.calendarMeetingReminderRequestDigests
+            ),
+            [occurrence.occurrenceDigest]
+        )
+
+        client.added.removeAll()
+        await service.replaceScheduledReminders(
+            [occurrence],
+            now: now.addingTimeInterval(1)
+        )
+        XCTAssertTrue(client.added.isEmpty)
+    }
+
+    func testPreviouslyScheduledReminderDoesNotBecomeDuplicateCatchUpReminder() async throws {
+        let suiteName = "CalendarMeetingScheduledLedgerTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let client = FakeCalendarMeetingNotificationClient()
+        let service = CalendarMeetingNotificationService(client: client, defaults: defaults)
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let occurrence = makeCalendarMeetingTestOccurrence(
+            eventID: "scheduled-before-fire",
+            start: now.addingTimeInterval(10 * 60)
+        )
+
+        await service.replaceScheduledReminders([occurrence], now: now)
+        XCTAssertEqual(client.added.count, 1)
+        client.added.removeAll()
+
+        await service.replaceScheduledReminders(
+            [occurrence],
+            now: now.addingTimeInterval(6 * 60)
+        )
+        XCTAssertTrue(client.added.isEmpty)
+    }
+
+    func testRescheduledOccurrenceDigestCanReceiveNewCatchUpReminder() async throws {
+        let suiteName = "CalendarMeetingRescheduledCatchUpTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let client = FakeCalendarMeetingNotificationClient()
+        let service = CalendarMeetingNotificationService(client: client, defaults: defaults)
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let original = makeCalendarMeetingTestOccurrence(
+            eventID: "rescheduled",
+            start: now.addingTimeInterval(-20 * 60)
+        )
+        let moved = makeCalendarMeetingTestOccurrence(
+            eventID: "rescheduled",
+            start: now.addingTimeInterval(-10 * 60)
+        )
+
+        await service.replaceScheduledReminders([original], now: now)
+        client.added.removeAll()
+        await service.replaceScheduledReminders([moved], now: now)
+
+        XCTAssertNotEqual(original.occurrenceDigest, moved.occurrenceDigest)
+        XCTAssertEqual(client.added.map(\.occurrenceDigest), [moved.occurrenceDigest])
+    }
+
+    func testCatchUpReminderFailsClosedAfterJoinWindow() async throws {
+        let suiteName = "CalendarMeetingExpiredCatchUpTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let client = FakeCalendarMeetingNotificationClient()
+        let service = CalendarMeetingNotificationService(client: client, defaults: defaults)
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let occurrence = makeCalendarMeetingTestOccurrence(
+            eventID: "expired",
+            start: now.addingTimeInterval(-2 * 60 * 60),
+            duration: 30 * 60
+        )
+
+        await service.replaceScheduledReminders([occurrence], now: now)
+
+        XCTAssertTrue(client.added.isEmpty)
+    }
+
+    func testReminderRequestLedgerIsUniqueAndBounded() {
+        let initial = (0..<CalendarMeetingReminderRequestLedger.capacity).map {
+            "digest-\($0)"
+        }
+        let refreshed = CalendarMeetingReminderRequestLedger.appending(
+            "digest-10",
+            to: initial
+        )
+        XCTAssertEqual(refreshed.count, CalendarMeetingReminderRequestLedger.capacity)
+        XCTAssertEqual(refreshed.last, "digest-10")
+        XCTAssertEqual(refreshed.filter { $0 == "digest-10" }.count, 1)
+
+        let overflow = CalendarMeetingReminderRequestLedger.appending(
+            "digest-new",
+            to: refreshed
+        )
+        XCTAssertEqual(overflow.count, CalendarMeetingReminderRequestLedger.capacity)
+        XCTAssertFalse(overflow.contains("digest-0"))
+        XCTAssertEqual(overflow.last, "digest-new")
+    }
+
+    func testFailedReminderReplacementIsEligibleForLaterRetry() async throws {
+        struct AddError: Error {}
+
+        let suiteName = "CalendarMeetingReminderRetryTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let client = FakeCalendarMeetingNotificationClient()
+        client.addError = AddError()
+        let service = CalendarMeetingNotificationService(client: client, defaults: defaults)
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let occurrence = makeCalendarMeetingTestOccurrence(
+            eventID: "retry-after-add-failure",
+            start: now.addingTimeInterval(10 * 60)
+        )
+        defaults.set(
+            [occurrence.occurrenceDigest],
+            forKey: UserDefaultsKeys.calendarMeetingReminderRequestDigests
+        )
+
+        await service.replaceScheduledReminders([occurrence], now: now)
+
+        XCTAssertEqual(
+            defaults.stringArray(
+                forKey: UserDefaultsKeys.calendarMeetingReminderRequestDigests
+            ),
+            []
+        )
     }
 
     func testUpcomingNotificationCategoryAndCopyReflectStartMode() async throws {
@@ -157,6 +315,7 @@ final class CalendarMeetingNotificationServiceTests: XCTestCase {
         XCTAssertEqual(client.added.first?.category, .detected)
         XCTAssertEqual(client.added.first?.occurrenceDigest, occurrence.id)
         XCTAssertEqual(client.added.first?.fireDate, now.addingTimeInterval(1))
+        XCTAssertEqual(client.added.first?.delivery, .immediate)
     }
 
     func testConfigurationRequestsAuthorizationOnlyWhenUndetermined() async throws {
@@ -205,6 +364,7 @@ final class CalendarMeetingNotificationServiceTests: XCTestCase {
         XCTAssertEqual(request.kind, .autoStop)
         XCTAssertEqual(request.occurrenceDigest, digest)
         XCTAssertEqual(request.fireDate, now)
+        XCTAssertEqual(request.delivery, .immediate)
         XCTAssertTrue(request.identifier.hasSuffix(".autoStop"))
         XCTAssertEqual(client.removed.last, [request.identifier])
         XCTAssertEqual(client.removedDelivered.last, [request.identifier])

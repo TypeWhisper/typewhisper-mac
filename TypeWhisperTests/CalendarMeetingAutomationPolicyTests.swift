@@ -5,6 +5,25 @@ import XCTest
 final class CalendarMeetingAutomationPolicyTests: XCTestCase {
     private let identity = CalendarMeetingCanonicalLink(provider: .zoom, identity: "j/123456789")
 
+    func testFreeAndOffConfigurationsNeverRequestAudioOrCameraCollectors() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let occurrence = makeCalendarMeetingTestOccurrence(start: now)
+
+        for configuration in [
+            configuration(mode: .automatic, premium: false),
+            configuration(mode: .off, premium: true)
+        ] {
+            var policy = CalendarMeetingAutomationPolicy()
+            let effects = policy.reduce(.configure(
+                configuration,
+                occurrences: [occurrence],
+                now: now
+            ))
+            XCTAssertFalse(effects.contains(.startActivityCollector))
+            XCTAssertFalse(effects.contains(.startCameraActivityCollector))
+        }
+    }
+
     func testReminderActionArmsOccurrenceWithoutStartingUntilStableJoinAndCountdown() throws {
         let now = Date(timeIntervalSince1970: 2_000_000_000)
         let occurrence = makeCalendarMeetingTestOccurrence(start: now.addingTimeInterval(5 * 60))
@@ -221,6 +240,130 @@ final class CalendarMeetingAutomationPolicyTests: XCTestCase {
 
         let startEffects = policy.reduce(.timeAdvanced(deadline))
         XCTAssertTrue(startEffects.contains(.startRecording(occurrence, identity)))
+    }
+
+    func testCameraFallbackStartsUniqueEligibleOccurrenceAfterDwellAndCountdown() throws {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let occurrence = makeCalendarMeetingTestOccurrence(start: now)
+        var policy = CalendarMeetingAutomationPolicy()
+
+        let configured = policy.reduce(.configure(
+            configuration(mode: .automatic),
+            occurrences: [occurrence],
+            now: now
+        ))
+        XCTAssertTrue(configured.contains(.startCameraActivityCollector))
+
+        XCTAssertFalse(policy.reduce(.cameraActivity(isRunning: true, now: now)).contains {
+            if case .showStartCountdown = $0 { return true }
+            return false
+        })
+
+        let dwellEffects = policy.reduce(.timeAdvanced(now.addingTimeInterval(3)))
+        let deadline = try XCTUnwrap(dwellEffects.compactMap { effect -> Date? in
+            guard case .showStartCountdown(let candidate, let deadline) = effect else {
+                return nil
+            }
+            XCTAssertEqual(candidate.id, occurrence.id)
+            return deadline
+        }.first)
+        XCTAssertEqual(deadline, now.addingTimeInterval(8))
+        XCTAssertTrue(policy.reduce(.timeAdvanced(deadline)).contains(
+            .startRecording(occurrence, identity)
+        ))
+    }
+
+    func testCameraFallbackFailsClosedForOverlappingEligibleOccurrences() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let first = makeCalendarMeetingTestOccurrence(eventID: "camera-one", start: now)
+        let second = makeCalendarMeetingTestOccurrence(eventID: "camera-two", start: now)
+        var policy = CalendarMeetingAutomationPolicy()
+        _ = policy.reduce(.configure(
+            configuration(mode: .automatic),
+            occurrences: [first, second],
+            now: now
+        ))
+        _ = policy.reduce(.cameraActivity(isRunning: true, now: now))
+
+        let effects = policy.reduce(.timeAdvanced(now.addingTimeInterval(30)))
+        XCTAssertFalse(effects.contains {
+            if case .showStartCountdown = $0 { return true }
+            if case .startRecording = $0 { return true }
+            return false
+        })
+    }
+
+    func testOutputOnlyBrowserSignalRequiresCameraToStart() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let occurrence = makeCalendarMeetingTestOccurrence(start: now)
+        let outputOnly = signal(for: occurrence, input: false, output: true)
+        var policy = CalendarMeetingAutomationPolicy()
+        _ = policy.reduce(.configure(
+            configuration(mode: .automatic),
+            occurrences: [occurrence],
+            now: now
+        ))
+        _ = policy.reduce(.activity([outputOnly], now: now))
+
+        XCTAssertFalse(policy.reduce(.timeAdvanced(now.addingTimeInterval(3))).contains {
+            if case .showStartCountdown = $0 { return true }
+            return false
+        })
+
+        _ = policy.reduce(.cameraActivity(
+            isRunning: true,
+            now: now.addingTimeInterval(4)
+        ))
+        XCTAssertTrue(policy.reduce(.timeAdvanced(now.addingTimeInterval(7))).contains {
+            if case .showStartCountdown(let candidate, _) = $0 {
+                return candidate.id == occurrence.id
+            }
+            return false
+        })
+    }
+
+    func testCameraAndExactOutputURLDisambiguateOverlappingBrowserMeetings() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let meetIdentity = CalendarMeetingCanonicalLink(
+            provider: .googleMeet,
+            identity: "abc-defg-hij"
+        )
+        let otherIdentity = CalendarMeetingCanonicalLink(
+            provider: .zoom,
+            identity: "j/987654321"
+        )
+        let matched = makeCalendarMeetingTestOccurrence(
+            eventID: "matched-browser",
+            start: now,
+            links: [meetIdentity]
+        )
+        let overlapping = makeCalendarMeetingTestOccurrence(
+            eventID: "overlapping-camera",
+            start: now,
+            links: [otherIdentity]
+        )
+        let exactOutput = CalendarMeetingJoinSignal(
+            occurrenceDigest: matched.id,
+            meetingIdentity: meetIdentity,
+            quality: .exactBrowserIdentity,
+            isRunningInput: false,
+            isRunningOutput: true
+        )
+        var policy = CalendarMeetingAutomationPolicy()
+        _ = policy.reduce(.configure(
+            configuration(mode: .automatic),
+            occurrences: [matched, overlapping],
+            now: now
+        ))
+        _ = policy.reduce(.activity([exactOutput], now: now))
+        _ = policy.reduce(.cameraActivity(isRunning: true, now: now))
+
+        XCTAssertTrue(policy.reduce(.timeAdvanced(now.addingTimeInterval(3))).contains {
+            if case .showStartCountdown(let candidate, _) = $0 {
+                return candidate.id == matched.id
+            }
+            return false
+        })
     }
 
     func testSignalLossCancelsCountdownAndLaterStableSignalCanRetry() {
@@ -594,6 +737,43 @@ final class CalendarMeetingAutomationPolicyTests: XCTestCase {
             if case .stopRecording = $0 { return true }
             return false
         })
+    }
+
+    func testCameraPresenceNeverCountsAsAutoStopIdentitySignal() {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let occurrence = makeCalendarMeetingTestOccurrence(start: now)
+        let handle = CalendarMeetingRecordingHandle(
+            id: UUID(),
+            outputURL: URL(fileURLWithPath: "/tmp/camera-fallback.wav")
+        )
+        var policy = CalendarMeetingAutomationPolicy()
+        _ = policy.reduce(.configure(
+            configuration(mode: .automatic, autoStop: true),
+            occurrences: [occurrence],
+            now: now
+        ))
+        _ = policy.reduce(.recordingStarted(
+            handle: handle,
+            occurrenceDigest: occurrence.id,
+            identity: identity,
+            autoStopArmed: true,
+            now: now
+        ))
+        _ = policy.reduce(.cameraActivity(isRunning: true, now: now))
+
+        XCTAssertFalse(policy.reduce(.timeAdvanced(now.addingTimeInterval(60))).contains {
+            if case .showStopCountdown = $0 { return true }
+            return false
+        })
+
+        _ = policy.reduce(.activity([
+            signal(for: occurrence, input: false, output: true)
+        ], now: now.addingTimeInterval(61)))
+        let missing = policy.reduce(.activity([], now: now.addingTimeInterval(62)))
+        XCTAssertEqual(
+            missing,
+            [.showStopCountdown(handle, deadline: now.addingTimeInterval(77))]
+        )
     }
 
     func testUnavailableActivityDisarmsAutoStopWithoutStoppingRecording() {

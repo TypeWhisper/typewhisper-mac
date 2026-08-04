@@ -12,6 +12,7 @@
 		CA1E00000000000000000003 /* BrowserURLResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA1F00000000000000000003 /* BrowserURLResolver.swift */; };
 		CA1E00000000000000000004 /* EventKitCalendarMeetingProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA1F00000000000000000004 /* EventKitCalendarMeetingProvider.swift */; };
 		CA1E00000000000000000005 /* MeetingAudioActivityCollector.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA1F00000000000000000005 /* MeetingAudioActivityCollector.swift */; };
+		CA4E00000000000000000001 /* MeetingCameraActivityCollector.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA4F00000000000000000001 /* MeetingCameraActivityCollector.swift */; };
 		CA1E00000000000000000006 /* CalendarMeetingAutomationPolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA1F00000000000000000006 /* CalendarMeetingAutomationPolicy.swift */; };
 		CA1E00000000000000000007 /* CalendarMeetingNotificationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA1F00000000000000000007 /* CalendarMeetingNotificationService.swift */; };
 		CA1E00000000000000000008 /* CalendarMeetingAutomationController.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA1F00000000000000000008 /* CalendarMeetingAutomationController.swift */; };
@@ -22,6 +23,7 @@
 		CA2E00000000000000000002 /* BrowserURLResolverTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA2F00000000000000000002 /* BrowserURLResolverTests.swift */; };
 		CA2E00000000000000000003 /* CalendarMeetingEventProviderTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA2F00000000000000000003 /* CalendarMeetingEventProviderTests.swift */; };
 		CA2E00000000000000000004 /* MeetingAudioActivityCollectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA2F00000000000000000004 /* MeetingAudioActivityCollectorTests.swift */; };
+		CA4E00000000000000000002 /* MeetingCameraActivityCollectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA4F00000000000000000002 /* MeetingCameraActivityCollectorTests.swift */; };
 		CA2E00000000000000000005 /* CalendarMeetingAutomationPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA2F00000000000000000005 /* CalendarMeetingAutomationPolicyTests.swift */; };
 		CA2E00000000000000000006 /* CalendarMeetingAutomationControllerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA2F00000000000000000006 /* CalendarMeetingAutomationControllerTests.swift */; };
 		CA2E00000000000000000007 /* CalendarMeetingNotificationServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA2F00000000000000000007 /* CalendarMeetingNotificationServiceTests.swift */; };
@@ -598,6 +600,7 @@
 		CA1F00000000000000000003 /* BrowserURLResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserURLResolver.swift; sourceTree = "<group>"; };
 		CA1F00000000000000000004 /* EventKitCalendarMeetingProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventKitCalendarMeetingProvider.swift; sourceTree = "<group>"; };
 		CA1F00000000000000000005 /* MeetingAudioActivityCollector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingAudioActivityCollector.swift; sourceTree = "<group>"; };
+		CA4F00000000000000000001 /* MeetingCameraActivityCollector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingCameraActivityCollector.swift; sourceTree = "<group>"; };
 		CA1F00000000000000000006 /* CalendarMeetingAutomationPolicy.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarMeetingAutomationPolicy.swift; sourceTree = "<group>"; };
 		CA1F00000000000000000007 /* CalendarMeetingNotificationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarMeetingNotificationService.swift; sourceTree = "<group>"; };
 		CA1F00000000000000000008 /* CalendarMeetingAutomationController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarMeetingAutomationController.swift; sourceTree = "<group>"; };
@@ -608,6 +611,7 @@
 		CA2F00000000000000000002 /* BrowserURLResolverTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = BrowserURLResolverTests.swift; sourceTree = "<group>"; };
 		CA2F00000000000000000003 /* CalendarMeetingEventProviderTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CalendarMeetingEventProviderTests.swift; sourceTree = "<group>"; };
 		CA2F00000000000000000004 /* MeetingAudioActivityCollectorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingAudioActivityCollectorTests.swift; sourceTree = "<group>"; };
+		CA4F00000000000000000002 /* MeetingCameraActivityCollectorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = MeetingCameraActivityCollectorTests.swift; sourceTree = "<group>"; };
 		CA2F00000000000000000005 /* CalendarMeetingAutomationPolicyTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CalendarMeetingAutomationPolicyTests.swift; sourceTree = "<group>"; };
 		CA2F00000000000000000006 /* CalendarMeetingAutomationControllerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CalendarMeetingAutomationControllerTests.swift; sourceTree = "<group>"; };
 		CA2F00000000000000000007 /* CalendarMeetingNotificationServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CalendarMeetingNotificationServiceTests.swift; sourceTree = "<group>"; };
@@ -1633,6 +1637,7 @@
 				CA1F00000000000000000003 /* BrowserURLResolver.swift */,
 				CA1F00000000000000000004 /* EventKitCalendarMeetingProvider.swift */,
 				CA1F00000000000000000005 /* MeetingAudioActivityCollector.swift */,
+				CA4F00000000000000000001 /* MeetingCameraActivityCollector.swift */,
 				CA1F00000000000000000006 /* CalendarMeetingAutomationPolicy.swift */,
 				CA1F00000000000000000007 /* CalendarMeetingNotificationService.swift */,
 				CA1F00000000000000000008 /* CalendarMeetingAutomationController.swift */,
@@ -2448,6 +2453,7 @@
 				CA2F00000000000000000002 /* BrowserURLResolverTests.swift */,
 				CA2F00000000000000000003 /* CalendarMeetingEventProviderTests.swift */,
 				CA2F00000000000000000004 /* MeetingAudioActivityCollectorTests.swift */,
+				CA4F00000000000000000002 /* MeetingCameraActivityCollectorTests.swift */,
 				CA2F00000000000000000005 /* CalendarMeetingAutomationPolicyTests.swift */,
 				CA2F00000000000000000006 /* CalendarMeetingAutomationControllerTests.swift */,
 				CA2F00000000000000000007 /* CalendarMeetingNotificationServiceTests.swift */,
@@ -4036,6 +4042,7 @@
 				CA2E00000000000000000002 /* BrowserURLResolverTests.swift in Sources */,
 				CA2E00000000000000000003 /* CalendarMeetingEventProviderTests.swift in Sources */,
 				CA2E00000000000000000004 /* MeetingAudioActivityCollectorTests.swift in Sources */,
+				CA4E00000000000000000002 /* MeetingCameraActivityCollectorTests.swift in Sources */,
 				CA2E00000000000000000005 /* CalendarMeetingAutomationPolicyTests.swift in Sources */,
 				CA2E00000000000000000006 /* CalendarMeetingAutomationControllerTests.swift in Sources */,
 				CA2E00000000000000000007 /* CalendarMeetingNotificationServiceTests.swift in Sources */,
@@ -4146,6 +4153,7 @@
 				CA1E00000000000000000003 /* BrowserURLResolver.swift in Sources */,
 				CA1E00000000000000000004 /* EventKitCalendarMeetingProvider.swift in Sources */,
 				CA1E00000000000000000005 /* MeetingAudioActivityCollector.swift in Sources */,
+				CA4E00000000000000000001 /* MeetingCameraActivityCollector.swift in Sources */,
 				CA1E00000000000000000006 /* CalendarMeetingAutomationPolicy.swift in Sources */,
 				CA1E00000000000000000007 /* CalendarMeetingNotificationService.swift in Sources */,
 				CA1E00000000000000000008 /* CalendarMeetingAutomationController.swift in Sources */,

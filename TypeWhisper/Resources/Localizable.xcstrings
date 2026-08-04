@@ -34706,6 +34706,34 @@
         }
       }
     },
+    "calendarMeeting.notification.inProgressTitle" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Meeting läuft bereits"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Meeting already in progress"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ミーティングはすでに進行中です"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "会议已开始"
+          }
+        }
+      }
+    },
     "calendarMeeting.notification.upcomingTitle" : {
       "localizations" : {
         "de" : {
@@ -35411,25 +35439,25 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Kalenderdaten bleiben auf diesem Mac. Titel werden nur in lokalen Mitteilungen, Einstellungen und Dateinamen verwendet."
+            "value" : "Kalenderdaten bleiben auf diesem Mac. TypeWhisper erkennt nur, ob Meeting-Audio oder eine Kamera aktiv ist, und liest keine Audio- oder Bildinhalte. Titel werden nur in lokalen Mitteilungen, Einstellungen und Dateinamen verwendet."
           }
         },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Calendar data stays on this Mac. Titles are used only in local notifications, settings, and recording filenames."
+            "value" : "Calendar data stays on this Mac. TypeWhisper detects only whether meeting audio or a camera is active and never reads audio or video content. Titles are used only in local notifications, settings, and recording filenames."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "カレンダーデータはこのMacにのみ保存されます。タイトルはローカル通知、設定、録音ファイル名にのみ使用されます。"
+            "value" : "カレンダーデータはこのMacにのみ保存されます。TypeWhisperはミーティング音声またはカメラが使用中かどうかだけを検出し、音声や映像の内容を読み取りません。タイトルはローカル通知、設定、録音ファイル名にのみ使用されます。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "日历数据保留在这台 Mac 上。标题仅用于本地通知、设置和录音文件名。"
+            "value" : "日历数据保留在这台 Mac 上。TypeWhisper 只检测会议音频或摄像头是否处于活动状态，不会读取音频或视频内容。标题仅用于本地通知、设置和录音文件名。"
           }
         }
       }

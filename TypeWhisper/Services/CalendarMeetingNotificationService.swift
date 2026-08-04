@@ -41,6 +41,11 @@ enum CalendarMeetingNotificationCategory: Equatable, Sendable {
     }
 }
 
+enum CalendarMeetingNotificationDelivery: Equatable, Sendable {
+    case scheduled(Date)
+    case immediate
+}
+
 struct CalendarMeetingNotificationRequest: Equatable, Sendable {
     let identifier: String
     let occurrenceDigest: String
@@ -49,6 +54,36 @@ struct CalendarMeetingNotificationRequest: Equatable, Sendable {
     let title: String
     let body: String
     let fireDate: Date
+    let delivery: CalendarMeetingNotificationDelivery
+
+    init(
+        identifier: String,
+        occurrenceDigest: String,
+        kind: CalendarMeetingNotificationKind,
+        category: CalendarMeetingNotificationCategory,
+        title: String,
+        body: String,
+        fireDate: Date,
+        delivery: CalendarMeetingNotificationDelivery? = nil
+    ) {
+        self.identifier = identifier
+        self.occurrenceDigest = occurrenceDigest
+        self.kind = kind
+        self.category = category
+        self.title = title
+        self.body = body
+        self.fireDate = fireDate
+        if let delivery {
+            self.delivery = delivery
+        } else {
+            self.delivery = switch kind {
+            case .upcoming:
+                .scheduled(fireDate)
+            case .detected, .autoStop:
+                .immediate
+            }
+        }
+    }
 }
 
 enum CalendarMeetingNotificationResponse: Equatable, Sendable {
@@ -312,17 +347,17 @@ private final class UserNotificationCenterClient: CalendarMeetingNotificationCli
             kind: request.kind
         )
         let trigger: UNNotificationTrigger?
-        switch request.kind {
-        case .upcoming:
+        switch request.delivery {
+        case .scheduled(let fireDate):
             let components = Calendar.current.dateComponents(
                 [.year, .month, .day, .hour, .minute, .second],
-                from: request.fireDate
+                from: fireDate
             )
             trigger = UNCalendarNotificationTrigger(dateMatching: components, repeats: false)
-        case .detected:
-            trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
-        case .autoStop:
+        case .immediate where request.kind == .autoStop:
             trigger = nil
+        case .immediate:
+            trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
         }
         try await center.add(UNNotificationRequest(
             identifier: request.identifier,
@@ -445,14 +480,26 @@ final class CalendarMeetingNotificationService: ObservableObject, CalendarMeetin
         await removeScheduledMeetingRequests()
         guard startMode != .off else { return }
         let upperBound = now.addingTimeInterval(7 * 24 * 60 * 60)
+        let requestedDigests = Set(
+            defaults.stringArray(
+                forKey: UserDefaultsKeys.calendarMeetingReminderRequestDigests
+            ) ?? []
+        )
         let candidates = occurrences
             .map { ($0, $0.startDate.addingTimeInterval(-5 * 60)) }
-            .filter { $0.1 > now && $0.1 <= upperBound }
-            .sorted { $0.1 < $1.1 }
+            .filter {
+                $0.1 <= upperBound
+                    && $0.0.endDate.addingTimeInterval(30 * 60) >= now
+            }
+            .filter { occurrence, fireDate in
+                fireDate > now || !requestedDigests.contains(occurrence.occurrenceDigest)
+            }
+            .sorted { max($0.1, now) < max($1.1, now) }
             .prefix(48)
 
         for (occurrence, fireDate) in candidates {
             guard !Task.isCancelled else { return }
+            let isCatchUp = fireDate <= now
             let title = occurrence.title.trimmingCharacters(in: .whitespacesAndNewlines)
             let category: CalendarMeetingNotificationCategory
             let notificationTitle: String
@@ -462,14 +509,18 @@ final class CalendarMeetingNotificationService: ObservableObject, CalendarMeetin
                 continue
             case .reminder:
                 category = .upcomingReminder
-                notificationTitle = String(localized: "calendarMeeting.notification.upcomingTitle")
+                notificationTitle = String(localized: isCatchUp
+                    ? "calendarMeeting.notification.inProgressTitle"
+                    : "calendarMeeting.notification.upcomingTitle")
                 body = title.isEmpty
                     ? String(localized: "calendarMeeting.notification.untitledBody")
                     : title
             case .automatic:
                 category = .upcomingAutomatic
                 notificationTitle = title.isEmpty
-                    ? String(localized: "calendarMeeting.notification.upcomingTitle")
+                    ? String(localized: isCatchUp
+                        ? "calendarMeeting.notification.inProgressTitle"
+                        : "calendarMeeting.notification.upcomingTitle")
                     : title
                 body = String(localized: "calendarMeeting.notification.upcomingAutomaticBody")
             }
@@ -483,9 +534,16 @@ final class CalendarMeetingNotificationService: ObservableObject, CalendarMeetin
                 category: category,
                 title: notificationTitle,
                 body: body,
-                fireDate: fireDate
+                fireDate: isCatchUp ? now : fireDate,
+                delivery: isCatchUp ? .immediate : .scheduled(fireDate)
             )
-            try? await client.add(request)
+            do {
+                try await client.add(request)
+                persistReminderRequestDigest(occurrence.occurrenceDigest)
+            } catch {
+                removeReminderRequestDigest(occurrence.occurrenceDigest)
+                continue
+            }
         }
     }
 
@@ -562,5 +620,25 @@ final class CalendarMeetingNotificationService: ObservableObject, CalendarMeetin
         kind: CalendarMeetingNotificationKind
     ) -> String {
         "\(requestIdentifierPrefix)\(digest).\(kind.rawValue)"
+    }
+
+    private func persistReminderRequestDigest(_ digest: String) {
+        let existing = defaults.stringArray(
+            forKey: UserDefaultsKeys.calendarMeetingReminderRequestDigests
+        ) ?? []
+        defaults.set(
+            CalendarMeetingReminderRequestLedger.appending(digest, to: existing),
+            forKey: UserDefaultsKeys.calendarMeetingReminderRequestDigests
+        )
+    }
+
+    private func removeReminderRequestDigest(_ digest: String) {
+        let existing = defaults.stringArray(
+            forKey: UserDefaultsKeys.calendarMeetingReminderRequestDigests
+        ) ?? []
+        defaults.set(
+            existing.filter { $0 != digest },
+            forKey: UserDefaultsKeys.calendarMeetingReminderRequestDigests
+        )
     }
 }

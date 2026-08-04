@@ -82,6 +82,7 @@ enum UserDefaultsKeys {
     static let calendarMeetingCalendarSelectionInitialized = "calendarMeetingCalendarSelectionInitialized"
     static let calendarMeetingEnabledProviderIDs = "calendarMeetingEnabledProviderIDs"
     static let calendarMeetingSuppressedOccurrenceDigests = "calendarMeetingSuppressedOccurrenceDigests"
+    static let calendarMeetingReminderRequestDigests = "calendarMeetingReminderRequestDigests"
     static let calendarMeetingNotificationsConfigured = "calendarMeetingNotificationsConfigured"
 
     // MARK: - History

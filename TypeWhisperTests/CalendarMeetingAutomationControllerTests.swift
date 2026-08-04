@@ -71,7 +71,7 @@ final class CalendarMeetingAutomationControllerTests: XCTestCase {
         ))
     }
 
-    func testBrowserURLResolutionRequiresRunningInput() {
+    func testBrowserURLResolutionAcceptsInputOrOutputForCameraFallback() {
         let input = MeetingAudioProcess(
             audioObjectID: 1,
             processID: 100,
@@ -95,8 +95,67 @@ final class CalendarMeetingAutomationControllerTests: XCTestCase {
         )
 
         XCTAssertTrue(CalendarMeetingAutomationController.shouldResolveBrowserURL(for: input))
-        XCTAssertFalse(CalendarMeetingAutomationController.shouldResolveBrowserURL(for: outputOnly))
+        XCTAssertTrue(CalendarMeetingAutomationController.shouldResolveBrowserURL(for: outputOnly))
         XCTAssertFalse(CalendarMeetingAutomationController.shouldResolveBrowserURL(for: unsupported))
+    }
+
+    func testResolvedNonMeetingBrowserURLIsSignalAbsenceNotCollectorFailure() throws {
+        XCTAssertEqual(
+            CalendarMeetingAutomationController.browserURLResolution(for: nil),
+            .unavailable
+        )
+        XCTAssertEqual(
+            CalendarMeetingAutomationController.browserURLResolution(
+                for: URL(string: "https://example.com/after-leaving")
+            ),
+            .nonMeeting
+        )
+
+        let meetURL = try XCTUnwrap(URL(string: "https://meet.google.com/abc-defg-hij"))
+        guard case .meeting(let link) = CalendarMeetingAutomationController
+            .browserURLResolution(for: meetURL) else {
+            return XCTFail("Expected a canonical Google Meet resolution")
+        }
+        XCTAssertEqual(link.provider, .googleMeet)
+    }
+
+    func testBrowserHelpersAreAggregatedOncePerCanonicalBrowser() throws {
+        let chromeInput = MeetingAudioProcess(
+            audioObjectID: 12,
+            processID: 120,
+            bundleIdentifier: SupportedMeetingBrowser.chrome + ".helper.renderer",
+            isRunningInput: true,
+            isRunningOutput: false
+        )
+        let chromeOutput = MeetingAudioProcess(
+            audioObjectID: 11,
+            processID: 110,
+            bundleIdentifier: SupportedMeetingBrowser.chrome + ".helper",
+            isRunningInput: false,
+            isRunningOutput: true
+        )
+        let brave = MeetingAudioProcess(
+            audioObjectID: 21,
+            processID: 210,
+            bundleIdentifier: SupportedMeetingBrowser.brave,
+            isRunningInput: true,
+            isRunningOutput: true
+        )
+
+        let aggregated = CalendarMeetingAutomationController.aggregatedBrowserProcesses([
+            chromeInput,
+            chromeOutput,
+            brave
+        ])
+
+        XCTAssertEqual(aggregated.count, 2)
+        let chrome = try XCTUnwrap(aggregated.first {
+            $0.bundleIdentifier == SupportedMeetingBrowser.chrome
+        })
+        XCTAssertEqual(chrome.processID, chromeOutput.processID)
+        XCTAssertEqual(chrome.audioObjectID, chromeOutput.audioObjectID)
+        XCTAssertTrue(chrome.isRunningInput)
+        XCTAssertTrue(chrome.isRunningOutput)
     }
 
     func testSuppressionFIFOIsUniqueAndBounded() {
