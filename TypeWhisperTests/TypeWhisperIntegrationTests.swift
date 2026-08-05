@@ -989,8 +989,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         private var _autoUnloadCount = 0
         private var _restoreCount = 0
         private var _batchBehavior = BatchBehavior.immediate
+        private var _restoreDelay: Duration = .milliseconds(0)
         let transcriptionGate = TranscriptionUseGate()
-        var restoreDelay: Duration = .milliseconds(0)
 
         var configured: Bool {
             get { stateLock.withLock { _configured } }
@@ -1008,6 +1008,11 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         var batchBehavior: BatchBehavior {
             get { stateLock.withLock { _batchBehavior } }
             set { stateLock.withLock { _batchBehavior = newValue } }
+        }
+
+        var restoreDelay: Duration {
+            get { stateLock.withLock { _restoreDelay } }
+            set { stateLock.withLock { _restoreDelay = newValue } }
         }
 
         required override init() {}
@@ -8267,6 +8272,59 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         await assertAutoUnloadCount(plugin, remains: 0)
 
         await modelManager.cancelLiveTranscriptionSession(handle)
+        await waitForAutoUnloadCount(plugin, toBecome: 1)
+    }
+
+    @MainActor
+    func testCopiedLiveSessionHandleReleasesAutoUnloadProtectionOnlyOnce() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let originalAutoUnload = UserDefaults.standard.object(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+        defer {
+            if let originalAutoUnload {
+                UserDefaults.standard.set(originalAutoUnload, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            } else {
+                UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            }
+        }
+        UserDefaults.standard.set(-1, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+
+        let plugin = AutoUnloadProtectedTranscriptionPlugin()
+        let modelManager = makeAutoUnloadModelManager(
+            plugin: plugin,
+            appSupportDirectory: appSupportDirectory
+        )
+
+        let optionalFirstHandle = try await modelManager.createLiveTranscriptionSession(
+            language: "en",
+            task: .transcribe,
+            engineOverrideId: plugin.providerId,
+            onProgress: { _ in true }
+        )
+        let firstHandle = try XCTUnwrap(optionalFirstHandle)
+        let copiedFirstHandle = firstHandle
+        let optionalSecondHandle = try await modelManager.createLiveTranscriptionSession(
+            language: "en",
+            task: .transcribe,
+            engineOverrideId: plugin.providerId,
+            onProgress: { _ in true }
+        )
+        let secondHandle = try XCTUnwrap(optionalSecondHandle)
+
+        _ = try await modelManager.finishLiveTranscriptionSession(
+            firstHandle,
+            bufferedDuration: 1,
+            language: "en"
+        )
+        await modelManager.cancelLiveTranscriptionSession(copiedFirstHandle)
+        await assertAutoUnloadCount(plugin, remains: 0)
+
+        _ = try await modelManager.finishLiveTranscriptionSession(
+            secondHandle,
+            bufferedDuration: 1,
+            language: "en"
+        )
         await waitForAutoUnloadCount(plugin, toBecome: 1)
     }
 

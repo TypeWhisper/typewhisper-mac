@@ -78,12 +78,30 @@ struct ModelAutoUnloadDiagnosticsSnapshot: Encodable, Equatable, Sendable {
     let entries: [Entry]
 }
 
+private final class AutoUnloadProtectionLease: @unchecked Sendable {
+    private let lock = NSLock()
+    private let plugin: any TranscriptionEnginePlugin
+    private var isReleased = false
+
+    init(plugin: any TranscriptionEnginePlugin) {
+        self.plugin = plugin
+    }
+
+    func takePluginForRelease() -> (any TranscriptionEnginePlugin)? {
+        lock.withLock {
+            guard !isReleased else { return nil }
+            isReleased = true
+            return plugin
+        }
+    }
+}
+
 @MainActor
 final class ModelManagerService: ObservableObject {
     struct LiveTranscriptionSessionHandle: Sendable {
         let providerId: String
         let session: any LiveTranscriptionSession
-        fileprivate let autoUnloadProtectedPlugin: any TranscriptionEnginePlugin
+        fileprivate let autoUnloadProtectionLease: AutoUnloadProtectionLease
         fileprivate let cloudModelOverridePlugin: (any TranscriptionEnginePlugin)?
         fileprivate let cloudModelOverrideRestoreId: String?
     }
@@ -504,7 +522,7 @@ final class ModelManagerService: ObservableObject {
         let handle = LiveTranscriptionSessionHandle(
             providerId: providerId,
             session: session,
-            autoUnloadProtectedPlugin: plugin,
+            autoUnloadProtectionLease: AutoUnloadProtectionLease(plugin: plugin),
             cloudModelOverridePlugin: overrideRestoreId == nil ? nil : plugin,
             cloudModelOverrideRestoreId: overrideRestoreId
         )
@@ -523,7 +541,7 @@ final class ModelManagerService: ObservableObject {
         let startTime = CFAbsoluteTimeGetCurrent()
         defer {
             restoreCloudModelOverride(for: handle)
-            endAutoUnloadProtectedUse(of: handle.autoUnloadProtectedPlugin)
+            releaseAutoUnloadProtection(for: handle)
         }
 
         let result = try await handle.session.finish()
@@ -546,9 +564,14 @@ final class ModelManagerService: ObservableObject {
     func cancelLiveTranscriptionSession(_ handle: LiveTranscriptionSessionHandle) async {
         defer {
             restoreCloudModelOverride(for: handle)
-            endAutoUnloadProtectedUse(of: handle.autoUnloadProtectedPlugin)
+            releaseAutoUnloadProtection(for: handle)
         }
         await handle.session.cancel()
+    }
+
+    private func releaseAutoUnloadProtection(for handle: LiveTranscriptionSessionHandle) {
+        guard let plugin = handle.autoUnloadProtectionLease.takePluginForRelease() else { return }
+        endAutoUnloadProtectedUse(of: plugin)
     }
 
     func transcribe(

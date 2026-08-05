@@ -23,8 +23,9 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
     fileprivate var modelState: WhisperModelState = .notLoaded
     fileprivate var downloadProgress: Double = 0
     private var modelLoadGeneration = 0
-    private let modelUseLock = NSLock()
+    private let modelUseCondition = NSCondition()
     private var activeModelUseCount = 0
+    private var isAutoUnloading = false
     fileprivate var slowModelLoadWarningDuration = WhisperKitPlugin.defaultSlowModelLoadWarningDuration
     #if DEBUG
     private(set) var restoreLoadedModelInvocationCountForTesting = 0
@@ -94,23 +95,35 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
     }
 
     private func beginModelUse() {
-        modelUseLock.withLock {
-            activeModelUseCount += 1
+        modelUseCondition.lock()
+        while isAutoUnloading {
+            modelUseCondition.wait()
         }
+        activeModelUseCount += 1
+        modelUseCondition.unlock()
     }
 
     private func endModelUse() {
-        modelUseLock.withLock {
+        modelUseCondition.withLock {
             guard activeModelUseCount > 0 else { return }
             activeModelUseCount -= 1
         }
     }
 
     private func autoUnloadIfIdle() {
-        modelUseLock.withLock {
-            guard activeModelUseCount == 0 else { return }
-            unloadModel(clearPersistence: false)
+        let claimedUnload = modelUseCondition.withLock {
+            guard activeModelUseCount == 0, !isAutoUnloading else { return false }
+            isAutoUnloading = true
+            return true
         }
+        guard claimedUnload else { return }
+
+        unloadModel(clearPersistence: false)
+
+        modelUseCondition.lock()
+        isAutoUnloading = false
+        modelUseCondition.broadcast()
+        modelUseCondition.unlock()
     }
 
     private func isCurrentModelLoad(_ generation: Int) -> Bool {
@@ -643,7 +656,7 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
     }
 
     var activeModelUseCountForTesting: Int {
-        modelUseLock.withLock { activeModelUseCount }
+        modelUseCondition.withLock { activeModelUseCount }
     }
 
     func beginModelUseForTesting() {
