@@ -762,7 +762,7 @@ final class AudioRecorderViewModelTests: XCTestCase {
             "recorder.retranscribeConfirmation.title",
             "recorder.retranscribeConfirmation.message"
         ] {
-            for language in ["de", "en", "ja"] {
+            for language in ["de", "en", "ja", "zh-Hans"] {
                 XCTAssertFalse(try TestSupport.localizedCatalogValue(for: key, language: language).isEmpty)
             }
         }

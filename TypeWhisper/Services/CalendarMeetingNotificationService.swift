@@ -91,6 +91,15 @@ enum CalendarMeetingNotificationResponse: Equatable, Sendable {
     case suppress(String)
     case continueRecording(String)
     case openPremiumSettings
+
+    var keepsApplicationInBackground: Bool {
+        switch self {
+        case .armStart, .suppress, .continueRecording:
+            true
+        case .openPremiumSettings:
+            false
+        }
+    }
 }
 
 enum CalendarMeetingNotificationResponseMapper {
@@ -216,6 +225,9 @@ private final class CalendarMeetingNotificationDelegateBridge:
         )
 
         if let action {
+            if action.keepsApplicationInBackground {
+                ManagedAppReopenSuppression.shared.markBackgroundInteraction()
+            }
             completionHandler()
             Task { @MainActor [handler] in
                 handler(action)

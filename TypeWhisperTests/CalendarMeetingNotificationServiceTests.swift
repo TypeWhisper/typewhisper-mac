@@ -480,6 +480,24 @@ final class CalendarMeetingNotificationServiceTests: XCTestCase {
         XCTAssertFalse(continueOptions.contains(.foreground))
     }
 
+    func testOnlyExplicitSettingsResponseAllowsManagedWindowReopen() {
+        let digest = String(repeating: "a", count: 64)
+
+        XCTAssertTrue(
+            CalendarMeetingNotificationResponse.armStart(digest).keepsApplicationInBackground
+        )
+        XCTAssertTrue(
+            CalendarMeetingNotificationResponse.suppress(digest).keepsApplicationInBackground
+        )
+        XCTAssertTrue(
+            CalendarMeetingNotificationResponse.continueRecording(digest)
+                .keepsApplicationInBackground
+        )
+        XCTAssertFalse(
+            CalendarMeetingNotificationResponse.openPremiumSettings.keepsApplicationInBackground
+        )
+    }
+
     func testOnlyAutoStopUsesTimeSensitiveInterruptionLevel() {
         XCTAssertEqual(
             CalendarMeetingNotificationPresentationPolicy.interruptionLevel(for: .autoStop),

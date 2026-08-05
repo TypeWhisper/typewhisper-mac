@@ -212,7 +212,10 @@ final class ServiceContainer: ObservableObject {
             audioDeviceService: audioDeviceService
         )
         calendarMeetingCountdownModel = CalendarMeetingCountdownModel(
-            hotkeyService: hotkeyService
+            hotkeyService: hotkeyService,
+            onButtonAction: {
+                ManagedAppReopenSuppression.shared.markBackgroundInteraction()
+            }
         )
         calendarMeetingAutomationController = CalendarMeetingAutomationController(
             licenseService: licenseService,

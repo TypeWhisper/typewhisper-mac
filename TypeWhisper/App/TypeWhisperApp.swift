@@ -1,6 +1,7 @@
 import SwiftUI
 import AVFoundation
 import Combine
+import Foundation
 import TypeWhisperPluginSDK
 @preconcurrency import Sparkle
 
@@ -38,6 +39,35 @@ enum DockIconVisibility {
 
         guard !showMenuBarIcon else { return false }
         return dockIconBehavior == .keepVisible
+    }
+}
+
+final class ManagedAppReopenSuppression: @unchecked Sendable {
+    static let shared = ManagedAppReopenSuppression()
+
+    private let lock = NSLock()
+    private let duration: TimeInterval
+    private var deadline: Date?
+
+    init(duration: TimeInterval = 1.5) {
+        self.duration = duration
+    }
+
+    func markBackgroundInteraction(at now: Date = Date()) {
+        lock.withLock {
+            deadline = now.addingTimeInterval(duration)
+        }
+    }
+
+    func consumeIfActive(at now: Date = Date()) -> Bool {
+        lock.withLock {
+            guard let deadline, deadline >= now else {
+                self.deadline = nil
+                return false
+            }
+            self.deadline = nil
+            return true
+        }
     }
 }
 
@@ -758,6 +788,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        if ManagedAppReopenSuppression.shared.consumeIfActive() {
+            return true
+        }
         if !hasVisibleManagedWindow {
             if HomeViewModel.shared.showSetupWizard {
                 openSetupWindow()

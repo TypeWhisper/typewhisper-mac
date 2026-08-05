@@ -919,6 +919,27 @@ final class DockIconVisibilityTests: XCTestCase {
     }
 }
 
+final class ManagedAppReopenSuppressionTests: XCTestCase {
+    func testBackgroundInteractionSuppressesExactlyOneImmediateReopen() {
+        let suppression = ManagedAppReopenSuppression(duration: 1.5)
+        let now = Date(timeIntervalSince1970: 1_000)
+
+        suppression.markBackgroundInteraction(at: now)
+
+        XCTAssertTrue(suppression.consumeIfActive(at: now.addingTimeInterval(1)))
+        XCTAssertFalse(suppression.consumeIfActive(at: now.addingTimeInterval(1)))
+    }
+
+    func testBackgroundInteractionSuppressionExpires() {
+        let suppression = ManagedAppReopenSuppression(duration: 1.5)
+        let now = Date(timeIntervalSince1970: 1_000)
+
+        suppression.markBackgroundInteraction(at: now)
+
+        XCTAssertFalse(suppression.consumeIfActive(at: now.addingTimeInterval(2)))
+    }
+}
+
 @MainActor
 final class ManagedAppWindowRestorationTests: XCTestCase {
     func testManagedWindowIsMarkedNonRestorable() {

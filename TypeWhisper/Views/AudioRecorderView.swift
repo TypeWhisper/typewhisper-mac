@@ -431,18 +431,35 @@ private struct RecordingRow: View {
                     }
 
                     if viewModel.isRetranscribing(item) {
-                        ProgressView()
-                            .controlSize(.small)
-                            .help(item.transcript == nil
-                                ? String(localized: "recorder.transcribing")
-                                : String(localized: "recorder.retranscribing"))
+                        HStack(spacing: 5) {
+                            ProgressView()
+                                .controlSize(.small)
+                            if item.transcript == nil {
+                                Text(String(localized: "recorder.transcribing"))
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                        .help(item.transcript == nil
+                            ? String(localized: "recorder.transcribing")
+                            : String(localized: "recorder.retranscribing"))
+                    } else if item.transcript == nil {
+                        Button {
+                            requestTranscription()
+                        } label: {
+                            Label(transcriptionActionTitle, systemImage: "text.viewfinder")
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                        .fixedSize()
+                        .help(transcriptionActionTitle)
+                        .disabled(!viewModel.canTranscribeRecording(item))
+                        .accessibilityIdentifier("recorder.recording.transcribe")
                     } else {
                         Button {
                             requestTranscription()
                         } label: {
-                            Image(systemName: item.transcript == nil
-                                ? "text.viewfinder"
-                                : "arrow.triangle.2.circlepath")
+                            Image(systemName: "arrow.triangle.2.circlepath")
                         }
                         .buttonStyle(.borderless)
                         .help(transcriptionActionTitle)

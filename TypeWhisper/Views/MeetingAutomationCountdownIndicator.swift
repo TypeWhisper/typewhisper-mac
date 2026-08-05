@@ -67,12 +67,17 @@ final class CalendarMeetingCountdownModel: ObservableObject {
     @Published private(set) var presentation: CalendarMeetingCountdownPresentation?
 
     private let hotkeyService: HotkeyService?
+    private let onButtonAction: @MainActor () -> Void
     private var generation: UInt64 = 0
     private var activeAction: (@MainActor () -> Void)?
     private var hotkeyRegistrationID: UUID?
 
-    init(hotkeyService: HotkeyService? = nil) {
+    init(
+        hotkeyService: HotkeyService? = nil,
+        onButtonAction: @escaping @MainActor () -> Void = {}
+    ) {
         self.hotkeyService = hotkeyService
+        self.onButtonAction = onButtonAction
     }
 
     deinit {
@@ -143,7 +148,10 @@ final class CalendarMeetingCountdownModel: ObservableObject {
         guard self.presentation == presentation else { return {} }
         let expectedGeneration = generation
         return { [weak self] in
-            self?.performAction(expectedGeneration: expectedGeneration)
+            self?.performAction(
+                expectedGeneration: expectedGeneration,
+                isButtonAction: true
+            )
         }
     }
 
@@ -172,13 +180,19 @@ final class CalendarMeetingCountdownModel: ObservableObject {
         }
     }
 
-    private func performAction(expectedGeneration: UInt64) {
+    private func performAction(
+        expectedGeneration: UInt64,
+        isButtonAction: Bool = false
+    ) {
         guard expectedGeneration == generation,
               presentation != nil,
               let action = activeAction else {
             return
         }
 
+        if isButtonAction {
+            onButtonAction()
+        }
         generation &+= 1
         presentation = nil
         activeAction = nil

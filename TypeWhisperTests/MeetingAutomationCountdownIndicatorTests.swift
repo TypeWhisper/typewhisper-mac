@@ -137,6 +137,25 @@ final class MeetingAutomationCountdownIndicatorTests: XCTestCase {
         XCTAssertFalse(hotkeyService.hasMeetingCountdownActionForTesting())
     }
 
+    func testIndicatorButtonMarksBackgroundInteractionBeforeRunningAction() throws {
+        var events: [String] = []
+        let model = CalendarMeetingCountdownModel(onButtonAction: {
+            events.append("background")
+        })
+        model.presentAutoStop(
+            startedAt: .now,
+            deadline: .now.addingTimeInterval(15)
+        ) {
+            events.append("continue")
+        }
+        let presentation = try XCTUnwrap(model.presentation)
+
+        model.action(for: presentation)()
+
+        XCTAssertEqual(events, ["background", "continue"])
+        XCTAssertNil(model.presentation)
+    }
+
     func testKeyboardShortcutCancelsStartAndIsNotRegisteredForAutoStop() {
         let hotkeyService = HotkeyService()
         let model = CalendarMeetingCountdownModel(hotkeyService: hotkeyService)
