@@ -73,6 +73,15 @@ final class BrowserURLResolverTests: XCTestCase {
         }
     }
 
+    func testBrowserAudioProcessAttributionCanonicalizesSafariWebKitGPUProcess() {
+        XCTAssertEqual(
+            BrowserAudioProcessAttribution.canonicalBrowserBundleIdentifier(
+                for: BrowserAudioProcessAttribution.safariWebKitGPUProcess
+            ),
+            SupportedMeetingBrowser.safari
+        )
+    }
+
     func testBrowserAudioProcessAttributionRejectsServicesAndLookalikes() {
         let rejected = [
             "com.google.Chrome.updater",
@@ -82,6 +91,8 @@ final class BrowserURLResolverTests: XCTestCase {
             "com.microsoft.edgemac.framework",
             "com.apple.Safari.helper",
             "com.apple.WebKit.WebContent",
+            "com.apple.WebKit.Networking",
+            "com.apple.WebKit.GPU.fake",
             SupportedMeetingBrowser.firefox + ".helper",
             SupportedMeetingBrowser.zen + ".helper"
         ]

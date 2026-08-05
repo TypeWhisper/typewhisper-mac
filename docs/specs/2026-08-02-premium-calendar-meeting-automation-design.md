@@ -2,7 +2,7 @@
 
 Date: 2026-08-02
 
-Last updated: 2026-08-04
+Last updated: 2026-08-05
 
 ## Scope
 
@@ -22,7 +22,7 @@ The previous TypeWhisper experiment remains untouched at `/Users/marco/.codex/wo
 
 - `EventKitCalendarMeetingProvider` owns one `EKEventStore` actor-isolated and emits detached calendars and occurrences.
 - `MeetingLinkParser` canonicalizes only links found in EventKit URL, location, and notes fields.
-- `BrowserURLResolver` centralizes the existing Safari/Chromium/Arc active-tab resolution. `BrowserAudioProcessAttribution` maps the exact main bundle identifier plus the explicitly allowed `.helper` and `.helper.renderer` forms back to the canonical Chrome, Chrome Canary, Brave, Edge, Arc, Opera, Vivaldi, Chromium, or Wavebox identifier. Updaters, alert services, lookalikes, Firefox, and Zen are rejected. Safari remains direct-only; WebKit processes are not attributed to Safari without separate live evidence.
+- `BrowserURLResolver` centralizes the existing Safari/Chromium/Arc active-tab resolution. `BrowserAudioProcessAttribution` maps the exact main bundle identifier plus the explicitly allowed `.helper` and `.helper.renderer` forms back to the canonical Chrome, Chrome Canary, Brave, Edge, Arc, Opera, Vivaldi, Chromium, or Wavebox identifier. A Safari live test on current macOS showed meeting I/O attributed to the exact `com.apple.WebKit.GPU` process, so that one process identifier is explicitly mapped to Safari; `WebContent`, `Networking`, lookalike, and other WebKit services remain rejected. The mapping only selects Safari for active-URL resolution, and the controller still requires an exact canonical calendar-link match. Updaters, alert services, Firefox, and Zen are rejected.
 - `MeetingAudioActivityCollector` listens to public CoreAudio process properties only while a join window is relevant. Process-list and per-process activity properties are required and fail closed when unsupported; the HAL service-restart listener is optional and installed only when advertised by the current system. While those listeners are installed, a deduplicated one-second snapshot reconciliation recovers process activity transitions that some macOS versions do not deliver through the per-process callback. A helper retains its real PID and audio object for listener ownership while snapshots expose the canonical browser identifier. The controller combines input and output across helpers and resolves the active URL once per canonical browser and snapshot. It is stopped together with the collector and never runs in Free, Off, or outside relevant join/auto-stop windows.
 - `MeetingCameraActivityCollector` observes only the public CoreMediaIO `DeviceIsRunningSomewhere` property while at least one join window is open. It neither requests camera permission nor reads image frames, device content, or application identity. Camera presence can back a unique eligible occurrence when process input is unavailable; exact browser URL or native-provider evidence still outranks generic camera presence. Camera state is discarded once recording starts and never becomes an auto-stop identity signal.
 - Native process attribution includes Zoom and both Teams bundle identifiers. For FaceTime it accepts the app process plus Apple's `com.apple.FaceTime.FTConversationService`, `com.apple.avconferenced`, and `com.apple.TelephonyUtilities` call services because recent macOS versions attribute FaceTime I/O to those services. These processes become a meeting signal only while a matching FaceTime calendar occurrence is already inside its join window.

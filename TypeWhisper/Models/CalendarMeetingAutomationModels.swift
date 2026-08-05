@@ -276,6 +276,12 @@ enum SupportedMeetingBrowser {
 }
 
 enum BrowserAudioProcessAttribution {
+    // Current Safari/WebKit versions attribute browser meeting audio to the
+    // GPU XPC process rather than to Safari itself. This attribution only
+    // selects Safari for URL resolution; the controller still requires the
+    // active Safari URL to match the canonical calendar meeting identity.
+    static let safariWebKitGPUProcess = "com.apple.WebKit.GPU"
+
     private static let supportedHelperSuffixes = [
         ".helper",
         ".helper.renderer"
@@ -284,6 +290,10 @@ enum BrowserAudioProcessAttribution {
     static func canonicalBrowserBundleIdentifier(
         for audioProcessBundleIdentifier: String
     ) -> String? {
+        if audioProcessBundleIdentifier == safariWebKitGPUProcess {
+            return SupportedMeetingBrowser.safari
+        }
+
         if SupportedMeetingBrowser.supportsAutomaticURLResolution(
             audioProcessBundleIdentifier
         ) {

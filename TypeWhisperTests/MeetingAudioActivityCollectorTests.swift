@@ -111,6 +111,36 @@ final class MeetingAudioActivityCollectorTests: XCTestCase {
         )
     }
 
+    func testNativeProcessRegistryMapsZoomAndBothTeamsBundleIdentifiers() {
+        let expectedProviders: [(String, MeetingProvider)] = [
+            ("us.zoom.xos", .zoom),
+            ("com.microsoft.teams2", .teams),
+            ("com.microsoft.teams", .teams)
+        ]
+
+        for (bundleIdentifier, expectedProvider) in expectedProviders {
+            XCTAssertEqual(
+                NativeMeetingAudioProcessRegistry.provider(for: bundleIdentifier),
+                expectedProvider,
+                "Unexpected provider for \(bundleIdentifier)"
+            )
+        }
+    }
+
+    func testNativeProcessRegistryRejectsZoomAndTeamsLookalikes() {
+        for bundleIdentifier in [
+            "us.zoom.xos.helper",
+            "com.microsoft.teams2.helper",
+            "com.microsoft.teams.updater",
+            "com.example.microsoft.teams"
+        ] {
+            XCTAssertNil(
+                NativeMeetingAudioProcessRegistry.provider(for: bundleIdentifier),
+                "Unexpected native meeting attribution for \(bundleIdentifier)"
+            )
+        }
+    }
+
     func testUnsupportedClientFailsClosedAndFinishesStream() async {
         let client = FakeMeetingAudioProcessClient()
         client.configure(

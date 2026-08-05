@@ -141,14 +141,30 @@ final class CalendarMeetingAutomationControllerTests: XCTestCase {
             isRunningInput: true,
             isRunningOutput: true
         )
+        let safariInput = MeetingAudioProcess(
+            audioObjectID: 31,
+            processID: 310,
+            bundleIdentifier: BrowserAudioProcessAttribution.safariWebKitGPUProcess,
+            isRunningInput: true,
+            isRunningOutput: false
+        )
+        let safariOutput = MeetingAudioProcess(
+            audioObjectID: 32,
+            processID: 320,
+            bundleIdentifier: BrowserAudioProcessAttribution.safariWebKitGPUProcess,
+            isRunningInput: false,
+            isRunningOutput: true
+        )
 
         let aggregated = CalendarMeetingAutomationController.aggregatedBrowserProcesses([
             chromeInput,
             chromeOutput,
-            brave
+            brave,
+            safariInput,
+            safariOutput
         ])
 
-        XCTAssertEqual(aggregated.count, 2)
+        XCTAssertEqual(aggregated.count, 3)
         let chrome = try XCTUnwrap(aggregated.first {
             $0.bundleIdentifier == SupportedMeetingBrowser.chrome
         })
@@ -156,6 +172,14 @@ final class CalendarMeetingAutomationControllerTests: XCTestCase {
         XCTAssertEqual(chrome.audioObjectID, chromeOutput.audioObjectID)
         XCTAssertTrue(chrome.isRunningInput)
         XCTAssertTrue(chrome.isRunningOutput)
+
+        let safari = try XCTUnwrap(aggregated.first {
+            $0.bundleIdentifier == SupportedMeetingBrowser.safari
+        })
+        XCTAssertEqual(safari.processID, safariInput.processID)
+        XCTAssertEqual(safari.audioObjectID, safariInput.audioObjectID)
+        XCTAssertTrue(safari.isRunningInput)
+        XCTAssertTrue(safari.isRunningOutput)
     }
 
     func testSuppressionFIFOIsUniqueAndBounded() {
