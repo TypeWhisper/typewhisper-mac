@@ -220,6 +220,45 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         }
     }
 
+    private actor TranscriptionUseGate {
+        private var entries = 0
+        private var released = false
+        private var entryWaiters: [(target: Int, continuation: CheckedContinuation<Void, Never>)] = []
+        private var releaseWaiters: [CheckedContinuation<Void, Never>] = []
+
+        func enter() {
+            entries += 1
+            let readyWaiters = entryWaiters.filter { entries >= $0.target }
+            entryWaiters.removeAll { entries >= $0.target }
+            for waiter in readyWaiters {
+                waiter.continuation.resume()
+            }
+        }
+
+        func waitForEntries(_ target: Int) async {
+            if entries >= target { return }
+            await withCheckedContinuation { continuation in
+                entryWaiters.append((target, continuation))
+            }
+        }
+
+        func waitForRelease() async {
+            if released { return }
+            await withCheckedContinuation { continuation in
+                releaseWaiters.append(continuation)
+            }
+        }
+
+        func releaseAll() {
+            released = true
+            let waiters = releaseWaiters
+            releaseWaiters.removeAll()
+            for waiter in waiters {
+                waiter.resume()
+            }
+        }
+    }
+
     @objc(APIRouterMockLLMProviderPlugin)
     private final class MockLLMProviderPlugin: NSObject, LLMProviderPlugin, LLMProviderIdentityProviding, LLMProviderSetupStatusProviding, LLMTemperatureControllableProvider, PluginSettingsActivityReporting, @unchecked Sendable {
         static var pluginId: String { "com.typewhisper.mock.llm" }
@@ -413,6 +452,68 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             try? await Task.sleep(for: .milliseconds(25))
         }
         XCTAssertEqual(plugin.autoUnloadCount, expected, file: file, line: line)
+    }
+
+    @MainActor
+    private func waitForAutoUnloadCount(
+        _ plugin: AutoUnloadProtectedTranscriptionPlugin,
+        toBecome expected: Int,
+        timeout: Duration = .seconds(2),
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async {
+        let deadline = ContinuousClock.now.advanced(by: timeout)
+        while ContinuousClock.now < deadline {
+            if plugin.autoUnloadCount == expected {
+                return
+            }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+        XCTAssertEqual(plugin.autoUnloadCount, expected, file: file, line: line)
+    }
+
+    @MainActor
+    private func assertAutoUnloadCount(
+        _ plugin: AutoUnloadProtectedTranscriptionPlugin,
+        remains expected: Int,
+        duration: Duration = .milliseconds(300),
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async {
+        let deadline = ContinuousClock.now.advanced(by: duration)
+        while ContinuousClock.now < deadline {
+            let actual = plugin.autoUnloadCount
+            if actual != expected {
+                XCTFail("Expected autoUnloadCount to remain \(expected), got \(actual)", file: file, line: line)
+                return
+            }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+        XCTAssertEqual(plugin.autoUnloadCount, expected, file: file, line: line)
+    }
+
+    @MainActor
+    private func makeAutoUnloadModelManager(
+        plugin: AutoUnloadProtectedTranscriptionPlugin,
+        appSupportDirectory: URL
+    ) -> ModelManagerService {
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: AutoUnloadProtectedTranscriptionPlugin.pluginId,
+                    name: AutoUnloadProtectedTranscriptionPlugin.pluginName,
+                    version: "1.0.0",
+                    principalClass: "APIRouterAutoUnloadProtectedTranscriptionPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+        return ModelManagerService()
     }
 
     @MainActor
@@ -868,6 +969,130 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
             PluginTranscriptionResult(text: "transcribed", detectedLanguage: language)
+        }
+    }
+
+    @objc(APIRouterAutoUnloadProtectedTranscriptionPlugin)
+    private final class AutoUnloadProtectedTranscriptionPlugin: NSObject, LiveTranscriptionCapablePlugin, @unchecked Sendable {
+        static var pluginId: String { "com.typewhisper.mock.auto-unload-transcription" }
+        static var pluginName: String { "Auto-Unload Protected Mock Transcription" }
+
+        enum BatchBehavior: Sendable {
+            case immediate
+            case waitForRelease
+            case waitForCancellation
+            case fail
+        }
+
+        private let stateLock = NSLock()
+        private var _configured = true
+        private var _autoUnloadCount = 0
+        private var _restoreCount = 0
+        private var _batchBehavior = BatchBehavior.immediate
+        private var _restoreDelay: Duration = .milliseconds(0)
+        let transcriptionGate = TranscriptionUseGate()
+
+        var configured: Bool {
+            get { stateLock.withLock { _configured } }
+            set { stateLock.withLock { _configured = newValue } }
+        }
+
+        var autoUnloadCount: Int {
+            stateLock.withLock { _autoUnloadCount }
+        }
+
+        var restoreCount: Int {
+            stateLock.withLock { _restoreCount }
+        }
+
+        var batchBehavior: BatchBehavior {
+            get { stateLock.withLock { _batchBehavior } }
+            set { stateLock.withLock { _batchBehavior = newValue } }
+        }
+
+        var restoreDelay: Duration {
+            get { stateLock.withLock { _restoreDelay } }
+            set { stateLock.withLock { _restoreDelay = newValue } }
+        }
+
+        required override init() {}
+
+        func activate(host: HostServices) {}
+        func deactivate() {}
+
+        var providerId: String { "auto-unload-transcription" }
+        var providerDisplayName: String { "Auto-Unload Protected Mock" }
+        var isConfigured: Bool { configured }
+        var transcriptionModels: [PluginModelInfo] {
+            [PluginModelInfo(id: "tiny", displayName: "Tiny")]
+        }
+        var selectedModelId: String? { "tiny" }
+        var supportsTranslation: Bool { false }
+        func selectModel(_ modelId: String) {}
+
+        @objc func triggerAutoUnload() {
+            stateLock.withLock {
+                _autoUnloadCount += 1
+                _configured = false
+            }
+        }
+
+        @objc func triggerRestoreModel() {
+            let delay = restoreDelay
+            stateLock.withLock {
+                _restoreCount += 1
+            }
+            Task { [weak self] in
+                try? await Task.sleep(for: delay)
+                self?.configured = true
+            }
+        }
+
+        func transcribe(
+            audio: AudioData,
+            language: String?,
+            translate: Bool,
+            prompt: String?
+        ) async throws -> PluginTranscriptionResult {
+            switch batchBehavior {
+            case .immediate:
+                break
+            case .waitForRelease:
+                await transcriptionGate.enter()
+                await transcriptionGate.waitForRelease()
+            case .waitForCancellation:
+                await transcriptionGate.enter()
+                try await Task.sleep(for: .seconds(60))
+            case .fail:
+                throw PluginTranscriptionError.apiError("Expected test failure")
+            }
+
+            return PluginTranscriptionResult(text: "transcribed", detectedLanguage: language)
+        }
+
+        func createLiveTranscriptionSession(
+            language: String?,
+            translate: Bool,
+            prompt: String?,
+            onProgress: @Sendable @escaping (String) -> Bool
+        ) async throws -> any LiveTranscriptionSession {
+            MockLiveSession(language: language)
+        }
+
+        private actor MockLiveSession: LiveTranscriptionSession {
+            let language: String?
+
+            init(language: String?) {
+                self.language = language
+            }
+
+            func appendAudio(samples: [Float]) async throws {}
+
+            func finish() async throws -> PluginTranscriptionResult {
+                PluginTranscriptionResult(text: "live transcription", detectedLanguage: language)
+            }
+
+            func cancel() async {}
         }
     }
 
@@ -7803,6 +8028,304 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         XCTAssertEqual(result, "processed")
         XCTAssertEqual(activityManager.reasons, ["Local prompt processing with Gemma 4 (MLX)"])
+    }
+
+    @MainActor
+    func testOverlappingTranscriptionsDelayImmediateAutoUnloadUntilLastUseCompletes() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let originalAutoUnload = UserDefaults.standard.object(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+        defer {
+            if let originalAutoUnload {
+                UserDefaults.standard.set(originalAutoUnload, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            } else {
+                UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            }
+        }
+        UserDefaults.standard.set(-1, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+
+        let plugin = AutoUnloadProtectedTranscriptionPlugin()
+        plugin.batchBehavior = .waitForRelease
+        let modelManager = makeAutoUnloadModelManager(
+            plugin: plugin,
+            appSupportDirectory: appSupportDirectory
+        )
+        modelManager.scheduleAutoUnloadIfNeeded(for: plugin)
+
+        let first = Task { @MainActor in
+            try await modelManager.transcribe(
+                audioSamples: [Float](repeating: 0, count: 1_600),
+                language: nil,
+                task: .transcribe,
+                engineOverrideId: plugin.providerId
+            )
+        }
+        let second = Task { @MainActor in
+            try await modelManager.transcribe(
+                audioSamples: [Float](repeating: 0, count: 1_600),
+                language: nil,
+                task: .transcribe,
+                engineOverrideId: plugin.providerId
+            )
+        }
+
+        await plugin.transcriptionGate.waitForEntries(2)
+        await assertAutoUnloadCount(plugin, remains: 0)
+
+        await plugin.transcriptionGate.releaseAll()
+        let firstResult = try await first.value
+        let secondResult = try await second.value
+        XCTAssertEqual(firstResult.text, "transcribed")
+        XCTAssertEqual(secondResult.text, "transcribed")
+        await waitForAutoUnloadCount(plugin, toBecome: 1)
+    }
+
+    @MainActor
+    func testRestoreAndTranscriptionCancelPreviouslyScheduledImmediateAutoUnload() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let originalAutoUnload = UserDefaults.standard.object(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+        defer {
+            if let originalAutoUnload {
+                UserDefaults.standard.set(originalAutoUnload, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            } else {
+                UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            }
+        }
+        UserDefaults.standard.set(-1, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+
+        let plugin = AutoUnloadProtectedTranscriptionPlugin()
+        plugin.restoreDelay = .milliseconds(200)
+        let modelManager = makeAutoUnloadModelManager(
+            plugin: plugin,
+            appSupportDirectory: appSupportDirectory
+        )
+        modelManager.scheduleAutoUnloadIfNeeded(for: plugin)
+        plugin.configured = false
+
+        let result = try await modelManager.transcribe(
+            audioSamples: [Float](repeating: 0, count: 1_600),
+            language: nil,
+            task: .transcribe,
+            engineOverrideId: plugin.providerId
+        )
+
+        XCTAssertEqual(result.text, "transcribed")
+        XCTAssertEqual(plugin.restoreCount, 1)
+        await waitForAutoUnloadCount(plugin, toBecome: 1)
+    }
+
+    @MainActor
+    func testTranscriptionErrorReleasesImmediateAutoUnloadProtection() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let originalAutoUnload = UserDefaults.standard.object(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+        defer {
+            if let originalAutoUnload {
+                UserDefaults.standard.set(originalAutoUnload, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            } else {
+                UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            }
+        }
+        UserDefaults.standard.set(-1, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+
+        let plugin = AutoUnloadProtectedTranscriptionPlugin()
+        plugin.batchBehavior = .fail
+        let modelManager = makeAutoUnloadModelManager(
+            plugin: plugin,
+            appSupportDirectory: appSupportDirectory
+        )
+
+        do {
+            _ = try await modelManager.transcribe(
+                audioSamples: [Float](repeating: 0, count: 1_600),
+                language: nil,
+                task: .transcribe,
+                engineOverrideId: plugin.providerId,
+                onProgress: { _ in true }
+            )
+            XCTFail("Expected transcription failure")
+        } catch let error as PluginTranscriptionError {
+            guard case .apiError(let message) = error else {
+                return XCTFail("Expected apiError, got \(error)")
+            }
+            XCTAssertEqual(message, "Expected test failure")
+        }
+
+        await waitForAutoUnloadCount(plugin, toBecome: 1)
+    }
+
+    @MainActor
+    func testTranscriptionCancellationReleasesImmediateAutoUnloadProtection() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let originalAutoUnload = UserDefaults.standard.object(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+        defer {
+            if let originalAutoUnload {
+                UserDefaults.standard.set(originalAutoUnload, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            } else {
+                UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            }
+        }
+        UserDefaults.standard.set(-1, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+
+        let plugin = AutoUnloadProtectedTranscriptionPlugin()
+        plugin.batchBehavior = .waitForCancellation
+        let modelManager = makeAutoUnloadModelManager(
+            plugin: plugin,
+            appSupportDirectory: appSupportDirectory
+        )
+
+        let transcription = Task { @MainActor in
+            try await modelManager.transcribe(
+                audioSamples: [Float](repeating: 0, count: 1_600),
+                language: nil,
+                task: .transcribe,
+                engineOverrideId: plugin.providerId
+            )
+        }
+        await plugin.transcriptionGate.waitForEntries(1)
+        transcription.cancel()
+
+        do {
+            _ = try await transcription.value
+            XCTFail("Expected cancellation")
+        } catch is CancellationError {
+            // Expected.
+        }
+
+        await waitForAutoUnloadCount(plugin, toBecome: 1)
+    }
+
+    @MainActor
+    func testLiveTranscriptionKeepsImmediateAutoUnloadProtectedUntilFinish() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let originalAutoUnload = UserDefaults.standard.object(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+        defer {
+            if let originalAutoUnload {
+                UserDefaults.standard.set(originalAutoUnload, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            } else {
+                UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            }
+        }
+        UserDefaults.standard.set(-1, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+
+        let plugin = AutoUnloadProtectedTranscriptionPlugin()
+        let modelManager = makeAutoUnloadModelManager(
+            plugin: plugin,
+            appSupportDirectory: appSupportDirectory
+        )
+        modelManager.scheduleAutoUnloadIfNeeded(for: plugin)
+
+        let optionalHandle = try await modelManager.createLiveTranscriptionSession(
+            language: "en",
+            task: .transcribe,
+            engineOverrideId: plugin.providerId,
+            onProgress: { _ in true }
+        )
+        let handle = try XCTUnwrap(optionalHandle)
+        await assertAutoUnloadCount(plugin, remains: 0)
+
+        let result = try await modelManager.finishLiveTranscriptionSession(
+            handle,
+            bufferedDuration: 1,
+            language: "en"
+        )
+        XCTAssertEqual(result.text, "live transcription")
+        await waitForAutoUnloadCount(plugin, toBecome: 1)
+    }
+
+    @MainActor
+    func testLiveTranscriptionKeepsImmediateAutoUnloadProtectedUntilCancel() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let originalAutoUnload = UserDefaults.standard.object(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+        defer {
+            if let originalAutoUnload {
+                UserDefaults.standard.set(originalAutoUnload, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            } else {
+                UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            }
+        }
+        UserDefaults.standard.set(-1, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+
+        let plugin = AutoUnloadProtectedTranscriptionPlugin()
+        let modelManager = makeAutoUnloadModelManager(
+            plugin: plugin,
+            appSupportDirectory: appSupportDirectory
+        )
+
+        let optionalHandle = try await modelManager.createLiveTranscriptionSession(
+            language: "en",
+            task: .transcribe,
+            engineOverrideId: plugin.providerId,
+            onProgress: { _ in true }
+        )
+        let handle = try XCTUnwrap(optionalHandle)
+        await assertAutoUnloadCount(plugin, remains: 0)
+
+        await modelManager.cancelLiveTranscriptionSession(handle)
+        await waitForAutoUnloadCount(plugin, toBecome: 1)
+    }
+
+    @MainActor
+    func testCopiedLiveSessionHandleReleasesAutoUnloadProtectionOnlyOnce() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let originalAutoUnload = UserDefaults.standard.object(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+        defer {
+            if let originalAutoUnload {
+                UserDefaults.standard.set(originalAutoUnload, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            } else {
+                UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            }
+        }
+        UserDefaults.standard.set(-1, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+
+        let plugin = AutoUnloadProtectedTranscriptionPlugin()
+        let modelManager = makeAutoUnloadModelManager(
+            plugin: plugin,
+            appSupportDirectory: appSupportDirectory
+        )
+
+        let optionalFirstHandle = try await modelManager.createLiveTranscriptionSession(
+            language: "en",
+            task: .transcribe,
+            engineOverrideId: plugin.providerId,
+            onProgress: { _ in true }
+        )
+        let firstHandle = try XCTUnwrap(optionalFirstHandle)
+        let copiedFirstHandle = firstHandle
+        let optionalSecondHandle = try await modelManager.createLiveTranscriptionSession(
+            language: "en",
+            task: .transcribe,
+            engineOverrideId: plugin.providerId,
+            onProgress: { _ in true }
+        )
+        let secondHandle = try XCTUnwrap(optionalSecondHandle)
+
+        _ = try await modelManager.finishLiveTranscriptionSession(
+            firstHandle,
+            bufferedDuration: 1,
+            language: "en"
+        )
+        await modelManager.cancelLiveTranscriptionSession(copiedFirstHandle)
+        await assertAutoUnloadCount(plugin, remains: 0)
+
+        _ = try await modelManager.finishLiveTranscriptionSession(
+            secondHandle,
+            bufferedDuration: 1,
+            language: "en"
+        )
+        await waitForAutoUnloadCount(plugin, toBecome: 1)
     }
 
     @MainActor

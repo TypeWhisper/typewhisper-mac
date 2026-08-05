@@ -535,6 +535,26 @@ final class AudioEngineRecoverySupportTests: XCTestCase {
         XCTAssertEqual(service.latestRecoveryRecordingURL, url)
     }
 
+    func testImmediateRetentionKeepsInMemoryAudioWithoutCreatingRecoveryFile() async throws {
+        let directory = makeRecoveryTestDirectory()
+        let store = DictationRecoveryAudioStore(directory: directory, retentionPolicy: .immediately)
+        let service = AudioRecordingService(recoveryAudioStore: store)
+        service.hasMicrophonePermissionOverride = true
+        service.startRecordingOverride = {}
+        service.stopRecordingOverride = { _ in service.getCurrentBuffer() }
+        let samples: [Float] = [0.25, -0.25, 0.5]
+
+        try service.startRecording()
+        service.testingProcessConvertedSamples(samples)
+
+        XCTAssertEqual(service.getCurrentBuffer(), samples)
+        let stoppedSamples = await service.stopRecording(policy: .immediate)
+        XCTAssertEqual(stoppedSamples, samples)
+        XCTAssertNil(service.preserveActiveRecoveryRecording())
+        XCTAssertNil(service.latestRecoveryRecordingURL)
+        XCTAssertTrue(try recoveryFileNames(in: directory).isEmpty)
+    }
+
     func testRecoveryCircuitBreakerPreservesBufferedRecoveryAudio() throws {
         let directory = makeRecoveryTestDirectory()
         let store = DictationRecoveryAudioStore(directory: directory)

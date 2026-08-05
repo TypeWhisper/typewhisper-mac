@@ -451,6 +451,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         source.userDefaults.set("overlay", forKey: UserDefaultsKeys.indicatorStyle)
         source.userDefaults.set(false, forKey: UserDefaultsKeys.indicatorVisibleInScreenCaptures)
         source.userDefaults.set(true, forKey: UserDefaultsKeys.recorderSystemAudioEnabled)
+        source.userDefaults.set(7, forKey: UserDefaultsKeys.dictationRecoveryRetentionDays)
         // Deliberately excluded: engine/model selections must not be exported.
         source.userDefaults.set("com.typewhisper.some-engine", forKey: UserDefaultsKeys.fileTranscriptionEngine)
 
@@ -474,9 +475,11 @@ final class SettingsBackupExporterTests: XCTestCase {
         XCTAssertEqual(backup.preferences.indicatorStyle, "overlay")
         XCTAssertEqual(backup.preferences.indicatorVisibleInScreenCaptures, false)
         XCTAssertEqual(backup.preferences.recorderSystemAudioEnabled, true)
+        XCTAssertEqual(backup.preferences.dictationRecoveryRetentionDays, 7)
 
         let destination = try makeFixture()
         defer { teardown(destination) }
+        var appliedRecoveryRetentionPolicy: DictationRecoveryRetentionPolicy?
 
         let result = await SettingsBackupExporter.importBackup(
             backup,
@@ -489,7 +492,8 @@ final class SettingsBackupExporterTests: XCTestCase {
             pluginRegistryService: destination.pluginRegistryService,
             historyService: destination.historyService,
             usageStatisticsService: destination.usageStatisticsService,
-            userDefaults: destination.userDefaults
+            userDefaults: destination.userDefaults,
+            recoveryRetentionPolicyDidChange: { appliedRecoveryRetentionPolicy = $0 }
         )
 
         XCTAssertTrue(result.updateChannelApplied)
@@ -503,7 +507,36 @@ final class SettingsBackupExporterTests: XCTestCase {
             destination.userDefaults.object(forKey: UserDefaultsKeys.indicatorVisibleInScreenCaptures) as? Bool,
             false
         )
+        XCTAssertEqual(destination.userDefaults.integer(forKey: UserDefaultsKeys.dictationRecoveryRetentionDays), 7)
+        XCTAssertEqual(appliedRecoveryRetentionPolicy, .sevenDays)
         XCTAssertNil(destination.userDefaults.string(forKey: UserDefaultsKeys.fileTranscriptionEngine))
+    }
+
+    func testBuildBackupExportsEffectiveRegisteredRecoveryRetentionPolicy() throws {
+        let source = try makeFixture()
+        defer { teardown(source) }
+
+        source.userDefaults.register(defaults: [
+            UserDefaultsKeys.dictationRecoveryRetentionDays: DictationRecoveryRetentionPolicy.thirtyDays.rawValue,
+        ])
+        XCTAssertNil(
+            source.userDefaults.persistentDomain(forName: source.suiteName)?[
+                UserDefaultsKeys.dictationRecoveryRetentionDays
+            ]
+        )
+
+        let backup = SettingsBackupExporter.buildBackup(
+            workflowService: source.workflowService,
+            dictionaryService: source.dictionaryService,
+            snippetService: source.snippetService,
+            profileService: source.profileService,
+            promptActionService: source.promptActionService,
+            pluginManager: source.pluginManager,
+            historyService: source.historyService,
+            userDefaults: source.userDefaults
+        )
+
+        XCTAssertEqual(backup.preferences.dictationRecoveryRetentionDays, 30)
     }
 
     func testCategoryCountsReflectBackupContents() throws {

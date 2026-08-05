@@ -6,7 +6,7 @@ import TypeWhisperPluginSDK
 // MARK: - Plugin Entry Point
 
 @objc(WhisperKitPlugin)
-final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin, TranscriptionModelCatalogProviding, DictionaryTermsCapabilityProviding, DictionaryTermsBudgetProviding, PluginSettingsActivityReporting, PluginDownloadedModelManaging, @unchecked Sendable {
+final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin, TranscriptionModelCatalogProviding, DictionaryTermsCapabilityProviding, DictionaryTermsBudgetProviding, PluginSettingsActivityReporting, PluginDownloadedModelManaging, HostModelLifecyclePolicyAwarePlugin, @unchecked Sendable {
     static let pluginId = "com.typewhisper.whisperkit"
     static let pluginName = "WhisperKit"
     private static let maxConditioningPromptChars = 500
@@ -23,6 +23,9 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
     fileprivate var modelState: WhisperModelState = .notLoaded
     fileprivate var downloadProgress: Double = 0
     private var modelLoadGeneration = 0
+    private let modelUseCondition = NSCondition()
+    private var activeModelUseCount = 0
+    private var isAutoUnloading = false
     fileprivate var slowModelLoadWarningDuration = WhisperKitPlugin.defaultSlowModelLoadWarningDuration
     #if DEBUG
     private(set) var restoreLoadedModelInvocationCountForTesting = 0
@@ -89,6 +92,38 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
 
     private func invalidateModelLoad() {
         modelLoadGeneration += 1
+    }
+
+    private func beginModelUse() {
+        modelUseCondition.lock()
+        while isAutoUnloading {
+            modelUseCondition.wait()
+        }
+        activeModelUseCount += 1
+        modelUseCondition.unlock()
+    }
+
+    private func endModelUse() {
+        modelUseCondition.withLock {
+            guard activeModelUseCount > 0 else { return }
+            activeModelUseCount -= 1
+        }
+    }
+
+    private func autoUnloadIfIdle() {
+        let claimedUnload = modelUseCondition.withLock {
+            guard activeModelUseCount == 0, !isAutoUnloading else { return false }
+            isAutoUnloading = true
+            return true
+        }
+        guard claimedUnload else { return }
+
+        unloadModel(clearPersistence: false)
+
+        modelUseCondition.lock()
+        isAutoUnloading = false
+        modelUseCondition.broadcast()
+        modelUseCondition.unlock()
     }
 
     private func isCurrentModelLoad(_ generation: Int) -> Bool {
@@ -235,6 +270,9 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
         translate: Bool,
         prompt: String?
     ) async throws -> PluginTranscriptionResult {
+        beginModelUse()
+        defer { endModelUse() }
+
         guard let whisperKit else {
             throw PluginTranscriptionError.notConfigured
         }
@@ -286,6 +324,9 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
         onProgress: @Sendable @escaping (String) -> Bool,
         onSourceProgress: @Sendable @escaping (PluginTranscriptionSourceProgress) -> Bool
     ) async throws -> PluginTranscriptionResult {
+        beginModelUse()
+        defer { endModelUse() }
+
         guard let whisperKit else {
             throw PluginTranscriptionError.notConfigured
         }
@@ -472,6 +513,9 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
     }
 
     fileprivate func loadModel(_ modelDef: WhisperModelDef) async {
+        beginModelUse()
+        defer { endModelUse() }
+
         guard !(isConfigured && loadedModelId == modelDef.id) else { return }
         guard !isModelLoadInProgress(for: modelDef.id) else { return }
 
@@ -585,7 +629,7 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
         }
     }
 
-    @objc func triggerAutoUnload() { unloadModel(clearPersistence: false) }
+    @objc func triggerAutoUnload() { autoUnloadIfIdle() }
     @objc func triggerRestoreModel() { Task { await restoreLoadedModel(allowDownloads: true) } }
 
     func unloadModel(clearPersistence: Bool = true) {
@@ -609,6 +653,18 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
 
     var loadingModelIdForTesting: String? {
         loadingModelId
+    }
+
+    var activeModelUseCountForTesting: Int {
+        modelUseCondition.withLock { activeModelUseCount }
+    }
+
+    func beginModelUseForTesting() {
+        beginModelUse()
+    }
+
+    func endModelUseForTesting() {
+        endModelUse()
     }
 
     func setModelStateForTesting(_ state: WhisperModelState, loadedModelId: String? = nil) {

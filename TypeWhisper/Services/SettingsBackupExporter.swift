@@ -182,6 +182,7 @@ enum SettingsBackupExporter {
         // Dictation Recovery
         var dictationRecoveryLanguage: String? = nil
         var dictationRecoveryAutomaticFallbackEnabled: Bool? = nil
+        var dictationRecoveryRetentionDays: Int? = nil
         // File Transcription
         var fileTranscriptionLanguage: String? = nil
         // Recorder
@@ -227,6 +228,7 @@ enum SettingsBackupExporter {
             if requireSecondEscapeToCancelRecording != nil { count += 1 }
             if dictationRecoveryLanguage != nil { count += 1 }
             if dictationRecoveryAutomaticFallbackEnabled != nil { count += 1 }
+            if dictationRecoveryRetentionDays != nil { count += 1 }
             if fileTranscriptionLanguage != nil { count += 1 }
             if recorderMicEnabled != nil { count += 1 }
             if recorderSystemAudioEnabled != nil { count += 1 }
@@ -571,6 +573,9 @@ enum SettingsBackupExporter {
                 requireSecondEscapeToCancelRecording: userDefaults.object(forKey: UserDefaultsKeys.requireSecondEscapeToCancelRecording) as? Bool,
                 dictationRecoveryLanguage: userDefaults.string(forKey: UserDefaultsKeys.dictationRecoveryLanguage),
                 dictationRecoveryAutomaticFallbackEnabled: userDefaults.object(forKey: UserDefaultsKeys.dictationRecoveryAutomaticFallbackEnabled) as? Bool,
+                dictationRecoveryRetentionDays: userDefaults.object(forKey: UserDefaultsKeys.dictationRecoveryRetentionDays) == nil
+                    ? nil
+                    : DictationRecoveryRetentionPolicy.load(from: userDefaults).rawValue,
                 fileTranscriptionLanguage: userDefaults.string(forKey: UserDefaultsKeys.fileTranscriptionLanguage),
                 recorderMicEnabled: userDefaults.object(forKey: UserDefaultsKeys.recorderMicEnabled) as? Bool,
                 recorderSystemAudioEnabled: userDefaults.object(forKey: UserDefaultsKeys.recorderSystemAudioEnabled) as? Bool,
@@ -618,7 +623,8 @@ enum SettingsBackupExporter {
         pluginRegistryService: PluginRegistryService,
         historyService: HistoryService,
         usageStatisticsService: UsageStatisticsService,
-        userDefaults: UserDefaults = .standard
+        userDefaults: UserDefaults = .standard,
+        recoveryRetentionPolicyDidChange: ((DictationRecoveryRetentionPolicy) -> Void)? = nil
     ) async -> ImportResult {
         var result = ImportResult()
 
@@ -843,6 +849,10 @@ enum SettingsBackupExporter {
         apply(preferences.requireSecondEscapeToCancelRecording, forKey: UserDefaultsKeys.requireSecondEscapeToCancelRecording)
         apply(preferences.dictationRecoveryLanguage, forKey: UserDefaultsKeys.dictationRecoveryLanguage)
         apply(preferences.dictationRecoveryAutomaticFallbackEnabled, forKey: UserDefaultsKeys.dictationRecoveryAutomaticFallbackEnabled)
+        apply(preferences.dictationRecoveryRetentionDays, forKey: UserDefaultsKeys.dictationRecoveryRetentionDays)
+        if preferences.dictationRecoveryRetentionDays != nil {
+            recoveryRetentionPolicyDidChange?(DictationRecoveryRetentionPolicy.load(from: userDefaults))
+        }
         apply(preferences.fileTranscriptionLanguage, forKey: UserDefaultsKeys.fileTranscriptionLanguage)
         apply(preferences.recorderMicEnabled, forKey: UserDefaultsKeys.recorderMicEnabled)
         apply(preferences.recorderSystemAudioEnabled, forKey: UserDefaultsKeys.recorderSystemAudioEnabled)

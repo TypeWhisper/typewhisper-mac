@@ -112,7 +112,7 @@ final class DictationRecoveryAudioStoreTests: XCTestCase {
         let directory = makeTemporaryDirectory()
         let outsideDirectory = makeTemporaryDirectory()
         let outsideURL = outsideDirectory
-            .appendingPathComponent("dictation-recovery-outside")
+            .appendingPathComponent("dictation-recovery-20330518-033320-000-0001")
             .appendingPathExtension("wav")
         FileManager.default.createFile(atPath: outsideURL.path, contents: Data([1, 2, 3]))
 
@@ -121,6 +121,204 @@ final class DictationRecoveryAudioStoreTests: XCTestCase {
         store.discardRecovery(at: outsideURL)
 
         XCTAssertTrue(FileManager.default.fileExists(atPath: outsideURL.path))
+    }
+
+    func testRetentionPolicyDefaultsToThirtyDaysForMissingOrUnknownValues() throws {
+        let suiteName = "DictationRecoveryRetentionPolicyTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defaults.removePersistentDomain(forName: suiteName)
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        XCTAssertEqual(DictationRecoveryRetentionPolicy.load(from: defaults), .thirtyDays)
+
+        defaults.set(999, forKey: UserDefaultsKeys.dictationRecoveryRetentionDays)
+        XCTAssertEqual(DictationRecoveryRetentionPolicy.load(from: defaults), .thirtyDays)
+
+        for policy in DictationRecoveryRetentionPolicy.allCases {
+            defaults.set(policy.rawValue, forKey: UserDefaultsKeys.dictationRecoveryRetentionDays)
+            XCTAssertEqual(DictationRecoveryRetentionPolicy.load(from: defaults), policy)
+        }
+    }
+
+    func testAllFiniteRetentionPoliciesRemoveOnlyExpiredRecoveries() throws {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let policies: [DictationRecoveryRetentionPolicy] = [
+            .oneDay,
+            .sevenDays,
+            .thirtyDays,
+            .sixtyDays,
+            .ninetyDays,
+            .oneHundredEightyDays,
+        ]
+
+        for policy in policies {
+            let retentionDays = try XCTUnwrap(policy.retentionDays)
+            let directory = makeTemporaryDirectory()
+            let expiredURL = try makeRecoveryFile(
+                in: directory,
+                named: "dictation-recovery-20330518-033320-000-0001.wav",
+                modifiedAt: Calendar.current.date(byAdding: .day, value: -(retentionDays + 1), to: now)!
+            )
+            let retainedURL = try makeRecoveryFile(
+                in: directory,
+                named: "dictation-recovery-20330518-033320-000-0002.wav",
+                modifiedAt: Calendar.current.date(byAdding: .day, value: -(retentionDays - 1), to: now)!
+            )
+            let boundaryURL = try makeRecoveryFile(
+                in: directory,
+                named: "dictation-recovery-20330518-033320-000-0003.wav",
+                modifiedAt: Calendar.current.date(byAdding: .day, value: -retentionDays, to: now)!
+            )
+
+            let store = DictationRecoveryAudioStore(
+                directory: directory,
+                retentionPolicy: policy,
+                now: { now }
+            )
+
+            XCTAssertFalse(FileManager.default.fileExists(atPath: expiredURL.path), "\(policy)")
+            XCTAssertTrue(FileManager.default.fileExists(atPath: retainedURL.path), "\(policy)")
+            XCTAssertTrue(FileManager.default.fileExists(atPath: boundaryURL.path), "\(policy)")
+            XCTAssertEqual(store.recoveryURLs, [retainedURL, boundaryURL], "\(policy)")
+        }
+    }
+
+    func testThirtyDayRetentionRemovesExpiredLegacyFileAndPreservesUnrelatedFile() throws {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let directory = makeTemporaryDirectory()
+        let oldDate = try XCTUnwrap(Calendar.current.date(byAdding: .day, value: -31, to: now))
+        let recentDate = try XCTUnwrap(Calendar.current.date(byAdding: .day, value: -29, to: now))
+        let expiredRecoveryURL = try makeRecoveryFile(
+            in: directory,
+            named: "dictation-recovery-20330518-033320-000-0001.wav",
+            modifiedAt: oldDate
+        )
+        let legacyRecoveryURL = try makeRecoveryFile(
+            in: directory,
+            named: "last-dictation-recovery.wav",
+            modifiedAt: oldDate
+        )
+        let recentRecoveryURL = try makeRecoveryFile(
+            in: directory,
+            named: "dictation-recovery-20330518-033320-000-0002.wav",
+            modifiedAt: recentDate
+        )
+        let similarlyNamedURL = try makeRecoveryFile(
+            in: directory,
+            named: "dictation-recovery-not-a-canonical-name.wav",
+            modifiedAt: oldDate
+        )
+        let unrelatedURL = try makeRecoveryFile(
+            in: directory,
+            named: "unrelated.wav",
+            modifiedAt: oldDate
+        )
+
+        let store = DictationRecoveryAudioStore(
+            directory: directory,
+            retentionPolicy: .thirtyDays,
+            now: { now }
+        )
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: expiredRecoveryURL.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: legacyRecoveryURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: recentRecoveryURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: similarlyNamedURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: unrelatedURL.path))
+        XCTAssertEqual(store.recoveryURLs, [recentRecoveryURL])
+    }
+
+    func testNeverRetentionPreservesOldRecovery() throws {
+        let now = Date(timeIntervalSince1970: 2_000_000_000)
+        let directory = makeTemporaryDirectory()
+        let oldDate = try XCTUnwrap(Calendar.current.date(byAdding: .day, value: -365, to: now))
+        let oldRecoveryURL = try makeRecoveryFile(
+            in: directory,
+            named: "dictation-recovery-20330518-033320-000-0001.wav",
+            modifiedAt: oldDate
+        )
+
+        let store = DictationRecoveryAudioStore(
+            directory: directory,
+            retentionPolicy: .never,
+            now: { now }
+        )
+
+        XCTAssertEqual(store.recoveryURLs, [oldRecoveryURL])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: oldRecoveryURL.path))
+    }
+
+    func testImmediatelyDeletesStoredAndActiveRecoveriesAndPreventsNewFiles() throws {
+        let directory = makeTemporaryDirectory()
+        let store = DictationRecoveryAudioStore(directory: directory, retentionPolicy: .never)
+        store.startNewRecording()
+        store.append([0.1])
+        _ = try XCTUnwrap(store.preserveActiveRecording())
+        store.startNewRecording()
+        store.append([0.2])
+
+        XCTAssertTrue(try fileNames(in: directory).contains { $0.hasSuffix(".wav") })
+
+        XCTAssertTrue(store.updateRetentionPolicy(.immediately).isEmpty)
+        XCTAssertTrue(try fileNames(in: directory).isEmpty)
+
+        store.startNewRecording()
+        store.append([0.3])
+
+        XCTAssertNil(store.preserveActiveRecording())
+        XCTAssertTrue(store.recoveryURLs.isEmpty)
+        XCTAssertTrue(try fileNames(in: directory).isEmpty)
+    }
+
+    func testInitializationRemovesStaleActiveFileWithoutDeletingUnrelatedFiles() throws {
+        let directory = makeTemporaryDirectory()
+        let activeURL = try makeRecoveryFile(
+            in: directory,
+            named: "active-dictation-recovery.wav",
+            modifiedAt: Date()
+        )
+        let unrelatedURL = try makeRecoveryFile(
+            in: directory,
+            named: "notes.txt",
+            modifiedAt: Date()
+        )
+
+        _ = DictationRecoveryAudioStore(directory: directory, retentionPolicy: .never)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: activeURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: unrelatedURL.path))
+    }
+
+    func testRetentionProtectsForeignDirectoriesAndSymlinksWithRecoveryNames() throws {
+        let directory = makeTemporaryDirectory()
+        let outsideDirectory = makeTemporaryDirectory()
+        let outsideURL = outsideDirectory.appendingPathComponent("voice.wav")
+        try Data([9, 8, 7]).write(to: outsideURL)
+
+        let canonicalNamedDirectory = directory.appendingPathComponent(
+            "dictation-recovery-20330518-033320-000-0001.wav",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(at: canonicalNamedDirectory, withIntermediateDirectories: false)
+        let nestedURL = canonicalNamedDirectory.appendingPathComponent("keep.txt")
+        try Data([1]).write(to: nestedURL)
+
+        let canonicalNamedSymlink = directory.appendingPathComponent(
+            "dictation-recovery-20330518-033320-000-0002.wav"
+        )
+        try FileManager.default.createSymbolicLink(at: canonicalNamedSymlink, withDestinationURL: outsideURL)
+        let activeSymlink = directory.appendingPathComponent("active-dictation-recovery.wav")
+        try FileManager.default.createSymbolicLink(at: activeSymlink, withDestinationURL: outsideURL)
+
+        let store = DictationRecoveryAudioStore(directory: directory, retentionPolicy: .immediately)
+        store.startNewRecording()
+        store.append([0.5])
+
+        XCTAssertNil(store.preserveActiveRecording())
+        XCTAssertTrue(FileManager.default.fileExists(atPath: nestedURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: canonicalNamedSymlink.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: activeSymlink.path))
+        XCTAssertEqual(try Data(contentsOf: outsideURL), Data([9, 8, 7]))
     }
 
     @MainActor
@@ -177,6 +375,13 @@ final class DictationRecoveryAudioStoreTests: XCTestCase {
         return try FileManager.default.contentsOfDirectory(atPath: directory.path)
     }
 
+    private func makeRecoveryFile(in directory: URL, named name: String, modifiedAt date: Date) throws -> URL {
+        let url = directory.appendingPathComponent(name)
+        try Data([1, 2, 3]).write(to: url)
+        try FileManager.default.setAttributes([.modificationDate: date], ofItemAtPath: url.path)
+        return url
+    }
+
     private func readUInt32(_ data: Data, at offset: Int) -> UInt32 {
         data[offset..<(offset + 4)].reversed().reduce(UInt32(0)) { ($0 << 8) | UInt32($1) }
     }
@@ -199,10 +404,13 @@ final class DictationRecoveryAudioStoreTests: XCTestCase {
         // while leaving a developer's real preferences untouched.
         let livePreviewEngineKey = UserDefaultsKeys.livePreviewEngineId
         let previewEnabledKey = UserDefaultsKeys.indicatorTranscriptPreviewEnabled
+        let recoveryRetentionKey = UserDefaultsKeys.dictationRecoveryRetentionDays
         let originalLivePreviewEngine = UserDefaults.standard.object(forKey: livePreviewEngineKey)
         let originalPreviewEnabled = UserDefaults.standard.object(forKey: previewEnabledKey)
+        let originalRecoveryRetention = UserDefaults.standard.object(forKey: recoveryRetentionKey)
         UserDefaults.standard.removeObject(forKey: livePreviewEngineKey)
         UserDefaults.standard.removeObject(forKey: previewEnabledKey)
+        UserDefaults.standard.removeObject(forKey: recoveryRetentionKey)
         defer {
             if let originalLivePreviewEngine {
                 UserDefaults.standard.set(originalLivePreviewEngine, forKey: livePreviewEngineKey)
@@ -213,6 +421,11 @@ final class DictationRecoveryAudioStoreTests: XCTestCase {
                 UserDefaults.standard.set(originalPreviewEnabled, forKey: previewEnabledKey)
             } else {
                 UserDefaults.standard.removeObject(forKey: previewEnabledKey)
+            }
+            if let originalRecoveryRetention {
+                UserDefaults.standard.set(originalRecoveryRetention, forKey: recoveryRetentionKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: recoveryRetentionKey)
             }
         }
         let textInsertionService = TextInsertionService()

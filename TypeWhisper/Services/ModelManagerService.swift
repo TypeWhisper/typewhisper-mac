@@ -78,11 +78,30 @@ struct ModelAutoUnloadDiagnosticsSnapshot: Encodable, Equatable, Sendable {
     let entries: [Entry]
 }
 
+private final class AutoUnloadProtectionLease: @unchecked Sendable {
+    private let lock = NSLock()
+    private let plugin: any TranscriptionEnginePlugin
+    private var isReleased = false
+
+    init(plugin: any TranscriptionEnginePlugin) {
+        self.plugin = plugin
+    }
+
+    func takePluginForRelease() -> (any TranscriptionEnginePlugin)? {
+        lock.withLock {
+            guard !isReleased else { return nil }
+            isReleased = true
+            return plugin
+        }
+    }
+}
+
 @MainActor
 final class ModelManagerService: ObservableObject {
     struct LiveTranscriptionSessionHandle: Sendable {
         let providerId: String
         let session: any LiveTranscriptionSession
+        fileprivate let autoUnloadProtectionLease: AutoUnloadProtectionLease
         fileprivate let cloudModelOverridePlugin: (any TranscriptionEnginePlugin)?
         fileprivate let cloudModelOverrideRestoreId: String?
     }
@@ -428,6 +447,14 @@ final class ModelManagerService: ObservableObject {
             )
         }
 
+        beginAutoUnloadProtectedUse(of: plugin)
+        var transfersAutoUnloadProtection = false
+        defer {
+            if !transfersAutoUnloadProtection {
+                endAutoUnloadProtectedUse(of: plugin)
+            }
+        }
+
         let runtimeSelection = runtimeLanguageSelection(for: languageSelection, plugin: plugin)
         let preparationLanguage = preparationRequestedLanguage(
             for: languageSelection,
@@ -492,12 +519,15 @@ final class ModelManagerService: ObservableObject {
             throw error
         }
 
-        return LiveTranscriptionSessionHandle(
+        let handle = LiveTranscriptionSessionHandle(
             providerId: providerId,
             session: session,
+            autoUnloadProtectionLease: AutoUnloadProtectionLease(plugin: plugin),
             cloudModelOverridePlugin: overrideRestoreId == nil ? nil : plugin,
             cloudModelOverrideRestoreId: overrideRestoreId
         )
+        transfersAutoUnloadProtection = true
+        return handle
     }
 
     func finishLiveTranscriptionSession(
@@ -509,12 +539,13 @@ final class ModelManagerService: ObservableObject {
         normalizeNumbers: Bool? = nil
     ) async throws -> TranscriptionResult {
         let startTime = CFAbsoluteTimeGetCurrent()
-        defer { restoreCloudModelOverride(for: handle) }
+        defer {
+            restoreCloudModelOverride(for: handle)
+            releaseAutoUnloadProtection(for: handle)
+        }
 
         let result = try await handle.session.finish()
         let processingTime = CFAbsoluteTimeGetCurrent() - startTime
-
-        scheduleAutoUnloadIfNeeded()
 
         return TranscriptionNormalizationService.normalizeResult(
             text: result.text,
@@ -531,8 +562,16 @@ final class ModelManagerService: ObservableObject {
     }
 
     func cancelLiveTranscriptionSession(_ handle: LiveTranscriptionSessionHandle) async {
+        defer {
+            restoreCloudModelOverride(for: handle)
+            releaseAutoUnloadProtection(for: handle)
+        }
         await handle.session.cancel()
-        restoreCloudModelOverride(for: handle)
+    }
+
+    private func releaseAutoUnloadProtection(for handle: LiveTranscriptionSessionHandle) {
+        guard let plugin = handle.autoUnloadProtectionLease.takePluginForRelease() else { return }
+        endAutoUnloadProtectedUse(of: plugin)
     }
 
     func transcribe(
@@ -580,18 +619,24 @@ final class ModelManagerService: ObservableObject {
             )
         }
 
+        beginAutoUnloadProtectedUse(of: plugin)
+        var overrideRestoreId: String?
+        defer {
+            restoreCloudModelOverride(plugin: plugin, previousId: overrideRestoreId)
+            endAutoUnloadProtectedUse(of: plugin)
+        }
+
         let runtimeSelection = runtimeLanguageSelection(for: languageSelection, plugin: plugin)
         let preparationLanguage = preparationRequestedLanguage(
             for: languageSelection,
             runtimeSelection: runtimeSelection,
             plugin: plugin
         )
-        let overrideRestoreId = try await prepareEngineForTranscription(
+        overrideRestoreId = try await prepareEngineForTranscription(
             plugin,
             requestedLanguage: preparationLanguage,
             cloudModelOverride: cloudModelOverride
         )
-        defer { restoreCloudModelOverride(plugin: plugin, previousId: overrideRestoreId) }
 
         guard plugin.isConfigured else {
             throw modelNotLoadedError(for: plugin)
@@ -614,8 +659,6 @@ final class ModelManagerService: ObservableObject {
         )
 
         let processingTime = CFAbsoluteTimeGetCurrent() - startTime
-
-        scheduleAutoUnloadIfNeeded()
 
         return TranscriptionNormalizationService.normalizeResult(
             text: result.text,
@@ -732,18 +775,24 @@ final class ModelManagerService: ObservableObject {
             )
         }
 
+        beginAutoUnloadProtectedUse(of: plugin)
+        var overrideRestoreId: String?
+        defer {
+            restoreCloudModelOverride(plugin: plugin, previousId: overrideRestoreId)
+            endAutoUnloadProtectedUse(of: plugin)
+        }
+
         let runtimeSelection = runtimeLanguageSelection(for: languageSelection, plugin: plugin)
         let preparationLanguage = preparationRequestedLanguage(
             for: languageSelection,
             runtimeSelection: runtimeSelection,
             plugin: plugin
         )
-        let overrideRestoreId = try await prepareEngineForTranscription(
+        overrideRestoreId = try await prepareEngineForTranscription(
             plugin,
             requestedLanguage: preparationLanguage,
             cloudModelOverride: cloudModelOverride
         )
-        defer { restoreCloudModelOverride(plugin: plugin, previousId: overrideRestoreId) }
 
         guard plugin.isConfigured else {
             throw modelNotLoadedError(for: plugin)
@@ -768,8 +817,6 @@ final class ModelManagerService: ObservableObject {
         )
 
         let processingTime = CFAbsoluteTimeGetCurrent() - startTime
-
-        scheduleAutoUnloadIfNeeded()
 
         return TranscriptionNormalizationService.normalizeResult(
             text: result.text,

@@ -372,6 +372,7 @@ private struct DiagnosticsReport: Encodable {
         let translationTargetLanguage: String?
         let historyRetentionDays: Int
         let saveAudioWithHistory: Bool
+        let dictationRecoveryRetentionDays: Int
         let memoryEnabled: Bool
         let memoryCaptureScope: String
         let appFormattingEnabled: Bool
@@ -642,6 +643,7 @@ final class ErrorLogService: ObservableObject {
                 translationTargetLanguage: defaults.string(forKey: UserDefaultsKeys.translationTargetLanguage),
                 historyRetentionDays: defaults.integer(forKey: UserDefaultsKeys.historyRetentionDays),
                 saveAudioWithHistory: defaults.bool(forKey: UserDefaultsKeys.saveAudioWithHistory),
+                dictationRecoveryRetentionDays: DictationRecoveryRetentionPolicy.load(from: defaults).rawValue,
                 memoryEnabled: defaults.bool(forKey: UserDefaultsKeys.memoryEnabled),
                 memoryCaptureScope: MemoryCaptureScope.load(from: defaults).rawValue,
                 appFormattingEnabled: defaults.bool(forKey: UserDefaultsKeys.appFormattingEnabled),

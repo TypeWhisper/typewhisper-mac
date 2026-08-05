@@ -629,7 +629,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
             UserDefaultsKeys.calendarMeetingAutoStopEnabled: false,
             UserDefaultsKeys.calendarMeetingSuppressedOccurrenceDigests: [String](),
             UserDefaultsKeys.calendarMeetingReminderRequestDigests: [String](),
-            UserDefaultsKeys.calendarMeetingNotificationsConfigured: false
+            UserDefaultsKeys.calendarMeetingNotificationsConfigured: false,
+            UserDefaultsKeys.dictationRecoveryRetentionDays: DictationRecoveryRetentionPolicy.defaultPolicy.rawValue
         ])
     }
 

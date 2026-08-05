@@ -606,6 +606,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
 
     func testRecoveryTranscribeUsesRecoveryEngineAndModelOverrides() async throws {
         let defaults = try makeDefaults()
+        defaults.set(true, forKey: UserDefaultsKeys.saveAudioWithHistory)
         let directory = makeTemporaryDirectory()
         let historyService = HistoryService(appSupportDirectory: makeTemporaryDirectory())
         let store = DictationRecoveryAudioStore(directory: directory)
@@ -674,6 +675,80 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.recoveries.map(\.url), [olderRecoveryURL])
         XCTAssertEqual(audioRecordingService.latestRecoveryRecordingURL, olderRecoveryURL)
         XCTAssertFalse(FileManager.default.fileExists(atPath: selectedRecoveryURL.path))
+    }
+
+    func testRecoveryTranscribeOmitsHistoryAudioWhenDisabled() async throws {
+        let defaults = try makeDefaults()
+        defaults.set(false, forKey: UserDefaultsKeys.saveAudioWithHistory)
+        let directory = makeTemporaryDirectory()
+        let historyService = HistoryService(appSupportDirectory: makeTemporaryDirectory())
+        let store = DictationRecoveryAudioStore(directory: directory)
+        store.startNewRecording()
+        store.append([0.2, -0.2])
+        let recoveryURL = try XCTUnwrap(store.preserveActiveRecording())
+        let audioRecordingService = AudioRecordingService(recoveryAudioStore: store)
+        let viewModel = DictationRecoveryViewModel(
+            audioRecordingService: audioRecordingService,
+            modelManager: ModelManagerService(),
+            historyService: historyService,
+            audioFileService: AudioFileService(),
+            defaults: defaults,
+            audioSamplesLoader: { _ in [0.2, -0.2] },
+            transcriptionRunner: { _, _, _, _, _ in
+                TranscriptionResult(
+                    text: "Recovered without audio",
+                    detectedLanguage: "en",
+                    duration: 1,
+                    processingTime: 0.1,
+                    engineUsed: "test",
+                    segments: []
+                )
+            },
+            engineReadinessChecker: { _ in true }
+        )
+
+        viewModel.transcribe()
+        try await waitForRecoveryToSave(viewModel, historyService: historyService)
+
+        let historyRecord = try XCTUnwrap(historyService.records.first)
+        XCTAssertNil(historyService.audioFileURL(for: historyRecord))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: recoveryURL.path))
+        XCTAssertTrue(viewModel.recoveries.isEmpty)
+    }
+
+    func testRecoveryRetentionPolicyDefaultsToThirtyDaysAndImmediatelyClearsStorage() throws {
+        let defaults = try makeDefaults()
+        let directory = makeTemporaryDirectory()
+        let store = DictationRecoveryAudioStore(directory: directory, retentionPolicy: .never)
+        store.startNewRecording()
+        store.append([0.1])
+        let recoveryURL = try XCTUnwrap(store.preserveActiveRecording())
+        let audioRecordingService = AudioRecordingService(recoveryAudioStore: store)
+        let viewModel = DictationRecoveryViewModel(
+            audioRecordingService: audioRecordingService,
+            modelManager: ModelManagerService(),
+            historyService: HistoryService(appSupportDirectory: makeTemporaryDirectory()),
+            audioFileService: AudioFileService(),
+            defaults: defaults
+        )
+
+        XCTAssertEqual(viewModel.retentionPolicy, .thirtyDays)
+        XCTAssertEqual(viewModel.recoveries.map(\.url), [recoveryURL])
+
+        viewModel.retentionPolicy = .immediately
+
+        XCTAssertEqual(
+            defaults.integer(forKey: UserDefaultsKeys.dictationRecoveryRetentionDays),
+            DictationRecoveryRetentionPolicy.immediately.rawValue
+        )
+        XCTAssertTrue(viewModel.isRecoveryStorageDisabled)
+        XCTAssertTrue(viewModel.recoveries.isEmpty)
+        XCTAssertTrue(audioRecordingService.recoveryRecordingURLs.isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: recoveryURL.path))
+
+        store.startNewRecording()
+        store.append([0.2])
+        XCTAssertNil(store.preserveActiveRecording())
     }
 
     func testRecoveryDiscardDeletesOnlySelectedRecoveryFile() throws {
