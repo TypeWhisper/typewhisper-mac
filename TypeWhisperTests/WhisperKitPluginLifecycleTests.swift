@@ -239,6 +239,56 @@ final class WhisperKitPluginLifecycleTests: XCTestCase {
         XCTAssertNil(host.userDefault(forKey: "loadedModel"))
     }
 
+    func testAutoUnloadWaitsForAllActiveModelUsesAndKeepsLoadedModelMarker() throws {
+        let modelId = "openai_whisper-tiny"
+        let host = try makeHost(
+            defaults: [
+                "selectedModel": modelId,
+                "loadedModel": modelId,
+            ],
+            shouldRestoreLoadedModelsPassively: false
+        )
+        defer { TestSupport.remove(host.pluginDataDirectory) }
+
+        let plugin = WhisperKitPlugin()
+        plugin.activate(host: host)
+        plugin.beginModelUseForTesting()
+        plugin.beginModelUseForTesting()
+
+        plugin.triggerAutoUnload()
+        XCTAssertEqual(plugin.activeModelUseCountForTesting, 2)
+        XCTAssertEqual(host.capabilitiesChangedCount, 0)
+
+        plugin.endModelUseForTesting()
+        plugin.triggerAutoUnload()
+        XCTAssertEqual(plugin.activeModelUseCountForTesting, 1)
+        XCTAssertEqual(host.capabilitiesChangedCount, 0)
+
+        plugin.endModelUseForTesting()
+        plugin.triggerAutoUnload()
+
+        XCTAssertEqual(plugin.activeModelUseCountForTesting, 0)
+        XCTAssertEqual(host.userDefault(forKey: "loadedModel") as? String, modelId)
+        XCTAssertEqual(host.capabilitiesChangedCount, 1)
+    }
+
+    func testEndingModelUseCannotUnderflowActiveUseCount() {
+        let plugin = WhisperKitPlugin()
+
+        plugin.endModelUseForTesting()
+        plugin.beginModelUseForTesting()
+        plugin.endModelUseForTesting()
+        plugin.endModelUseForTesting()
+
+        XCTAssertEqual(plugin.activeModelUseCountForTesting, 0)
+    }
+
+    func testWhisperKitDeclaresHostModelLifecyclePolicyAwareness() {
+        let plugin: any TypeWhisperPlugin = WhisperKitPlugin()
+
+        XCTAssertNotNil(plugin as? any HostModelLifecyclePolicyAwarePlugin)
+    }
+
     func testReadyModelStateClearsLoadingSettingsActivity() throws {
         let host = try makeHost(defaults: [
             "selectedModel": "openai_whisper-large-v3_turbo",
