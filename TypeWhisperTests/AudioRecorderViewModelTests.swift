@@ -88,6 +88,14 @@ private final class OutOfOrderRecordingsLoader: @unchecked Sendable {
 
 @MainActor
 final class AudioRecorderViewModelTests: XCTestCase {
+    private struct RestorableRecorderFixture {
+        let viewModel: AudioRecorderViewModel
+        let plugin: AudioRecorderRestorableTranscriptionPlugin
+        let recording: AudioRecorderViewModel.RecordingItem
+        let transcriptURL: URL
+        let failureURL: URL
+    }
+
     func testRecorderFilesAreLoadedOffMainThreadDuringInitialization() throws {
         let probe = BlockingRecordingsLoader()
         defer { probe.release.signal() }
@@ -582,6 +590,63 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertTrue(request.translate)
         XCTAssertTrue(request.prompt?.contains("TypeWhisper") == true)
         XCTAssertTrue(plugin.selectedModelOverrides.contains("universal-3-5-pro"))
+    }
+
+    func testRecorderRetranscriptionIsAvailableForAutoUnloadedRestorableEngine() async throws {
+        let fixture = try await makeRestorableRecorderFixture(hasPersistedModel: true)
+
+        XCTAssertFalse(fixture.plugin.isConfigured)
+        XCTAssertTrue(fixture.viewModel.canTranscribeRecording(fixture.recording))
+        XCTAssertEqual(fixture.plugin.restoreCount, 0)
+    }
+
+    func testRecorderRetranscriptionRestoresAutoUnloadedEngineAndSavesTranscript() async throws {
+        let fixture = try await makeRestorableRecorderFixture(hasPersistedModel: true)
+
+        XCTAssertTrue(fixture.viewModel.canTranscribeRecording(fixture.recording))
+        fixture.viewModel.transcribeRecording(fixture.recording)
+        try await waitForRetranscriptionToFinish(fixture.viewModel)
+
+        XCTAssertEqual(fixture.plugin.restoreCount, 1)
+        XCTAssertTrue(fixture.plugin.isConfigured)
+        XCTAssertEqual(
+            try String(contentsOf: fixture.transcriptURL, encoding: .utf8),
+            "restored transcription"
+        )
+        XCTAssertFalse(FileManager.default.fileExists(atPath: fixture.failureURL.path))
+    }
+
+    func testRecorderRetranscriptionStaysDisabledAfterManualUnload() async throws {
+        let fixture = try await makeRestorableRecorderFixture(hasPersistedModel: false)
+
+        XCTAssertFalse(fixture.plugin.isConfigured)
+        XCTAssertNotNil(fixture.plugin.selectedModelId, "A retained selection alone must not imply restorable state")
+        XCTAssertFalse(fixture.viewModel.canTranscribeRecording(fixture.recording))
+        XCTAssertEqual(fixture.plugin.restoreCount, 0)
+    }
+
+    func testRecorderRetranscriptionSurfacesMissingRestorableModelError() async throws {
+        let restoreMessage = "Downloaded model is missing. Re-download it in Integrations."
+        let fixture = try await makeRestorableRecorderFixture(
+            restoreBehavior: .fails(restoreMessage),
+            hasPersistedModel: true
+        )
+
+        XCTAssertTrue(fixture.viewModel.canTranscribeRecording(fixture.recording))
+        fixture.viewModel.transcribeRecording(fixture.recording)
+        try await waitForRetranscriptionToFinish(fixture.viewModel)
+
+        let failure = try JSONDecoder().decode(
+            AudioRecorderViewModel.RecordingTranscriptionFailure.self,
+            from: Data(contentsOf: fixture.failureURL)
+        )
+        XCTAssertEqual(fixture.plugin.restoreCount, 1)
+        XCTAssertFalse(fixture.plugin.isConfigured)
+        XCTAssertEqual(failure.phase, .finalTranscription)
+        XCTAssertTrue(failure.providerError.contains("Failed to load model"))
+        XCTAssertTrue(failure.providerError.contains(restoreMessage))
+        XCTAssertTrue(fixture.viewModel.errorMessage?.contains(restoreMessage) == true)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: fixture.transcriptURL.path))
     }
 
     func testRetranscriptionAudioLoadFailurePreservesExistingTranscript() async throws {
@@ -1085,6 +1150,51 @@ final class AudioRecorderViewModelTests: XCTestCase {
         return try XCTUnwrap(session, file: file, line: line)
     }
 
+    private func makeRestorableRecorderFixture(
+        restoreBehavior: AudioRecorderRestorableTranscriptionPlugin.RestoreBehavior = .succeeds,
+        hasPersistedModel: Bool
+    ) async throws -> RestorableRecorderFixture {
+        try preserveStandardDefaults(additionalKeys: [
+            AudioRecorderRestorableTranscriptionPlugin.loadedModelDefaultsKey
+        ])
+        let plugin = setupRestorablePluginManager(restoreBehavior: restoreBehavior)
+        if hasPersistedModel {
+            UserDefaults.standard.set(
+                AudioRecorderRestorableTranscriptionPlugin.modelId,
+                forKey: AudioRecorderRestorableTranscriptionPlugin.loadedModelDefaultsKey
+            )
+        }
+
+        let defaults = try makeDefaults()
+        let modelManager = ModelManagerService()
+        modelManager.setPluginRestoreWaitConfigurationForTesting(
+            initialAttempts: 1,
+            busyAttempts: 1,
+            pollInterval: .milliseconds(1)
+        )
+        modelManager.selectProvider(plugin.providerId)
+
+        let recordingsDirectory = makeTemporaryDirectory()
+        let audioURL = recordingsDirectory.appendingPathComponent("Restorable.wav")
+        try Data("audio".utf8).write(to: audioURL)
+        let viewModel = makeViewModel(
+            defaults: defaults,
+            modelManager: modelManager,
+            recorderService: makeRecorderService(recordingsDirectory: recordingsDirectory),
+            audioSamplesLoader: { _ in [0.25, -0.25] }
+        )
+        viewModel.loadRecordings()
+        try await waitForRecordingsToLoad(viewModel, count: 1)
+
+        return RestorableRecorderFixture(
+            viewModel: viewModel,
+            plugin: plugin,
+            recording: try XCTUnwrap(viewModel.recordings.first),
+            transcriptURL: audioURL.deletingPathExtension().appendingPathExtension("txt"),
+            failureURL: failureSidecarURL(for: audioURL)
+        )
+    }
+
     private func setupEventBus() {
         let previousEventBus: EventBus? = EventBus.shared
         EventBus.shared = EventBus()
@@ -1151,13 +1261,42 @@ final class AudioRecorderViewModelTests: XCTestCase {
         PluginManager.shared = pluginManager
     }
 
-    private func preserveStandardDefaults() throws {
-        let keys = [
+    private func setupRestorablePluginManager(
+        restoreBehavior: AudioRecorderRestorableTranscriptionPlugin.RestoreBehavior
+    ) -> AudioRecorderRestorableTranscriptionPlugin {
+        let previousPluginManager = PluginManager.shared
+        addTeardownBlock {
+            PluginManager.shared = previousPluginManager
+        }
+
+        let appSupportDirectory = makeTemporaryDirectory()
+        let plugin = AudioRecorderRestorableTranscriptionPlugin(restoreBehavior: restoreBehavior)
+        let pluginManager = PluginManager(appSupportDirectory: appSupportDirectory)
+        pluginManager.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: AudioRecorderRestorableTranscriptionPlugin.pluginId,
+                    name: AudioRecorderRestorableTranscriptionPlugin.pluginName,
+                    version: "1.0.0",
+                    principalClass: "AudioRecorderRestorableTranscriptionPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+        PluginManager.shared = pluginManager
+        return plugin
+    }
+
+    private func preserveStandardDefaults(additionalKeys: [String] = []) throws {
+        let keys = Array(Set([
             UserDefaultsKeys.selectedEngine,
             UserDefaultsKeys.selectedModelId,
             UserDefaultsKeys.selectedInputDeviceUID,
             UserDefaultsKeys.inputDevicePriorityList
-        ]
+        ] + additionalKeys))
         let originals = Dictionary(uniqueKeysWithValues: keys.map { ($0, UserDefaults.standard.object(forKey: $0)) })
         for key in keys {
             UserDefaults.standard.removeObject(forKey: key)
@@ -1191,6 +1330,77 @@ final class AudioRecorderViewModelTests: XCTestCase {
             try? FileManager.default.removeItem(at: directory)
         }
         return directory
+    }
+}
+
+private final class AudioRecorderRestorableTranscriptionPlugin: NSObject, TranscriptionEnginePlugin, PluginSettingsActivityReporting, @unchecked Sendable {
+    enum RestoreBehavior: Sendable {
+        case succeeds
+        case fails(String)
+    }
+
+    private struct State {
+        var isConfigured = false
+        var currentSettingsActivity: PluginSettingsActivity?
+        var restoreCount = 0
+    }
+
+    static let pluginId = "com.typewhisper.mock.audio-recorder-restorable"
+    static let pluginName = "Audio Recorder Restorable Mock"
+    static let modelId = "restorable-model"
+    static let loadedModelDefaultsKey = "plugin.\(pluginId).loadedModel"
+
+    let providerId = "recorder-restorable"
+    let providerDisplayName = "Recorder Restorable"
+    let transcriptionModels = [PluginModelInfo(id: modelId, displayName: "Restorable Model")]
+    var selectedModelId: String? { Self.modelId }
+    var supportsTranslation = false
+    var isConfigured: Bool { stateLock.withLock { state.isConfigured } }
+    var currentSettingsActivity: PluginSettingsActivity? {
+        stateLock.withLock { state.currentSettingsActivity }
+    }
+    var restoreCount: Int { stateLock.withLock { state.restoreCount } }
+
+    private let restoreBehavior: RestoreBehavior
+    private let stateLock = NSLock()
+    private var state = State()
+
+    required override init() {
+        self.restoreBehavior = .succeeds
+        super.init()
+    }
+
+    init(restoreBehavior: RestoreBehavior) {
+        self.restoreBehavior = restoreBehavior
+        super.init()
+    }
+
+    func activate(host: HostServices) {}
+    func deactivate() {}
+    func selectModel(_ modelId: String) {}
+
+    @objc func triggerRestoreModel() {
+        stateLock.withLock {
+            state.restoreCount += 1
+            switch restoreBehavior {
+            case .succeeds:
+                state.isConfigured = true
+                state.currentSettingsActivity = nil
+            case .fails(let message):
+                state.isConfigured = false
+                state.currentSettingsActivity = PluginSettingsActivity(message: message, isError: true)
+            }
+        }
+    }
+
+    func transcribe(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?
+    ) async throws -> PluginTranscriptionResult {
+        guard isConfigured else { throw PluginTranscriptionError.notConfigured }
+        return PluginTranscriptionResult(text: "restored transcription", detectedLanguage: language)
     }
 }
 

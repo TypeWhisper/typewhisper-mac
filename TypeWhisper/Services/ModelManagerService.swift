@@ -62,6 +62,31 @@ enum ModelAutoUnloadPolicy {
     }
 }
 
+enum TranscriptionEngineReadiness {
+    /// Whether the plugin has the persisted model state consumed by
+    /// `triggerRestoreModel`. The key is scoped by the plugin manifest ID, not
+    /// by an engine provider ID; the two identifiers may differ.
+    static func hasPersistedRestorableModel(
+        pluginId: String,
+        defaults: UserDefaults = .standard
+    ) -> Bool {
+        defaults.object(forKey: "plugin.\(pluginId).loadedModel") != nil
+    }
+
+    /// A selected engine is actionable when authentication is available and it
+    /// is already configured, can restore persisted model state, or has a
+    /// provider-specific preparation fallback such as Apple Speech's catalog.
+    static func engineIsReadyOrRestorable(
+        authAvailable: Bool,
+        isConfigured: Bool,
+        hasPersistedRestorableModel: Bool,
+        hasPreparationFallback: Bool
+    ) -> Bool {
+        guard authAvailable else { return false }
+        return isConfigured || hasPersistedRestorableModel || hasPreparationFallback
+    }
+}
+
 struct ModelAutoUnloadDiagnosticsSnapshot: Encodable, Equatable, Sendable {
     struct Entry: Encodable, Equatable, Sendable {
         let pluginClassName: String
@@ -312,10 +337,22 @@ final class ModelManagerService: ObservableObject {
     }
 
     func canPrepareForTranscription(_ engine: TranscriptionEnginePlugin) -> Bool {
-        guard canUseForTranscription(engine) else { return false }
-        if engine.isConfigured { return true }
-        guard engine.providerId == AppleSpeechModelSelection.providerId else { return false }
-        return engine.selectedModelId != nil || !engine.modelCatalog.isEmpty
+        let isAppleSpeech = engine.providerId == AppleSpeechModelSelection.providerId
+        let hasPreparationFallback = isAppleSpeech
+            && (engine.selectedModelId != nil || !engine.modelCatalog.isEmpty)
+        let pluginId = isAppleSpeech
+            ? nil
+            : PluginManager.shared?.loadedTranscriptionPlugin(for: engine.providerId)?.manifest.id
+        let hasPersistedRestorableModel = pluginId.map {
+            TranscriptionEngineReadiness.hasPersistedRestorableModel(pluginId: $0)
+        } ?? false
+
+        return TranscriptionEngineReadiness.engineIsReadyOrRestorable(
+            authAvailable: canUseForTranscription(engine),
+            isConfigured: engine.isConfigured,
+            hasPersistedRestorableModel: hasPersistedRestorableModel,
+            hasPreparationFallback: hasPreparationFallback
+        )
     }
 
     /// Resolve display name for a given engine/model override combination

@@ -2335,54 +2335,11 @@ final class DictationViewModel: ObservableObject {
     /// `prepareEngineForTranscription` → `triggerRestoreModel`), AND actually able
     /// to produce a preview — via a native live session or the batch fallback.
     func canUseEngineForPreview(_ engine: TranscriptionEnginePlugin) -> Bool {
-        // `loadedModel` is persisted by the host under the plugin's MANIFEST id
-        // (`HostServicesImpl.setUserDefault` writes `plugin.<manifest.id>.<key>`),
-        // which is not the engine's `providerId` — e.g. "parakeet" vs
-        // "com.typewhisper.parakeet". Resolve through the plugin so the lookup
-        // reads the key the plugin actually wrote; an unresolvable engine is not
-        // restorable, so it correctly fails the readiness gate.
-        let pluginId = PluginManager.shared?.loadedTranscriptionPlugin(for: engine.providerId)?.manifest.id
-        guard Self.engineIsReadyOrRestorableForPreview(
-            authAvailable: modelManager.canUseForTranscription(engine),
-            isConfigured: engine.isConfigured,
-            hasPersistedRestorableModel: pluginId.map { Self.hasPersistedRestorableModel(pluginId: $0) } ?? false,
-            canPrepare: modelManager.canPrepareForTranscription(engine)
-        ) else { return false }
+        guard modelManager.canPrepareForTranscription(engine) else { return false }
         if engine is any LiveTranscriptionCapablePlugin { return true }
         let allowsFallback = (engine as? any TranscriptPreviewFallbackPolicyProviding)?
             .allowsTranscriptPreviewFallback ?? true
         return allowsFallback
-    }
-
-    /// Whether the plugin has a persisted `loadedModel` default —  the state
-    /// `triggerRestoreModel` restores from. Auto-unload keeps it (restorable);
-    /// manually unloading a model clears it (restore is a no-op, so the engine
-    /// must not be treated as available). Same plugin-scoped convention key the
-    /// host special-cases in `HostServicesImpl.userDefault(forKey:)`.
-    ///
-    /// Takes the plugin's MANIFEST id, not an engine `providerId` — the two differ
-    /// (`com.typewhisper.parakeet` vs `parakeet`) and only the former matches what
-    /// `HostServicesImpl` wrote.
-    nonisolated static func hasPersistedRestorableModel(
-        pluginId: String,
-        defaults: UserDefaults = .standard
-    ) -> Bool {
-        defaults.object(forKey: "plugin.\(pluginId).loadedModel") != nil
-    }
-
-    /// Pure readiness predicate for the preview engine. A persisted restorable
-    /// model counts as available even when it is not currently loaded
-    /// (`isConfigured == false`) — auto-unloaded local engines restore at
-    /// session start. `canPrepare` additionally keeps Apple Speech's
-    /// catalog-based grace from `canPrepareForTranscription`.
-    nonisolated static func engineIsReadyOrRestorableForPreview(
-        authAvailable: Bool,
-        isConfigured: Bool,
-        hasPersistedRestorableModel: Bool,
-        canPrepare: Bool
-    ) -> Bool {
-        guard authAvailable else { return false }
-        return isConfigured || hasPersistedRestorableModel || canPrepare
     }
 
     enum PreviewEngineResolution: Equatable {
