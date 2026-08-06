@@ -972,6 +972,61 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         }
     }
 
+    @objc(APIRouterPreferredModelRestoringTranscriptionPlugin)
+    private final class PreferredModelRestoringTranscriptionPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
+        static var pluginId: String { "com.typewhisper.mock.preferred-model-restoring-transcription" }
+        static var pluginName: String { "Preferred Model Restoring Mock Transcription" }
+
+        var configured = false
+        var currentModelId: String? = "alpha"
+        var restoredModelId: String?
+        var modelIdToRestore: String?
+        var transcribedModelId: String?
+
+        required override init() {}
+
+        func activate(host: HostServices) {}
+        func deactivate() {}
+
+        var providerId: String { "preferred-model-restoring-mock" }
+        var providerDisplayName: String { "Preferred Model Restoring Mock" }
+        var isConfigured: Bool { configured }
+        var transcriptionModels: [PluginModelInfo] {
+            [
+                PluginModelInfo(id: "alpha", displayName: "Alpha"),
+                PluginModelInfo(id: "beta", displayName: "Beta"),
+            ]
+        }
+        var selectedModelId: String? { currentModelId }
+        func selectModel(_ modelId: String) {
+            currentModelId = modelId
+        }
+        var supportsTranslation: Bool { false }
+
+        @objc func triggerRestoreModel() {
+            restoredModelId = "alpha"
+            currentModelId = "alpha"
+            configured = true
+        }
+
+        @objc(triggerRestoreModelForModel:)
+        func triggerRestoreModel(forModel modelId: NSString?) {
+            restoredModelId = modelId.map(String.init)
+            currentModelId = modelIdToRestore ?? restoredModelId
+            configured = true
+        }
+
+        func transcribe(
+            audio: AudioData,
+            language: String?,
+            translate: Bool,
+            prompt: String?
+        ) async throws -> PluginTranscriptionResult {
+            transcribedModelId = currentModelId
+            return PluginTranscriptionResult(text: "transcribed", detectedLanguage: language)
+        }
+    }
+
     @objc(APIRouterAutoUnloadProtectedTranscriptionPlugin)
     private final class AutoUnloadProtectedTranscriptionPlugin: NSObject, LiveTranscriptionCapablePlugin, @unchecked Sendable {
         static var pluginId: String { "com.typewhisper.mock.auto-unload-transcription" }
@@ -3483,12 +3538,26 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         UserDefaults.standard.set(true, forKey: historyEnabledKey)
 
         context = await MainActor.run {
-            Self.makeAPIContext(appSupportDirectory: appSupportDirectory, withMockTranscriptionPlugin: true)
+            Self.makeAPIContext(appSupportDirectory: appSupportDirectory)
         }
         let apiContext = try XCTUnwrap(context)
         let router = apiContext.router
 
-        let workflowID = try await MainActor.run {
+        let workflowSetup = try await MainActor.run {
+            let workflowPlugin = PreferredModelRestoringTranscriptionPlugin()
+            PluginManager.shared.loadedPlugins.append(LoadedPlugin(
+                manifest: PluginManifest(
+                    id: PreferredModelRestoringTranscriptionPlugin.pluginId,
+                    name: PreferredModelRestoringTranscriptionPlugin.pluginName,
+                    version: "1.0.0",
+                    principalClass: "APIRouterPreferredModelRestoringTranscriptionPlugin"
+                ),
+                instance: workflowPlugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            ))
+
             let globalPlugin = NamedTranscriptionPlugin(
                 providerId: "global-mock",
                 providerDisplayName: "Global Mock",
@@ -3520,16 +3589,19 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             }
             apiContext.textInsertionService.selectedTextOverride = { nil }
             apiContext.textInsertionService.pasteSimulatorOverride = {}
-            return try XCTUnwrap(apiContext.workflowService.addWorkflow(
+            let workflow = try XCTUnwrap(apiContext.workflowService.addWorkflow(
                 name: "Meeting notes",
                 template: .dictation,
                 trigger: .manual(),
                 behavior: WorkflowBehavior(
-                    transcriptionEngineId: "mock",
-                    transcriptionModelId: "tiny"
+                    transcriptionEngineId: workflowPlugin.providerId,
+                    transcriptionModelId: "beta"
                 )
-            )?.id.uuidString)
+            ))
+            return (workflow.id.uuidString, workflowPlugin)
         }
+        let workflowID = workflowSetup.0
+        let workflowPlugin = workflowSetup.1
 
         let start = try Self.jsonObject(
             await router.route(HTTPRequest(
@@ -3552,7 +3624,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(activeStatus["state"] as? String, "recording")
         XCTAssertEqual(activeStatus["active_workflow_id"] as? String, workflowID)
         XCTAssertEqual(activeStatus["active_workflow"] as? String, "Meeting notes")
-        XCTAssertEqual(activeStatus["active_model"] as? String, "tiny")
+        XCTAssertEqual(activeStatus["active_model"] as? String, "beta")
 
         await MainActor.run {
             apiContext.dictationViewModel.partialText = "transcribed"
@@ -3597,6 +3669,9 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         let recordID = await MainActor.run { apiContext.historyService.records.first?.id.uuidString }
         XCTAssertEqual(recordID, startID)
+        XCTAssertEqual(workflowPlugin.restoredModelId, "beta")
+        XCTAssertEqual(workflowPlugin.transcribedModelId, "beta")
+        XCTAssertEqual(workflowPlugin.selectedModelId, "alpha")
     }
 
     func testDictationEndpointsSpeakCompletedTranscriptionOnly() async throws {
@@ -8945,6 +9020,120 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         )
 
         XCTAssertEqual(plugin.selectedModelId, "alpha", "cloudModelOverride must not persist the plugin's default model")
+    }
+
+    @MainActor
+    func testModelOverrideRestoresRequestedAutoUnloadedModel() async throws {
+        let selectedEngineKey = UserDefaultsKeys.selectedEngine
+        let originalSelection = UserDefaults.standard.object(forKey: selectedEngineKey)
+        UserDefaults.standard.removeObject(forKey: selectedEngineKey)
+        defer {
+            if let originalSelection {
+                UserDefaults.standard.set(originalSelection, forKey: selectedEngineKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: selectedEngineKey)
+            }
+        }
+
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let plugin = PreferredModelRestoringTranscriptionPlugin()
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: PreferredModelRestoringTranscriptionPlugin.pluginId,
+                    name: PreferredModelRestoringTranscriptionPlugin.pluginName,
+                    version: "1.0.0",
+                    principalClass: "APIRouterPreferredModelRestoringTranscriptionPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider(plugin.providerId)
+
+        let result = try await modelManager.transcribe(
+            audioSamples: [Float](repeating: 0, count: 16_000),
+            language: nil,
+            task: .transcribe,
+            engineOverrideId: nil,
+            cloudModelOverride: "beta",
+            prompt: nil
+        )
+
+        XCTAssertEqual(result.text, "transcribed")
+        XCTAssertEqual(plugin.restoredModelId, "beta")
+        XCTAssertEqual(plugin.transcribedModelId, "beta")
+        XCTAssertEqual(plugin.selectedModelId, "alpha", "The one-shot override must restore the previous selection")
+    }
+
+    @MainActor
+    func testModelOverrideRejectsDifferentRestoredModel() async throws {
+        let selectedEngineKey = UserDefaultsKeys.selectedEngine
+        let originalSelection = UserDefaults.standard.object(forKey: selectedEngineKey)
+        UserDefaults.standard.removeObject(forKey: selectedEngineKey)
+        defer {
+            if let originalSelection {
+                UserDefaults.standard.set(originalSelection, forKey: selectedEngineKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: selectedEngineKey)
+            }
+        }
+
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let plugin = PreferredModelRestoringTranscriptionPlugin()
+        plugin.modelIdToRestore = "alpha"
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: PreferredModelRestoringTranscriptionPlugin.pluginId,
+                    name: PreferredModelRestoringTranscriptionPlugin.pluginName,
+                    version: "1.0.0",
+                    principalClass: "APIRouterPreferredModelRestoringTranscriptionPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider(plugin.providerId)
+
+        do {
+            _ = try await modelManager.transcribe(
+                audioSamples: [Float](repeating: 0, count: 16_000),
+                language: nil,
+                task: .transcribe,
+                engineOverrideId: nil,
+                cloudModelOverride: "beta",
+                prompt: nil
+            )
+            XCTFail("Expected mismatched model restore to fail")
+        } catch let error as TranscriptionEngineError {
+            guard case .modelLoadFailed(let detail) = error else {
+                return XCTFail("Expected modelLoadFailed, got \(error)")
+            }
+            XCTAssertTrue(detail.contains("beta"))
+        }
+
+        XCTAssertEqual(plugin.restoredModelId, "beta")
+        XCTAssertNil(plugin.transcribedModelId)
+        XCTAssertEqual(plugin.selectedModelId, "alpha", "A failed override must restore the previous selection")
     }
 
     @MainActor

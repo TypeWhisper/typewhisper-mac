@@ -239,8 +239,25 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
     var selectedModelId: String? { _selectedModelId }
 
     func selectModel(_ modelId: String) {
+        guard Self.availableModels.contains(where: { $0.id == modelId }) else { return }
+
+        let previousLoadedModelId = loadedModelId
+        let shouldUnloadCurrentModel = previousLoadedModelId != nil && previousLoadedModelId != modelId
         _selectedModelId = modelId
         host?.setUserDefault(modelId, forKey: "selectedModel")
+
+        if shouldUnloadCurrentModel {
+            unloadModel(clearPersistence: false)
+        }
+
+        guard shouldRestoreDownloadedSelection(
+            modelId,
+            previousLoadedModelId: previousLoadedModelId
+        ) else {
+            return
+        }
+
+        Task { await restoreLoadedModel(allowDownloads: false, preferredModelId: modelId) }
     }
 
     var supportsTranslation: Bool { true }
@@ -631,6 +648,11 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
 
     @objc func triggerAutoUnload() { autoUnloadIfIdle() }
     @objc func triggerRestoreModel() { Task { await restoreLoadedModel(allowDownloads: true) } }
+    @objc(triggerRestoreModelForModel:)
+    func triggerRestoreModel(forModel modelId: NSString?) {
+        let preferredModelId = modelId.map(String.init)
+        Task { await restoreLoadedModel(allowDownloads: false, preferredModelId: preferredModelId) }
+    }
 
     func unloadModel(clearPersistence: Bool = true) {
         invalidateModelLoad()
@@ -692,8 +714,14 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
         startSlowModelLoadWarning(generation: generation)
     }
 
-    func restoreTargetModelIdForTesting(allowDownloads: Bool = true) -> String? {
-        modelDefinitionForRestore(allowDownloads: allowDownloads)?.id
+    func restoreTargetModelIdForTesting(
+        allowDownloads: Bool = true,
+        preferredModelId: String? = nil
+    ) -> String? {
+        modelDefinitionForRestore(
+            allowDownloads: allowDownloads,
+            preferredModelId: preferredModelId
+        )?.id
     }
     #endif
 
@@ -705,15 +733,34 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
     }
 
     func restoreLoadedModel(allowDownloads: Bool = true) async {
+        await restoreLoadedModel(allowDownloads: allowDownloads, preferredModelId: nil)
+    }
+
+    func restoreLoadedModel(allowDownloads: Bool = true, preferredModelId: String?) async {
         #if DEBUG
         restoreLoadedModelInvocationCountForTesting += 1
         #endif
 
-        guard let modelDef = modelDefinitionForRestore(allowDownloads: allowDownloads) else { return }
+        guard let modelDef = modelDefinitionForRestore(
+            allowDownloads: allowDownloads,
+            preferredModelId: preferredModelId
+        ) else { return }
         await loadModel(modelDef)
     }
 
-    private func modelDefinitionForRestore(allowDownloads: Bool) -> WhisperModelDef? {
+    private func modelDefinitionForRestore(
+        allowDownloads: Bool,
+        preferredModelId: String? = nil
+    ) -> WhisperModelDef? {
+        if let preferredModelId = preferredModelId?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !preferredModelId.isEmpty {
+            guard let modelDef = Self.availableModels.first(where: { $0.id == preferredModelId }),
+                  allowDownloads || isModelDownloaded(modelDef) else {
+                return nil
+            }
+            return modelDef
+        }
+
         let persistedLoadedId = host?.userDefault(forKey: "loadedModel") as? String
         let candidateIds = [persistedLoadedId, _selectedModelId]
 
@@ -730,6 +777,17 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
         }
 
         return nil
+    }
+
+    private func shouldRestoreDownloadedSelection(
+        _ modelId: String,
+        previousLoadedModelId: String?
+    ) -> Bool {
+        guard previousLoadedModelId != modelId else { return false }
+        guard let modelDef = Self.availableModels.first(where: { $0.id == modelId }) else {
+            return false
+        }
+        return isModelDownloaded(modelDef)
     }
 
     fileprivate func isModelDownloaded(_ modelDef: WhisperModelDef) -> Bool {

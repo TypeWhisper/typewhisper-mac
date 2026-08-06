@@ -396,15 +396,16 @@ final class ModelManagerService: ObservableObject {
 
     /// Apply a one-shot cloud model override without persisting the default.
     ///
-    /// Returns the model id that should be restored after the transcription call completes
-    /// (nil means "no restore needed" -- either no override was applied or the plugin had no
-    /// previous selection to restore to). Callers must pair this with `restoreCloudModelOverride`
-    /// inside a `defer` so the original selection is restored even on throw.
+    /// Returns the previous selection plus the model id that should be restored after the
+    /// transcription call completes. A nil restore id means either no override was applied or
+    /// the plugin had no previous selection to restore to. Callers must pair this with
+    /// `restoreCloudModelOverride` inside a `defer` so the original selection is restored even
+    /// on throw.
     private func applyCloudModelOverride(
         plugin: any TranscriptionEnginePlugin,
         override: String?
-    ) -> String? {
-        guard let override else { return nil }
+    ) -> (restoreId: String?, previousId: String?) {
+        guard let override else { return (nil, nil) }
         let previousId = plugin.selectedModelId
         if previousId != override || !plugin.isConfigured {
             plugin.selectModel(override)
@@ -412,9 +413,9 @@ final class ModelManagerService: ObservableObject {
         // If the plugin had no previous selection we can't express "unselect" through the SDK,
         // so the override stays in place. For configured plugins selectedModelId is normally set.
         guard let previousId, previousId != override else {
-            return nil
+            return (nil, previousId)
         }
-        return previousId
+        return (previousId, previousId)
     }
 
     private func restoreCloudModelOverride(
@@ -1426,30 +1427,81 @@ final class ModelManagerService: ObservableObject {
         requestedLanguage: String?,
         cloudModelOverride: String?
     ) async throws -> String? {
-        let overrideRestoreId = applyCloudModelOverride(plugin: plugin, override: cloudModelOverride)
+        let modelOverride = applyCloudModelOverride(plugin: plugin, override: cloudModelOverride)
+        let previousModelId = modelOverride.previousId
+        let overrideRestoreId = modelOverride.restoreId
 
-        if let cloudModelOverride {
-            let selectedModelId = plugin.selectedModelId ?? cloudModelOverride
-            _ = await waitForPluginConfigured(plugin, selectedModelId: selectedModelId)
+        do {
+            if let cloudModelOverride {
+                let selectedModelId = plugin.selectedModelId
+                let expectedModelId: String
+                if let selectedModelId,
+                   selectedModelId != previousModelId || cloudModelOverride == previousModelId {
+                    // Plugins may normalize legacy aliases during selectModel(). In that
+                    // case the canonical selected ID is the model that must become ready.
+                    expectedModelId = selectedModelId
+                } else {
+                    // If selection was rejected and the old ID remained unchanged, keep
+                    // checking the requested ID so a different loaded model is not accepted.
+                    expectedModelId = cloudModelOverride
+                }
+
+                if pluginConfiguredState(
+                    plugin,
+                    selectedModelId: expectedModelId,
+                    stopOnMismatchedSelection: true
+                ) == true {
+                    return overrideRestoreId
+                }
+
+                let restoreResult = await triggerRestoreModel(
+                    plugin,
+                    preferredModelId: expectedModelId
+                )
+                switch restoreResult {
+                case .configured:
+                    return overrideRestoreId
+                case .failed(let message):
+                    throw TranscriptionEngineError.modelLoadFailed(message)
+                case .unavailable:
+                    // Cloud plugins may not expose a local restore selector or a readable
+                    // selected-model identifier. Their selectModel implementation is the
+                    // source of truth, so preserve the existing configured behavior.
+                    if plugin.isConfigured, plugin.selectedModelId == nil {
+                        return overrideRestoreId
+                    }
+                    let prepared = await waitForPluginConfigured(
+                        plugin,
+                        selectedModelId: expectedModelId,
+                        stopOnMismatchedSelection: true
+                    )
+                    guard prepared else {
+                        throw modelNotLoadedError(for: plugin)
+                    }
+                    return overrideRestoreId
+                }
+            }
+
+            if plugin.providerId == AppleSpeechModelSelection.providerId {
+                let prepared = await triggerAppleSpeechModelPreparation(
+                    plugin,
+                    requestedLanguage: requestedLanguage
+                )
+                guard prepared else {
+                    throw modelNotLoadedError(for: plugin)
+                }
+            } else if !plugin.isConfigured {
+                let restoreResult = await triggerRestoreModel(plugin)
+                if case .failed(let message) = restoreResult {
+                    throw TranscriptionEngineError.modelLoadFailed(message)
+                }
+            }
+
             return overrideRestoreId
+        } catch {
+            restoreCloudModelOverride(plugin: plugin, previousId: overrideRestoreId)
+            throw error
         }
-
-        if plugin.providerId == AppleSpeechModelSelection.providerId {
-            let prepared = await triggerAppleSpeechModelPreparation(
-                plugin,
-                requestedLanguage: requestedLanguage
-            )
-            guard prepared else {
-                throw modelNotLoadedError(for: plugin)
-            }
-        } else if !plugin.isConfigured {
-            let restoreResult = await triggerRestoreModel(plugin)
-            if case .failed(let message) = restoreResult {
-                throw TranscriptionEngineError.modelLoadFailed(message)
-            }
-        }
-
-        return overrideRestoreId
     }
 
     private func modelNotLoadedError(for plugin: TranscriptionEnginePlugin) -> TranscriptionEngineError {
@@ -1502,15 +1554,28 @@ final class ModelManagerService: ObservableObject {
 
     /// Trigger model restore via ObjC dispatch (avoids Swift protocol witness table issues
     /// with dynamically loaded plugin bundles) and poll until ready.
-    private func triggerRestoreModel(_ plugin: TranscriptionEnginePlugin) async -> PluginRestoreResult {
-        let restoreSelector = NSSelectorFromString("triggerRestoreModel")
-        guard let nsPlugin = plugin as? NSObject,
-              nsPlugin.responds(to: restoreSelector) else {
+    private func triggerRestoreModel(
+        _ plugin: TranscriptionEnginePlugin,
+        preferredModelId: String? = nil
+    ) async -> PluginRestoreResult {
+        guard let nsPlugin = plugin as? NSObject else {
             return .unavailable
         }
-        _ = nsPlugin.perform(restoreSelector)
 
-        switch await waitForPluginRestoreConfigured(plugin) {
+        let preferredRestoreSelector = NSSelectorFromString("triggerRestoreModelForModel:")
+        let genericRestoreSelector = NSSelectorFromString("triggerRestoreModel")
+        if let preferredModelId, nsPlugin.responds(to: preferredRestoreSelector) {
+            _ = nsPlugin.perform(preferredRestoreSelector, with: preferredModelId as NSString)
+        } else if nsPlugin.responds(to: genericRestoreSelector) {
+            _ = nsPlugin.perform(genericRestoreSelector)
+        } else {
+            return .unavailable
+        }
+
+        switch await waitForPluginRestoreConfigured(
+            plugin,
+            selectedModelId: preferredModelId
+        ) {
         case .configured:
             return .configured
         case .failed(let message):
@@ -1544,11 +1609,22 @@ final class ModelManagerService: ObservableObject {
         ) ?? false
     }
 
-    private func waitForPluginRestoreConfigured(_ plugin: TranscriptionEnginePlugin) async -> PluginRestoreWaitResult {
+    private func waitForPluginRestoreConfigured(
+        _ plugin: TranscriptionEnginePlugin,
+        selectedModelId: String? = nil
+    ) async -> PluginRestoreWaitResult {
         var latestActivity: PluginSettingsActivity?
 
         for _ in 0..<pluginConfiguredWaitAttempts {
-            if plugin.isConfigured { return .configured }
+            if let configured = pluginConfiguredState(
+                plugin,
+                selectedModelId: selectedModelId,
+                stopOnMismatchedSelection: selectedModelId != nil
+            ) {
+                return configured
+                    ? .configured
+                    : .failed(Self.mismatchedRestoreMessage(selectedModelId: selectedModelId))
+            }
             if let activity = pluginSettingsActivity(plugin) {
                 latestActivity = activity
                 if activity.isError {
@@ -1558,14 +1634,30 @@ final class ModelManagerService: ObservableObject {
             try? await Task.sleep(for: pluginConfiguredPollInterval)
         }
 
-        if plugin.isConfigured { return .configured }
+        if let configured = pluginConfiguredState(
+            plugin,
+            selectedModelId: selectedModelId,
+            stopOnMismatchedSelection: selectedModelId != nil
+        ) {
+            return configured
+                ? .configured
+                : .failed(Self.mismatchedRestoreMessage(selectedModelId: selectedModelId))
+        }
 
         guard latestActivity != nil else {
             return .timedOut(activity: nil)
         }
 
         for _ in 0..<pluginRestoreBusyWaitAttempts {
-            if plugin.isConfigured { return .configured }
+            if let configured = pluginConfiguredState(
+                plugin,
+                selectedModelId: selectedModelId,
+                stopOnMismatchedSelection: selectedModelId != nil
+            ) {
+                return configured
+                    ? .configured
+                    : .failed(Self.mismatchedRestoreMessage(selectedModelId: selectedModelId))
+            }
             guard let activity = pluginSettingsActivity(plugin) else {
                 return .timedOut(activity: latestActivity)
             }
@@ -1576,7 +1668,15 @@ final class ModelManagerService: ObservableObject {
             try? await Task.sleep(for: pluginConfiguredPollInterval)
         }
 
-        if plugin.isConfigured { return .configured }
+        if let configured = pluginConfiguredState(
+            plugin,
+            selectedModelId: selectedModelId,
+            stopOnMismatchedSelection: selectedModelId != nil
+        ) {
+            return configured
+                ? .configured
+                : .failed(Self.mismatchedRestoreMessage(selectedModelId: selectedModelId))
+        }
         return .timedOut(activity: latestActivity)
     }
 
@@ -1603,5 +1703,12 @@ final class ModelManagerService: ObservableObject {
             return "Timed out while restoring the selected model."
         }
         return "Timed out while restoring the selected model: \(message)."
+    }
+
+    private static func mismatchedRestoreMessage(selectedModelId: String?) -> String {
+        guard let selectedModelId else {
+            return "The plugin restored a different model than requested."
+        }
+        return "The plugin restored a different model than the requested model \"\(selectedModelId)\"."
     }
 }

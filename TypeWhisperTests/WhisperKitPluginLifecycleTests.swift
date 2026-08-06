@@ -205,6 +205,96 @@ final class WhisperKitPluginLifecycleTests: XCTestCase {
         XCTAssertEqual(plugin.restoreTargetModelIdForTesting(allowDownloads: true), modelId)
     }
 
+    func testPreferredRestoreWinsOverPersistedLoadedModel() throws {
+        let persistedModelId = "openai_whisper-tiny"
+        let preferredModelId = "openai_whisper-large-v3_turbo"
+        let host = try makeHost(
+            defaults: [
+                "selectedModel": persistedModelId,
+                "loadedModel": persistedModelId,
+            ],
+            shouldRestoreLoadedModelsPassively: false
+        )
+        defer { TestSupport.remove(host.pluginDataDirectory) }
+        _ = try makeUsableWhisperModelDirectory(host: host, modelId: persistedModelId)
+        _ = try makeUsableWhisperModelDirectory(host: host, modelId: preferredModelId)
+
+        let plugin = WhisperKitPlugin()
+        plugin.activate(host: host)
+
+        XCTAssertEqual(
+            plugin.restoreTargetModelIdForTesting(
+                allowDownloads: false,
+                preferredModelId: preferredModelId
+            ),
+            preferredModelId
+        )
+    }
+
+    func testPreferredRestoreDoesNotFallBackWhenRequestedModelIsNotDownloaded() throws {
+        let persistedModelId = "openai_whisper-tiny"
+        let preferredModelId = "openai_whisper-large-v3_turbo"
+        let host = try makeHost(
+            defaults: [
+                "selectedModel": persistedModelId,
+                "loadedModel": persistedModelId,
+            ],
+            shouldRestoreLoadedModelsPassively: false
+        )
+        defer { TestSupport.remove(host.pluginDataDirectory) }
+        _ = try makeUsableWhisperModelDirectory(host: host, modelId: persistedModelId)
+
+        let plugin = WhisperKitPlugin()
+        plugin.activate(host: host)
+
+        XCTAssertNil(
+            plugin.restoreTargetModelIdForTesting(
+                allowDownloads: false,
+                preferredModelId: preferredModelId
+            )
+        )
+    }
+
+    func testSelectingDownloadedAutoUnloadedModelSchedulesRestore() async throws {
+        let modelId = "openai_whisper-tiny"
+        let host = try makeHost(shouldRestoreLoadedModelsPassively: false)
+        defer { TestSupport.remove(host.pluginDataDirectory) }
+        _ = try makeUsableWhisperModelDirectory(host: host, modelId: modelId)
+
+        let plugin = WhisperKitPlugin()
+        plugin.activate(host: host)
+        plugin.selectModel(modelId)
+
+        #if DEBUG
+        await waitForRestoreLoadedModelInvocationCount(plugin, toBecome: 1)
+        #endif
+        XCTAssertEqual(plugin.selectedModelId, modelId)
+        XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, modelId)
+        plugin.deactivate()
+    }
+
+    func testSelectingUndownloadedModelDoesNotScheduleRestore() async throws {
+        let modelId = "openai_whisper-large-v3_turbo"
+        let host = try makeHost(shouldRestoreLoadedModelsPassively: false)
+        defer { TestSupport.remove(host.pluginDataDirectory) }
+
+        let plugin = WhisperKitPlugin()
+        plugin.activate(host: host)
+        plugin.selectModel(modelId)
+
+        #if DEBUG
+        await waitForRestoreLoadedModelInvocationCount(plugin, toBecome: 0)
+        #endif
+        XCTAssertEqual(plugin.selectedModelId, modelId)
+        XCTAssertFalse(plugin.isConfigured)
+    }
+
+    func testWhisperKitExposesPreferredModelRestoreSelector() {
+        let plugin = WhisperKitPlugin()
+
+        XCTAssertTrue(plugin.responds(to: NSSelectorFromString("triggerRestoreModelForModel:")))
+    }
+
     func testUnloadWithoutClearingPersistenceKeepsLoadedModelMarker() throws {
         let host = try makeHost(defaults: [
             "selectedModel": "openai_whisper-tiny",
