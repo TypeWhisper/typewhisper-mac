@@ -107,19 +107,27 @@ final class SpeechmaticsPlugin: NSObject, TranscriptionEnginePlugin, DictionaryT
 
     // MARK: - Region Helpers
 
-    fileprivate var wsHost: String {
-        switch _selectedRegion {
+    // The realtime and batch namespaces do not share region labels: realtime keeps
+    // the legacy "usa" prefix, while batch only serves the numbered SaaS endpoints
+    // (eu1/eu2/us1/us2/au1). "usa.asr.api.speechmatics.com" is not a registered
+    // host and fails the TLS handshake.
+    static func wsHost(forRegion region: String?) -> String {
+        switch region {
         case "us": return "usa.rt.speechmatics.com"
         default: return "eu2.rt.speechmatics.com"
         }
     }
 
-    fileprivate var batchHost: String {
-        switch _selectedRegion {
-        case "us": return "usa.asr.api.speechmatics.com"
+    static func batchHost(forRegion region: String?) -> String {
+        switch region {
+        case "us": return "us1.asr.api.speechmatics.com"
         default: return "asr.api.speechmatics.com"
         }
     }
+
+    fileprivate var wsHost: String { Self.wsHost(forRegion: _selectedRegion) }
+
+    fileprivate var batchHost: String { Self.batchHost(forRegion: _selectedRegion) }
 
     // MARK: - Transcription (REST Fallback)
 
