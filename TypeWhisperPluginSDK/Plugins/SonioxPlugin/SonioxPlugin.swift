@@ -2307,10 +2307,10 @@ final class SonioxPlugin: NSObject,
 
     private static func providerErrorMessage(from data: Data) -> String? {
         if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            if let message = nonEmptyString(json["error_message"]) {
+            if let message = nonEmptyString(json["message"]) {
                 return message
             }
-            if let message = nonEmptyString(json["message"]) {
+            if let message = nonEmptyString(json["error_message"]) {
                 return message
             }
             if let error = json["error"] as? [String: Any],

@@ -937,6 +937,10 @@ final class SonioxPluginTests: XCTestCase {
         let response = Self.httpResponse(url: "https://tts-rt.soniox.com/tts", statusCode: 429)
         let variants = [
             (Data(#"{"message":"Message field"}"#.utf8), "API error: Message field"),
+            (
+                Data(#"{"message":"Primary message","error_message":"Secondary message"}"#.utf8),
+                "API error: Primary message"
+            ),
             (Data(#"{"error_message":"Error message field"}"#.utf8), "API error: Error message field"),
             (Data(#"{"error":{"message":"Nested message field"}}"#.utf8), "API error: Nested message field"),
         ]
