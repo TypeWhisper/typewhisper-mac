@@ -283,10 +283,12 @@ final class WhisperKitPluginLifecycleTests: XCTestCase {
         plugin.selectModel(modelId)
 
         #if DEBUG
-        await waitForRestoreLoadedModelInvocationCount(plugin, toBecome: 0)
+        try await Task.sleep(for: .milliseconds(200))
+        XCTAssertEqual(plugin.restoreLoadedModelInvocationCountForTesting, 0)
         #endif
         XCTAssertEqual(plugin.selectedModelId, modelId)
         XCTAssertFalse(plugin.isConfigured)
+        plugin.deactivate()
     }
 
     func testWhisperKitExposesPreferredModelRestoreSelector() {

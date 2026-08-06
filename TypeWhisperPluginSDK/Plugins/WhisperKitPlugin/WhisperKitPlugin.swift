@@ -247,7 +247,7 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
         host?.setUserDefault(modelId, forKey: "selectedModel")
 
         if shouldUnloadCurrentModel {
-            unloadModel(clearPersistence: false)
+            unloadModel(clearPersistence: true)
         }
 
         guard shouldRestoreDownloadedSelection(

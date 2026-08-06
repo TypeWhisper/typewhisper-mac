@@ -1572,9 +1572,10 @@ final class ModelManagerService: ObservableObject {
             return .unavailable
         }
 
+        let identityCheckModelId = plugin.selectedModelId == nil ? nil : preferredModelId
         switch await waitForPluginRestoreConfigured(
             plugin,
-            selectedModelId: preferredModelId
+            selectedModelId: identityCheckModelId
         ) {
         case .configured:
             return .configured

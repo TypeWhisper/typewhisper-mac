@@ -9026,8 +9026,12 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     func testModelOverrideRestoresRequestedAutoUnloadedModel() async throws {
         let selectedEngineKey = UserDefaultsKeys.selectedEngine
         let originalSelection = UserDefaults.standard.object(forKey: selectedEngineKey)
+        let originalEventBus = EventBus.shared
+        let originalPluginManager = PluginManager.shared
         UserDefaults.standard.removeObject(forKey: selectedEngineKey)
         defer {
+            EventBus.shared = originalEventBus
+            PluginManager.shared = originalPluginManager
             if let originalSelection {
                 UserDefaults.standard.set(originalSelection, forKey: selectedEngineKey)
             } else {
@@ -9079,8 +9083,12 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     func testModelOverrideRejectsDifferentRestoredModel() async throws {
         let selectedEngineKey = UserDefaultsKeys.selectedEngine
         let originalSelection = UserDefaults.standard.object(forKey: selectedEngineKey)
+        let originalEventBus = EventBus.shared
+        let originalPluginManager = PluginManager.shared
         UserDefaults.standard.removeObject(forKey: selectedEngineKey)
         defer {
+            EventBus.shared = originalEventBus
+            PluginManager.shared = originalPluginManager
             if let originalSelection {
                 UserDefaults.standard.set(originalSelection, forKey: selectedEngineKey)
             } else {
