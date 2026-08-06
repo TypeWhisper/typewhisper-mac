@@ -139,6 +139,12 @@ private struct SonioxAsyncJobFailure: Error, Sendable {
     let transcriptionError: PluginTranscriptionError
 }
 
+private enum SonioxCleanupDeletionResult: Sendable {
+    case deleted
+    case stillProcessing
+    case failed
+}
+
 struct SonioxFetchedLanguage: Codable, Equatable, Sendable {
     let code: String
     let name: String?
@@ -822,6 +828,7 @@ final class SonioxPlugin: NSObject,
     static let defaultTTSModelId = "tts-rt-v1"
     static let ttsSampleRate = 24_000
     static let defaultVoiceId = "Maya"
+    private static let cleanupLogger = Logger(subsystem: "com.typewhisper.soniox", category: "RESTCleanup")
     static let fallbackVoices: [PluginVoiceInfo] = [
         PluginVoiceInfo(id: "Maya", displayName: "Maya"),
         PluginVoiceInfo(id: "Daniel", displayName: "Daniel"),
@@ -1415,12 +1422,228 @@ final class SonioxPlugin: NSObject,
         fileID: String,
         request configuration: SonioxAsyncTranscriptionRequest
     ) async throws -> PluginTranscriptionResult {
-        let transcriptionID = try await createTranscription(
-            fileID: fileID,
+        var transcriptionID: String?
+
+        do {
+            let createdTranscriptionID = try await createTranscription(
+                fileID: fileID,
+                request: configuration
+            )
+            transcriptionID = createdTranscriptionID
+            try await pollUntilCompleted(id: createdTranscriptionID, request: configuration)
+            let result = try await fetchTranscript(id: createdTranscriptionID, request: configuration)
+            await cleanupRESTResources(
+                fileID: fileID,
+                transcriptionID: createdTranscriptionID,
+                request: configuration
+            )
+            return result
+        } catch {
+            await cleanupRESTResources(
+                fileID: fileID,
+                transcriptionID: transcriptionID,
+                request: configuration
+            )
+            throw error
+        }
+    }
+
+    private func cleanupRESTResources(
+        fileID: String,
+        transcriptionID: String?,
+        request configuration: SonioxAsyncTranscriptionRequest
+    ) async {
+        await Task.detached(priority: .utility) {
+            await Self.performRESTCleanup(
+                fileID: fileID,
+                transcriptionID: transcriptionID,
+                request: configuration
+            )
+        }.value
+    }
+
+    private static func performRESTCleanup(
+        fileID: String,
+        transcriptionID: String?,
+        request configuration: SonioxAsyncTranscriptionRequest
+    ) async {
+        let transcriptionResult: SonioxCleanupDeletionResult
+        if let transcriptionID {
+            transcriptionResult = await deleteTranscription(
+                id: transcriptionID,
+                request: configuration
+            )
+        } else {
+            transcriptionResult = .deleted
+        }
+
+        await deleteFile(id: fileID, request: configuration)
+
+        guard case .stillProcessing = transcriptionResult,
+              let transcriptionID else {
+            return
+        }
+
+        await retryTranscriptionDeletionWithinCleanupWindow(
+            id: transcriptionID,
             request: configuration
         )
-        try await pollUntilCompleted(id: transcriptionID, request: configuration)
-        return try await fetchTranscript(id: transcriptionID, request: configuration)
+    }
+
+    private static func retryTranscriptionDeletionWithinCleanupWindow(
+        id transcriptionID: String,
+        request configuration: SonioxAsyncTranscriptionRequest
+    ) async {
+        let resolved = await withTaskGroup(of: Bool.self, returning: Bool.self) { group in
+            group.addTask {
+                while !Task.isCancelled {
+                    do {
+                        try await Task.sleep(for: .seconds(1))
+                    } catch {
+                        return true
+                    }
+
+                    guard let status = await cleanupTranscriptionStatus(
+                        id: transcriptionID,
+                        request: configuration
+                    ) else {
+                        continue
+                    }
+
+                    if status == "missing" {
+                        return true
+                    }
+
+                    guard ["completed", "error", "failed"].contains(status) else {
+                        continue
+                    }
+
+                    let retryResult = await deleteTranscription(
+                        id: transcriptionID,
+                        request: configuration
+                    )
+                    if case .stillProcessing = retryResult {
+                        cleanupLogger.warning("Soniox cleanup could not delete a still-processing transcription")
+                    }
+                    return true
+                }
+
+                return true
+            }
+
+            group.addTask {
+                do {
+                    try await Task.sleep(for: .seconds(10))
+                    return false
+                } catch {
+                    return true
+                }
+            }
+
+            let firstResult = await group.next() ?? false
+            group.cancelAll()
+            return firstResult
+        }
+
+        if !resolved {
+            cleanupLogger.warning("Soniox cleanup timed out waiting for a transcription to become terminal")
+        }
+    }
+
+    private static func deleteTranscription(
+        id: String,
+        request configuration: SonioxAsyncTranscriptionRequest
+    ) async -> SonioxCleanupDeletionResult {
+        guard let url = URL(string: "\(configuration.region.apiBaseURL)/v1/transcriptions/\(id)") else {
+            cleanupLogger.warning("Soniox cleanup could not construct the transcription deletion URL")
+            return .failed
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        request.setValue("Bearer \(configuration.apiKey)", forHTTPHeaderField: "Authorization")
+        request.timeoutInterval = 10
+
+        do {
+            let (_, response) = try await PluginHTTPClient.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse else {
+                cleanupLogger.warning("Soniox transcription cleanup received a non-HTTP response")
+                return .failed
+            }
+
+            switch httpResponse.statusCode {
+            case 204, 404:
+                return .deleted
+            case 409:
+                return .stillProcessing
+            default:
+                cleanupLogger.warning("Soniox transcription cleanup returned HTTP \(httpResponse.statusCode)")
+                return .failed
+            }
+        } catch {
+            cleanupLogger.warning("Soniox transcription cleanup request failed")
+            return .failed
+        }
+    }
+
+    private static func deleteFile(
+        id: String,
+        request configuration: SonioxAsyncTranscriptionRequest
+    ) async {
+        guard let url = URL(string: "\(configuration.region.apiBaseURL)/v1/files/\(id)") else {
+            cleanupLogger.warning("Soniox cleanup could not construct the file deletion URL")
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        request.setValue("Bearer \(configuration.apiKey)", forHTTPHeaderField: "Authorization")
+        request.timeoutInterval = 10
+
+        do {
+            let (_, response) = try await PluginHTTPClient.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse else {
+                cleanupLogger.warning("Soniox file cleanup received a non-HTTP response")
+                return
+            }
+
+            guard [204, 404].contains(httpResponse.statusCode) else {
+                cleanupLogger.warning("Soniox file cleanup returned HTTP \(httpResponse.statusCode)")
+                return
+            }
+        } catch {
+            cleanupLogger.warning("Soniox file cleanup request failed")
+        }
+    }
+
+    private static func cleanupTranscriptionStatus(
+        id: String,
+        request configuration: SonioxAsyncTranscriptionRequest
+    ) async -> String? {
+        guard let url = URL(string: "\(configuration.region.apiBaseURL)/v1/transcriptions/\(id)") else {
+            return nil
+        }
+
+        var request = URLRequest(url: url)
+        request.setValue("Bearer \(configuration.apiKey)", forHTTPHeaderField: "Authorization")
+        request.timeoutInterval = 10
+
+        do {
+            let (data, response) = try await PluginHTTPClient.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse else {
+                return nil
+            }
+            if httpResponse.statusCode == 404 {
+                return "missing"
+            }
+            guard httpResponse.statusCode == 200,
+                  let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                return nil
+            }
+            return json["status"] as? String
+        } catch {
+            return nil
+        }
     }
 
     private func uploadFile(
@@ -1456,7 +1679,7 @@ final class SonioxPlugin: NSObject,
         case 200, 201: break
         case 401: throw PluginTranscriptionError.invalidApiKey
         case 413: throw PluginTranscriptionError.fileTooLarge
-        case 429: throw PluginTranscriptionError.rateLimited
+        case 429: throw Self.rateLimitError(from: data)
         default:
             let body = String(data: data, encoding: .utf8) ?? ""
             throw PluginTranscriptionError.apiError("Upload failed HTTP \(httpResponse.statusCode): \(body)")
@@ -1494,7 +1717,7 @@ final class SonioxPlugin: NSObject,
         switch httpResponse.statusCode {
         case 200, 201: break
         case 401: throw PluginTranscriptionError.invalidApiKey
-        case 429: throw PluginTranscriptionError.rateLimited
+        case 429: throw Self.rateLimitError(from: data)
         default:
             let body = String(data: data, encoding: .utf8) ?? ""
             throw PluginTranscriptionError.apiError("Create transcription failed HTTP \(httpResponse.statusCode): \(body)")
@@ -1657,7 +1880,7 @@ final class SonioxPlugin: NSObject,
         case 413:
             throw PluginTranscriptionError.fileTooLarge
         case 429:
-            throw PluginTranscriptionError.rateLimited
+            throw rateLimitError(from: data)
         default:
             throw PluginTranscriptionError.apiError(errorMessage(from: data, statusCode: httpResponse.statusCode))
         }
@@ -1939,7 +2162,18 @@ final class SonioxPlugin: NSObject,
 
             let (data, response) = try await PluginHTTPClient.data(for: request)
 
-            guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
+            guard let httpResponse = response as? HTTPURLResponse else {
+                continue
+            }
+
+            switch httpResponse.statusCode {
+            case 200:
+                break
+            case 401, 403:
+                throw PluginTranscriptionError.invalidApiKey
+            case 429:
+                throw Self.rateLimitError(from: data)
+            default:
                 continue
             }
 
@@ -1996,7 +2230,14 @@ final class SonioxPlugin: NSObject,
             throw PluginTranscriptionError.apiError("No HTTP response")
         }
 
-        guard httpResponse.statusCode == 200 else {
+        switch httpResponse.statusCode {
+        case 200:
+            break
+        case 401, 403:
+            throw PluginTranscriptionError.invalidApiKey
+        case 429:
+            throw Self.rateLimitError(from: data)
+        default:
             let body = String(data: data, encoding: .utf8) ?? ""
             throw PluginTranscriptionError.apiError("Fetch transcript failed HTTP \(httpResponse.statusCode): \(body)")
         }
@@ -2064,18 +2305,38 @@ final class SonioxPlugin: NSObject,
         return request
     }
 
-    private static func errorMessage(from data: Data, statusCode: Int) -> String {
+    private static func providerErrorMessage(from data: Data) -> String? {
         if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
-            if let message = json["error_message"] as? String {
+            if let message = nonEmptyString(json["error_message"]) {
                 return message
             }
-            if let message = json["message"] as? String {
+            if let message = nonEmptyString(json["message"]) {
                 return message
             }
             if let error = json["error"] as? [String: Any],
-               let message = error["message"] as? String {
+               let message = nonEmptyString(error["message"]) {
                 return message
             }
+        }
+        return nil
+    }
+
+    private static func nonEmptyString(_ value: Any?) -> String? {
+        guard let value = value as? String else { return nil }
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private static func rateLimitError(from data: Data) -> PluginTranscriptionError {
+        guard let message = providerErrorMessage(from: data) else {
+            return .rateLimited
+        }
+        return .apiError(message)
+    }
+
+    private static func errorMessage(from data: Data, statusCode: Int) -> String {
+        if let message = providerErrorMessage(from: data) {
+            return message
         }
         if let body = String(data: data, encoding: .utf8), !body.isEmpty {
             return "HTTP \(statusCode): \(body)"

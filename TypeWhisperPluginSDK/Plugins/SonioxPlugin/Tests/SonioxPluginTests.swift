@@ -299,6 +299,14 @@ final class SonioxPluginTests: XCTestCase {
                     Data(#"{"text":"Async file transcript"}"#.utf8),
                     Self.httpResponse(url: "https://api.soniox.com/v1/transcriptions/transcription_123/transcript", statusCode: 200)
                 ),
+                .success(
+                    Data(),
+                    Self.httpResponse(url: "https://api.soniox.com/v1/transcriptions/transcription_123", statusCode: 204)
+                ),
+                .success(
+                    Data(),
+                    Self.httpResponse(url: "https://api.soniox.com/v1/files/file_123", statusCode: 404)
+                ),
             ])
         }
 
@@ -332,8 +340,17 @@ final class SonioxPluginTests: XCTestCase {
                 "/v1/transcriptions",
                 "/v1/transcriptions/transcription_123",
                 "/v1/transcriptions/transcription_123/transcript",
+                "/v1/transcriptions/transcription_123",
+                "/v1/files/file_123",
             ]
         )
+
+        let deleteRequests = session.requestedRequests.suffix(2)
+        XCTAssertEqual(deleteRequests.map(\.httpMethod), ["DELETE", "DELETE"])
+        XCTAssertTrue(deleteRequests.allSatisfy {
+            $0.value(forHTTPHeaderField: "Authorization") == "Bearer soniox-key"
+                && $0.timeoutInterval == 10
+        })
 
         let uploadRequest = try XCTUnwrap(session.requestedRequests.first { $0.url?.path == "/v1/files" })
         let uploadBody = String(decoding: try XCTUnwrap(uploadRequest.httpBody), as: UTF8.self)
@@ -374,6 +391,14 @@ final class SonioxPluginTests: XCTestCase {
                     Data(#"{"text":"WAV retry transcript"}"#.utf8),
                     Self.httpResponse(url: "https://api.soniox.com/v1/transcriptions/transcription_123/transcript", statusCode: 200)
                 ),
+                .success(
+                    Data(),
+                    Self.httpResponse(url: "https://api.soniox.com/v1/transcriptions/transcription_123", statusCode: 204)
+                ),
+                .success(
+                    Data(),
+                    Self.httpResponse(url: "https://api.soniox.com/v1/files/file_123", statusCode: 404)
+                ),
             ])
         }
 
@@ -396,6 +421,8 @@ final class SonioxPluginTests: XCTestCase {
             "/v1/transcriptions",
             "/v1/transcriptions/transcription_123",
             "/v1/transcriptions/transcription_123/transcript",
+            "/v1/transcriptions/transcription_123",
+            "/v1/files/file_123",
         ])
 
         let firstUploadBody = String(decoding: try XCTUnwrap(requests[0].httpBody), as: UTF8.self)
@@ -455,6 +482,17 @@ final class SonioxPluginTests: XCTestCase {
                     )
                 ),
                 .success(
+                    Data(),
+                    Self.httpResponse(
+                        url: "https://api.eu.soniox.com/v1/transcriptions/transcription_m4a",
+                        statusCode: 204
+                    )
+                ),
+                .success(
+                    Data(),
+                    Self.httpResponse(url: "https://api.eu.soniox.com/v1/files/file_m4a", statusCode: 404)
+                ),
+                .success(
                     Data(#"{"id":"file_wav"}"#.utf8),
                     Self.httpResponse(url: "https://api.eu.soniox.com/v1/files", statusCode: 201)
                 ),
@@ -475,6 +513,17 @@ final class SonioxPluginTests: XCTestCase {
                         url: "https://api.eu.soniox.com/v1/transcriptions/transcription_wav/transcript",
                         statusCode: 200
                     )
+                ),
+                .success(
+                    Data(),
+                    Self.httpResponse(
+                        url: "https://api.eu.soniox.com/v1/transcriptions/transcription_wav",
+                        statusCode: 204
+                    )
+                ),
+                .success(
+                    Data(),
+                    Self.httpResponse(url: "https://api.eu.soniox.com/v1/files/file_wav", statusCode: 404)
                 ),
             ])
         }
@@ -501,10 +550,14 @@ final class SonioxPluginTests: XCTestCase {
             "/v1/files",
             "/v1/transcriptions",
             "/v1/transcriptions/transcription_m4a",
+            "/v1/transcriptions/transcription_m4a",
+            "/v1/files/file_m4a",
             "/v1/files",
             "/v1/transcriptions",
             "/v1/transcriptions/transcription_wav",
             "/v1/transcriptions/transcription_wav/transcript",
+            "/v1/transcriptions/transcription_wav",
+            "/v1/files/file_wav",
         ])
         XCTAssertTrue(requests.allSatisfy { $0.url?.host == "api.eu.soniox.com" })
 
@@ -512,15 +565,15 @@ final class SonioxPluginTests: XCTestCase {
         XCTAssertTrue(firstUploadBody.contains(#"filename="audio.m4a""#))
         XCTAssertTrue(firstUploadBody.contains("Content-Type: audio/mp4"))
 
-        let retryUploadBody = String(decoding: try XCTUnwrap(requests[3].httpBody), as: UTF8.self)
+        let retryUploadBody = String(decoding: try XCTUnwrap(requests[5].httpBody), as: UTF8.self)
         XCTAssertTrue(retryUploadBody.contains(#"filename="audio.wav""#))
         XCTAssertTrue(retryUploadBody.contains("Content-Type: audio/wav"))
 
         XCTAssertEqual(requests[1].value(forHTTPHeaderField: "Authorization"), "Bearer soniox-key")
-        XCTAssertEqual(requests[4].value(forHTTPHeaderField: "Authorization"), "Bearer soniox-key")
+        XCTAssertEqual(requests[6].value(forHTTPHeaderField: "Authorization"), "Bearer soniox-key")
 
         var firstCreateBody = try Self.jsonBody(from: requests[1])
-        var retryCreateBody = try Self.jsonBody(from: requests[4])
+        var retryCreateBody = try Self.jsonBody(from: requests[6])
         XCTAssertEqual(firstCreateBody.removeValue(forKey: "file_id") as? String, "file_m4a")
         XCTAssertEqual(retryCreateBody.removeValue(forKey: "file_id") as? String, "file_wav")
         XCTAssertTrue(NSDictionary(dictionary: firstCreateBody).isEqual(to: retryCreateBody))
@@ -559,6 +612,14 @@ final class SonioxPluginTests: XCTestCase {
                         statusCode: 200
                     )
                 ),
+                .success(
+                    Data(#"{"message":"cleanup failed"}"#.utf8),
+                    Self.httpResponse(
+                        url: "https://api.soniox.com/v1/transcriptions/transcription_m4a",
+                        statusCode: 500
+                    )
+                ),
+                .failure(URLError(.cannotConnectToHost)),
             ])
         }
 
@@ -584,6 +645,8 @@ final class SonioxPluginTests: XCTestCase {
             "/v1/files",
             "/v1/transcriptions",
             "/v1/transcriptions/transcription_m4a",
+            "/v1/transcriptions/transcription_m4a",
+            "/v1/files/file_m4a",
         ])
         let uploadBody = String(decoding: try XCTUnwrap(requests[0].httpBody), as: UTF8.self)
         XCTAssertTrue(uploadBody.contains(#"filename="audio.m4a""#))
@@ -615,6 +678,17 @@ final class SonioxPluginTests: XCTestCase {
                     )
                 ),
                 .success(
+                    Data(),
+                    Self.httpResponse(
+                        url: "https://api.soniox.com/v1/transcriptions/transcription_m4a",
+                        statusCode: 204
+                    )
+                ),
+                .success(
+                    Data(),
+                    Self.httpResponse(url: "https://api.soniox.com/v1/files/file_m4a", statusCode: 404)
+                ),
+                .success(
                     Data(#"{"id":"file_wav"}"#.utf8),
                     Self.httpResponse(url: "https://api.soniox.com/v1/files", statusCode: 201)
                 ),
@@ -630,6 +704,17 @@ final class SonioxPluginTests: XCTestCase {
                         url: "https://api.soniox.com/v1/transcriptions/transcription_wav",
                         statusCode: 200
                     )
+                ),
+                .success(
+                    Data(),
+                    Self.httpResponse(
+                        url: "https://api.soniox.com/v1/transcriptions/transcription_wav",
+                        statusCode: 204
+                    )
+                ),
+                .success(
+                    Data(),
+                    Self.httpResponse(url: "https://api.soniox.com/v1/files/file_wav", statusCode: 404)
                 ),
             ])
         }
@@ -661,13 +746,397 @@ final class SonioxPluginTests: XCTestCase {
             "/v1/files",
             "/v1/transcriptions",
             "/v1/transcriptions/transcription_m4a",
+            "/v1/transcriptions/transcription_m4a",
+            "/v1/files/file_m4a",
             "/v1/files",
             "/v1/transcriptions",
             "/v1/transcriptions/transcription_wav",
+            "/v1/transcriptions/transcription_wav",
+            "/v1/files/file_wav",
         ])
-        let retryUploadBody = String(decoding: try XCTUnwrap(requests[3].httpBody), as: UTF8.self)
+        let retryUploadBody = String(decoding: try XCTUnwrap(requests[5].httpBody), as: UTF8.self)
         XCTAssertTrue(retryUploadBody.contains(#"filename="audio.wav""#))
         XCTAssertTrue(retryUploadBody.contains("Content-Type: audio/wav"))
+    }
+
+    func testUpload429SurfacesSonioxQuotaMessage() async throws {
+        let plugin = try configuredPlugin()
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"error_type":"limit_exceeded","message":"Total file count limit exceeded. Please delete some files."}"#.utf8),
+                    Self.httpResponse(url: "https://api.soniox.com/v1/files", statusCode: 429)
+                ),
+            ])
+        }
+
+        do {
+            _ = try await transcribeREST(using: plugin)
+            XCTFail("Expected the Soniox quota error")
+        } catch {
+            XCTAssertEqual(
+                (error as? PluginTranscriptionError)?.localizedDescription,
+                "API error: Total file count limit exceeded. Please delete some files."
+            )
+        }
+
+        XCTAssertEqual(store.sessions.first?.requestedPaths, ["/v1/files"])
+    }
+
+    func testCreateTranscription429SurfacesMessageAndDeletesUploadedFile() async throws {
+        let plugin = try configuredPlugin()
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"id":"file_123"}"#.utf8),
+                    Self.httpResponse(url: "https://api.soniox.com/v1/files", statusCode: 201)
+                ),
+                .success(
+                    Data(#"{"error_type":"limit_exceeded","error_message":"Total transcription count exceeded."}"#.utf8),
+                    Self.httpResponse(url: "https://api.soniox.com/v1/transcriptions", statusCode: 429)
+                ),
+                .success(
+                    Data(),
+                    Self.httpResponse(url: "https://api.soniox.com/v1/files/file_123", statusCode: 204)
+                ),
+            ])
+        }
+
+        do {
+            _ = try await transcribeREST(using: plugin)
+            XCTFail("Expected the Soniox quota error")
+        } catch {
+            XCTAssertEqual(
+                (error as? PluginTranscriptionError)?.localizedDescription,
+                "API error: Total transcription count exceeded."
+            )
+        }
+
+        let requests = try XCTUnwrap(store.sessions.first?.requestedRequests)
+        XCTAssertEqual(requests.map { $0.url?.path }, [
+            "/v1/files",
+            "/v1/transcriptions",
+            "/v1/files/file_123",
+        ])
+        XCTAssertEqual(requests.last?.httpMethod, "DELETE")
+    }
+
+    func testPolling429SurfacesNestedMessageAndCleansUpBothResources() async throws {
+        let plugin = try configuredPlugin()
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"id":"file_123"}"#.utf8),
+                    Self.httpResponse(url: "https://api.soniox.com/v1/files", statusCode: 201)
+                ),
+                .success(
+                    Data(#"{"id":"transcription_123"}"#.utf8),
+                    Self.httpResponse(url: "https://api.soniox.com/v1/transcriptions", statusCode: 201)
+                ),
+                .success(
+                    Data(#"{"error_type":"limit_exceeded","error":{"message":"Async requests per minute exceeded."}}"#.utf8),
+                    Self.httpResponse(
+                        url: "https://api.soniox.com/v1/transcriptions/transcription_123",
+                        statusCode: 429
+                    )
+                ),
+                .success(
+                    Data(),
+                    Self.httpResponse(
+                        url: "https://api.soniox.com/v1/transcriptions/transcription_123",
+                        statusCode: 204
+                    )
+                ),
+                .success(
+                    Data(),
+                    Self.httpResponse(url: "https://api.soniox.com/v1/files/file_123", statusCode: 404)
+                ),
+            ])
+        }
+
+        do {
+            _ = try await transcribeREST(using: plugin)
+            XCTFail("Expected the Soniox quota error")
+        } catch {
+            XCTAssertEqual(
+                (error as? PluginTranscriptionError)?.localizedDescription,
+                "API error: Async requests per minute exceeded."
+            )
+        }
+
+        XCTAssertEqual(store.sessions.first?.requestedPaths, [
+            "/v1/files",
+            "/v1/transcriptions",
+            "/v1/transcriptions/transcription_123",
+            "/v1/transcriptions/transcription_123",
+            "/v1/files/file_123",
+        ])
+    }
+
+    func testTranscriptFetch429SurfacesMessageAndCleansUpBothResources() async throws {
+        let plugin = try configuredPlugin()
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"id":"file_123"}"#.utf8),
+                    Self.httpResponse(url: "https://api.soniox.com/v1/files", statusCode: 201)
+                ),
+                .success(
+                    Data(#"{"id":"transcription_123"}"#.utf8),
+                    Self.httpResponse(url: "https://api.soniox.com/v1/transcriptions", statusCode: 201)
+                ),
+                .success(
+                    Data(#"{"status":"completed"}"#.utf8),
+                    Self.httpResponse(
+                        url: "https://api.soniox.com/v1/transcriptions/transcription_123",
+                        statusCode: 200
+                    )
+                ),
+                .success(
+                    Data(#"{"message":"Transcript retrieval quota exceeded."}"#.utf8),
+                    Self.httpResponse(
+                        url: "https://api.soniox.com/v1/transcriptions/transcription_123/transcript",
+                        statusCode: 429
+                    )
+                ),
+                .success(
+                    Data(),
+                    Self.httpResponse(
+                        url: "https://api.soniox.com/v1/transcriptions/transcription_123",
+                        statusCode: 204
+                    )
+                ),
+                .success(
+                    Data(),
+                    Self.httpResponse(url: "https://api.soniox.com/v1/files/file_123", statusCode: 404)
+                ),
+            ])
+        }
+
+        do {
+            _ = try await transcribeREST(using: plugin)
+            XCTFail("Expected the Soniox quota error")
+        } catch {
+            XCTAssertEqual(
+                (error as? PluginTranscriptionError)?.localizedDescription,
+                "API error: Transcript retrieval quota exceeded."
+            )
+        }
+
+        XCTAssertEqual(store.sessions.first?.requestedPaths.suffix(2), [
+            "/v1/transcriptions/transcription_123",
+            "/v1/files/file_123",
+        ])
+    }
+
+    func testHTTP429UsesProviderMessageVariantsAndFallsBackWhenMissing() throws {
+        let response = Self.httpResponse(url: "https://tts-rt.soniox.com/tts", statusCode: 429)
+        let variants = [
+            (Data(#"{"message":"Message field"}"#.utf8), "API error: Message field"),
+            (Data(#"{"error_message":"Error message field"}"#.utf8), "API error: Error message field"),
+            (Data(#"{"error":{"message":"Nested message field"}}"#.utf8), "API error: Nested message field"),
+        ]
+
+        for (data, expectedDescription) in variants {
+            XCTAssertThrowsError(try SonioxPlugin.validateHTTPResponse(data: data, response: response)) { error in
+                XCTAssertEqual((error as? PluginTranscriptionError)?.localizedDescription, expectedDescription)
+            }
+        }
+
+        for data in [Data(), Data("not-json".utf8), Data(#"{"message":"   "}"#.utf8)] {
+            XCTAssertThrowsError(try SonioxPlugin.validateHTTPResponse(data: data, response: response)) { error in
+                XCTAssertEqual(
+                    (error as? PluginTranscriptionError)?.localizedDescription,
+                    "Rate limit exceeded. Please wait and try again."
+                )
+            }
+        }
+    }
+
+    func testCleanupFailuresDoNotReplaceSuccessfulTranscript() async throws {
+        let plugin = try configuredPlugin()
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"id":"file_123"}"#.utf8),
+                    Self.httpResponse(url: "https://api.soniox.com/v1/files", statusCode: 201)
+                ),
+                .success(
+                    Data(#"{"id":"transcription_123"}"#.utf8),
+                    Self.httpResponse(url: "https://api.soniox.com/v1/transcriptions", statusCode: 201)
+                ),
+                .success(
+                    Data(#"{"status":"completed"}"#.utf8),
+                    Self.httpResponse(
+                        url: "https://api.soniox.com/v1/transcriptions/transcription_123",
+                        statusCode: 200
+                    )
+                ),
+                .success(
+                    Data(#"{"text":"Cleanup-independent transcript"}"#.utf8),
+                    Self.httpResponse(
+                        url: "https://api.soniox.com/v1/transcriptions/transcription_123/transcript",
+                        statusCode: 200
+                    )
+                ),
+                .success(
+                    Data(),
+                    Self.httpResponse(
+                        url: "https://api.soniox.com/v1/transcriptions/transcription_123",
+                        statusCode: 500
+                    )
+                ),
+                .failure(URLError(.cannotConnectToHost)),
+            ])
+        }
+
+        let result = try await transcribeREST(using: plugin)
+
+        XCTAssertEqual(result.text, "Cleanup-independent transcript")
+        XCTAssertEqual(store.sessions.first?.requestedPaths.suffix(2), [
+            "/v1/transcriptions/transcription_123",
+            "/v1/files/file_123",
+        ])
+    }
+
+    func testCleanupRetriesTranscriptionDeletionAfterProcessingEnds() async throws {
+        let plugin = try configuredPlugin()
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"id":"file_123"}"#.utf8),
+                    Self.httpResponse(url: "https://api.soniox.com/v1/files", statusCode: 201)
+                ),
+                .success(
+                    Data(#"{"id":"transcription_123"}"#.utf8),
+                    Self.httpResponse(url: "https://api.soniox.com/v1/transcriptions", statusCode: 201)
+                ),
+                .success(
+                    Data(#"{"status":"completed"}"#.utf8),
+                    Self.httpResponse(
+                        url: "https://api.soniox.com/v1/transcriptions/transcription_123",
+                        statusCode: 200
+                    )
+                ),
+                .success(
+                    Data(#"{"text":"Retry cleanup transcript"}"#.utf8),
+                    Self.httpResponse(
+                        url: "https://api.soniox.com/v1/transcriptions/transcription_123/transcript",
+                        statusCode: 200
+                    )
+                ),
+                .success(
+                    Data(),
+                    Self.httpResponse(
+                        url: "https://api.soniox.com/v1/transcriptions/transcription_123",
+                        statusCode: 409
+                    )
+                ),
+                .success(
+                    Data(),
+                    Self.httpResponse(url: "https://api.soniox.com/v1/files/file_123", statusCode: 204)
+                ),
+                .success(
+                    Data(#"{"status":"error"}"#.utf8),
+                    Self.httpResponse(
+                        url: "https://api.soniox.com/v1/transcriptions/transcription_123",
+                        statusCode: 200
+                    )
+                ),
+                .success(
+                    Data(),
+                    Self.httpResponse(
+                        url: "https://api.soniox.com/v1/transcriptions/transcription_123",
+                        statusCode: 204
+                    )
+                ),
+            ])
+        }
+
+        let result = try await transcribeREST(using: plugin)
+
+        XCTAssertEqual(result.text, "Retry cleanup transcript")
+        let requests = try XCTUnwrap(store.sessions.first?.requestedRequests)
+        let cleanupRequests = requests.suffix(4)
+        XCTAssertEqual(cleanupRequests.map(\.httpMethod), ["DELETE", "DELETE", "GET", "DELETE"])
+        XCTAssertEqual(cleanupRequests.map { $0.url?.path }, [
+            "/v1/transcriptions/transcription_123",
+            "/v1/files/file_123",
+            "/v1/transcriptions/transcription_123",
+            "/v1/transcriptions/transcription_123",
+        ])
+    }
+
+    func testCancellationStillCleansUpCreatedResources() async throws {
+        let plugin = try configuredPlugin()
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"id":"file_123"}"#.utf8),
+                    Self.httpResponse(url: "https://api.soniox.com/v1/files", statusCode: 201)
+                ),
+                .success(
+                    Data(#"{"id":"transcription_123"}"#.utf8),
+                    Self.httpResponse(url: "https://api.soniox.com/v1/transcriptions", statusCode: 201)
+                ),
+                .success(
+                    Data(),
+                    Self.httpResponse(
+                        url: "https://api.soniox.com/v1/transcriptions/transcription_123",
+                        statusCode: 204
+                    )
+                ),
+                .success(
+                    Data(),
+                    Self.httpResponse(url: "https://api.soniox.com/v1/files/file_123", statusCode: 404)
+                ),
+            ])
+        }
+
+        let task = Task {
+            try await plugin.transcribe(
+                audio: AudioData(samples: [0], wavData: Data("wav".utf8), duration: 1),
+                languageSelection: PluginLanguageSelection(languageHints: ["en"]),
+                translate: false,
+                prompt: nil,
+                onProgress: { _ in true },
+                onSourceProgress: { _ in true }
+            )
+        }
+
+        for _ in 0..<200 {
+            if store.sessions.first?.requestedRequests.count == 2 {
+                break
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertEqual(store.sessions.first?.requestedRequests.count, 2)
+
+        task.cancel()
+        do {
+            _ = try await task.value
+            XCTFail("Expected cancellation")
+        } catch is CancellationError {
+            // Expected. Cleanup is awaited before the cancellation escapes.
+        } catch {
+            XCTFail("Expected CancellationError, got \(error)")
+        }
+
+        let requests = try XCTUnwrap(store.sessions.first?.requestedRequests)
+        XCTAssertEqual(requests.map(\.httpMethod), ["POST", "POST", "DELETE", "DELETE"])
+        XCTAssertEqual(requests.map { $0.url?.path }, [
+            "/v1/files",
+            "/v1/transcriptions",
+            "/v1/transcriptions/transcription_123",
+            "/v1/files/file_123",
+        ])
     }
 
     func testSourceProgressTranscriptionUsesSelectedRegionalRESTPath() async throws {
@@ -697,6 +1166,17 @@ final class SonioxPluginTests: XCTestCase {
                     Data(#"{"text":"EU transcript"}"#.utf8),
                     Self.httpResponse(url: "https://api.eu.soniox.com/v1/transcriptions/transcription_123/transcript", statusCode: 200)
                 ),
+                .success(
+                    Data(),
+                    Self.httpResponse(
+                        url: "https://api.eu.soniox.com/v1/transcriptions/transcription_123",
+                        statusCode: 204
+                    )
+                ),
+                .success(
+                    Data(),
+                    Self.httpResponse(url: "https://api.eu.soniox.com/v1/files/file_123", statusCode: 404)
+                ),
             ])
         }
 
@@ -718,6 +1198,8 @@ final class SonioxPluginTests: XCTestCase {
                 "https://api.eu.soniox.com/v1/transcriptions",
                 "https://api.eu.soniox.com/v1/transcriptions/transcription_123",
                 "https://api.eu.soniox.com/v1/transcriptions/transcription_123/transcript",
+                "https://api.eu.soniox.com/v1/transcriptions/transcription_123",
+                "https://api.eu.soniox.com/v1/files/file_123",
             ]
         )
     }
@@ -1003,6 +1485,24 @@ final class SonioxPluginTests: XCTestCase {
 
         let result = try await session.finish()
         XCTAssertEqual(result.text, "done")
+    }
+
+    private func configuredPlugin() throws -> SonioxPlugin {
+        let host = try PluginTestHostServices(secrets: ["api-key": "soniox-key"])
+        let plugin = SonioxPlugin()
+        plugin.activate(host: host)
+        return plugin
+    }
+
+    private func transcribeREST(using plugin: SonioxPlugin) async throws -> PluginTranscriptionResult {
+        try await plugin.transcribe(
+            audio: AudioData(samples: [0], wavData: Data("wav".utf8), duration: 1),
+            languageSelection: PluginLanguageSelection(languageHints: ["en"]),
+            translate: false,
+            prompt: nil,
+            onProgress: { _ in true },
+            onSourceProgress: { _ in true }
+        )
     }
 
     private static func jsonBody(from request: URLRequest) throws -> [String: Any] {
