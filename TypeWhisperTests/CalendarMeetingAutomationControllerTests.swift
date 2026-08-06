@@ -139,7 +139,8 @@ final class CalendarMeetingAutomationControllerTests: XCTestCase {
 
     func testCalendarAccessRequestReturnsGrantedAuthorization() async {
         let provider = CalendarMeetingEventProviderStub(
-            authorization: .fullAccess,
+            authorization: .notDetermined,
+            authorizationAfterRequest: .fullAccess,
             requestResult: .value(true)
         )
 
@@ -368,15 +369,18 @@ private actor CalendarMeetingEventProviderStub: CalendarMeetingEventProviding {
         case failure(domain: String, code: Int)
     }
 
-    private let authorization: CalendarMeetingCalendarAuthorization
+    private var authorization: CalendarMeetingCalendarAuthorization
+    private let authorizationAfterRequest: CalendarMeetingCalendarAuthorization?
     private let requestResult: RequestResult
     private var recordedRequestCount = 0
 
     init(
         authorization: CalendarMeetingCalendarAuthorization,
+        authorizationAfterRequest: CalendarMeetingCalendarAuthorization? = nil,
         requestResult: RequestResult
     ) {
         self.authorization = authorization
+        self.authorizationAfterRequest = authorizationAfterRequest
         self.requestResult = requestResult
     }
 
@@ -386,6 +390,9 @@ private actor CalendarMeetingEventProviderStub: CalendarMeetingEventProviding {
 
     func requestFullAccess() throws -> Bool {
         recordedRequestCount += 1
+        if let authorizationAfterRequest {
+            authorization = authorizationAfterRequest
+        }
         switch requestResult {
         case .value(let granted):
             return granted
