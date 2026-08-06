@@ -159,6 +159,45 @@ enum CalendarMeetingCalendarAuthorization: String, Equatable, Sendable {
     case restricted
     case writeOnly
     case unknown
+
+    var permissionAction: CalendarMeetingCalendarPermissionAction {
+        switch self {
+        case .notDetermined:
+            .requestAccess
+        case .denied, .writeOnly, .unknown:
+            .openSystemSettings
+        case .restricted:
+            .unavailable
+        case .fullAccess:
+            .none
+        }
+    }
+}
+
+enum CalendarMeetingCalendarPermissionAction: Equatable, Sendable {
+    case requestAccess
+    case openSystemSettings
+    case unavailable
+    case none
+}
+
+enum CalendarMeetingCalendarAccessRequestFailure: Identifiable, Equatable, Sendable {
+    case notCompleted
+    case system(domain: String, code: Int)
+
+    var id: String {
+        switch self {
+        case .notCompleted:
+            "notCompleted"
+        case .system(let domain, let code):
+            "system:\(domain):\(code)"
+        }
+    }
+}
+
+struct CalendarMeetingCalendarAccessRequestOutcome: Equatable, Sendable {
+    let authorization: CalendarMeetingCalendarAuthorization
+    let failure: CalendarMeetingCalendarAccessRequestFailure?
 }
 
 struct MeetingAudioProcess: Equatable, Hashable, Sendable {

@@ -2,6 +2,40 @@ import AppKit
 import AVFoundation
 import Combine
 import Foundation
+import os
+
+private let calendarMeetingAutomationLogger = Logger(
+    subsystem: AppConstants.loggerSubsystem,
+    category: "CalendarMeetingAutomation"
+)
+
+func requestCalendarMeetingCalendarAccess(
+    using provider: any CalendarMeetingEventProviding
+) async -> CalendarMeetingCalendarAccessRequestOutcome {
+    do {
+        let granted = try await provider.requestFullAccess()
+        let authorization = await provider.authorizationStatus()
+        let failure: CalendarMeetingCalendarAccessRequestFailure?
+        if authorization == .fullAccess {
+            failure = nil
+        } else if granted || authorization == .notDetermined {
+            failure = .notCompleted
+        } else {
+            failure = nil
+        }
+        return CalendarMeetingCalendarAccessRequestOutcome(
+            authorization: authorization,
+            failure: failure
+        )
+    } catch {
+        let authorization = await provider.authorizationStatus()
+        let error = error as NSError
+        return CalendarMeetingCalendarAccessRequestOutcome(
+            authorization: authorization,
+            failure: .system(domain: error.domain, code: error.code)
+        )
+    }
+}
 
 enum CalendarMeetingBrowserURLResolution: Equatable, Sendable {
     case unavailable
@@ -79,6 +113,24 @@ final class CalendarMeetingAutomationController: ObservableObject {
         authorization.permitsAutoStop
     }
 
+    nonisolated static func shouldStartCalendarAccessRequest(
+        hasPremiumAccess: Bool,
+        startMode: CalendarMeetingStartMode,
+        isRequestInFlight: Bool
+    ) -> Bool {
+        hasPremiumAccess && startMode != .off && !isRequestInFlight
+    }
+
+    nonisolated static func shouldRequestNotifications(
+        hasPremiumAccess: Bool,
+        startMode: CalendarMeetingStartMode,
+        calendarAuthorization: CalendarMeetingCalendarAuthorization
+    ) -> Bool {
+        hasPremiumAccess
+            && startMode != .off
+            && calendarAuthorization == .fullAccess
+    }
+
     nonisolated static func automationUserAction(
         for response: CalendarMeetingNotificationResponse
     ) -> CalendarMeetingAutomationUserAction? {
@@ -107,7 +159,9 @@ final class CalendarMeetingAutomationController: ObservableObject {
     @Published private(set) var calendarAuthorization: CalendarMeetingCalendarAuthorization = .notDetermined
     @Published private(set) var notificationAuthorization: CalendarMeetingNotificationAuthorization = .notDetermined
     @Published private(set) var isAutomationActive = false
-    @Published var permissionExplanationPresented = false
+    @Published private(set) var isCalendarAccessRequestInFlight = false
+    @Published private(set) var calendarAccessRequestFailure:
+        CalendarMeetingCalendarAccessRequestFailure?
 
     var canEnableAutoStop: Bool {
         Self.canUseAutoStopNotifications(authorization: notificationAuthorization)
@@ -146,7 +200,6 @@ final class CalendarMeetingAutomationController: ObservableObject {
     private var browserMeetingIdentityByBundleIdentifier:
         [String: CalendarMeetingCanonicalLink] = [:]
     private var calendarAutoStopTrackingActive = false
-    private var pendingStartMode: CalendarMeetingStartMode?
     private var notificationRouterInstalled = false
     private var initialized = false
     private var refreshGeneration = 0
@@ -166,6 +219,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
     private var policyTimerTask: Task<Void, Never>?
     private var recordingStartTask: Task<Void, Never>?
     private var notificationTask: Task<Void, Never>?
+    private var calendarAccessRequestTask: Task<Void, Never>?
     private var cancellables = Set<AnyCancellable>()
     private var environmentObserverTokens: [NSObjectProtocol] = []
 
@@ -297,39 +351,74 @@ final class CalendarMeetingAutomationController: ObservableObject {
             dismissAutoStopWarning()
         }
         if mode == .off {
-            pendingStartMode = nil
-            permissionExplanationPresented = false
             persistStartMode(.off)
             requestRefresh()
             return
         }
-        if startMode == .off {
-            pendingStartMode = mode
-            permissionExplanationPresented = true
-        } else {
-            persistStartMode(mode)
-            requestRefresh()
-        }
+        persistStartMode(mode)
+        requestRefresh()
     }
 
-    func confirmPermissionExplanation() {
-        guard let pendingStartMode else { return }
-        self.pendingStartMode = nil
-        permissionExplanationPresented = false
-        persistStartMode(pendingStartMode)
-
-        guard premiumAccessProvider() else {
-            entitlementDidChange()
+    func requestCalendarAccess() {
+        let hasAccess = premiumAccessProvider()
+        guard Self.shouldStartCalendarAccessRequest(
+            hasPremiumAccess: hasAccess,
+            startMode: startMode,
+            isRequestInFlight: isCalendarAccessRequestInFlight
+        ) else {
+            if !hasAccess {
+                entitlementDidChange()
+            }
             return
         }
-        Task { @MainActor [weak self] in
-            await self?.requestCalendarAndNotificationAccess()
+
+        calendarAccessRequestFailure = nil
+        isCalendarAccessRequestInFlight = true
+        let provider = eventProviderInstance()
+        calendarAccessRequestTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            let outcome = await requestCalendarMeetingCalendarAccess(using: provider)
+            guard !Task.isCancelled else { return }
+
+            self.calendarAccessRequestTask = nil
+            self.isCalendarAccessRequestInFlight = false
+            self.calendarAuthorization = outcome.authorization
+            self.calendarAccessRequestFailure = outcome.failure
+
+            if let failure = outcome.failure {
+                switch failure {
+                case .notCompleted:
+                    calendarMeetingAutomationLogger.error(
+                        "Calendar access request did not complete and authorization remains unavailable"
+                    )
+                case .system(let domain, let code):
+                    calendarMeetingAutomationLogger.error(
+                        "Calendar access request failed: \(domain, privacy: .public) code \(code)"
+                    )
+                }
+            }
+
+            guard Self.shouldRequestNotifications(
+                hasPremiumAccess: self.premiumAccessProvider(),
+                startMode: self.startMode,
+                calendarAuthorization: outcome.authorization
+            ) else {
+                self.requestRefresh()
+                return
+            }
+
+            await self.initializeCalendarSelectionIfNeeded(provider: provider)
+            let notificationService = self.notificationServiceInstance()
+            self.ensureNotificationRouterInstalled()
+            self.notificationAuthorization = await notificationService
+                .configureAndRequestAuthorization()
+            self.disableAutoStopIfNotificationsUnavailable()
+            self.requestRefresh()
         }
     }
 
-    func cancelPermissionExplanation() {
-        pendingStartMode = nil
-        permissionExplanationPresented = false
+    func dismissCalendarAccessRequestFailure() {
+        calendarAccessRequestFailure = nil
     }
 
     func setAutoStopEnabled(_ enabled: Bool) {
@@ -433,6 +522,10 @@ final class CalendarMeetingAutomationController: ObservableObject {
         recordingStartTask = nil
         notificationTask?.cancel()
         notificationTask = nil
+        calendarAccessRequestTask?.cancel()
+        calendarAccessRequestTask = nil
+        isCalendarAccessRequestInFlight = false
+        calendarAccessRequestFailure = nil
         if let activeAutoStopWarningDigest, let notificationService {
             notificationService.removeAutoStopWarning(
                 occurrenceDigest: activeAutoStopWarningDigest
@@ -478,23 +571,6 @@ final class CalendarMeetingAutomationController: ObservableObject {
     private func persistStartMode(_ mode: CalendarMeetingStartMode) {
         startMode = mode
         defaults.set(mode.rawValue, forKey: UserDefaultsKeys.calendarMeetingStartMode)
-    }
-
-    private func requestCalendarAndNotificationAccess() async {
-        let provider = eventProviderInstance()
-        _ = try? await provider.requestFullAccess()
-        calendarAuthorization = await provider.authorizationStatus()
-        guard calendarAuthorization == .fullAccess else {
-            requestRefresh()
-            return
-        }
-
-        await initializeCalendarSelectionIfNeeded(provider: provider)
-        let notificationService = notificationServiceInstance()
-        ensureNotificationRouterInstalled()
-        notificationAuthorization = await notificationService.configureAndRequestAuthorization()
-        disableAutoStopIfNotificationsUnavailable()
-        requestRefresh()
     }
 
     private func requestRefresh() {

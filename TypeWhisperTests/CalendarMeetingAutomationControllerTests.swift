@@ -56,6 +56,147 @@ final class CalendarMeetingAutomationControllerTests: XCTestCase {
         }
     }
 
+    func testCalendarPermissionActionsCoverEveryAuthorizationState() {
+        XCTAssertEqual(
+            CalendarMeetingCalendarAuthorization.notDetermined.permissionAction,
+            .requestAccess
+        )
+        XCTAssertEqual(
+            CalendarMeetingCalendarAuthorization.denied.permissionAction,
+            .openSystemSettings
+        )
+        XCTAssertEqual(
+            CalendarMeetingCalendarAuthorization.writeOnly.permissionAction,
+            .openSystemSettings
+        )
+        XCTAssertEqual(
+            CalendarMeetingCalendarAuthorization.unknown.permissionAction,
+            .openSystemSettings
+        )
+        XCTAssertEqual(
+            CalendarMeetingCalendarAuthorization.restricted.permissionAction,
+            .unavailable
+        )
+        XCTAssertEqual(
+            CalendarMeetingCalendarAuthorization.fullAccess.permissionAction,
+            .none
+        )
+    }
+
+    func testCalendarAccessRequestRequiresPremiumActiveModeAndNoRequestInFlight() {
+        XCTAssertTrue(CalendarMeetingAutomationController.shouldStartCalendarAccessRequest(
+            hasPremiumAccess: true,
+            startMode: .reminder,
+            isRequestInFlight: false
+        ))
+        XCTAssertFalse(CalendarMeetingAutomationController.shouldStartCalendarAccessRequest(
+            hasPremiumAccess: true,
+            startMode: .automatic,
+            isRequestInFlight: true
+        ))
+        XCTAssertFalse(CalendarMeetingAutomationController.shouldStartCalendarAccessRequest(
+            hasPremiumAccess: true,
+            startMode: .off,
+            isRequestInFlight: false
+        ))
+        XCTAssertFalse(CalendarMeetingAutomationController.shouldStartCalendarAccessRequest(
+            hasPremiumAccess: false,
+            startMode: .automatic,
+            isRequestInFlight: false
+        ))
+    }
+
+    func testNotificationRequestRequiresFullCalendarAccess() {
+        for authorization in [
+            CalendarMeetingCalendarAuthorization.notDetermined,
+            .denied,
+            .restricted,
+            .writeOnly,
+            .unknown
+        ] {
+            XCTAssertFalse(CalendarMeetingAutomationController.shouldRequestNotifications(
+                hasPremiumAccess: true,
+                startMode: .reminder,
+                calendarAuthorization: authorization
+            ))
+        }
+        XCTAssertTrue(CalendarMeetingAutomationController.shouldRequestNotifications(
+            hasPremiumAccess: true,
+            startMode: .automatic,
+            calendarAuthorization: .fullAccess
+        ))
+        XCTAssertFalse(CalendarMeetingAutomationController.shouldRequestNotifications(
+            hasPremiumAccess: true,
+            startMode: .off,
+            calendarAuthorization: .fullAccess
+        ))
+        XCTAssertFalse(CalendarMeetingAutomationController.shouldRequestNotifications(
+            hasPremiumAccess: false,
+            startMode: .automatic,
+            calendarAuthorization: .fullAccess
+        ))
+    }
+
+    func testCalendarAccessRequestReturnsGrantedAuthorization() async {
+        let provider = CalendarMeetingEventProviderStub(
+            authorization: .fullAccess,
+            requestResult: .value(true)
+        )
+
+        let outcome = await requestCalendarMeetingCalendarAccess(using: provider)
+
+        XCTAssertEqual(outcome, CalendarMeetingCalendarAccessRequestOutcome(
+            authorization: .fullAccess,
+            failure: nil
+        ))
+        let requestCount = await provider.requestCount()
+        XCTAssertEqual(requestCount, 1)
+    }
+
+    func testCalendarAccessRequestSurfacesIncompleteRequest() async {
+        let provider = CalendarMeetingEventProviderStub(
+            authorization: .notDetermined,
+            requestResult: .value(false)
+        )
+
+        let outcome = await requestCalendarMeetingCalendarAccess(using: provider)
+
+        XCTAssertEqual(outcome, CalendarMeetingCalendarAccessRequestOutcome(
+            authorization: .notDetermined,
+            failure: .notCompleted
+        ))
+        let requestCount = await provider.requestCount()
+        XCTAssertEqual(requestCount, 1)
+    }
+
+    func testCalendarAccessRequestPreservesDeniedStatusWithoutSyntheticFailure() async {
+        let provider = CalendarMeetingEventProviderStub(
+            authorization: .denied,
+            requestResult: .value(false)
+        )
+
+        let outcome = await requestCalendarMeetingCalendarAccess(using: provider)
+
+        XCTAssertEqual(outcome, CalendarMeetingCalendarAccessRequestOutcome(
+            authorization: .denied,
+            failure: nil
+        ))
+    }
+
+    func testCalendarAccessRequestSurfacesSystemError() async {
+        let provider = CalendarMeetingEventProviderStub(
+            authorization: .notDetermined,
+            requestResult: .failure(domain: "EKErrorDomain", code: 99)
+        )
+
+        let outcome = await requestCalendarMeetingCalendarAccess(using: provider)
+
+        XCTAssertEqual(outcome, CalendarMeetingCalendarAccessRequestOutcome(
+            authorization: .notDetermined,
+            failure: .system(domain: "EKErrorDomain", code: 99)
+        ))
+    }
+
     func testCommercialOrPremiumAccountUnlocksButSupporterDoesNotParticipate() {
         XCTAssertFalse(CalendarMeetingPremiumAccess.isGranted(
             hasCommercialLicense: false,
@@ -218,5 +359,59 @@ final class CalendarMeetingAutomationControllerTests: XCTestCase {
         XCTAssertFalse(CalendarMeetingNotificationService.shouldInstallRouter(defaults: defaults))
         defaults.set(CalendarMeetingStartMode.reminder.rawValue, forKey: UserDefaultsKeys.calendarMeetingStartMode)
         XCTAssertTrue(CalendarMeetingNotificationService.shouldInstallRouter(defaults: defaults))
+    }
+}
+
+private actor CalendarMeetingEventProviderStub: CalendarMeetingEventProviding {
+    enum RequestResult: Sendable {
+        case value(Bool)
+        case failure(domain: String, code: Int)
+    }
+
+    private let authorization: CalendarMeetingCalendarAuthorization
+    private let requestResult: RequestResult
+    private var recordedRequestCount = 0
+
+    init(
+        authorization: CalendarMeetingCalendarAuthorization,
+        requestResult: RequestResult
+    ) {
+        self.authorization = authorization
+        self.requestResult = requestResult
+    }
+
+    func authorizationStatus() -> CalendarMeetingCalendarAuthorization {
+        authorization
+    }
+
+    func requestFullAccess() throws -> Bool {
+        recordedRequestCount += 1
+        switch requestResult {
+        case .value(let granted):
+            return granted
+        case .failure(let domain, let code):
+            throw NSError(domain: domain, code: code)
+        }
+    }
+
+    func requestCount() -> Int {
+        recordedRequestCount
+    }
+
+    func calendars() -> [CalendarMeetingCalendar] {
+        []
+    }
+
+    func occurrences(
+        in interval: DateInterval,
+        calendarIDs: Set<String>
+    ) -> [CalendarMeetingOccurrence] {
+        []
+    }
+
+    func changes() -> AsyncStream<Void> {
+        AsyncStream { continuation in
+            continuation.finish()
+        }
     }
 }

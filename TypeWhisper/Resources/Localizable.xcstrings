@@ -35672,6 +35672,62 @@
         }
       }
     },
+    "calendarMeeting.settings.requestCalendarAccess" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kalenderzugriff anfordern"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Request Calendar Access"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "カレンダーアクセスを要求"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请求日历访问权限"
+          }
+        }
+      }
+    },
+    "calendarMeeting.settings.requestingCalendarAccess" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kalenderzugriff wird angefragt…"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Requesting Calendar Access…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "カレンダーアクセスを要求中…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在请求日历访问权限…"
+          }
+        }
+      }
+    },
     "calendarMeeting.settings.openNotificationSettings" : {
       "localizations" : {
         "de" : {
@@ -35864,6 +35920,118 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "需要日历访问权限"
+          }
+        }
+      }
+    },
+    "calendarMeeting.permission.calendarRestricted" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kalenderzugriff eingeschränkt"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Calendar access restricted"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "カレンダーアクセスが制限されています"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "日历访问受限"
+          }
+        }
+      }
+    },
+    "calendarMeeting.permission.calendarRestrictedHelp" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Kalenderzugriff ist durch macOS oder die Geräteverwaltung eingeschränkt und kann hier nicht geändert werden."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Calendar access is restricted by macOS or device management and cannot be changed here."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "カレンダーアクセスはmacOSまたはデバイス管理によって制限されているため、ここでは変更できません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "日历访问受到 macOS 或设备管理的限制，无法在此处更改。"
+          }
+        }
+      }
+    },
+    "calendarMeeting.permission.requestFailedTitle" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kalenderzugriff konnte nicht angefragt werden"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Calendar Access Request Failed"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "カレンダーアクセスを要求できませんでした"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "日历访问请求失败"
+          }
+        }
+      }
+    },
+    "calendarMeeting.permission.requestFailedMessage" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS hat die Anfrage auf Kalenderzugriff nicht abgeschlossen. Schließe diese Meldung und verwende dann „Kalenderzugriff anfordern“, um es erneut zu versuchen."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS did not complete the calendar access request. Dismiss this message, then use Request Calendar Access to try again."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOSでカレンダーアクセスの要求が完了しませんでした。このメッセージを閉じてから、「カレンダーアクセスを要求」を使用してもう一度お試しください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "macOS 未能完成日历访问请求。关闭此消息，然后使用“请求日历访问权限”重试。"
           }
         }
       }

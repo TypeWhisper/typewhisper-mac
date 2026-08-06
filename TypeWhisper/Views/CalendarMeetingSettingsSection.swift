@@ -116,18 +116,21 @@ struct CalendarMeetingSettingsSection: View {
             }
         }
         .alert(
-            String(localized: "calendarMeeting.permission.title"),
-            isPresented: $controller.permissionExplanationPresented
+            String(localized: "calendarMeeting.permission.requestFailedTitle"),
+            isPresented: Binding(
+                get: { controller.calendarAccessRequestFailure != nil },
+                set: { isPresented in
+                    if !isPresented {
+                        controller.dismissCalendarAccessRequestFailure()
+                    }
+                }
+            )
         ) {
-            Button(String(localized: "calendarMeeting.permission.continue")) {
-                controller.confirmPermissionExplanation()
-            }
-            .accessibilityIdentifier("calendarMeeting.permission.continue")
-            Button(String(localized: "Cancel"), role: .cancel) {
-                controller.cancelPermissionExplanation()
+            Button(String(localized: "OK"), role: .cancel) {
+                controller.dismissCalendarAccessRequestFailure()
             }
         } message: {
-            Text(String(localized: "calendarMeeting.permission.message"))
+            Text(String(localized: "calendarMeeting.permission.requestFailedMessage"))
         }
     }
 
@@ -154,12 +157,38 @@ struct CalendarMeetingSettingsSection: View {
                     controller.calendarAuthorization == .fullAccess ? .green : .orange
                 )
                 Spacer()
-                if controller.calendarAuthorization != .fullAccess {
+                switch controller.calendarAuthorization.permissionAction {
+                case .requestAccess:
+                    if controller.isCalendarAccessRequestInFlight {
+                        HStack(spacing: 6) {
+                            ProgressView()
+                                .controlSize(.small)
+                            Text(String(localized: "calendarMeeting.settings.requestingCalendarAccess"))
+                        }
+                        .accessibilityElement(children: .combine)
+                        .accessibilityIdentifier(
+                            "calendarMeeting.permission.calendarRequestProgress"
+                        )
+                    } else {
+                        Button(String(localized: "calendarMeeting.settings.requestCalendarAccess")) {
+                            controller.requestCalendarAccess()
+                        }
+                        .accessibilityIdentifier("calendarMeeting.permission.calendarRequest")
+                    }
+                case .openSystemSettings:
                     Button(String(localized: "calendarMeeting.settings.openCalendarSettings")) {
                         controller.openCalendarPrivacySettings()
                     }
                     .accessibilityIdentifier("calendarMeeting.permission.calendarSettings")
+                case .unavailable, .none:
+                    EmptyView()
                 }
+            }
+
+            if controller.calendarAuthorization == .restricted {
+                Text(String(localized: "calendarMeeting.permission.calendarRestrictedHelp"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             Divider()
@@ -277,7 +306,9 @@ struct CalendarMeetingSettingsSection: View {
             String(localized: "calendarMeeting.permission.calendarGranted")
         case .notDetermined:
             String(localized: "calendarMeeting.permission.calendarNotDetermined")
-        case .denied, .restricted, .writeOnly, .unknown:
+        case .restricted:
+            String(localized: "calendarMeeting.permission.calendarRestricted")
+        case .denied, .writeOnly, .unknown:
             String(localized: "calendarMeeting.permission.calendarDenied")
         }
     }
