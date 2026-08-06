@@ -65,6 +65,16 @@ final class SpeechmaticsPluginTests: XCTestCase {
         }
     }
 
+    func testRealtimeStreamingIsSkippedWhenLanguageIdentificationIsNeeded() {
+        XCTAssertFalse(SpeechmaticsPlugin.supportsRealtimeStreaming(language: nil))
+        XCTAssertFalse(SpeechmaticsPlugin.supportsRealtimeStreaming(language: ""))
+    }
+
+    func testRealtimeStreamingIsUsedForExplicitLanguages() {
+        XCTAssertTrue(SpeechmaticsPlugin.supportsRealtimeStreaming(language: "de"))
+        XCTAssertTrue(SpeechmaticsPlugin.supportsRealtimeStreaming(language: "zh"))
+    }
+
     func testUnsupportedLanguagesAreNoLongerAdvertised() {
         let plugin = SpeechmaticsPlugin()
         for code in ["gu", "is", "ka", "kk", "ml", "mk", "pa", "sq", "sr", "te"] {

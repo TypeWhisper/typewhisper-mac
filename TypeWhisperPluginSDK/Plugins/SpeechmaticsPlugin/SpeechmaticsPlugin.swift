@@ -121,6 +121,12 @@ final class SpeechmaticsPlugin: NSObject, TranscriptionEnginePlugin, DictionaryT
         return languagePackAliases[language] ?? language
     }
 
+    // Language identification is a batch-only feature, so "auto" is not a value the
+    // realtime endpoint accepts.
+    static func supportsRealtimeStreaming(language: String?) -> Bool {
+        languagePack(for: language) != "auto"
+    }
+
     // MARK: - Region Helpers
 
     // The realtime and batch namespaces do not share region labels: realtime keeps
@@ -178,6 +184,19 @@ final class SpeechmaticsPlugin: NSObject, TranscriptionEnginePlugin, DictionaryT
         }
         guard let modelId = _selectedModelId else {
             throw PluginTranscriptionError.noModelSelected
+        }
+
+        // Without a language the job needs language identification, which only the
+        // batch API offers - opening the realtime endpoint would just get rejected
+        // and reach a transcript through the fallback below.
+        guard Self.supportsRealtimeStreaming(language: language) else {
+            return try await transcribeREST(
+                audio: audio,
+                language: language,
+                modelId: modelId,
+                apiKey: apiKey,
+                prompt: prompt
+            )
         }
 
         do {
