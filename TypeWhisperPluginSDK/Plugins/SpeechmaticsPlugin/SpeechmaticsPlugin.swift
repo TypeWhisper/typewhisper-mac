@@ -94,15 +94,31 @@ final class SpeechmaticsPlugin: NSObject, TranscriptionEnginePlugin, DictionaryT
     var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
     var dictionaryTermsBudget: DictionaryTermsBudget { Self.dictionaryBudget }
 
+    // Codes that map 1:1 onto a Speechmatics language pack. The previous list also
+    // advertised gu/is/ka/kk/ml/mk/pa/sq/sr/te, none of which Speechmatics serves -
+    // picking any of them failed the job with HTTP 400 "Languagepack is not supported".
+    static let languagePackCodes: [String] = [
+        "ar", "bg", "ca", "cmn", "cs", "cy", "da", "de", "el", "en",
+        "es", "et", "eu", "fa", "fi", "fr", "ga", "gl", "he", "hi",
+        "hr", "hu", "id", "it", "ja", "ko", "lt", "lv", "ms", "mt",
+        "nl", "no", "pl", "pt", "ro", "ru", "sk", "sl", "sv", "sw",
+        "ta", "th", "tr", "uk", "ur", "vi", "yue",
+    ]
+
+    // Speechmatics identifies Mandarin by its ISO 639-3 code, but the app's spoken
+    // language list only offers the generic "zh", so it is advertised as an alias and
+    // resolved before the request is built.
+    static let languagePackAliases: [String: String] = [
+        "zh": "cmn",
+    ]
+
     var supportedLanguages: [String] {
-        [
-            "ar", "bg", "ca", "cmn", "cs", "cy", "da", "de", "el", "en",
-            "es", "et", "eu", "fa", "fi", "fr", "ga", "gl", "gu", "he",
-            "hi", "hr", "hu", "id", "is", "it", "ja", "ka", "kk", "ko",
-            "lt", "lv", "mk", "ml", "ms", "mt", "nl", "no", "pa", "pl",
-            "pt", "ro", "ru", "sk", "sl", "sq", "sr", "sv", "sw", "ta",
-            "te", "th", "tr", "uk", "ur", "vi", "yue", "zh",
-        ]
+        Self.languagePackCodes + ["zh"]
+    }
+
+    static func languagePack(for language: String?) -> String {
+        guard let language, !language.isEmpty else { return "auto" }
+        return languagePackAliases[language] ?? language
     }
 
     // MARK: - Region Helpers
@@ -215,7 +231,7 @@ final class SpeechmaticsPlugin: NSObject, TranscriptionEnginePlugin, DictionaryT
 
         let boundary = UUID().uuidString
 
-        let lang = (language?.isEmpty == false) ? language! : "auto"
+        let lang = Self.languagePack(for: language)
         var transcriptionConfig: [String: Any] = [
             "language": lang,
             "operating_point": modelId,
@@ -372,7 +388,7 @@ final class SpeechmaticsPlugin: NSObject, TranscriptionEnginePlugin, DictionaryT
         wsTask.resume()
 
         // Send StartRecognition message
-        let lang = (language?.isEmpty == false) ? language! : "auto"
+        let lang = Self.languagePack(for: language)
         var transcriptionConfig: [String: Any] = [
             "language": lang,
             "operating_point": modelId,
