@@ -195,7 +195,7 @@ final class PremiumSettingsViewTests: XCTestCase {
         }
     }
 
-    func testPlistHasCalendarUsageCopyAndEntitlementsRemainCalendarFree() throws {
+    func testPlistHasCalendarUsageCopyAndCalendarEntitlement() throws {
         let root = repositoryRoot
         let plistData = try Data(contentsOf: root.appendingPathComponent("TypeWhisper/Resources/Info.plist"))
         let plist = try XCTUnwrap(
@@ -204,10 +204,19 @@ final class PremiumSettingsViewTests: XCTestCase {
         let usage = try XCTUnwrap(plist["NSCalendarsFullAccessUsageDescription"] as? String)
         XCTAssertFalse(usage.isEmpty)
 
-        let entitlements = try String(contentsOf: root.appendingPathComponent(
+        let entitlementData = try Data(contentsOf: root.appendingPathComponent(
             "TypeWhisper/Resources/TypeWhisper.entitlements"
-        ), encoding: .utf8)
-        XCTAssertFalse(entitlements.localizedCaseInsensitiveContains("calendar"))
+        ))
+        let entitlements = try XCTUnwrap(
+            PropertyListSerialization.propertyList(
+                from: entitlementData,
+                format: nil
+            ) as? [String: Any]
+        )
+        XCTAssertEqual(
+            entitlements["com.apple.security.personal-information.calendars"] as? Bool,
+            true
+        )
     }
 
     func testLocalCalendarSettingsAreNotPartOfBackupExporter() throws {
