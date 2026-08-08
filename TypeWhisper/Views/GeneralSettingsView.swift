@@ -2,6 +2,13 @@ import SwiftUI
 import ServiceManagement
 import TypeWhisperPluginSDK
 
+private func completeApplicationRelaunch(_ application: NSRunningApplication?, _ error: Error?) {
+    guard application != nil, error == nil else { return }
+    Task { @MainActor in
+        NSApplication.shared.terminate(nil)
+    }
+}
+
 struct GeneralSettingsView: View {
     private enum AppVisibilityMode: String, CaseIterable {
         case menuBar
@@ -285,22 +292,11 @@ struct GeneralSettingsView: View {
         .frame(minWidth: 500, minHeight: 300)
         .alert(String(localized: "Restart Required"), isPresented: $showRestartAlert) {
             Button(String(localized: "Restart Now")) {
-                restartApp()
+                ApplicationRelauncher.relaunch()
             }
             Button(String(localized: "Later"), role: .cancel) {}
         } message: {
             Text(String(localized: "The language change will take effect after restarting TypeWhisper."))
-        }
-    }
-
-    private func restartApp() {
-        let bundleURL = Bundle.main.bundleURL
-        let config = NSWorkspace.OpenConfiguration()
-        config.createsNewApplicationInstance = true
-        NSWorkspace.shared.openApplication(at: bundleURL, configuration: config) { _, _ in
-            DispatchQueue.main.async {
-                NSApplication.shared.terminate(nil)
-            }
         }
     }
 
@@ -324,5 +320,19 @@ struct GeneralSettingsView: View {
             // Revert toggle on failure
             launchAtLogin = SMAppService.mainApp.status == .enabled
         }
+    }
+}
+
+@MainActor
+enum ApplicationRelauncher {
+    static func relaunch() {
+        let bundleURL = Bundle.main.bundleURL
+        let config = NSWorkspace.OpenConfiguration()
+        config.createsNewApplicationInstance = true
+        NSWorkspace.shared.openApplication(
+            at: bundleURL,
+            configuration: config,
+            completionHandler: completeApplicationRelaunch
+        )
     }
 }

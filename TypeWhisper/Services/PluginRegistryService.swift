@@ -479,6 +479,7 @@ final class PluginRegistryService: ObservableObject {
     @Published var fetchState: FetchState = .idle
     @Published var installStates: [String: InstallState] = [:]
     @Published var availableUpdatesCount: Int = 0
+    @Published private(set) var bulkUpdateProgress: BulkUpdateProgress?
 
     private var lastFetchDate: Date?
     private var activeInstallPluginIDs: Set<String> = []
@@ -505,12 +506,50 @@ final class PluginRegistryService: ObservableObject {
         case restartRequired
         case error(String)
 
+        var isInProgress: Bool {
+            switch self {
+            case .downloading, .extracting:
+                return true
+            case .restartRequired, .error:
+                return false
+            }
+        }
+
         var requiresRestart: Bool {
             if case .restartRequired = self {
                 return true
             }
             return false
         }
+    }
+
+    struct BulkUpdateProgress: Equatable {
+        let completed: Int
+        let total: Int
+    }
+
+    struct BulkUpdateFailure: Equatable {
+        let pluginId: String
+        let pluginName: String
+    }
+
+    struct BulkUpdateResult: Equatable {
+        let attemptedPluginIDs: [String]
+        let failures: [BulkUpdateFailure]
+
+        var shouldRelaunch: Bool {
+            !attemptedPluginIDs.isEmpty && failures.isEmpty
+        }
+
+        static let empty = BulkUpdateResult(attemptedPluginIDs: [], failures: [])
+    }
+
+    var isBulkUpdating: Bool {
+        bulkUpdateProgress != nil
+    }
+
+    var hasInstallInProgress: Bool {
+        installStates.values.contains(where: \.isInProgress)
     }
 
     // MARK: - Version Comparison
@@ -679,16 +718,64 @@ final class PluginRegistryService: ObservableObject {
     }
 
     func updateAvailableUpdatesCount() {
-        guard let pluginManager = PluginManager.shared else {
-            availableUpdatesCount = 0
-            return
+        availableUpdatesCount = availableUpdatePlugins().count
+    }
+
+    func availableUpdatePlugins() -> [RegistryPlugin] {
+        guard let pluginManager = PluginManager.shared else { return [] }
+
+        return registry
+            .filter { plugin in
+                guard pluginManager.externalBundleNotice(
+                    for: plugin.id,
+                    registryPlugin: plugin
+                )?.requiresConfirmation != true else {
+                    return false
+                }
+
+                if case .updateAvailable = installInfo(for: plugin.id) {
+                    return true
+                }
+                return false
+            }
+            .sorted { lhs, rhs in
+                lhs.name.localizedCompare(rhs.name) == .orderedAscending
+            }
+    }
+
+    func updateAllAvailablePlugins() async -> BulkUpdateResult {
+        await updateAllAvailablePlugins { [weak self] plugin in
+            guard let self else { return false }
+            return await self.downloadAndInstall(plugin)
+        }
+    }
+
+    func updateAllAvailablePlugins(
+        using install: (RegistryPlugin) async -> Bool
+    ) async -> BulkUpdateResult {
+        guard !isBulkUpdating, !hasInstallInProgress else { return .empty }
+
+        let plugins = availableUpdatePlugins()
+        guard !plugins.isEmpty else { return .empty }
+
+        bulkUpdateProgress = BulkUpdateProgress(completed: 0, total: plugins.count)
+        defer { bulkUpdateProgress = nil }
+
+        var attemptedPluginIDs: [String] = []
+        var failures: [BulkUpdateFailure] = []
+
+        for (index, plugin) in plugins.enumerated() {
+            attemptedPluginIDs.append(plugin.id)
+            if !(await install(plugin)) {
+                failures.append(BulkUpdateFailure(pluginId: plugin.id, pluginName: plugin.name))
+            }
+            bulkUpdateProgress = BulkUpdateProgress(completed: index + 1, total: plugins.count)
         }
 
-        let count = pluginManager.loadedPlugins.count(where: { plugin in
-            if case .updateAvailable = installInfo(for: plugin.manifest.id) { return true }
-            return false
-        })
-        availableUpdatesCount = count
+        return BulkUpdateResult(
+            attemptedPluginIDs: attemptedPluginIDs,
+            failures: failures
+        )
     }
 
     // MARK: - Install Info

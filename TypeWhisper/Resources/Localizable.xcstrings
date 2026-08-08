@@ -26707,6 +26707,29 @@
         }
       }
     },
+    "Some Plugins Could Not Be Updated" : {
+      "comment" : "The title of an alert shown when one or more plugins fail during a bulk update.",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Einige Plugins konnten nicht aktualisiert werden"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "一部のプラグインを更新できませんでした"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "部分插件无法更新"
+          }
+        }
+      }
+    },
     "Sound" : {
       "localizations" : {
         "de" : {
@@ -29052,6 +29075,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "工作流面板"
+          }
+        }
+      }
+    },
+    "These plugins could not be updated: %@. Successful updates remain installed. TypeWhisper was not restarted." : {
+      "comment" : "An alert message listing failed plugin updates and explaining why the app did not restart. The argument is a comma-separated list of plugin names.",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Plugins konnten nicht aktualisiert werden: %1$@. Erfolgreiche Updates bleiben installiert. TypeWhisper wurde nicht neu gestartet."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "次のプラグインを更新できませんでした：%1$@。成功した更新はインストールされたままです。TypeWhisperは再起動されませんでした。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "以下插件无法更新：%1$@。成功的更新仍保持已安装状态。TypeWhisper 未重新启动。"
           }
         }
       }
@@ -31735,6 +31781,29 @@
         }
       }
     },
+    "Update All and Restart" : {
+      "comment" : "A button that updates every eligible installed plugin and restarts TypeWhisper after success.",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Alle aktualisieren und neu starten"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "すべて更新して再起動"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "全部更新并重新启动"
+          }
+        }
+      }
+    },
     "Update Available" : {
       "localizations" : {
         "de" : {
@@ -31814,6 +31883,29 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "更新"
+          }
+        }
+      }
+    },
+    "Updating %lld of %lld..." : {
+      "comment" : "Progress shown while updating all eligible plugins. The first argument is the completed count and the second is the total count.",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aktualisiere %1$lld von %2$lld …"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%2$lld件中%1$lld件を更新中…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在更新第 %1$lld 个，共 %2$lld 个…"
           }
         }
       }

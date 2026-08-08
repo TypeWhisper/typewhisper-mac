@@ -481,6 +481,193 @@ final class PluginRegistryServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testAvailableUpdatePluginsIncludesMarketplaceUpdatesInNameOrder() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginBulkUpdateSelection")
+        let cacheDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginBulkUpdateSelectionCache")
+        defer {
+            TestSupport.remove(appSupportDirectory)
+            TestSupport.remove(cacheDirectory)
+        }
+
+        let previousPluginManager = PluginManager.shared
+        let pluginManager = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared = pluginManager
+        defer { PluginManager.shared = previousPluginManager }
+
+        let bundledPluginsURL = try XCTUnwrap(Bundle.main.builtInPlugInsURL)
+        let bundledPlugin = Self.makeLoadedPlugin(
+            id: "com.typewhisper.bundled",
+            name: "Bundled Plugin",
+            version: "1.0.0",
+            sourceURL: bundledPluginsURL.appendingPathComponent("BundledPlugin.bundle")
+        )
+        let alphaPlugin = Self.makeLoadedPlugin(
+            id: "com.typewhisper.alpha",
+            name: "Alpha Community",
+            version: "1.0.0"
+        )
+        let zuluPlugin = Self.makeLoadedPlugin(
+            id: "com.typewhisper.zulu",
+            name: "Zulu Official",
+            version: "1.0.0"
+        )
+        let currentPlugin = Self.makeLoadedPlugin(
+            id: "com.typewhisper.current",
+            name: "Current Plugin",
+            version: "1.1.0"
+        )
+        pluginManager.loadedPlugins = [zuluPlugin, bundledPlugin, currentPlugin, alphaPlugin]
+
+        let incompatibleBundleURL = pluginManager.pluginsDirectory
+            .appendingPathComponent("BundledPlugin.bundle", isDirectory: true)
+        try Self.makePluginBundle(
+            at: incompatibleBundleURL,
+            pluginId: bundledPlugin.id,
+            pluginName: bundledPlugin.manifest.name,
+            version: bundledPlugin.manifest.version,
+            sdkCompatibilityVersion: nil
+        )
+        try pluginManager.loadPlugin(at: incompatibleBundleURL)
+
+        let service = PluginRegistryService(
+            registryBaseURL: URL(string: "https://example.com")!,
+            cacheDirectory: cacheDirectory,
+            fetchData: { _ in throw URLError(.badServerResponse) }
+        )
+        service.registry = [
+            Self.makeRegistryPlugin(id: zuluPlugin.id, name: zuluPlugin.manifest.name, version: "1.1.0"),
+            Self.makeRegistryPlugin(id: alphaPlugin.id, source: .community, name: alphaPlugin.manifest.name, version: "1.2.0"),
+            Self.makeRegistryPlugin(id: bundledPlugin.id, name: bundledPlugin.manifest.name, version: "1.2.0"),
+            Self.makeRegistryPlugin(id: currentPlugin.id, name: currentPlugin.manifest.name, version: "1.1.0"),
+            Self.makeRegistryPlugin(id: "com.typewhisper.uninstalled", name: "Uninstalled Plugin", version: "1.0.0"),
+        ]
+
+        let bundledNotice = pluginManager.externalBundleNotice(
+            for: bundledPlugin.id,
+            registryPlugin: service.registry.first { $0.id == bundledPlugin.id }
+        )
+        service.updateAvailableUpdatesCount()
+
+        XCTAssertEqual(
+            service.availableUpdatePlugins().map(\.id),
+            [alphaPlugin.id, zuluPlugin.id]
+        )
+        XCTAssertEqual(service.availableUpdatesCount, 2)
+        XCTAssertEqual(bundledNotice?.requiresConfirmation, true)
+    }
+
+    @MainActor
+    func testBulkUpdateContinuesAfterFailureAndReportsProgress() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginBulkUpdate")
+        let cacheDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginBulkUpdateCache")
+        defer {
+            TestSupport.remove(appSupportDirectory)
+            TestSupport.remove(cacheDirectory)
+        }
+
+        let previousPluginManager = PluginManager.shared
+        let pluginManager = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared = pluginManager
+        defer { PluginManager.shared = previousPluginManager }
+
+        let plugins = [
+            Self.makeLoadedPlugin(id: "com.typewhisper.charlie", name: "Charlie", version: "1.0.0"),
+            Self.makeLoadedPlugin(id: "com.typewhisper.alpha", name: "Alpha", version: "1.0.0"),
+            Self.makeLoadedPlugin(id: "com.typewhisper.bravo", name: "Bravo", version: "1.0.0"),
+        ]
+        pluginManager.loadedPlugins = plugins
+
+        let service = PluginRegistryService(
+            registryBaseURL: URL(string: "https://example.com")!,
+            cacheDirectory: cacheDirectory,
+            fetchData: { _ in throw URLError(.badServerResponse) }
+        )
+        service.registry = plugins.map {
+            Self.makeRegistryPlugin(id: $0.id, name: $0.manifest.name, version: "1.1.0")
+        }
+
+        var attemptedPluginIDs: [String] = []
+        var observedProgress: [PluginRegistryService.BulkUpdateProgress] = []
+        let result = await service.updateAllAvailablePlugins { plugin in
+            attemptedPluginIDs.append(plugin.id)
+            if let progress = service.bulkUpdateProgress {
+                observedProgress.append(progress)
+            }
+            return plugin.id != "com.typewhisper.bravo"
+        }
+
+        XCTAssertEqual(
+            attemptedPluginIDs,
+            ["com.typewhisper.alpha", "com.typewhisper.bravo", "com.typewhisper.charlie"]
+        )
+        XCTAssertEqual(result.attemptedPluginIDs, attemptedPluginIDs)
+        XCTAssertEqual(
+            result.failures,
+            [.init(pluginId: "com.typewhisper.bravo", pluginName: "Bravo")]
+        )
+        XCTAssertEqual(
+            observedProgress,
+            [
+                .init(completed: 0, total: 3),
+                .init(completed: 1, total: 3),
+                .init(completed: 2, total: 3),
+            ]
+        )
+        XCTAssertFalse(result.shouldRelaunch)
+        XCTAssertNil(service.bulkUpdateProgress)
+    }
+
+    @MainActor
+    func testBulkUpdateRelaunchDecisionRequiresSuccessfulAttempt() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginBulkUpdateRelaunch")
+        let cacheDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginBulkUpdateRelaunchCache")
+        defer {
+            TestSupport.remove(appSupportDirectory)
+            TestSupport.remove(cacheDirectory)
+        }
+
+        let previousPluginManager = PluginManager.shared
+        let pluginManager = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared = pluginManager
+        defer { PluginManager.shared = previousPluginManager }
+
+        let loadedPlugin = Self.makeLoadedPlugin(
+            id: "com.typewhisper.success",
+            name: "Successful Plugin",
+            version: "1.0.0"
+        )
+        pluginManager.loadedPlugins = [loadedPlugin]
+
+        let service = PluginRegistryService(
+            registryBaseURL: URL(string: "https://example.com")!,
+            cacheDirectory: cacheDirectory,
+            fetchData: { _ in throw URLError(.badServerResponse) }
+        )
+        service.registry = [
+            Self.makeRegistryPlugin(id: loadedPlugin.id, name: loadedPlugin.manifest.name, version: "1.1.0"),
+        ]
+
+        let successfulResult = await service.updateAllAvailablePlugins { _ in true }
+        service.installStates[loadedPlugin.id] = .downloading(0.5)
+        var busyInstallerWasCalled = false
+        let busyResult = await service.updateAllAvailablePlugins { _ in
+            busyInstallerWasCalled = true
+            return true
+        }
+        service.installStates.removeValue(forKey: loadedPlugin.id)
+        service.registry = []
+        let emptyResult = await service.updateAllAvailablePlugins { _ in true }
+
+        XCTAssertTrue(successfulResult.shouldRelaunch)
+        XCTAssertEqual(successfulResult.attemptedPluginIDs, [loadedPlugin.id])
+        XCTAssertFalse(busyResult.shouldRelaunch)
+        XCTAssertTrue(busyResult.attemptedPluginIDs.isEmpty)
+        XCTAssertFalse(busyInstallerWasCalled)
+        XCTAssertFalse(emptyResult.shouldRelaunch)
+        XCTAssertTrue(emptyResult.attemptedPluginIDs.isEmpty)
+    }
+
+    @MainActor
     func testDownloadAndInstallReportsFailureForIncompatiblePlugin() async throws {
         let cacheDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
@@ -1402,6 +1589,58 @@ final class PluginRegistryServiceTests: XCTestCase {
               ]
             }
             """.utf8
+        )
+    }
+
+    private static func makeRegistryPlugin(
+        id: String,
+        source: PluginDistributionSource = .official,
+        name: String,
+        version: String
+    ) -> RegistryPlugin {
+        RegistryPlugin(
+            id: id,
+            source: source,
+            name: name,
+            version: version,
+            minHostVersion: "1.0.0",
+            sdkCompatibilityVersion: PluginSDKCompatibility.currentVersion,
+            minOSVersion: nil,
+            supportedArchitectures: nil,
+            author: "TypeWhisper",
+            description: "Test plugin",
+            category: "utility",
+            categories: ["utility"],
+            size: 10,
+            downloadURL: "https://example.com/\(id).zip",
+            iconSystemName: nil,
+            requiresAPIKey: nil,
+            hosting: nil,
+            descriptions: nil,
+            downloadCount: nil
+        )
+    }
+
+    private static func makeLoadedPlugin(
+        id: String,
+        name: String,
+        version: String,
+        sourceURL: URL? = nil,
+        isEnabled: Bool = true
+    ) -> LoadedPlugin {
+        LoadedPlugin(
+            manifest: PluginManifest(
+                id: id,
+                name: name,
+                version: version,
+                sdkCompatibilityVersion: PluginSDKCompatibility.currentVersion,
+                principalClass: "RuntimeUpdatePlugin"
+            ),
+            instance: MockRuntimeUpdatePlugin(),
+            bundle: Bundle.main,
+            sourceURL: sourceURL ?? FileManager.default.temporaryDirectory
+                .appendingPathComponent("\(id).bundle", isDirectory: true),
+            isEnabled: isEnabled
         )
     }
 

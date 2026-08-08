@@ -193,6 +193,7 @@ struct PluginSettingsView: View {
     @State private var installFromFileError: String?
     @State private var uninstallError: String?
     @State private var incompatibleBundleRemovalError: String?
+    @State private var bulkUpdateFailures: [PluginRegistryService.BulkUpdateFailure] = []
     @State private var includeCommunityPlugins = true
     @State private var selectedCapabilityFilters: Set<PluginCategory> = []
     @State private var searchText = ""
@@ -319,6 +320,17 @@ struct PluginSettingsView: View {
                 Text(error)
             }
         }
+        .alert(
+            String(localized: "Some Plugins Could Not Be Updated"),
+            isPresented: .init(
+                get: { !bulkUpdateFailures.isEmpty },
+                set: { if !$0 { bulkUpdateFailures = [] } }
+            )
+        ) {
+            Button(String(localized: "OK")) { bulkUpdateFailures = [] }
+        } message: {
+            Text(bulkUpdateFailureMessage)
+        }
     }
 
     // MARK: - Header
@@ -328,21 +340,66 @@ struct PluginSettingsView: View {
             String(localized: "Integrations"),
             summary: integrationSummaryText
         ) {
-            HStack(spacing: 12) {
-                Button {
-                    pluginManager.openPluginsFolder()
-                } label: {
-                    Label(String(localized: "Open Plugins Folder"), systemImage: "folder")
-                }
-                .help(String(localized: "Open Plugins Folder"))
-
-                Button {
-                    installFromFile()
-                } label: {
-                    Label(localizedAppText("Install Plugin", de: "Plugin installieren"), systemImage: "plus")
-                }
-                .help(String(localized: "Install from File..."))
+            ViewThatFits(in: .horizontal) {
+                integrationHeaderActions(showLabels: true)
+                integrationHeaderActions(showLabels: false)
             }
+        }
+    }
+
+    private func integrationHeaderActions(showLabels: Bool) -> some View {
+        HStack(spacing: showLabels ? 12 : 8) {
+            if registryService.availableUpdatesCount > 0 || registryService.isBulkUpdating {
+                bulkUpdateControl
+            }
+
+            Button {
+                pluginManager.openPluginsFolder()
+            } label: {
+                if showLabels {
+                    Label(String(localized: "Open Plugins Folder"), systemImage: "folder")
+                } else {
+                    Image(systemName: "folder")
+                }
+            }
+            .help(String(localized: "Open Plugins Folder"))
+            .accessibilityLabel(String(localized: "Open Plugins Folder"))
+
+            Button {
+                installFromFile()
+            } label: {
+                if showLabels {
+                    Label(localizedAppText("Install Plugin", de: "Plugin installieren"), systemImage: "plus")
+                } else {
+                    Image(systemName: "plus")
+                }
+            }
+            .help(String(localized: "Install from File..."))
+            .accessibilityLabel(String(localized: "Install from File..."))
+            .disabled(registryService.isBulkUpdating)
+        }
+    }
+
+    @ViewBuilder
+    private var bulkUpdateControl: some View {
+        if let progress = registryService.bulkUpdateProgress {
+            HStack(spacing: 8) {
+                ProgressView(value: Double(progress.completed), total: Double(progress.total))
+                    .frame(width: 72)
+                Text(String(localized: "Updating \(progress.completed) of \(progress.total)..."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+            }
+            .accessibilityElement(children: .combine)
+        } else {
+            Button {
+                startBulkUpdate()
+            } label: {
+                Label(String(localized: "Update All and Restart"), systemImage: "arrow.triangle.2.circlepath")
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(registryService.hasInstallInProgress)
         }
     }
 
@@ -606,6 +663,7 @@ struct PluginSettingsView: View {
                             showUninstallAlert = true
                         }
                     )
+                    .disabled(registryService.isBulkUpdating)
                     .background {
                         integrationGroupedSurface(cornerRadius: 14)
                     }
@@ -1058,6 +1116,7 @@ struct PluginSettingsView: View {
                         openExternalURL(detailsURLString)
                     }
                 )
+                .disabled(registryService.isBulkUpdating)
                 .background {
                     integrationGroupedSurface(cornerRadius: 14)
                 }
@@ -1068,6 +1127,8 @@ struct PluginSettingsView: View {
     // MARK: - Install from File
 
     private func installFromFile() {
+        guard !registryService.isBulkUpdating else { return }
+
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.bundle, .zip]
         panel.allowsMultipleSelection = false
@@ -1087,6 +1148,8 @@ struct PluginSettingsView: View {
     }
 
     private func startInstall(_ plugin: RegistryPlugin) {
+        guard !registryService.isBulkUpdating else { return }
+
         if let notice = pluginManager.externalBundleNotice(for: plugin.id, registryPlugin: plugin),
            notice.requiresConfirmation {
             pendingBoundaryUpgradePlugin = plugin
@@ -1100,6 +1163,27 @@ struct PluginSettingsView: View {
                 completeSuccessfulInstall(pluginId: plugin.id, registryPlugin: plugin)
             }
         }
+    }
+
+    private func startBulkUpdate() {
+        guard !registryService.isBulkUpdating, !registryService.hasInstallInProgress else { return }
+
+        selectedTab = .installed
+        Task {
+            let result = await registryService.updateAllAvailablePlugins()
+            if result.shouldRelaunch {
+                ApplicationRelauncher.relaunch()
+            } else if !result.failures.isEmpty {
+                bulkUpdateFailures = result.failures
+            }
+        }
+    }
+
+    private var bulkUpdateFailureMessage: String {
+        let pluginNames = bulkUpdateFailures.map(\.pluginName).joined(separator: ", ")
+        return String(
+            localized: "These plugins could not be updated: \(pluginNames). Successful updates remain installed. TypeWhisper was not restarted."
+        )
     }
 
     @MainActor
