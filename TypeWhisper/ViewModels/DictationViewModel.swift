@@ -1210,67 +1210,51 @@ final class DictationViewModel: ObservableObject {
         prepareRecordingStartCue(playsSound: !selectedInputUsesBluetooth)
         let audioStartTimestamp = DispatchTime.now().uptimeNanoseconds
 
-        if selectedInputUsesBluetooth {
-            beginRecordingPreparation()
-            logger.info("Preparing Bluetooth recording input without blocking the main actor")
-            recordingStartTask?.cancel()
-            recordingStartTask = Task { @MainActor [weak self] in
-                guard let self else { return }
-                defer {
-                    if self.activeDictationSessionID == sessionID || self.activeDictationSessionID == nil {
-                        self.recordingStartTask = nil
-                    }
-                }
-
-                do {
-                    try await self.audioRecordingService.startRecordingAsync(
-                        requestUptimeNanoseconds: requestUptimeNanoseconds
-                    )
-                    guard !Task.isCancelled,
-                          self.activeDictationSessionID == sessionID,
-                          self.state == .recording else {
-                        return
-                    }
-                    self.completeRecordingStart(
-                        forcedWorkflowId: forcedWorkflowId,
-                        sessionID: sessionID,
-                        requestUptimeNanoseconds: requestUptimeNanoseconds,
-                        startTimestamp: startTimestamp,
-                        audioStartTimestamp: audioStartTimestamp,
-                        selectedInputUsesBluetooth: true,
-                        initialForcedWorkflow: initialForcedWorkflow
-                    )
-                } catch is CancellationError {
-                    logger.info("Bluetooth recording preparation cancelled")
-                } catch {
-                    guard self.activeDictationSessionID == sessionID else { return }
-                    self.handleRecordingStartFailure(
-                        error,
-                        sessionID: sessionID,
-                        resolvedInputSelection: resolvedInputSelection
-                    )
+        beginRecordingPreparation()
+        let requestToFeedbackMs = Self.elapsedMilliseconds(
+            from: requestUptimeNanoseconds,
+            to: DispatchTime.now().uptimeNanoseconds
+        )
+        logger.info(
+            "Preparing recording input without blocking the main actor: requestToFeedbackMs=\(Self.formatMilliseconds(requestToFeedbackMs), privacy: .public), bluetooth=\(selectedInputUsesBluetooth, privacy: .public)"
+        )
+        recordingStartTask?.cancel()
+        recordingStartTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer {
+                if self.activeDictationSessionID == sessionID || self.activeDictationSessionID == nil {
+                    self.recordingStartTask = nil
                 }
             }
-            return
-        }
 
-        do {
-            try audioRecordingService.startRecording(requestUptimeNanoseconds: requestUptimeNanoseconds)
-            completeRecordingStart(
-                forcedWorkflowId: forcedWorkflowId,
-                sessionID: sessionID,
-                requestUptimeNanoseconds: requestUptimeNanoseconds,
-                startTimestamp: startTimestamp,
-                audioStartTimestamp: audioStartTimestamp,
-                selectedInputUsesBluetooth: false,
-                initialForcedWorkflow: initialForcedWorkflow
-            )
-        } catch {
-            handleRecordingStartFailure(
-                error,
-                sessionID: sessionID,
-                resolvedInputSelection: resolvedInputSelection
-            )
+            do {
+                try await self.audioRecordingService.startRecordingAsync(
+                    requestUptimeNanoseconds: requestUptimeNanoseconds
+                )
+                guard !Task.isCancelled,
+                      self.activeDictationSessionID == sessionID,
+                      self.state == .recording else {
+                    return
+                }
+                self.completeRecordingStart(
+                    forcedWorkflowId: forcedWorkflowId,
+                    sessionID: sessionID,
+                    requestUptimeNanoseconds: requestUptimeNanoseconds,
+                    startTimestamp: startTimestamp,
+                    audioStartTimestamp: audioStartTimestamp,
+                    selectedInputUsesBluetooth: selectedInputUsesBluetooth,
+                    initialForcedWorkflow: initialForcedWorkflow
+                )
+            } catch is CancellationError {
+                logger.info("Recording preparation cancelled")
+            } catch {
+                guard self.activeDictationSessionID == sessionID else { return }
+                self.handleRecordingStartFailure(
+                    error,
+                    sessionID: sessionID,
+                    resolvedInputSelection: resolvedInputSelection
+                )
+            }
         }
     }
 
