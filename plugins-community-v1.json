@@ -2854,17 +2854,25 @@
       "id": "com.typewhisper.mcp-client",
       "name": "MCP Client",
       "author": "TypeWhisper",
-      "description": "Connect TypeWhisper workflows to local MCP tools over stdio.",
+      "description": "Connect TypeWhisper workflows to local or remote MCP tools over stdio or Streamable HTTP.",
       "category": "action",
       "downloadCount": 0,
       "descriptions": {
-        "de": "TypeWhisper-Workflows \u00fcber stdio mit lokalen MCP-Tools verbinden.",
-        "ja": "TypeWhisper\u306e\u30ef\u30fc\u30af\u30d5\u30ed\u30fc\u3092stdio\u7d4c\u7531\u3067\u30ed\u30fc\u30ab\u30ebMCP\u30c4\u30fc\u30eb\u306b\u63a5\u7d9a\u3057\u307e\u3059\u3002",
-        "zh-Hans": "\u901a\u8fc7 stdio \u5c06 TypeWhisper \u5de5\u4f5c\u6d41\u8fde\u63a5\u5230\u672c\u5730 MCP \u5de5\u5177\u3002"
+        "de": "TypeWhisper-Workflows \u00fcber stdio oder Streamable HTTP mit lokalen oder entfernten MCP-Tools verbinden.",
+        "ja": "TypeWhisper\u306e\u30ef\u30fc\u30af\u30d5\u30ed\u30fc\u3092stdio\u307e\u305f\u306fStreamable HTTP\u7d4c\u7531\u3067\u30ed\u30fc\u30ab\u30eb\u307e\u305f\u306f\u30ea\u30e2\u30fc\u30c8\u306eMCP\u30c4\u30fc\u30eb\u306b\u63a5\u7d9a\u3057\u307e\u3059\u3002",
+        "zh-Hans": "\u901a\u8fc7 stdio \u6216 Streamable HTTP \u5c06 TypeWhisper \u5de5\u4f5c\u6d41\u8fde\u63a5\u5230\u672c\u5730\u6216\u8fdc\u7a0b MCP \u5de5\u5177\u3002"
       },
       "iconSystemName": "point.3.connected.trianglepath.dotted",
       "requiresAPIKey": false,
       "releases": [
+        {
+          "version": "0.2.0",
+          "minHostVersion": "1.6.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 3417551,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-mcp-client-v0.2.0/MCPClientPlugin.zip",
+          "minOSVersion": "14.0"
+        },
         {
           "version": "0.1.0",
           "minHostVersion": "1.6.0",
