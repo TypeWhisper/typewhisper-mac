@@ -19,6 +19,26 @@ final class ObsidianPluginTests: XCTestCase {
         let pipelineSteps: [String]
     }
 
+    private struct StoredNoteContext: Codable {
+        let timestamp: Date
+        let rawText: String
+        let finalText: String
+        let appName: String?
+        let bundleIdentifier: String?
+        let url: String?
+        let language: String?
+        let engineUsed: String?
+        let modelUsed: String?
+        let durationSeconds: Double?
+        let pipelineSteps: [String]
+    }
+
+    private struct StoredLiveSyncEntry: Codable {
+        let path: String
+        let context: StoredNoteContext
+        let awaitingCompletion: Bool
+    }
+
     private static let historySyncActionID = "com.typewhisper.history.transcription-updated"
     private static let workflowInstructionTitle = "Workflow Instruction"
     private static let workflowInstructionHelp = "Create a Custom Workflow, paste this into Instruction, and set Action Target to \"Save to Obsidian\"."
@@ -54,6 +74,7 @@ final class ObsidianPluginTests: XCTestCase {
             "vaultPath": vaultURL.path,
             "subfolder": "Captured",
             "frontmatterEnabled": true,
+            "frontmatterTags": ["team: voice", "#capture"],
         ])
         let plugin = ObsidianPlugin()
         plugin.activate(host: host)
@@ -61,10 +82,10 @@ final class ObsidianPluginTests: XCTestCase {
         let result = try await plugin.execute(
             input: "Captured text",
             context: ActionContext(
-                appName: "Notes",
+                appName: "Research: Notes #1",
                 bundleIdentifier: "com.apple.Notes",
-                url: "https://example.com",
-                language: "en",
+                url: "https://example.com/search?q=voice#result",
+                language: "en: US",
                 originalText: "Captured text"
             )
         )
@@ -79,8 +100,12 @@ final class ObsidianPluginTests: XCTestCase {
 
         let content = try String(contentsOf: files[0], encoding: .utf8)
         XCTAssertTrue(content.contains("---"))
-        XCTAssertTrue(content.contains("app: Notes"))
-        XCTAssertTrue(content.contains("language: en"))
+        XCTAssertTrue(content.contains("app: \"Research: Notes #1\""))
+        XCTAssertTrue(content.contains("bundleId: \"com.apple.Notes\""))
+        XCTAssertTrue(content.contains("url: \"https://example.com/search?q=voice#result\""))
+        XCTAssertTrue(content.contains("language: \"en: US\""))
+        XCTAssertTrue(content.contains("  - \"team: voice\""))
+        XCTAssertTrue(content.contains("  - \"#capture\""))
         XCTAssertTrue(content.contains("Captured text"))
     }
 
@@ -114,7 +139,7 @@ final class ObsidianPluginTests: XCTestCase {
         let vaultURL = try Self.makeTemporaryDirectory(prefix: "ObsidianVaultLiveSync")
         defer { try? FileManager.default.removeItem(at: vaultURL) }
         let id = UUID(uuidString: "55555555-5555-4555-8555-555555555555")!
-        let timestamp = Date(timeIntervalSince1970: 1_754_668_800)
+        let timestamp = Date()
         let eventBus = PluginTestEventBus()
         let host = try PluginTestHostServices(
             defaults: [
@@ -388,11 +413,62 @@ final class ObsidianPluginTests: XCTestCase {
 
         let content = try String(contentsOf: files[0], encoding: .utf8)
         XCTAssertTrue(content.contains("---"))
-        XCTAssertFalse(content.contains("app: Brave Browser"))
-        XCTAssertFalse(content.contains("bundleId: com.brave.Browser"))
-        XCTAssertFalse(content.contains("url: https://example.com"))
-        XCTAssertTrue(content.contains("language: it"))
+        XCTAssertFalse(content.contains("app: \"Brave Browser\""))
+        XCTAssertFalse(content.contains("bundleId: \"com.brave.Browser\""))
+        XCTAssertFalse(content.contains("url: \"https://example.com\""))
+        XCTAssertTrue(content.contains("language: \"it\""))
         XCTAssertTrue(content.contains("First entry"))
+    }
+
+    func testActivationPrunesExpiredEntriesAndCapsPersistentLiveSyncStore() throws {
+        let vaultURL = try Self.makeTemporaryDirectory(prefix: "ObsidianVaultPruning")
+        defer { try? FileManager.default.removeItem(at: vaultURL) }
+        let now = Date()
+        let context: (Date) -> StoredNoteContext = { timestamp in
+            StoredNoteContext(
+                timestamp: timestamp,
+                rawText: "Raw text",
+                finalText: "Final text",
+                appName: "Notes",
+                bundleIdentifier: "com.apple.Notes",
+                url: nil,
+                language: "en",
+                engineUsed: "test",
+                modelUsed: nil,
+                durationSeconds: 1,
+                pipelineSteps: []
+            )
+        }
+        var storedEntries: [String: StoredLiveSyncEntry] = [
+            "expired": StoredLiveSyncEntry(
+                path: vaultURL.appendingPathComponent("expired.md").path,
+                context: context(now.addingTimeInterval(-31 * 24 * 60 * 60)),
+                awaitingCompletion: false
+            ),
+        ]
+        for index in 0...500 {
+            let key = String(format: "recent-%03d", index)
+            storedEntries[key] = StoredLiveSyncEntry(
+                path: vaultURL.appendingPathComponent("\(key).md").path,
+                context: context(now.addingTimeInterval(-TimeInterval(index))),
+                awaitingCompletion: false
+            )
+        }
+
+        let host = try PluginTestHostServices(defaults: [
+            "vaultPath": vaultURL.path,
+            "liveSyncEntries": try JSONEncoder().encode(storedEntries),
+        ])
+        let plugin = ObsidianPlugin()
+        plugin.activate(host: host)
+
+        let persistedData = try XCTUnwrap(host.userDefault(forKey: "liveSyncEntries") as? Data)
+        let persistedEntries = try JSONDecoder().decode([String: StoredLiveSyncEntry].self, from: persistedData)
+        XCTAssertEqual(persistedEntries.count, 500)
+        XCTAssertNil(persistedEntries["expired"])
+        XCTAssertNotNil(persistedEntries["recent-000"])
+        XCTAssertNil(persistedEntries["recent-500"])
+        plugin.deactivate()
     }
 
     func testActionNameMatchesWorkflowInstructionTarget() {

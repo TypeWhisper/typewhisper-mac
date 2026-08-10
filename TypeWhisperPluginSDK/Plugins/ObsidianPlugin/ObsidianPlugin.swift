@@ -1,6 +1,7 @@
 import Foundation
 import SwiftUI
 import TypeWhisperPluginSDK
+import os
 
 // MARK: - Plugin Entry Point
 
@@ -9,6 +10,8 @@ final class ObsidianPlugin: NSObject, ActionPlugin, @unchecked Sendable {
     static let pluginId = "com.typewhisper.obsidian"
     static let pluginName = "Obsidian"
     private static let historySyncActionID = "com.typewhisper.history.transcription-updated"
+    private static let liveSyncEntryRetention: TimeInterval = 30 * 24 * 60 * 60
+    private static let liveSyncEntryLimit = 500
 
     var actionName: String { "Save to Obsidian" }
     var actionId: String { "obsidian-save-note" }
@@ -29,7 +32,7 @@ final class ObsidianPlugin: NSObject, ActionPlugin, @unchecked Sendable {
     fileprivate var _frontmatterTags: [String] = ["typewhisper"]
     fileprivate var _autoExportEnabled: Bool = false
     fileprivate var _liveSyncEnabled: Bool = true
-    private var liveSyncEntries: [String: LiveSyncEntry] = [:]
+    private let liveSyncEntries = OSAllocatedUnfairLock(initialState: [String: LiveSyncEntry]())
 
     required override init() {
         super.init()
@@ -67,11 +70,16 @@ final class ObsidianPlugin: NSObject, ActionPlugin, @unchecked Sendable {
         _frontmatterTags = host?.userDefault(forKey: "frontmatterTags") as? [String] ?? ["typewhisper"]
         _autoExportEnabled = host?.userDefault(forKey: "autoExportEnabled") as? Bool ?? false
         _liveSyncEnabled = host?.userDefault(forKey: "liveSyncEnabled") as? Bool ?? true
+        let storedEntries: [String: LiveSyncEntry]
         if let data = host?.userDefault(forKey: "liveSyncEntries") as? Data,
            let entries = try? JSONDecoder().decode([String: LiveSyncEntry].self, from: data) {
-            liveSyncEntries = entries
+            storedEntries = entries
         } else {
-            liveSyncEntries = [:]
+            storedEntries = [:]
+        }
+        liveSyncEntries.withLock { entries in
+            entries = storedEntries
+            persistLiveSyncEntries(&entries)
         }
 
         // Auto-detect vault if none set
@@ -283,12 +291,12 @@ final class ObsidianPlugin: NSObject, ActionPlugin, @unchecked Sendable {
         let formatter = ISO8601DateFormatter()
         formatter.formatOptions = [.withInternetDateTime]
         lines.append("date: \(formatter.string(from: context.timestamp))")
-        if includeAppMetadata, let app = context.appName { lines.append("app: \(app)") }
-        if includeAppMetadata, let bid = context.bundleIdentifier { lines.append("bundleId: \(bid)") }
-        if includeAppMetadata, let url = context.url { lines.append("url: \(url)") }
-        if let language = context.language { lines.append("language: \(language)") }
-        if let engine = context.engineUsed { lines.append("engine: \(engine)") }
-        if let model = context.modelUsed { lines.append("model: \(model)") }
+        if includeAppMetadata, let app = context.appName { lines.append("app: \(yamlScalar(app))") }
+        if includeAppMetadata, let bid = context.bundleIdentifier { lines.append("bundleId: \(yamlScalar(bid))") }
+        if includeAppMetadata, let url = context.url { lines.append("url: \(yamlScalar(url))") }
+        if let language = context.language { lines.append("language: \(yamlScalar(language))") }
+        if let engine = context.engineUsed { lines.append("engine: \(yamlScalar(engine))") }
+        if let model = context.modelUsed { lines.append("model: \(yamlScalar(model))") }
         if let duration = context.durationSeconds {
             lines.append("duration: \(String(format: "%.1f", locale: Locale(identifier: "en_US_POSIX"), duration))")
         }
@@ -296,17 +304,27 @@ final class ObsidianPlugin: NSObject, ActionPlugin, @unchecked Sendable {
         if !context.pipelineSteps.isEmpty {
             lines.append("processing:")
             for step in context.pipelineSteps {
-                lines.append("  - \(step)")
+                lines.append("  - \(yamlScalar(step))")
             }
         }
         if !_frontmatterTags.isEmpty {
             lines.append("tags:")
             for tag in _frontmatterTags {
-                lines.append("  - \(tag)")
+                lines.append("  - \(yamlScalar(tag))")
             }
         }
         lines.append("---")
         return lines.joined(separator: "\n")
+    }
+
+    private func yamlScalar(_ value: String) -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.withoutEscapingSlashes]
+        guard let data = try? encoder.encode(value),
+              let encoded = String(data: data, encoding: .utf8) else {
+            return "\"\""
+        }
+        return encoded
     }
 
     private func renderNote(context: NoteContext) -> String {
@@ -407,35 +425,64 @@ final class ObsidianPlugin: NSObject, ActionPlugin, @unchecked Sendable {
         String(timestamp.timeIntervalSinceReferenceDate.bitPattern, radix: 16)
     }
 
-    private func persistLiveSyncEntries() {
-        guard let data = try? JSONEncoder().encode(liveSyncEntries) else {
+    @discardableResult
+    private func pruneLiveSyncEntries(_ entries: inout [String: LiveSyncEntry], now: Date = Date()) -> Bool {
+        let originalCount = entries.count
+        let cutoff = now.addingTimeInterval(-Self.liveSyncEntryRetention)
+        entries = entries.filter { $0.value.context.timestamp >= cutoff }
+
+        if entries.count > Self.liveSyncEntryLimit {
+            entries = Dictionary(
+                uniqueKeysWithValues: entries
+                    .sorted { lhs, rhs in
+                        if lhs.value.context.timestamp == rhs.value.context.timestamp {
+                            return lhs.key < rhs.key
+                        }
+                        return lhs.value.context.timestamp > rhs.value.context.timestamp
+                    }
+                    .prefix(Self.liveSyncEntryLimit)
+                    .map { ($0.key, $0.value) }
+            )
+        }
+        return entries.count != originalCount
+    }
+
+    private func persistLiveSyncEntries(_ entries: inout [String: LiveSyncEntry]) {
+        pruneLiveSyncEntries(&entries)
+        guard let data = try? JSONEncoder().encode(entries) else {
             print("[ObsidianPlugin] Failed to persist live sync entries")
             return
         }
         saveSetting(data, forKey: "liveSyncEntries")
     }
 
-    private func storeLiveSyncEntry(path: String, context: NoteContext, awaitingCompletion: Bool) {
-        liveSyncEntries[liveSyncKey(for: context.timestamp)] = LiveSyncEntry(
+    private func storeLiveSyncEntry(
+        path: String,
+        context: NoteContext,
+        awaitingCompletion: Bool,
+        entries: inout [String: LiveSyncEntry]
+    ) {
+        entries[liveSyncKey(for: context.timestamp)] = LiveSyncEntry(
             path: path,
             context: context,
             awaitingCompletion: awaitingCompletion
         )
-        persistLiveSyncEntries()
+        persistLiveSyncEntries(&entries)
     }
 
-    private func removeLiveSyncEntry(forKey key: String) {
-        liveSyncEntries.removeValue(forKey: key)
-        persistLiveSyncEntries()
+    private func removeLiveSyncEntry(forKey key: String, entries: inout [String: LiveSyncEntry]) {
+        entries.removeValue(forKey: key)
+        persistLiveSyncEntries(&entries)
     }
 
     private func matchingEntryKey(
         for context: NoteContext,
         requireMatchingFinalText: Bool,
-        requireAwaitingCompletion: Bool = false
+        requireAwaitingCompletion: Bool = false,
+        entries: [String: LiveSyncEntry]
     ) -> String? {
         let exactKey = liveSyncKey(for: context.timestamp)
-        if let exactEntry = liveSyncEntries[exactKey],
+        if let exactEntry = entries[exactKey],
            entryMatches(
                exactEntry,
                context: context,
@@ -445,7 +492,7 @@ final class ObsidianPlugin: NSObject, ActionPlugin, @unchecked Sendable {
             return exactKey
         }
 
-        return liveSyncEntries
+        return entries
             .filter { _, entry in
                 abs(entry.context.timestamp.timeIntervalSince(context.timestamp)) <= 60
                     && entryMatches(
@@ -507,9 +554,17 @@ final class ObsidianPlugin: NSObject, ActionPlugin, @unchecked Sendable {
 
         do {
             let noteContext = NoteContext(input: input, actionContext: context)
-            let note = try writeNote(context: noteContext)
-            if _liveSyncEnabled, !_dailyNoteEnabled {
-                storeLiveSyncEntry(path: note.path, context: noteContext, awaitingCompletion: true)
+            let note = try liveSyncEntries.withLock { entries in
+                let note = try writeNote(context: noteContext)
+                if _liveSyncEnabled, !_dailyNoteEnabled {
+                    storeLiveSyncEntry(
+                        path: note.path,
+                        context: noteContext,
+                        awaitingCompletion: true,
+                        entries: &entries
+                    )
+                }
+                return note
             }
             return ActionResult(
                 success: true,
@@ -530,15 +585,22 @@ final class ObsidianPlugin: NSObject, ActionPlugin, @unchecked Sendable {
         guard !text.isEmpty else { return }
 
         do {
-            if _liveSyncEnabled,
-               !_dailyNoteEnabled,
-               await adoptMatchingActionExport(payload: payload) {
-                return
-            }
-            let noteContext = NoteContext(payload)
-            let note = try writeNote(context: noteContext)
-            if _liveSyncEnabled, !_dailyNoteEnabled {
-                storeLiveSyncEntry(path: note.path, context: noteContext, awaitingCompletion: false)
+            try liveSyncEntries.withLock { entries in
+                if _liveSyncEnabled,
+                   !_dailyNoteEnabled,
+                   adoptMatchingActionExport(payload: payload, entries: &entries) {
+                    return
+                }
+                let noteContext = NoteContext(payload)
+                let note = try writeNote(context: noteContext)
+                if _liveSyncEnabled, !_dailyNoteEnabled {
+                    storeLiveSyncEntry(
+                        path: note.path,
+                        context: noteContext,
+                        awaitingCompletion: false,
+                        entries: &entries
+                    )
+                }
             }
         } catch {
             print("[ObsidianPlugin] Auto-export failed: \(error)")
@@ -547,14 +609,30 @@ final class ObsidianPlugin: NSObject, ActionPlugin, @unchecked Sendable {
 
     @discardableResult
     private func adoptMatchingActionExport(payload: TranscriptionCompletedPayload) async -> Bool {
+        liveSyncEntries.withLock { entries in
+            adoptMatchingActionExport(payload: payload, entries: &entries)
+        }
+    }
+
+    private func adoptMatchingActionExport(
+        payload: TranscriptionCompletedPayload,
+        entries: inout [String: LiveSyncEntry]
+    ) -> Bool {
         guard !_dailyNoteEnabled, isConfigured else { return false }
+        let didPrune = pruneLiveSyncEntries(&entries)
         let completedContext = NoteContext(payload)
         guard let oldKey = matchingEntryKey(
             for: completedContext,
             requireMatchingFinalText: true,
-            requireAwaitingCompletion: true
+            requireAwaitingCompletion: true,
+            entries: entries
         ),
-              let existingEntry = liveSyncEntries[oldKey] else { return false }
+              let existingEntry = entries[oldKey] else {
+            if didPrune {
+                persistLiveSyncEntries(&entries)
+            }
+            return false
+        }
 
         let newKey = liveSyncKey(for: completedContext.timestamp)
         let adoptedEntry = LiveSyncEntry(
@@ -564,15 +642,15 @@ final class ObsidianPlugin: NSObject, ActionPlugin, @unchecked Sendable {
         )
         guard isInsideConfiguredVault(adoptedEntry.path),
               FileManager.default.fileExists(atPath: adoptedEntry.path) else {
-            removeLiveSyncEntry(forKey: oldKey)
+            removeLiveSyncEntry(forKey: oldKey, entries: &entries)
             return false
         }
 
         do {
             try rewriteLiveSyncEntry(adoptedEntry)
-            liveSyncEntries.removeValue(forKey: oldKey)
-            liveSyncEntries[newKey] = adoptedEntry
-            persistLiveSyncEntries()
+            entries.removeValue(forKey: oldKey)
+            entries[newKey] = adoptedEntry
+            persistLiveSyncEntries(&entries)
             return true
         } catch {
             print("[ObsidianPlugin] Failed to associate an action export with its transcription: \(error)")
@@ -587,27 +665,39 @@ final class ObsidianPlugin: NSObject, ActionPlugin, @unchecked Sendable {
               let update = try? JSONDecoder().decode(HistorySyncPayload.self, from: data) else { return }
 
         let updatedContext = NoteContext(update, timestamp: payload.timestamp)
-        guard let oldKey = matchingEntryKey(for: updatedContext, requireMatchingFinalText: false),
-              let existingEntry = liveSyncEntries[oldKey] else { return }
-        guard isInsideConfiguredVault(existingEntry.path) else {
-            removeLiveSyncEntry(forKey: oldKey)
-            print("[ObsidianPlugin] Live sync ignored a note path outside the configured vault")
-            return
-        }
+        liveSyncEntries.withLock { entries in
+            let didPrune = pruneLiveSyncEntries(&entries)
+            guard let oldKey = matchingEntryKey(
+                for: updatedContext,
+                requireMatchingFinalText: false,
+                entries: entries
+            ),
+                  let existingEntry = entries[oldKey] else {
+                if didPrune {
+                    persistLiveSyncEntries(&entries)
+                }
+                return
+            }
+            guard isInsideConfiguredVault(existingEntry.path) else {
+                removeLiveSyncEntry(forKey: oldKey, entries: &entries)
+                print("[ObsidianPlugin] Live sync ignored a note path outside the configured vault")
+                return
+            }
 
-        do {
-            let updatedEntry = LiveSyncEntry(
-                path: existingEntry.path,
-                context: updatedContext,
-                awaitingCompletion: false
-            )
-            try rewriteLiveSyncEntry(updatedEntry)
-            let newKey = liveSyncKey(for: updatedContext.timestamp)
-            liveSyncEntries.removeValue(forKey: oldKey)
-            liveSyncEntries[newKey] = updatedEntry
-            persistLiveSyncEntries()
-        } catch {
-            print("[ObsidianPlugin] Live sync failed: \(error)")
+            do {
+                let updatedEntry = LiveSyncEntry(
+                    path: existingEntry.path,
+                    context: updatedContext,
+                    awaitingCompletion: false
+                )
+                try rewriteLiveSyncEntry(updatedEntry)
+                let newKey = liveSyncKey(for: updatedContext.timestamp)
+                entries.removeValue(forKey: oldKey)
+                entries[newKey] = updatedEntry
+                persistLiveSyncEntries(&entries)
+            } catch {
+                print("[ObsidianPlugin] Live sync failed: \(error)")
+            }
         }
     }
 
