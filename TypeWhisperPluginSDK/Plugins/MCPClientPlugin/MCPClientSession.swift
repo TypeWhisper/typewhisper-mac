@@ -36,6 +36,8 @@ private final class MCPStandardErrorBuffer: @unchecked Sendable {
 
     func text(redacting secrets: [String]) -> String {
         let data = storage.withLock { $0 }
+        // Truncation can split a multi-byte sequence, so lossy decoding is intentional.
+        // swiftlint:disable:next optional_data_string_conversion
         let text = String(decoding: data, as: UTF8.self)
         return MCPRedactor.redact(text, secrets: secrets)
     }
@@ -58,6 +60,7 @@ actor MCPServerSession {
     private var callIsActive = false
     private var callWaiters: [CheckedContinuation<Void, Never>] = []
     private let standardError = MCPStandardErrorBuffer()
+    private let logger = Logger(subsystem: "com.typewhisper.mcp-client", category: "MCPServerSession")
 
     init(
         resolvedServer: MCPResolvedServer,
@@ -169,7 +172,7 @@ actor MCPServerSession {
 
     private func ensureConnected() async throws {
         if let connectionTask {
-            try await connectionTask.value
+            try await awaitSharedTask(connectionTask)
             return
         }
 
@@ -180,7 +183,7 @@ actor MCPServerSession {
         let task = Task { try await self.connectFresh() }
         connectionTask = task
         do {
-            try await task.value
+            try await awaitSharedTask(task)
             connectionTask = nil
         } catch {
             connectionTask = nil
@@ -241,7 +244,9 @@ actor MCPServerSession {
             input: .init(rawValue: outputPipe.fileHandleForReading.fileDescriptor),
             output: .init(rawValue: inputPipe.fileHandleForWriting.fileDescriptor)
         )
-        let client = Client(name: "TypeWhisper", version: "1.6.0", title: "TypeWhisper MCP Client")
+        let clientVersion = Bundle(for: MCPClientPlugin.self)
+            .object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0"
+        let client = Client(name: "TypeWhisper", version: clientVersion, title: "TypeWhisper MCP Client")
 
         self.process = process
         self.inputPipe = inputPipe
@@ -303,7 +308,7 @@ actor MCPServerSession {
 
     private func refreshToolsWithTimeout() async throws {
         if let refreshTask {
-            try await refreshTask.value
+            try await awaitSharedTask(refreshTask)
             return
         }
         guard let client else {
@@ -313,7 +318,7 @@ actor MCPServerSession {
         let task = Task { try await self.performRefreshToolsWithTimeout(client: client) }
         refreshTask = task
         do {
-            try await task.value
+            try await awaitSharedTask(task)
             refreshTask = nil
         } catch {
             refreshTask = nil
@@ -430,8 +435,16 @@ actor MCPServerSession {
     }
 
     private func sanitizedIndeterminateError(_ error: Error) -> MCPClientError {
-        _ = sanitize(error.localizedDescription)
+        logger.error("MCP transport failure: \(self.sanitize(error.localizedDescription), privacy: .public)")
         return .indeterminateTransportFailure
+    }
+
+    private func awaitSharedTask(_ task: Task<Void, Error>) async throws {
+        try await withTaskCancellationHandler {
+            try await task.value
+        } onCancel: {
+            task.cancel()
+        }
     }
 
     private func sanitize(_ text: String) -> String {
@@ -510,11 +523,12 @@ actor MCPClientRuntime {
             return entry.session
         }
 
-        if let old = sessions.removeValue(forKey: server.configuration.id) {
-            await old.session.close()
-        }
+        let old = sessions.removeValue(forKey: server.configuration.id)
         let session = MCPServerSession(resolvedServer: server)
         sessions[server.configuration.id] = Entry(revision: server.configuration.revision, session: session)
+        if let old {
+            await old.session.close()
+        }
         return session
     }
 }

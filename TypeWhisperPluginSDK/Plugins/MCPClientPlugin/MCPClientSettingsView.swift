@@ -6,20 +6,37 @@ struct MCPClientSettingsView: View {
     private let bundle = Bundle(for: MCPClientPlugin.self)
 
     @State private var refreshToken = 0
+    @State private var selectedTab = 0
     @State private var serverEditor: MCPServerConfiguration?
     @State private var actionEditor: MCPActionConfiguration?
 
     var body: some View {
-        TabView {
-            serversView
-                .tabItem { Label(String(localized: "Servers", bundle: bundle), systemImage: "terminal") }
-            actionsView
-                .tabItem { Label(String(localized: "Actions", bundle: bundle), systemImage: "bolt") }
-            activityView
-                .tabItem { Label(String(localized: "Activity", bundle: bundle), systemImage: "clock") }
+        Group {
+            if plugin.configurationLoadFailed {
+                ContentUnavailableView(
+                    String(localized: "MCP Configuration Unavailable", bundle: bundle),
+                    systemImage: "exclamationmark.triangle.fill",
+                    description: Text(
+                        "The stored MCP configuration could not be loaded. It was left unchanged to prevent data loss.",
+                        bundle: bundle
+                    )
+                )
+            } else {
+                TabView(selection: $selectedTab) {
+                    serversView
+                        .tag(0)
+                        .tabItem { Label(String(localized: "Servers", bundle: bundle), systemImage: "terminal") }
+                    actionsView
+                        .tag(1)
+                        .tabItem { Label(String(localized: "Actions", bundle: bundle), systemImage: "bolt") }
+                    activityView
+                        .tag(2)
+                        .tabItem { Label(String(localized: "Activity", bundle: bundle), systemImage: "clock") }
+                }
+                .id(refreshToken)
+            }
         }
         .padding(16)
-        .id(refreshToken)
         .sheet(item: $serverEditor) { server in
             MCPServerEditorView(plugin: plugin, server: server) {
                 serverEditor = nil
@@ -477,12 +494,11 @@ private struct MCPServerEditorView: View {
     private func connectAndLoadTools() {
         do {
             let (draft, secrets) = try makeDraft()
-            try plugin.saveServer(draft, secretValues: secrets)
             isConnecting = true
             errorMessage = nil
             Task {
                 do {
-                    let loaded = try await plugin.discoverTools(serverID: original.id)
+                    let loaded = try await plugin.discoverTools(server: draft, secretValues: secrets)
                     await MainActor.run {
                         tools = loaded
                         isConnecting = false
@@ -545,6 +561,7 @@ private struct MCPActionEditorView: View {
     @State private var isLoading = false
     @State private var errorMessage: String?
     @State private var toolLoadRequestID = UUID()
+    @State private var toolLoadFailed = false
 
     init(plugin: MCPClientPlugin, action: MCPActionConfiguration, onDone: @escaping () -> Void) {
         self.plugin = plugin
@@ -598,6 +615,8 @@ private struct MCPActionEditorView: View {
                     .onChange(of: invocationMode) { _, mode in
                         if mode == .single, rawArgumentsSource == .currentBatchItem {
                             rawArgumentsSource = .processedText
+                        } else if mode == .batch, usesRawJSONArguments {
+                            rawArgumentsSource = .currentBatchItem
                         }
                         configureBindings(for: selectedTool)
                     }
@@ -612,7 +631,7 @@ private struct MCPActionEditorView: View {
                     } else {
                         Picker(String(localized: "MCP Tool", bundle: bundle), selection: $selectedToolName) {
                             Text("Select a tool…", bundle: bundle).tag("")
-                            ForEach(tools) { tool in
+                            ForEach(displayedTools) { tool in
                                 Text(tool.title ?? tool.name).tag(tool.name)
                             }
                         }
@@ -640,14 +659,20 @@ private struct MCPActionEditorView: View {
                     Section(String(localized: "Arguments", bundle: bundle)) {
                         Toggle(String(localized: "Raw JSON Arguments", bundle: bundle), isOn: $usesRawJSONArguments)
                             .toggleStyle(.checkbox)
+                            .onChange(of: usesRawJSONArguments) { _, usesRaw in
+                                if usesRaw, invocationMode == .batch {
+                                    rawArgumentsSource = .currentBatchItem
+                                }
+                            }
 
                         if usesRawJSONArguments {
                             Picker(String(localized: "JSON Source", bundle: bundle), selection: $rawArgumentsSource) {
-                                Text("Processed workflow JSON", bundle: bundle).tag(MCPRawArgumentsSource.processedText)
                                 if invocationMode == .batch {
                                     Text("Current batch item", bundle: bundle).tag(MCPRawArgumentsSource.currentBatchItem)
+                                } else {
+                                    Text("Processed workflow JSON", bundle: bundle).tag(MCPRawArgumentsSource.processedText)
+                                    Text("Literal JSON", bundle: bundle).tag(MCPRawArgumentsSource.literalJSON)
                                 }
-                                Text("Literal JSON", bundle: bundle).tag(MCPRawArgumentsSource.literalJSON)
                             }
                             if rawArgumentsSource == .literalJSON {
                                 TextEditor(text: $rawLiteralJSON)
@@ -740,16 +765,39 @@ private struct MCPActionEditorView: View {
     }
 
     private var selectedTool: MCPToolDescriptor? {
-        tools.first { $0.name == selectedToolName }
+        displayedTools.first { $0.name == selectedToolName }
+    }
+
+    private var displayedTools: [MCPToolDescriptor] {
+        guard toolLoadFailed,
+              serverID == original.serverID,
+              !original.toolName.isEmpty,
+              !tools.contains(where: { $0.name == original.toolName }) else {
+            return tools
+        }
+        return tools + [persistedTool]
+    }
+
+    private var persistedTool: MCPToolDescriptor {
+        MCPToolDescriptor(
+            name: original.toolName,
+            title: nil,
+            description: nil,
+            inputSchema: original.toolInputSchema,
+            destructiveHint: original.toolDestructiveHint,
+            readOnlyHint: nil
+        )
     }
 
     private func loadTools(resetSelection: Bool) {
         let requestID = UUID()
         let requestedServerID = serverID
         toolLoadRequestID = requestID
+        toolLoadFailed = false
         if resetSelection {
             selectedToolName = ""
             bindings = []
+            tools = []
         }
         isLoading = true
         errorMessage = nil
@@ -759,6 +807,7 @@ private struct MCPActionEditorView: View {
                 await MainActor.run {
                     guard toolLoadRequestID == requestID else { return }
                     tools = loaded
+                    toolLoadFailed = false
                     isLoading = false
                     configureBindings(for: selectedTool)
                 }
@@ -766,6 +815,7 @@ private struct MCPActionEditorView: View {
                 await MainActor.run {
                     guard toolLoadRequestID == requestID else { return }
                     errorMessage = error.localizedDescription
+                    toolLoadFailed = true
                     isLoading = false
                 }
             }

@@ -443,6 +443,8 @@ enum MCPExecutableResolver {
 }
 
 enum MCPJSONSchemaValidator {
+    /// Performs limited prevalidation for `type`, `enum`, `required`, `properties`, and `items`.
+    /// Boolean schemas and unsupported JSON Schema keywords remain authoritative on the MCP server.
     static func validate(_ value: MCPJSONValue, against schema: MCPJSONValue, path: String = "arguments") throws {
         guard case .object(let schemaObject) = schema else { return }
 
@@ -497,6 +499,14 @@ enum MCPArgumentMapper {
                 throw MCPClientError.batchTooLarge(batch.count)
             }
             items = batch.map(Optional.some)
+        }
+
+        if action.invocationMode == .batch,
+           action.usesRawJSONArguments,
+           action.rawArgumentsSource != .currentBatchItem {
+            throw MCPClientError.invalidInput(
+                MCPClientLocalization.string("Batch raw JSON arguments must use the current batch item.")
+            )
         }
 
         let parsedInput = try? MCPJSONValue.parse(input)

@@ -30,6 +30,32 @@ final class MCPClientPluginTests: XCTestCase {
         XCTAssertEqual(manifest.minHostVersion, "1.6.0")
         XCTAssertEqual(manifest.sdkCompatibilityVersion, "v1")
         XCTAssertEqual(manifest.category, "action")
+
+        let object = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any]
+        )
+        let descriptions = try XCTUnwrap(object["descriptions"] as? [String: String])
+        XCTAssertEqual(descriptions["zh-Hans"], "通过 stdio 将 TypeWhisper 工作流连接到本地 MCP 工具。")
+    }
+
+    func testUnreadableStoredConfigurationIsNeverOverwritten() throws {
+        let host = try PluginTestHostServices()
+        let unreadable = Data("not-json".utf8)
+        host.setUserDefault(unreadable, forKey: MCPClientConstants.configurationDefaultsKey)
+        let plugin = MCPClientPlugin()
+        plugin.activate(host: host)
+
+        XCTAssertTrue(plugin.configurationLoadFailed)
+        let server = MCPServerConfiguration(
+            name: "Tasks",
+            command: "/usr/bin/env",
+            launchAcknowledged: true
+        )
+        XCTAssertThrowsError(try plugin.saveServer(server, secretValues: [:]))
+        XCTAssertEqual(
+            host.userDefault(forKey: MCPClientConstants.configurationDefaultsKey) as? Data,
+            unreadable
+        )
     }
 
     func testSecretValuesStayOutOfStoredConfigurationAndAreClearedWithServer() throws {
@@ -84,6 +110,22 @@ final class MCPClientPluginTests: XCTestCase {
         XCTAssertEqual(plugin.actions[0].name, "Renamed meeting tasks")
         XCTAssertEqual(plugin.additionalActionPlugins.map(\.actionId), [stableID])
         XCTAssertEqual(host.capabilitiesChangedCount, 3)
+    }
+
+    func testConcurrentServerSavesAdvanceRevisionAtomically() throws {
+        let host = try PluginTestHostServices()
+        let plugin = MCPClientPlugin()
+        plugin.activate(host: host)
+        let server = MCPServerConfiguration(name: "Tasks", command: "/usr/bin/env", launchAcknowledged: true)
+        try plugin.saveServer(server, secretValues: [:])
+
+        DispatchQueue.concurrentPerform(iterations: 20) { index in
+            var edit = server
+            edit.name = "Tasks \(index)"
+            try! plugin.saveServer(edit, secretValues: [:])
+        }
+
+        XCTAssertEqual(plugin.servers.first?.revision, 21)
     }
 
     func testExecutableResolutionUsesConfiguredPathBeforeProcessPath() throws {
@@ -346,6 +388,41 @@ final class MCPClientPluginTests: XCTestCase {
         }
     }
 
+    func testBatchRawArgumentsRequireCurrentBatchItem() throws {
+        let action = MCPActionConfiguration(
+            name: "Raw batch",
+            serverID: UUID(),
+            tool: taskTool,
+            bindings: [],
+            invocationMode: .batch,
+            usesRawJSONArguments: true,
+            rawArgumentsSource: .literalJSON,
+            rawLiteralJSON: #"{"title":"duplicate"}"#
+        )
+
+        XCTAssertThrowsError(
+            try MCPArgumentMapper.invocations(
+                input: #"["first","second"]"#,
+                context: ActionContext(),
+                action: action
+            )
+        ) { error in
+            XCTAssertEqual(
+                error as? MCPClientError,
+                .invalidInput("Batch raw JSON arguments must use the current batch item.")
+            )
+        }
+
+        let host = try PluginTestHostServices()
+        let plugin = MCPClientPlugin()
+        plugin.activate(host: host)
+        let server = MCPServerConfiguration(name: "Tasks", command: "/usr/bin/env", launchAcknowledged: true)
+        try plugin.saveServer(server, secretValues: [:])
+        var storedAction = action
+        storedAction.serverID = server.id
+        XCTAssertThrowsError(try plugin.saveAction(storedAction))
+    }
+
     func testRedactorRemovesAllConfiguredSecretValues() {
         XCTAssertEqual(
             MCPRedactor.redact("token=abc123 and abc", secrets: ["abc", "abc123"]),
@@ -420,6 +497,38 @@ final class MCPClientPluginTests: XCTestCase {
             .split(separator: "\n").count
         XCTAssertEqual(callCount, 2, "A tool error must not be retried")
         await runtime.closeAll()
+    }
+
+    func testDraftDiscoveryDoesNotPersistServerOrSecrets() async throws {
+        let fixture = try Self.fixtureResources()
+        defer { try? FileManager.default.removeItem(at: fixture.counter) }
+        let host = try PluginTestHostServices()
+        let plugin = MCPClientPlugin()
+        plugin.activate(host: host)
+        let server = MCPServerConfiguration(
+            name: "Draft",
+            command: fixture.pythonPath,
+            arguments: [fixture.script.path, fixture.counter.path],
+            secretEnvironmentNames: ["TASK_TOKEN"],
+            launchAcknowledged: true
+        )
+
+        let tools = try await plugin.discoverTools(
+            server: server,
+            secretValues: ["TASK_TOKEN": "draft-secret"]
+        )
+
+        XCTAssertEqual(tools.map(\.name), ["create_task"])
+        XCTAssertTrue(plugin.servers.isEmpty)
+        XCTAssertNil(host.userDefault(forKey: MCPClientConstants.configurationDefaultsKey))
+        XCTAssertNil(
+            host.loadSecret(
+                key: MCPServerConfiguration.secretStorageKey(
+                    serverID: server.id,
+                    environmentName: "TASK_TOKEN"
+                )
+            )
+        )
     }
 
     func testCancellationUsesMCPRequestCancellationAndReturnsPromptly() async throws {
@@ -500,6 +609,35 @@ final class MCPClientPluginTests: XCTestCase {
             guard case .timedOut = error else {
                 return XCTFail("Expected timedOut, got \(error)")
             }
+        }
+        await session.close()
+    }
+
+    func testCancellingConnectionCancelsSharedTaskAndClosesProcess() async throws {
+        let fixture = try Self.fixtureResources()
+        defer { try? FileManager.default.removeItem(at: fixture.counter) }
+        let configuration = MCPServerConfiguration(
+            name: "Fixture",
+            command: fixture.pythonPath,
+            arguments: [fixture.script.path, fixture.counter.path, "hang-init"],
+            launchAcknowledged: true
+        )
+        let server = MCPResolvedServer(
+            configuration: configuration,
+            executableURL: URL(fileURLWithPath: fixture.pythonPath),
+            environment: ProcessInfo.processInfo.environment,
+            secrets: []
+        )
+        let session = MCPServerSession(resolvedServer: server)
+        let task = Task { try await session.tools() }
+        try await Task.sleep(for: .milliseconds(100))
+
+        task.cancel()
+        do {
+            _ = try await task.value
+            XCTFail("Expected cancellation")
+        } catch is CancellationError {
+            // Expected.
         }
         await session.close()
     }
@@ -638,6 +776,38 @@ final class MCPClientPluginTests: XCTestCase {
         await session.close()
     }
 
+    func testRevisionReplacementIsVisibleBeforeOldSessionCloses() async throws {
+        let fixture = try Self.fixtureResources()
+        defer { try? FileManager.default.removeItem(at: fixture.counter) }
+        let id = UUID()
+        func resolved(revision: Int) -> MCPResolvedServer {
+            let configuration = MCPServerConfiguration(
+                id: id,
+                name: "Fixture",
+                command: fixture.pythonPath,
+                arguments: [fixture.script.path, fixture.counter.path, "count-connection"],
+                launchAcknowledged: true,
+                revision: revision
+            )
+            return MCPResolvedServer(
+                configuration: configuration,
+                executableURL: URL(fileURLWithPath: fixture.pythonPath),
+                environment: ProcessInfo.processInfo.environment,
+                secrets: []
+            )
+        }
+        let runtime = MCPClientRuntime()
+        defer { Task { await runtime.closeAll() } }
+
+        _ = try await runtime.tools(for: resolved(revision: 1))
+        async let first = runtime.tools(for: resolved(revision: 2))
+        async let second = runtime.tools(for: resolved(revision: 2))
+        _ = try await (first, second)
+
+        XCTAssertEqual(try Self.requestCount(at: fixture.counter), 4)
+        await runtime.closeAll()
+    }
+
     func testBatchExecutionContinuesAfterToolErrorInOrder() async throws {
         let fixture = try Self.fixtureResources()
         defer { try? FileManager.default.removeItem(at: fixture.counter) }
@@ -675,6 +845,36 @@ final class MCPClientPluginTests: XCTestCase {
         XCTAssertEqual(plugin.activity.first?.summary, "2 of 3 actions completed; failed items: 2.")
         XCTAssertFalse(plugin.activity.first?.summary.contains("fixture tool failure") == true)
         XCTAssertEqual(try Self.requestCount(at: fixture.counter), 3)
+    }
+
+    func testConnectionFailureReturnsStructuredActionResultAndActivity() async throws {
+        let host = try PluginTestHostServices()
+        let plugin = MCPClientPlugin()
+        plugin.activate(host: host)
+        defer { plugin.deactivate() }
+        let server = MCPServerConfiguration(
+            name: "Unavailable",
+            command: "/usr/bin/false",
+            launchAcknowledged: true
+        )
+        try plugin.saveServer(server, secretValues: [:])
+        let action = MCPActionConfiguration(
+            name: "Meeting tasks",
+            serverID: server.id,
+            tool: taskTool,
+            bindings: MCPClientPlugin.defaultBindings(for: taskTool, mode: .single)
+        )
+        try plugin.saveAction(action)
+
+        let result = try await plugin.execute(
+            actionID: action.id,
+            input: "Create a task",
+            context: ActionContext()
+        )
+
+        XCTAssertFalse(result.success)
+        XCTAssertEqual(plugin.activity.first?.status, .failure)
+        XCTAssertEqual(plugin.activity.first?.actionName, action.name)
     }
 
     func testTransportLossAfterWriteIsNeverReplayed() async throws {

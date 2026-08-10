@@ -288,7 +288,7 @@ item. The plugin never automatically retries a failed item.
 
 If every item succeeds, the action succeeds with a summary such as `5 actions completed`. If some
 items fail, the aggregate action fails with a summary such as
-`4 of 5 actions completed; item 3 failed`. The activity view records failed indices and sanitized
+`4 of 5 actions completed; failed items: 3.` The activity view records failed indices and sanitized
 error summaries so the user can identify partial completion without storing the submitted text.
 
 ## Process and Session Lifecycle

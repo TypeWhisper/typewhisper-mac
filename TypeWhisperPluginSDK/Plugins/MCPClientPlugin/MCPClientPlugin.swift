@@ -41,6 +41,7 @@ final class MCPClientPlugin: NSObject, AdditionalActionPluginsProviding, PluginS
     private struct State {
         var host: HostServices?
         var configuration = MCPStoredConfiguration()
+        var configurationLoadFailed = false
         var activity: [MCPActivityEntry] = []
     }
 
@@ -53,15 +54,23 @@ final class MCPClientPlugin: NSObject, AdditionalActionPluginsProviding, PluginS
 
     func activate(host: HostServices) {
         let configuration: MCPStoredConfiguration
-        if let data = host.userDefault(forKey: MCPClientConstants.configurationDefaultsKey) as? Data,
-           let decoded = try? JSONDecoder().decode(MCPStoredConfiguration.self, from: data) {
-            configuration = decoded
+        let configurationLoadFailed: Bool
+        if let data = host.userDefault(forKey: MCPClientConstants.configurationDefaultsKey) as? Data {
+            do {
+                configuration = try JSONDecoder().decode(MCPStoredConfiguration.self, from: data)
+                configurationLoadFailed = false
+            } catch {
+                configuration = MCPStoredConfiguration()
+                configurationLoadFailed = true
+            }
         } else {
             configuration = MCPStoredConfiguration()
+            configurationLoadFailed = false
         }
         state.withLock {
             $0.host = host
             $0.configuration = configuration
+            $0.configurationLoadFailed = configurationLoadFailed
         }
     }
 
@@ -99,6 +108,10 @@ final class MCPClientPlugin: NSObject, AdditionalActionPluginsProviding, PluginS
         state.withLock { $0.activity }
     }
 
+    var configurationLoadFailed: Bool {
+        state.withLock { $0.configurationLoadFailed }
+    }
+
     func secretValue(serverID: UUID, name: String) -> String {
         let host = state.withLock { $0.host }
         return host?.loadSecret(key: MCPServerConfiguration.secretStorageKey(serverID: serverID, environmentName: name)) ?? ""
@@ -119,6 +132,7 @@ final class MCPClientPlugin: NSObject, AdditionalActionPluginsProviding, PluginS
     }
 
     func saveServer(_ draft: MCPServerConfiguration, secretValues: [String: String]) throws {
+        try ensureConfigurationWritable()
         guard !draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw MCPClientError.invalidConfiguration(MCPClientLocalization.string("Enter a server name."))
         }
@@ -155,19 +169,22 @@ final class MCPClientPlugin: NSObject, AdditionalActionPluginsProviding, PluginS
             }
         }
 
-        var updatedServer = draft
-        updatedServer.name = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        updatedServer.command = draft.command.trimmingCharacters(in: .whitespacesAndNewlines)
-        updatedServer.environment = draft.environment.filter { !newSecretNames.contains($0.key) }
-        updatedServer.secretEnvironmentNames = newSecretNames.sorted()
-        updatedServer.createdAt = oldServer?.createdAt ?? draft.createdAt
-        updatedServer.updatedAt = Date()
-        updatedServer.revision = (oldServer?.revision ?? 0) + 1
-        let saved = updatedServer
+        var normalizedServer = draft
+        normalizedServer.name = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        normalizedServer.command = draft.command.trimmingCharacters(in: .whitespacesAndNewlines)
+        normalizedServer.environment = draft.environment.filter { !newSecretNames.contains($0.key) }
+        normalizedServer.secretEnvironmentNames = newSecretNames.sorted()
+        normalizedServer.updatedAt = Date()
+        let normalizedDraft = normalizedServer
 
-        state.withLock { current in
+        let saved = state.withLock { current -> MCPServerConfiguration in
+            let currentServer = current.configuration.servers.first { $0.id == draft.id }
+            var saved = normalizedDraft
+            saved.createdAt = currentServer?.createdAt ?? draft.createdAt
+            saved.revision = (currentServer?.revision ?? 0) + 1
             current.configuration.servers.removeAll { $0.id == saved.id }
             current.configuration.servers.append(saved)
+            return saved
         }
         persistConfiguration(using: host)
         host.notifyCapabilitiesChanged()
@@ -177,6 +194,7 @@ final class MCPClientPlugin: NSObject, AdditionalActionPluginsProviding, PluginS
     }
 
     func removeServer(id: UUID) {
+        guard !configurationLoadFailed else { return }
         let snapshot = state.withLock { current -> (HostServices?, MCPServerConfiguration?) in
             let server = current.configuration.servers.first { $0.id == id }
             current.configuration.servers.removeAll { $0.id == id }
@@ -221,7 +239,44 @@ final class MCPClientPlugin: NSObject, AdditionalActionPluginsProviding, PluginS
         }
     }
 
+    func discoverTools(
+        server draft: MCPServerConfiguration,
+        secretValues: [String: String]
+    ) async throws -> [MCPToolDescriptor] {
+        guard draft.launchAcknowledged else {
+            throw MCPClientError.invalidConfiguration(
+                MCPClientLocalization.string("Acknowledge that TypeWhisper may launch this executable with your user permissions.")
+            )
+        }
+        let host = state.withLock { $0.host }
+        guard let host else {
+            throw MCPClientError.invalidConfiguration(MCPClientLocalization.string("MCP Client is not active."))
+        }
+        let server = try resolvedServer(configuration: draft, secretValues: secretValues, host: host)
+        let session = MCPServerSession(resolvedServer: server)
+        do {
+            let tools = try await session.tools()
+            await session.close()
+            recordActivity(
+                serverName: draft.name,
+                actionName: nil,
+                status: .success,
+                summary: MCPClientLocalization.string("Loaded %lld MCP tools.", Int64(tools.count))
+            )
+            return tools
+        } catch is CancellationError {
+            await session.close()
+            throw CancellationError()
+        } catch {
+            await session.close()
+            let message = sanitize(error.localizedDescription, secrets: server.secrets)
+            recordActivity(serverName: draft.name, actionName: nil, status: .failure, summary: message)
+            throw MCPClientError.invalidConfiguration(message)
+        }
+    }
+
     func saveAction(_ draft: MCPActionConfiguration) throws {
+        try ensureConfigurationWritable()
         guard !draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw MCPClientError.invalidConfiguration(MCPClientLocalization.string("Enter an action name."))
         }
@@ -236,7 +291,13 @@ final class MCPClientPlugin: NSObject, AdditionalActionPluginsProviding, PluginS
             )
         }
 
-        if !draft.usesRawJSONArguments {
+        if draft.usesRawJSONArguments {
+            if draft.invocationMode == .batch, draft.rawArgumentsSource != .currentBatchItem {
+                throw MCPClientError.invalidConfiguration(
+                    MCPClientLocalization.string("Batch raw JSON arguments must use the current batch item.")
+                )
+            }
+        } else {
             let descriptor = MCPToolDescriptor(
                 name: draft.toolName,
                 title: nil,
@@ -286,6 +347,7 @@ final class MCPClientPlugin: NSObject, AdditionalActionPluginsProviding, PluginS
     }
 
     func removeAction(id: UUID) {
+        guard !configurationLoadFailed else { return }
         let host = state.withLock { current -> HostServices? in
             current.configuration.actions.removeAll { $0.id == id }
             return current.host
@@ -305,8 +367,23 @@ final class MCPClientPlugin: NSObject, AdditionalActionPluginsProviding, PluginS
         guard let action = snapshot.0 else { throw MCPClientError.actionNotFound }
         guard snapshot.1 != nil else { throw MCPClientError.serverNotFound }
 
-        let server = try resolvedServer(id: action.serverID)
-        let tools = try await runtime.tools(for: server)
+        let serverConfiguration = snapshot.1!
+        let fallbackSecrets = secretValues(for: serverConfiguration, host: snapshot.2)
+        let server: MCPResolvedServer
+        let tools: [MCPToolDescriptor]
+        do {
+            server = try resolvedServer(id: action.serverID)
+            tools = try await runtime.tools(for: server)
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            return failureResult(
+                error,
+                action: action,
+                serverName: serverConfiguration.name,
+                secrets: fallbackSecrets
+            )
+        }
         guard let tool = tools.first(where: { $0.name == action.toolName }) else {
             return failureResult(MCPClientError.toolNotFound(action.toolName), action: action, server: server)
         }
@@ -329,9 +406,8 @@ final class MCPClientPlugin: NSObject, AdditionalActionPluginsProviding, PluginS
                     expectedSchemaFingerprint: action.schemaFingerprint,
                     arguments: invocations[0]
                 )
-                let message = result.message?.isEmpty == false
-                    ? result.message!
-                    : MCPClientLocalization.string("MCP action completed.")
+                let message = result.message.flatMap { $0.isEmpty ? nil : $0 }
+                    ?? MCPClientLocalization.string("MCP action completed.")
                 recordActivity(
                     serverName: server.configuration.name,
                     actionName: action.name,
@@ -367,7 +443,7 @@ final class MCPClientPlugin: NSObject, AdditionalActionPluginsProviding, PluginS
                 throw CancellationError()
             } catch {
                 failedItems.append(index + 1)
-                if error as? MCPClientError == .indeterminateTransportFailure {
+                if shouldAbortBatch(after: error) {
                     break
                 }
             }
@@ -428,11 +504,23 @@ final class MCPClientPlugin: NSObject, AdditionalActionPluginsProviding, PluginS
             throw MCPClientError.invalidConfiguration(MCPClientLocalization.string("MCP Client is not active."))
         }
 
-        var environment = ProcessInfo.processInfo.environment
+        return try resolvedServer(configuration: server, secretValues: nil, host: host)
+    }
+
+    private func resolvedServer(
+        configuration server: MCPServerConfiguration,
+        secretValues: [String: String]?,
+        host: HostServices
+    ) throws -> MCPResolvedServer {
+        let inherited = ProcessInfo.processInfo.environment
+        let inheritedKeys = ["PATH", "HOME", "USER", "SHELL", "TMPDIR", "LANG"]
+        var environment = Dictionary(uniqueKeysWithValues: inheritedKeys.compactMap { key in
+            inherited[key].map { (key, $0) }
+        })
         environment.merge(server.environment) { _, configured in configured }
         var secrets: [String] = []
         for name in server.secretEnvironmentNames {
-            let value = host.loadSecret(
+            let value = secretValues?[name] ?? host.loadSecret(
                 key: MCPServerConfiguration.secretStorageKey(serverID: server.id, environmentName: name)
             ) ?? ""
             if !value.isEmpty {
@@ -454,7 +542,9 @@ final class MCPClientPlugin: NSObject, AdditionalActionPluginsProviding, PluginS
     }
 
     private func persistConfiguration(using host: HostServices) {
-        let configuration = state.withLock { $0.configuration }
+        let snapshot = state.withLock { ($0.configuration, $0.configurationLoadFailed) }
+        guard !snapshot.1 else { return }
+        let configuration = snapshot.0
         guard let data = try? JSONEncoder().encode(configuration) else { return }
         host.setUserDefault(data, forKey: MCPClientConstants.configurationDefaultsKey)
     }
@@ -464,9 +554,23 @@ final class MCPClientPlugin: NSObject, AdditionalActionPluginsProviding, PluginS
         action: MCPActionConfiguration,
         server: MCPResolvedServer
     ) -> ActionResult {
-        let message = sanitize(error.localizedDescription, secrets: server.secrets)
-        recordActivity(
+        failureResult(
+            error,
+            action: action,
             serverName: server.configuration.name,
+            secrets: server.secrets
+        )
+    }
+
+    private func failureResult(
+        _ error: Error,
+        action: MCPActionConfiguration,
+        serverName: String,
+        secrets: [String]
+    ) -> ActionResult {
+        let message = sanitize(error.localizedDescription, secrets: secrets)
+        recordActivity(
+            serverName: serverName,
             actionName: action.name,
             status: .failure,
             summary: MCPClientLocalization.string("MCP action failed.")
@@ -481,6 +585,33 @@ final class MCPClientPlugin: NSObject, AdditionalActionPluginsProviding, PluginS
 
     private func sanitize(_ text: String, secrets: [String]) -> String {
         MCPRedactor.redact(text, secrets: secrets)
+    }
+
+    private func ensureConfigurationWritable() throws {
+        guard !configurationLoadFailed else {
+            throw MCPClientError.invalidConfiguration(
+                MCPClientLocalization.string(
+                    "The stored MCP configuration could not be loaded. It was left unchanged to prevent data loss."
+                )
+            )
+        }
+    }
+
+    private func secretValues(for server: MCPServerConfiguration, host: HostServices?) -> [String] {
+        guard let host else { return [] }
+        return server.secretEnvironmentNames.compactMap { name in
+            host.loadSecret(
+                key: MCPServerConfiguration.secretStorageKey(serverID: server.id, environmentName: name)
+            )
+        }.filter { !$0.isEmpty }
+    }
+
+    private func shouldAbortBatch(after error: Error) -> Bool {
+        guard let error = error as? MCPClientError else { return true }
+        if case .toolFailed = error {
+            return false
+        }
+        return true
     }
 
     private func recordActivity(

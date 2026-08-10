@@ -9,7 +9,8 @@
     "description": "Connect TypeWhisper workflows to local MCP tools over stdio.",
     "descriptions": {
         "de": "TypeWhisper-Workflows über stdio mit lokalen MCP-Tools verbinden.",
-        "ja": "TypeWhisperのワークフローをstdio経由でローカルMCPツールに接続します。"
+        "ja": "TypeWhisperのワークフローをstdio経由でローカルMCPツールに接続します。",
+        "zh-Hans": "通过 stdio 将 TypeWhisper 工作流连接到本地 MCP 工具。"
     },
     "category": "action",
     "iconSystemName": "point.3.connected.trianglepath.dotted",
