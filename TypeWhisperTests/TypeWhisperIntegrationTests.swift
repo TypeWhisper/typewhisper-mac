@@ -591,6 +591,84 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         func deactivate() {}
     }
 
+    @objc(APIRouterMockActionPlugin)
+    private final class MockActionPlugin: NSObject, ActionPlugin, @unchecked Sendable {
+        static let pluginId = "com.typewhisper.mock.action"
+        static let pluginName = "Mock Action"
+
+        let actionName: String
+        let actionId: String
+        let actionIcon = "bolt"
+
+        required override init() {
+            actionName = "Default Action"
+            actionId = "default-action"
+            super.init()
+        }
+
+        init(name: String, id: String) {
+            actionName = name
+            actionId = id
+            super.init()
+        }
+
+        func activate(host: HostServices) {}
+        func deactivate() {}
+
+        func execute(input: String, context: ActionContext) async throws -> ActionResult {
+            ActionResult(success: true, message: input)
+        }
+    }
+
+    @objc(APIRouterExpandedActionPlugin)
+    private final class ExpandedActionPlugin: NSObject, ActionPlugin, AdditionalActionPluginsProviding, @unchecked Sendable {
+        static let pluginId = "com.typewhisper.mock.expanded-action"
+        static let pluginName = "Expanded Action Mock"
+
+        let actionName = "Primary Action"
+        let actionId = "primary-action"
+        let actionIcon = "bolt.fill"
+        var additionalActionPlugins: [any ActionPlugin]
+
+        required override init() {
+            additionalActionPlugins = []
+            super.init()
+        }
+
+        init(additionalActionPlugins: [any ActionPlugin]) {
+            self.additionalActionPlugins = additionalActionPlugins
+            super.init()
+        }
+
+        func activate(host: HostServices) {}
+        func deactivate() {}
+
+        func execute(input: String, context: ActionContext) async throws -> ActionResult {
+            ActionResult(success: true, message: input)
+        }
+    }
+
+    @objc(APIRouterActionProviderPlugin)
+    private final class ActionProviderPlugin: NSObject, AdditionalActionPluginsProviding, @unchecked Sendable {
+        static let pluginId = "com.typewhisper.mock.action-provider"
+        static let pluginName = "Action Provider Mock"
+
+        var additionalActionPlugins: [any ActionPlugin]
+
+        required override init() {
+            additionalActionPlugins = []
+            super.init()
+        }
+
+        init(additionalActionPlugins: [any ActionPlugin]) {
+            self.additionalActionPlugins = additionalActionPlugins
+            super.init()
+        }
+
+        func activate(host: HostServices) {}
+        func deactivate() {}
+    }
+
     @objc(APIRouterNamedTranscriptionPlugin)
     private final class NamedTranscriptionPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
         static var pluginId: String { "com.typewhisper.mock.named-transcription" }
@@ -7355,6 +7433,60 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             PluginManager.shared.loadedTranscriptionPlugin(for: "openai-compatible:inception")?.manifest.id,
             loaded.manifest.id
         )
+    }
+
+    @MainActor
+    func testPluginManagerExpandsAdditionalActionsAndHonorsEnabledState() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let child = MockActionPlugin(name: "Child Action", id: "stable-child-action")
+        let expandedPlugin = ExpandedActionPlugin(additionalActionPlugins: [child])
+        let providerChild = MockActionPlugin(name: "Provider Child Action", id: "provider-child-action")
+        let providerPlugin = ActionProviderPlugin(additionalActionPlugins: [providerChild])
+        let enabled = LoadedPlugin(
+            manifest: PluginManifest(
+                id: ExpandedActionPlugin.pluginId,
+                name: ExpandedActionPlugin.pluginName,
+                version: "1.0.0",
+                principalClass: "APIRouterExpandedActionPlugin"
+            ),
+            instance: expandedPlugin,
+            bundle: Bundle.main,
+            sourceURL: appSupportDirectory,
+            isEnabled: true
+        )
+        let providerOnly = LoadedPlugin(
+            manifest: PluginManifest(
+                id: ActionProviderPlugin.pluginId,
+                name: ActionProviderPlugin.pluginName,
+                version: "1.0.0",
+                principalClass: "APIRouterActionProviderPlugin"
+            ),
+            instance: providerPlugin,
+            bundle: Bundle.main,
+            sourceURL: appSupportDirectory,
+            isEnabled: true
+        )
+
+        PluginManager.shared.loadedPlugins = [enabled, providerOnly]
+        XCTAssertEqual(
+            PluginManager.shared.actionPlugins.map(\.actionId),
+            ["primary-action", "stable-child-action", "provider-child-action"]
+        )
+        XCTAssertTrue(PluginManager.shared.actionPlugin(for: "stable-child-action") === child)
+        XCTAssertTrue(PluginManager.shared.actionPlugin(for: "provider-child-action") === providerChild)
+
+        PluginManager.shared.loadedPlugins[0].isEnabled = false
+        XCTAssertEqual(PluginManager.shared.actionPlugins.map(\.actionId), ["provider-child-action"])
+        XCTAssertNil(PluginManager.shared.actionPlugin(for: "stable-child-action"))
+
+        PluginManager.shared.loadedPlugins[1].isEnabled = false
+        XCTAssertTrue(PluginManager.shared.actionPlugins.isEmpty)
+        XCTAssertNil(PluginManager.shared.actionPlugin(for: "provider-child-action"))
     }
 
     @MainActor

@@ -17,6 +17,7 @@ let package = Package(
         .package(url: "https://github.com/huggingface/swift-jinja.git", exact: "2.3.6"),
         .package(url: "https://github.com/ml-explore/mlx-swift.git", exact: "0.31.4"),
         .package(url: "https://github.com/microsoft/onnxruntime-swift-package-manager.git", from: "1.24.2"),
+        .package(url: "https://github.com/modelcontextprotocol/swift-sdk.git", exact: "0.12.1"),
     ],
     targets: [
         .target(name: "TypeWhisperPluginSDK"),
@@ -168,6 +169,19 @@ let package = Package(
             name: "LinearPlugin",
             dependencies: ["TypeWhisperPluginSDK"],
             path: "Plugins/LinearPlugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("Localizable.xcstrings"),
+                .process("manifest.json"),
+            ]
+        ),
+        .target(
+            name: "MCPClientPlugin",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                .product(name: "MCP", package: "swift-sdk"),
+            ],
+            path: "Plugins/MCPClientPlugin",
             exclude: ["Tests"],
             resources: [
                 .process("Localizable.xcstrings"),
@@ -477,6 +491,18 @@ let package = Package(
                 "LinearPlugin",
             ],
             path: "Plugins/LinearPlugin/Tests"
+        ),
+        .testTarget(
+            name: "MCPClientPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "MCPClientPlugin",
+            ],
+            path: "Plugins/MCPClientPlugin/Tests",
+            resources: [
+                .copy("Fixtures"),
+            ]
         ),
         .testTarget(
             name: "ObsidianPluginTests",

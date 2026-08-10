@@ -299,7 +299,16 @@ final class PluginManager: ObservableObject {
     var actionPlugins: [ActionPlugin] {
         loadedPlugins
             .filter { $0.isEnabled }
-            .compactMap { $0.instance as? ActionPlugin }
+            .flatMap { plugin -> [ActionPlugin] in
+                var actions: [ActionPlugin] = []
+                if let action = plugin.instance as? ActionPlugin {
+                    actions.append(action)
+                }
+                if let expanded = plugin.instance as? AdditionalActionPluginsProviding {
+                    actions.append(contentsOf: expanded.additionalActionPlugins)
+                }
+                return actions
+            }
     }
 
     var memoryStoragePlugins: [MemoryStoragePlugin] {

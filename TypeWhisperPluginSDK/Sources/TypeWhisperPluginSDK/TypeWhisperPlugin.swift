@@ -1253,6 +1253,12 @@ public protocol ActionPlugin: TypeWhisperPlugin {
     func execute(input: String, context: ActionContext) async throws -> ActionResult
 }
 
+/// Optional extension for plugins that expose multiple independently selectable
+/// workflow actions from one bundle.
+public protocol AdditionalActionPluginsProviding: TypeWhisperPlugin {
+    var additionalActionPlugins: [any ActionPlugin] { get }
+}
+
 // MARK: - Memory Storage Plugin
 
 public enum MemoryType: String, Codable, Sendable, CaseIterable {
