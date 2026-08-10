@@ -78,7 +78,8 @@ final class MCPClientPluginTests: XCTestCase {
         XCTAssertEqual(host.loadSecret(key: secretKey), "super-secret-token")
 
         let data = try XCTUnwrap(host.userDefault(forKey: MCPClientConstants.configurationDefaultsKey) as? Data)
-        XCTAssertFalse(String(decoding: data, as: UTF8.self).contains("super-secret-token"))
+        let storedText = try XCTUnwrap(String(data: data, encoding: .utf8))
+        XCTAssertFalse(storedText.contains("super-secret-token"))
         let stored = try JSONDecoder().decode(MCPStoredConfiguration.self, from: data)
         XCTAssertEqual(stored.servers.first?.secretEnvironmentNames, ["TASK_TOKEN"])
         XCTAssertTrue(stored.servers.first?.environment.isEmpty == true)
@@ -455,7 +456,7 @@ final class MCPClientPluginTests: XCTestCase {
             secrets: []
         )
         let runtime = MCPClientRuntime()
-        defer { Task { await runtime.closeAll() } }
+        addTeardownBlock { await runtime.closeAll() }
 
         let tools = try await runtime.tools(for: server)
         XCTAssertEqual(tools.map(\.name), ["create_task"])
@@ -496,7 +497,6 @@ final class MCPClientPluginTests: XCTestCase {
         let callCount = try String(contentsOf: counter, encoding: .utf8)
             .split(separator: "\n").count
         XCTAssertEqual(callCount, 2, "A tool error must not be retried")
-        await runtime.closeAll()
     }
 
     func testDraftDiscoveryDoesNotPersistServerOrSecrets() async throws {
@@ -536,7 +536,7 @@ final class MCPClientPluginTests: XCTestCase {
         defer { try? FileManager.default.removeItem(at: fixture.counter) }
         let server = Self.resolvedFixtureServer(fixture)
         let runtime = MCPClientRuntime()
-        defer { Task { await runtime.closeAll() } }
+        addTeardownBlock { await runtime.closeAll() }
         let tools = try await runtime.tools(for: server)
         let fingerprint = try XCTUnwrap(tools.first).schemaFingerprint
 
@@ -558,7 +558,6 @@ final class MCPClientPluginTests: XCTestCase {
             // Expected: the SDK cancellation path removes the pending request.
         }
         XCTAssertEqual(try Self.requestCount(at: fixture.counter), 1)
-        await runtime.closeAll()
     }
 
     func testToolCallTimeoutCancelsRequestWithoutRetry() async throws {
@@ -659,7 +658,7 @@ final class MCPClientPluginTests: XCTestCase {
             secrets: [secret]
         )
         let runtime = MCPClientRuntime()
-        defer { Task { await runtime.closeAll() } }
+        addTeardownBlock { await runtime.closeAll() }
 
         do {
             _ = try await runtime.tools(for: server)
@@ -669,7 +668,6 @@ final class MCPClientPluginTests: XCTestCase {
             XCTAssertTrue(error.localizedDescription.contains("••••"))
             XCTAssertLessThan(error.localizedDescription.utf8.count, 66 * 1024)
         }
-        await runtime.closeAll()
     }
 
     func testKnownProcessExitBeforeWriteReconnectsOnce() async throws {
@@ -697,7 +695,7 @@ final class MCPClientPluginTests: XCTestCase {
             secrets: []
         )
         let runtime = MCPClientRuntime()
-        defer { Task { await runtime.closeAll() } }
+        addTeardownBlock { await runtime.closeAll() }
 
         let tools = try await runtime.tools(for: server)
         try await Task.sleep(for: .milliseconds(250))
@@ -710,7 +708,6 @@ final class MCPClientPluginTests: XCTestCase {
 
         XCTAssertEqual(result.message, "created:after-reconnect")
         XCTAssertEqual(try Self.requestCount(at: fixture.counter), 1)
-        await runtime.closeAll()
     }
 
     func testToolListChangedNotificationRefreshesCatalog() async throws {
@@ -797,7 +794,7 @@ final class MCPClientPluginTests: XCTestCase {
             )
         }
         let runtime = MCPClientRuntime()
-        defer { Task { await runtime.closeAll() } }
+        addTeardownBlock { await runtime.closeAll() }
 
         _ = try await runtime.tools(for: resolved(revision: 1))
         async let first = runtime.tools(for: resolved(revision: 2))
@@ -805,7 +802,6 @@ final class MCPClientPluginTests: XCTestCase {
         _ = try await (first, second)
 
         XCTAssertEqual(try Self.requestCount(at: fixture.counter), 4)
-        await runtime.closeAll()
     }
 
     func testBatchExecutionContinuesAfterToolErrorInOrder() async throws {
@@ -893,7 +889,7 @@ final class MCPClientPluginTests: XCTestCase {
             secrets: []
         )
         let runtime = MCPClientRuntime()
-        defer { Task { await runtime.closeAll() } }
+        addTeardownBlock { await runtime.closeAll() }
 
         let tools = try await runtime.tools(for: server)
         do {
@@ -908,7 +904,6 @@ final class MCPClientPluginTests: XCTestCase {
             XCTAssertEqual(error as? MCPClientError, .indeterminateTransportFailure)
         }
         XCTAssertEqual(try Self.requestCount(at: fixture.counter), 1)
-        await runtime.closeAll()
     }
 
     private static var fixtureTool: MCPToolDescriptor {
