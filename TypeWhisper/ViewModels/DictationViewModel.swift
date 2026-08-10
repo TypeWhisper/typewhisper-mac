@@ -1856,6 +1856,11 @@ final class DictationViewModel: ObservableObject {
                 partialText = ""
                 var insertedTextForCorrectionTracking: String?
                 var targetAppCorrectionBaseline: TextInsertionService.FocusedTextObservation?
+                let modelDisplayName = transcription.modelDisplayName
+                var pipelineSteps = ppResult.appliedSteps
+                if transcription.usedRecoveryFallback {
+                    pipelineSteps.append(localizedAppText("Recovery fallback", de: "Recovery-Fallback"))
+                }
 
                 // Route to action plugin or insert text
                 if let actionPluginId = self.effectiveActionPluginId,
@@ -1905,12 +1910,6 @@ final class DictationViewModel: ObservableObject {
                     )))
                 }
 
-                let modelDisplayName = transcription.modelDisplayName
-                var pipelineSteps = ppResult.appliedSteps
-                if transcription.usedRecoveryFallback {
-                    pipelineSteps.append(localizedAppText("Recovery fallback", de: "Recovery-Fallback"))
-                }
-
                 if let insertedTextForCorrectionTracking {
                     let contributionContext: CorrectionContributionContext? = improveTypeWhisperCaptureEnabled
                         ? CorrectionContributionContext(
@@ -1929,6 +1928,7 @@ final class DictationViewModel: ObservableObject {
                 if UserDefaults.standard.object(forKey: UserDefaultsKeys.historyEnabled) as? Bool ?? true {
                     historyService.addRecord(
                         id: transcriptionID,
+                        timestamp: completionTimestamp,
                         rawText: result.text,
                         finalText: text,
                         appName: activeApp.name,
@@ -1944,6 +1944,7 @@ final class DictationViewModel: ObservableObject {
                 }
 
                 EventBus.shared.emit(.transcriptionCompleted(TranscriptionCompletedPayload(
+                    timestamp: completionTimestamp,
                     rawText: result.text,
                     finalText: text,
                     language: language,

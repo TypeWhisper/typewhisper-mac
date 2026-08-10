@@ -331,6 +331,94 @@
         }
       }
     },
+    "Keep exported individual notes up to date when their transcript is edited in TypeWhisper. External Obsidian edits may be overwritten.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Exportierte Einzelnotizen aktuell halten, wenn ihr Transkript in TypeWhisper bearbeitet wird. Externe Änderungen in Obsidian können überschrieben werden."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TypeWhisper で文字起こしを編集したとき、エクスポート済みの個別ノートを更新します。Obsidian 側の編集は上書きされる場合があります。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 TypeWhisper 中编辑转录时，保持已导出的单独笔记为最新状态。Obsidian 中的外部编辑可能会被覆盖。"
+          }
+        }
+      }
+    },
+    "Live Sync History Edits": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verlaufsänderungen live synchronisieren"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "履歴の編集をライブ同期"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "实时同步历史编辑"
+          }
+        }
+      }
+    },
+    "Live Sync is available for individual notes only.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Live-Sync ist nur für einzelne Notizen verfügbar."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ライブ同期は個別ノートでのみ利用できます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "实时同步仅适用于单独笔记。"
+          }
+        }
+      }
+    },
+    "Note Template": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Notizvorlage"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ノートテンプレート"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "笔记模板"
+          }
+        }
+      }
+    },
     "No vault selected": {
       "localizations": {
         "de": {
@@ -371,6 +459,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "占位符：{{DATE}}, {{TIME}}, {{APP}}, {{LANGUAGE}}"
+          }
+        }
+      }
+    },
+    "Placeholders: {{TRANSCRIPT}}, {{RAW_TRANSCRIPT}}, {{DATE}}, {{TIME}}, {{APP}}, {{LANGUAGE}}, {{URL}}, {{ENGINE}}, {{MODEL}}, {{DURATION}}, {{WORDS}}": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Platzhalter: {{TRANSCRIPT}}, {{RAW_TRANSCRIPT}}, {{DATE}}, {{TIME}}, {{APP}}, {{LANGUAGE}}, {{URL}}, {{ENGINE}}, {{MODEL}}, {{DURATION}}, {{WORDS}}"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "プレースホルダー: {{TRANSCRIPT}}, {{RAW_TRANSCRIPT}}, {{DATE}}, {{TIME}}, {{APP}}, {{LANGUAGE}}, {{URL}}, {{ENGINE}}, {{MODEL}}, {{DURATION}}, {{WORDS}}"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "占位符：{{TRANSCRIPT}}, {{RAW_TRANSCRIPT}}, {{DATE}}, {{TIME}}, {{APP}}, {{LANGUAGE}}, {{URL}}, {{ENGINE}}, {{MODEL}}, {{DURATION}}, {{WORDS}}"
           }
         }
       }

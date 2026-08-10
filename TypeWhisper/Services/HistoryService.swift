@@ -1,16 +1,34 @@
 import Foundation
 import SwiftData
 import Combine
+import TypeWhisperPluginSDK
 import os.log
 
 private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper", category: "HistoryService")
 
 @MainActor
 final class HistoryService: ObservableObject {
+    static let pluginSyncActionID = "com.typewhisper.history.transcription-updated"
+
+    private struct PluginSyncPayload: Codable {
+        let id: UUID
+        let rawText: String
+        let finalText: String
+        let language: String?
+        let engineUsed: String
+        let modelUsed: String?
+        let durationSeconds: Double
+        let appName: String?
+        let bundleIdentifier: String?
+        let url: String?
+        let pipelineSteps: [String]
+    }
+
     @Published var records: [TranscriptionRecord] = []
 
     private let modelContainer: ModelContainer
     private let modelContext: ModelContext
+    private let eventEmitter: @MainActor (TypeWhisperEvent) -> Void
 
     private(set) var totalRecords: Int = 0
     private(set) var totalWords: Int = 0
@@ -18,8 +36,14 @@ final class HistoryService: ObservableObject {
 
     private let audioDirectory: URL
 
-    init(appSupportDirectory: URL = AppConstants.appSupportDirectory) {
+    init(
+        appSupportDirectory: URL = AppConstants.appSupportDirectory,
+        eventEmitter: @escaping @MainActor (TypeWhisperEvent) -> Void = { event in
+            EventBus.shared?.emit(event)
+        }
+    ) {
         let storeDir = appSupportDirectory
+        self.eventEmitter = eventEmitter
 
         let audioDir = storeDir.appendingPathComponent("audio", isDirectory: true)
         try? FileManager.default.createDirectory(at: audioDir, withIntermediateDirectories: true)
@@ -115,6 +139,35 @@ final class HistoryService: ObservableObject {
         record.wordsCount = finalText.split(separator: " ").count
         save()
         fetchRecords()
+        let payload = PluginSyncPayload(
+            id: record.id,
+            rawText: record.rawText,
+            finalText: record.finalText,
+            language: record.language,
+            engineUsed: record.engineUsed,
+            modelUsed: record.modelUsed,
+            durationSeconds: record.durationSeconds,
+            appName: record.appName,
+            bundleIdentifier: record.appBundleIdentifier,
+            url: record.appURL,
+            pipelineSteps: record.pipelineStepList
+        )
+        guard let data = try? JSONEncoder().encode(payload),
+              let message = String(data: data, encoding: .utf8) else {
+            logger.error("Failed to encode history plugin sync payload")
+            return
+        }
+        // Keep the public plugin SDK on compatibility line v1 by using its existing
+        // action-completed envelope for this private host-to-plugin notification.
+        eventEmitter(.actionCompleted(ActionCompletedPayload(
+            timestamp: record.timestamp,
+            actionId: Self.pluginSyncActionID,
+            success: true,
+            message: message,
+            url: record.appURL,
+            appName: record.appName,
+            bundleIdentifier: record.appBundleIdentifier
+        )))
     }
 
     func deleteRecord(_ record: TranscriptionRecord) {

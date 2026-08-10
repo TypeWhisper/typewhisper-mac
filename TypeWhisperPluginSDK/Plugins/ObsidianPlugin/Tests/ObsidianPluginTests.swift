@@ -5,6 +5,21 @@ import XCTest
 @testable import ObsidianPlugin
 
 final class ObsidianPluginTests: XCTestCase {
+    private struct HistorySyncPayload: Encodable {
+        let id: UUID
+        let rawText: String
+        let finalText: String
+        let language: String?
+        let engineUsed: String
+        let modelUsed: String?
+        let durationSeconds: Double
+        let appName: String?
+        let bundleIdentifier: String?
+        let url: String?
+        let pipelineSteps: [String]
+    }
+
+    private static let historySyncActionID = "com.typewhisper.history.transcription-updated"
     private static let workflowInstructionTitle = "Workflow Instruction"
     private static let workflowInstructionHelp = "Create a Custom Workflow, paste this into Instruction, and set Action Target to \"Save to Obsidian\"."
     private static let copyInstructionTitle = "Copy Instruction"
@@ -67,6 +82,175 @@ final class ObsidianPluginTests: XCTestCase {
         XCTAssertTrue(content.contains("app: Notes"))
         XCTAssertTrue(content.contains("language: en"))
         XCTAssertTrue(content.contains("Captured text"))
+    }
+
+    func testIndividualNoteTemplateResolvesAvailableMetadataAndSanitizesFilename() async throws {
+        let vaultURL = try Self.makeTemporaryDirectory(prefix: "ObsidianVaultTemplate")
+        defer { try? FileManager.default.removeItem(at: vaultURL) }
+
+        let host = try PluginTestHostServices(defaults: [
+            "vaultPath": vaultURL.path,
+            "subfolder": "",
+            "filenameTemplate": "[{{APP}}]: report?",
+            "noteTemplate": "# {{app}}\n\n{{transcript}}\n\nOriginal: {{raw_transcript}}\nWords: {{words}}",
+            "frontmatterEnabled": false,
+        ])
+        let plugin = ObsidianPlugin()
+        plugin.activate(host: host)
+
+        let result = try await plugin.execute(
+            input: "Clean final text",
+            context: ActionContext(appName: "Notes", originalText: "Raw text")
+        )
+
+        XCTAssertTrue(result.success)
+        let files = try FileManager.default.contentsOfDirectory(at: vaultURL, includingPropertiesForKeys: nil)
+        XCTAssertEqual(files.map(\.lastPathComponent), ["Notes report.md"])
+        let content = try String(contentsOf: try XCTUnwrap(files.first), encoding: .utf8)
+        XCTAssertEqual(content, "# Notes\n\nClean final text\n\nOriginal: Raw text\nWords: 3")
+    }
+
+    func testAutoExportLiveSyncUpdatesSameFileAfterPluginReactivation() async throws {
+        let vaultURL = try Self.makeTemporaryDirectory(prefix: "ObsidianVaultLiveSync")
+        defer { try? FileManager.default.removeItem(at: vaultURL) }
+        let id = UUID(uuidString: "55555555-5555-4555-8555-555555555555")!
+        let timestamp = Date(timeIntervalSince1970: 1_754_668_800)
+        let eventBus = PluginTestEventBus()
+        let host = try PluginTestHostServices(
+            defaults: [
+                "vaultPath": vaultURL.path,
+                "subfolder": "Captured",
+                "filenameTemplate": "{{DATE}} {{TIME}}",
+                "noteTemplate": "## Transcript\n\n{{TRANSCRIPT}}",
+                "frontmatterEnabled": true,
+                "autoExportEnabled": true,
+                "liveSyncEnabled": true,
+            ],
+            eventBus: eventBus
+        )
+        var plugin: ObsidianPlugin? = ObsidianPlugin()
+        plugin?.activate(host: host)
+
+        await eventBus.emit(.transcriptionCompleted(TranscriptionCompletedPayload(
+            timestamp: timestamp,
+            rawText: "Initial raw text",
+            finalText: "Initial final text",
+            language: "en",
+            engineUsed: "parakeet",
+            modelUsed: "TDT",
+            durationSeconds: 4,
+            appName: "Notes",
+            bundleIdentifier: "com.apple.Notes",
+            ruleName: nil
+        )))
+
+        let folderURL = vaultURL.appendingPathComponent("Captured", isDirectory: true)
+        let initialFiles = try FileManager.default.contentsOfDirectory(at: folderURL, includingPropertiesForKeys: nil)
+        let noteURL = try XCTUnwrap(initialFiles.first)
+        XCTAssertEqual(initialFiles.count, 1)
+        XCTAssertTrue(try String(contentsOf: noteURL, encoding: .utf8).contains("Initial final text"))
+
+        plugin?.deactivate()
+        plugin = ObsidianPlugin()
+        plugin?.activate(host: host)
+
+        await eventBus.emit(try Self.historyUpdateEvent(
+            id: id,
+            timestamp: timestamp,
+            rawText: "Initial raw text",
+            finalText: "Corrected final text",
+            language: "en",
+            engineUsed: "parakeet",
+            modelUsed: "TDT",
+            durationSeconds: 4,
+            appName: "Notes",
+            bundleIdentifier: "com.apple.Notes",
+            pipelineSteps: []
+        ))
+
+        let updatedFiles = try FileManager.default.contentsOfDirectory(at: folderURL, includingPropertiesForKeys: nil)
+        XCTAssertEqual(updatedFiles, initialFiles)
+        let updatedContent = try String(contentsOf: noteURL, encoding: .utf8)
+        XCTAssertTrue(updatedContent.contains("Corrected final text"))
+        XCTAssertFalse(updatedContent.contains("Initial final text"))
+        plugin?.deactivate()
+    }
+
+    func testWorkflowActionLiveSyncPersistsMappingWithoutDuplicateAutoExport() async throws {
+        let vaultURL = try Self.makeTemporaryDirectory(prefix: "ObsidianVaultWorkflowLiveSync")
+        defer { try? FileManager.default.removeItem(at: vaultURL) }
+        let id = UUID(uuidString: "66666666-6666-4666-8666-666666666666")!
+        let timestamp = Date()
+        let eventBus = PluginTestEventBus()
+        let host = try PluginTestHostServices(
+            defaults: [
+                "vaultPath": vaultURL.path,
+                "subfolder": "Captured",
+                "filenameTemplate": "{{DATE}} {{TIME}}",
+                "noteTemplate": "{{TRANSCRIPT}}\n\nEngine: {{ENGINE}}\nProcessing: {{PROCESSING}}",
+                "frontmatterEnabled": true,
+                "autoExportEnabled": true,
+                "liveSyncEnabled": true,
+            ],
+            eventBus: eventBus
+        )
+        var plugin: ObsidianPlugin? = ObsidianPlugin()
+        plugin?.activate(host: host)
+
+        let result = try await plugin?.execute(
+            input: "Workflow result",
+            context: ActionContext(
+                appName: "Notes",
+                language: "en",
+                originalText: "Raw workflow text"
+            )
+        )
+        XCTAssertEqual(result?.success, true)
+
+        await eventBus.emit(.transcriptionCompleted(TranscriptionCompletedPayload(
+            timestamp: timestamp,
+            rawText: "Raw workflow text",
+            finalText: "Workflow result",
+            language: "en",
+            engineUsed: "parakeet",
+            modelUsed: "TDT",
+            durationSeconds: 4,
+            appName: "Notes",
+            ruleName: nil
+        )))
+
+        let folderURL = vaultURL.appendingPathComponent("Captured", isDirectory: true)
+        let initialFiles = try FileManager.default.contentsOfDirectory(at: folderURL, includingPropertiesForKeys: nil)
+        let noteURL = try XCTUnwrap(initialFiles.first)
+        XCTAssertEqual(initialFiles.count, 1)
+        let initialContent = try String(contentsOf: noteURL, encoding: .utf8)
+        XCTAssertTrue(initialContent.contains("Engine: parakeet"))
+
+        plugin?.deactivate()
+        plugin = ObsidianPlugin()
+        plugin?.activate(host: host)
+        await eventBus.emit(try Self.historyUpdateEvent(
+            id: id,
+            timestamp: timestamp,
+            rawText: "Raw workflow text",
+            finalText: "Corrected workflow result",
+            language: "en",
+            engineUsed: "parakeet",
+            modelUsed: "TDT",
+            durationSeconds: 4,
+            appName: "Notes",
+            bundleIdentifier: nil,
+            pipelineSteps: ["Cleanup"]
+        ))
+
+        XCTAssertEqual(
+            try FileManager.default.contentsOfDirectory(at: folderURL, includingPropertiesForKeys: nil),
+            initialFiles
+        )
+        let updatedContent = try String(contentsOf: noteURL, encoding: .utf8)
+        XCTAssertTrue(updatedContent.contains("Corrected workflow result"))
+        XCTAssertTrue(updatedContent.contains("Processing: Cleanup"))
+        plugin?.deactivate()
     }
 
     func testAutoExportDailyNoteAppendsTranscriptions() async throws {
@@ -243,6 +427,45 @@ final class ObsidianPluginTests: XCTestCase {
         for staleTerm in ["PromptAction", "Recommended Prompt", "Copy Prompt", "Create a new PromptAction"] {
             XCTAssertFalse(combinedCopy.contains(staleTerm), "\(staleTerm) should not appear in Obsidian settings copy")
         }
+    }
+
+    private static func historyUpdateEvent(
+        id: UUID,
+        timestamp: Date,
+        rawText: String,
+        finalText: String,
+        language: String?,
+        engineUsed: String,
+        modelUsed: String?,
+        durationSeconds: Double,
+        appName: String?,
+        bundleIdentifier: String?,
+        url: String? = nil,
+        pipelineSteps: [String]
+    ) throws -> TypeWhisperEvent {
+        let payload = HistorySyncPayload(
+            id: id,
+            rawText: rawText,
+            finalText: finalText,
+            language: language,
+            engineUsed: engineUsed,
+            modelUsed: modelUsed,
+            durationSeconds: durationSeconds,
+            appName: appName,
+            bundleIdentifier: bundleIdentifier,
+            url: url,
+            pipelineSteps: pipelineSteps
+        )
+        let message = try XCTUnwrap(String(data: JSONEncoder().encode(payload), encoding: .utf8))
+        return .actionCompleted(ActionCompletedPayload(
+            timestamp: timestamp,
+            actionId: historySyncActionID,
+            success: true,
+            message: message,
+            url: url,
+            appName: appName,
+            bundleIdentifier: bundleIdentifier
+        ))
     }
 
     private static func makeTemporaryDirectory(prefix: String) throws -> URL {
