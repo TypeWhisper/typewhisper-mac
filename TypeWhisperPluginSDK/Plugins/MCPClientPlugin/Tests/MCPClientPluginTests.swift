@@ -593,8 +593,11 @@ final class MCPClientPluginTests: XCTestCase {
         let session = MCPServerSession(resolvedServer: server)
 
         _ = try await session.tools()
-        try await Task.sleep(for: .milliseconds(100))
-        let refreshed = try await session.tools()
+        var refreshed = try await session.tools()
+        for _ in 0..<100 where refreshed.first?.description != "Create a fixture task version 2" {
+            try await Task.sleep(for: .milliseconds(50))
+            refreshed = try await session.tools()
+        }
 
         XCTAssertEqual(refreshed.first?.description, "Create a fixture task version 2")
         XCTAssertEqual(try Self.requestCount(at: fixture.counter), 2)
