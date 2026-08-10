@@ -151,6 +151,15 @@ final class MCPClientPluginTests: XCTestCase {
             try MCPHTTPEndpointResolver.resolve("http://127.0.0.1:8080/mcp").absoluteString,
             "http://127.0.0.1:8080/mcp"
         )
+        XCTAssertEqual(
+            try MCPHTTPEndpointResolver.resolve("http://localhost:8080/mcp").absoluteString,
+            "http://localhost:8080/mcp"
+        )
+        XCTAssertEqual(
+            try MCPHTTPEndpointResolver.resolve("http://[::1]:8080/mcp").absoluteString,
+            "http://[::1]:8080/mcp"
+        )
+        XCTAssertThrowsError(try MCPHTTPEndpointResolver.resolve("http://taskfox.example/mcp"))
         XCTAssertThrowsError(try MCPHTTPEndpointResolver.resolve("ftp://taskfox.example/mcp"))
         XCTAssertThrowsError(try MCPHTTPEndpointResolver.resolve("https://token@taskfox.example/mcp"))
     }

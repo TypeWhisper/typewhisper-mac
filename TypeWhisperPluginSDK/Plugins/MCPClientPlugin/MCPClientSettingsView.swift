@@ -512,6 +512,10 @@ private struct MCPServerEditorView: View {
             tools = []
             updateResolvedPath()
         }
+        .onChange(of: httpAuthentication) { _, _ in
+            launchAcknowledged = false
+            tools = []
+        }
     }
 
     private func makeDraft() throws -> (MCPServerConfiguration, [String: String], String?) {

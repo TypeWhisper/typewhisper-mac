@@ -521,17 +521,21 @@ enum MCPExecutableResolver {
 }
 
 enum MCPHTTPEndpointResolver {
+    private static let loopbackHosts: Set<String> = ["localhost", "127.0.0.1", "::1", "[::1]"]
+
     static func resolve(_ endpoint: String) throws -> URL {
         let trimmed = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
         guard let components = URLComponents(string: trimmed),
               let scheme = components.scheme?.lowercased(),
               ["http", "https"].contains(scheme),
-              components.host?.isEmpty == false,
+              let host = components.host,
+              !host.isEmpty,
+              scheme == "https" || loopbackHosts.contains(host.lowercased()),
               components.user == nil,
               components.password == nil,
               let url = components.url else {
             throw MCPClientError.invalidConfiguration(
-                MCPClientLocalization.string("Enter a valid MCP server URL using HTTP or HTTPS.")
+                MCPClientLocalization.string("Enter a valid MCP server URL using HTTPS, or HTTP for a local address.")
             )
         }
         return url
