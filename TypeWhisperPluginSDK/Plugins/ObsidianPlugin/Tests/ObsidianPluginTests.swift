@@ -44,6 +44,18 @@ final class ObsidianPluginTests: XCTestCase {
     private static let workflowInstructionHelp = "Create a Custom Workflow, paste this into Instruction, and set Action Target to \"Save to Obsidian\"."
     private static let copyInstructionTitle = "Copy Instruction"
 
+    func testManifestDeclaresVersionAndHostBoundary() throws {
+        let manifest = try JSONDecoder().decode(
+            PluginManifest.self,
+            from: Data(contentsOf: Self.pluginRoot.appendingPathComponent("manifest.json"))
+        )
+
+        XCTAssertEqual(manifest.id, "com.typewhisper.obsidian")
+        XCTAssertEqual(manifest.version, "1.1.0")
+        XCTAssertEqual(manifest.minHostVersion, "1.6.0")
+        XCTAssertEqual(manifest.sdkCompatibilityVersion, "v1")
+    }
+
     func testExecuteFailsForInvalidVaultPath() async throws {
         let invalidVaultURL = FileManager.default.temporaryDirectory
             .appendingPathComponent("obsidian-invalid-\(UUID().uuidString)", isDirectory: false)
