@@ -5,11 +5,36 @@ import os
 import Darwin
 #endif
 
+enum MCPResolvedTransport: Sendable {
+    case stdio(executableURL: URL, environment: [String: String])
+    case streamableHTTP(endpoint: URL, bearerToken: String?)
+}
+
 struct MCPResolvedServer: Sendable {
     let configuration: MCPServerConfiguration
-    let executableURL: URL
-    let environment: [String: String]
+    let transport: MCPResolvedTransport
     let secrets: [String]
+
+    init(
+        configuration: MCPServerConfiguration,
+        executableURL: URL,
+        environment: [String: String],
+        secrets: [String]
+    ) {
+        self.configuration = configuration
+        transport = .stdio(executableURL: executableURL, environment: environment)
+        self.secrets = secrets
+    }
+
+    init(
+        configuration: MCPServerConfiguration,
+        endpoint: URL,
+        bearerToken: String?
+    ) {
+        self.configuration = configuration
+        transport = .streamableHTTP(endpoint: endpoint, bearerToken: bearerToken)
+        secrets = bearerToken.map { [$0] } ?? []
+    }
 }
 
 struct MCPToolInvocationResult: Sendable {
@@ -49,7 +74,8 @@ actor MCPServerSession {
     private let toolCallTimeout: Duration
     private var process: Process?
     private var client: Client?
-    private var transport: StdioTransport?
+    private var transport: (any Transport)?
+    private var isConnected = false
     private var connectionTask: Task<Void, Error>?
     private var refreshTask: Task<Void, Error>?
     private var inputPipe: Pipe?
@@ -91,7 +117,7 @@ actor MCPServerSession {
 
         try await prepareTool(named: toolName, expectedSchemaFingerprint: expectedSchemaFingerprint)
 
-        if process?.isRunning != true {
+        if case .stdio = resolvedServer.transport, process?.isRunning != true {
             try await prepareTool(named: toolName, expectedSchemaFingerprint: expectedSchemaFingerprint)
         }
 
@@ -139,6 +165,7 @@ actor MCPServerSession {
     }
 
     private func closeResources() async {
+        isConnected = false
         if let client {
             await client.disconnect()
         } else if let transport {
@@ -176,8 +203,15 @@ actor MCPServerSession {
             return
         }
 
-        if let process, process.isRunning, client != nil {
-            return
+        if isConnected, client != nil, transport != nil {
+            switch resolvedServer.transport {
+            case .stdio:
+                if process?.isRunning == true {
+                    return
+                }
+            case .streamableHTTP:
+                return
+            }
         }
 
         let task = Task { try await self.connectFresh() }
@@ -195,63 +229,81 @@ actor MCPServerSession {
         await closeResources()
         try Task.checkCancellation()
 
-        let process = Process()
-        let inputPipe = Pipe()
-        let outputPipe = Pipe()
-        let errorPipe = Pipe()
-        process.executableURL = resolvedServer.executableURL
-        process.arguments = resolvedServer.configuration.arguments
-        process.environment = resolvedServer.environment
-        process.standardInput = inputPipe
-        process.standardOutput = outputPipe
-        process.standardError = errorPipe
+        let transport: any Transport
+        switch resolvedServer.transport {
+        case .stdio(let executableURL, let environment):
+            let process = Process()
+            let inputPipe = Pipe()
+            let outputPipe = Pipe()
+            let errorPipe = Pipe()
+            process.executableURL = executableURL
+            process.arguments = resolvedServer.configuration.arguments
+            process.environment = environment
+            process.standardInput = inputPipe
+            process.standardOutput = outputPipe
+            process.standardError = errorPipe
 
-        #if canImport(Darwin)
-        _ = fcntl(inputPipe.fileHandleForWriting.fileDescriptor, F_SETNOSIGPIPE, 1)
-        #endif
+            #if canImport(Darwin)
+            _ = fcntl(inputPipe.fileHandleForWriting.fileDescriptor, F_SETNOSIGPIPE, 1)
+            #endif
 
-        standardError.reset()
-        errorPipe.fileHandleForReading.readabilityHandler = { [standardError] handle in
-            let data = handle.availableData
-            if data.isEmpty {
-                handle.readabilityHandler = nil
-            } else {
-                standardError.append(data)
+            standardError.reset()
+            errorPipe.fileHandleForReading.readabilityHandler = { [standardError] handle in
+                let data = handle.availableData
+                if data.isEmpty {
+                    handle.readabilityHandler = nil
+                } else {
+                    standardError.append(data)
+                }
             }
-        }
 
-        do {
-            try process.run()
-        } catch {
-            errorPipe.fileHandleForReading.readabilityHandler = nil
-            throw MCPClientError.invalidConfiguration(
-                MCPClientLocalization.string(
-                    "Could not launch MCP server ‘%@’: %@",
-                    resolvedServer.configuration.name,
-                    sanitize(error.localizedDescription)
+            do {
+                try process.run()
+            } catch {
+                errorPipe.fileHandleForReading.readabilityHandler = nil
+                throw MCPClientError.invalidConfiguration(
+                    MCPClientLocalization.string(
+                        "Could not launch MCP server ‘%@’: %@",
+                        resolvedServer.configuration.name,
+                        sanitize(error.localizedDescription)
+                    )
                 )
+            }
+
+            process.terminationHandler = { [weak self] terminatedProcess in
+                let processIdentifier = terminatedProcess.processIdentifier
+                Task {
+                    await self?.processDidTerminate(processIdentifier: processIdentifier)
+                }
+            }
+
+            transport = StdioTransport(
+                input: .init(rawValue: outputPipe.fileHandleForReading.fileDescriptor),
+                output: .init(rawValue: inputPipe.fileHandleForWriting.fileDescriptor)
+            )
+            self.process = process
+            self.inputPipe = inputPipe
+            self.outputPipe = outputPipe
+            self.errorPipe = errorPipe
+
+        case .streamableHTTP(let endpoint, let bearerToken):
+            let authorization = bearerToken.map { "Bearer \($0)" }
+            transport = HTTPClientTransport(
+                endpoint: endpoint,
+                streaming: true,
+                requestModifier: { request in
+                    guard let authorization else { return request }
+                    var request = request
+                    request.setValue(authorization, forHTTPHeaderField: "Authorization")
+                    return request
+                }
             )
         }
 
-        process.terminationHandler = { [weak self] terminatedProcess in
-            let processIdentifier = terminatedProcess.processIdentifier
-            Task {
-                await self?.processDidTerminate(processIdentifier: processIdentifier)
-            }
-        }
-
-        let transport = StdioTransport(
-            input: .init(rawValue: outputPipe.fileHandleForReading.fileDescriptor),
-            output: .init(rawValue: inputPipe.fileHandleForWriting.fileDescriptor)
-        )
         let clientVersion = Bundle(for: MCPClientPlugin.self)
-            .object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.1.0"
+            .object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.2.0"
         let client = Client(name: "TypeWhisper", version: clientVersion, title: "TypeWhisper MCP Client")
 
-        self.process = process
-        self.inputPipe = inputPipe
-        self.outputPipe = outputPipe
-        self.errorPipe = errorPipe
         self.transport = transport
         self.client = client
 
@@ -260,13 +312,14 @@ actor MCPServerSession {
                 try await withTimeout(
                     connectionTimeout,
                     operationName: MCPClientLocalization.string("MCP connection"),
-                    onTimeout: { await client.disconnect() }
+                    onTimeout: { await self.disconnectClient(client) }
                 ) {
                     _ = try await client.connect(transport: transport)
                 }
             } onCancel: {
-                Task { await client.disconnect() }
+                Task { await self.disconnectClient(client) }
             }
+            isConnected = true
             await client.onNotification(ToolListChangedNotification.self) { [weak self] _ in
                 await self?.markCatalogStale()
             }
@@ -331,12 +384,12 @@ actor MCPServerSession {
             try await withTimeout(
                 connectionTimeout,
                 operationName: MCPClientLocalization.string("MCP tool discovery"),
-                onTimeout: { await client.disconnect() }
+                onTimeout: { await self.disconnectClient(client) }
             ) {
                 try await self.refreshTools()
             }
         } onCancel: {
-            Task { await client.disconnect() }
+            Task { await self.disconnectClient(client) }
         }
     }
 
@@ -359,6 +412,7 @@ actor MCPServerSession {
 
     private func processDidTerminate(processIdentifier: Int32) async {
         guard process?.processIdentifier == processIdentifier else { return }
+        isConnected = false
         catalogIsStale = true
         if let client {
             await client.disconnect()
@@ -389,28 +443,35 @@ actor MCPServerSession {
         _ context: RequestContext<CallTool.Result>,
         client: Client
     ) async throws -> CallTool.Result {
-        let activeProcess = process
+        let canCancelRequest = isConnected
         return try await withTaskCancellationHandler {
             try await withTimeout(
                 toolCallTimeout,
                 operationName: MCPClientLocalization.string("MCP tool call"),
                 onTimeout: {
-                    if activeProcess?.isRunning == true {
+                    if canCancelRequest {
                         try? await client.cancelRequest(context.requestID, reason: "TypeWhisper tool-call timeout")
                     }
-                    await client.disconnect()
+                    await self.disconnectClient(client)
                 }
             ) {
                 try await context.value
             }
         } onCancel: {
             Task {
-                if activeProcess?.isRunning == true {
+                if canCancelRequest {
                     try? await client.cancelRequest(context.requestID, reason: "TypeWhisper action cancelled")
                 }
-                await client.disconnect()
+                await self.disconnectClient(client)
             }
         }
+    }
+
+    private func disconnectClient(_ client: Client) async {
+        if self.client === client {
+            isConnected = false
+        }
+        await client.disconnect()
     }
 
     private func withTimeout<T: Sendable>(

@@ -117,6 +117,11 @@ final class MCPClientPlugin: NSObject, AdditionalActionPluginsProviding, PluginS
         return host?.loadSecret(key: MCPServerConfiguration.secretStorageKey(serverID: serverID, environmentName: name)) ?? ""
     }
 
+    func bearerTokenValue(serverID: UUID) -> String {
+        let host = state.withLock { $0.host }
+        return host?.loadSecret(key: MCPServerConfiguration.bearerTokenStorageKey(serverID: serverID)) ?? ""
+    }
+
     func resolvedExecutable(for server: MCPServerConfiguration, secretValues: [String: String] = [:]) throws -> URL {
         var configuredEnvironment = server.environment
         for name in server.secretEnvironmentNames {
@@ -131,28 +136,50 @@ final class MCPClientPlugin: NSObject, AdditionalActionPluginsProviding, PluginS
         )
     }
 
-    func saveServer(_ draft: MCPServerConfiguration, secretValues: [String: String]) throws {
+    func resolvedEndpoint(for server: MCPServerConfiguration) throws -> URL {
+        try MCPHTTPEndpointResolver.resolve(server.endpoint)
+    }
+
+    func saveServer(
+        _ draft: MCPServerConfiguration,
+        secretValues: [String: String],
+        bearerToken: String? = nil
+    ) throws {
         try ensureConfigurationWritable()
         guard !draft.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             throw MCPClientError.invalidConfiguration(MCPClientLocalization.string("Enter a server name."))
         }
         guard draft.launchAcknowledged else {
-            throw MCPClientError.invalidConfiguration(
-                MCPClientLocalization.string("Acknowledge that TypeWhisper may launch this executable with your user permissions.")
-            )
+            let message = draft.transport == .stdio
+                ? MCPClientLocalization.string("Acknowledge that TypeWhisper may launch this executable with your user permissions.")
+                : MCPClientLocalization.string("Acknowledge that TypeWhisper may connect to this MCP server and send configured workflow data.")
+            throw MCPClientError.invalidConfiguration(message)
         }
-        _ = try resolvedExecutable(for: draft, secretValues: secretValues)
 
         let host = state.withLock { $0.host }
         guard let host else {
             throw MCPClientError.invalidConfiguration(MCPClientLocalization.string("MCP Client is not active."))
         }
-
         let oldServer = state.withLock { current in
             current.configuration.servers.first { $0.id == draft.id }
         }
         let oldSecretNames = Set(oldServer?.secretEnvironmentNames ?? [])
-        let newSecretNames = Set(draft.secretEnvironmentNames)
+        let newSecretNames = draft.transport == .stdio ? Set(draft.secretEnvironmentNames) : []
+
+        switch draft.transport {
+        case .stdio:
+            _ = try resolvedExecutable(for: draft, secretValues: secretValues)
+        case .streamableHTTP:
+            _ = try resolvedEndpoint(for: draft)
+            if draft.httpAuthentication == .bearerToken {
+                let effectiveToken = bearerToken
+                    ?? host.loadSecret(key: MCPServerConfiguration.bearerTokenStorageKey(serverID: draft.id))
+                    ?? ""
+                guard !effectiveToken.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                    throw MCPClientError.invalidConfiguration(MCPClientLocalization.string("Enter a bearer token."))
+                }
+            }
+        }
 
         for name in oldSecretNames.subtracting(newSecretNames) {
             try host.storeSecret(
@@ -169,11 +196,31 @@ final class MCPClientPlugin: NSObject, AdditionalActionPluginsProviding, PluginS
             }
         }
 
+        let bearerTokenKey = MCPServerConfiguration.bearerTokenStorageKey(serverID: draft.id)
+        if draft.transport == .streamableHTTP, draft.httpAuthentication == .bearerToken {
+            if let bearerToken {
+                try host.storeSecret(key: bearerTokenKey, value: bearerToken)
+            }
+        } else {
+            try host.storeSecret(key: bearerTokenKey, value: "")
+        }
+
         var normalizedServer = draft
         normalizedServer.name = draft.name.trimmingCharacters(in: .whitespacesAndNewlines)
-        normalizedServer.command = draft.command.trimmingCharacters(in: .whitespacesAndNewlines)
-        normalizedServer.environment = draft.environment.filter { !newSecretNames.contains($0.key) }
-        normalizedServer.secretEnvironmentNames = newSecretNames.sorted()
+        switch draft.transport {
+        case .stdio:
+            normalizedServer.command = draft.command.trimmingCharacters(in: .whitespacesAndNewlines)
+            normalizedServer.environment = draft.environment.filter { !newSecretNames.contains($0.key) }
+            normalizedServer.secretEnvironmentNames = newSecretNames.sorted()
+            normalizedServer.endpoint = ""
+            normalizedServer.httpAuthentication = .none
+        case .streamableHTTP:
+            normalizedServer.command = ""
+            normalizedServer.arguments = []
+            normalizedServer.environment = [:]
+            normalizedServer.secretEnvironmentNames = []
+            normalizedServer.endpoint = draft.endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
         normalizedServer.updatedAt = Date()
         let normalizedDraft = normalizedServer
 
@@ -209,6 +256,10 @@ final class MCPClientPlugin: NSObject, AdditionalActionPluginsProviding, PluginS
                     value: ""
                 )
             }
+            try? host.storeSecret(
+                key: MCPServerConfiguration.bearerTokenStorageKey(serverID: id),
+                value: ""
+            )
             persistConfiguration(using: host)
             host.notifyCapabilitiesChanged()
         }
@@ -241,18 +292,25 @@ final class MCPClientPlugin: NSObject, AdditionalActionPluginsProviding, PluginS
 
     func discoverTools(
         server draft: MCPServerConfiguration,
-        secretValues: [String: String]
+        secretValues: [String: String],
+        bearerToken: String? = nil
     ) async throws -> [MCPToolDescriptor] {
         guard draft.launchAcknowledged else {
-            throw MCPClientError.invalidConfiguration(
-                MCPClientLocalization.string("Acknowledge that TypeWhisper may launch this executable with your user permissions.")
-            )
+            let message = draft.transport == .stdio
+                ? MCPClientLocalization.string("Acknowledge that TypeWhisper may launch this executable with your user permissions.")
+                : MCPClientLocalization.string("Acknowledge that TypeWhisper may connect to this MCP server and send configured workflow data.")
+            throw MCPClientError.invalidConfiguration(message)
         }
         let host = state.withLock { $0.host }
         guard let host else {
             throw MCPClientError.invalidConfiguration(MCPClientLocalization.string("MCP Client is not active."))
         }
-        let server = try resolvedServer(configuration: draft, secretValues: secretValues, host: host)
+        let server = try resolvedServer(
+            configuration: draft,
+            secretValues: secretValues,
+            bearerToken: bearerToken,
+            host: host
+        )
         let session = MCPServerSession(resolvedServer: server)
         do {
             let tools = try await session.tools()
@@ -504,14 +562,33 @@ final class MCPClientPlugin: NSObject, AdditionalActionPluginsProviding, PluginS
             throw MCPClientError.invalidConfiguration(MCPClientLocalization.string("MCP Client is not active."))
         }
 
-        return try resolvedServer(configuration: server, secretValues: nil, host: host)
+        return try resolvedServer(configuration: server, secretValues: nil, bearerToken: nil, host: host)
     }
 
     private func resolvedServer(
         configuration server: MCPServerConfiguration,
         secretValues: [String: String]?,
+        bearerToken: String?,
         host: HostServices
     ) throws -> MCPResolvedServer {
+        if server.transport == .streamableHTTP {
+            let endpoint = try MCPHTTPEndpointResolver.resolve(server.endpoint)
+            let token: String?
+            switch server.httpAuthentication {
+            case .none:
+                token = nil
+            case .bearerToken:
+                let value = bearerToken
+                    ?? host.loadSecret(key: MCPServerConfiguration.bearerTokenStorageKey(serverID: server.id))
+                    ?? ""
+                guard !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                    throw MCPClientError.invalidConfiguration(MCPClientLocalization.string("Enter a bearer token."))
+                }
+                token = value
+            }
+            return MCPResolvedServer(configuration: server, endpoint: endpoint, bearerToken: token)
+        }
+
         let inherited = ProcessInfo.processInfo.environment
         let inheritedKeys = ["PATH", "HOME", "USER", "SHELL", "TMPDIR", "LANG"]
         var environment = Dictionary(uniqueKeysWithValues: inheritedKeys.compactMap { key in
@@ -599,11 +676,18 @@ final class MCPClientPlugin: NSObject, AdditionalActionPluginsProviding, PluginS
 
     private func secretValues(for server: MCPServerConfiguration, host: HostServices?) -> [String] {
         guard let host else { return [] }
-        return server.secretEnvironmentNames.compactMap { name in
+        var secrets = server.secretEnvironmentNames.compactMap { name in
             host.loadSecret(
                 key: MCPServerConfiguration.secretStorageKey(serverID: server.id, environmentName: name)
             )
         }.filter { !$0.isEmpty }
+        if server.transport == .streamableHTTP,
+           server.httpAuthentication == .bearerToken,
+           let bearerToken = host.loadSecret(key: MCPServerConfiguration.bearerTokenStorageKey(serverID: server.id)),
+           !bearerToken.isEmpty {
+            secrets.append(bearerToken)
+        }
+        return secrets
     }
 
     private func shouldAbortBatch(after error: Error) -> Bool {

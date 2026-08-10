@@ -57,7 +57,7 @@ struct MCPClientSettingsView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text("MCP Servers", bundle: bundle)
                         .font(.title2.weight(.semibold))
-                    Text("Configure local MCP processes. Commands are launched directly, never through a shell.", bundle: bundle)
+                    Text("Configure local stdio processes or remote Streamable HTTP endpoints.", bundle: bundle)
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -74,22 +74,29 @@ struct MCPClientSettingsView: View {
                 ContentUnavailableView(
                     String(localized: "No MCP Servers", bundle: bundle),
                     systemImage: "terminal",
-                    description: Text("Add a stdio server to discover its tools.", bundle: bundle)
+                    description: Text("Add a stdio or Streamable HTTP server to discover its tools.", bundle: bundle)
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 List(plugin.servers) { server in
                     HStack(spacing: 12) {
-                        Image(systemName: "terminal")
+                        Image(systemName: server.transport == .stdio ? "terminal" : "network")
                             .foregroundStyle(.secondary)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(server.name).font(.headline)
-                            Text(([server.command] + server.arguments).joined(separator: " "))
+                            Text(
+                                server.transport == .stdio
+                                    ? ([server.command] + server.arguments).joined(separator: " ")
+                                    : server.endpoint
+                            )
                                 .font(.system(.caption, design: .monospaced))
                                 .foregroundStyle(.secondary)
                                 .lineLimit(1)
                         }
                         Spacer()
+                        Text(server.transport.displayName)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                         Button(String(localized: "Edit", bundle: bundle)) {
                             serverEditor = server
                         }
@@ -256,9 +263,13 @@ private struct MCPServerEditorView: View {
     private let bundle = Bundle(for: MCPClientPlugin.self)
 
     @State private var name: String
+    @State private var transport: MCPServerTransport
     @State private var command: String
     @State private var arguments: [MCPEditableArgument]
     @State private var environment: [MCPEditableEnvironment]
+    @State private var endpoint: String
+    @State private var httpAuthentication: MCPHTTPAuthentication
+    @State private var bearerToken: String
     @State private var launchAcknowledged: Bool
     @State private var resolvedPath = ""
     @State private var tools: [MCPToolDescriptor] = []
@@ -270,6 +281,7 @@ private struct MCPServerEditorView: View {
         original = server
         self.onDone = onDone
         _name = State(initialValue: server.name)
+        _transport = State(initialValue: server.transport)
         _command = State(initialValue: server.command)
         _arguments = State(initialValue: server.arguments.map { MCPEditableArgument(value: $0) })
         let plainRows = server.environment.keys.sorted().map {
@@ -279,6 +291,9 @@ private struct MCPServerEditorView: View {
             MCPEditableEnvironment(name: $0, value: plugin.secretValue(serverID: server.id, name: $0), isSecret: true)
         }
         _environment = State(initialValue: plainRows + secretRows)
+        _endpoint = State(initialValue: server.endpoint)
+        _httpAuthentication = State(initialValue: server.httpAuthentication)
+        _bearerToken = State(initialValue: plugin.bearerTokenValue(serverID: server.id))
         _launchAcknowledged = State(initialValue: server.launchAcknowledged)
     }
 
@@ -303,100 +318,135 @@ private struct MCPServerEditorView: View {
             Form {
                 Section(String(localized: "Server", bundle: bundle)) {
                     TextField(String(localized: "Name", bundle: bundle), text: $name)
-                    TextField(String(localized: "Command", bundle: bundle), text: $command)
-                        .font(.system(.body, design: .monospaced))
-                    if !resolvedPath.isEmpty {
-                        LabeledContent(String(localized: "Resolved executable", bundle: bundle)) {
-                            Text(resolvedPath)
-                                .font(.system(.caption, design: .monospaced))
-                                .textSelection(.enabled)
+                    Picker(String(localized: "Transport", bundle: bundle), selection: $transport) {
+                        ForEach(MCPServerTransport.allCases) { transport in
+                            Text(transport.displayName).tag(transport)
+                        }
+                    }
+
+                    switch transport {
+                    case .stdio:
+                        TextField(String(localized: "Command", bundle: bundle), text: $command)
+                            .font(.system(.body, design: .monospaced))
+                        if !resolvedPath.isEmpty {
+                            LabeledContent(String(localized: "Resolved executable", bundle: bundle)) {
+                                Text(resolvedPath)
+                                    .font(.system(.caption, design: .monospaced))
+                                    .textSelection(.enabled)
+                            }
+                        }
+                    case .streamableHTTP:
+                        TextField(String(localized: "Endpoint URL", bundle: bundle), text: $endpoint)
+                            .font(.system(.body, design: .monospaced))
+                            .textContentType(.URL)
+                        Picker(String(localized: "Authentication", bundle: bundle), selection: $httpAuthentication) {
+                            ForEach(MCPHTTPAuthentication.allCases) { authentication in
+                                Text(authentication.displayName).tag(authentication)
+                            }
+                        }
+                        if httpAuthentication == .bearerToken {
+                            SecureField(String(localized: "Bearer token", bundle: bundle), text: $bearerToken)
+                                .textContentType(.password)
+                            Text("The bearer token is stored in the macOS Keychain and sent only in the Authorization header.", bundle: bundle)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }
 
-                Section(String(localized: "Arguments", bundle: bundle)) {
-                    ForEach($arguments) { $argument in
-                        HStack {
-                            TextField(String(localized: "Argument", bundle: bundle), text: $argument.value)
-                                .font(.system(.body, design: .monospaced))
-                            Button {
-                                moveArgument(id: argument.id, offset: -1)
-                            } label: {
-                                Image(systemName: "arrow.up")
+                if transport == .stdio {
+                    Section(String(localized: "Arguments", bundle: bundle)) {
+                        ForEach($arguments) { $argument in
+                            HStack {
+                                TextField(String(localized: "Argument", bundle: bundle), text: $argument.value)
+                                    .font(.system(.body, design: .monospaced))
+                                Button {
+                                    moveArgument(id: argument.id, offset: -1)
+                                } label: {
+                                    Image(systemName: "arrow.up")
+                                }
+                                .buttonStyle(.borderless)
+                                .disabled(arguments.first?.id == argument.id)
+                                .accessibilityLabel(Text("Move argument up", bundle: bundle))
+                                Button {
+                                    moveArgument(id: argument.id, offset: 1)
+                                } label: {
+                                    Image(systemName: "arrow.down")
+                                }
+                                .buttonStyle(.borderless)
+                                .disabled(arguments.last?.id == argument.id)
+                                .accessibilityLabel(Text("Move argument down", bundle: bundle))
+                                Button(role: .destructive) {
+                                    arguments.removeAll { $0.id == argument.id }
+                                } label: {
+                                    Image(systemName: "minus.circle")
+                                }
+                                .buttonStyle(.borderless)
+                                .accessibilityLabel(Text("Remove argument", bundle: bundle))
                             }
-                            .buttonStyle(.borderless)
-                            .disabled(arguments.first?.id == argument.id)
-                            .accessibilityLabel(Text("Move argument up", bundle: bundle))
-                            Button {
-                                moveArgument(id: argument.id, offset: 1)
-                            } label: {
-                                Image(systemName: "arrow.down")
-                            }
-                            .buttonStyle(.borderless)
-                            .disabled(arguments.last?.id == argument.id)
-                            .accessibilityLabel(Text("Move argument down", bundle: bundle))
-                            Button(role: .destructive) {
-                                arguments.removeAll { $0.id == argument.id }
-                            } label: {
-                                Image(systemName: "minus.circle")
-                            }
-                            .buttonStyle(.borderless)
-                            .accessibilityLabel(Text("Remove argument", bundle: bundle))
                         }
+                        Button {
+                            arguments.append(MCPEditableArgument(value: ""))
+                        } label: {
+                            Label(String(localized: "Add Argument", bundle: bundle), systemImage: "plus")
+                        }
+                        .accessibilityLabel(Text("Add argument", bundle: bundle))
                     }
-                    Button {
-                        arguments.append(MCPEditableArgument(value: ""))
-                    } label: {
-                        Label(String(localized: "Add Argument", bundle: bundle), systemImage: "plus")
-                    }
-                    .accessibilityLabel(Text("Add argument", bundle: bundle))
-                }
 
-                Section(String(localized: "Environment", bundle: bundle)) {
-                    ForEach($environment) { $variable in
-                        HStack {
-                            TextField("NAME", text: $variable.name)
-                                .font(.system(.body, design: .monospaced))
-                                .frame(minWidth: 120)
-                            if variable.isSecret {
-                                SecureField(String(localized: "Value", bundle: bundle), text: $variable.value)
-                            } else {
-                                TextField(String(localized: "Value", bundle: bundle), text: $variable.value)
+                    Section(String(localized: "Environment", bundle: bundle)) {
+                        ForEach($environment) { $variable in
+                            HStack {
+                                TextField("NAME", text: $variable.name)
+                                    .font(.system(.body, design: .monospaced))
+                                    .frame(minWidth: 120)
+                                if variable.isSecret {
+                                    SecureField(String(localized: "Value", bundle: bundle), text: $variable.value)
+                                } else {
+                                    TextField(String(localized: "Value", bundle: bundle), text: $variable.value)
+                                }
+                                Toggle(String(localized: "Secret", bundle: bundle), isOn: $variable.isSecret)
+                                    .toggleStyle(.checkbox)
+                                    .accessibilityLabel(Text("Store environment value in Keychain", bundle: bundle))
+                                Button(role: .destructive) {
+                                    environment.removeAll { $0.id == variable.id }
+                                } label: {
+                                    Image(systemName: "minus.circle")
+                                }
+                                .buttonStyle(.borderless)
+                                .accessibilityLabel(Text("Remove environment value", bundle: bundle))
                             }
-                            Toggle(String(localized: "Secret", bundle: bundle), isOn: $variable.isSecret)
-                                .toggleStyle(.checkbox)
-                                .accessibilityLabel(Text("Store environment value in Keychain", bundle: bundle))
-                            Button(role: .destructive) {
-                                environment.removeAll { $0.id == variable.id }
-                            } label: {
-                                Image(systemName: "minus.circle")
-                            }
-                            .buttonStyle(.borderless)
-                            .accessibilityLabel(Text("Remove environment value", bundle: bundle))
                         }
-                    }
-                    Button {
-                        environment.append(MCPEditableEnvironment(name: "", value: "", isSecret: false))
-                    } label: {
-                        Label(String(localized: "Add Environment Value", bundle: bundle), systemImage: "plus")
+                        Button {
+                            environment.append(MCPEditableEnvironment(name: "", value: "", isSecret: false))
+                        } label: {
+                            Label(String(localized: "Add Environment Value", bundle: bundle), systemImage: "plus")
+                        }
                     }
                 }
 
                 Section(String(localized: "Authorization", bundle: bundle)) {
                     Toggle(isOn: $launchAcknowledged) {
-                        Text(
-                            String(
-                                format: String(
-                                    localized: "I understand that TypeWhisper will launch %@ with my user permissions.",
-                                    bundle: bundle
-                                ),
-                                resolvedPath.isEmpty ? command : resolvedPath
+                        if transport == .stdio {
+                            Text(
+                                String(
+                                    format: String(
+                                        localized: "I understand that TypeWhisper will launch %@ with my user permissions.",
+                                        bundle: bundle
+                                    ),
+                                    resolvedPath.isEmpty ? command : resolvedPath
+                                )
                             )
-                        )
+                        } else {
+                            Text("I understand that TypeWhisper will connect to this MCP server and may send configured workflow data.", bundle: bundle)
+                        }
                     }
                     .toggleStyle(.checkbox)
 
-                    Text("The command is not interpreted by a shell. The process may still access files and services available to your macOS user.", bundle: bundle)
+                    Text(
+                        transport == .stdio
+                            ? String(localized: "The command is not interpreted by a shell. The process may still access files and services available to your macOS user.", bundle: bundle)
+                            : String(localized: "Use only an MCP endpoint you trust. Tool calls can include text and context mapped by your workflow action.", bundle: bundle)
+                    )
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -443,12 +493,31 @@ private struct MCPServerEditorView: View {
         }
         .frame(minWidth: 680, minHeight: 560)
         .onAppear(perform: updateResolvedPath)
-        .onChange(of: command) { _, _ in updateResolvedPath() }
+        .onChange(of: command) { oldValue, newValue in
+            if oldValue != newValue {
+                launchAcknowledged = false
+                tools = []
+            }
+            updateResolvedPath()
+        }
+        .onChange(of: endpoint) { oldValue, newValue in
+            if oldValue != newValue {
+                launchAcknowledged = false
+                tools = []
+            }
+        }
         .onChange(of: environment.map { "\($0.name)=\($0.value)" }) { _, _ in updateResolvedPath() }
+        .onChange(of: transport) { _, _ in
+            launchAcknowledged = false
+            tools = []
+            updateResolvedPath()
+        }
     }
 
-    private func makeDraft() throws -> (MCPServerConfiguration, [String: String]) {
-        let rows = environment.filter { !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    private func makeDraft() throws -> (MCPServerConfiguration, [String: String], String?) {
+        let rows = transport == .stdio
+            ? environment.filter { !$0.name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+            : []
         let names = rows.map { $0.name.trimmingCharacters(in: .whitespacesAndNewlines) }
         guard Set(names).count == names.count else {
             throw MCPClientError.invalidConfiguration(
@@ -469,22 +538,28 @@ private struct MCPServerEditorView: View {
         let draft = MCPServerConfiguration(
             id: original.id,
             name: name,
+            transport: transport,
             command: command,
             arguments: arguments.map(\.value).filter { !$0.isEmpty },
             environment: plain,
             secretEnvironmentNames: secrets.keys.sorted(),
+            endpoint: endpoint,
+            httpAuthentication: httpAuthentication,
             launchAcknowledged: launchAcknowledged,
             revision: original.revision,
             createdAt: original.createdAt,
             updatedAt: original.updatedAt
         )
-        return (draft, secrets)
+        let token = transport == .streamableHTTP && httpAuthentication == .bearerToken
+            ? bearerToken
+            : nil
+        return (draft, secrets, token)
     }
 
     private func save() {
         do {
-            let (draft, secrets) = try makeDraft()
-            try plugin.saveServer(draft, secretValues: secrets)
+            let (draft, secrets, token) = try makeDraft()
+            try plugin.saveServer(draft, secretValues: secrets, bearerToken: token)
             onDone()
         } catch {
             errorMessage = error.localizedDescription
@@ -493,12 +568,16 @@ private struct MCPServerEditorView: View {
 
     private func connectAndLoadTools() {
         do {
-            let (draft, secrets) = try makeDraft()
+            let (draft, secrets, token) = try makeDraft()
             isConnecting = true
             errorMessage = nil
             Task {
                 do {
-                    let loaded = try await plugin.discoverTools(server: draft, secretValues: secrets)
+                    let loaded = try await plugin.discoverTools(
+                        server: draft,
+                        secretValues: secrets,
+                        bearerToken: token
+                    )
                     await MainActor.run {
                         tools = loaded
                         isConnecting = false
@@ -517,8 +596,12 @@ private struct MCPServerEditorView: View {
     }
 
     private func updateResolvedPath() {
+        guard transport == .stdio else {
+            resolvedPath = ""
+            return
+        }
         do {
-            let (draft, secrets) = try makeDraft()
+            let (draft, secrets, _) = try makeDraft()
             resolvedPath = try plugin.resolvedExecutable(for: draft, secretValues: secrets).path
         } catch {
             resolvedPath = ""

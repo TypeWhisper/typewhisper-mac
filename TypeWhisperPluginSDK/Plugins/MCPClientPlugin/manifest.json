@@ -1,16 +1,16 @@
 {
     "id": "com.typewhisper.mcp-client",
     "name": "MCP Client",
-    "version": "0.1.0",
+    "version": "0.2.0",
     "minHostVersion": "1.6.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
     "author": "TypeWhisper",
-    "description": "Connect TypeWhisper workflows to local MCP tools over stdio.",
+    "description": "Connect TypeWhisper workflows to local or remote MCP tools over stdio or Streamable HTTP.",
     "descriptions": {
-        "de": "TypeWhisper-Workflows über stdio mit lokalen MCP-Tools verbinden.",
-        "ja": "TypeWhisperのワークフローをstdio経由でローカルMCPツールに接続します。",
-        "zh-Hans": "通过 stdio 将 TypeWhisper 工作流连接到本地 MCP 工具。"
+        "de": "TypeWhisper-Workflows über stdio oder Streamable HTTP mit lokalen oder entfernten MCP-Tools verbinden.",
+        "ja": "TypeWhisperのワークフローをstdioまたはStreamable HTTP経由でローカルまたはリモートのMCPツールに接続します。",
+        "zh-Hans": "通过 stdio 或 Streamable HTTP 将 TypeWhisper 工作流连接到本地或远程 MCP 工具。"
     },
     "category": "action",
     "iconSystemName": "point.3.connected.trianglepath.dotted",

@@ -21,12 +21,12 @@ final class MCPClientPluginTests: XCTestCase {
         readOnlyHint: false
     )
 
-    func testManifestDeclaresInitialVersionAndHostBoundary() throws {
+    func testManifestDeclaresStreamableHTTPVersionAndHostBoundary() throws {
         let url = Self.pluginRoot.appendingPathComponent("manifest.json")
         let manifest = try JSONDecoder().decode(PluginManifest.self, from: Data(contentsOf: url))
 
         XCTAssertEqual(manifest.id, "com.typewhisper.mcp-client")
-        XCTAssertEqual(manifest.version, "0.1.0")
+        XCTAssertEqual(manifest.version, "0.2.0")
         XCTAssertEqual(manifest.minHostVersion, "1.6.0")
         XCTAssertEqual(manifest.sdkCompatibilityVersion, "v1")
         XCTAssertEqual(manifest.category, "action")
@@ -35,7 +35,10 @@ final class MCPClientPluginTests: XCTestCase {
             JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any]
         )
         let descriptions = try XCTUnwrap(object["descriptions"] as? [String: String])
-        XCTAssertEqual(descriptions["zh-Hans"], "通过 stdio 将 TypeWhisper 工作流连接到本地 MCP 工具。")
+        XCTAssertEqual(
+            descriptions["zh-Hans"],
+            "通过 stdio 或 Streamable HTTP 将 TypeWhisper 工作流连接到本地或远程 MCP 工具。"
+        )
     }
 
     func testUnreadableStoredConfigurationIsNeverOverwritten() throws {
@@ -86,6 +89,70 @@ final class MCPClientPluginTests: XCTestCase {
 
         plugin.removeServer(id: server.id)
         XCTAssertEqual(host.loadSecret(key: secretKey), "")
+    }
+
+    func testBearerTokenStaysOutOfStoredConfigurationAndIsClearedWithServer() throws {
+        let host = try PluginTestHostServices()
+        let plugin = MCPClientPlugin()
+        plugin.activate(host: host)
+        let token = "http-super-secret-token"
+        let server = MCPServerConfiguration(
+            name: "TaskFox",
+            transport: .streamableHTTP,
+            endpoint: "https://taskfox.example/mcp",
+            httpAuthentication: .bearerToken,
+            launchAcknowledged: true
+        )
+
+        try plugin.saveServer(server, secretValues: [:], bearerToken: token)
+
+        let secretKey = MCPServerConfiguration.bearerTokenStorageKey(serverID: server.id)
+        XCTAssertEqual(host.loadSecret(key: secretKey), token)
+        let data = try XCTUnwrap(host.userDefault(forKey: MCPClientConstants.configurationDefaultsKey) as? Data)
+        XCTAssertFalse(try XCTUnwrap(String(data: data, encoding: .utf8)).contains(token))
+        let stored = try JSONDecoder().decode(MCPStoredConfiguration.self, from: data)
+        XCTAssertEqual(stored.servers.first?.transport, .streamableHTTP)
+        XCTAssertEqual(stored.servers.first?.httpAuthentication, .bearerToken)
+        XCTAssertEqual(stored.servers.first?.endpoint, "https://taskfox.example/mcp")
+
+        plugin.removeServer(id: server.id)
+        XCTAssertEqual(host.loadSecret(key: secretKey), "")
+    }
+
+    func testExistingStdioConfigurationDecodesWithoutTransportFields() throws {
+        let original = MCPStoredConfiguration(
+            servers: [MCPServerConfiguration(name: "Tasks", command: "/usr/bin/env")],
+            actions: []
+        )
+        let encoded = try JSONEncoder().encode(original)
+        var object = try XCTUnwrap(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        var servers = try XCTUnwrap(object["servers"] as? [[String: Any]])
+        servers[0].removeValue(forKey: "transport")
+        servers[0].removeValue(forKey: "endpoint")
+        servers[0].removeValue(forKey: "httpAuthentication")
+        object["servers"] = servers
+
+        let decoded = try JSONDecoder().decode(
+            MCPStoredConfiguration.self,
+            from: JSONSerialization.data(withJSONObject: object)
+        )
+
+        XCTAssertEqual(decoded.servers.first?.transport, .stdio)
+        XCTAssertEqual(decoded.servers.first?.endpoint, "")
+        XCTAssertEqual(decoded.servers.first?.httpAuthentication, MCPHTTPAuthentication.none)
+    }
+
+    func testHTTPEndpointValidationAcceptsHTTPAndHTTPSOnly() throws {
+        XCTAssertEqual(
+            try MCPHTTPEndpointResolver.resolve(" https://taskfox.example/mcp ").absoluteString,
+            "https://taskfox.example/mcp"
+        )
+        XCTAssertEqual(
+            try MCPHTTPEndpointResolver.resolve("http://127.0.0.1:8080/mcp").absoluteString,
+            "http://127.0.0.1:8080/mcp"
+        )
+        XCTAssertThrowsError(try MCPHTTPEndpointResolver.resolve("ftp://taskfox.example/mcp"))
+        XCTAssertThrowsError(try MCPHTTPEndpointResolver.resolve("https://token@taskfox.example/mcp"))
     }
 
     func testConfiguredActionsKeepStableIDsAcrossEditsAndNotifyHost() throws {
@@ -497,6 +564,48 @@ final class MCPClientPluginTests: XCTestCase {
         let callCount = try String(contentsOf: counter, encoding: .utf8)
             .split(separator: "\n").count
         XCTAssertEqual(callCount, 2, "A tool error must not be retried")
+    }
+
+    func testStreamableHTTPContractSupportsNoAuthenticationAndBearerToken() async throws {
+        for token in [nil, "fixture-bearer-token"] as [String?] {
+            let fixture = try await Self.startHTTPFixture(expectedToken: token)
+            defer { Self.stopHTTPFixture(fixture) }
+            let configuration = MCPServerConfiguration(
+                name: "HTTP Fixture",
+                transport: .streamableHTTP,
+                endpoint: fixture.endpoint.absoluteString,
+                httpAuthentication: token == nil ? .none : .bearerToken,
+                launchAcknowledged: true
+            )
+            let server = MCPResolvedServer(
+                configuration: configuration,
+                endpoint: fixture.endpoint,
+                bearerToken: token
+            )
+            let runtime = MCPClientRuntime()
+
+            let tools = try await runtime.tools(for: server)
+            XCTAssertEqual(tools.map(\.name), ["create_task"])
+            let result = try await runtime.call(
+                server: server,
+                toolName: "create_task",
+                expectedSchemaFingerprint: try XCTUnwrap(tools.first).schemaFingerprint,
+                arguments: ["title": .string(token == nil ? "without-auth" : "with-bearer")]
+            )
+            XCTAssertEqual(
+                result.message,
+                token == nil ? "created:without-auth" : "created:with-bearer"
+            )
+            await runtime.closeAll()
+
+            let methods = try String(contentsOf: fixture.counter, encoding: .utf8)
+                .split(separator: "\n")
+                .map(String.init)
+            XCTAssertTrue(methods.contains("initialize"))
+            XCTAssertTrue(methods.contains("notifications/initialized"))
+            XCTAssertTrue(methods.contains("tools/list"))
+            XCTAssertTrue(methods.contains("tools/call"))
+        }
     }
 
     func testDraftDiscoveryDoesNotPersistServerOrSecrets() async throws {
@@ -932,6 +1041,61 @@ final class MCPClientPluginTests: XCTestCase {
         let counter = FileManager.default.temporaryDirectory
             .appendingPathComponent("MCPClientPluginTests-\(UUID().uuidString).count")
         return (pythonPath, script, counter)
+    }
+
+    private struct HTTPFixture {
+        let process: Process
+        let endpoint: URL
+        let portFile: URL
+        let counter: URL
+    }
+
+    private static func startHTTPFixture(expectedToken: String?) async throws -> HTTPFixture {
+        let pythonPath = "/usr/bin/python3"
+        guard FileManager.default.isExecutableFile(atPath: pythonPath) else {
+            throw XCTSkip("System Python is unavailable")
+        }
+        let script = try XCTUnwrap(
+            Bundle.module.url(forResource: "mcp_http_fixture", withExtension: "py", subdirectory: "Fixtures")
+        )
+        let identifier = UUID().uuidString
+        let portFile = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MCPClientPluginTests-\(identifier).port")
+        let counter = FileManager.default.temporaryDirectory
+            .appendingPathComponent("MCPClientPluginTests-\(identifier).http-count")
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: pythonPath)
+        process.arguments = [script.path, portFile.path, counter.path, expectedToken ?? ""]
+        process.standardOutput = FileHandle.nullDevice
+        process.standardError = FileHandle.nullDevice
+        try process.run()
+
+        for _ in 0..<200 {
+            if let value = try? String(contentsOf: portFile, encoding: .utf8),
+               let port = Int(value),
+               let endpoint = URL(string: "http://127.0.0.1:\(port)/mcp") {
+                return HTTPFixture(process: process, endpoint: endpoint, portFile: portFile, counter: counter)
+            }
+            guard process.isRunning else {
+                throw MCPClientError.invalidConfiguration("HTTP fixture stopped before publishing its port.")
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        if process.isRunning {
+            process.terminate()
+            process.waitUntilExit()
+        }
+        throw MCPClientError.timedOut("HTTP fixture startup")
+    }
+
+    private static func stopHTTPFixture(_ fixture: HTTPFixture) {
+        if fixture.process.isRunning {
+            fixture.process.terminate()
+            fixture.process.waitUntilExit()
+        }
+        try? FileManager.default.removeItem(at: fixture.portFile)
+        try? FileManager.default.removeItem(at: fixture.counter)
     }
 
     private static func resolvedFixtureServer(

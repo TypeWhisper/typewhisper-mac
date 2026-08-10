@@ -246,13 +246,48 @@ struct MCPToolDescriptor: Codable, Equatable, Identifiable, Sendable {
     }
 }
 
+enum MCPServerTransport: String, Codable, CaseIterable, Identifiable, Sendable {
+    case stdio
+    case streamableHTTP
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .stdio:
+            MCPClientLocalization.string("stdio")
+        case .streamableHTTP:
+            MCPClientLocalization.string("Streamable HTTP")
+        }
+    }
+}
+
+enum MCPHTTPAuthentication: String, Codable, CaseIterable, Identifiable, Sendable {
+    case none
+    case bearerToken
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .none:
+            MCPClientLocalization.string("None")
+        case .bearerToken:
+            MCPClientLocalization.string("Bearer token")
+        }
+    }
+}
+
 struct MCPServerConfiguration: Codable, Equatable, Identifiable, Sendable {
     var id: UUID
     var name: String
+    var transport: MCPServerTransport
     var command: String
     var arguments: [String]
     var environment: [String: String]
     var secretEnvironmentNames: [String]
+    var endpoint: String
+    var httpAuthentication: MCPHTTPAuthentication
     var launchAcknowledged: Bool
     var revision: Int
     var createdAt: Date
@@ -261,10 +296,13 @@ struct MCPServerConfiguration: Codable, Equatable, Identifiable, Sendable {
     init(
         id: UUID = UUID(),
         name: String,
-        command: String,
+        transport: MCPServerTransport = .stdio,
+        command: String = "",
         arguments: [String] = [],
         environment: [String: String] = [:],
         secretEnvironmentNames: [String] = [],
+        endpoint: String = "",
+        httpAuthentication: MCPHTTPAuthentication = .none,
         launchAcknowledged: Bool = false,
         revision: Int = 1,
         createdAt: Date = Date(),
@@ -272,18 +310,58 @@ struct MCPServerConfiguration: Codable, Equatable, Identifiable, Sendable {
     ) {
         self.id = id
         self.name = name
+        self.transport = transport
         self.command = command
         self.arguments = arguments
         self.environment = environment
         self.secretEnvironmentNames = secretEnvironmentNames.sorted()
+        self.endpoint = endpoint
+        self.httpAuthentication = httpAuthentication
         self.launchAcknowledged = launchAcknowledged
         self.revision = revision
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
 
+    private enum CodingKeys: String, CodingKey {
+        case id
+        case name
+        case transport
+        case command
+        case arguments
+        case environment
+        case secretEnvironmentNames
+        case endpoint
+        case httpAuthentication
+        case launchAcknowledged
+        case revision
+        case createdAt
+        case updatedAt
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        transport = try container.decodeIfPresent(MCPServerTransport.self, forKey: .transport) ?? .stdio
+        command = try container.decodeIfPresent(String.self, forKey: .command) ?? ""
+        arguments = try container.decodeIfPresent([String].self, forKey: .arguments) ?? []
+        environment = try container.decodeIfPresent([String: String].self, forKey: .environment) ?? [:]
+        secretEnvironmentNames = try container.decodeIfPresent([String].self, forKey: .secretEnvironmentNames) ?? []
+        endpoint = try container.decodeIfPresent(String.self, forKey: .endpoint) ?? ""
+        httpAuthentication = try container.decodeIfPresent(MCPHTTPAuthentication.self, forKey: .httpAuthentication) ?? .none
+        launchAcknowledged = try container.decodeIfPresent(Bool.self, forKey: .launchAcknowledged) ?? false
+        revision = try container.decodeIfPresent(Int.self, forKey: .revision) ?? 1
+        createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
+        updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? createdAt
+    }
+
     static func secretStorageKey(serverID: UUID, environmentName: String) -> String {
         "server.\(serverID.uuidString.lowercased()).environment.\(environmentName)"
+    }
+
+    static func bearerTokenStorageKey(serverID: UUID) -> String {
+        "server.\(serverID.uuidString.lowercased()).http.bearer-token"
     }
 }
 
@@ -439,6 +517,24 @@ enum MCPExecutableResolver {
         }
 
         throw MCPClientError.executableNotFound(trimmed)
+    }
+}
+
+enum MCPHTTPEndpointResolver {
+    static func resolve(_ endpoint: String) throws -> URL {
+        let trimmed = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let components = URLComponents(string: trimmed),
+              let scheme = components.scheme?.lowercased(),
+              ["http", "https"].contains(scheme),
+              components.host?.isEmpty == false,
+              components.user == nil,
+              components.password == nil,
+              let url = components.url else {
+            throw MCPClientError.invalidConfiguration(
+                MCPClientLocalization.string("Enter a valid MCP server URL using HTTP or HTTPS.")
+            )
+        }
+        return url
     }
 }
 
