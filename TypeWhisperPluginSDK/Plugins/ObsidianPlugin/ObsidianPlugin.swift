@@ -522,9 +522,29 @@ final class ObsidianPlugin: NSObject, ActionPlugin, @unchecked Sendable {
     }
 
     private func isInsideConfiguredVault(_ path: String) -> Bool {
-        let vaultURL = URL(fileURLWithPath: _vaultPath, isDirectory: true).standardizedFileURL
-        let noteURL = URL(fileURLWithPath: path, isDirectory: false).standardizedFileURL
-        return noteURL.path.hasPrefix(vaultURL.path + "/") && noteURL.pathExtension.lowercased() == "md"
+        guard !_vaultPath.isEmpty else { return false }
+        let vaultURL = URL(fileURLWithPath: _vaultPath, isDirectory: true)
+            .resolvingSymlinksInPath()
+            .standardizedFileURL
+        let noteURL = URL(fileURLWithPath: path, isDirectory: false)
+            .resolvingSymlinksInPath()
+            .standardizedFileURL
+        let vaultComponents = vaultURL.pathComponents
+        let noteComponents = noteURL.pathComponents
+        guard noteComponents.count > vaultComponents.count,
+              noteURL.pathExtension.compare("md", options: .caseInsensitive) == .orderedSame else {
+            return false
+        }
+
+        let volumeIsCaseSensitive = (try? vaultURL.resourceValues(
+            forKeys: [.volumeSupportsCaseSensitiveNamesKey]
+        ).volumeSupportsCaseSensitiveNames) ?? true
+        return zip(vaultComponents, noteComponents).allSatisfy { vaultComponent, noteComponent in
+            if volumeIsCaseSensitive {
+                return vaultComponent == noteComponent
+            }
+            return vaultComponent.compare(noteComponent, options: .caseInsensitive) == .orderedSame
+        }
     }
 
     private func uniquePath(for path: String) -> String {

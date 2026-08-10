@@ -471,6 +471,103 @@ final class ObsidianPluginTests: XCTestCase {
         plugin.deactivate()
     }
 
+    func testLiveSyncRejectsPersistedEntryThroughSymlinkOutsideConfiguredVault() async throws {
+        let vaultURL = try Self.makeTemporaryDirectory(prefix: "ObsidianVaultContainment")
+        let outsideURL = try Self.makeTemporaryDirectory(prefix: "ObsidianOutsideVault")
+        defer {
+            try? FileManager.default.removeItem(at: vaultURL)
+            try? FileManager.default.removeItem(at: outsideURL)
+        }
+        let outsideNoteURL = outsideURL.appendingPathComponent("outside.md")
+        try "Original outside content".write(to: outsideNoteURL, atomically: true, encoding: .utf8)
+        let symlinkURL = vaultURL.appendingPathComponent("linked-outside", isDirectory: true)
+        try FileManager.default.createSymbolicLink(at: symlinkURL, withDestinationURL: outsideURL)
+        let persistedNoteURL = symlinkURL.appendingPathComponent("outside.md")
+        let timestamp = Date()
+        let storedEntry = StoredLiveSyncEntry(
+            path: persistedNoteURL.path,
+            context: Self.storedNoteContext(timestamp: timestamp),
+            awaitingCompletion: false
+        )
+        let eventBus = PluginTestEventBus()
+        let host = try PluginTestHostServices(
+            defaults: [
+                "vaultPath": vaultURL.path,
+                "liveSyncEnabled": true,
+                "liveSyncEntries": try JSONEncoder().encode([
+                    Self.liveSyncKey(for: timestamp): storedEntry,
+                ]),
+            ],
+            eventBus: eventBus
+        )
+        let plugin = ObsidianPlugin()
+        plugin.activate(host: host)
+
+        await eventBus.emit(try Self.historyUpdateEvent(
+            id: UUID(),
+            timestamp: timestamp,
+            rawText: "Raw text",
+            finalText: "Changed content",
+            language: "en",
+            engineUsed: "test",
+            modelUsed: nil,
+            durationSeconds: 1,
+            appName: "Notes",
+            bundleIdentifier: "com.apple.Notes",
+            pipelineSteps: []
+        ))
+
+        XCTAssertEqual(try String(contentsOf: outsideNoteURL, encoding: .utf8), "Original outside content")
+        let persistedData = try XCTUnwrap(host.userDefault(forKey: "liveSyncEntries") as? Data)
+        XCTAssertTrue(try JSONDecoder().decode([String: StoredLiveSyncEntry].self, from: persistedData).isEmpty)
+        plugin.deactivate()
+    }
+
+    func testDailyNoteModeIgnoresHistoryLiveSyncEvents() async throws {
+        let vaultURL = try Self.makeTemporaryDirectory(prefix: "ObsidianVaultDailyGuard")
+        defer { try? FileManager.default.removeItem(at: vaultURL) }
+        let noteURL = vaultURL.appendingPathComponent("tracked.md")
+        try "Original daily content".write(to: noteURL, atomically: true, encoding: .utf8)
+        let timestamp = Date()
+        let storedEntry = StoredLiveSyncEntry(
+            path: noteURL.path,
+            context: Self.storedNoteContext(timestamp: timestamp),
+            awaitingCompletion: false
+        )
+        let eventBus = PluginTestEventBus()
+        let host = try PluginTestHostServices(
+            defaults: [
+                "vaultPath": vaultURL.path,
+                "dailyNoteEnabled": true,
+                "liveSyncEnabled": true,
+                "liveSyncEntries": try JSONEncoder().encode([
+                    Self.liveSyncKey(for: timestamp): storedEntry,
+                ]),
+            ],
+            eventBus: eventBus
+        )
+        let plugin = ObsidianPlugin()
+        plugin.activate(host: host)
+
+        await eventBus.emit(try Self.historyUpdateEvent(
+            id: UUID(),
+            timestamp: timestamp,
+            rawText: "Raw text",
+            finalText: "Changed content",
+            language: "en",
+            engineUsed: "test",
+            modelUsed: nil,
+            durationSeconds: 1,
+            appName: "Notes",
+            bundleIdentifier: "com.apple.Notes",
+            pipelineSteps: []
+        ))
+
+        XCTAssertEqual(try String(contentsOf: noteURL, encoding: .utf8), "Original daily content")
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: vaultURL.path), ["tracked.md"])
+        plugin.deactivate()
+    }
+
     func testActionNameMatchesWorkflowInstructionTarget() {
         let plugin = ObsidianPlugin()
 
@@ -542,6 +639,26 @@ final class ObsidianPluginTests: XCTestCase {
             appName: appName,
             bundleIdentifier: bundleIdentifier
         ))
+    }
+
+    private static func storedNoteContext(timestamp: Date) -> StoredNoteContext {
+        StoredNoteContext(
+            timestamp: timestamp,
+            rawText: "Raw text",
+            finalText: "Final text",
+            appName: "Notes",
+            bundleIdentifier: "com.apple.Notes",
+            url: nil,
+            language: "en",
+            engineUsed: "test",
+            modelUsed: nil,
+            durationSeconds: 1,
+            pipelineSteps: []
+        )
+    }
+
+    private static func liveSyncKey(for timestamp: Date) -> String {
+        String(timestamp.timeIntervalSinceReferenceDate.bitPattern, radix: 16)
     }
 
     private static func makeTemporaryDirectory(prefix: String) throws -> URL {
