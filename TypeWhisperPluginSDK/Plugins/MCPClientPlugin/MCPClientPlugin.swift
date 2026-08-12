@@ -267,10 +267,13 @@ final class MCPClientPlugin: NSObject, AdditionalActionPluginsProviding, PluginS
         Task { await runtime.invalidate(serverID: id) }
     }
 
-    func discoverTools(serverID: UUID) async throws -> [MCPToolDescriptor] {
+    func discoverTools(
+        serverID: UUID,
+        forceRefresh: Bool = false
+    ) async throws -> [MCPToolDescriptor] {
         let server = try resolvedServer(id: serverID)
         do {
-            let tools = try await runtime.tools(for: server)
+            let tools = try await runtime.tools(for: server, forceRefresh: forceRefresh)
             recordActivity(
                 serverName: server.configuration.name,
                 actionName: nil,

@@ -26,7 +26,7 @@ final class MCPClientPluginTests: XCTestCase {
         let manifest = try JSONDecoder().decode(PluginManifest.self, from: Data(contentsOf: url))
 
         XCTAssertEqual(manifest.id, "com.typewhisper.mcp-client")
-        XCTAssertEqual(manifest.version, "0.2.0")
+        XCTAssertEqual(manifest.version, "0.2.1")
         XCTAssertEqual(manifest.minHostVersion, "1.6.0")
         XCTAssertEqual(manifest.sdkCompatibilityVersion, "v1")
         XCTAssertEqual(manifest.category, "action")
@@ -855,6 +855,34 @@ final class MCPClientPluginTests: XCTestCase {
         XCTAssertEqual(refreshed.first?.description, "Create a fixture task version 2")
         XCTAssertEqual(try Self.requestCount(at: fixture.counter), 2)
         await session.close()
+    }
+
+    func testForcedDiscoveryRefreshesCachedCatalogWithoutListChangedNotification() async throws {
+        let fixture = try Self.fixtureResources()
+        defer { try? FileManager.default.removeItem(at: fixture.counter) }
+        let configuration = MCPServerConfiguration(
+            name: "Fixture",
+            command: fixture.pythonPath,
+            arguments: [fixture.script.path, fixture.counter.path, "count-connection"],
+            launchAcknowledged: true
+        )
+        let server = MCPResolvedServer(
+            configuration: configuration,
+            executableURL: URL(fileURLWithPath: fixture.pythonPath),
+            environment: ProcessInfo.processInfo.environment,
+            secrets: []
+        )
+        let runtime = MCPClientRuntime()
+        addTeardownBlock { await runtime.closeAll() }
+
+        let initial = try await runtime.tools(for: server)
+        let cached = try await runtime.tools(for: server)
+        let refreshed = try await runtime.tools(for: server, forceRefresh: true)
+
+        XCTAssertEqual(initial.first?.description, "Create a fixture task version 1")
+        XCTAssertEqual(cached.first?.description, "Create a fixture task version 1")
+        XCTAssertEqual(refreshed.first?.description, "Create a fixture task version 2")
+        XCTAssertEqual(try Self.requestCount(at: fixture.counter), 3)
     }
 
     func testConcurrentDiscoverySharesOneConnectionAndCatalogLoad() async throws {

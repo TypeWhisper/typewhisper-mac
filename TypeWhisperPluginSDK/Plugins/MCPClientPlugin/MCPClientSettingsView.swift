@@ -727,7 +727,7 @@ private struct MCPActionEditorView: View {
                             configureBindings(for: selectedTool)
                         }
                         Button(String(localized: "Refresh Tools", bundle: bundle)) {
-                            loadTools(resetSelection: false)
+                            loadTools(resetSelection: false, forceRefresh: true)
                         }
                     }
 
@@ -876,7 +876,7 @@ private struct MCPActionEditorView: View {
         )
     }
 
-    private func loadTools(resetSelection: Bool) {
+    private func loadTools(resetSelection: Bool, forceRefresh: Bool = false) {
         let requestID = UUID()
         let requestedServerID = serverID
         toolLoadRequestID = requestID
@@ -890,7 +890,10 @@ private struct MCPActionEditorView: View {
         errorMessage = nil
         Task {
             do {
-                let loaded = try await plugin.discoverTools(serverID: requestedServerID)
+                let loaded = try await plugin.discoverTools(
+                    serverID: requestedServerID,
+                    forceRefresh: forceRefresh
+                )
                 await MainActor.run {
                     guard toolLoadRequestID == requestID else { return }
                     tools = loaded

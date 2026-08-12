@@ -98,12 +98,26 @@ actor MCPServerSession {
         self.toolCallTimeout = toolCallTimeout
     }
 
-    func tools() async throws -> [MCPToolDescriptor] {
+    func tools(forceRefresh: Bool = false) async throws -> [MCPToolDescriptor] {
+        let hadUsableConnection = hasUsableConnection
         try await ensureConnected()
+        if forceRefresh, hadUsableConnection {
+            catalogIsStale = true
+        }
         if catalogIsStale {
             try await refreshToolsWithTimeout()
         }
         return cachedTools
+    }
+
+    private var hasUsableConnection: Bool {
+        guard isConnected, client != nil, transport != nil else { return false }
+        switch resolvedServer.transport {
+        case .stdio:
+            return process?.isRunning == true
+        case .streamableHTTP:
+            return true
+        }
     }
 
     func call(
@@ -301,7 +315,7 @@ actor MCPServerSession {
         }
 
         let clientVersion = Bundle(for: MCPClientPlugin.self)
-            .object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.2.0"
+            .object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.2.1"
         let client = Client(name: "TypeWhisper", version: clientVersion, title: "TypeWhisper MCP Client")
 
         self.transport = transport
@@ -549,8 +563,11 @@ actor MCPClientRuntime {
 
     private var sessions: [UUID: Entry] = [:]
 
-    func tools(for server: MCPResolvedServer) async throws -> [MCPToolDescriptor] {
-        try await session(for: server).tools()
+    func tools(
+        for server: MCPResolvedServer,
+        forceRefresh: Bool = false
+    ) async throws -> [MCPToolDescriptor] {
+        try await session(for: server).tools(forceRefresh: forceRefresh)
     }
 
     func call(
