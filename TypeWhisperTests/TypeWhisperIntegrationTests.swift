@@ -4302,6 +4302,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let pasteboard = NSPasteboard.withUniqueName()
         service.accessibilityGrantedOverride = true
         service.pasteboardProvider = { pasteboard }
+        service.focusedTextElementOverride = { nil }
 
         var didSimulatePaste = false
         service.pasteSimulatorOverride = {
