@@ -57,6 +57,61 @@ enum OpenAICompatibleResolvedTranscriptionTransport: Sendable, Equatable {
     case realtime
 }
 
+/// Per-profile LLM endpoint selection. Chat Completions remains the default so
+/// profiles created before Responses API support keep their existing behavior.
+enum OpenAICompatibleLLMAPI: String, Codable, CaseIterable, Sendable {
+    case chatCompletions = "chat-completions"
+    case responses
+
+    var displayName: String {
+        switch self {
+        case .chatCompletions:
+            "Chat Completions"
+        case .responses:
+            "Responses"
+        }
+    }
+
+    var path: String {
+        switch self {
+        case .chatCompletions:
+            "/v1/chat/completions"
+        case .responses:
+            "/v1/responses"
+        }
+    }
+}
+
+enum OpenAICompatibleReasoningEffort: String, Codable, CaseIterable, Sendable {
+    case providerDefault = ""
+    case low
+    case medium
+    case high
+    case xhigh
+    case max
+
+    var displayName: String {
+        switch self {
+        case .providerDefault:
+            "Provider Default"
+        case .low:
+            "Low"
+        case .medium:
+            "Medium"
+        case .high:
+            "High"
+        case .xhigh:
+            "X High"
+        case .max:
+            "Max"
+        }
+    }
+
+    var requestValue: String? {
+        self == .providerDefault ? nil : rawValue
+    }
+}
+
 /// Knowledge about the well-known OpenAI/Azure realtime transcription model
 /// IDs, mirroring the classification `OpenAIPlugin` uses for `gpt-live-transcribe`
 /// (context-aware) and `gpt-realtime-whisper` (legacy). Custom Azure/Foundry
@@ -102,6 +157,8 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
     var chatRequestTimeoutSeconds: TimeInterval?
     var thinkingEnabled: Bool
     var transcriptionTransportRaw: String
+    var llmAPIModeRaw: String
+    var reasoningEffortRaw: String
 
     static let defaultChatRequestTimeout: TimeInterval = 30
     static let minChatRequestTimeout: TimeInterval = 5
@@ -120,6 +177,8 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
         case chatRequestTimeoutSeconds
         case thinkingEnabled
         case transcriptionTransportRaw
+        case llmAPIModeRaw
+        case reasoningEffortRaw
     }
 
     init(
@@ -134,7 +193,9 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
         fetchedModels: [FetchedModel] = [],
         chatRequestTimeoutSeconds: TimeInterval? = nil,
         thinkingEnabled: Bool = false,
-        transcriptionTransportRaw: String = OpenAICompatibleTranscriptTransport.auto.rawValue
+        transcriptionTransportRaw: String = OpenAICompatibleTranscriptTransport.auto.rawValue,
+        llmAPIModeRaw: String = OpenAICompatibleLLMAPI.chatCompletions.rawValue,
+        reasoningEffortRaw: String = OpenAICompatibleReasoningEffort.providerDefault.rawValue
     ) {
         self.id = id
         self.name = name
@@ -148,6 +209,8 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
         self.chatRequestTimeoutSeconds = chatRequestTimeoutSeconds
         self.thinkingEnabled = thinkingEnabled
         self.transcriptionTransportRaw = transcriptionTransportRaw
+        self.llmAPIModeRaw = llmAPIModeRaw
+        self.reasoningEffortRaw = reasoningEffortRaw
     }
 
     init(from decoder: Decoder) throws {
@@ -168,6 +231,11 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
         // and only the known realtime model IDs switch transport.
         transcriptionTransportRaw = try container.decodeIfPresent(String.self, forKey: .transcriptionTransportRaw)
             ?? OpenAICompatibleTranscriptTransport.auto.rawValue
+        // Profiles saved before Responses API support always used Chat Completions.
+        llmAPIModeRaw = try container.decodeIfPresent(String.self, forKey: .llmAPIModeRaw)
+            ?? OpenAICompatibleLLMAPI.chatCompletions.rawValue
+        reasoningEffortRaw = try container.decodeIfPresent(String.self, forKey: .reasoningEffortRaw)
+            ?? OpenAICompatibleReasoningEffort.providerDefault.rawValue
     }
 
     var isDefault: Bool { id == Self.defaultId }
@@ -186,6 +254,14 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
 
     var transcriptionTransport: OpenAICompatibleTranscriptTransport {
         OpenAICompatibleTranscriptTransport(rawValue: transcriptionTransportRaw) ?? .auto
+    }
+
+    var llmAPI: OpenAICompatibleLLMAPI {
+        OpenAICompatibleLLMAPI(rawValue: llmAPIModeRaw) ?? .chatCompletions
+    }
+
+    var reasoningEffort: OpenAICompatibleReasoningEffort {
+        OpenAICompatibleReasoningEffort(rawValue: reasoningEffortRaw) ?? .providerDefault
     }
 
     /// Resolves the effective (non-`auto`) transport for the currently
@@ -211,7 +287,9 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
         fetchedModels: [FetchedModel] = [],
         chatRequestTimeoutSeconds: TimeInterval? = nil,
         thinkingEnabled: Bool = false,
-        transcriptionTransportRaw: String = OpenAICompatibleTranscriptTransport.auto.rawValue
+        transcriptionTransportRaw: String = OpenAICompatibleTranscriptTransport.auto.rawValue,
+        llmAPIModeRaw: String = OpenAICompatibleLLMAPI.chatCompletions.rawValue,
+        reasoningEffortRaw: String = OpenAICompatibleReasoningEffort.providerDefault.rawValue
     ) -> OpenAICompatibleProfile {
         OpenAICompatibleProfile(
             id: defaultId,
@@ -225,7 +303,9 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
             fetchedModels: fetchedModels,
             chatRequestTimeoutSeconds: chatRequestTimeoutSeconds,
             thinkingEnabled: thinkingEnabled,
-            transcriptionTransportRaw: transcriptionTransportRaw
+            transcriptionTransportRaw: transcriptionTransportRaw,
+            llmAPIModeRaw: llmAPIModeRaw,
+            reasoningEffortRaw: reasoningEffortRaw
         )
     }
 }
@@ -612,6 +692,18 @@ final class OpenAICompatiblePlugin: NSObject,
         }
     }
 
+    func setLLMAPI(_ api: OpenAICompatibleLLMAPI, for profileId: String) {
+        updateProfile(profileId) { profile in
+            profile.llmAPIModeRaw = api.rawValue
+        }
+    }
+
+    func setReasoningEffort(_ effort: OpenAICompatibleReasoningEffort, for profileId: String) {
+        updateProfile(profileId) { profile in
+            profile.reasoningEffortRaw = effort.rawValue
+        }
+    }
+
     // MARK: - Profile Runtime
 
     func displayName(for profileId: String) -> String {
@@ -862,18 +954,36 @@ final class OpenAICompatiblePlugin: NSObject,
         guard !modelId.isEmpty else {
             throw PluginChatError.noModelSelected
         }
-        return try await processChatCompletion(
-            apiKey: apiKey(for: profileId) ?? "",
-            baseURL: profile.baseURL,
-            model: modelId,
-            systemPrompt: systemPrompt,
-            userText: userText,
-            temperature: providerTemperatureDirective(for: profileId)
-                .resolvedTemperature(applying: temperatureDirective),
-            requestTimeout: profile.resolvedChatRequestTimeout,
-            thinkingEnabled: profile.thinkingEnabled,
-            apiVersion: profile.apiVersion
-        )
+        let temperature = providerTemperatureDirective(for: profileId)
+            .resolvedTemperature(applying: temperatureDirective)
+        let apiKey = apiKey(for: profileId) ?? ""
+
+        switch profile.llmAPI {
+        case .chatCompletions:
+            return try await processChatCompletion(
+                apiKey: apiKey,
+                baseURL: profile.baseURL,
+                model: modelId,
+                systemPrompt: systemPrompt,
+                userText: userText,
+                temperature: temperature,
+                requestTimeout: profile.resolvedChatRequestTimeout,
+                thinkingEnabled: profile.thinkingEnabled,
+                apiVersion: profile.apiVersion
+            )
+        case .responses:
+            return try await processResponse(
+                apiKey: apiKey,
+                baseURL: profile.baseURL,
+                model: modelId,
+                systemPrompt: systemPrompt,
+                userText: userText,
+                temperature: profile.reasoningEffort.requestValue == nil ? temperature : nil,
+                reasoningEffort: profile.reasoningEffort.requestValue,
+                requestTimeout: profile.resolvedChatRequestTimeout,
+                apiVersion: profile.apiVersion
+            )
+        }
     }
 
     func fetchModels() async -> [FetchedModel] {
@@ -1030,7 +1140,11 @@ final class OpenAICompatiblePlugin: NSObject,
                 llmTemperatureModeRaw: host.userDefault(forKey: "llmTemperatureMode") as? String
                     ?? PluginLLMTemperatureMode.providerDefault.rawValue,
                 llmTemperatureValue: host.userDefault(forKey: "llmTemperatureValue") as? Double ?? 0.3,
-                fetchedModels: fetchedModels
+                fetchedModels: fetchedModels,
+                llmAPIModeRaw: host.userDefault(forKey: "llmAPIMode") as? String
+                    ?? OpenAICompatibleLLMAPI.chatCompletions.rawValue,
+                reasoningEffortRaw: host.userDefault(forKey: "reasoningEffort") as? String
+                    ?? OpenAICompatibleReasoningEffort.providerDefault.rawValue
             )
         ]
     }
@@ -1064,7 +1178,11 @@ final class OpenAICompatiblePlugin: NSObject,
                         host.userDefault(forKey: "apiVersion") as? String ?? ""
                     ),
                     selectedModelId: host.userDefault(forKey: "selectedModel") as? String ?? "",
-                    selectedLLMModelId: host.userDefault(forKey: "selectedLLMModel") as? String ?? ""
+                    selectedLLMModelId: host.userDefault(forKey: "selectedLLMModel") as? String ?? "",
+                    llmAPIModeRaw: host.userDefault(forKey: "llmAPIMode") as? String
+                        ?? OpenAICompatibleLLMAPI.chatCompletions.rawValue,
+                    reasoningEffortRaw: host.userDefault(forKey: "reasoningEffort") as? String
+                        ?? OpenAICompatibleReasoningEffort.providerDefault.rawValue
                 ),
                 at: 0
             )
@@ -1099,6 +1217,8 @@ final class OpenAICompatiblePlugin: NSObject,
         host.setUserDefault(defaultProfile.selectedLLMModelId, forKey: "selectedLLMModel")
         host.setUserDefault(defaultProfile.llmTemperatureModeRaw, forKey: "llmTemperatureMode")
         host.setUserDefault(defaultProfile.llmTemperatureValue, forKey: "llmTemperatureValue")
+        host.setUserDefault(defaultProfile.llmAPIModeRaw, forKey: "llmAPIMode")
+        host.setUserDefault(defaultProfile.reasoningEffortRaw, forKey: "reasoningEffort")
         if let data = try? JSONEncoder().encode(defaultProfile.fetchedModels) {
             host.setUserDefault(data, forKey: "fetchedModels")
         }
@@ -1166,7 +1286,7 @@ final class OpenAICompatiblePlugin: NSObject,
         thinkingEnabled: Bool,
         apiVersion: String
     ) async throws -> String {
-        let path = "/v1/chat/completions"
+        let path = OpenAICompatibleLLMAPI.chatCompletions.path
         guard let url = Self.requestURL(baseURL: baseURL, path: path, apiVersion: apiVersion) else {
             throw PluginChatError.apiError("Invalid URL: \(baseURL)\(path)")
         }
@@ -1223,13 +1343,13 @@ final class OpenAICompatiblePlugin: NSObject,
                 ["role": "system", "content": systemPrompt],
                 ["role": "user", "content": userText],
             ],
-            "thinking": [
-                "type": thinkingEnabled ? "enabled" : "disabled"
-            ],
         ]
         requestBody[outputTokenParameter.rawValue] = 4096
         if let temperature {
             requestBody["temperature"] = temperature
+        }
+        if thinkingEnabled {
+            requestBody["thinking"] = ["type": "enabled"]
         }
 
         var request = URLRequest(url: url)
@@ -1265,6 +1385,110 @@ final class OpenAICompatiblePlugin: NSObject,
         }
 
         return content.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private func processResponse(
+        apiKey: String,
+        baseURL: String,
+        model: String,
+        systemPrompt: String,
+        userText: String,
+        temperature: Double?,
+        reasoningEffort: String?,
+        requestTimeout: TimeInterval,
+        apiVersion: String
+    ) async throws -> String {
+        let path = OpenAICompatibleLLMAPI.responses.path
+        guard let url = Self.requestURL(baseURL: baseURL, path: path, apiVersion: apiVersion) else {
+            throw PluginChatError.apiError("Invalid URL: \(baseURL)\(path)")
+        }
+
+        let instructions = systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? "You are a helpful assistant."
+            : systemPrompt
+        var requestBody: [String: Any] = [
+            "model": model,
+            "instructions": instructions,
+            "input": [
+                [
+                    "type": "message",
+                    "role": "user",
+                    "content": [
+                        [
+                            "type": "input_text",
+                            "text": userText,
+                        ],
+                    ],
+                ],
+            ],
+            "store": false,
+        ]
+        if let reasoningEffort {
+            requestBody["reasoning"] = ["effort": reasoningEffort]
+        }
+        if let temperature {
+            requestBody["temperature"] = temperature
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        Self.applyAuthentication(to: &request, apiKey: apiKey)
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.timeoutInterval = requestTimeout
+        request.httpBody = try JSONSerialization.data(withJSONObject: requestBody)
+
+        let (data, response) = try await PluginHTTPClient.data(for: request, resourceTimeout: requestTimeout)
+        guard let httpResponse = response as? HTTPURLResponse else {
+            throw PluginChatError.networkError("Invalid response")
+        }
+
+        switch httpResponse.statusCode {
+        case 200:
+            return try Self.parseResponsesText(from: data)
+        case 401:
+            throw PluginChatError.invalidApiKey
+        case 429:
+            throw PluginChatError.rateLimited
+        default:
+            throw PluginChatError.apiError(Self.chatErrorMessage(from: data, statusCode: httpResponse.statusCode))
+        }
+    }
+
+    static func parseResponsesText(from data: Data) throws -> String {
+        guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw PluginChatError.apiError("Failed to parse response")
+        }
+
+        if let outputText = json["output_text"] as? String {
+            let trimmed = outputText.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmed.isEmpty {
+                return trimmed
+            }
+        }
+
+        if let output = json["output"] as? [[String: Any]] {
+            let textParts = output.flatMap { item -> [String] in
+                guard let content = item["content"] as? [[String: Any]] else { return [] }
+                return content.compactMap { contentItem in
+                    let type = contentItem["type"] as? String
+                    guard type == nil || type == "output_text" || type == "text" else { return nil }
+                    if let text = contentItem["text"] as? String {
+                        return text
+                    }
+                    if let text = contentItem["text"] as? [String: Any] {
+                        return text["value"] as? String
+                    }
+                    return nil
+                }
+            }
+
+            let text = textParts.joined().trimmingCharacters(in: .whitespacesAndNewlines)
+            if !text.isEmpty {
+                return text
+            }
+        }
+
+        throw PluginChatError.apiError("Failed to parse response text")
     }
 
     private func performVersionedTranscriptionRequest(
@@ -1635,6 +1859,8 @@ private struct OpenAICompatibleSettingsView: View {
     @State private var thinkingEnabled = false
     @State private var chatTimeoutInput = ""
     @State private var transcriptionTransport: OpenAICompatibleTranscriptTransport = .auto
+    @State private var llmAPI: OpenAICompatibleLLMAPI = .chatCompletions
+    @State private var reasoningEffort: OpenAICompatibleReasoningEffort = .providerDefault
 
     private let bundle = pluginModuleBundle
 
@@ -1736,7 +1962,11 @@ private struct OpenAICompatibleSettingsView: View {
                     serverSection
                     modelSection
                     temperatureSection
-                    thinkingModeSection
+                    if llmAPI == .chatCompletions {
+                        thinkingModeSection
+                    } else {
+                        reasoningEffortSection
+                    }
                     timeoutSection
 
                     Text("API keys are stored securely in the Keychain", bundle: bundle)
@@ -1886,7 +2116,37 @@ private struct OpenAICompatibleSettingsView: View {
                 manualModelSection
             }
 
+            llmAPISection
             transportSection
+        }
+    }
+
+    private var llmAPISection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("LLM API", bundle: bundle)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            Picker("LLM API", selection: $llmAPI) {
+                Text("Chat Completions", bundle: bundle).tag(OpenAICompatibleLLMAPI.chatCompletions)
+                Text("Responses", bundle: bundle).tag(OpenAICompatibleLLMAPI.responses)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .onChange(of: llmAPI) {
+                guard let selectedProfile else { return }
+                plugin.setLLMAPI(llmAPI, for: selectedProfile.id)
+                reloadProfiles(selecting: selectedProfile.id, preserveInputs: true)
+            }
+
+            Text(
+                llmAPI == .chatCompletions
+                    ? "Uses /v1/chat/completions for broad compatibility with existing providers."
+                    : "Uses /v1/responses with OpenAI-compatible input, output, and reasoning fields.",
+                bundle: bundle
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
         }
     }
 
@@ -2044,6 +2304,12 @@ private struct OpenAICompatibleSettingsView: View {
                         reloadProfiles(selecting: selectedProfile.id, preserveInputs: true)
                     }
             }
+
+            if llmAPI == .responses, reasoningEffort != .providerDefault {
+                Text("Temperature overrides are omitted when Responses reasoning effort is configured.", bundle: bundle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -2052,7 +2318,7 @@ private struct OpenAICompatibleSettingsView: View {
             Divider()
 
             Toggle(isOn: $thinkingEnabled) {
-                Text("Thinking Mode", bundle: bundle)
+                Text("Provider Thinking Extension", bundle: bundle)
                     .font(.headline)
             }
             .onChange(of: thinkingEnabled) {
@@ -2060,6 +2326,35 @@ private struct OpenAICompatibleSettingsView: View {
                 plugin.setThinkingEnabled(thinkingEnabled, for: selectedProfile.id)
                 reloadProfiles(selecting: selectedProfile.id, preserveInputs: true)
             }
+
+            Text("Adds the nonstandard Chat Completions thinking field only when enabled. Leave off unless your provider documents support.", bundle: bundle)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var reasoningEffortSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Divider()
+
+            Text("Reasoning Effort", bundle: bundle)
+                .font(.headline)
+
+            Picker("Reasoning Effort", selection: $reasoningEffort) {
+                ForEach(OpenAICompatibleReasoningEffort.allCases, id: \.self) { effort in
+                    Text(String(localized: String.LocalizationValue(effort.displayName), bundle: bundle))
+                        .tag(effort)
+                }
+            }
+            .onChange(of: reasoningEffort) {
+                guard let selectedProfile else { return }
+                plugin.setReasoningEffort(reasoningEffort, for: selectedProfile.id)
+                reloadProfiles(selecting: selectedProfile.id, preserveInputs: true)
+            }
+
+            Text("Provider Default omits reasoning. Other values send reasoning: { effort: ... } to /v1/responses.", bundle: bundle)
+                .font(.caption)
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -2118,6 +2413,8 @@ private struct OpenAICompatibleSettingsView: View {
         thinkingEnabled = profile.thinkingEnabled
         chatTimeoutInput = String(Int(profile.resolvedChatRequestTimeout))
         transcriptionTransport = profile.transcriptionTransport
+        llmAPI = profile.llmAPI
+        reasoningEffort = profile.reasoningEffort
         connectionResult = nil
     }
 

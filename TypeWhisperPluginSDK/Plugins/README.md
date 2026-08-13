@@ -81,7 +81,7 @@ Bundled MLX plugins such as Qwen3, Granite, and Voxtral store their optional Hug
 
 Bundled experimental local TTS plugins such as Supertonic store optional HuggingFace tokens the same way, but model weights are not bundled in the plugin ZIP. Supertonic downloads `Supertone/supertonic-3` assets only after the user accepts the OpenRAIL-M model license in plugin settings. That model-license confirmation is scoped to the model download and does not change TypeWhisper app licensing.
 
-Bundled cloud plugins include Groq, OpenAI, OpenAI Compatible, and xAI/Grok. The xAI/Grok bundle is a combined `LLMProviderPlugin`, `TranscriptionEnginePlugin`, `LiveTranscriptionCapablePlugin`, and `TTSProviderPlugin` implementation for Grok text generation, STT, and TTS.
+Bundled cloud plugins include Groq, OpenAI, OpenAI Compatible, and xAI/Grok. OpenAI Compatible profiles can independently use the broadly supported `/v1/chat/completions` endpoint or the OpenAI-style `/v1/responses` endpoint. Responses profiles support optional reasoning effort (`low`, `medium`, `high`, `xhigh`, or `max`); Chat Completions profiles retain an opt-in provider-specific thinking extension. Existing profiles default to Chat Completions. The xAI/Grok bundle is a combined `LLMProviderPlugin`, `TranscriptionEnginePlugin`, `LiveTranscriptionCapablePlugin`, and `TTSProviderPlugin` implementation for Grok text generation, STT, and TTS.
 
 ## Example
 

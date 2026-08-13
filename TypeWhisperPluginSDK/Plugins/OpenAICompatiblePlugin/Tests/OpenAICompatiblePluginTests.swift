@@ -70,6 +70,8 @@ final class OpenAICompatiblePluginTests: XCTestCase {
         XCTAssertEqual(profile.llmTemperatureModeRaw, PluginLLMTemperatureMode.custom.rawValue)
         XCTAssertEqual(profile.llmTemperatureValue, 0.7)
         XCTAssertFalse(profile.thinkingEnabled)
+        XCTAssertEqual(profile.llmAPI, .chatCompletions)
+        XCTAssertEqual(profile.reasoningEffort, .providerDefault)
         XCTAssertEqual(profile.fetchedModels.map(\.id), ["legacy-model"])
         XCTAssertEqual(plugin.apiKey(for: profile.id), "legacy-token")
         XCTAssertNotNil(host.userDefault(forKey: "profiles") as? Data)
@@ -126,6 +128,8 @@ final class OpenAICompatiblePluginTests: XCTestCase {
         let profile = try XCTUnwrap(plugin.profileSnapshot(for: plugin.providerId))
         XCTAssertEqual(profile.apiVersion, "")
         XCTAssertFalse(profile.thinkingEnabled)
+        XCTAssertEqual(profile.llmAPI, .chatCompletions)
+        XCTAssertEqual(profile.reasoningEffort, .providerDefault)
         XCTAssertEqual(profile.resolvedChatRequestTimeout, 45)
         XCTAssertNoThrow(try JSONEncoder().encode(plugin.profileSnapshots))
     }
@@ -667,8 +671,7 @@ final class OpenAICompatiblePluginTests: XCTestCase {
         XCTAssertEqual(defaultJSON["model"] as? String, "default-chat")
         XCTAssertEqual(defaultJSON["max_tokens"] as? Int, 4096)
         XCTAssertEqual(defaultJSON["temperature"] as? Double, 0.2)
-        let defaultThinking = try XCTUnwrap(defaultJSON["thinking"] as? [String: String])
-        XCTAssertEqual(defaultThinking["type"], "disabled")
+        XCTAssertNil(defaultJSON["thinking"])
 
         let inceptionBody = try XCTUnwrap(requests[1].httpBody)
         let inceptionJSON = try XCTUnwrap(JSONSerialization.jsonObject(with: inceptionBody) as? [String: Any])
@@ -678,6 +681,205 @@ final class OpenAICompatiblePluginTests: XCTestCase {
         XCTAssertEqual(inceptionJSON["temperature"] as? Double, 0.9)
         let inceptionThinking = try XCTUnwrap(inceptionJSON["thinking"] as? [String: String])
         XCTAssertEqual(inceptionThinking["type"], "enabled")
+    }
+
+    func testResponsesModeUsesProfileURLAuthTimeoutAndOpenAIRequestShape() async throws {
+        let host = try PluginTestHostServices(
+            defaults: [
+                "baseURL": "https://example.test/openai?tenant=contoso",
+                "selectedLLMModel": "gpt-5-compatible",
+            ],
+            secrets: ["api-key": "secret-token"]
+        )
+        let plugin = OpenAICompatiblePlugin()
+        plugin.activate(host: host)
+        plugin.setApiVersion("preview", for: plugin.providerId)
+        plugin.setLLMAPI(.responses, for: plugin.providerId)
+        plugin.setChatRequestTimeout(75, for: plugin.providerId)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"output_text":"  processed response  "}"#.utf8),
+                    Self.httpResponse(
+                        url: "https://example.test/openai/v1/responses?tenant=contoso&api-version=preview",
+                        statusCode: 200
+                    )
+                )
+            ])
+        }
+
+        let result = try await plugin.process(
+            systemPrompt: "Fix the text",
+            userText: "hello",
+            model: nil,
+            temperatureDirective: .custom(0.8)
+        )
+
+        XCTAssertEqual(result, "processed response")
+        let request = try XCTUnwrap(store.sessions.first?.requestedRequests.first)
+        XCTAssertEqual(request.url?.path, "/openai/v1/responses")
+        XCTAssertEqual(
+            URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false)?.queryItems,
+            [
+                URLQueryItem(name: "tenant", value: "contoso"),
+                URLQueryItem(name: "api-version", value: "preview"),
+            ]
+        )
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer " + "secret-token")
+        XCTAssertEqual(request.timeoutInterval, 75)
+
+        let body = try XCTUnwrap(request.httpBody)
+        let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        XCTAssertEqual(json["model"] as? String, "gpt-5-compatible")
+        XCTAssertEqual(json["instructions"] as? String, "Fix the text")
+        XCTAssertEqual(json["store"] as? Bool, false)
+        XCTAssertEqual(json["temperature"] as? Double, 0.8)
+        XCTAssertNil(json["reasoning"])
+        XCTAssertNil(json["thinking"])
+        XCTAssertNil(json["messages"])
+
+        let input = try XCTUnwrap(json["input"] as? [[String: Any]])
+        XCTAssertEqual(input.first?["type"] as? String, "message")
+        XCTAssertEqual(input.first?["role"] as? String, "user")
+        let content = try XCTUnwrap(input.first?["content"] as? [[String: Any]])
+        XCTAssertEqual(content.first?["type"] as? String, "input_text")
+        XCTAssertEqual(content.first?["text"] as? String, "hello")
+    }
+
+    func testResponsesModeSendsConfiguredReasoningLevelsAndOmitsTemperature() async throws {
+        let host = try PluginTestHostServices(
+            defaults: [
+                "baseURL": "https://example.test",
+                "selectedLLMModel": "reasoning-model",
+            ]
+        )
+        let plugin = OpenAICompatiblePlugin()
+        plugin.activate(host: host)
+        plugin.setLLMAPI(.responses, for: plugin.providerId)
+        plugin.setLLMTemperatureMode(.custom)
+        plugin.setLLMTemperatureValue(0.6)
+
+        let efforts: [OpenAICompatibleReasoningEffort] = [.low, .medium, .high, .xhigh, .max]
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: efforts.map { _ in
+                .success(
+                    Data(#"{"output_text":"ok"}"#.utf8),
+                    Self.httpResponse(url: "https://example.test/v1/responses", statusCode: 200)
+                )
+            })
+        }
+
+        for effort in efforts {
+            plugin.setReasoningEffort(effort, for: plugin.providerId)
+            let result = try await plugin.process(
+                systemPrompt: "",
+                userText: "hello",
+                model: nil,
+                temperatureDirective: .custom(1.1)
+            )
+            XCTAssertEqual(result, "ok")
+        }
+
+        let requests = try XCTUnwrap(store.sessions.first?.requestedRequests)
+        XCTAssertEqual(requests.count, efforts.count)
+        for (request, effort) in zip(requests, efforts) {
+            let body = try XCTUnwrap(request.httpBody)
+            let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+            let reasoning = try XCTUnwrap(json["reasoning"] as? [String: String])
+            XCTAssertEqual(reasoning["effort"], effort.rawValue)
+            XCTAssertNil(json["temperature"])
+            XCTAssertEqual(json["instructions"] as? String, "You are a helpful assistant.")
+        }
+    }
+
+    func testResponsesModeParsesOutputContentFallbacks() async throws {
+        let host = try PluginTestHostServices(
+            defaults: [
+                "baseURL": "https://example.test",
+                "selectedLLMModel": "responses-model",
+            ]
+        )
+        let plugin = OpenAICompatiblePlugin()
+        plugin.activate(host: host)
+        plugin.setLLMAPI(.responses, for: plugin.providerId)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(
+                        #"""
+                        {
+                          "output": [
+                            {"type":"reasoning","content":[{"type":"reasoning_text","text":"hidden"}]},
+                            {"type":"message","content":[
+                              {"type":"output_text","text":"First "},
+                              {"type":"text","text":{"value":"part"}}
+                            ]}
+                          ]
+                        }
+                        """#.utf8
+                    ),
+                    Self.httpResponse(url: "https://example.test/v1/responses", statusCode: 200)
+                )
+            ])
+        }
+
+        let result = try await plugin.process(systemPrompt: "Fix", userText: "hello", model: nil)
+
+        XCTAssertEqual(result, "First part")
+    }
+
+    func testResponsesModeSurfacesCompatibleErrorMessage() async throws {
+        let host = try PluginTestHostServices(
+            defaults: [
+                "baseURL": "https://example.test",
+                "selectedLLMModel": "missing-model",
+            ]
+        )
+        let plugin = OpenAICompatiblePlugin()
+        plugin.activate(host: host)
+        plugin.setLLMAPI(.responses, for: plugin.providerId)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"error":{"message":"responses model not found"}}"#.utf8),
+                    Self.httpResponse(url: "https://example.test/v1/responses", statusCode: 404)
+                )
+            ])
+        }
+
+        do {
+            _ = try await plugin.process(systemPrompt: "Fix", userText: "hello", model: nil)
+            XCTFail("Expected apiError")
+        } catch PluginChatError.apiError(let message) {
+            XCTAssertEqual(message, "responses model not found")
+        } catch {
+            XCTFail("Unexpected error: \(error)")
+        }
+    }
+
+    func testLLMAPIAndReasoningEffortPersistPerProfile() throws {
+        let host = try PluginTestHostServices(defaults: ["baseURL": "https://default.test"])
+        let plugin = OpenAICompatiblePlugin()
+        plugin.activate(host: host)
+        let custom = plugin.addProfile(named: "Responses Server")
+        plugin.setBaseURL("https://responses.test", for: custom.id)
+        plugin.setLLMAPI(.responses, for: custom.id)
+        plugin.setReasoningEffort(.max, for: custom.id)
+
+        let reloaded = OpenAICompatiblePlugin()
+        reloaded.activate(host: host)
+
+        XCTAssertEqual(reloaded.profileSnapshot(for: reloaded.providerId)?.llmAPI, .chatCompletions)
+        XCTAssertEqual(reloaded.profileSnapshot(for: reloaded.providerId)?.reasoningEffort, .providerDefault)
+        XCTAssertEqual(reloaded.profileSnapshot(for: custom.id)?.llmAPI, .responses)
+        XCTAssertEqual(reloaded.profileSnapshot(for: custom.id)?.reasoningEffort, .max)
     }
 
     func testProcessRetriesWithMaxCompletionTokensWhenProviderRequestsIt() async throws {
