@@ -155,7 +155,6 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
     var llmTemperatureValue: Double
     var fetchedModels: [FetchedModel]
     var chatRequestTimeoutSeconds: TimeInterval?
-    var thinkingEnabled: Bool
     var transcriptionTransportRaw: String
     var llmAPIModeRaw: String
     var reasoningEffortRaw: String
@@ -175,7 +174,6 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
         case llmTemperatureValue
         case fetchedModels
         case chatRequestTimeoutSeconds
-        case thinkingEnabled
         case transcriptionTransportRaw
         case llmAPIModeRaw
         case reasoningEffortRaw
@@ -192,7 +190,6 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
         llmTemperatureValue: Double = 0.3,
         fetchedModels: [FetchedModel] = [],
         chatRequestTimeoutSeconds: TimeInterval? = nil,
-        thinkingEnabled: Bool = false,
         transcriptionTransportRaw: String = OpenAICompatibleTranscriptTransport.auto.rawValue,
         llmAPIModeRaw: String = OpenAICompatibleLLMAPI.chatCompletions.rawValue,
         reasoningEffortRaw: String = OpenAICompatibleReasoningEffort.providerDefault.rawValue
@@ -207,7 +204,6 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
         self.llmTemperatureValue = llmTemperatureValue
         self.fetchedModels = fetchedModels
         self.chatRequestTimeoutSeconds = chatRequestTimeoutSeconds
-        self.thinkingEnabled = thinkingEnabled
         self.transcriptionTransportRaw = transcriptionTransportRaw
         self.llmAPIModeRaw = llmAPIModeRaw
         self.reasoningEffortRaw = reasoningEffortRaw
@@ -225,7 +221,6 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
         llmTemperatureValue = try container.decode(Double.self, forKey: .llmTemperatureValue)
         fetchedModels = try container.decode([FetchedModel].self, forKey: .fetchedModels)
         chatRequestTimeoutSeconds = try container.decodeIfPresent(TimeInterval.self, forKey: .chatRequestTimeoutSeconds)
-        thinkingEnabled = try container.decodeIfPresent(Bool.self, forKey: .thinkingEnabled) ?? false
         // Profiles saved before realtime support existed have no stored value;
         // default to `auto` so previously-working batch models keep working
         // and only the known realtime model IDs switch transport.
@@ -286,7 +281,6 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
         llmTemperatureValue: Double = 0.3,
         fetchedModels: [FetchedModel] = [],
         chatRequestTimeoutSeconds: TimeInterval? = nil,
-        thinkingEnabled: Bool = false,
         transcriptionTransportRaw: String = OpenAICompatibleTranscriptTransport.auto.rawValue,
         llmAPIModeRaw: String = OpenAICompatibleLLMAPI.chatCompletions.rawValue,
         reasoningEffortRaw: String = OpenAICompatibleReasoningEffort.providerDefault.rawValue
@@ -302,7 +296,6 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
             llmTemperatureValue: llmTemperatureValue,
             fetchedModels: fetchedModels,
             chatRequestTimeoutSeconds: chatRequestTimeoutSeconds,
-            thinkingEnabled: thinkingEnabled,
             transcriptionTransportRaw: transcriptionTransportRaw,
             llmAPIModeRaw: llmAPIModeRaw,
             reasoningEffortRaw: reasoningEffortRaw
@@ -542,10 +535,6 @@ final class OpenAICompatiblePlugin: NSObject,
         setLLMTemperatureValue(value, for: providerId)
     }
 
-    func setThinkingEnabled(_ enabled: Bool) {
-        setThinkingEnabled(enabled, for: providerId)
-    }
-
     // MARK: - Settings View
 
     var settingsView: AnyView? {
@@ -683,12 +672,6 @@ final class OpenAICompatiblePlugin: NSObject,
         )
         updateProfile(profileId) { profile in
             profile.chatRequestTimeoutSeconds = clamped
-        }
-    }
-
-    func setThinkingEnabled(_ enabled: Bool, for profileId: String) {
-        updateProfile(profileId) { profile in
-            profile.thinkingEnabled = enabled
         }
     }
 
@@ -968,7 +951,6 @@ final class OpenAICompatiblePlugin: NSObject,
                 userText: userText,
                 temperature: temperature,
                 requestTimeout: profile.resolvedChatRequestTimeout,
-                thinkingEnabled: profile.thinkingEnabled,
                 apiVersion: profile.apiVersion
             )
         case .responses:
@@ -1283,7 +1265,6 @@ final class OpenAICompatiblePlugin: NSObject,
         userText: String,
         temperature: Double?,
         requestTimeout: TimeInterval,
-        thinkingEnabled: Bool,
         apiVersion: String
     ) async throws -> String {
         let path = OpenAICompatibleLLMAPI.chatCompletions.path
@@ -1301,7 +1282,6 @@ final class OpenAICompatiblePlugin: NSObject,
                 userText: userText,
                 temperature: temperature,
                 requestTimeout: requestTimeout,
-                thinkingEnabled: thinkingEnabled,
                 outputTokenParameter: outputTokenParameter
             )
         } catch let error as PluginChatError {
@@ -1320,7 +1300,6 @@ final class OpenAICompatiblePlugin: NSObject,
                 userText: userText,
                 temperature: temperature,
                 requestTimeout: requestTimeout,
-                thinkingEnabled: thinkingEnabled,
                 outputTokenParameter: fallback
             )
         }
@@ -1334,7 +1313,6 @@ final class OpenAICompatiblePlugin: NSObject,
         userText: String,
         temperature: Double?,
         requestTimeout: TimeInterval,
-        thinkingEnabled: Bool,
         outputTokenParameter: OutputTokenParameter
     ) async throws -> String {
         var requestBody: [String: Any] = [
@@ -1347,9 +1325,6 @@ final class OpenAICompatiblePlugin: NSObject,
         requestBody[outputTokenParameter.rawValue] = 4096
         if let temperature {
             requestBody["temperature"] = temperature
-        }
-        if thinkingEnabled {
-            requestBody["thinking"] = ["type": "enabled"]
         }
 
         var request = URLRequest(url: url)
@@ -1856,7 +1831,6 @@ private struct OpenAICompatibleSettingsView: View {
     @State private var manualLLMModel = ""
     @State private var llmTemperatureMode: PluginLLMTemperatureMode = .providerDefault
     @State private var llmTemperatureValue: Double = 0.3
-    @State private var thinkingEnabled = false
     @State private var chatTimeoutInput = ""
     @State private var transcriptionTransport: OpenAICompatibleTranscriptTransport = .auto
     @State private var llmAPI: OpenAICompatibleLLMAPI = .chatCompletions
@@ -1962,9 +1936,7 @@ private struct OpenAICompatibleSettingsView: View {
                     serverSection
                     modelSection
                     temperatureSection
-                    if llmAPI == .chatCompletions {
-                        thinkingModeSection
-                    } else {
+                    if llmAPI == .responses {
                         reasoningEffortSection
                     }
                     timeoutSection
@@ -2313,26 +2285,6 @@ private struct OpenAICompatibleSettingsView: View {
         }
     }
 
-    private var thinkingModeSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Divider()
-
-            Toggle(isOn: $thinkingEnabled) {
-                Text("Provider Thinking Extension", bundle: bundle)
-                    .font(.headline)
-            }
-            .onChange(of: thinkingEnabled) {
-                guard let selectedProfile else { return }
-                plugin.setThinkingEnabled(thinkingEnabled, for: selectedProfile.id)
-                reloadProfiles(selecting: selectedProfile.id, preserveInputs: true)
-            }
-
-            Text("Adds the nonstandard Chat Completions thinking field only when enabled. Leave off unless your provider documents support.", bundle: bundle)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-    }
-
     private var reasoningEffortSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Divider()
@@ -2410,7 +2362,6 @@ private struct OpenAICompatibleSettingsView: View {
         manualLLMModel = profile.selectedLLMModelId
         llmTemperatureMode = PluginLLMTemperatureMode(rawValue: profile.llmTemperatureModeRaw) ?? .providerDefault
         llmTemperatureValue = profile.llmTemperatureValue
-        thinkingEnabled = profile.thinkingEnabled
         chatTimeoutInput = String(Int(profile.resolvedChatRequestTimeout))
         transcriptionTransport = profile.transcriptionTransport
         llmAPI = profile.llmAPI

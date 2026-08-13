@@ -28,7 +28,6 @@ final class OpenAICompatiblePluginTests: XCTestCase {
 
         plugin.selectModel("whisper-1")
         plugin.selectLLMModel("gpt-4.1-mini")
-        plugin.setThinkingEnabled(true)
         plugin.deactivate()
 
         let reloaded = OpenAICompatiblePlugin()
@@ -36,7 +35,6 @@ final class OpenAICompatiblePluginTests: XCTestCase {
 
         XCTAssertEqual(reloaded.selectedModelId, "whisper-1")
         XCTAssertEqual(reloaded.selectedLLMModelId, "gpt-4.1-mini")
-        XCTAssertEqual(reloaded.profileSnapshot(for: reloaded.providerId)?.thinkingEnabled, true)
     }
 
     func testLegacyConfigurationMigratesIntoDefaultProfile() throws {
@@ -69,7 +67,6 @@ final class OpenAICompatiblePluginTests: XCTestCase {
         XCTAssertEqual(profile.selectedLLMModelId, "chat-legacy")
         XCTAssertEqual(profile.llmTemperatureModeRaw, PluginLLMTemperatureMode.custom.rawValue)
         XCTAssertEqual(profile.llmTemperatureValue, 0.7)
-        XCTAssertFalse(profile.thinkingEnabled)
         XCTAssertEqual(profile.llmAPI, .chatCompletions)
         XCTAssertEqual(profile.reasoningEffort, .providerDefault)
         XCTAssertEqual(profile.fetchedModels.map(\.id), ["legacy-model"])
@@ -102,7 +99,7 @@ final class OpenAICompatiblePluginTests: XCTestCase {
         XCTAssertEqual(host.userDefault(forKey: "apiVersion") as? String, "preview")
     }
 
-    func testSavedProfilesWithoutThinkingModeDecodeAsDisabled() throws {
+    func testSavedProfilesIgnoreLegacyThinkingMode() throws {
         let savedProfiles = Data(
             """
             [
@@ -115,7 +112,8 @@ final class OpenAICompatiblePluginTests: XCTestCase {
                 "llmTemperatureModeRaw": "providerDefault",
                 "llmTemperatureValue": 0.3,
                 "fetchedModels": [],
-                "chatRequestTimeoutSeconds": 45
+                "chatRequestTimeoutSeconds": 45,
+                "thinkingEnabled": true
               }
             ]
             """.utf8
@@ -127,11 +125,11 @@ final class OpenAICompatiblePluginTests: XCTestCase {
 
         let profile = try XCTUnwrap(plugin.profileSnapshot(for: plugin.providerId))
         XCTAssertEqual(profile.apiVersion, "")
-        XCTAssertFalse(profile.thinkingEnabled)
         XCTAssertEqual(profile.llmAPI, .chatCompletions)
         XCTAssertEqual(profile.reasoningEffort, .providerDefault)
         XCTAssertEqual(profile.resolvedChatRequestTimeout, 45)
-        XCTAssertNoThrow(try JSONEncoder().encode(plugin.profileSnapshots))
+        let encoded = try JSONEncoder().encode(plugin.profileSnapshots)
+        XCTAssertFalse(String(decoding: encoded, as: UTF8.self).contains("thinkingEnabled"))
     }
 
     func testAdditionalProfilesExposeIndependentTranscriptionAndLLMRoles() throws {
@@ -626,7 +624,6 @@ final class OpenAICompatiblePluginTests: XCTestCase {
         plugin.selectLLMModel("inception-chat", for: inception.id)
         plugin.setLLMTemperatureMode(.custom, for: inception.id)
         plugin.setLLMTemperatureValue(0.9, for: inception.id)
-        plugin.setThinkingEnabled(true, for: inception.id)
 
         let store = PluginHTTPClientSessionStore()
         PluginHTTPClientTestHarness.configure { _ in
@@ -679,8 +676,7 @@ final class OpenAICompatiblePluginTests: XCTestCase {
         XCTAssertEqual(inceptionJSON["max_tokens"] as? Int, 4096)
         XCTAssertNil(inceptionJSON["max_completion_tokens"])
         XCTAssertEqual(inceptionJSON["temperature"] as? Double, 0.9)
-        let inceptionThinking = try XCTUnwrap(inceptionJSON["thinking"] as? [String: String])
-        XCTAssertEqual(inceptionThinking["type"], "enabled")
+        XCTAssertNil(inceptionJSON["thinking"])
     }
 
     func testResponsesModeUsesProfileURLAuthTimeoutAndOpenAIRequestShape() async throws {
@@ -894,7 +890,6 @@ final class OpenAICompatiblePluginTests: XCTestCase {
         plugin.activate(host: host)
         plugin.setLLMTemperatureMode(.custom)
         plugin.setLLMTemperatureValue(0.4)
-        plugin.setThinkingEnabled(true)
 
         let store = PluginHTTPClientSessionStore()
         PluginHTTPClientTestHarness.configure { _ in
@@ -928,6 +923,7 @@ final class OpenAICompatiblePluginTests: XCTestCase {
         XCTAssertEqual(firstJSON["model"] as? String, "future-chat")
         XCTAssertEqual(firstJSON["max_tokens"] as? Int, 4096)
         XCTAssertNil(firstJSON["max_completion_tokens"])
+        XCTAssertNil(firstJSON["thinking"])
 
         let retryBody = try XCTUnwrap(requests[1].httpBody)
         let retryJSON = try XCTUnwrap(JSONSerialization.jsonObject(with: retryBody) as? [String: Any])
@@ -935,8 +931,7 @@ final class OpenAICompatiblePluginTests: XCTestCase {
         XCTAssertEqual(retryJSON["max_completion_tokens"] as? Int, 4096)
         XCTAssertNil(retryJSON["max_tokens"])
         XCTAssertEqual(retryJSON["temperature"] as? Double, 0.4)
-        let retryThinking = try XCTUnwrap(retryJSON["thinking"] as? [String: String])
-        XCTAssertEqual(retryThinking["type"], "enabled")
+        XCTAssertNil(retryJSON["thinking"])
     }
 
     func testFallbackOutputTokenParameterRequiresBothParameterNames() {

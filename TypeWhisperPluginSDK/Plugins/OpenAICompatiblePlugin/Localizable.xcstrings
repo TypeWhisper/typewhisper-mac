@@ -265,34 +265,6 @@
         }
       }
     },
-    "Thinking Mode": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Denkmodus"
-          }
-        },
-        "en": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Thinking Mode"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "思考モード"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "思考模式"
-          }
-        }
-      }
-    },
     "Model name": {
       "localizations": {
         "de": {
@@ -667,28 +639,6 @@
         }
       }
     },
-    "Adds the nonstandard Chat Completions thinking field only when enabled. Leave off unless your provider documents support.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Fügt das nicht standardisierte Thinking-Feld für Chat Completions nur hinzu, wenn es aktiviert ist. Deaktiviert lassen, sofern Ihr Anbieter die Unterstützung nicht dokumentiert."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "有効な場合にのみ、非標準の Chat Completions thinking フィールドを追加します。プロバイダーが対応を明記していない限り、オフのままにしてください。"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "仅在启用时添加非标准的 Chat Completions thinking 字段。除非提供商明确说明支持，否则请保持关闭。"
-          }
-        }
-      }
-    },
     "Chat Completions": {
       "localizations": {
         "de": {
@@ -861,28 +811,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "“提供商默认值”会省略 reasoning。其他值会向 /v1/responses 发送 reasoning: { effort: ... }。"
-          }
-        }
-      }
-    },
-    "Provider Thinking Extension": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Thinking-Erweiterung des Anbieters"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "プロバイダーの Thinking 拡張"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "提供商 Thinking 扩展"
           }
         }
       }
