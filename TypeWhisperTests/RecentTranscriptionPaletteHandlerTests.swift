@@ -109,7 +109,6 @@ final class RecentTranscriptionPaletteHandlerTests: XCTestCase {
         let textInsertionService = TextInsertionService()
         textInsertionService.accessibilityGrantedOverride = true
         textInsertionService.pasteboardProvider = { pasteboard }
-        textInsertionService.focusedTextFieldOverride = { true }
 
         var pasteCount = 0
         var returnCount = 0

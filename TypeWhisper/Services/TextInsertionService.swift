@@ -31,7 +31,6 @@ final class TextInsertionService {
 
     var accessibilityGrantedOverride: Bool?
     var pasteboardProvider: () -> NSPasteboard = { .general }
-    var focusedTextFieldOverride: (() -> Bool)?
     var focusedTextElementOverride: (() -> AXUIElement?)?
     var focusedTextStateOverride: ((AXUIElement) -> FocusedTextSnapshot?)?
     var textSelectionOverride: (() -> TextSelection?)?
@@ -395,7 +394,6 @@ final class TextInsertionService {
             throw TextInsertionError.accessibilityNotGranted
         }
 
-        let hadFocusedTextField = autoEnter && hasFocusedTextField()
         let formattedClipboardPayload = ClipboardContentFormatter.payload(for: text, outputFormat: outputFormat)
         let requiresPasteboardInsertion = ClipboardContentFormatter.requiresPasteboardInsertion(
             outputFormat: outputFormat
@@ -416,7 +414,7 @@ final class TextInsertionService {
         if preserveClipboard, !requiresPasteboardInsertion, !prefersSyntheticPaste,
            let focusedElement = getFocusedTextElement(),
            insertTextAtAndVerifyChange(element: focusedElement, text: text) {
-            if hadFocusedTextField {
+            if autoEnter {
                 try? await Task.sleep(for: .milliseconds(50))
                 simulateReturn()
             }
@@ -471,7 +469,7 @@ final class TextInsertionService {
             )
         }
 
-        if hadFocusedTextField {
+        if autoEnter {
             try? await Task.sleep(for: .milliseconds(50))
             simulateReturn()
         }
@@ -529,27 +527,6 @@ final class TextInsertionService {
         return elementPosition(from: axElement)
     }
 
-    /// Checks if the currently focused UI element is a text input field.
-    func hasFocusedTextField() -> Bool {
-        if let focusedTextFieldOverride {
-            return focusedTextFieldOverride()
-        }
-        guard isAccessibilityGranted else { return false }
-
-        let systemWide = AXUIElementCreateSystemWide()
-        var focusedElement: AnyObject?
-        let result = AXUIElementCopyAttributeValue(systemWide, kAXFocusedUIElementAttribute as CFString, &focusedElement)
-        guard result == .success, let element = focusedElement else { return false }
-
-        let axElement = element as! AXUIElement
-        var roleValue: AnyObject?
-        let roleResult = AXUIElementCopyAttributeValue(axElement, kAXRoleAttribute as CFString, &roleValue)
-        guard roleResult == .success, let role = roleValue as? String else { return false }
-
-        let textRoles = ["AXTextField", "AXTextArea", "AXComboBox", "AXSearchField", "AXWebArea"]
-        return textRoles.contains(role)
-    }
-
     private func caretRect(from element: AXUIElement) -> CGRect? {
         var selectedRangeValue: AnyObject?
         let rangeResult = AXUIElementCopyAttributeValue(
@@ -586,13 +563,14 @@ final class TextInsertionService {
             return
         }
         let returnKeyCode: CGKeyCode = 0x24
-        let keyDown = CGEvent(keyboardEventSource: nil, virtualKey: returnKeyCode, keyDown: true)
+        let eventSource = CGEventSource(stateID: .combinedSessionState)
+        let keyDown = CGEvent(keyboardEventSource: eventSource, virtualKey: returnKeyCode, keyDown: true)
         keyDown?.flags = []
-        keyDown?.post(tap: .cgSessionEventTap)
+        keyDown?.post(tap: .cghidEventTap)
 
-        let keyUp = CGEvent(keyboardEventSource: nil, virtualKey: returnKeyCode, keyDown: false)
+        let keyUp = CGEvent(keyboardEventSource: eventSource, virtualKey: returnKeyCode, keyDown: false)
         keyUp?.flags = []
-        keyUp?.post(tap: .cgSessionEventTap)
+        keyUp?.post(tap: .cghidEventTap)
     }
 
     private func simulatePaste() {
