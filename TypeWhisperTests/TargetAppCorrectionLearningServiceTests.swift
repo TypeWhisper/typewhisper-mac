@@ -54,6 +54,53 @@ final class TargetAppCorrectionLearningServiceTests: XCTestCase {
         XCTAssertEqual(dictionaryService.correctionsCount, 1)
     }
 
+    func testLearnsReportedTextEditCorrectionAfterTransientObservationAndReturn() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let element = AXUIElementCreateSystemWide()
+        let textInsertionService = TextInsertionService()
+        textInsertionService.focusedTextElementOverride = { element }
+        var captureCount = 0
+        textInsertionService.focusedTextStateOverride = { _ in
+            captureCount += 1
+            guard captureCount > 1 else { return nil }
+            let value = "Beeper\n"
+            return (value: value, selectedText: nil, selectedRange: NSRange(location: value.count, length: 0))
+        }
+
+        let commitEmitter = CommitEmitterBox()
+        var sleepCount = 0
+        let dictionaryService = DictionaryService(appSupportDirectory: appSupportDirectory)
+        let service = TargetAppCorrectionLearningService(
+            textInsertionService: textInsertionService,
+            textDiffService: TextDiffService(),
+            dictionaryService: dictionaryService,
+            pollSchedule: [.milliseconds(0), .milliseconds(0)],
+            sleep: { _ in
+                sleepCount += 1
+                if sleepCount == 2 {
+                    commitEmitter.emit(.returnKey)
+                }
+            },
+            makeCommitObserver: commitObserver(capturing: commitEmitter)
+        )
+        let baseline = TextInsertionService.FocusedTextObservation(
+            element: element,
+            value: "Biper",
+            selectedText: nil,
+            selectedRange: NSRange(location: 5, length: 0)
+        )
+
+        let result = await service.trackInsertion(insertedText: "Biper", baseline: baseline)
+
+        XCTAssertEqual(result.snapshot.outcome, .learned)
+        XCTAssertEqual(result.snapshot.commitSignal, .returnKey)
+        XCTAssertEqual(result.learnedCorrections.first?.original, "Biper")
+        XCTAssertEqual(result.learnedCorrections.first?.replacement, "Beeper")
+        XCTAssertEqual(dictionaryService.correctionsCount, 1)
+    }
+
     func testSkipsSentenceRewriteAfterCommitSignal() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
