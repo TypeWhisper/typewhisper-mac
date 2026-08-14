@@ -105,7 +105,7 @@ final class PluginManifestValidationTests: XCTestCase {
 
     func testMLXStoragePluginReleasesRequireHost16() throws {
         let manifestExpectations = [
-            ("TypeWhisperPluginSDK/Plugins/Qwen3Plugin/manifest.json", "1.1.6"),
+            ("TypeWhisperPluginSDK/Plugins/Qwen3Plugin/manifest.json", "1.1.7"),
             ("TypeWhisperPluginSDK/Plugins/VoxtralPlugin/manifest.json", "1.0.13"),
             ("TypeWhisperPluginSDK/Plugins/GranitePlugin/manifest.json", "1.0.9"),
             ("TypeWhisperPluginSDK/Plugins/Gemma4Plugin/manifest.json", "1.1.4"),
