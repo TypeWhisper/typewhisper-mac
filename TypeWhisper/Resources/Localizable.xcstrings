@@ -27535,24 +27535,24 @@
         }
       }
     },
-    "Supported text fields are updated while you speak. TypeWhisper uses the transcript overlay when direct updates are unavailable." : {
+    "Supported text fields are updated while you speak. TypeWhisper inserts the final transcript normally when direct updates are unavailable." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Unterstützte Textfelder werden während des Sprechens aktualisiert. Wenn direkte Aktualisierungen nicht verfügbar sind, verwendet TypeWhisper die Transkriptvorschau."
+            "value" : "Unterstützte Textfelder werden während des Sprechens aktualisiert. Wenn direkte Aktualisierungen nicht verfügbar sind, fügt TypeWhisper das endgültige Transkript wie gewohnt ein."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "対応するテキストフィールドは話している間に更新されます。直接更新できない場合、TypeWhisperは文字起こしオーバーレイを使用します。"
+            "value" : "対応するテキストフィールドは話している間に更新されます。直接更新できない場合、TypeWhisperは最終的な文字起こしを通常どおり挿入します。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "支持的文本字段会在您说话时更新。无法直接更新时，TypeWhisper 会使用转录浮层。"
+            "value" : "支持的文本字段会在您说话时更新。无法直接更新时，TypeWhisper 会照常插入最终转录。"
           }
         }
       }

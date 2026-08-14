@@ -45,6 +45,8 @@ private func installLiveFieldApplicationActivationObserver(
 /// Inserts transcribed text into the active application via clipboard + simulated Cmd+V.
 @MainActor
 final class TextInsertionService {
+    private static let liveFieldMessagingTimeout: Float = 0.05
+
     private let browserURLResolver: BrowserURLResolver
     private let syntheticPastePreferredBundleIdentifiers: Set<String> = [
         "com.apple.Terminal",
@@ -72,6 +74,7 @@ final class TextInsertionService {
     var liveFieldTargetEligibilityOverride: ((AXUIElement) -> Bool)?
     var liveFieldApplicationEligibilityOverride: ((String) -> Bool)?
     var liveFieldElectronApplicationOverride: ((String) -> Bool)?
+    var setMessagingTimeoutOverride: ((AXUIElement, Float) -> Void)?
     var setSelectedRangeOverride: ((AXUIElement, NSRange) -> Bool)?
     var textSelectionOverride: (() -> TextSelection?)?
     var insertTextAtOverride: ((AXUIElement, String) -> Bool)?
@@ -279,23 +282,27 @@ final class TextInsertionService {
     }
 
     /// Returns the focused text element (even without selection), for later insertion.
-    func getFocusedTextElement() -> AXUIElement? {
+    func getFocusedTextElement(messagingTimeout: Float? = nil) -> AXUIElement? {
         if let focusedTextElementOverride {
-            return focusedTextElementOverride()
+            guard let element = focusedTextElementOverride() else { return nil }
+            applyMessagingTimeout(messagingTimeout, to: element)
+            return element
         }
         guard isAccessibilityGranted else { return nil }
 
         let systemWide = AXUIElementCreateSystemWide()
+        applyMessagingTimeout(messagingTimeout, to: systemWide)
         var focusedElement: AnyObject?
         guard AXUIElementCopyAttributeValue(systemWide, kAXFocusedUIElementAttribute as CFString, &focusedElement) == .success else {
             return nil
         }
 
         guard let element = axElement(from: focusedElement) else { return nil }
-        if isLiveFieldTextRole(element), selectedRangeAttribute(from: element) != nil {
+        applyMessagingTimeout(messagingTimeout, to: element)
+        if isLiveFieldTextRole(element) {
             return element
         }
-        return findEditableTextDescendant(of: element)
+        return findEditableTextDescendant(of: element, messagingTimeout: messagingTimeout)
     }
 
     /// Replaces the selected text on a previously captured AXUIElement.
@@ -396,7 +403,9 @@ final class TextInsertionService {
             logger.debug("Live field target rejected: app requires normal final insertion")
             return nil
         }
-        guard let state = captureFocusedTextState() else {
+        guard let state = captureFocusedTextState(
+            messagingTimeout: Self.liveFieldMessagingTimeout
+        ) else {
             logger.debug("Live field target rejected: no readable focused text element")
             return nil
         }
@@ -472,23 +481,31 @@ final class TextInsertionService {
             return .detached
         }
 
-        if var resultingState = captureFocusedTextState(),
+        if var resultingState = captureFocusedTextState(
+            messagingTimeout: Self.liveFieldMessagingTimeout
+        ),
            captureActiveApp().bundleId == target.applicationBundleIdentifier,
            resultingState.value == expectedValue,
            resultingState.selectedRange != expectedCaret {
             _ = setSelectedRange(expectedCaret, on: resultingState.element)
-            resultingState = captureFocusedTextState() ?? resultingState
+            resultingState = captureFocusedTextState(
+                messagingTimeout: Self.liveFieldMessagingTimeout
+            ) ?? resultingState
         }
 
         guard captureActiveApp().bundleId == target.applicationBundleIdentifier,
-              let resultingState = captureFocusedTextState(),
+              let resultingState = captureFocusedTextState(
+                messagingTimeout: Self.liveFieldMessagingTimeout
+              ),
               resultingState.value == expectedValue,
               resultingState.selectedRange == expectedCaret,
               resultingState.selectedText?.isEmpty != false,
               resultingState.element == target.element
                 || isEligibleLiveFieldTarget(resultingState.element) else {
             _ = setSelectedRange(target.expectedCaret, on: target.element)
-            if let unchangedState = captureFocusedTextState(),
+            if let unchangedState = captureFocusedTextState(
+                messagingTimeout: Self.liveFieldMessagingTimeout
+            ),
                unchangedState.element == target.element,
                unchangedState.value == target.expectedValue,
                unchangedState.selectedRange == target.expectedCaret,
@@ -971,13 +988,17 @@ final class TextInsertionService {
         findSelectionInDescendants(of: root, maxDepth: 6, maxNodes: 80)
     }
 
-    private func findEditableTextDescendant(of root: AXUIElement) -> AXUIElement? {
+    private func findEditableTextDescendant(
+        of root: AXUIElement,
+        messagingTimeout: Float? = nil
+    ) -> AXUIElement? {
         var queue: [(element: AXUIElement, depth: Int)] = childElements(of: root).map { ($0, 1) }
         var visited = 0
 
         while !queue.isEmpty && visited < 80 {
             let current = queue.removeFirst()
             visited += 1
+            applyMessagingTimeout(messagingTimeout, to: current.element)
 
             if isLiveFieldTextRole(current.element),
                selectedRangeAttribute(from: current.element) != nil {
@@ -1135,12 +1156,16 @@ final class TextInsertionService {
         return text.isEmpty ? nil : text
     }
 
-    private func captureFocusedTextState() -> FocusedTextState? {
-        guard let element = getFocusedTextElement() else { return nil }
-        return captureFocusedTextState(for: element)
+    private func captureFocusedTextState(messagingTimeout: Float? = nil) -> FocusedTextState? {
+        guard let element = getFocusedTextElement(messagingTimeout: messagingTimeout) else { return nil }
+        return captureFocusedTextState(for: element, messagingTimeout: messagingTimeout)
     }
 
-    private func captureFocusedTextState(for element: AXUIElement) -> FocusedTextState? {
+    private func captureFocusedTextState(
+        for element: AXUIElement,
+        messagingTimeout: Float? = nil
+    ) -> FocusedTextState? {
+        applyMessagingTimeout(messagingTimeout, to: element)
         if let focusedTextStateOverride {
             guard let snapshot = focusedTextStateOverride(element) else { return nil }
             return FocusedTextState(
@@ -1213,7 +1238,9 @@ final class TextInsertionService {
 
     private func verifiedLiveFieldState(for target: inout LiveFieldTarget) -> FocusedTextState? {
         guard captureActiveApp().bundleId == target.applicationBundleIdentifier,
-              let state = captureFocusedTextState(),
+              let state = captureFocusedTextState(
+                messagingTimeout: Self.liveFieldMessagingTimeout
+              ),
               state.value == target.expectedValue,
               state.selectedRange == target.expectedCaret,
               state.selectedText?.isEmpty != false else {
@@ -1235,6 +1262,15 @@ final class TextInsertionService {
             selectedText: nil,
             selectedRange: target.expectedCaret
         )
+    }
+
+    private func applyMessagingTimeout(_ timeout: Float?, to element: AXUIElement) {
+        guard let timeout, timeout > 0 else { return }
+        if let setMessagingTimeoutOverride {
+            setMessagingTimeoutOverride(element, timeout)
+        } else {
+            _ = AXUIElementSetMessagingTimeout(element, timeout)
+        }
     }
 
     private func applicationSupportsVerifiedLiveFieldUpdates(

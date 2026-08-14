@@ -627,6 +627,7 @@ enum SettingsBackupExporter {
         historyService: HistoryService,
         usageStatisticsService: UsageStatisticsService,
         userDefaults: UserDefaults = .standard,
+        liveFieldTranscriptEnabledDidChange: ((Bool) -> Void)? = nil,
         recoveryRetentionPolicyDidChange: ((DictationRecoveryRetentionPolicy) -> Void)? = nil
     ) async -> ImportResult {
         var result = ImportResult()
@@ -845,6 +846,9 @@ enum SettingsBackupExporter {
         apply(preferences.indicatorVisibleInScreenCaptures, forKey: UserDefaultsKeys.indicatorVisibleInScreenCaptures)
         apply(preferences.indicatorTranscriptPreviewEnabled, forKey: UserDefaultsKeys.indicatorTranscriptPreviewEnabled)
         apply(preferences.liveFieldTranscriptEnabled, forKey: UserDefaultsKeys.liveFieldTranscriptEnabled)
+        if let liveFieldTranscriptEnabled = preferences.liveFieldTranscriptEnabled {
+            liveFieldTranscriptEnabledDidChange?(liveFieldTranscriptEnabled)
+        }
         apply(preferences.indicatorTranscriptPreviewFontSizeOffset, forKey: UserDefaultsKeys.indicatorTranscriptPreviewFontSizeOffset)
         apply(preferences.preserveClipboard, forKey: UserDefaultsKeys.preserveClipboard)
         apply(preferences.mediaPauseEnabled, forKey: UserDefaultsKeys.mediaPauseEnabled)

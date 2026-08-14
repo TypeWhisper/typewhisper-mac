@@ -3902,6 +3902,20 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    private func waitForLiveFieldUpdate(
+        _ description: String,
+        condition: () -> Bool
+    ) async throws {
+        for _ in 0..<100 {
+            if condition() {
+                return
+            }
+            try await Task.sleep(for: .milliseconds(1))
+        }
+        XCTFail("Timed out waiting for live-field update: \(description)")
+    }
+
+    @MainActor
     func testLiveFieldSessionRevisesOneOwnedRangeAndFinalizesInPlace() async throws {
         let service = TextInsertionService()
         let element = AXUIElementCreateSystemWide()
@@ -3941,9 +3955,11 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         )
 
         session.receivePartial("Hello")
-        try await Task.sleep(for: .milliseconds(10))
+        try await waitForLiveFieldUpdate("first partial") { writes == ["Hello"] }
         session.receivePartial("Hello world")
-        try await Task.sleep(for: .milliseconds(10))
+        try await waitForLiveFieldUpdate("revised partial") {
+            value == "Before Hello world after"
+        }
 
         XCTAssertEqual(value, "Before Hello world after")
         XCTAssertEqual(writes, ["Hello", "Hello world"])
@@ -3998,12 +4014,14 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             updateInterval: .milliseconds(1)
         )
         session.receivePartial("Hello")
-        try await Task.sleep(for: .milliseconds(10))
+        try await waitForLiveFieldUpdate("initial partial") { writeCount == 1 }
 
         value += "!"
         selectedRange = NSRange(location: 6, length: 0)
         session.receivePartial("Hello world")
-        try await Task.sleep(for: .milliseconds(10))
+        try await waitForLiveFieldUpdate("detach after external edit") {
+            session.state == .detached
+        }
 
         XCTAssertEqual(session.state, .detached)
         XCTAssertEqual(value, "Hello!")
@@ -4055,7 +4073,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             updateInterval: .milliseconds(1)
         )
         session.receivePartial("draft ")
-        try await Task.sleep(for: .milliseconds(10))
+        try await waitForLiveFieldUpdate("cancellable partial") { value == "Start draft end" }
 
         guard case .applied = session.cancel() else {
             return XCTFail("Expected cancellation cleanup")
@@ -4122,8 +4140,14 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             return true
         }
         service.insertTextAtOverride = { _, text in
-            value = text
-            selectedRange = NSRange(location: (text as NSString).length, length: 0)
+            if value == placeholder {
+                value = ""
+            }
+            value = (value as NSString).replacingCharacters(in: selectedRange, with: text)
+            selectedRange = NSRange(
+                location: selectedRange.location + (text as NSString).length,
+                length: 0
+            )
             return true
         }
 
@@ -4139,7 +4163,9 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             updateInterval: .milliseconds(1)
         )
         session.receivePartial("Hello from TypeWhisper")
-        try await Task.sleep(for: .milliseconds(10))
+        try await waitForLiveFieldUpdate("placeholder replacement") {
+            value == "Hello from TypeWhisper"
+        }
 
         XCTAssertEqual(session.state, .active)
         XCTAssertEqual(value, "Hello from TypeWhisper")
@@ -4178,7 +4204,9 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             updateInterval: .milliseconds(1)
         )
         session.receivePartial("Hello")
-        try await Task.sleep(for: .milliseconds(10))
+        try await waitForLiveFieldUpdate("failed AX write fallback") {
+            session.state == .detached
+        }
 
         XCTAssertEqual(session.state, .detached)
         guard case .detached(let hadAttemptedMutation) = session.finalize(with: "Final") else {
@@ -4216,7 +4244,9 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             updateInterval: .milliseconds(1)
         )
         session.receivePartial("Hello")
-        try await Task.sleep(for: .milliseconds(10))
+        try await waitForLiveFieldUpdate("ignored AX write fallback") {
+            session.state == .detached
+        }
 
         XCTAssertEqual(session.state, .detached)
         guard case .detached(let hadAttemptedMutation) = session.finalize(with: "Final") else {
@@ -4228,14 +4258,21 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     @MainActor
     func testLiveFieldSessionRebindsToRecreatedWebEditorElement() async throws {
         let service = TextInsertionService()
-        var element = AXUIElementCreateSystemWide()
+        let originalElement = AXUIElementCreateSystemWide()
+        let recreatedElement = AXUIElementCreateApplication(ProcessInfo.processInfo.processIdentifier)
+        XCTAssertFalse(CFEqual(originalElement, recreatedElement))
+        var element = originalElement
         var value = ""
         var selectedRange = NSRange(location: 0, length: 0)
+        var timeoutApplications: [(element: AXUIElement, timeout: Float)] = []
 
         service.accessibilityGrantedOverride = true
         service.captureActiveAppOverride = { ("T3 Code", "com.t3.code", nil) }
         service.focusedTextElementOverride = { element }
         service.liveFieldTargetEligibilityOverride = { _ in true }
+        service.setMessagingTimeoutOverride = { element, timeout in
+            timeoutApplications.append((element, timeout))
+        }
         service.focusedTextStateOverride = { _ in
             (value: value, selectedText: nil, selectedRange: selectedRange)
         }
@@ -4249,7 +4286,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
                 location: selectedRange.location + (text as NSString).length,
                 length: 0
             )
-            element = AXUIElementCreateSystemWide()
+            element = recreatedElement
             return true
         }
 
@@ -4263,12 +4300,19 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             updateInterval: .milliseconds(1)
         )
         session.receivePartial("Hello")
-        try await Task.sleep(for: .milliseconds(10))
+        try await waitForLiveFieldUpdate("first recreated-element partial") {
+            value == "Hello"
+        }
         session.receivePartial("Hello from Electron")
-        try await Task.sleep(for: .milliseconds(10))
+        try await waitForLiveFieldUpdate("second recreated-element partial") {
+            value == "Hello from Electron"
+        }
 
         XCTAssertEqual(session.state, .active)
         XCTAssertEqual(value, "Hello from Electron")
+        XCTAssertTrue(timeoutApplications.allSatisfy { $0.timeout > 0 })
+        XCTAssertTrue(timeoutApplications.contains { CFEqual($0.element, originalElement) })
+        XCTAssertTrue(timeoutApplications.contains { CFEqual($0.element, recreatedElement) })
         guard case .applied = session.finalize(with: "Final transcript") else {
             return XCTFail("Expected recreated Electron element to finalize")
         }

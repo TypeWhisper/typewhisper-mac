@@ -482,6 +482,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         let destination = try makeFixture()
         defer { teardown(destination) }
         var appliedRecoveryRetentionPolicy: DictationRecoveryRetentionPolicy?
+        var appliedLiveFieldTranscriptEnabled: Bool?
 
         let result = await SettingsBackupExporter.importBackup(
             backup,
@@ -495,6 +496,7 @@ final class SettingsBackupExporterTests: XCTestCase {
             historyService: destination.historyService,
             usageStatisticsService: destination.usageStatisticsService,
             userDefaults: destination.userDefaults,
+            liveFieldTranscriptEnabledDidChange: { appliedLiveFieldTranscriptEnabled = $0 },
             recoveryRetentionPolicyDidChange: { appliedRecoveryRetentionPolicy = $0 }
         )
 
@@ -510,6 +512,7 @@ final class SettingsBackupExporterTests: XCTestCase {
             false
         )
         XCTAssertEqual(destination.userDefaults.bool(forKey: UserDefaultsKeys.liveFieldTranscriptEnabled), true)
+        XCTAssertEqual(appliedLiveFieldTranscriptEnabled, true)
         XCTAssertEqual(destination.userDefaults.integer(forKey: UserDefaultsKeys.dictationRecoveryRetentionDays), 7)
         XCTAssertEqual(appliedRecoveryRetentionPolicy, .sevenDays)
         XCTAssertNil(destination.userDefaults.string(forKey: UserDefaultsKeys.fileTranscriptionEngine))
