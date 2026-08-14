@@ -50,7 +50,6 @@ struct SettingsPageHeader<Actions: View>: View {
         .padding(.horizontal, SettingsLayoutMetrics.pagePadding)
         .padding(.vertical, 14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.bar)
     }
 }
 

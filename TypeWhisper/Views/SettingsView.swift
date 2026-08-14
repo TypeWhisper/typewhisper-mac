@@ -88,7 +88,13 @@ struct SettingsView: View {
 
     var body: some View {
         Group {
-            if #available(macOS 15, *) {
+            if #available(macOS 27, *) {
+                SettingsSidebarShell(
+                    selectedTab: $selectedTab,
+                    sections: destinationSections,
+                    detail: settingsDetail(for:)
+                )
+            } else if #available(macOS 15, *) {
                 SettingsModernShell(
                     selectedTab: $selectedTab,
                     sections: destinationSections,
@@ -492,24 +498,16 @@ private struct SettingsSidebarShell<DetailContent: View>: View {
     let detail: (SettingsTab) -> DetailContent
 
     @State private var isSidebarVisible = true
+    @State private var sidebarSearchText = ""
 
     var body: some View {
         HStack(spacing: 0) {
             if isSidebarVisible {
-                List(selection: $selectedTab) {
-                    ForEach(sections) { section in
-                        Section {
-                            ForEach(section.destinations) { destination in
-                                SettingsSidebarRow(
-                                    destination: destination,
-                                    isSelected: destination.tab == selectedTab
-                                )
-                                .tag(destination.tab)
-                            }
-                        }
-                    }
-                }
-                .listStyle(.sidebar)
+                SettingsSidebarContent(
+                    selectedTab: $selectedTab,
+                    sidebarSearchText: $sidebarSearchText,
+                    sections: sections
+                )
                 .frame(width: 240)
 
                 Divider()
