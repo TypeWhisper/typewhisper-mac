@@ -111,24 +111,24 @@
         }
       }
     },
-    "Azure OpenAI and Microsoft Foundry may require an API version such as preview for audio transcription. Leave blank for standard OpenAI-compatible servers.": {
+    "Some servers require an API version. Deployment-scoped batch endpoints require a dated version; realtime endpoints may require a preview version. Leave blank when the server does not require one.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Azure OpenAI und Microsoft Foundry benötigen für die Audiotranskription möglicherweise eine API-Version wie preview. Für standardmäßige OpenAI-kompatible Server leer lassen."
+            "value": "Einige Server erfordern eine API-Version. Bereitstellungsbezogene Batch-Endpunkte benötigen eine datierte Version; Echtzeitendpunkte möglicherweise eine Vorschauversion. Leer lassen, wenn der Server keine Version erfordert."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "Azure OpenAI および Microsoft Foundry では、音声文字起こしに preview などの API バージョンが必要な場合があります。標準の OpenAI 互換サーバーでは空欄のままにしてください。"
+            "value": "一部のサーバーでは API バージョンが必要です。デプロイスコープのバッチエンドポイントには日付付きバージョン、リアルタイムエンドポイントにはプレビューバージョンが必要な場合があります。サーバーがバージョンを必要としない場合は空欄にします。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "Azure OpenAI 和 Microsoft Foundry 进行音频转写时可能需要指定 API 版本，例如 preview。标准 OpenAI 兼容服务器请留空。"
+            "value": "某些服务器需要 API 版本。部署范围的批量终结点需要带日期的版本；实时终结点可能需要预览版本。服务器不需要版本时请留空。"
           }
         }
       }
@@ -151,6 +151,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "批量"
+          }
+        }
+      }
+    },
+    "Batch Transcription Endpoint": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Endpunkt für Batch-Transkription"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "バッチ文字起こしエンドポイント"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "批量转录终结点"
           }
         }
       }
@@ -707,6 +729,72 @@
           "stringUnit": {
             "state": "translated",
             "value": "聊天补全"
+          }
+        }
+      }
+    },
+    "Deployment-scoped": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bereitstellungsbezogen"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "デプロイスコープ"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "部署范围"
+          }
+        }
+      }
+    },
+    "Standard v1": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Standard v1"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "標準 v1"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "标准 v1"
+          }
+        }
+      }
+    },
+    "Standard v1 uses /v1/audio/transcriptions. Deployment-scoped uses /deployments/{model}/audio/transcriptions and requires a dated API version. Realtime transcription continues to use /v1/realtime.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Standard v1 verwendet /v1/audio/transcriptions. Bereitstellungsbezogen verwendet /deployments/{model}/audio/transcriptions und erfordert eine datierte API-Version. Die Echtzeittranskription verwendet weiterhin /v1/realtime."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "標準 v1 は /v1/audio/transcriptions を使用します。デプロイスコープは /deployments/{model}/audio/transcriptions を使用し、日付付き API バージョンが必要です。リアルタイム文字起こしは引き続き /v1/realtime を使用します。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "标准 v1 使用 /v1/audio/transcriptions。部署范围使用 /deployments/{model}/audio/transcriptions，并需要带日期的 API 版本。实时转录继续使用 /v1/realtime。"
           }
         }
       }

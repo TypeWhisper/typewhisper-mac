@@ -57,6 +57,13 @@ enum OpenAICompatibleResolvedTranscriptionTransport: Sendable, Equatable {
     case realtime
 }
 
+/// Per-profile URL shape for batch transcription. Standard OpenAI-compatible
+/// servers use `/v1/audio/...`; some providers require a deployment-scoped route.
+enum OpenAICompatibleBatchEndpoint: String, Codable, CaseIterable, Sendable {
+    case standard
+    case deploymentScoped = "deployment-scoped"
+}
+
 /// Per-profile LLM endpoint selection. Chat Completions remains the default so
 /// profiles created before Responses API support keep their existing behavior.
 enum OpenAICompatibleLLMAPI: String, Codable, CaseIterable, Sendable {
@@ -157,6 +164,7 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
     var chatRequestTimeoutSeconds: TimeInterval?
     var thinkingEnabled: Bool
     var transcriptionTransportRaw: String
+    var batchEndpointRaw: String
     var llmAPIModeRaw: String
     var reasoningEffortRaw: String
 
@@ -177,6 +185,7 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
         case chatRequestTimeoutSeconds
         case thinkingEnabled
         case transcriptionTransportRaw
+        case batchEndpointRaw
         case llmAPIModeRaw
         case reasoningEffortRaw
     }
@@ -194,6 +203,7 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
         chatRequestTimeoutSeconds: TimeInterval? = nil,
         thinkingEnabled: Bool = false,
         transcriptionTransportRaw: String = OpenAICompatibleTranscriptTransport.auto.rawValue,
+        batchEndpointRaw: String = OpenAICompatibleBatchEndpoint.standard.rawValue,
         llmAPIModeRaw: String = OpenAICompatibleLLMAPI.chatCompletions.rawValue,
         reasoningEffortRaw: String = OpenAICompatibleReasoningEffort.providerDefault.rawValue
     ) {
@@ -209,6 +219,7 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
         self.chatRequestTimeoutSeconds = chatRequestTimeoutSeconds
         self.thinkingEnabled = thinkingEnabled
         self.transcriptionTransportRaw = transcriptionTransportRaw
+        self.batchEndpointRaw = batchEndpointRaw
         self.llmAPIModeRaw = llmAPIModeRaw
         self.reasoningEffortRaw = reasoningEffortRaw
     }
@@ -231,6 +242,8 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
         // and only the known realtime model IDs switch transport.
         transcriptionTransportRaw = try container.decodeIfPresent(String.self, forKey: .transcriptionTransportRaw)
             ?? OpenAICompatibleTranscriptTransport.auto.rawValue
+        batchEndpointRaw = try container.decodeIfPresent(String.self, forKey: .batchEndpointRaw)
+            ?? OpenAICompatibleBatchEndpoint.standard.rawValue
         // Profiles saved before Responses API support always used Chat Completions.
         llmAPIModeRaw = try container.decodeIfPresent(String.self, forKey: .llmAPIModeRaw)
             ?? OpenAICompatibleLLMAPI.chatCompletions.rawValue
@@ -254,6 +267,10 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
 
     var transcriptionTransport: OpenAICompatibleTranscriptTransport {
         OpenAICompatibleTranscriptTransport(rawValue: transcriptionTransportRaw) ?? .auto
+    }
+
+    var batchEndpoint: OpenAICompatibleBatchEndpoint {
+        OpenAICompatibleBatchEndpoint(rawValue: batchEndpointRaw) ?? .standard
     }
 
     var llmAPI: OpenAICompatibleLLMAPI {
@@ -288,6 +305,7 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
         chatRequestTimeoutSeconds: TimeInterval? = nil,
         thinkingEnabled: Bool = false,
         transcriptionTransportRaw: String = OpenAICompatibleTranscriptTransport.auto.rawValue,
+        batchEndpointRaw: String = OpenAICompatibleBatchEndpoint.standard.rawValue,
         llmAPIModeRaw: String = OpenAICompatibleLLMAPI.chatCompletions.rawValue,
         reasoningEffortRaw: String = OpenAICompatibleReasoningEffort.providerDefault.rawValue
     ) -> OpenAICompatibleProfile {
@@ -304,6 +322,7 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
             chatRequestTimeoutSeconds: chatRequestTimeoutSeconds,
             thinkingEnabled: thinkingEnabled,
             transcriptionTransportRaw: transcriptionTransportRaw,
+            batchEndpointRaw: batchEndpointRaw,
             llmAPIModeRaw: llmAPIModeRaw,
             reasoningEffortRaw: reasoningEffortRaw
         )
@@ -790,11 +809,18 @@ final class OpenAICompatiblePlugin: NSObject,
             }
         }
 
+        if profile.batchEndpoint == .deploymentScoped,
+           !Self.isDatedAPIVersion(profile.apiVersion) {
+            throw PluginTranscriptionError.apiError(
+                "Deployment-scoped batch transcription requires a dated API version."
+            )
+        }
+
         guard let helper = makeTranscriptionHelper(for: profile) else {
             throw PluginTranscriptionError.notConfigured
         }
         let apiKey = apiKey(for: profileId) ?? ""
-        if profile.apiVersion.isEmpty {
+        if profile.apiVersion.isEmpty, profile.batchEndpoint == .standard {
             return try await helper.transcribeCompressedAudioWithWavFallback(
                 audio: audio,
                 apiKey: apiKey,
@@ -809,7 +835,7 @@ final class OpenAICompatiblePlugin: NSObject,
         // TypeWhisper 1.6 RC1 does not export the SDK's apiVersion overload.
         // Keep this JSON request path in the plugin until that host is no longer supported.
         return try await PluginAudioUploadEncoder.withCompressedM4AUploadWavFallback(from: audio) { uploadFile in
-            try await self.performVersionedTranscriptionRequest(
+            try await self.performBatchTranscriptionRequest(
                 profile: profile,
                 uploadFile: uploadFile,
                 apiKey: apiKey,
@@ -830,6 +856,16 @@ final class OpenAICompatiblePlugin: NSObject,
     func setTranscriptionTransport(_ transport: OpenAICompatibleTranscriptTransport, for profileId: String) {
         updateProfile(profileId) { profile in
             profile.transcriptionTransportRaw = transport.rawValue
+        }
+    }
+
+    func batchEndpoint(for profileId: String) -> OpenAICompatibleBatchEndpoint {
+        profile(for: profileId)?.batchEndpoint ?? .standard
+    }
+
+    func setBatchEndpoint(_ endpoint: OpenAICompatibleBatchEndpoint, for profileId: String) {
+        updateProfile(profileId) { profile in
+            profile.batchEndpointRaw = endpoint.rawValue
         }
     }
 
@@ -1491,7 +1527,7 @@ final class OpenAICompatiblePlugin: NSObject,
         throw PluginChatError.apiError("Failed to parse response text")
     }
 
-    private func performVersionedTranscriptionRequest(
+    private func performBatchTranscriptionRequest(
         profile: OpenAICompatibleProfile,
         uploadFile: PluginAudioUploadFile,
         apiKey: String,
@@ -1500,7 +1536,14 @@ final class OpenAICompatiblePlugin: NSObject,
         translate: Bool,
         prompt: String?
     ) async throws -> PluginTranscriptionResult {
-        let path = translate ? "/v1/audio/translations" : "/v1/audio/transcriptions"
+        let operation = translate ? "translations" : "transcriptions"
+        let path: String
+        switch profile.batchEndpoint {
+        case .standard:
+            path = "/v1/audio/\(operation)"
+        case .deploymentScoped:
+            path = "/deployments/\(Self.percentEncodedPathSegment(modelName))/audio/\(operation)"
+        }
         guard let url = Self.requestURL(
             baseURL: profile.baseURL,
             path: path,
@@ -1641,6 +1684,19 @@ final class OpenAICompatiblePlugin: NSObject,
 
     private static func normalizedAPIVersion(_ apiVersion: String) -> String {
         apiVersion.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    private static func isDatedAPIVersion(_ apiVersion: String) -> Bool {
+        normalizedAPIVersion(apiVersion).range(
+            of: #"^\d{4}-\d{2}-\d{2}"#,
+            options: .regularExpression
+        ) != nil
+    }
+
+    private static func percentEncodedPathSegment(_ value: String) -> String {
+        var allowed = CharacterSet.alphanumerics
+        allowed.insert(charactersIn: "-._~")
+        return value.addingPercentEncoding(withAllowedCharacters: allowed) ?? value
     }
 
     private static func requestURL(baseURL: String, path: String, apiVersion: String) -> URL? {
@@ -1859,6 +1915,7 @@ private struct OpenAICompatibleSettingsView: View {
     @State private var thinkingEnabled = false
     @State private var chatTimeoutInput = ""
     @State private var transcriptionTransport: OpenAICompatibleTranscriptTransport = .auto
+    @State private var batchEndpoint: OpenAICompatibleBatchEndpoint = .standard
     @State private var llmAPI: OpenAICompatibleLLMAPI = .chatCompletions
     @State private var reasoningEffort: OpenAICompatibleReasoningEffort = .providerDefault
 
@@ -2022,7 +2079,7 @@ private struct OpenAICompatibleSettingsView: View {
                     saveApiVersion()
                 }
 
-                Text("Azure OpenAI and Microsoft Foundry may require an API version such as preview for audio transcription. Leave blank for standard OpenAI-compatible servers.", bundle: bundle)
+                Text("Some servers require an API version. Deployment-scoped batch endpoints require a dated version; realtime endpoints may require a preview version. Leave blank when the server does not require one.", bundle: bundle)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -2118,6 +2175,7 @@ private struct OpenAICompatibleSettingsView: View {
 
             llmAPISection
             transportSection
+            batchEndpointSection
         }
     }
 
@@ -2168,6 +2226,28 @@ private struct OpenAICompatibleSettingsView: View {
             }
 
             Text("Auto uses realtime streaming only for known realtime model IDs (gpt-live-transcribe, gpt-realtime-whisper) and batch upload otherwise. Choose Realtime to force streaming for any OpenAI-compatible server that supports the /v1/realtime WebSocket API, including custom deployment aliases (e.g. an Azure OpenAI or Microsoft Foundry gpt-live-transcribe deployment) — some providers, including Azure, require a preview API version for realtime transcription. Choose Batch to always use /v1/audio/transcriptions.", bundle: bundle)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var batchEndpointSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Batch Transcription Endpoint", bundle: bundle)
+                .font(.subheadline)
+                .foregroundStyle(.secondary)
+
+            Picker("Batch Transcription Endpoint", selection: $batchEndpoint) {
+                Text("Standard v1", bundle: bundle).tag(OpenAICompatibleBatchEndpoint.standard)
+                Text("Deployment-scoped", bundle: bundle).tag(OpenAICompatibleBatchEndpoint.deploymentScoped)
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .onChange(of: batchEndpoint) {
+                saveBatchEndpoint()
+            }
+
+            Text("Standard v1 uses /v1/audio/transcriptions. Deployment-scoped uses /deployments/{model}/audio/transcriptions and requires a dated API version. Realtime transcription continues to use /v1/realtime.", bundle: bundle)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
@@ -2413,6 +2493,7 @@ private struct OpenAICompatibleSettingsView: View {
         thinkingEnabled = profile.thinkingEnabled
         chatTimeoutInput = String(Int(profile.resolvedChatRequestTimeout))
         transcriptionTransport = profile.transcriptionTransport
+        batchEndpoint = profile.batchEndpoint
         llmAPI = profile.llmAPI
         reasoningEffort = profile.reasoningEffort
         connectionResult = nil
@@ -2444,6 +2525,13 @@ private struct OpenAICompatibleSettingsView: View {
         guard let selectedProfile else { return }
         guard transcriptionTransport != selectedProfile.transcriptionTransport else { return }
         plugin.setTranscriptionTransport(transcriptionTransport, for: selectedProfile.id)
+        reloadProfiles(selecting: selectedProfile.id, preserveInputs: true)
+    }
+
+    private func saveBatchEndpoint() {
+        guard let selectedProfile else { return }
+        guard batchEndpoint != selectedProfile.batchEndpoint else { return }
+        plugin.setBatchEndpoint(batchEndpoint, for: selectedProfile.id)
         reloadProfiles(selecting: selectedProfile.id, preserveInputs: true)
     }
 

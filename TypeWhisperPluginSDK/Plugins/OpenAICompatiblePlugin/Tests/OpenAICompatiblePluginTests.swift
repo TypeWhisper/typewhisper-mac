@@ -128,6 +128,7 @@ final class OpenAICompatiblePluginTests: XCTestCase {
         let profile = try XCTUnwrap(plugin.profileSnapshot(for: plugin.providerId))
         XCTAssertEqual(profile.apiVersion, "")
         XCTAssertFalse(profile.thinkingEnabled)
+        XCTAssertEqual(profile.batchEndpoint, .standard)
         XCTAssertEqual(profile.llmAPI, .chatCompletions)
         XCTAssertEqual(profile.reasoningEffort, .providerDefault)
         XCTAssertEqual(profile.resolvedChatRequestTimeout, 45)
@@ -485,6 +486,126 @@ final class OpenAICompatiblePluginTests: XCTestCase {
         XCTAssertEqual(segment.text, "transcribed")
         XCTAssertEqual(segment.start, 0)
         XCTAssertEqual(segment.end, 1)
+    }
+
+    func testAzureDeploymentBatchEndpointUsesDeploymentRouteAuthAndMultipartModel() async throws {
+        let host = try PluginTestHostServices(
+            defaults: [
+                "baseURL": "https://foundry-example.services.ai.azure.com/openai",
+                "selectedModel": "gpt-transcribe",
+            ],
+            secrets: ["api-key": "azure-key"]
+        )
+        let plugin = OpenAICompatiblePlugin()
+        plugin.activate(host: host)
+        plugin.setApiVersion("2025-03-01-preview", for: plugin.providerId)
+        plugin.setBatchEndpoint(.deploymentScoped, for: plugin.providerId)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"text":"transcribed"}"#.utf8),
+                    Self.httpResponse(
+                        url: "https://foundry-example.services.ai.azure.com/openai/deployments/gpt-transcribe/audio/transcriptions?api-version=2025-03-01-preview",
+                        statusCode: 200
+                    )
+                )
+            ])
+        }
+
+        let result = try await plugin.transcribe(
+            audio: AudioData(samples: [0, 0, 0], wavData: Data("wav".utf8), duration: 1.0),
+            language: "en",
+            translate: false,
+            prompt: nil
+        )
+
+        XCTAssertEqual(result.text, "transcribed")
+        let request = try XCTUnwrap(store.sessions[0].requestedRequests.first)
+        XCTAssertEqual(
+            request.url?.path,
+            "/openai/deployments/gpt-transcribe/audio/transcriptions"
+        )
+        XCTAssertEqual(request.url?.query, "api-version=2025-03-01-preview")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "api-key"), "azure-key")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer azure-key")
+        let body = String(decoding: try XCTUnwrap(request.httpBody), as: UTF8.self)
+        XCTAssertTrue(body.contains("name=\"model\"\r\n\r\ngpt-transcribe\r\n"))
+    }
+
+    func testAzureDeploymentBatchEndpointRequiresDatedAPIVersion() async throws {
+        let host = try PluginTestHostServices(
+            defaults: [
+                "baseURL": "https://foundry-example.services.ai.azure.com/openai",
+                "selectedModel": "gpt-transcribe",
+            ]
+        )
+        let plugin = OpenAICompatiblePlugin()
+        plugin.activate(host: host)
+        plugin.setApiVersion("preview", for: plugin.providerId)
+        plugin.setBatchEndpoint(.deploymentScoped, for: plugin.providerId)
+
+        do {
+            _ = try await plugin.transcribe(
+                audio: AudioData(samples: [0, 0, 0], wavData: Data("wav".utf8), duration: 1.0),
+                language: nil,
+                translate: false,
+                prompt: nil
+            )
+            XCTFail("Expected a dated API version error")
+        } catch let error as PluginTranscriptionError {
+            guard case .apiError(let message) = error else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+            XCTAssertEqual(
+                message,
+                "Deployment-scoped batch transcription requires a dated API version."
+            )
+        }
+    }
+
+    func testDeploymentScopedEndpointEncodesModelAsSinglePathSegment() async throws {
+        let deploymentName = "transcription east/1%prod"
+        let host = try PluginTestHostServices(
+            defaults: [
+                "baseURL": "https://example.test/openai",
+                "selectedModel": deploymentName,
+            ]
+        )
+        let plugin = OpenAICompatiblePlugin()
+        plugin.activate(host: host)
+        plugin.setApiVersion("2025-03-01-preview", for: plugin.providerId)
+        plugin.setBatchEndpoint(.deploymentScoped, for: plugin.providerId)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"text":"transcribed"}"#.utf8),
+                    Self.httpResponse(
+                        url: "https://example.test/openai/deployments/transcription%20east%2F1%25prod/audio/transcriptions?api-version=2025-03-01-preview",
+                        statusCode: 200
+                    )
+                )
+            ])
+        }
+
+        _ = try await plugin.transcribe(
+            audio: AudioData(samples: [0, 0, 0], wavData: Data("wav".utf8), duration: 1.0),
+            language: nil,
+            translate: false,
+            prompt: nil
+        )
+
+        let request = try XCTUnwrap(store.sessions[0].requestedRequests.first)
+        XCTAssertEqual(
+            URLComponents(url: try XCTUnwrap(request.url), resolvingAgainstBaseURL: false)?
+                .percentEncodedPath,
+            "/openai/deployments/transcription%20east%2F1%25prod/audio/transcriptions"
+        )
+        let body = String(decoding: try XCTUnwrap(request.httpBody), as: UTF8.self)
+        XCTAssertTrue(body.contains("name=\"model\"\r\n\r\n\(deploymentName)\r\n"))
     }
 
     func testAzureSovereignEndpointUsesAzureAuthenticationHeaders() async throws {
@@ -1040,6 +1161,22 @@ final class OpenAICompatiblePluginTests: XCTestCase {
         XCTAssertNoThrow(try JSONEncoder().encode(plugin.profileSnapshots))
     }
 
+    func testBatchEndpointPersistsPerProfile() throws {
+        let host = try PluginTestHostServices(defaults: ["baseURL": "https://example.test"])
+        let plugin = OpenAICompatiblePlugin()
+        plugin.activate(host: host)
+        let custom = plugin.addProfile(named: "Azure Foundry")
+
+        plugin.setBatchEndpoint(.deploymentScoped, for: custom.id)
+        plugin.deactivate()
+
+        let reloaded = OpenAICompatiblePlugin()
+        reloaded.activate(host: host)
+
+        XCTAssertEqual(reloaded.batchEndpoint(for: reloaded.providerId), .standard)
+        XCTAssertEqual(reloaded.batchEndpoint(for: custom.id), .deploymentScoped)
+    }
+
     func testProcessFailsWithoutSelectedModel() async throws {
         let host = try PluginTestHostServices(defaults: ["baseURL": "https://example.test"])
         let plugin = OpenAICompatiblePlugin()
@@ -1434,8 +1571,19 @@ final class OpenAICompatiblePluginTests: XCTestCase {
         let catalog = try XCTUnwrap(JSONSerialization.jsonObject(with: catalogData) as? [String: Any])
         let strings = try XCTUnwrap(catalog["strings"] as? [String: Any])
         let helpText = "Auto uses realtime streaming only for known realtime model IDs (gpt-live-transcribe, gpt-realtime-whisper) and batch upload otherwise. Choose Realtime to force streaming for any OpenAI-compatible server that supports the /v1/realtime WebSocket API, including custom deployment aliases (e.g. an Azure OpenAI or Microsoft Foundry gpt-live-transcribe deployment) — some providers, including Azure, require a preview API version for realtime transcription. Choose Batch to always use /v1/audio/transcriptions."
+        let batchEndpointHelp = "Standard v1 uses /v1/audio/transcriptions. Deployment-scoped uses /deployments/{model}/audio/transcriptions and requires a dated API version. Realtime transcription continues to use /v1/realtime."
 
-        for key in ["Transcription Transport", "Auto", "Batch", "Realtime", helpText] {
+        for key in [
+            "Transcription Transport",
+            "Auto",
+            "Batch",
+            "Realtime",
+            helpText,
+            "Batch Transcription Endpoint",
+            "Standard v1",
+            "Deployment-scoped",
+            batchEndpointHelp,
+        ] {
             let entry = try XCTUnwrap(strings[key] as? [String: Any], "Missing localization key: \(key)")
             let localizations = try XCTUnwrap(entry["localizations"] as? [String: Any])
             XCTAssertNotNil(localizations["de"], "Missing German localization for \(key)")
