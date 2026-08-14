@@ -173,6 +173,7 @@ enum SettingsBackupExporter {
         var indicatorStyle: String? = nil
         var indicatorVisibleInScreenCaptures: Bool? = nil
         var indicatorTranscriptPreviewEnabled: Bool? = nil
+        var liveFieldTranscriptEnabled: Bool? = nil
         var indicatorTranscriptPreviewFontSizeOffset: Int? = nil
         var preserveClipboard: Bool? = nil
         var mediaPauseEnabled: Bool? = nil
@@ -220,6 +221,7 @@ enum SettingsBackupExporter {
             if indicatorStyle != nil { count += 1 }
             if indicatorVisibleInScreenCaptures != nil { count += 1 }
             if indicatorTranscriptPreviewEnabled != nil { count += 1 }
+            if liveFieldTranscriptEnabled != nil { count += 1 }
             if indicatorTranscriptPreviewFontSizeOffset != nil { count += 1 }
             if preserveClipboard != nil { count += 1 }
             if mediaPauseEnabled != nil { count += 1 }
@@ -565,6 +567,7 @@ enum SettingsBackupExporter {
                 indicatorStyle: userDefaults.string(forKey: UserDefaultsKeys.indicatorStyle),
                 indicatorVisibleInScreenCaptures: userDefaults.object(forKey: UserDefaultsKeys.indicatorVisibleInScreenCaptures) as? Bool,
                 indicatorTranscriptPreviewEnabled: userDefaults.object(forKey: UserDefaultsKeys.indicatorTranscriptPreviewEnabled) as? Bool,
+                liveFieldTranscriptEnabled: userDefaults.object(forKey: UserDefaultsKeys.liveFieldTranscriptEnabled) as? Bool,
                 indicatorTranscriptPreviewFontSizeOffset: userDefaults.object(forKey: UserDefaultsKeys.indicatorTranscriptPreviewFontSizeOffset) as? Int,
                 preserveClipboard: userDefaults.object(forKey: UserDefaultsKeys.preserveClipboard) as? Bool,
                 mediaPauseEnabled: userDefaults.object(forKey: UserDefaultsKeys.mediaPauseEnabled) as? Bool,
@@ -841,6 +844,7 @@ enum SettingsBackupExporter {
         apply(preferences.indicatorStyle, forKey: UserDefaultsKeys.indicatorStyle)
         apply(preferences.indicatorVisibleInScreenCaptures, forKey: UserDefaultsKeys.indicatorVisibleInScreenCaptures)
         apply(preferences.indicatorTranscriptPreviewEnabled, forKey: UserDefaultsKeys.indicatorTranscriptPreviewEnabled)
+        apply(preferences.liveFieldTranscriptEnabled, forKey: UserDefaultsKeys.liveFieldTranscriptEnabled)
         apply(preferences.indicatorTranscriptPreviewFontSizeOffset, forKey: UserDefaultsKeys.indicatorTranscriptPreviewFontSizeOffset)
         apply(preferences.preserveClipboard, forKey: UserDefaultsKeys.preserveClipboard)
         apply(preferences.mediaPauseEnabled, forKey: UserDefaultsKeys.mediaPauseEnabled)

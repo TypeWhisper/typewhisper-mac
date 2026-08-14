@@ -47,6 +47,20 @@ final class DictationViewModelIndicatorSettingsTests: XCTestCase {
         XCTAssertFalse(DictationViewModel.loadIndicatorTranscriptPreviewEnabled(defaults: defaults))
     }
 
+    func testLiveFieldTranscriptDefaultsToDisabled() {
+        XCTAssertFalse(DictationViewModel.loadLiveFieldTranscriptEnabled(defaults: defaults))
+    }
+
+    func testLiveFieldTranscriptPersistsWhenEnabled() {
+        DictationViewModel.persistLiveFieldTranscriptEnabled(true, defaults: defaults)
+
+        XCTAssertEqual(
+            defaults.object(forKey: UserDefaultsKeys.liveFieldTranscriptEnabled) as? Bool,
+            true
+        )
+        XCTAssertTrue(DictationViewModel.loadLiveFieldTranscriptEnabled(defaults: defaults))
+    }
+
     func testMissingIndicatorTranscriptPreviewKeyFallsBackToTrue() {
         defaults.removeObject(forKey: UserDefaultsKeys.indicatorTranscriptPreviewEnabled)
 

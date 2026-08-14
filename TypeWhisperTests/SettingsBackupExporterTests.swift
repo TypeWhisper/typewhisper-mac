@@ -450,6 +450,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         source.userDefaults.set(3, forKey: UserDefaultsKeys.indicatorTranscriptPreviewFontSizeOffset)
         source.userDefaults.set("overlay", forKey: UserDefaultsKeys.indicatorStyle)
         source.userDefaults.set(false, forKey: UserDefaultsKeys.indicatorVisibleInScreenCaptures)
+        source.userDefaults.set(true, forKey: UserDefaultsKeys.liveFieldTranscriptEnabled)
         source.userDefaults.set(true, forKey: UserDefaultsKeys.recorderSystemAudioEnabled)
         source.userDefaults.set(7, forKey: UserDefaultsKeys.dictationRecoveryRetentionDays)
         // Deliberately excluded: engine/model selections must not be exported.
@@ -474,6 +475,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         XCTAssertEqual(backup.preferences.indicatorTranscriptPreviewFontSizeOffset, 3)
         XCTAssertEqual(backup.preferences.indicatorStyle, "overlay")
         XCTAssertEqual(backup.preferences.indicatorVisibleInScreenCaptures, false)
+        XCTAssertEqual(backup.preferences.liveFieldTranscriptEnabled, true)
         XCTAssertEqual(backup.preferences.recorderSystemAudioEnabled, true)
         XCTAssertEqual(backup.preferences.dictationRecoveryRetentionDays, 7)
 
@@ -497,7 +499,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         )
 
         XCTAssertTrue(result.updateChannelApplied)
-        XCTAssertGreaterThanOrEqual(result.preferencesApplied, 7)
+        XCTAssertGreaterThanOrEqual(result.preferencesApplied, 8)
         XCTAssertEqual(destination.userDefaults.string(forKey: UserDefaultsKeys.updateChannel), AppConstants.ReleaseChannel.daily.rawValue)
         XCTAssertEqual(destination.userDefaults.string(forKey: UserDefaultsKeys.selectedLanguage), "de")
         XCTAssertEqual(destination.userDefaults.bool(forKey: UserDefaultsKeys.translationEnabled), true)
@@ -507,6 +509,7 @@ final class SettingsBackupExporterTests: XCTestCase {
             destination.userDefaults.object(forKey: UserDefaultsKeys.indicatorVisibleInScreenCaptures) as? Bool,
             false
         )
+        XCTAssertEqual(destination.userDefaults.bool(forKey: UserDefaultsKeys.liveFieldTranscriptEnabled), true)
         XCTAssertEqual(destination.userDefaults.integer(forKey: UserDefaultsKeys.dictationRecoveryRetentionDays), 7)
         XCTAssertEqual(appliedRecoveryRetentionPolicy, .sevenDays)
         XCTAssertNil(destination.userDefaults.string(forKey: UserDefaultsKeys.fileTranscriptionEngine))

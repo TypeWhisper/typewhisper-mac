@@ -7,6 +7,41 @@ import os.log
 
 private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper", category: "TextInsertionService")
 
+private final class LiveFieldApplicationActivationObservation: @unchecked Sendable {
+    private let notificationCenter: NotificationCenter
+    private let token: NSObjectProtocol
+
+    init(notificationCenter: NotificationCenter, token: NSObjectProtocol) {
+        self.notificationCenter = notificationCenter
+        self.token = token
+    }
+
+    deinit {
+        notificationCenter.removeObserver(token)
+    }
+}
+
+private func installLiveFieldApplicationActivationObserver(
+    onActivation: @escaping @MainActor (String?) -> Void
+) -> LiveFieldApplicationActivationObservation {
+    let notificationCenter = NSWorkspace.shared.notificationCenter
+    let token = notificationCenter.addObserver(
+        forName: NSWorkspace.didActivateApplicationNotification,
+        object: nil,
+        queue: .main
+    ) { notification in
+        let application = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+        let bundleIdentifier = application?.bundleIdentifier
+        Task { @MainActor in
+            onActivation(bundleIdentifier)
+        }
+    }
+    return LiveFieldApplicationActivationObservation(
+        notificationCenter: notificationCenter,
+        token: token
+    )
+}
+
 /// Inserts transcribed text into the active application via clipboard + simulated Cmd+V.
 @MainActor
 final class TextInsertionService {
@@ -33,6 +68,11 @@ final class TextInsertionService {
     var pasteboardProvider: () -> NSPasteboard = { .general }
     var focusedTextElementOverride: (() -> AXUIElement?)?
     var focusedTextStateOverride: ((AXUIElement) -> FocusedTextSnapshot?)?
+    var focusedTextPlaceholderOverride: ((AXUIElement) -> String?)?
+    var liveFieldTargetEligibilityOverride: ((AXUIElement) -> Bool)?
+    var liveFieldApplicationEligibilityOverride: ((String) -> Bool)?
+    var liveFieldElectronApplicationOverride: ((String) -> Bool)?
+    var setSelectedRangeOverride: ((AXUIElement, NSRange) -> Bool)?
     var textSelectionOverride: (() -> TextSelection?)?
     var insertTextAtOverride: ((AXUIElement, String) -> Bool)?
     var pasteSimulatorOverride: (() -> Void)?
@@ -177,6 +217,26 @@ final class TextInsertionService {
         let selectedRange: NSRange?
     }
 
+    struct LiveFieldTarget: @unchecked Sendable {
+        let applicationBundleIdentifier: String
+        fileprivate var element: AXUIElement
+        let originalInsertionContext: InsertionContext
+        fileprivate var expectedValue: String
+        fileprivate var expectedCaret: NSRange
+        fileprivate var ownedRange: NSRange
+        fileprivate var provisionalText: String
+        fileprivate(set) var hasAttemptedMutation = false
+
+        var hasProvisionalText: Bool {
+            !provisionalText.isEmpty
+        }
+    }
+
+    enum LiveFieldMutationResult {
+        case applied(FocusedTextObservation)
+        case detached
+    }
+
     func getSelectedText() -> String? {
         if let selectedTextOverride {
             return selectedTextOverride()
@@ -231,14 +291,11 @@ final class TextInsertionService {
             return nil
         }
 
-        let element = focusedElement as! AXUIElement
-        var roleValue: AnyObject?
-        guard AXUIElementCopyAttributeValue(element, kAXRoleAttribute as CFString, &roleValue) == .success,
-              let role = roleValue as? String else { return nil }
-
-        let textRoles = ["AXTextField", "AXTextArea", "AXComboBox", "AXSearchField", "AXWebArea"]
-        guard textRoles.contains(role) else { return nil }
-        return element
+        guard let element = axElement(from: focusedElement) else { return nil }
+        if isLiveFieldTextRole(element), selectedRangeAttribute(from: element) != nil {
+            return element
+        }
+        return findEditableTextDescendant(of: element)
     }
 
     /// Replaces the selected text on a previously captured AXUIElement.
@@ -320,6 +377,138 @@ final class TextInsertionService {
             previousCharacter: previousCharacter,
             nextCharacter: nextCharacter
         )
+    }
+
+    func captureLiveFieldTarget(expectedBundleIdentifier: String?) -> LiveFieldTarget? {
+        guard isAccessibilityGranted else {
+            logger.debug("Live field target rejected: Accessibility is not granted")
+            return nil
+        }
+        guard let expectedBundleIdentifier else {
+            logger.debug("Live field target rejected: target app has no bundle identifier")
+            return nil
+        }
+        guard captureActiveApp().bundleId == expectedBundleIdentifier else {
+            logger.debug("Live field target rejected: active app changed before capture")
+            return nil
+        }
+        guard applicationSupportsVerifiedLiveFieldUpdates(expectedBundleIdentifier) else {
+            logger.debug("Live field target rejected: app requires normal final insertion")
+            return nil
+        }
+        guard let state = captureFocusedTextState() else {
+            logger.debug("Live field target rejected: no readable focused text element")
+            return nil
+        }
+        guard let value = state.value else {
+            logger.debug("Live field target rejected: focused element has no readable value")
+            return nil
+        }
+        guard let selectedRange = state.selectedRange else {
+            logger.debug("Live field target rejected: focused element has no selected-text range")
+            return nil
+        }
+        guard selectedRange.length == 0,
+              state.selectedText?.isEmpty != false else {
+            logger.debug("Live field target rejected: selection is not empty")
+            return nil
+        }
+        guard Range(selectedRange, in: value) != nil else {
+            logger.debug("Live field target rejected: selection is outside the readable value")
+            return nil
+        }
+        guard isEligibleLiveFieldTarget(state.element) else {
+            logger.debug("Live field target rejected: focused element is not eligible")
+            return nil
+        }
+
+        let insertionContext = insertionContext(
+            value: value,
+            selectedText: state.selectedText,
+            selectedRange: selectedRange
+        )
+        return LiveFieldTarget(
+            applicationBundleIdentifier: expectedBundleIdentifier,
+            element: state.element,
+            originalInsertionContext: insertionContext,
+            expectedValue: value,
+            expectedCaret: selectedRange,
+            ownedRange: selectedRange,
+            provisionalText: ""
+        )
+    }
+
+    func replaceLiveFieldText(
+        _ text: String,
+        in target: inout LiveFieldTarget
+    ) -> LiveFieldMutationResult {
+        guard let currentState = verifiedLiveFieldState(for: &target) else {
+            return .detached
+        }
+
+        if text == target.provisionalText {
+            return .applied(observation(from: currentState))
+        }
+
+        let expectedValue = (target.expectedValue as NSString).replacingCharacters(
+            in: target.ownedRange,
+            with: text
+        )
+        let replacementLength = (text as NSString).length
+        let expectedCaret = NSRange(
+            location: target.ownedRange.location + replacementLength,
+            length: 0
+        )
+        let expectedOwnedRange = NSRange(
+            location: target.ownedRange.location,
+            length: replacementLength
+        )
+
+        guard setSelectedRange(target.ownedRange, on: target.element) else {
+            return .detached
+        }
+        guard insertTextAt(element: target.element, text: text) else {
+            _ = setSelectedRange(target.expectedCaret, on: target.element)
+            return .detached
+        }
+
+        if var resultingState = captureFocusedTextState(),
+           captureActiveApp().bundleId == target.applicationBundleIdentifier,
+           resultingState.value == expectedValue,
+           resultingState.selectedRange != expectedCaret {
+            _ = setSelectedRange(expectedCaret, on: resultingState.element)
+            resultingState = captureFocusedTextState() ?? resultingState
+        }
+
+        guard captureActiveApp().bundleId == target.applicationBundleIdentifier,
+              let resultingState = captureFocusedTextState(),
+              resultingState.value == expectedValue,
+              resultingState.selectedRange == expectedCaret,
+              resultingState.selectedText?.isEmpty != false,
+              resultingState.element == target.element
+                || isEligibleLiveFieldTarget(resultingState.element) else {
+            _ = setSelectedRange(target.expectedCaret, on: target.element)
+            if let unchangedState = captureFocusedTextState(),
+               unchangedState.element == target.element,
+               unchangedState.value == target.expectedValue,
+               unchangedState.selectedRange == target.expectedCaret,
+               unchangedState.selectedText?.isEmpty != false {
+                return .detached
+            }
+
+            // AX reported a successful write but the resulting state is not
+            // provably unchanged. Text may be present, so paste is unsafe.
+            target.hasAttemptedMutation = true
+            return .detached
+        }
+
+        target.hasAttemptedMutation = true
+        target.element = resultingState.element
+        target.expectedValue = expectedValue
+        target.expectedCaret = expectedCaret
+        target.ownedRange = expectedOwnedRange
+        target.provisionalText = text
+        return .applied(observation(from: resultingState))
     }
 
     func captureFocusedTextObservation() -> FocusedTextObservation? {
@@ -782,6 +971,29 @@ final class TextInsertionService {
         findSelectionInDescendants(of: root, maxDepth: 6, maxNodes: 80)
     }
 
+    private func findEditableTextDescendant(of root: AXUIElement) -> AXUIElement? {
+        var queue: [(element: AXUIElement, depth: Int)] = childElements(of: root).map { ($0, 1) }
+        var visited = 0
+
+        while !queue.isEmpty && visited < 80 {
+            let current = queue.removeFirst()
+            visited += 1
+
+            if isLiveFieldTextRole(current.element),
+               selectedRangeAttribute(from: current.element) != nil {
+                return current.element
+            }
+
+            if current.depth < 6 {
+                queue.append(contentsOf: childElements(of: current.element).map {
+                    ($0, current.depth + 1)
+                })
+            }
+        }
+
+        return nil
+    }
+
     private func findSelectionInDescendants(
         of root: AXUIElement,
         maxDepth: Int,
@@ -933,24 +1145,200 @@ final class TextInsertionService {
             guard let snapshot = focusedTextStateOverride(element) else { return nil }
             return FocusedTextState(
                 element: element,
-                value: snapshot.value,
+                value: normalizedTextValue(
+                    snapshot.value,
+                    placeholder: focusedTextPlaceholderOverride?(element),
+                    selectedRange: snapshot.selectedRange
+                ),
                 selectedText: snapshot.selectedText,
                 selectedRange: snapshot.selectedRange
             )
         }
 
+        let selectedRange = selectedRangeAttribute(from: element)
         return FocusedTextState(
             element: element,
-            value: stringAttribute(kAXValueAttribute as CFString, from: element),
+            value: normalizedTextValue(
+                stringAttribute(kAXValueAttribute as CFString, from: element),
+                placeholder: stringAttribute(kAXPlaceholderValueAttribute as CFString, from: element),
+                selectedRange: selectedRange
+            ),
             selectedText: stringAttribute(kAXSelectedTextAttribute as CFString, from: element),
-            selectedRange: selectedRangeAttribute(from: element)
+            selectedRange: selectedRange
         )
+    }
+
+    private func normalizedTextValue(
+        _ value: String?,
+        placeholder: String?,
+        selectedRange: NSRange?
+    ) -> String? {
+        guard let value,
+              let placeholder,
+              !placeholder.isEmpty,
+              value == placeholder,
+              selectedRange == NSRange(location: 0, length: 0) else {
+            return value
+        }
+
+        // Chromium/Electron content-editable fields can expose their visible
+        // placeholder through AXValue. It disappears on the first real write,
+        // so treating it as document content would make verification detach.
+        return ""
+    }
+
+    private func insertionContext(
+        value: String,
+        selectedText: String?,
+        selectedRange: NSRange
+    ) -> InsertionContext {
+        let stringRange = Range(selectedRange, in: value)
+        let previousCharacter = stringRange.flatMap { range in
+            range.lowerBound > value.startIndex
+                ? value[value.index(before: range.lowerBound)]
+                : nil
+        }
+        let nextCharacter = stringRange.flatMap { range in
+            range.upperBound < value.endIndex ? value[range.upperBound] : nil
+        }
+
+        return InsertionContext(
+            value: value,
+            selectedRange: selectedRange,
+            selectedText: selectedText,
+            previousCharacter: previousCharacter,
+            nextCharacter: nextCharacter
+        )
+    }
+
+    private func verifiedLiveFieldState(for target: inout LiveFieldTarget) -> FocusedTextState? {
+        guard captureActiveApp().bundleId == target.applicationBundleIdentifier,
+              let state = captureFocusedTextState(),
+              state.value == target.expectedValue,
+              state.selectedRange == target.expectedCaret,
+              state.selectedText?.isEmpty != false else {
+            return nil
+        }
+
+        if state.element != target.element {
+            guard target.hasProvisionalText,
+                  isEligibleLiveFieldTarget(state.element),
+                  (target.expectedValue as NSString).substring(with: target.ownedRange)
+                    == target.provisionalText else {
+                return nil
+            }
+            target.element = state.element
+        }
+        return FocusedTextState(
+            element: state.element,
+            value: target.expectedValue,
+            selectedText: nil,
+            selectedRange: target.expectedCaret
+        )
+    }
+
+    private func applicationSupportsVerifiedLiveFieldUpdates(
+        _ bundleIdentifier: String
+    ) -> Bool {
+        if let liveFieldApplicationEligibilityOverride {
+            return liveFieldApplicationEligibilityOverride(bundleIdentifier)
+        }
+
+        return !isElectronApplication(bundleIdentifier)
+    }
+
+    private func isElectronApplication(_ bundleIdentifier: String) -> Bool {
+        if let liveFieldElectronApplicationOverride {
+            return liveFieldElectronApplicationOverride(bundleIdentifier)
+        }
+
+        let runningApplication = NSRunningApplication
+            .runningApplications(withBundleIdentifier: bundleIdentifier)
+            .first
+        let frontmostApplication = NSWorkspace.shared.frontmostApplication
+        let application = runningApplication
+            ?? (frontmostApplication?.bundleIdentifier == bundleIdentifier
+                ? frontmostApplication
+                : nil)
+        guard let bundleURL = application?.bundleURL else {
+            return false
+        }
+
+        let electronFrameworkURL = bundleURL
+            .appendingPathComponent("Contents", isDirectory: true)
+            .appendingPathComponent("Frameworks", isDirectory: true)
+            .appendingPathComponent("Electron Framework.framework", isDirectory: true)
+        return FileManager.default.fileExists(atPath: electronFrameworkURL.path)
+    }
+
+    private func observation(from state: FocusedTextState) -> FocusedTextObservation {
+        FocusedTextObservation(
+            element: state.element,
+            value: state.value ?? "",
+            selectedText: state.selectedText,
+            selectedRange: state.selectedRange
+        )
+    }
+
+    private func isEligibleLiveFieldTarget(_ element: AXUIElement) -> Bool {
+        if let liveFieldTargetEligibilityOverride {
+            return liveFieldTargetEligibilityOverride(element)
+        }
+
+        guard isLiveFieldTextRole(element) else { return false }
+
+        var selectedTextSettable = DarwinBoolean(false)
+        var selectedRangeSettable = DarwinBoolean(false)
+        guard AXUIElementIsAttributeSettable(
+            element,
+            kAXSelectedTextAttribute as CFString,
+            &selectedTextSettable
+        ) == .success,
+        AXUIElementIsAttributeSettable(
+            element,
+            kAXSelectedTextRangeAttribute as CFString,
+            &selectedRangeSettable
+        ) == .success else {
+            return false
+        }
+        return selectedTextSettable.boolValue && selectedRangeSettable.boolValue
+    }
+
+    private func isLiveFieldTextRole(_ element: AXUIElement) -> Bool {
+        var roleValue: AnyObject?
+        guard AXUIElementCopyAttributeValue(
+            element,
+            kAXRoleAttribute as CFString,
+            &roleValue
+        ) == .success,
+        let role = roleValue as? String else {
+            return false
+        }
+        return ["AXTextField", "AXTextArea", "AXComboBox", "AXSearchField", "AXWebArea"]
+            .contains(role)
+    }
+
+    private func setSelectedRange(_ range: NSRange, on element: AXUIElement) -> Bool {
+        if let setSelectedRangeOverride {
+            return setSelectedRangeOverride(element, range)
+        }
+
+        var cfRange = CFRange(location: range.location, length: range.length)
+        guard let rangeValue = AXValueCreate(.cfRange, &cfRange) else { return false }
+        return AXUIElementSetAttributeValue(
+            element,
+            kAXSelectedTextRangeAttribute as CFString,
+            rangeValue
+        ) == .success
     }
 
     private func stringAttribute(_ attribute: CFString, from element: AXUIElement) -> String? {
         var value: AnyObject?
         guard AXUIElementCopyAttributeValue(element, attribute, &value) == .success else { return nil }
-        return value as? String
+        if let string = value as? String {
+            return string
+        }
+        return (value as? NSAttributedString)?.string
     }
 
     private func selectedRangeAttribute(from element: AXUIElement) -> NSRange? {
@@ -972,4 +1360,149 @@ final class TextInsertionService {
         return NSRange(location: range.location, length: range.length)
     }
 
+}
+
+@MainActor
+final class LiveFieldTranscriptSession {
+    enum State: Equatable {
+        case active
+        case detached
+        case finalized
+        case cancelled
+    }
+
+    enum CompletionResult {
+        case applied(TextInsertionService.FocusedTextObservation)
+        case detached(hadAttemptedMutation: Bool)
+    }
+
+    let sessionID: UUID
+    private(set) var state: State = .active
+    private(set) var target: TextInsertionService.LiveFieldTarget
+
+    private let textInsertionService: TextInsertionService
+    private let updateInterval: Duration
+    private var pendingText: String?
+    private var updateTask: Task<Void, Never>?
+    private var applicationActivationObservation: LiveFieldApplicationActivationObservation?
+
+    init(
+        sessionID: UUID,
+        target: TextInsertionService.LiveFieldTarget,
+        textInsertionService: TextInsertionService,
+        updateInterval: Duration = .milliseconds(120)
+    ) {
+        self.sessionID = sessionID
+        self.target = target
+        self.textInsertionService = textInsertionService
+        self.updateInterval = updateInterval
+        self.applicationActivationObservation = installLiveFieldApplicationActivationObserver { [weak self] bundleIdentifier in
+            self?.handleApplicationActivation(bundleIdentifier: bundleIdentifier)
+        }
+    }
+
+    deinit {
+        updateTask?.cancel()
+    }
+
+    var originalInsertionContext: TextInsertionService.InsertionContext {
+        target.originalInsertionContext
+    }
+
+    var hasAttemptedMutation: Bool {
+        target.hasAttemptedMutation
+    }
+
+    var hasProvisionalText: Bool {
+        target.hasProvisionalText
+    }
+
+    func receivePartial(_ text: String) {
+        guard state == .active,
+              !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return
+        }
+
+        pendingText = text
+        schedulePendingUpdateIfNeeded()
+    }
+
+    func finalize(with text: String) -> CompletionResult {
+        cancelPendingUpdate()
+        guard state == .active else {
+            return .detached(hadAttemptedMutation: target.hasAttemptedMutation)
+        }
+
+        switch textInsertionService.replaceLiveFieldText(text, in: &target) {
+        case .applied(let observation):
+            state = .finalized
+            return .applied(observation)
+        case .detached:
+            state = .detached
+            return .detached(hadAttemptedMutation: target.hasAttemptedMutation)
+        }
+    }
+
+    func cancel() -> CompletionResult {
+        cancelPendingUpdate()
+        guard state == .active else {
+            return .detached(hadAttemptedMutation: target.hasAttemptedMutation)
+        }
+
+        switch textInsertionService.replaceLiveFieldText("", in: &target) {
+        case .applied(let observation):
+            state = .cancelled
+            return .applied(observation)
+        case .detached:
+            state = .detached
+            return .detached(hadAttemptedMutation: target.hasAttemptedMutation)
+        }
+    }
+
+    func keepProvisionalText() {
+        cancelPendingUpdate()
+        guard state == .active else { return }
+        state = .finalized
+    }
+
+    private func schedulePendingUpdateIfNeeded() {
+        guard updateTask == nil else { return }
+        updateTask = Task { @MainActor [weak self] in
+            guard let self else { return }
+            try? await Task.sleep(for: updateInterval)
+            guard !Task.isCancelled else { return }
+            applyPendingUpdate()
+        }
+    }
+
+    private func applyPendingUpdate() {
+        updateTask = nil
+        guard state == .active, let pendingText else { return }
+        self.pendingText = nil
+
+        switch textInsertionService.replaceLiveFieldText(pendingText, in: &target) {
+        case .applied:
+            if self.pendingText != nil {
+                schedulePendingUpdateIfNeeded()
+            }
+        case .detached:
+            state = .detached
+            self.pendingText = nil
+        }
+    }
+
+    private func cancelPendingUpdate() {
+        updateTask?.cancel()
+        updateTask = nil
+        pendingText = nil
+    }
+
+    private func handleApplicationActivation(bundleIdentifier: String?) {
+        guard state == .active,
+              bundleIdentifier != target.applicationBundleIdentifier else {
+            return
+        }
+        cancelPendingUpdate()
+        state = .detached
+    }
 }

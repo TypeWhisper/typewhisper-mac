@@ -26422,6 +26422,28 @@
         }
       }
     },
+    "Show live transcript in the active text field" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Live-Transkript im aktiven Textfeld anzeigen"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アクティブなテキストフィールドにライブ文字起こしを表示"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在当前文本字段中显示实时转录"
+          }
+        }
+      }
+    },
     "Show live transcript preview" : {
       "localizations" : {
         "de" : {
@@ -27509,6 +27531,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "周日"
+          }
+        }
+      }
+    },
+    "Supported text fields are updated while you speak. TypeWhisper uses the transcript overlay when direct updates are unavailable." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Unterstützte Textfelder werden während des Sprechens aktualisiert. Wenn direkte Aktualisierungen nicht verfügbar sind, verwendet TypeWhisper die Transkriptvorschau."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "対応するテキストフィールドは話している間に更新されます。直接更新できない場合、TypeWhisperは文字起こしオーバーレイを使用します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "支持的文本字段会在您说话时更新。无法直接更新时，TypeWhisper 会使用转录浮层。"
           }
         }
       }
@@ -29027,6 +29071,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "无法验证“通过 Apple 登录”的响应。"
+          }
+        }
+      }
+    },
+    "The text field changed. The final transcript is available in Recent Transcriptions." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Das Textfeld wurde geändert. Das endgültige Transkript ist unter „Letzte Transkriptionen“ verfügbar."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テキストフィールドが変更されました。最終的な文字起こしは「最近の文字起こし」で確認できます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文本字段已更改。最终转录可在“最近的转录”中查看。"
           }
         }
       }
