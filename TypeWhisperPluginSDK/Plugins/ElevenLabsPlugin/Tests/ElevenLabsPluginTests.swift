@@ -11,6 +11,65 @@ final class ElevenLabsPluginTests: XCTestCase {
         super.tearDown()
     }
 
+    func testAPIKeyValidationAcceptsSuccessfulUserResponse() {
+        XCTAssertEqual(
+            ElevenLabsPlugin.apiKeyValidationResult(statusCode: 200, data: Data()),
+            .valid
+        )
+    }
+
+    func testAPIKeyValidationAcceptsKeyWithoutUserReadPermission() {
+        let data = Data(#"""
+        {
+            "detail": {
+                "type": "authentication_error",
+                "code": "unauthorized",
+                "message": "The API key you used is missing the permission user_read to execute this operation.",
+                "status": "missing_permissions"
+            }
+        }
+        """#.utf8)
+
+        XCTAssertEqual(
+            ElevenLabsPlugin.apiKeyValidationResult(statusCode: 401, data: data),
+            .valid
+        )
+    }
+
+    func testAPIKeyValidationRejectsInvalidKeyWithProviderMessage() {
+        let data = Data(#"""
+        {
+            "detail": {
+                "type": "authentication_error",
+                "code": "invalid_api_key",
+                "message": "Invalid API key",
+                "status": "invalid_api_key"
+            }
+        }
+        """#.utf8)
+
+        XCTAssertEqual(
+            ElevenLabsPlugin.apiKeyValidationResult(statusCode: 401, data: data),
+            .invalid(message: "Invalid API key")
+        )
+    }
+
+    func testAPIKeyValidationRejectsUnrelatedMissingPermission() {
+        let data = Data(#"""
+        {
+            "detail": {
+                "message": "The API key is missing the permission speech_to_text.",
+                "status": "missing_permissions"
+            }
+        }
+        """#.utf8)
+
+        XCTAssertEqual(
+            ElevenLabsPlugin.apiKeyValidationResult(statusCode: 401, data: data),
+            .invalid(message: "The API key is missing the permission speech_to_text.")
+        )
+    }
+
     func testTranscriptionModeDefaultsToAutomaticForMissingOrUnknownValue() throws {
         let defaultHost = try PluginTestHostServices()
         let defaultPlugin = ElevenLabsPlugin()

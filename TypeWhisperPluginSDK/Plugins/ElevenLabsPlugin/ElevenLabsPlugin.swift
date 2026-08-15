@@ -72,6 +72,30 @@ enum ElevenLabsTranscriptionMode: String, CaseIterable, Sendable {
     case restOnly
 }
 
+enum ElevenLabsAPIKeyValidationResult: Equatable, Sendable {
+    case valid
+    case invalid(message: String?)
+
+    var isValid: Bool {
+        if case .valid = self { return true }
+        return false
+    }
+
+    var errorMessage: String? {
+        guard case .invalid(let message) = self else { return nil }
+        return message
+    }
+}
+
+private struct ElevenLabsAPIErrorResponse: Decodable {
+    struct Detail: Decodable {
+        let message: String?
+        let status: String?
+    }
+
+    let detail: Detail?
+}
+
 @objc(ElevenLabsPlugin)
 final class ElevenLabsPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, @unchecked Sendable {
     static let pluginId = "com.typewhisper.elevenlabs"
@@ -473,20 +497,41 @@ final class ElevenLabsPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTer
         return data
     }
 
-    fileprivate func validateApiKey(_ key: String) async -> Bool {
-        guard let url = URL(string: "https://api.elevenlabs.io/v1/user") else { return false }
+    fileprivate func validateApiKey(_ key: String) async -> ElevenLabsAPIKeyValidationResult {
+        guard let url = URL(string: "https://api.elevenlabs.io/v1/user") else {
+            return .invalid(message: nil)
+        }
 
         var request = URLRequest(url: url)
         request.setValue(key, forHTTPHeaderField: "xi-api-key")
         request.timeoutInterval = 10
 
         do {
-            let (_, response) = try await PluginHTTPClient.data(for: request)
-            guard let httpResponse = response as? HTTPURLResponse else { return false }
-            return httpResponse.statusCode == 200
+            let (data, response) = try await PluginHTTPClient.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse else {
+                return .invalid(message: nil)
+            }
+            return Self.apiKeyValidationResult(statusCode: httpResponse.statusCode, data: data)
         } catch {
-            return false
+            return .invalid(message: error.localizedDescription)
         }
+    }
+
+    static func apiKeyValidationResult(statusCode: Int, data: Data) -> ElevenLabsAPIKeyValidationResult {
+        guard statusCode != 200 else { return .valid }
+
+        let detail = try? JSONDecoder().decode(ElevenLabsAPIErrorResponse.self, from: data).detail
+        let message = detail?.message?.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        // ElevenLabs scopes API keys per endpoint. A key restricted to Speech to Text is valid for
+        // this plugin even though the optional user-profile validation endpoint returns HTTP 401.
+        if statusCode == 401,
+           detail?.status == "missing_permissions",
+           message?.localizedCaseInsensitiveContains("user_read") == true {
+            return .valid
+        }
+
+        return .invalid(message: message?.isEmpty == false ? message : nil)
     }
 
     var settingsView: AnyView? {
@@ -522,7 +567,7 @@ private struct ElevenLabsSettingsView: View {
     let plugin: ElevenLabsPlugin
     @State private var apiKeyInput = ""
     @State private var isValidating = false
-    @State private var validationResult: Bool?
+    @State private var validationResult: ElevenLabsAPIKeyValidationResult?
     @State private var showApiKey = false
     @State private var selectedModel = ""
     @State private var transcriptionMode = ElevenLabsTranscriptionMode.automatic
@@ -563,7 +608,7 @@ private struct ElevenLabsSettingsView: View {
                     }
                     .buttonStyle(.borderless)
 
-                    if hasStoredKey && isEditingStoredKey && validationResult != false {
+                    if hasStoredKey && isEditingStoredKey && validationResult?.isValid != false {
                         Button(String(localized: "Remove", bundle: bundle)) {
                             apiKeyInput = ""
                             validationResult = nil
@@ -591,15 +636,15 @@ private struct ElevenLabsSettingsView: View {
                     }
                 } else if let result = validationResult {
                     HStack(spacing: 4) {
-                        Image(systemName: result ? "checkmark.circle.fill" : "xmark.circle.fill")
-                            .foregroundStyle(result ? .green : .red)
+                        Image(systemName: result.isValid ? "checkmark.circle.fill" : "xmark.circle.fill")
+                            .foregroundStyle(result.isValid ? .green : .red)
                         Text(
-                            result
+                            result.isValid
                                 ? String(localized: "Valid API Key", bundle: bundle)
-                                : String(localized: "Invalid API Key", bundle: bundle)
+                                : result.errorMessage ?? String(localized: "Invalid API Key", bundle: bundle)
                         )
                         .font(.caption)
-                        .foregroundStyle(result ? .green : .red)
+                        .foregroundStyle(result.isValid ? .green : .red)
                     }
                 }
             }
@@ -654,10 +699,10 @@ private struct ElevenLabsSettingsView: View {
                 apiKeyInput = key
                 isValidating = true
                 Task {
-                    let isValid = await plugin.validateApiKey(key)
+                    let result = await plugin.validateApiKey(key)
                     await MainActor.run {
                         isValidating = false
-                        validationResult = isValid
+                        validationResult = result
                     }
                 }
             }
@@ -674,13 +719,13 @@ private struct ElevenLabsSettingsView: View {
         validationResult = nil
 
         Task {
-            let isValid = await plugin.validateApiKey(trimmedKey)
+            let result = await plugin.validateApiKey(trimmedKey)
             await MainActor.run {
-                if isValid {
+                if result.isValid {
                     plugin.setApiKey(trimmedKey)
                 }
                 isValidating = false
-                validationResult = isValid
+                validationResult = result
             }
         }
     }
