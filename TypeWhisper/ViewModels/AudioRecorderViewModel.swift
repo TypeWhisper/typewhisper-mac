@@ -476,7 +476,8 @@ final class AudioRecorderViewModel: ObservableObject {
                     micEnabled: micEnabled,
                     systemAudioEnabled: systemAudioEnabled,
                     apiSessionID: nil,
-                    preferredBaseName: nil
+                    preferredBaseName: nil,
+                    transcriptMetadata: nil
                 )
             } catch {
                 errorMessage = error.localizedDescription
@@ -493,7 +494,8 @@ final class AudioRecorderViewModel: ObservableObject {
         micEnabled requestedMicEnabled: Bool,
         systemAudioEnabled requestedSystemAudioEnabled: Bool,
         apiSessionID: UUID?,
-        preferredBaseName: String?
+        preferredBaseName: String?,
+        transcriptMetadata: CalendarMeetingTranscriptMetadata?
     ) async throws -> URL {
         guard retranscribingRecordingURL == nil else {
             throw RecorderAPIError.retranscribing
@@ -515,7 +517,7 @@ final class AudioRecorderViewModel: ObservableObject {
         errorMessage = nil
         systemAudioWarningMessage = nil
         partialText = ""
-        activeCalendarMeetingTranscriptMetadata = nil
+        activeCalendarMeetingTranscriptMetadata = transcriptMetadata
         reconcileSelectionWithAvailablePlugins()
         state = .recording
         let microphoneSelection = requestedMicEnabled
@@ -541,6 +543,7 @@ final class AudioRecorderViewModel: ObservableObject {
             }
             state = .idle
             currentOutputURL = nil
+            activeCalendarMeetingTranscriptMetadata = nil
             if let apiSessionID {
                 activeRecorderAPISessionID = nil
                 recorderAPISessions.removeValue(forKey: apiSessionID)
@@ -716,7 +719,8 @@ final class AudioRecorderViewModel: ObservableObject {
             micEnabled: resolvedMicEnabled,
             systemAudioEnabled: resolvedSystemAudioEnabled,
             apiSessionID: sessionID,
-            preferredBaseName: nil
+            preferredBaseName: nil,
+            transcriptMetadata: nil
         )
         return sessionID
     }
@@ -750,7 +754,8 @@ final class AudioRecorderViewModel: ObservableObject {
             micEnabled: micEnabled,
             systemAudioEnabled: systemAudioEnabled,
             apiSessionID: nil,
-            preferredBaseName: preferredBaseName
+            preferredBaseName: preferredBaseName,
+            transcriptMetadata: transcriptMetadata
         )
         guard state == .recording else {
             activeCalendarMeetingHandle = nil
@@ -758,7 +763,6 @@ final class AudioRecorderViewModel: ObservableObject {
         }
         let handle = CalendarMeetingRecordingHandle(id: UUID(), outputURL: outputURL)
         activeCalendarMeetingHandle = handle
-        activeCalendarMeetingTranscriptMetadata = transcriptMetadata
         return handle
     }
 
@@ -821,15 +825,24 @@ final class AudioRecorderViewModel: ObservableObject {
         guard !isRetranscribing(item) else { return }
 
         do {
-            try FileManager.default.removeItem(at: item.url)
-            // Also delete sidecar transcript
-            let txtURL = item.url.deletingPathExtension().appendingPathExtension("txt")
-            try? FileManager.default.removeItem(at: txtURL)
-            try? FileManager.default.removeItem(at: transcriptDocumentURL(for: item.url))
-            clearTranscriptionFailure(for: item.url)
+            try removeRecordingFileIfPresent(at: transcriptURL(for: item.url))
+            try removeRecordingFileIfPresent(at: transcriptDocumentURL(for: item.url))
+            try removeRecordingFileIfPresent(at: transcriptionFailureURL(for: item.url))
+            try removeRecordingFileIfPresent(at: item.url)
+            transientTranscriptionFailures.removeValue(
+                forKey: transcriptionFailureKey(for: item.url)
+            )
             recordings.removeAll { $0.id == item.id }
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+
+    private func removeRecordingFileIfPresent(at url: URL) throws {
+        do {
+            try FileManager.default.removeItem(at: url)
+        } catch let error as CocoaError where error.code == .fileNoSuchFile {
+            return
         }
     }
 

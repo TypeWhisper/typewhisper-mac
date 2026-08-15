@@ -20,7 +20,7 @@ final class CalendarMeetingRecordingTests: XCTestCase {
 
     func testPreferredNamePrefixesEventStartDateForSorting() throws {
         var calendar = Calendar(identifier: .gregorian)
-        calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+        calendar.timeZone = .autoupdatingCurrent
         let date = try XCTUnwrap(calendar.date(from: DateComponents(
             year: 2026,
             month: 8,

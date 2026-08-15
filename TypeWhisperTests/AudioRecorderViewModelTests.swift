@@ -558,6 +558,47 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: documentURL.path))
     }
 
+    func testDeleteRecordingRetainsAudioWhenCalendarMetadataCannotBeDeleted() async throws {
+        try preserveStandardDefaults()
+        let defaults = try makeDefaults()
+        let recordingsDirectory = makeTemporaryDirectory()
+        let viewModel = makeViewModel(
+            defaults: defaults,
+            recorderService: makeRecorderService(recordingsDirectory: recordingsDirectory)
+        )
+        viewModel.transcriptionEnabled = false
+        viewModel.livePreviewEnabled = false
+
+        let handle = try await viewModel.startCalendarMeetingRecording(
+            preferredBaseName: "Protected metadata",
+            transcriptMetadata: makeCalendarMeetingTranscriptMetadata(title: "Protected metadata")
+        )
+        try viewModel.stopCalendarMeetingRecording(handle: handle)
+        try await waitForRecordingsToLoad(viewModel, count: 1)
+
+        let recording = try XCTUnwrap(viewModel.recordings.first)
+        let documentURL = handle.outputURL
+            .deletingPathExtension()
+            .appendingPathExtension("transcript.json")
+        try FileManager.default.setAttributes(
+            [.immutable: true],
+            ofItemAtPath: documentURL.path
+        )
+        defer {
+            try? FileManager.default.setAttributes(
+                [.immutable: false],
+                ofItemAtPath: documentURL.path
+            )
+        }
+
+        viewModel.deleteRecording(recording)
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: handle.outputURL.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: documentURL.path))
+        XCTAssertEqual(viewModel.recordings.map(\.id), [recording.id])
+        XCTAssertNotNil(viewModel.errorMessage)
+    }
+
     func testFinalTranscriptionDoesNotForceGlobalDefaultModelAsRecorderOverride() async throws {
         try preserveStandardDefaults()
         let defaults = try makeDefaults()

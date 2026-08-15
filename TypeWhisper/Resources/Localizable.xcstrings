@@ -35525,7 +35525,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Creates a transcript after calendar-started recordings. Calendar metadata is stored locally alongside the recording either way."
+            "value" : "Creates a transcript after a calendar-started recording ends. Calendar metadata is stored locally alongside the recording either way."
           }
         },
         "ja" : {
@@ -35537,7 +35537,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "为日历启动的录音生成转录。无论此设置如何，日历元数据都会与录音一起存储在本机。"
+            "value" : "在日历启动的录音结束后生成转录。无论此设置如何，日历元数据都会与录音一起存储在本机。"
           }
         }
       }
