@@ -26,7 +26,8 @@ route rather than the OpenAI v1 route. Configure a dedicated profile with:
 - Transcription Transport: `Batch` or `Auto` for a batch model
 - Batch Transcription Endpoint: `Deployment-scoped`
 
-For realtime transcription, use the Standard v1 endpoint style and the API
-version required by the provider's `/v1/realtime` endpoint. A separate profile
-is recommended when batch and realtime endpoints require different API
-versions.
+For realtime transcription, select the `Realtime` transport and configure the
+API version required by the provider's `/v1/realtime` endpoint. Realtime
+requests always use `/v1/realtime` and ignore the Batch Transcription Endpoint
+setting. A separate profile is recommended when batch and realtime endpoints
+require different API versions.
