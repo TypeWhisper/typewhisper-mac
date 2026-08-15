@@ -7252,7 +7252,9 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         }
         let audioFileService = AudioFileService()
         let audioRecordingService = AudioRecordingService(
-            bluetoothInputRouteStabilizer: audioRecordingBluetoothInputRouteStabilizer
+            bluetoothInputRouteStabilizer: audioRecordingBluetoothInputRouteStabilizer,
+            defaultInputController: APIFakeAudioInputDeviceDefaultController(defaultInputDeviceID: nil),
+            inputTransportResolver: FakeAudioDeviceTransportResolver(transports: [:])
         )
         let audioRecorderService = AudioRecorderService()
         audioRecorderService.recordingsDirectoryOverride = appSupportDirectory.appendingPathComponent("recordings")
@@ -7578,6 +7580,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         let audioRecordingService = AudioRecordingService(
             bluetoothInputRouteStabilizer: audioRecordingBluetoothInputRouteStabilizer,
+            defaultInputController: APIFakeAudioInputDeviceDefaultController(defaultInputDeviceID: nil),
+            inputTransportResolver: FakeAudioDeviceTransportResolver(transports: [:]),
             recoveryAudioStore: audioRecordingRecoveryAudioStore
         )
         let hotkeyService = HotkeyService()
