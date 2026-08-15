@@ -99,6 +99,8 @@ private struct ElevenLabsAPIErrorResponse: Decodable {
 @objc(ElevenLabsPlugin)
 final class ElevenLabsPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, @unchecked Sendable {
     static let pluginId = "com.typewhisper.elevenlabs"
+    private static let missingUserReadPermissionMessage =
+        "The API key you used is missing the permission user_read to execute this operation."
     static let pluginName = "ElevenLabs"
     static let transcriptionModeKey = "transcriptionMode"
 
@@ -527,7 +529,7 @@ final class ElevenLabsPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTer
         // this plugin even though the optional user-profile validation endpoint returns HTTP 401.
         if statusCode == 401,
            detail?.status == "missing_permissions",
-           message?.localizedCaseInsensitiveContains("user_read") == true {
+           message?.caseInsensitiveCompare(Self.missingUserReadPermissionMessage) == .orderedSame {
             return .valid
         }
 

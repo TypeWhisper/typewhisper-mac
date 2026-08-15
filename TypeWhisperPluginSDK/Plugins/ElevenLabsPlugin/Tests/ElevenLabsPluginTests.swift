@@ -70,6 +70,23 @@ final class ElevenLabsPluginTests: XCTestCase {
         )
     }
 
+    func testAPIKeyValidationRejectsMultipleMissingPermissions() {
+        let message = "The API key you used is missing the permissions user_read and speech_to_text."
+        let data = Data(#"""
+        {
+            "detail": {
+                "message": "\#(message)",
+                "status": "missing_permissions"
+            }
+        }
+        """#.utf8)
+
+        XCTAssertEqual(
+            ElevenLabsPlugin.apiKeyValidationResult(statusCode: 401, data: data),
+            .invalid(message: message)
+        )
+    }
+
     func testTranscriptionModeDefaultsToAutomaticForMissingOrUnknownValue() throws {
         let defaultHost = try PluginTestHostServices()
         let defaultPlugin = ElevenLabsPlugin()
