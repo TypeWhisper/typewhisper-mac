@@ -13759,7 +13759,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Hält das AirPods-Mikrofon zwischen Diktaten aktiv. Dadurch wird der orangefarbene Mikrofonindikator angezeigt, der Akku stärker beansprucht und die AirPods-Wiedergabe im Telefonie-Modus gehalten."
+            "value" : "Hält das AirPods-Mikrofon zwischen Diktaten aktiv. Dadurch wird der orangefarbene Mikrofonindikator angezeigt, der Akku stärker beansprucht und die AirPods-Audioqualität im Telefonie-Modus gehalten."
           }
         }
       }

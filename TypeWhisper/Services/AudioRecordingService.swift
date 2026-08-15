@@ -206,6 +206,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             let changed = configLock.withLock { () -> Bool in
                 guard _selectedDeviceID != newValue else { return false }
                 _selectedDeviceID = newValue
+                _selectedInputDeviceName = nil
                 return true
             }
             if changed { invalidatePreparedRecordingInputs(reason: "selected-device-changed") }
@@ -559,7 +560,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
 
             guard !isRecordingActive,
                   builtInInputPreparationDeviceID() == defaultInputDeviceID else {
-                teardownEngine(engine)
+                teardownPreparedEngine(engine)
                 return
             }
 
@@ -579,7 +580,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
                 return (true, previous)
             }
             if let replacedInput = storageResult.replaced {
-                teardownEngine(replacedInput.engine)
+                teardownPreparedEngine(replacedInput.engine)
             }
             guard storageResult.stored else { return }
 
@@ -588,7 +589,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
                 "Prepared built-in recording input without starting capture in \(String(format: "%.1f", elapsedMs), privacy: .public)ms"
             )
         } catch {
-            teardownEngine(engine)
+            teardownPreparedEngine(engine)
             logger.warning(
                 "Could not prepare built-in recording input; keeping cold-start fallback: \(error.localizedDescription, privacy: .public)"
             )
@@ -717,7 +718,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
 
             guard !isRecordingActive,
                   bluetoothInputPreparationDeviceID() == deviceID else {
-                teardownEngine(engine)
+                teardownPreparedEngine(engine)
                 bluetoothInputStartupTracker.reset()
                 inputActivationGuard.restore(reason: "airpods-instant-start-prewarm-ineligible")
                 outputVolumeGuard.clear()
@@ -741,7 +742,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
                 return (true, previous)
             }
             if let replacedInput = storageResult.replaced {
-                teardownEngine(replacedInput.engine)
+                teardownPreparedEngine(replacedInput.engine)
             }
             guard storageResult.stored else {
                 bluetoothInputStartupTracker.reset()
@@ -757,7 +758,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
                 "AirPods Instant Start is ready in \(String(format: "%.1f", elapsedMs), privacy: .public)ms"
             )
         } catch {
-            teardownEngine(engine)
+            teardownPreparedEngine(engine)
             bluetoothInputStartupTracker.reset()
             inputActivationGuard.restore(reason: "airpods-instant-start-prewarm-failed")
             outputVolumeGuard.restoreIfRaised(reason: "airpods-instant-start-prewarm-failed")
@@ -789,7 +790,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             return preparedInput
         }
         if let staleInput {
-            teardownEngine(staleInput.engine)
+            teardownPreparedEngine(staleInput.engine)
         }
         return claimedInput
     }
@@ -818,6 +819,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
 
     private func claimPreparedBluetoothInputIfEligible() -> PreparedBluetoothInput? {
         guard let deviceID = bluetoothInputPreparationDeviceID() else {
+            invalidatePreparedRecordingInputs(reason: "bluetooth-recording-route-ineligible")
             return nil
         }
 
@@ -837,8 +839,11 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             return preparedInput
         }
         if let staleInput {
-            teardownEngine(staleInput.engine)
+            teardownPreparedEngine(staleInput.engine)
             bluetoothInputStartupTracker.reset()
+            inputActivationGuard.restore(reason: "airpods-instant-start-prewarm-stale")
+        } else if claimedInput != nil {
+            inputActivationGuard.restore(reason: "airpods-instant-start-prewarm-claimed")
         }
         return claimedInput
     }
@@ -855,11 +860,11 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             return (builtInInput, usbInput, bluetoothInput)
         }
         if let builtInInput = preparedInputs.0 {
-            teardownEngine(builtInInput.engine)
+            teardownPreparedEngine(builtInInput.engine)
         }
         preparedInputs.1?.session.stop()
         if let bluetoothInput = preparedInputs.2 {
-            teardownEngine(bluetoothInput.engine)
+            teardownPreparedEngine(bluetoothInput.engine)
             bluetoothInputStartupTracker.reset()
             inputActivationGuard.restore(reason: "airpods-instant-start-prewarm-invalidated")
         }
@@ -1909,6 +1914,11 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         engine.stop()
     }
 
+    private func teardownPreparedEngine(_ engine: AVAudioEngine) {
+        teardownEngine(engine)
+        engineTeardownRetainer.retain(engine, for: Self.engineTeardownRetentionInterval)
+    }
+
     @discardableResult
     private func replaceAudioEngineForRecoveryIfNeeded(_ engine: AVAudioEngine) -> AVAudioEngine? {
         let replacementEngine = AVAudioEngine()
@@ -2818,6 +2828,14 @@ extension AudioRecordingService {
 
     func testingCurrentAudioEngine() -> AVAudioEngine? {
         engineLock.withLock { audioEngine }
+    }
+
+    func testingHasPreparedUSBInput(deviceID: AudioDeviceID) -> Bool {
+        engineLock.withLock { preparedUSBInput?.deviceID == deviceID }
+    }
+
+    func testingSelectedInputDeviceName() -> String? {
+        configLock.withLock { _selectedInputDeviceName }
     }
 
     func testingValidateTapInstallationPreconditions(expected: AVAudioFormat, current: AVAudioFormat) throws {

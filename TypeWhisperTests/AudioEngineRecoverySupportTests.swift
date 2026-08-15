@@ -299,6 +299,23 @@ final class AudioEngineRecoverySupportTests: XCTestCase {
         ))
     }
 
+    func testChangingSelectedDeviceIDClearsTheStoredInputDeviceName() {
+        let service = AudioRecordingService()
+        service.hasMicrophonePermissionOverride = false
+        service.configureInputSelection(
+            deviceID: AudioDeviceID(5),
+            hasExplicitDeviceSelection: true,
+            usesBluetoothTransport: true,
+            deviceName: "AirPods Pro"
+        )
+
+        XCTAssertEqual(service.testingSelectedInputDeviceName(), "AirPods Pro")
+
+        service.selectedDeviceID = AudioDeviceID(6)
+
+        XCTAssertNil(service.testingSelectedInputDeviceName())
+    }
+
     func testAudioInputBufferNormalizerSelectsStrongestNonInterleavedChannel() throws {
         let stereoFormat = try XCTUnwrap(AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
@@ -2651,6 +2668,10 @@ final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
         )
         await fulfillment(of: [prepared], timeout: 1.0)
         inputCaptureFactory.prepareHook = nil
+        let didStorePreparedInput = await waitUntil(timeout: 1.0) {
+            service.testingHasPreparedUSBInput(deviceID: usbDeviceID)
+        }
+        XCTAssertTrue(didStorePreparedInput)
 
         let preparedSession = try XCTUnwrap(inputCaptureFactory.createdSessions.first)
         XCTAssertEqual(preparedSession.startCalls, 0)
@@ -2691,6 +2712,10 @@ final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
         )
         await fulfillment(of: [prepared], timeout: 1.0)
         inputCaptureFactory.prepareHook = nil
+        let didStorePreparedInput = await waitUntil(timeout: 1.0) {
+            service.testingHasPreparedUSBInput(deviceID: usbDeviceID)
+        }
+        XCTAssertTrue(didStorePreparedInput)
 
         try service.startRecording()
 
@@ -3550,26 +3575,43 @@ private final class FakeAudioInputSelectionEngineValidator: AudioInputSelectionE
     }
 }
 
-private final class FakeAudioInputCaptureSession: AudioInputCaptureSession {
+private func waitUntil(
+    timeout: TimeInterval,
+    pollInterval: Duration = .milliseconds(5),
+    condition: () -> Bool
+) async -> Bool {
+    let deadline = Date().addingTimeInterval(timeout)
+    while !condition() {
+        guard Date() < deadline else { return false }
+        try? await Task.sleep(for: pollInterval)
+    }
+    return true
+}
+
+private final class FakeAudioInputCaptureSession: AudioInputCaptureSession, @unchecked Sendable {
     private let startError: Error?
-    private(set) var startCalls = 0
-    private(set) var stopCalls = 0
+    private let lock = NSLock()
+    private var _startCalls = 0
+    private var _stopCalls = 0
+
+    var startCalls: Int { lock.withLock { _startCalls } }
+    var stopCalls: Int { lock.withLock { _stopCalls } }
 
     init(startError: Error? = nil) {
         self.startError = startError
     }
 
     func start() throws {
-        startCalls += 1
+        lock.withLock { _startCalls += 1 }
         if let startError { throw startError }
     }
 
     func stop() {
-        stopCalls += 1
+        lock.withLock { _stopCalls += 1 }
     }
 }
 
-private final class FakeAudioInputCaptureFactory: AudioInputCaptureFactory {
+private final class FakeAudioInputCaptureFactory: AudioInputCaptureFactory, @unchecked Sendable {
     struct ValidateCall: Equatable {
         let deviceID: AudioDeviceID
         let label: String
@@ -3582,16 +3624,43 @@ private final class FakeAudioInputCaptureFactory: AudioInputCaptureFactory {
     }
 
     private let format: AVAudioFormat
-    var inputFormatError: Error?
-    var validateError: Error?
-    var startError: Error?
-    var preparedSessionStartError: Error?
-    var prepareHook: (() -> Void)?
-    private(set) var inputFormatCalls: [AudioDeviceID] = []
-    private(set) var validateCalls: [ValidateCall] = []
-    private(set) var prepareCalls: [StartCall] = []
-    private(set) var startCalls: [StartCall] = []
-    private(set) var createdSessions: [FakeAudioInputCaptureSession] = []
+    private let lock = NSLock()
+    private var _inputFormatError: Error?
+    private var _validateError: Error?
+    private var _startError: Error?
+    private var _preparedSessionStartError: Error?
+    private var _prepareHook: (() -> Void)?
+    private var _inputFormatCalls: [AudioDeviceID] = []
+    private var _validateCalls: [ValidateCall] = []
+    private var _prepareCalls: [StartCall] = []
+    private var _startCalls: [StartCall] = []
+    private var _createdSessions: [FakeAudioInputCaptureSession] = []
+
+    var inputFormatError: Error? {
+        get { lock.withLock { _inputFormatError } }
+        set { lock.withLock { _inputFormatError = newValue } }
+    }
+    var validateError: Error? {
+        get { lock.withLock { _validateError } }
+        set { lock.withLock { _validateError = newValue } }
+    }
+    var startError: Error? {
+        get { lock.withLock { _startError } }
+        set { lock.withLock { _startError = newValue } }
+    }
+    var preparedSessionStartError: Error? {
+        get { lock.withLock { _preparedSessionStartError } }
+        set { lock.withLock { _preparedSessionStartError = newValue } }
+    }
+    var prepareHook: (() -> Void)? {
+        get { lock.withLock { _prepareHook } }
+        set { lock.withLock { _prepareHook = newValue } }
+    }
+    var inputFormatCalls: [AudioDeviceID] { lock.withLock { _inputFormatCalls } }
+    var validateCalls: [ValidateCall] { lock.withLock { _validateCalls } }
+    var prepareCalls: [StartCall] { lock.withLock { _prepareCalls } }
+    var startCalls: [StartCall] { lock.withLock { _startCalls } }
+    var createdSessions: [FakeAudioInputCaptureSession] { lock.withLock { _createdSessions } }
 
     init(format: AVAudioFormat? = nil) {
         self.format = format ?? AVAudioFormat(
@@ -3603,14 +3672,20 @@ private final class FakeAudioInputCaptureFactory: AudioInputCaptureFactory {
     }
 
     func inputOnlyCaptureFormat(deviceID: AudioDeviceID) throws -> AVAudioFormat {
-        inputFormatCalls.append(deviceID)
-        if let inputFormatError { throw inputFormatError }
+        let error = lock.withLock { () -> Error? in
+            _inputFormatCalls.append(deviceID)
+            return _inputFormatError
+        }
+        if let error { throw error }
         return format
     }
 
     func validateInputOnlyDevice(deviceID: AudioDeviceID, label: String) throws {
-        validateCalls.append(.init(deviceID: deviceID, label: label))
-        if let validateError { throw validateError }
+        let error = lock.withLock { () -> Error? in
+            _validateCalls.append(.init(deviceID: deviceID, label: label))
+            return _validateError
+        }
+        if let error { throw error }
     }
 
     func prepareInputOnlyCapture(
@@ -3619,11 +3694,14 @@ private final class FakeAudioInputCaptureFactory: AudioInputCaptureFactory {
         bufferSize: AVAudioFrameCount,
         onBuffer: @escaping (AVAudioPCMBuffer) -> Void
     ) throws -> AudioInputCaptureSession {
-        prepareCalls.append(.init(deviceID: deviceID, label: label, bufferSize: bufferSize))
-        if let startError { throw startError }
-        let session = FakeAudioInputCaptureSession(startError: preparedSessionStartError)
-        createdSessions.append(session)
-        prepareHook?()
+        let configuration = lock.withLock { () -> (Error?, Error?, (() -> Void)?) in
+            _prepareCalls.append(.init(deviceID: deviceID, label: label, bufferSize: bufferSize))
+            return (_startError, _preparedSessionStartError, _prepareHook)
+        }
+        if let error = configuration.0 { throw error }
+        let session = FakeAudioInputCaptureSession(startError: configuration.1)
+        lock.withLock { _createdSessions.append(session) }
+        configuration.2?()
         return session
     }
 
@@ -3633,10 +3711,13 @@ private final class FakeAudioInputCaptureFactory: AudioInputCaptureFactory {
         bufferSize: AVAudioFrameCount,
         onBuffer: @escaping (AVAudioPCMBuffer) -> Void
     ) throws -> AudioInputCaptureSession {
-        startCalls.append(.init(deviceID: deviceID, label: label, bufferSize: bufferSize))
-        if let startError { throw startError }
+        let error = lock.withLock { () -> Error? in
+            _startCalls.append(.init(deviceID: deviceID, label: label, bufferSize: bufferSize))
+            return _startError
+        }
+        if let error { throw error }
         let session = FakeAudioInputCaptureSession()
-        createdSessions.append(session)
+        lock.withLock { _createdSessions.append(session) }
         return session
     }
 }
