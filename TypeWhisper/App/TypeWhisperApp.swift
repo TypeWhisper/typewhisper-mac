@@ -755,6 +755,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
         ) { _ in
             PluginHTTPClient.resetSharedSession(reason: "macOS wake")
             Task { @MainActor in
+                ServiceContainer.shared.audioRecordingService.handleSystemWake()
                 ServiceContainer.shared.calendarMeetingAutomationController.handleWake()
             }
         }

@@ -8,6 +8,66 @@ import os
 
 private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "typewhisper-mac", category: "AudioRecordingService")
 
+enum BuiltInRecordingInputPreparationPolicy {
+    static func isEligible(
+        hasMicrophonePermission: Bool,
+        selectedDeviceID: AudioDeviceID?,
+        hasExplicitDeviceSelection: Bool,
+        usesBluetoothTransport: Bool,
+        defaultInputDeviceID: AudioDeviceID?,
+        defaultInputTransport: UInt32?
+    ) -> Bool {
+        hasMicrophonePermission
+            && selectedDeviceID == nil
+            && !hasExplicitDeviceSelection
+            && !usesBluetoothTransport
+            && defaultInputDeviceID != nil
+            && defaultInputTransport == kAudioDeviceTransportTypeBuiltIn
+    }
+}
+
+enum USBRecordingInputPreparationPolicy {
+    static func isEligible(
+        hasMicrophonePermission: Bool,
+        selectedDeviceID: AudioDeviceID?,
+        hasExplicitDeviceSelection: Bool,
+        usesBluetoothTransport: Bool,
+        selectedInputTransport: UInt32?
+    ) -> Bool {
+        hasMicrophonePermission
+            && selectedDeviceID != nil
+            && hasExplicitDeviceSelection
+            && !usesBluetoothTransport
+            && selectedInputTransport == kAudioDeviceTransportTypeUSB
+    }
+}
+
+enum AirPodsRecordingInputPreparationPolicy {
+    static func isAirPods(deviceName: String?, usesBluetoothTransport: Bool) -> Bool {
+        guard usesBluetoothTransport, let deviceName else { return false }
+        return deviceName.range(
+            of: "AirPods",
+            options: [.caseInsensitive, .diacriticInsensitive]
+        ) != nil
+    }
+
+    static func isEligible(
+        hasMicrophonePermission: Bool,
+        isEnabled: Bool,
+        selectedDeviceID: AudioDeviceID?,
+        selectedDeviceName: String?,
+        usesBluetoothTransport: Bool
+    ) -> Bool {
+        hasMicrophonePermission
+            && isEnabled
+            && selectedDeviceID != nil
+            && isAirPods(
+                deviceName: selectedDeviceName,
+                usesBluetoothTransport: usesBluetoothTransport
+            )
+    }
+}
+
 struct MicrophoneBoostProcessingResult {
     let samples: [Float]
     let inputRMS: Float
@@ -142,15 +202,36 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     /// CoreAudio device ID to use for recording. nil = system default input.
     var selectedDeviceID: AudioDeviceID? {
         get { configLock.withLock { _selectedDeviceID } }
-        set { configLock.withLock { _selectedDeviceID = newValue } }
+        set {
+            let changed = configLock.withLock { () -> Bool in
+                guard _selectedDeviceID != newValue else { return false }
+                _selectedDeviceID = newValue
+                return true
+            }
+            if changed { invalidatePreparedRecordingInputs(reason: "selected-device-changed") }
+        }
     }
     var hasExplicitDeviceSelection: Bool {
         get { configLock.withLock { _hasExplicitDeviceSelection } }
-        set { configLock.withLock { _hasExplicitDeviceSelection = newValue } }
+        set {
+            let changed = configLock.withLock { () -> Bool in
+                guard _hasExplicitDeviceSelection != newValue else { return false }
+                _hasExplicitDeviceSelection = newValue
+                return true
+            }
+            if changed { invalidatePreparedRecordingInputs(reason: "input-selection-mode-changed") }
+        }
     }
     var selectedInputDeviceUsesBluetoothTransport: Bool {
         get { configLock.withLock { _selectedInputDeviceUsesBluetoothTransport } }
-        set { configLock.withLock { _selectedInputDeviceUsesBluetoothTransport = newValue } }
+        set {
+            let changed = configLock.withLock { () -> Bool in
+                guard _selectedInputDeviceUsesBluetoothTransport != newValue else { return false }
+                _selectedInputDeviceUsesBluetoothTransport = newValue
+                return true
+            }
+            if changed { invalidatePreparedRecordingInputs(reason: "input-transport-changed") }
+        }
     }
     var microphoneBoostEnabled: Bool {
         get { microphoneBoostEnabledLock.withLock { $0 } }
@@ -159,6 +240,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     private var _selectedDeviceID: AudioDeviceID?
     private var _hasExplicitDeviceSelection = false
     private var _selectedInputDeviceUsesBluetoothTransport = false
+    private var _selectedInputDeviceName: String?
 
     private struct StartupConfigurationChangeGuard {
         let engineID: ObjectIdentifier
@@ -176,8 +258,36 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         }
     }
 
+    private struct PreparedBuiltInInput {
+        let engine: AVAudioEngine
+        let defaultInputDeviceID: AudioDeviceID
+        let tapFormat: AVAudioFormat
+    }
+
+    private struct PreparedUSBInput {
+        let session: AudioInputCaptureSession
+        let deviceID: AudioDeviceID
+    }
+
+    private struct PreparedBluetoothInput {
+        let engine: AVAudioEngine
+        let deviceID: AudioDeviceID
+        let tapFormat: AVAudioFormat
+        let inputGeneration: UInt64
+    }
+
+    private struct ConfiguredEngineCapture {
+        let inputNode: AVAudioInputNode
+        let tapFormat: AVAudioFormat
+        let bluetoothInputGeneration: UInt64?
+    }
+
     private var audioEngine: AVAudioEngine?
     private var inputCaptureSession: AudioInputCaptureSession?
+    private var preparedBuiltInInput: PreparedBuiltInInput?
+    private var preparedUSBInput: PreparedUSBInput?
+    private var preparedBluetoothInput: PreparedBluetoothInput?
+    private var preparedInputGeneration: UInt64 = 0
     private var startupConfigurationChangeGuard: StartupConfigurationChangeGuard?
     private var configChangeObserver: NSObjectProtocol?
     private var sampleBuffer: [Float] = []
@@ -222,6 +332,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     private static let captureTapFrames: AVAudioFrameCount = 256
     private static let audioLevelPublishIntervalNanoseconds: UInt64 = 33_333_333
     private static let engineTeardownRetentionInterval: TimeInterval = 0.3
+    private static let postRecordingInputPreparationDelay: TimeInterval = 0.25
 
     init(
         outputVolumeGuard: AudioOutputVolumeGuard = AudioOutputVolumeGuard(),
@@ -291,20 +402,469 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
 
     func requestMicrophonePermission() async -> Bool {
         let permission = AVAudioApplication.shared.recordPermission
-        if permission == .granted { return true }
+        if permission == .granted {
+            prepareRecordingInputIfEligible()
+            return true
+        }
         if permission == .undetermined {
             // Request permission via the official AVAudioApplication API
-            return await withCheckedContinuation { continuation in
+            let granted = await withCheckedContinuation { continuation in
                 AVAudioApplication.requestRecordPermission { granted in
                     continuation.resume(returning: granted)
                 }
             }
+            if granted { prepareRecordingInputIfEligible() }
+            return granted
         }
         // .denied — open System Settings so user can grant manually
         DispatchQueue.main.async {
             NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone")!)
         }
         return false
+    }
+
+    /// Prepares the automatic built-in microphone or explicitly selected USB input
+    /// without starting capture. If the user explicitly opts in, an active AirPods
+    /// stream can also be kept ready and reused by the next recording.
+    func prepareRecordingInputIfEligible() {
+        scheduleRecordingInputPreparation(after: 0)
+    }
+
+    func configureInputSelection(
+        deviceID: AudioDeviceID?,
+        hasExplicitDeviceSelection: Bool,
+        usesBluetoothTransport: Bool,
+        deviceName: String? = nil
+    ) {
+        let changed = configLock.withLock { () -> Bool in
+            let changed = _selectedDeviceID != deviceID
+                || _hasExplicitDeviceSelection != hasExplicitDeviceSelection
+                || _selectedInputDeviceUsesBluetoothTransport != usesBluetoothTransport
+                || _selectedInputDeviceName != deviceName
+            _selectedDeviceID = deviceID
+            _hasExplicitDeviceSelection = hasExplicitDeviceSelection
+            _selectedInputDeviceUsesBluetoothTransport = usesBluetoothTransport
+            _selectedInputDeviceName = deviceName
+            return changed
+        }
+        if changed {
+            inputSelectionDidChange(reason: "input-selection-changed")
+        } else {
+            prepareRecordingInputIfEligible()
+        }
+    }
+
+    func handleAirPodsInstantStartPreferenceChange() {
+        recordingStartQueue.async { [weak self] in
+            guard let self else { return }
+            self.invalidatePreparedRecordingInputs(reason: "airpods-instant-start-setting-changed")
+            self.performRecordingInputPreparationIfEligible()
+        }
+    }
+
+    private func scheduleRecordingInputPreparation(after delay: TimeInterval) {
+        recordingStartQueue.asyncAfter(deadline: .now() + delay) { [weak self] in
+            self?.performRecordingInputPreparationIfEligible()
+        }
+    }
+
+    func handleSystemWake() {
+        invalidatePreparedRecordingInputs(reason: "system-wake")
+        prepareRecordingInputIfEligible()
+    }
+
+    private func inputSelectionDidChange(reason: String) {
+        invalidatePreparedRecordingInputs(reason: reason)
+        prepareRecordingInputIfEligible()
+    }
+
+    private func performRecordingInputPreparationIfEligible() {
+        if bluetoothInputPreparationDeviceID() != nil {
+            performBluetoothInputPreparationIfEligible()
+        } else if builtInInputPreparationDeviceID() != nil {
+            performBuiltInInputPreparationIfEligible()
+        } else if usbInputPreparationDeviceID() != nil {
+            performUSBInputPreparationIfEligible()
+        }
+    }
+
+    private func bluetoothInputPreparationDeviceID() -> AudioDeviceID? {
+        let selection = configLock.withLock {
+            (
+                selectedDeviceID: _selectedDeviceID,
+                selectedDeviceName: _selectedInputDeviceName,
+                usesBluetoothTransport: _selectedInputDeviceUsesBluetoothTransport
+            )
+        }
+        guard AirPodsRecordingInputPreparationPolicy.isEligible(
+            hasMicrophonePermission: hasMicrophonePermission,
+            isEnabled: UserDefaults.standard.bool(forKey: UserDefaultsKeys.airPodsInstantStartEnabled),
+            selectedDeviceID: selection.selectedDeviceID,
+            selectedDeviceName: selection.selectedDeviceName,
+            usesBluetoothTransport: selection.usesBluetoothTransport
+        ), let selectedDeviceID = selection.selectedDeviceID else {
+            return nil
+        }
+        return selectedDeviceID
+    }
+
+    private func builtInInputPreparationDeviceID() -> AudioDeviceID? {
+        let selection = configLock.withLock {
+            (
+                selectedDeviceID: _selectedDeviceID,
+                hasExplicitDeviceSelection: _hasExplicitDeviceSelection,
+                usesBluetoothTransport: _selectedInputDeviceUsesBluetoothTransport
+            )
+        }
+        let defaultInputDeviceID = defaultInputController.defaultInputDeviceID()
+        let defaultInputTransport = defaultInputDeviceID.flatMap {
+            inputTransportResolver.transportType(for: $0)
+        }
+
+        guard BuiltInRecordingInputPreparationPolicy.isEligible(
+            hasMicrophonePermission: hasMicrophonePermission,
+            selectedDeviceID: selection.selectedDeviceID,
+            hasExplicitDeviceSelection: selection.hasExplicitDeviceSelection,
+            usesBluetoothTransport: selection.usesBluetoothTransport,
+            defaultInputDeviceID: defaultInputDeviceID,
+            defaultInputTransport: defaultInputTransport
+        ) else {
+            return nil
+        }
+        return defaultInputDeviceID
+    }
+
+    private func performBuiltInInputPreparationIfEligible() {
+        guard !isRecordingActive,
+              let defaultInputDeviceID = builtInInputPreparationDeviceID() else {
+            return
+        }
+
+        let alreadyPrepared = engineLock.withLock {
+            preparedBuiltInInput?.defaultInputDeviceID == defaultInputDeviceID
+        }
+        guard !alreadyPrepared else { return }
+        let preparationGeneration = engineLock.withLock { preparedInputGeneration }
+
+        let engine = AVAudioEngine()
+        let preparationStart = CFAbsoluteTimeGetCurrent()
+        do {
+            let configuredCapture = try configureEngineCapture(
+                engine,
+                label: "built-in-prewarm",
+                readinessDeadline: nil,
+                shouldCancel: { false }
+            )
+            engine.prepare()
+
+            guard !isRecordingActive,
+                  builtInInputPreparationDeviceID() == defaultInputDeviceID else {
+                teardownEngine(engine)
+                return
+            }
+
+            let preparedInput = PreparedBuiltInInput(
+                engine: engine,
+                defaultInputDeviceID: defaultInputDeviceID,
+                tapFormat: configuredCapture.tapFormat
+            )
+            let storageResult = engineLock.withLock { () -> (stored: Bool, replaced: PreparedBuiltInInput?) in
+                guard preparedInputGeneration == preparationGeneration,
+                      audioEngine == nil,
+                      inputCaptureSession == nil else {
+                    return (false, preparedInput)
+                }
+                let previous = preparedBuiltInInput
+                preparedBuiltInInput = preparedInput
+                return (true, previous)
+            }
+            if let replacedInput = storageResult.replaced {
+                teardownEngine(replacedInput.engine)
+            }
+            guard storageResult.stored else { return }
+
+            let elapsedMs = (CFAbsoluteTimeGetCurrent() - preparationStart) * 1000
+            logger.info(
+                "Prepared built-in recording input without starting capture in \(String(format: "%.1f", elapsedMs), privacy: .public)ms"
+            )
+        } catch {
+            teardownEngine(engine)
+            logger.warning(
+                "Could not prepare built-in recording input; keeping cold-start fallback: \(error.localizedDescription, privacy: .public)"
+            )
+        }
+    }
+
+    private func usbInputPreparationDeviceID() -> AudioDeviceID? {
+        let selection = configLock.withLock {
+            (
+                selectedDeviceID: _selectedDeviceID,
+                hasExplicitDeviceSelection: _hasExplicitDeviceSelection,
+                usesBluetoothTransport: _selectedInputDeviceUsesBluetoothTransport
+            )
+        }
+        let selectedInputTransport = selection.selectedDeviceID.flatMap {
+            inputTransportResolver.transportType(for: $0)
+        }
+        guard USBRecordingInputPreparationPolicy.isEligible(
+            hasMicrophonePermission: hasMicrophonePermission,
+            selectedDeviceID: selection.selectedDeviceID,
+            hasExplicitDeviceSelection: selection.hasExplicitDeviceSelection,
+            usesBluetoothTransport: selection.usesBluetoothTransport,
+            selectedInputTransport: selectedInputTransport
+        ) else {
+            return nil
+        }
+        return selection.selectedDeviceID
+    }
+
+    private func performUSBInputPreparationIfEligible() {
+        guard !isRecordingActive,
+              let deviceID = usbInputPreparationDeviceID() else {
+            return
+        }
+
+        let alreadyPrepared = engineLock.withLock {
+            preparedUSBInput?.deviceID == deviceID
+        }
+        guard !alreadyPrepared else { return }
+        let preparationGeneration = engineLock.withLock { preparedInputGeneration }
+        let preparationStart = CFAbsoluteTimeGetCurrent()
+
+        do {
+            let preparedInput = try prepareInputOnlyRecording(deviceID: deviceID, label: "usb-prewarm")
+            guard !isRecordingActive,
+                  usbInputPreparationDeviceID() == deviceID else {
+                preparedInput.session.stop()
+                return
+            }
+
+            let storageResult = engineLock.withLock { () -> (stored: Bool, replaced: PreparedUSBInput?) in
+                guard preparedInputGeneration == preparationGeneration,
+                      audioEngine == nil,
+                      inputCaptureSession == nil else {
+                    return (false, preparedInput)
+                }
+                let previous = preparedUSBInput
+                preparedUSBInput = preparedInput
+                return (true, previous)
+            }
+            storageResult.replaced?.session.stop()
+            guard storageResult.stored else { return }
+
+            let elapsedMs = (CFAbsoluteTimeGetCurrent() - preparationStart) * 1000
+            logger.info(
+                "Prepared selected USB recording input without starting capture in \(String(format: "%.1f", elapsedMs), privacy: .public)ms"
+            )
+        } catch {
+            logger.warning(
+                "Could not prepare selected USB recording input; keeping cold-start fallback: \(error.localizedDescription, privacy: .public)"
+            )
+        }
+    }
+
+    private func performBluetoothInputPreparationIfEligible() {
+        guard !isRecordingActive,
+              let deviceID = bluetoothInputPreparationDeviceID() else {
+            return
+        }
+
+        let alreadyPrepared = engineLock.withLock {
+            preparedBluetoothInput?.deviceID == deviceID
+        }
+        guard !alreadyPrepared else { return }
+        let preparationGeneration = engineLock.withLock { preparedInputGeneration }
+        let preparationStart = CFAbsoluteTimeGetCurrent()
+        let engine = AVAudioEngine()
+        let readinessDeadline = CFAbsoluteTimeGetCurrent() + Self.bluetoothInputReadinessTimeout
+
+        outputVolumeGuard.captureBaseline()
+        guard inputActivationGuard.activateIfNeeded(
+            deviceID: deviceID,
+            usesBluetoothTransport: true,
+            reason: "airpods-instant-start-prewarm"
+        ) else {
+            outputVolumeGuard.clear()
+            return
+        }
+
+        do {
+            try waitForBluetoothRouteStabilizationIfNeeded(
+                inputDeviceID: deviceID,
+                usesBluetoothTransport: true,
+                reason: "airpods-instant-start-prewarm",
+                readinessDeadline: readinessDeadline,
+                shouldCancel: { false }
+            )
+            let configuredCapture = try configureEngineCapture(
+                engine,
+                label: "airpods-instant-start-prewarm",
+                readinessDeadline: readinessDeadline,
+                shouldCancel: { false }
+            )
+            guard let inputGeneration = configuredCapture.bluetoothInputGeneration else {
+                throw AudioRecordingError.engineStartFailed("Missing Bluetooth input generation")
+            }
+            try engine.start()
+            try waitForInitialInputReadinessIfNeeded(
+                label: "airpods-instant-start-prewarm",
+                generation: inputGeneration,
+                deadline: readinessDeadline,
+                isEngineRunning: { engine.isRunning },
+                shouldCancel: { false }
+            )
+            bluetoothInputStartupTracker.disarm(generation: inputGeneration)
+
+            guard !isRecordingActive,
+                  bluetoothInputPreparationDeviceID() == deviceID else {
+                teardownEngine(engine)
+                bluetoothInputStartupTracker.reset()
+                inputActivationGuard.restore(reason: "airpods-instant-start-prewarm-ineligible")
+                outputVolumeGuard.clear()
+                return
+            }
+
+            let preparedInput = PreparedBluetoothInput(
+                engine: engine,
+                deviceID: deviceID,
+                tapFormat: configuredCapture.tapFormat,
+                inputGeneration: inputGeneration
+            )
+            let storageResult = engineLock.withLock { () -> (stored: Bool, replaced: PreparedBluetoothInput?) in
+                guard preparedInputGeneration == preparationGeneration,
+                      audioEngine == nil,
+                      inputCaptureSession == nil else {
+                    return (false, preparedInput)
+                }
+                let previous = preparedBluetoothInput
+                preparedBluetoothInput = preparedInput
+                return (true, previous)
+            }
+            if let replacedInput = storageResult.replaced {
+                teardownEngine(replacedInput.engine)
+            }
+            guard storageResult.stored else {
+                bluetoothInputStartupTracker.reset()
+                inputActivationGuard.restore(reason: "airpods-instant-start-prewarm-not-stored")
+                outputVolumeGuard.clear()
+                return
+            }
+
+            outputVolumeGuard.restoreIfRaised(reason: "airpods-instant-start-prewarm")
+            outputVolumeGuard.clear()
+            let elapsedMs = (CFAbsoluteTimeGetCurrent() - preparationStart) * 1000
+            logger.warning(
+                "AirPods Instant Start is ready in \(String(format: "%.1f", elapsedMs), privacy: .public)ms"
+            )
+        } catch {
+            teardownEngine(engine)
+            bluetoothInputStartupTracker.reset()
+            inputActivationGuard.restore(reason: "airpods-instant-start-prewarm-failed")
+            outputVolumeGuard.restoreIfRaised(reason: "airpods-instant-start-prewarm-failed")
+            outputVolumeGuard.clear()
+            logger.warning(
+                "AirPods Instant Start preparation failed; keeping cold-start fallback: \(error.localizedDescription, privacy: .public)"
+            )
+        }
+    }
+
+    private func claimPreparedBuiltInInputIfEligible() -> PreparedBuiltInInput? {
+        guard let defaultInputDeviceID = builtInInputPreparationDeviceID() else {
+            invalidatePreparedRecordingInputs(reason: "recording-route-ineligible")
+            return nil
+        }
+
+        var staleInput: PreparedBuiltInInput?
+        let claimedInput = engineLock.withLock { () -> PreparedBuiltInInput? in
+            guard let preparedInput = preparedBuiltInInput else { return nil }
+            preparedBuiltInInput = nil
+            guard preparedInput.defaultInputDeviceID == defaultInputDeviceID,
+                  audioEngine == nil,
+                  inputCaptureSession == nil else {
+                staleInput = preparedInput
+                return nil
+            }
+            audioEngine = preparedInput.engine
+            startupConfigurationChangeGuard = nil
+            return preparedInput
+        }
+        if let staleInput {
+            teardownEngine(staleInput.engine)
+        }
+        return claimedInput
+    }
+
+    private func claimPreparedUSBInputIfEligible(deviceID: AudioDeviceID) -> PreparedUSBInput? {
+        guard usbInputPreparationDeviceID() == deviceID else {
+            invalidatePreparedRecordingInputs(reason: "usb-recording-route-ineligible")
+            return nil
+        }
+
+        var staleInput: PreparedUSBInput?
+        let claimedInput = engineLock.withLock { () -> PreparedUSBInput? in
+            guard let preparedInput = preparedUSBInput else { return nil }
+            preparedUSBInput = nil
+            guard preparedInput.deviceID == deviceID,
+                  audioEngine == nil,
+                  inputCaptureSession == nil else {
+                staleInput = preparedInput
+                return nil
+            }
+            return preparedInput
+        }
+        staleInput?.session.stop()
+        return claimedInput
+    }
+
+    private func claimPreparedBluetoothInputIfEligible() -> PreparedBluetoothInput? {
+        guard let deviceID = bluetoothInputPreparationDeviceID() else {
+            return nil
+        }
+
+        var staleInput: PreparedBluetoothInput?
+        let claimedInput = engineLock.withLock { () -> PreparedBluetoothInput? in
+            guard let preparedInput = preparedBluetoothInput else { return nil }
+            preparedBluetoothInput = nil
+            guard preparedInput.deviceID == deviceID,
+                  preparedInput.engine.isRunning,
+                  audioEngine == nil,
+                  inputCaptureSession == nil else {
+                staleInput = preparedInput
+                return nil
+            }
+            audioEngine = preparedInput.engine
+            startupConfigurationChangeGuard = nil
+            return preparedInput
+        }
+        if let staleInput {
+            teardownEngine(staleInput.engine)
+            bluetoothInputStartupTracker.reset()
+        }
+        return claimedInput
+    }
+
+    private func invalidatePreparedRecordingInputs(reason: String) {
+        let preparedInputs = engineLock.withLock { () -> (PreparedBuiltInInput?, PreparedUSBInput?, PreparedBluetoothInput?) in
+            preparedInputGeneration &+= 1
+            let builtInInput = preparedBuiltInInput
+            let usbInput = preparedUSBInput
+            let bluetoothInput = preparedBluetoothInput
+            preparedBuiltInInput = nil
+            preparedUSBInput = nil
+            preparedBluetoothInput = nil
+            return (builtInInput, usbInput, bluetoothInput)
+        }
+        if let builtInInput = preparedInputs.0 {
+            teardownEngine(builtInInput.engine)
+        }
+        preparedInputs.1?.session.stop()
+        if let bluetoothInput = preparedInputs.2 {
+            teardownEngine(bluetoothInput.engine)
+            bluetoothInputStartupTracker.reset()
+            inputActivationGuard.restore(reason: "airpods-instant-start-prewarm-invalidated")
+        }
+        guard preparedInputs.0 != nil || preparedInputs.1 != nil || preparedInputs.2 != nil else { return }
+        logger.info("Invalidated prepared recording input: \(reason, privacy: .public)")
     }
 
     /// Thread-safe snapshot of the current recording buffer for streaming transcription.
@@ -565,7 +1125,18 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
 
         if case .inputOnlyDevice(let inputOnlyDeviceID) = selectedCaptureRoute {
             do {
-                try startInputOnlyRecording(deviceID: inputOnlyDeviceID, label: "recording")
+                if let preparedInput = claimPreparedUSBInputIfEligible(deviceID: inputOnlyDeviceID) {
+                    do {
+                        try startPreparedInputOnlyRecording(preparedInput, label: "recording")
+                    } catch {
+                        logger.warning(
+                            "recording prepared USB input was stale; retrying with cold-start fallback: \(error.localizedDescription, privacy: .public)"
+                        )
+                        try startInputOnlyRecording(deviceID: inputOnlyDeviceID, label: "recording-usb-cold-fallback")
+                    }
+                } else {
+                    try startInputOnlyRecording(deviceID: inputOnlyDeviceID, label: "recording")
+                }
                 try throwIfRecordingStartCancelled(shouldCancel)
                 guard commitStart() else { throw CancellationError() }
                 outputVolumeGuard.restoreIfRaised(reason: "recording-start")
@@ -579,22 +1150,44 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             return
         }
 
-        let engine = AVAudioEngine()
-        engineLock.withLock {
-            audioEngine = engine
-            inputCaptureSession = nil
-            startupConfigurationChangeGuard = nil
+        let preparedBluetoothInput = claimPreparedBluetoothInputIfEligible()
+        let preparedBuiltInInput = preparedBluetoothInput == nil
+            ? claimPreparedBuiltInInputIfEligible()
+            : nil
+        let engine = preparedBluetoothInput?.engine ?? preparedBuiltInInput?.engine ?? AVAudioEngine()
+        if preparedBluetoothInput == nil, preparedBuiltInInput == nil {
+            engineLock.withLock {
+                audioEngine = engine
+                inputCaptureSession = nil
+                startupConfigurationChangeGuard = nil
+            }
         }
         recoveryCoordinator.beginStarting()
         installConfigurationObserver(for: engine)
 
         do {
-            try startEngineWithRecovery(
-                engine,
-                label: "recording",
-                readinessDeadline: readinessDeadline,
-                shouldCancel: shouldCancel
-            )
+            if let preparedBluetoothInput {
+                try startPreparedBluetoothEngineWithFallback(
+                    preparedBluetoothInput,
+                    label: "recording",
+                    readinessDeadline: readinessDeadline,
+                    shouldCancel: shouldCancel
+                )
+            } else if let preparedBuiltInInput {
+                try startPreparedBuiltInEngineWithFallback(
+                    preparedBuiltInInput,
+                    label: "recording",
+                    readinessDeadline: readinessDeadline,
+                    shouldCancel: shouldCancel
+                )
+            } else {
+                try startEngineWithRecovery(
+                    engine,
+                    label: "recording",
+                    readinessDeadline: readinessDeadline,
+                    shouldCancel: shouldCancel
+                )
+            }
 
             if recoveryCoordinator.finishStartingSuccessfully() == .performImmediateRecovery {
                 guard let currentEngine = engineLock.withLock({ audioEngine }) else {
@@ -698,6 +1291,8 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
                 self?.rawAudioLevel = 0
             }
 
+            scheduleRecordingInputPreparation(after: Self.postRecordingInputPreparationDelay)
+
             return samples
         }
 
@@ -742,6 +1337,8 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             self?.audioLevel = 0
             self?.rawAudioLevel = 0
         }
+
+        scheduleRecordingInputPreparation(after: Self.postRecordingInputPreparationDelay)
 
         return samples
     }
@@ -927,6 +1524,108 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         }
     }
 
+    private func startPreparedBuiltInEngineWithFallback(
+        _ preparedInput: PreparedBuiltInInput,
+        label: String,
+        readinessDeadline: TimeInterval?,
+        shouldCancel: @escaping () -> Bool
+    ) throws {
+        let engine = preparedInput.engine
+        do {
+            try throwIfRecordingStartCancelled(shouldCancel)
+            try validateTapInstallationPreconditions(
+                expected: preparedInput.tapFormat,
+                current: engine.inputNode.outputFormat(forBus: 0)
+            )
+
+            let engineStartTime = CFAbsoluteTimeGetCurrent()
+            try engine.start()
+            armStartupConfigurationChangeGuard(for: engine, expectedTapFormat: preparedInput.tapFormat)
+            recoveryCoordinator.noteEngineStarted()
+            let elapsedMs = (CFAbsoluteTimeGetCurrent() - engineStartTime) * 1000
+            logger.info(
+                "\(label, privacy: .public) prepared built-in audio engine started in \(String(format: "%.1f", elapsedMs), privacy: .public)ms"
+            )
+            return
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            logger.warning(
+                "\(label, privacy: .public) prepared built-in audio engine was stale; retrying with cold-start fallback: \(error.localizedDescription, privacy: .public)"
+            )
+        }
+
+        recoveryCoordinator.consumePendingConfigurationChangeForEngineReplacement()
+        guard let replacementEngine = replaceAudioEngineForRecoveryIfNeeded(engine) else {
+            throw AudioRecordingError.engineStartFailed("Prepared built-in audio engine disappeared before fallback")
+        }
+        installConfigurationObserver(for: replacementEngine)
+        teardownEngine(engine)
+        engineTeardownRetainer.retain(engine, for: Self.engineTeardownRetentionInterval)
+        try startEngineWithRecovery(
+            replacementEngine,
+            label: "\(label)-cold-fallback",
+            readinessDeadline: readinessDeadline,
+            shouldCancel: shouldCancel
+        )
+    }
+
+    private func startPreparedBluetoothEngineWithFallback(
+        _ preparedInput: PreparedBluetoothInput,
+        label: String,
+        readinessDeadline: TimeInterval?,
+        shouldCancel: @escaping () -> Bool
+    ) throws {
+        let engine = preparedInput.engine
+        do {
+            try throwIfRecordingStartCancelled(shouldCancel)
+            guard engine.isRunning else {
+                throw AudioRecordingError.engineStartFailed("Prepared Bluetooth audio engine stopped")
+            }
+            try validateTapInstallationPreconditions(
+                expected: preparedInput.tapFormat,
+                current: engine.inputNode.outputFormat(forBus: 0)
+            )
+            guard bluetoothInputStartupTracker.armExistingGeneration(preparedInput.inputGeneration) else {
+                throw AudioRecordingError.engineStartFailed("Prepared Bluetooth input generation became stale")
+            }
+
+            recoveryCoordinator.noteEngineStarted()
+            try waitForInitialInputReadinessIfNeeded(
+                label: "\(label)-prepared-bluetooth",
+                generation: preparedInput.inputGeneration,
+                deadline: readinessDeadline,
+                isEngineRunning: { [recoveryCoordinator] in
+                    engine.isRunning && !recoveryCoordinator.hasPendingConfigurationChange
+                },
+                shouldCancel: shouldCancel
+            )
+            logger.warning("\(label, privacy: .public) claimed actively prewarmed Bluetooth audio engine")
+            return
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            logger.warning(
+                "\(label, privacy: .public) actively prewarmed Bluetooth engine was stale; retrying cold: \(error.localizedDescription, privacy: .public)"
+            )
+        }
+
+        bluetoothInputStartupTracker.reset()
+        recoveryCoordinator.consumePendingConfigurationChangeForEngineReplacement()
+        guard let replacementEngine = replaceAudioEngineForRecoveryIfNeeded(engine) else {
+            throw AudioRecordingError.engineStartFailed("Prepared Bluetooth audio engine disappeared before fallback")
+        }
+        installConfigurationObserver(for: replacementEngine)
+        teardownEngine(engine)
+        engineTeardownRetainer.retain(engine, for: Self.engineTeardownRetentionInterval)
+        try startEngineWithRecovery(
+            replacementEngine,
+            label: "\(label)-bluetooth-cold-fallback",
+            readinessDeadline: readinessDeadline,
+            shouldCancel: shouldCancel
+        )
+    }
+
     private func restartEngineWithRecovery(
         _ engine: AVAudioEngine,
         label: String,
@@ -960,12 +1659,12 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         }
     }
 
-    private func configureAndStartEngine(
+    private func configureEngineCapture(
         _ engine: AVAudioEngine,
         label: String,
         readinessDeadline: TimeInterval?,
         shouldCancel: @escaping () -> Bool
-    ) throws {
+    ) throws -> ConfiguredEngineCapture {
         try throwIfRecordingStartCancelled(shouldCancel)
         let inputRoute = selectedEngineInputRoute
         // Set non-Bluetooth explicit inputs before reading the format so each retry sees fresh hardware state.
@@ -1046,10 +1745,30 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             throw tapError
         }
 
+        return ConfiguredEngineCapture(
+            inputNode: inputNode,
+            tapFormat: tapFormat,
+            bluetoothInputGeneration: bluetoothInputGeneration
+        )
+    }
+
+    private func configureAndStartEngine(
+        _ engine: AVAudioEngine,
+        label: String,
+        readinessDeadline: TimeInterval?,
+        shouldCancel: @escaping () -> Bool
+    ) throws {
+        let configuredCapture = try configureEngineCapture(
+            engine,
+            label: label,
+            readinessDeadline: readinessDeadline,
+            shouldCancel: shouldCancel
+        )
+
         let engineStartTime = CFAbsoluteTimeGetCurrent()
         do {
             try engine.start()
-            armStartupConfigurationChangeGuard(for: engine, expectedTapFormat: tapFormat)
+            armStartupConfigurationChangeGuard(for: engine, expectedTapFormat: configuredCapture.tapFormat)
             // Open the post-start quiescence window so configuration-change
             // notifications caused by our own AudioUnitSetProperty / start
             // sequence (Bluetooth A2DP↔HFP renegotiation) are deferred
@@ -1057,7 +1776,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             recoveryCoordinator.noteEngineStarted()
             try waitForInitialInputReadinessIfNeeded(
                 label: label,
-                generation: bluetoothInputGeneration,
+                generation: configuredCapture.bluetoothInputGeneration,
                 deadline: readinessDeadline,
                 isEngineRunning: { [recoveryCoordinator] in
                     engine.isRunning && !recoveryCoordinator.hasPendingConfigurationChange
@@ -1067,7 +1786,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             let elapsedMs = (CFAbsoluteTimeGetCurrent() - engineStartTime) * 1000
             logger.info("\(label, privacy: .public) audio engine started in \(String(format: "%.1f", elapsedMs), privacy: .public)ms")
         } catch {
-            inputNode.removeTap(onBus: 0)
+            configuredCapture.inputNode.removeTap(onBus: 0)
             engine.stop()
             throw error
         }
@@ -1385,6 +2104,74 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         } catch let error as AudioRecordingError {
             throw error
         } catch {
+            throw AudioRecordingError.engineStartFailed(error.localizedDescription)
+        }
+    }
+
+    private func prepareInputOnlyRecording(
+        deviceID: AudioDeviceID,
+        label: String
+    ) throws -> PreparedUSBInput {
+        do {
+            let inputFormat = try inputCaptureFactory.inputOnlyCaptureFormat(deviceID: deviceID)
+            guard let monoFormat = AudioInputBufferNormalizer.monoFloatFormat(for: inputFormat),
+                  let targetFormat = AVAudioFormat(
+                      commonFormat: .pcmFormatFloat32,
+                      sampleRate: Self.targetSampleRate,
+                      channels: 1,
+                      interleaved: false
+                  ),
+                  let converter = AVAudioConverter(from: monoFormat, to: targetFormat) else {
+                throw AudioRecordingError.engineStartFailed("Cannot create prepared input-only audio converter")
+            }
+
+            let session = try inputCaptureFactory.prepareInputOnlyCapture(
+                deviceID: deviceID,
+                label: label,
+                bufferSize: Self.captureTapFrames
+            ) { [weak self] buffer in
+                guard let self,
+                      let monoBuffer = AudioInputBufferNormalizer.monoFloatBuffer(from: buffer) else {
+                    return
+                }
+                self.processAudioBuffer(monoBuffer, converter: converter, targetFormat: targetFormat)
+            }
+            return PreparedUSBInput(session: session, deviceID: deviceID)
+        } catch let error as SelectedInputDeviceError {
+            throw mapSelectedInputDeviceError(error)
+        } catch let error as AudioRecordingError {
+            throw error
+        } catch {
+            throw AudioRecordingError.engineStartFailed(error.localizedDescription)
+        }
+    }
+
+    private func startPreparedInputOnlyRecording(
+        _ preparedInput: PreparedUSBInput,
+        label: String
+    ) throws {
+        do {
+            let startTime = CFAbsoluteTimeGetCurrent()
+            try preparedInput.session.start()
+            let elapsedMs = (CFAbsoluteTimeGetCurrent() - startTime) * 1000
+            logger.info(
+                "\(label, privacy: .public) prepared USB capture started in \(String(format: "%.1f", elapsedMs), privacy: .public)ms"
+            )
+            recoveryCoordinator.transitionToIdle()
+            removeConfigurationObserver()
+            engineLock.withLock {
+                audioEngine = nil
+                inputCaptureSession = preparedInput.session
+                startupConfigurationChangeGuard = nil
+            }
+        } catch let error as SelectedInputDeviceError {
+            preparedInput.session.stop()
+            throw mapSelectedInputDeviceError(error)
+        } catch let error as AudioRecordingError {
+            preparedInput.session.stop()
+            throw error
+        } catch {
+            preparedInput.session.stop()
             throw AudioRecordingError.engineStartFailed(error.localizedDescription)
         }
     }
@@ -1778,6 +2565,37 @@ final class BluetoothInputStartupTracker: @unchecked Sendable {
             state.stagedSamples.removeAll(keepingCapacity: true)
             state.peakInputRMS = 0
             return state.generation
+        }
+    }
+
+    func disarm(generation: UInt64) {
+        state.withLock { state in
+            guard state.generation == generation else { return }
+            state.isActive = false
+            state.isReady = false
+            state.streakStartedAt = nil
+            state.lastBufferTimestamp = nil
+            state.consecutiveBufferCount = 0
+            state.buffersSinceSignal = 0
+            state.stagedSamples.removeAll(keepingCapacity: false)
+            state.peakInputRMS = 0
+        }
+    }
+
+    func armExistingGeneration(_ generation: UInt64) -> Bool {
+        let timestamp = now()
+        return state.withLock { state in
+            guard state.generation == generation else { return false }
+            state.isActive = true
+            state.isReady = false
+            state.generationStartedAt = timestamp
+            state.streakStartedAt = nil
+            state.lastBufferTimestamp = nil
+            state.consecutiveBufferCount = 0
+            state.buffersSinceSignal = 0
+            state.stagedSamples.removeAll(keepingCapacity: true)
+            state.peakInputRMS = 0
+            return true
         }
     }
 

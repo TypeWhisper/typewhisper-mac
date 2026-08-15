@@ -600,10 +600,20 @@ struct RecordingSettingsView: View {
     @State private var selectedProvider: String?
     @State private var customSounds: [String] = SoundChoice.installedCustomSounds()
     @State private var draggedInputDevicePriorityItem: AudioInputDevicePriorityItem?
+    @AppStorage(UserDefaultsKeys.airPodsInstantStartEnabled) private var airPodsInstantStartEnabled = false
     private let soundService = ServiceContainer.shared.soundService
+    private let audioRecordingService = ServiceContainer.shared.audioRecordingService
 
     private var needsPermissions: Bool {
         dictation.needsMicPermission || dictation.needsAccessibilityPermission
+    }
+
+    private var usesAirPodsInput: Bool {
+        let selection = audioDevice.resolvedRecordingInputSelection()
+        return AirPodsRecordingInputPreparationPolicy.isAirPods(
+            deviceName: selection.deviceName,
+            usesBluetoothTransport: selection.usesBluetoothTransport
+        )
     }
 
     private func transcriptionAuthNotice(for engines: [TranscriptionEnginePlugin]) -> String? {
@@ -875,6 +885,20 @@ struct RecordingSettingsView: View {
                 }
 
                 microphonePriorityEditor
+
+                if usesAirPodsInput {
+                    Toggle(
+                        String(localized: "Faster AirPods start"),
+                        isOn: $airPodsInstantStartEnabled
+                    )
+                    .onChange(of: airPodsInstantStartEnabled) { _, _ in
+                        audioRecordingService.handleAirPodsInstantStartPreferenceChange()
+                    }
+
+                    Text(String(localized: "Keeps the AirPods microphone active between dictations. This shows the orange microphone indicator, uses more battery, and keeps AirPods audio in call-quality mode."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
 
                 if let message = audioDevice.selectedDeviceStatusMessage {
                     Label(message, systemImage: "exclamationmark.triangle")

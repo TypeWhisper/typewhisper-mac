@@ -2110,12 +2110,19 @@ enum AudioInputCaptureRoute: Equatable {
 }
 
 protocol AudioInputCaptureSession: AnyObject {
+    func start() throws
     func stop()
 }
 
 protocol AudioInputCaptureFactory: AnyObject {
     func inputOnlyCaptureFormat(deviceID: AudioDeviceID) throws -> AVAudioFormat
     func validateInputOnlyDevice(deviceID: AudioDeviceID, label: String) throws
+    func prepareInputOnlyCapture(
+        deviceID: AudioDeviceID,
+        label: String,
+        bufferSize: AVAudioFrameCount,
+        onBuffer: @escaping (AVAudioPCMBuffer) -> Void
+    ) throws -> AudioInputCaptureSession
     func startInputOnlyCapture(
         deviceID: AudioDeviceID,
         label: String,
@@ -2145,7 +2152,7 @@ final class CoreAudioHALInputCaptureFactory: AudioInputCaptureFactory {
         session.stop()
     }
 
-    func startInputOnlyCapture(
+    func prepareInputOnlyCapture(
         deviceID: AudioDeviceID,
         label: String,
         bufferSize: AVAudioFrameCount,
@@ -2159,11 +2166,36 @@ final class CoreAudioHALInputCaptureFactory: AudioInputCaptureFactory {
                 bufferSize: bufferSize,
                 label: label,
                 operations: operations,
+                startsImmediately: false,
                 onBuffer: onBuffer
             )
         } catch let error as SelectedInputDeviceError {
             throw error
         } catch {
+            throw SelectedInputDeviceError.incompatible(.engineStartFailed)
+        }
+    }
+
+    func startInputOnlyCapture(
+        deviceID: AudioDeviceID,
+        label: String,
+        bufferSize: AVAudioFrameCount,
+        onBuffer: @escaping (AVAudioPCMBuffer) -> Void
+    ) throws -> AudioInputCaptureSession {
+        let session = try prepareInputOnlyCapture(
+            deviceID: deviceID,
+            label: label,
+            bufferSize: bufferSize,
+            onBuffer: onBuffer
+        )
+        do {
+            try session.start()
+            return session
+        } catch let error as SelectedInputDeviceError {
+            session.stop()
+            throw error
+        } catch {
+            session.stop()
             throw SelectedInputDeviceError.incompatible(.engineStartFailed)
         }
     }
@@ -2527,6 +2559,11 @@ final class CoreAudioHALInputCaptureSession: AudioInputCaptureSession, @unchecke
     }
 
     private let callbackLifetime: CallbackLifetime
+    private let deviceID: AudioDeviceID
+    private let format: AVAudioFormat
+    private let label: String
+    private let startLock = NSLock()
+    private var didStart = false
 
     init(
         deviceID: AudioDeviceID,
@@ -2534,6 +2571,7 @@ final class CoreAudioHALInputCaptureSession: AudioInputCaptureSession, @unchecke
         bufferSize: AVAudioFrameCount,
         label: String,
         operations: CoreAudioHALInputOperating,
+        startsImmediately: Bool = true,
         onBuffer: @escaping (AVAudioPCMBuffer) -> Void
     ) throws {
         let audioUnit: AudioUnit
@@ -2579,6 +2617,9 @@ final class CoreAudioHALInputCaptureSession: AudioInputCaptureSession, @unchecke
             renderState: renderState,
             callbackContext: callbackContext
         )
+        self.deviceID = deviceID
+        self.format = format
+        self.label = label
 
         do {
             let disabled: UInt32 = 0
@@ -2596,16 +2637,13 @@ final class CoreAudioHALInputCaptureSession: AudioInputCaptureSession, @unchecke
             )
             try operations.setInputCallback(&callback, audioUnit: audioUnit, label: label)
             try operations.initialize(audioUnit, label: label)
-            guard callbackLifetime.openCallbackGate() else {
-                throw CoreAudioHALInputOperationError(
-                    operation: "\(label) open HAL callback gate",
-                    status: -1
+            if startsImmediately {
+                try start()
+            } else {
+                deviceHelperLogger.info(
+                    "[\(label)] Prepared input-only HAL capture without starting device \(deviceID), sampleRate=\(format.sampleRate), channels=\(format.channelCount), bufferSize=\(bufferSize)"
                 )
             }
-            try operations.start(audioUnit, label: label)
-
-            AudioInputCaptureDiagnosticsStore.clear()
-            deviceHelperLogger.info("[\(label)] Started input-only HAL capture for device \(deviceID), sampleRate=\(format.sampleRate), channels=\(format.channelCount), bufferSize=\(bufferSize)")
         } catch {
             callbackLifetime.stop()
             AudioInputCaptureDiagnosticsStore.recordFailure(
@@ -2620,6 +2658,38 @@ final class CoreAudioHALInputCaptureSession: AudioInputCaptureSession, @unchecke
 
     deinit {
         callbackLifetime.stop()
+    }
+
+    func start() throws {
+        let shouldStart = startLock.withLock { () -> Bool in
+            guard !didStart else { return false }
+            didStart = true
+            return true
+        }
+        guard shouldStart else { return }
+
+        do {
+            guard callbackLifetime.openCallbackGate() else {
+                throw CoreAudioHALInputOperationError(
+                    operation: "\(label) open HAL callback gate",
+                    status: -1
+                )
+            }
+            try callbackLifetime.operations.start(callbackLifetime.audioUnit, label: label)
+            AudioInputCaptureDiagnosticsStore.clear()
+            deviceHelperLogger.info(
+                "[\(self.label)] Started input-only HAL capture for device \(self.deviceID), sampleRate=\(self.format.sampleRate), channels=\(self.format.channelCount)"
+            )
+        } catch {
+            callbackLifetime.stop()
+            AudioInputCaptureDiagnosticsStore.recordFailure(
+                label: label,
+                deviceID: deviceID,
+                format: format,
+                error: error
+            )
+            throw error
+        }
     }
 
     static func captureFormat(for deviceID: AudioDeviceID) throws -> AVAudioFormat {

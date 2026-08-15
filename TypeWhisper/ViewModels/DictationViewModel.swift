@@ -980,6 +980,16 @@ final class DictationViewModel: ObservableObject {
     }
 
     private func setupBindings() {
+        Publishers.CombineLatest(
+            audioDeviceService.$selectedDeviceUID.removeDuplicates(),
+            audioDeviceService.$inputDevices
+        )
+        .debounce(for: .milliseconds(50), scheduler: DispatchQueue.main)
+        .sink { [weak self] _, _ in
+            self?.refreshRecordingInputConfiguration()
+        }
+        .store(in: &cancellables)
+
         indicatorFeedbackLifetime.$remainingFraction
             .removeDuplicates()
             .sink { [weak self] remainingFraction in
@@ -1092,6 +1102,16 @@ final class DictationViewModel: ObservableObject {
                 )
             }
             .store(in: &cancellables)
+    }
+
+    private func refreshRecordingInputConfiguration() {
+        let resolvedInputSelection = audioDeviceService.resolvedRecordingInputSelection()
+        audioRecordingService.configureInputSelection(
+            deviceID: resolvedInputSelection.deviceID,
+            hasExplicitDeviceSelection: resolvedInputSelection.hasExplicitDeviceSelection,
+            usesBluetoothTransport: resolvedInputSelection.usesBluetoothTransport,
+            deviceName: resolvedInputSelection.deviceName
+        )
     }
 
     func handleCancelHotkey() {
@@ -1223,10 +1243,13 @@ final class DictationViewModel: ObservableObject {
         let resolvedInputSelection = audioDeviceService.resolvedRecordingInputSelection()
         let initialForcedWorkflow = forcedWorkflow(for: forcedWorkflowId)
         audioRecordingService.microphoneBoostEnabled = microphoneBoostEnabled(for: initialForcedWorkflow)
-        audioRecordingService.selectedDeviceID = resolvedInputSelection.deviceID
-        audioRecordingService.hasExplicitDeviceSelection = resolvedInputSelection.hasExplicitDeviceSelection
         let selectedInputUsesBluetooth = resolvedInputSelection.usesBluetoothTransport
-        audioRecordingService.selectedInputDeviceUsesBluetoothTransport = selectedInputUsesBluetooth
+        audioRecordingService.configureInputSelection(
+            deviceID: resolvedInputSelection.deviceID,
+            hasExplicitDeviceSelection: resolvedInputSelection.hasExplicitDeviceSelection,
+            usesBluetoothTransport: selectedInputUsesBluetooth,
+            deviceName: resolvedInputSelection.deviceName
+        )
         prepareRecordingStartCue(playsSound: !selectedInputUsesBluetooth)
         let audioStartTimestamp = DispatchTime.now().uptimeNanoseconds
 

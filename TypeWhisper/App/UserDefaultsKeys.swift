@@ -63,6 +63,7 @@ enum UserDefaultsKeys {
     // MARK: - Audio Device
     static let selectedInputDeviceUID = "selectedInputDeviceUID"
     static let inputDevicePriorityList = "inputDevicePriorityList"
+    static let airPodsInstantStartEnabled = "airPodsInstantStartEnabled"
 
     // MARK: - Home / Setup
     static let setupWizardCompleted = "setupWizardCompleted"
