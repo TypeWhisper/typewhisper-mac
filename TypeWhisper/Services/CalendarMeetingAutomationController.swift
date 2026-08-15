@@ -940,11 +940,12 @@ final class CalendarMeetingAutomationController: ObservableObject {
 
             let preferredBaseName = CalendarMeetingRecordingFilename.preferredBaseName(
                 title: occurrence.title,
-                date: self.nowProvider()
+                date: occurrence.startDate
             )
             do {
                 let handle = try await self.recorderViewModel.startCalendarMeetingRecording(
-                    preferredBaseName: preferredBaseName
+                    preferredBaseName: preferredBaseName,
+                    transcriptMetadata: occurrence.transcriptMetadata
                 )
                 guard generation == self.recordingStartGeneration,
                       self.hasPremiumAccess,

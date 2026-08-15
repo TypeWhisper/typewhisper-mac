@@ -482,8 +482,10 @@ final class AudioRecorderViewModelTests: XCTestCase {
         viewModel.transcriptionEnabled = true
         viewModel.livePreviewEnabled = false
 
+        let metadata = makeCalendarMeetingTranscriptMetadata(title: "RC2 Meeting")
         let handle = try await viewModel.startCalendarMeetingRecording(
-            preferredBaseName: "RC2 Meeting"
+            preferredBaseName: "RC2 Meeting",
+            transcriptMetadata: metadata
         )
         try viewModel.stopCalendarMeetingRecording(handle: handle)
 
@@ -498,7 +500,62 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertEqual(request.audioSampleCount, finalizedFileSamples.count)
         XCTAssertEqual(request.firstAudioSample, finalizedFileSamples.first)
         XCTAssertNotEqual(request.audioSampleCount, captureSamples.count)
-        XCTAssertEqual(viewModel.recordings.first?.transcript, "complete meeting transcript")
+        let recording = try XCTUnwrap(viewModel.recordings.first)
+        XCTAssertEqual(recording.transcript, "complete meeting transcript")
+        XCTAssertEqual(recording.calendarEvent, metadata)
+
+        let documentURL = handle.outputURL
+            .deletingPathExtension()
+            .appendingPathExtension("transcript.json")
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let document = try decoder.decode(
+            RecordingTranscriptDocument.self,
+            from: Data(contentsOf: documentURL)
+        )
+        XCTAssertEqual(document.schemaVersion, RecordingTranscriptDocument.currentSchemaVersion)
+        XCTAssertEqual(document.text, "complete meeting transcript")
+        XCTAssertEqual(document.calendarEvent, metadata)
+    }
+
+    func testCalendarMetadataPersistsWithoutTranscriptionAndIsDeletedWithRecording() async throws {
+        try preserveStandardDefaults()
+        let defaults = try makeDefaults()
+        let recordingsDirectory = makeTemporaryDirectory()
+        let viewModel = makeViewModel(
+            defaults: defaults,
+            recorderService: makeRecorderService(recordingsDirectory: recordingsDirectory)
+        )
+        viewModel.transcriptionEnabled = false
+        viewModel.livePreviewEnabled = false
+
+        let metadata = makeCalendarMeetingTranscriptMetadata(title: "Planning")
+        let handle = try await viewModel.startCalendarMeetingRecording(
+            preferredBaseName: "Planning",
+            transcriptMetadata: metadata
+        )
+        try viewModel.stopCalendarMeetingRecording(handle: handle)
+
+        try await waitForRecordingsToLoad(viewModel, count: 1)
+        let recording = try XCTUnwrap(viewModel.recordings.first)
+        XCTAssertNil(recording.transcript)
+        XCTAssertEqual(recording.calendarEvent, metadata)
+
+        let documentURL = handle.outputURL
+            .deletingPathExtension()
+            .appendingPathExtension("transcript.json")
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let document = try decoder.decode(
+            RecordingTranscriptDocument.self,
+            from: Data(contentsOf: documentURL)
+        )
+        XCTAssertNil(document.text)
+        XCTAssertEqual(document.calendarEvent, metadata)
+
+        viewModel.deleteRecording(recording)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: handle.outputURL.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: documentURL.path))
     }
 
     func testFinalTranscriptionDoesNotForceGlobalDefaultModelAsRecorderOverride() async throws {

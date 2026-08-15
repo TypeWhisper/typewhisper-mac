@@ -176,8 +176,59 @@ actor EventKitCalendarMeetingProvider: CalendarMeetingEventProviding {
             title: event.title ?? "",
             calendarID: event.calendar.calendarIdentifier,
             participationStatus: participationStatus,
-            meetingLinks: links
+            meetingLinks: links,
+            location: Self.normalized(event.location),
+            organizer: event.organizer.map(Self.participantMetadata),
+            attendees: (event.attendees ?? []).map(Self.participantMetadata)
         )
+    }
+
+    private static func participantMetadata(
+        _ participant: EKParticipant
+    ) -> CalendarMeetingParticipant {
+        CalendarMeetingParticipant(
+            name: normalized(participant.name),
+            emailAddress: emailAddress(from: participant.url),
+            status: participantStatusMetadata(participant.participantStatus),
+            isCurrentUser: participant.isCurrentUser
+        )
+    }
+
+    private static func emailAddress(from url: URL) -> String? {
+        guard url.scheme?.lowercased() == "mailto" else { return nil }
+        var address = String(url.absoluteString.dropFirst("mailto:".count))
+        if address.hasPrefix("//") {
+            address.removeFirst(2)
+        }
+        address = address
+            .split(whereSeparator: { $0 == "?" || $0 == "#" })
+            .first
+            .map(String.init) ?? ""
+        return normalized(address.removingPercentEncoding ?? address)
+    }
+
+    private static func normalized(_ value: String?) -> String? {
+        guard let value else { return nil }
+        let normalized = value
+            .replacingOccurrences(of: "\0", with: "")
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return normalized.isEmpty ? nil : normalized
+    }
+
+    private static func participantStatusMetadata(
+        _ status: EKParticipantStatus
+    ) -> CalendarMeetingParticipantStatus {
+        switch status {
+        case .accepted: .accepted
+        case .tentative: .tentative
+        case .pending: .pending
+        case .declined: .declined
+        case .delegated: .delegated
+        case .completed: .completed
+        case .inProcess: .inProcess
+        case .unknown: .unknown
+        @unknown default: .unknown
+        }
     }
 
     nonisolated static func mapAuthorization(

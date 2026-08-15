@@ -140,3 +140,35 @@ func makeCalendarMeetingTestOccurrence(
         meetingLinks: links
     )
 }
+
+func makeCalendarMeetingTranscriptMetadata(
+    eventIdentifier: String = "event-1",
+    title: String = "Planning",
+    startDate: Date = Date(timeIntervalSince1970: 2_000_000_000),
+    endDate: Date = Date(timeIntervalSince1970: 2_000_003_600),
+    location: String? = "Conference Room",
+    organizer: CalendarMeetingParticipant? = CalendarMeetingParticipant(
+        name: "Ada Organizer",
+        emailAddress: "ada@example.com",
+        status: .accepted,
+        isCurrentUser: false
+    ),
+    attendees: [CalendarMeetingParticipant] = [
+        CalendarMeetingParticipant(
+            name: "Marco Attendee",
+            emailAddress: "marco@example.com",
+            status: .accepted,
+            isCurrentUser: true
+        )
+    ]
+) -> CalendarMeetingTranscriptMetadata {
+    CalendarMeetingTranscriptMetadata(
+        eventIdentifier: eventIdentifier,
+        title: title,
+        startDate: startDate,
+        endDate: endDate,
+        location: location,
+        organizer: organizer,
+        attendees: attendees
+    )
+}

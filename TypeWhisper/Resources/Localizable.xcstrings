@@ -35486,6 +35486,62 @@
         }
       }
     },
+    "calendarMeeting.settings.configureTranscription" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Recorder konfigurieren"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Configure Recorder"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "レコーダーを設定"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "配置录音器"
+          }
+        }
+      }
+    },
+    "calendarMeeting.settings.transcriptionHelp" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erstellt nach kalendergestarteten Aufnahmen ein Transkript. Kalender-Metadaten werden unabhängig davon lokal neben der Aufnahme gespeichert."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Creates a transcript after calendar-started recordings. Calendar metadata is stored locally alongside the recording either way."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "カレンダーから開始した録音の終了後に文字起こしを作成します。カレンダーのメタデータは、この設定に関係なく録音とともにローカルに保存されます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "为日历启动的录音生成转录。无论此设置如何，日历元数据都会与录音一起存储在本机。"
+          }
+        }
+      }
+    },
     "calendarMeeting.settings.startMode" : {
       "localizations" : {
         "de" : {

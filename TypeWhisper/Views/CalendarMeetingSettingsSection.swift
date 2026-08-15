@@ -3,6 +3,15 @@ import SwiftUI
 @MainActor
 struct CalendarMeetingSettingsSection: View {
     @ObservedObject var controller: CalendarMeetingAutomationController
+    @ObservedObject private var recorderViewModel: AudioRecorderViewModel
+
+    init(
+        controller: CalendarMeetingAutomationController,
+        recorderViewModel: AudioRecorderViewModel = .shared
+    ) {
+        self.controller = controller
+        self.recorderViewModel = recorderViewModel
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -37,6 +46,50 @@ struct CalendarMeetingSettingsSection: View {
                     Text(String(localized: "calendarMeeting.settings.startModeHelp"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
+                }
+            }
+
+            SettingsCard {
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(String(localized: "recorder.transcription"))
+                        .font(.headline)
+
+                    Toggle(
+                        String(localized: "recorder.createTranscriptAfterRecording"),
+                        isOn: $recorderViewModel.transcriptionEnabled
+                    )
+                    .toggleStyle(.switch)
+                    .disabled(recorderViewModel.state != .idle)
+                    .accessibilityIdentifier("calendarMeeting.transcriptionEnabled")
+
+                    Text(String(localized: "calendarMeeting.settings.transcriptionHelp"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    if recorderViewModel.transcriptionEnabled {
+                        Divider()
+
+                        LabeledContent(String(localized: "recorder.effectiveEngine")) {
+                            Text(
+                                recorderViewModel.activeEngineName
+                                    ?? String(localized: "recorder.noEngineSelected")
+                            )
+                        }
+
+                        LabeledContent(String(localized: "recorder.effectiveModel")) {
+                            Text(
+                                recorderViewModel.activeModelName
+                                    ?? String(localized: "watchFolder.model.default")
+                            )
+                        }
+
+                        Button(String(localized: "calendarMeeting.settings.configureTranscription")) {
+                            SettingsNavigationCoordinator.shared.navigate(to: .recorder)
+                            ManagedAppWindowOpener.shared.open(id: "settings")
+                        }
+                        .buttonStyle(.link)
+                        .accessibilityIdentifier("calendarMeeting.configureTranscription")
+                    }
                 }
             }
 

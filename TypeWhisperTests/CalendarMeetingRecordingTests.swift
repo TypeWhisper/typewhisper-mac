@@ -11,10 +11,30 @@ final class CalendarMeetingRecordingTests: XCTestCase {
             date: date
         )
 
-        XCTAssertTrue(value.hasPrefix("Café Team Weekly Sync — "))
+        XCTAssertTrue(value.hasSuffix(" - Café Team Weekly Sync"))
+        XCTAssertNotNil(value.range(of: #"^\d{8} - "#, options: .regularExpression))
         XCTAssertFalse(value.contains("/"))
         XCTAssertFalse(value.contains(":"))
         XCTAssertFalse(value.contains("\n"))
+    }
+
+    func testPreferredNamePrefixesEventStartDateForSorting() throws {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+        let date = try XCTUnwrap(calendar.date(from: DateComponents(
+            year: 2026,
+            month: 8,
+            day: 9,
+            hour: 12
+        )))
+
+        XCTAssertEqual(
+            CalendarMeetingRecordingFilename.preferredBaseName(
+                title: "Event title",
+                date: date
+            ),
+            "20260809 - Event title"
+        )
     }
 
     func testEmptyTitleFallsBackAndTitleIsLimitedToOneHundredTwentyGraphemes() {
@@ -22,11 +42,11 @@ final class CalendarMeetingRecordingTests: XCTestCase {
         XCTAssertTrue(CalendarMeetingRecordingFilename.preferredBaseName(
             title: " .  \n ",
             date: date
-        ).hasPrefix("Recording "))
+        ).hasSuffix(" - Recording"))
 
         let longTitle = String(repeating: "A", count: 140)
         let result = CalendarMeetingRecordingFilename.preferredBaseName(title: longTitle, date: date)
-        let title = result.components(separatedBy: " — ").first ?? ""
+        let title = result.components(separatedBy: " - ").last ?? ""
         XCTAssertEqual(title.count, 120)
     }
 
@@ -36,7 +56,7 @@ final class CalendarMeetingRecordingTests: XCTestCase {
             title: String(repeating: "会", count: 140),
             date: date
         )
-        let title = preferredBaseName.components(separatedBy: " — ").first ?? ""
+        let title = preferredBaseName.components(separatedBy: " - ").last ?? ""
         XCTAssertLessThanOrEqual(title.utf8.count, 200)
 
         let result = CalendarMeetingRecordingFilename.availableURL(

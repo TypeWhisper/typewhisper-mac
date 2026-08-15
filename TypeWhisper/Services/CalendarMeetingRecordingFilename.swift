@@ -6,12 +6,12 @@ enum CalendarMeetingRecordingFilename {
     private static let maximumFilenameUTF8Bytes = 255
 
     static func preferredBaseName(title: String, date: Date = Date()) -> String {
-        let timestamp = timestampString(for: date)
+        let datePrefix = datePrefixString(for: date)
         let sanitizedTitle = sanitizeTitle(title)
         if sanitizedTitle.isEmpty {
-            return "Recording \(timestamp)"
+            return "\(datePrefix) - Recording"
         }
-        return "\(sanitizedTitle) — \(timestamp)"
+        return "\(datePrefix) - \(sanitizedTitle)"
     }
 
     static func sanitizedBaseName(_ value: String, fallbackDate: Date = Date()) -> String {
@@ -94,6 +94,15 @@ enum CalendarMeetingRecordingFilename {
         formatter.calendar = Calendar(identifier: .gregorian)
         formatter.timeZone = .autoupdatingCurrent
         formatter.dateFormat = "yyyy-MM-dd HH.mm.ss"
+        return formatter.string(from: date)
+    }
+
+    private static func datePrefixString(for date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = .autoupdatingCurrent
+        formatter.dateFormat = "yyyyMMdd"
         return formatter.string(from: date)
     }
 }

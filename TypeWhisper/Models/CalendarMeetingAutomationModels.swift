@@ -88,6 +88,52 @@ struct CalendarMeetingCanonicalLink: Codable, Hashable, Sendable, Identifiable {
     var id: String { "\(provider.rawValue):\(identity)" }
 }
 
+enum CalendarMeetingParticipantStatus: String, Codable, Sendable {
+    case accepted
+    case tentative
+    case pending
+    case declined
+    case delegated
+    case completed
+    case inProcess
+    case unknown
+}
+
+struct CalendarMeetingParticipant: Codable, Equatable, Sendable {
+    let name: String?
+    let emailAddress: String?
+    let status: CalendarMeetingParticipantStatus
+    let isCurrentUser: Bool
+}
+
+struct CalendarMeetingTranscriptMetadata: Codable, Equatable, Sendable {
+    let eventIdentifier: String
+    let title: String
+    let startDate: Date
+    let endDate: Date
+    let location: String?
+    let organizer: CalendarMeetingParticipant?
+    let attendees: [CalendarMeetingParticipant]
+}
+
+struct RecordingTranscriptDocument: Codable, Equatable, Sendable {
+    static let currentSchemaVersion = 1
+
+    let schemaVersion: Int
+    let text: String?
+    let calendarEvent: CalendarMeetingTranscriptMetadata
+
+    init(
+        schemaVersion: Int = currentSchemaVersion,
+        text: String?,
+        calendarEvent: CalendarMeetingTranscriptMetadata
+    ) {
+        self.schemaVersion = schemaVersion
+        self.text = text
+        self.calendarEvent = calendarEvent
+    }
+}
+
 struct CalendarMeetingOccurrence: Identifiable, Equatable, Sendable {
     let eventIdentifier: String
     let occurrenceStart: Date
@@ -97,6 +143,7 @@ struct CalendarMeetingOccurrence: Identifiable, Equatable, Sendable {
     let calendarID: String
     let participationStatus: CalendarMeetingParticipationStatus
     let meetingLinks: [CalendarMeetingCanonicalLink]
+    let transcriptMetadata: CalendarMeetingTranscriptMetadata
     let occurrenceDigest: String
 
     var id: String { occurrenceDigest }
@@ -109,7 +156,10 @@ struct CalendarMeetingOccurrence: Identifiable, Equatable, Sendable {
         title: String,
         calendarID: String,
         participationStatus: CalendarMeetingParticipationStatus,
-        meetingLinks: [CalendarMeetingCanonicalLink]
+        meetingLinks: [CalendarMeetingCanonicalLink],
+        location: String? = nil,
+        organizer: CalendarMeetingParticipant? = nil,
+        attendees: [CalendarMeetingParticipant] = []
     ) {
         self.eventIdentifier = eventIdentifier
         self.occurrenceStart = occurrenceStart
@@ -119,6 +169,15 @@ struct CalendarMeetingOccurrence: Identifiable, Equatable, Sendable {
         self.calendarID = calendarID
         self.participationStatus = participationStatus
         self.meetingLinks = meetingLinks
+        transcriptMetadata = CalendarMeetingTranscriptMetadata(
+            eventIdentifier: eventIdentifier,
+            title: title,
+            startDate: startDate,
+            endDate: endDate,
+            location: location,
+            organizer: organizer,
+            attendees: attendees
+        )
         occurrenceDigest = CalendarMeetingOccurrenceDigest.make(
             eventIdentifier: eventIdentifier,
             occurrenceStart: occurrenceStart
