@@ -2458,6 +2458,26 @@ final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
         XCTAssertNil(tracker.promoteCurrentGeneration())
     }
 
+    func testBluetoothInputStartupTrackerRearmRejectsQueuedPrewarmSamples() throws {
+        let tracker = BluetoothInputStartupTracker()
+        let prewarmGeneration = tracker.beginGeneration()
+        tracker.disarm(generation: prewarmGeneration)
+
+        let recordingGeneration = try XCTUnwrap(tracker.armExistingGeneration(prewarmGeneration))
+
+        XCTAssertNotEqual(recordingGeneration, prewarmGeneration)
+        XCTAssertFalse(tracker.isActiveGeneration(prewarmGeneration))
+        XCTAssertTrue(tracker.isActiveGeneration(recordingGeneration))
+        XCTAssertEqual(
+            tracker.consume(samples: [0.9], inputRMS: 0.9, generation: prewarmGeneration),
+            .ignored
+        )
+        XCTAssertEqual(
+            tracker.consume(samples: [0.2], inputRMS: 0.2, generation: recordingGeneration),
+            .staged
+        )
+    }
+
     func testAsyncRecordingStartCancellationDuringPreparationDoesNotBecomeRecording() async throws {
         let recoveryDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(recoveryDirectory) }

@@ -1650,14 +1650,16 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
                 expected: preparedInput.tapFormat,
                 current: engine.inputNode.outputFormat(forBus: 0)
             )
-            guard bluetoothInputStartupTracker.armExistingGeneration(preparedInput.inputGeneration) else {
+            guard let recordingInputGeneration = bluetoothInputStartupTracker.armExistingGeneration(
+                preparedInput.inputGeneration
+            ) else {
                 throw AudioRecordingError.engineStartFailed("Prepared Bluetooth input generation became stale")
             }
 
             recoveryCoordinator.noteEngineStarted()
             try waitForInitialInputReadinessIfNeeded(
                 label: "\(label)-prepared-bluetooth",
-                generation: preparedInput.inputGeneration,
+                generation: recordingInputGeneration,
                 deadline: readinessDeadline,
                 isEngineRunning: { [recoveryCoordinator] in
                     engine.isRunning && !recoveryCoordinator.hasPendingConfigurationChange
@@ -1787,14 +1789,18 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         do {
             _ = try ObjCExceptionCatcher.catching {
                 inputNode.installTap(onBus: 0, bufferSize: Self.captureTapFrames, format: tapFormat) { [weak self] buffer, _ in
+                    guard let self else { return }
                     guard let normalizedBuffer = Self.normalizedInputBuffer(buffer) else {
                         return
                     }
-                    self?.processAudioBuffer(
+                    let captureGeneration = bluetoothInputGeneration == nil
+                        ? nil
+                        : self.bluetoothInputStartupTracker.currentGeneration
+                    self.processAudioBuffer(
                         normalizedBuffer,
                         converter: converter,
                         targetFormat: targetFormat,
-                        bluetoothInputGeneration: bluetoothInputGeneration
+                        bluetoothInputGeneration: captureGeneration
                     )
                 }
             }
@@ -2036,14 +2042,18 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     }
 
     private func clearRecordingBuffer(requestUptimeNanoseconds: UInt64? = nil) {
-        microphoneBoostProcessor.reset()
+        // Drain already converted samples before resetting processing state. Prepared
+        // Bluetooth capture can keep producing buffers while it is waiting to be armed.
+        processingQueue.sync {
+            microphoneBoostProcessor.reset()
+            bluetoothInputStartupTracker.reset()
+        }
         bufferLock.lock()
         sampleBuffer.removeAll()
         _peakRawAudioLevel = 0
         recordingRequestUptimeNanoseconds = requestUptimeNanoseconds
         hasLoggedFirstConvertedSample = false
         bufferLock.unlock()
-        bluetoothInputStartupTracker.reset()
         resetAudioLevelPublishing()
     }
 
@@ -2272,6 +2282,11 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         _ samples: [Float],
         bluetoothInputGeneration: UInt64? = nil
     ) {
+        if let bluetoothInputGeneration,
+           !bluetoothInputStartupTracker.isActiveGeneration(bluetoothInputGeneration) {
+            return
+        }
+
         let boostResult = microphoneBoostProcessor.process(samples, enabled: microphoneBoostEnabled)
         let processedSamples = boostResult.samples
         let rms = boostResult.outputRMS
@@ -2652,10 +2667,19 @@ final class BluetoothInputStartupTracker: @unchecked Sendable {
         }
     }
 
-    func armExistingGeneration(_ generation: UInt64) -> Bool {
+    var currentGeneration: UInt64 {
+        state.withLock { $0.generation }
+    }
+
+    func isActiveGeneration(_ generation: UInt64) -> Bool {
+        state.withLock { $0.isActive && $0.generation == generation }
+    }
+
+    func armExistingGeneration(_ generation: UInt64) -> UInt64? {
         let timestamp = now()
         return state.withLock { state in
-            guard state.generation == generation else { return false }
+            guard state.generation == generation else { return nil }
+            state.generation &+= 1
             state.isActive = true
             state.isReady = false
             state.generationStartedAt = timestamp
@@ -2665,7 +2689,7 @@ final class BluetoothInputStartupTracker: @unchecked Sendable {
             state.buffersSinceSignal = 0
             state.stagedSamples.removeAll(keepingCapacity: true)
             state.peakInputRMS = 0
-            return true
+            return state.generation
         }
     }
 
