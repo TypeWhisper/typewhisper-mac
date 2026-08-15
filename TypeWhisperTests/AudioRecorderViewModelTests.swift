@@ -27,6 +27,30 @@ private actor RecorderStopFinalizationGate {
     }
 }
 
+private actor RecorderStartGate {
+    private var continuation: CheckedContinuation<URL, Never>?
+    private var started = false
+    private var outputURL: URL?
+
+    func wait(outputURL: URL) async -> URL {
+        started = true
+        self.outputURL = outputURL
+        return await withCheckedContinuation { continuation in
+            self.continuation = continuation
+        }
+    }
+
+    func hasStarted() -> Bool {
+        started
+    }
+
+    func resume() {
+        guard let continuation, let outputURL else { return }
+        continuation.resume(returning: outputURL)
+        self.continuation = nil
+    }
+}
+
 private final class BlockingRecordingsLoader: @unchecked Sendable {
     let started = DispatchSemaphore(value: 0)
     let release = DispatchSemaphore(value: 0)
@@ -513,9 +537,99 @@ final class AudioRecorderViewModelTests: XCTestCase {
             RecordingTranscriptDocument.self,
             from: Data(contentsOf: documentURL)
         )
-        XCTAssertEqual(document.schemaVersion, RecordingTranscriptDocument.currentSchemaVersion)
+        XCTAssertEqual(document.schemaVersion, 1)
         XCTAssertEqual(document.text, "complete meeting transcript")
         XCTAssertEqual(document.calendarEvent, metadata)
+    }
+
+    func testCalendarMetadataPersistsWhenFinalTranscriptionFails() async throws {
+        try preserveStandardDefaults()
+        setupPluginManager(groqBehavior: .failure("provider unavailable"))
+        let defaults = try makeDefaults()
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider("groq")
+        let recordingsDirectory = makeTemporaryDirectory()
+        let viewModel = makeFinalTranscriptionViewModel(
+            defaults: defaults,
+            modelManager: modelManager,
+            recordingsDirectory: recordingsDirectory
+        )
+        let metadata = makeCalendarMeetingTranscriptMetadata(title: "Failed meeting")
+
+        let handle = try await viewModel.startCalendarMeetingRecording(
+            preferredBaseName: "Failed meeting",
+            transcriptMetadata: metadata
+        )
+        try viewModel.stopCalendarMeetingRecording(handle: handle)
+        try await waitForRecordingsToLoad(viewModel, count: 1)
+
+        let recording = try XCTUnwrap(viewModel.recordings.first)
+        XCTAssertNil(recording.transcript)
+        XCTAssertEqual(recording.calendarEvent, metadata)
+        XCTAssertEqual(recording.transcriptionFailure?.phase, .finalTranscription)
+
+        let documentURL = handle.outputURL
+            .deletingPathExtension()
+            .appendingPathExtension("transcript.json")
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let document = try decoder.decode(
+            RecordingTranscriptDocument.self,
+            from: Data(contentsOf: documentURL)
+        )
+        XCTAssertEqual(document.schemaVersion, 1)
+        XCTAssertNil(document.text)
+        XCTAssertEqual(document.calendarEvent, metadata)
+    }
+
+    func testManualStopDuringCalendarStartupPersistsMetadata() async throws {
+        try preserveStandardDefaults()
+        let defaults = try makeDefaults()
+        let recordingsDirectory = makeTemporaryDirectory()
+        let recorderService = AudioRecorderService()
+        recorderService.recordingsDirectoryOverride = recordingsDirectory
+        let startGate = RecorderStartGate()
+        recorderService.startRecordingOverride = { _, _, _, outputURL, _ in
+            try Data("starting".utf8).write(to: outputURL)
+            return await startGate.wait(outputURL: outputURL)
+        }
+        recorderService.stopRecordingOverride = { outputURL in
+            try Data("recorded".utf8).write(to: outputURL)
+            return outputURL
+        }
+        let viewModel = makeViewModel(defaults: defaults, recorderService: recorderService)
+        viewModel.transcriptionEnabled = false
+        viewModel.livePreviewEnabled = false
+        let metadata = makeCalendarMeetingTranscriptMetadata(title: "Startup race")
+
+        let startTask = Task {
+            try await viewModel.startCalendarMeetingRecording(
+                preferredBaseName: "Startup race",
+                transcriptMetadata: metadata
+            )
+        }
+        for _ in 0..<100 where !(await startGate.hasStarted()) {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let startupDidSuspend = await startGate.hasStarted()
+        XCTAssertTrue(startupDidSuspend)
+        XCTAssertEqual(viewModel.state, .recording)
+
+        viewModel.stopRecording()
+        await startGate.resume()
+        do {
+            _ = try await startTask.value
+            XCTFail("Expected startup to observe the manual stop")
+        } catch let error as AudioRecorderViewModel.RecorderAPIError {
+            guard case .notRecording = error else {
+                return XCTFail("Expected notRecording, got \(error)")
+            }
+        }
+
+        try await waitForRecordingsToLoad(viewModel, count: 1)
+        let recording = try XCTUnwrap(viewModel.recordings.first)
+        XCTAssertEqual(recording.calendarEvent, metadata)
+        XCTAssertNil(recording.transcript)
     }
 
     func testCalendarMetadataPersistsWithoutTranscriptionAndIsDeletedWithRecording() async throws {
@@ -550,6 +664,7 @@ final class AudioRecorderViewModelTests: XCTestCase {
             RecordingTranscriptDocument.self,
             from: Data(contentsOf: documentURL)
         )
+        XCTAssertEqual(document.schemaVersion, 1)
         XCTAssertNil(document.text)
         XCTAssertEqual(document.calendarEvent, metadata)
 
@@ -688,8 +803,16 @@ final class AudioRecorderViewModelTests: XCTestCase {
         let audioURL = recordingsDirectory.appendingPathComponent("Meeting.m4a")
         let transcriptURL = audioURL.deletingPathExtension().appendingPathExtension("txt")
         let failureURL = failureSidecarURL(for: audioURL)
+        let documentURL = audioURL.deletingPathExtension().appendingPathExtension("transcript.json")
+        let metadata = makeCalendarMeetingTranscriptMetadata(title: "Meeting")
         try Data("audio".utf8).write(to: audioURL)
         try "old transcript".write(to: transcriptURL, atomically: true, encoding: .utf8)
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        try encoder.encode(RecordingTranscriptDocument(
+            text: "old transcript",
+            calendarEvent: metadata
+        )).write(to: documentURL, options: .atomic)
         let oldFailure = AudioRecorderViewModel.RecordingTranscriptionFailure(
             phase: .finalTranscription,
             providerError: "old failure",
@@ -729,7 +852,18 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: failureURL.path))
         XCTAssertEqual(viewModel.recordings.first?.transcript, "fresh retranscription")
         XCTAssertNil(viewModel.recordings.first?.transcriptionFailure)
+        XCTAssertEqual(viewModel.recordings.first?.calendarEvent, metadata)
         XCTAssertTrue(viewModel.canToggleRecording)
+
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        let document = try decoder.decode(
+            RecordingTranscriptDocument.self,
+            from: Data(contentsOf: documentURL)
+        )
+        XCTAssertEqual(document.schemaVersion, 1)
+        XCTAssertEqual(document.text, "fresh retranscription")
+        XCTAssertEqual(document.calendarEvent, metadata)
 
         let plugin = try XCTUnwrap(
             PluginManager.shared.transcriptionEngine(for: "assemblyai") as? AudioRecorderMockTranscriptionPlugin
