@@ -2466,6 +2466,7 @@ final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
         let recordingGeneration = try XCTUnwrap(tracker.armExistingGeneration(prewarmGeneration))
 
         XCTAssertNotEqual(recordingGeneration, prewarmGeneration)
+        XCTAssertEqual(tracker.currentGenerationIfAvailable, recordingGeneration)
         XCTAssertFalse(tracker.isActiveGeneration(prewarmGeneration))
         XCTAssertTrue(tracker.isActiveGeneration(recordingGeneration))
         XCTAssertEqual(

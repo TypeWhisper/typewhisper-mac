@@ -1790,12 +1790,18 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             _ = try ObjCExceptionCatcher.catching {
                 inputNode.installTap(onBus: 0, bufferSize: Self.captureTapFrames, format: tapFormat) { [weak self] buffer, _ in
                     guard let self else { return }
+                    let captureGeneration: UInt64?
+                    if bluetoothInputGeneration != nil {
+                        guard let generation = self.bluetoothInputStartupTracker.currentGenerationIfAvailable else {
+                            return
+                        }
+                        captureGeneration = generation
+                    } else {
+                        captureGeneration = nil
+                    }
                     guard let normalizedBuffer = Self.normalizedInputBuffer(buffer) else {
                         return
                     }
-                    let captureGeneration = bluetoothInputGeneration == nil
-                        ? nil
-                        : self.bluetoothInputStartupTracker.currentGeneration
                     self.processAudioBuffer(
                         normalizedBuffer,
                         converter: converter,
@@ -2667,8 +2673,8 @@ final class BluetoothInputStartupTracker: @unchecked Sendable {
         }
     }
 
-    var currentGeneration: UInt64 {
-        state.withLock { $0.generation }
+    var currentGenerationIfAvailable: UInt64? {
+        state.withLockIfAvailable { $0.generation }
     }
 
     func isActiveGeneration(_ generation: UInt64) -> Bool {
