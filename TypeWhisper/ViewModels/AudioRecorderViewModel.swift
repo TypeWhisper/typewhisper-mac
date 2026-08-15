@@ -575,9 +575,17 @@ final class AudioRecorderViewModel: ObservableObject {
                 let providerId = effectiveProviderId
                 let dictionaryPrompt = dictionaryService.getTermsForPrompt(providerId: providerId)
                 let dictionaryTermHints = dictionaryService.getTermHints(providerId: providerId)
+                let finalSamples = if liveSessionResult == nil {
+                    await finalizedRecordingSamples(
+                        from: url,
+                        fallback: stoppedRecording.transcriptionSamples
+                    )
+                } else {
+                    stoppedRecording.transcriptionSamples
+                }
                 finalTranscriptionRequest = FinalTranscriptionRequest(
                     outputURL: url,
-                    buffer: stoppedRecording.transcriptionSamples,
+                    buffer: finalSamples,
                     languageSelection: languageSelection,
                     task: selectedTask,
                     providerId: providerId,
@@ -631,6 +639,27 @@ final class AudioRecorderViewModel: ObservableObject {
                     failRecorderAPISession(id: apiSessionID, error: "Failed to finalize recording")
                 }
             }
+        }
+    }
+
+    private func finalizedRecordingSamples(
+        from outputURL: URL,
+        fallback captureSamples: [Float]
+    ) async -> [Float] {
+        do {
+            let samples = try await audioSamplesLoader(outputURL)
+            guard !samples.isEmpty else {
+                logger.warning(
+                    "Finalized recording contained no transcription samples; using capture buffer"
+                )
+                return captureSamples
+            }
+            return samples
+        } catch {
+            logger.warning(
+                "Could not load finalized recording for transcription; using capture buffer: \(error.localizedDescription, privacy: .public)"
+            )
+            return captureSamples
         }
     }
 

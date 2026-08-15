@@ -450,6 +450,57 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertNil(recording.transcriptionFailure)
     }
 
+    func testCalendarMeetingFinalTranscriptionUsesFinalizedRecordingSamples() async throws {
+        try preserveStandardDefaults()
+        setupPluginManager(groqBehavior: .success("complete meeting transcript"))
+        let defaults = try makeDefaults()
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider("groq")
+        let recordingsDirectory = makeTemporaryDirectory()
+        let captureSamples = Array(
+            repeating: Float(0.1),
+            count: Int(AudioRecorderService.transcriptionSampleRate)
+        )
+        let finalizedFileSamples = Array(
+            repeating: Float(0.6),
+            count: Int(AudioRecorderService.transcriptionSampleRate * 2)
+        )
+        let recorderService = makeRecorderService(
+            recordingsDirectory: recordingsDirectory,
+            samples: captureSamples
+        )
+        var loadedURL: URL?
+        let viewModel = makeViewModel(
+            defaults: defaults,
+            modelManager: modelManager,
+            recorderService: recorderService,
+            audioSamplesLoader: { url in
+                loadedURL = url
+                return finalizedFileSamples
+            }
+        )
+        viewModel.transcriptionEnabled = true
+        viewModel.livePreviewEnabled = false
+
+        let handle = try await viewModel.startCalendarMeetingRecording(
+            preferredBaseName: "RC2 Meeting"
+        )
+        try viewModel.stopCalendarMeetingRecording(handle: handle)
+
+        try await waitForRecordingsToLoad(viewModel, count: 1)
+
+        XCTAssertEqual(loadedURL?.standardizedFileURL, handle.outputURL.standardizedFileURL)
+        let plugin = try XCTUnwrap(
+            PluginManager.shared.transcriptionEngine(for: "groq")
+                as? AudioRecorderMockTranscriptionPlugin
+        )
+        let request = try XCTUnwrap(plugin.lastRequest)
+        XCTAssertEqual(request.audioSampleCount, finalizedFileSamples.count)
+        XCTAssertEqual(request.firstAudioSample, finalizedFileSamples.first)
+        XCTAssertNotEqual(request.audioSampleCount, captureSamples.count)
+        XCTAssertEqual(viewModel.recordings.first?.transcript, "complete meeting transcript")
+    }
+
     func testFinalTranscriptionDoesNotForceGlobalDefaultModelAsRecorderOverride() async throws {
         try preserveStandardDefaults()
         let defaults = try makeDefaults()
@@ -1409,6 +1460,8 @@ private final class AudioRecorderMockTranscriptionPlugin: NSObject, Transcriptio
         let language: String?
         let translate: Bool
         let prompt: String?
+        let audioSampleCount: Int
+        let firstAudioSample: Float?
     }
 
     enum TranscriptionBehavior {
@@ -1468,7 +1521,13 @@ private final class AudioRecorderMockTranscriptionPlugin: NSObject, Transcriptio
         translate: Bool,
         prompt: String?
     ) async throws -> PluginTranscriptionResult {
-        lastRequest = Request(language: language, translate: translate, prompt: prompt)
+        lastRequest = Request(
+            language: language,
+            translate: translate,
+            prompt: prompt,
+            audioSampleCount: audio.samples.count,
+            firstAudioSample: audio.samples.first
+        )
         return switch behavior {
         case .success(let text):
             PluginTranscriptionResult(text: text)
