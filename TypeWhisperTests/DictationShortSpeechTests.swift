@@ -181,8 +181,9 @@ final class DictationShortSpeechTests: XCTestCase {
 final class MicrophoneBoostProcessorTests: XCTestCase {
     func testDisabledBoostLeavesSamplesUnchanged() {
         let samples: [Float] = [0.01, -0.02, 0.03]
+        let processor = MicrophoneBoostProcessor()
 
-        let result = MicrophoneBoostProcessor.process(samples, enabled: false)
+        let result = processor.process(samples, enabled: false)
 
         XCTAssertEqual(result.samples, samples)
         XCTAssertEqual(result.gain, 1)
@@ -190,39 +191,100 @@ final class MicrophoneBoostProcessorTests: XCTestCase {
 
     func testQuietSpeechIsBoostedTowardTargetRMS() {
         let samples = [Float](repeating: 0.01, count: 100)
+        let processor = MicrophoneBoostProcessor()
 
-        let result = MicrophoneBoostProcessor.process(samples, enabled: true)
+        var result = processor.process(samples, enabled: true)
+        for _ in 0..<12 {
+            result = processor.process(samples, enabled: true)
+        }
 
-        XCTAssertEqual(result.gain, 10, accuracy: 0.0001)
-        XCTAssertEqual(result.outputRMS, MicrophoneBoostProcessor.targetRMS, accuracy: 0.0001)
-        XCTAssertTrue(result.samples.allSatisfy { abs($0 - 0.1) < 0.0001 })
+        XCTAssertEqual(result.gain, 10, accuracy: 0.01)
+        XCTAssertEqual(result.outputRMS, MicrophoneBoostProcessor.targetRMS, accuracy: 0.001)
+        XCTAssertTrue(result.samples.allSatisfy { abs($0 - 0.1) < 0.001 })
     }
 
-    func testBoostIsCappedAtMaximumGain() {
+    func testQuietSpeechReceivesUsefulBoostInFirstBuffer() {
+        let samples = [Float](repeating: 0.01, count: 100)
+        let processor = MicrophoneBoostProcessor()
+
+        let result = processor.process(samples, enabled: true)
+
+        XCTAssertGreaterThanOrEqual(result.gain, 5)
+        XCTAssertGreaterThanOrEqual(result.outputRMS, 0.05)
+    }
+
+    func testGainDoesNotExceedMaximum() {
+        let samples = [Float](repeating: 0.002, count: 100)
+        let processor = MicrophoneBoostProcessor()
+
+        var result = processor.process(samples, enabled: true)
+        for _ in 0..<12 {
+            result = processor.process(samples, enabled: true)
+        }
+
+        XCTAssertEqual(result.gain, MicrophoneBoostProcessor.maximumGain, accuracy: 0.01)
+        XCTAssertLessThanOrEqual(result.gain, MicrophoneBoostProcessor.maximumGain)
+    }
+
+    func testRoomNoiseDoesNotTriggerGainIncrease() {
         let samples = [Float](repeating: 0.001, count: 100)
+        let processor = MicrophoneBoostProcessor()
 
-        let result = MicrophoneBoostProcessor.process(samples, enabled: true)
-
-        XCTAssertEqual(result.gain, MicrophoneBoostProcessor.maximumGain, accuracy: 0.0001)
-        XCTAssertEqual(result.outputRMS, 0.02, accuracy: 0.0001)
-    }
-
-    func testNearSilenceIsNotBoosted() {
-        let samples = [Float](repeating: 0.00005, count: 100)
-
-        let result = MicrophoneBoostProcessor.process(samples, enabled: true)
+        let result = processor.process(samples, enabled: true)
 
         XCTAssertEqual(result.samples, samples)
         XCTAssertEqual(result.gain, 1)
     }
 
-    func testBoostClampsSamplesToValidRange() {
+    func testNearSilenceIsNotBoosted() {
+        let samples = [Float](repeating: 0.00005, count: 100)
+        let processor = MicrophoneBoostProcessor()
+
+        let result = processor.process(samples, enabled: true)
+
+        XCTAssertEqual(result.samples, samples)
+        XCTAssertEqual(result.gain, 1)
+    }
+
+    func testPeakGuardAndSoftLimiterAvoidHardClipping() {
         let samples = [Float(0.96)] + [Float](repeating: 0, count: 99)
+        let processor = MicrophoneBoostProcessor()
 
-        let result = MicrophoneBoostProcessor.process(samples, enabled: true)
+        let result = processor.process(samples, enabled: true)
 
-        XCTAssertEqual(try XCTUnwrap(result.samples.first), 1, accuracy: 0.0001)
-        XCTAssertTrue(result.samples.allSatisfy { $0 >= -1 && $0 <= 1 })
+        XCTAssertLessThan(try XCTUnwrap(result.samples.first), 0.99)
+        XCTAssertTrue(result.samples.allSatisfy { $0 > -1 && $0 < 1 })
+    }
+
+    func testGainIsHeldThroughBriefLowEnergyGap() {
+        let speech = [Float](repeating: 0.02, count: 100)
+        let quietGap = [Float](repeating: 0.001, count: 100)
+        let processor = MicrophoneBoostProcessor()
+
+        var speechResult = processor.process(speech, enabled: true)
+        for _ in 0..<12 {
+            speechResult = processor.process(speech, enabled: true)
+        }
+        let gapResult = processor.process(quietGap, enabled: true)
+
+        XCTAssertGreaterThan(speechResult.gain, 1)
+        XCTAssertEqual(gapResult.gain, speechResult.gain, accuracy: 0.0001)
+        XCTAssertEqual(gapResult.outputRMS, quietGap[0] * speechResult.gain, accuracy: 0.0001)
+    }
+
+    func testResetClearsGainBetweenRecordings() {
+        let speech = [Float](repeating: 0.02, count: 100)
+        let roomNoise = [Float](repeating: 0.001, count: 100)
+        let processor = MicrophoneBoostProcessor()
+
+        for _ in 0..<12 {
+            _ = processor.process(speech, enabled: true)
+        }
+        processor.reset()
+        let result = processor.process(roomNoise, enabled: true)
+
+        XCTAssertEqual(result.samples, roomNoise)
+        XCTAssertEqual(result.gain, 1)
     }
 }
 

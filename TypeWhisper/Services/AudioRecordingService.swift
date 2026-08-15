@@ -75,34 +75,92 @@ struct MicrophoneBoostProcessingResult {
     let gain: Float
 }
 
-enum MicrophoneBoostProcessor {
+final class MicrophoneBoostProcessor: @unchecked Sendable {
     static let targetRMS: Float = 0.1
     static let maximumGain: Float = 20
     static let minimumGain: Float = 1
-    static let minimumInputRMS: Float = 0.0001
+    static let activationRMS: Float = 0.0015
+    static let peakCeiling: Float = 0.96
 
-    static func process(_ samples: [Float], enabled: Bool) -> MicrophoneBoostProcessingResult {
+    private static let gainAttack: Float = 0.45
+    private static let gainRelease: Float = 0.06
+    private static let peakDecay: Float = 0.95
+    private static let limiterKnee: Float = 0.8
+    private static let limiterCeiling: Float = 0.98
+
+    private struct State {
+        var gain: Float = 1
+        var recentPeak: Float = 0
+    }
+
+    private let stateLock = OSAllocatedUnfairLock(initialState: State())
+
+    func reset() {
+        stateLock.withLock { state in
+            state = State()
+        }
+    }
+
+    func process(_ samples: [Float], enabled: Bool) -> MicrophoneBoostProcessingResult {
         guard !samples.isEmpty else {
             return MicrophoneBoostProcessingResult(samples: [], inputRMS: 0, outputRMS: 0, gain: 1)
         }
 
-        let inputRMS = rms(samples)
-        guard enabled, inputRMS > minimumInputRMS else {
+        let inputRMS = Self.rms(samples)
+        guard enabled else {
+            reset()
             return MicrophoneBoostProcessingResult(samples: samples, inputRMS: inputRMS, outputRMS: inputRMS, gain: 1)
         }
 
-        let gain = min(max(targetRMS / inputRMS, minimumGain), maximumGain)
+        let inputPeak = samples.reduce(Float.zero) { max($0, abs($1)) }
+        let gain = stateLock.withLock { state -> Float in
+            state.recentPeak = max(inputPeak, state.recentPeak * Self.peakDecay)
+
+            // Hold the current gain through near-silence instead of normalizing each
+            // quiet buffer independently. This avoids pumping the room noise between words.
+            guard inputRMS >= Self.activationRMS else {
+                return state.gain
+            }
+
+            var desiredGain = min(
+                max(Self.targetRMS / inputRMS, Self.minimumGain),
+                Self.maximumGain
+            )
+            if state.recentPeak > 0 {
+                desiredGain = min(desiredGain, Self.peakCeiling / state.recentPeak)
+            }
+
+            let smoothing = desiredGain > state.gain ? Self.gainAttack : Self.gainRelease
+            state.gain += (desiredGain - state.gain) * smoothing
+
+            // Peak protection is immediate even when the normal gain release is gentle.
+            if inputPeak > 0 {
+                state.gain = min(state.gain, Self.peakCeiling / inputPeak)
+            }
+            state.gain = min(max(state.gain, Self.minimumGain), Self.maximumGain)
+            return state.gain
+        }
+
         guard gain > 1 else {
             return MicrophoneBoostProcessingResult(samples: samples, inputRMS: inputRMS, outputRMS: inputRMS, gain: 1)
         }
 
-        let boosted = samples.map { max(-1, min(1, $0 * gain)) }
+        let boosted = samples.map { Self.softLimited($0 * gain) }
         return MicrophoneBoostProcessingResult(
             samples: boosted,
             inputRMS: inputRMS,
-            outputRMS: rms(boosted),
+            outputRMS: Self.rms(boosted),
             gain: gain
         )
+    }
+
+    private static func softLimited(_ sample: Float) -> Float {
+        let magnitude = abs(sample)
+        guard magnitude > limiterKnee else { return sample }
+
+        let normalizedExcess = (magnitude - limiterKnee) / (limiterCeiling - limiterKnee)
+        let limitedMagnitude = limiterKnee + (limiterCeiling - limiterKnee) * tanh(normalizedExcess)
+        return sample < 0 ? -limitedMagnitude : limitedMagnitude
     }
 
     private static func rms(_ samples: [Float]) -> Float {
@@ -295,6 +353,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     private var _peakRawAudioLevel: Float = 0
     private let bufferLock = NSLock()
     private let microphoneBoostEnabledLock = OSAllocatedUnfairLock(initialState: false)
+    private let microphoneBoostProcessor = MicrophoneBoostProcessor()
     private let configLock = NSLock()
     private let stopStateLock = NSLock()
     private let engineLock = NSLock()
@@ -1977,6 +2036,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     }
 
     private func clearRecordingBuffer(requestUptimeNanoseconds: UInt64? = nil) {
+        microphoneBoostProcessor.reset()
         bufferLock.lock()
         sampleBuffer.removeAll()
         _peakRawAudioLevel = 0
@@ -2212,7 +2272,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         _ samples: [Float],
         bluetoothInputGeneration: UInt64? = nil
     ) {
-        let boostResult = MicrophoneBoostProcessor.process(samples, enabled: microphoneBoostEnabled)
+        let boostResult = microphoneBoostProcessor.process(samples, enabled: microphoneBoostEnabled)
         let processedSamples = boostResult.samples
         let rms = boostResult.outputRMS
         let normalizedLevel = AudioLevelMeter.normalizedLevel(rms: rms)
