@@ -29,7 +29,7 @@ let package = Package(
             name: "OpenAICompatiblePlugin",
             dependencies: ["TypeWhisperPluginSDK"],
             path: "Plugins/OpenAICompatiblePlugin",
-            exclude: ["Tests"],
+            exclude: ["README.md", "Tests"],
             resources: [
                 .process("Localizable.xcstrings"),
                 .process("manifest.json"),

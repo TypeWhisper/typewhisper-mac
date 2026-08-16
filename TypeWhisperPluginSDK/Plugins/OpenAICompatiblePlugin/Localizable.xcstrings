@@ -89,24 +89,24 @@
         }
       }
     },
-    "Auto uses realtime streaming only for known realtime model IDs (gpt-live-transcribe, gpt-realtime-whisper) and batch upload otherwise. Choose Realtime to force streaming for any OpenAI-compatible server that supports the /v1/realtime WebSocket API, including custom deployment aliases (e.g. an Azure OpenAI or Microsoft Foundry gpt-live-transcribe deployment) — some providers, including Azure, require a preview API version for realtime transcription. Choose Batch to always use /v1/audio/transcriptions.": {
+    "Auto uses realtime streaming only for known realtime model IDs (gpt-live-transcribe, gpt-realtime-whisper) and batch upload otherwise. Choose Realtime to force streaming for any OpenAI-compatible server that supports the /v1/realtime WebSocket API, including custom deployment aliases (e.g. an Azure OpenAI or Microsoft Foundry gpt-live-transcribe deployment) — some providers, including Azure, require a preview API version for realtime transcription. Choose Batch to use the selected Batch Transcription Endpoint.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Automatisch verwendet Echtzeit-Streaming nur für bekannte Echtzeit-Modell-IDs (gpt-live-transcribe, gpt-realtime-whisper) und ansonsten den Batch-Upload. Wählen Sie Echtzeit, um Streaming für jeden OpenAI-kompatiblen Server zu erzwingen, der die WebSocket-API /v1/realtime unterstützt, einschließlich benutzerdefinierter Bereitstellungsaliase (z. B. eine gpt-live-transcribe-Bereitstellung in Azure OpenAI oder Microsoft Foundry). Einige Anbieter, darunter Azure, erfordern für die Echtzeittranskription eine Vorschau-API-Version. Wählen Sie Batch, um immer /v1/audio/transcriptions zu verwenden."
+            "value": "Automatisch verwendet Echtzeit-Streaming nur für bekannte Echtzeit-Modell-IDs (gpt-live-transcribe, gpt-realtime-whisper) und ansonsten den Batch-Upload. Wählen Sie Echtzeit, um Streaming für jeden OpenAI-kompatiblen Server zu erzwingen, der die WebSocket-API /v1/realtime unterstützt, einschließlich benutzerdefinierter Bereitstellungsaliase (z. B. eine gpt-live-transcribe-Bereitstellung in Azure OpenAI oder Microsoft Foundry). Einige Anbieter, darunter Azure, erfordern für die Echtzeittranskription eine Vorschau-API-Version. Wählen Sie Batch, um den ausgewählten Batch-Transkriptionsendpunkt zu verwenden."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "自動では、既知のリアルタイムモデル ID（gpt-live-transcribe、gpt-realtime-whisper）のみリアルタイムストリーミングを使用し、それ以外はバッチアップロードを使用します。/v1/realtime WebSocket API をサポートする任意の OpenAI 互換サーバーでストリーミングを強制するには、リアルタイムを選択します。これには、カスタムデプロイ名（Azure OpenAI または Microsoft Foundry の gpt-live-transcribe デプロイなど）も含まれます。Azure など一部のプロバイダーでは、リアルタイム文字起こしにプレビュー API バージョンが必要です。常に /v1/audio/transcriptions を使用するには、バッチを選択します。"
+            "value": "自動では、既知のリアルタイムモデル ID（gpt-live-transcribe、gpt-realtime-whisper）のみリアルタイムストリーミングを使用し、それ以外はバッチアップロードを使用します。/v1/realtime WebSocket API をサポートする任意の OpenAI 互換サーバーでストリーミングを強制するには、リアルタイムを選択します。これには、カスタムデプロイ名（Azure OpenAI または Microsoft Foundry の gpt-live-transcribe デプロイなど）も含まれます。Azure など一部のプロバイダーでは、リアルタイム文字起こしにプレビュー API バージョンが必要です。選択したバッチ文字起こしエンドポイントを使用するには、バッチを選択します。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "“自动”仅对已知的实时模型 ID（gpt-live-transcribe、gpt-realtime-whisper）使用实时流式传输，其他模型则使用批量上传。选择“实时”可强制任何支持 /v1/realtime WebSocket API 的 OpenAI 兼容服务器使用流式传输，包括自定义部署别名（例如 Azure OpenAI 或 Microsoft Foundry 的 gpt-live-transcribe 部署）。部分提供商（包括 Azure）需要预览版 API 版本才能进行实时转写。选择“批量”则始终使用 /v1/audio/transcriptions。"
+            "value": "“自动”仅对已知的实时模型 ID（gpt-live-transcribe、gpt-realtime-whisper）使用实时流式传输，其他模型则使用批量上传。选择“实时”可强制任何支持 /v1/realtime WebSocket API 的 OpenAI 兼容服务器使用流式传输，包括自定义部署别名（例如 Azure OpenAI 或 Microsoft Foundry 的 gpt-live-transcribe 部署）。部分提供商（包括 Azure）需要预览版 API 版本才能进行实时转写。选择“批量”以使用所选的批量转写终结点。"
           }
         }
       }

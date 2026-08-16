@@ -1562,7 +1562,7 @@ final class OpenAICompatiblePluginTests: XCTestCase {
         )
     }
 
-    func testTransportSettingsHaveGermanAndJapaneseLocalizations() throws {
+    func testTransportSettingsHaveLocalizations() throws {
         let catalogURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -1570,7 +1570,7 @@ final class OpenAICompatiblePluginTests: XCTestCase {
         let catalogData = try Data(contentsOf: catalogURL)
         let catalog = try XCTUnwrap(JSONSerialization.jsonObject(with: catalogData) as? [String: Any])
         let strings = try XCTUnwrap(catalog["strings"] as? [String: Any])
-        let helpText = "Auto uses realtime streaming only for known realtime model IDs (gpt-live-transcribe, gpt-realtime-whisper) and batch upload otherwise. Choose Realtime to force streaming for any OpenAI-compatible server that supports the /v1/realtime WebSocket API, including custom deployment aliases (e.g. an Azure OpenAI or Microsoft Foundry gpt-live-transcribe deployment) — some providers, including Azure, require a preview API version for realtime transcription. Choose Batch to always use /v1/audio/transcriptions."
+        let helpText = "Auto uses realtime streaming only for known realtime model IDs (gpt-live-transcribe, gpt-realtime-whisper) and batch upload otherwise. Choose Realtime to force streaming for any OpenAI-compatible server that supports the /v1/realtime WebSocket API, including custom deployment aliases (e.g. an Azure OpenAI or Microsoft Foundry gpt-live-transcribe deployment) — some providers, including Azure, require a preview API version for realtime transcription. Choose Batch to use the selected Batch Transcription Endpoint."
         let batchEndpointHelp = "Standard v1 uses /v1/audio/transcriptions. Deployment-scoped uses /deployments/{model}/audio/transcriptions and requires a dated API version. Realtime transcription continues to use /v1/realtime."
 
         for key in [
@@ -1586,8 +1586,9 @@ final class OpenAICompatiblePluginTests: XCTestCase {
         ] {
             let entry = try XCTUnwrap(strings[key] as? [String: Any], "Missing localization key: \(key)")
             let localizations = try XCTUnwrap(entry["localizations"] as? [String: Any])
-            XCTAssertNotNil(localizations["de"], "Missing German localization for \(key)")
-            XCTAssertNotNil(localizations["ja"], "Missing Japanese localization for \(key)")
+            for locale in ["de", "ja", "zh-Hans"] {
+                XCTAssertNotNil(localizations[locale], "Missing \(locale) localization for \(key)")
+            }
         }
     }
 
