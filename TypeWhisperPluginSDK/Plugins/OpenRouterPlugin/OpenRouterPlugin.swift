@@ -188,6 +188,10 @@ final class OpenRouterPlugin: NSObject,
                 "format": uploadFile.format,
             ],
         ]
+        if Self.supportsVerboseTimestamps(modelId: modelId) {
+            body["response_format"] = "verbose_json"
+            body["timestamp_granularities"] = ["segment"]
+        }
         let trimmedLanguage = language?.trimmingCharacters(in: .whitespacesAndNewlines)
         if let trimmedLanguage, !trimmedLanguage.isEmpty {
             body["language"] = trimmedLanguage
@@ -200,6 +204,11 @@ final class OpenRouterPlugin: NSObject,
         request.timeoutInterval = timeout
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
         return request
+    }
+
+    private static func supportsVerboseTimestamps(modelId: String) -> Bool {
+        let provider = modelId.split(separator: "/", maxSplits: 1).first?.lowercased()
+        return provider == "openai" || provider == "groq" || provider == "together"
     }
 
     static func validateTranscriptionResponse(data: Data, response: URLResponse) throws {
@@ -223,13 +232,28 @@ final class OpenRouterPlugin: NSObject,
     }
 
     static func parseTranscriptionResponse(_ data: Data) throws -> PluginTranscriptionResult {
+        struct Segment: Decodable {
+            let text: String
+            let start: Double
+            let end: Double
+        }
+
         struct Response: Decodable {
             let text: String
+            let language: String?
+            let segments: [Segment]?
         }
 
         do {
             let response = try JSONDecoder().decode(Response.self, from: data)
-            return PluginTranscriptionResult(text: response.text)
+            let segments = (response.segments ?? []).map {
+                PluginTranscriptionSegment(text: $0.text, start: $0.start, end: $0.end)
+            }
+            return PluginTranscriptionResult(
+                text: response.text,
+                detectedLanguage: response.language,
+                segments: segments
+            )
         } catch {
             if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                let text = json["text"] as? String {

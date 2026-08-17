@@ -276,6 +276,8 @@ final class OpenRouterPluginTests: XCTestCase {
         let body = try Self.jsonBody(from: request)
         XCTAssertEqual(body["model"] as? String, "openai/whisper-1")
         XCTAssertEqual(body["language"] as? String, "de")
+        XCTAssertEqual(body["response_format"] as? String, "verbose_json")
+        XCTAssertEqual(body["timestamp_granularities"] as? [String], ["segment"])
 
         let inputAudio = try XCTUnwrap(body["input_audio"] as? [String: Any])
         XCTAssertEqual(inputAudio["format"] as? String, "m4a")
@@ -296,7 +298,21 @@ final class OpenRouterPluginTests: XCTestCase {
         XCTAssertNil(body["prompt"])
     }
 
-    func testTranscribeSendsJSONRequestAndParsesText() async throws {
+    func testTranscriptionRequestUsesPlainJSONForUnsupportedTimestampProvider() throws {
+        let request = try OpenRouterPlugin.makeTranscriptionRequest(
+            uploadFile: Self.m4aUpload(),
+            apiKey: "openrouter-key",
+            modelId: "deepgram/nova-3",
+            language: nil,
+            timeout: 120
+        )
+
+        let body = try Self.jsonBody(from: request)
+        XCTAssertNil(body["response_format"])
+        XCTAssertNil(body["timestamp_granularities"])
+    }
+
+    func testTranscribeRequestsAndParsesTimedSegments() async throws {
         let host = try PluginTestHostServices(
             defaults: ["selectedModel": "openai/whisper-1"],
             secrets: ["api-key": "openrouter-key"]
@@ -308,7 +324,9 @@ final class OpenRouterPluginTests: XCTestCase {
         PluginHTTPClientTestHarness.configure { _ in
             store.makeSession(outcomes: [
                 .success(
-                    Data(#"{"text":"hello from openrouter","usage":{"cost":0.01}}"#.utf8),
+                    Data(
+                        #"{"text":"hello from openrouter","language":"en","segments":[{"id":0,"start":0.0,"end":1.25,"text":"hello from"},{"id":1,"start":1.25,"end":2.5,"text":"openrouter"}],"usage":{"cost":0.01}}"#.utf8
+                    ),
                     Self.httpResponse(url: "https://openrouter.ai/api/v1/audio/transcriptions", statusCode: 200)
                 ),
             ])
@@ -322,6 +340,14 @@ final class OpenRouterPluginTests: XCTestCase {
         )
 
         XCTAssertEqual(result.text, "hello from openrouter")
+        XCTAssertEqual(result.detectedLanguage, "en")
+        XCTAssertEqual(result.segments.count, 2)
+        XCTAssertEqual(result.segments[0].text, "hello from")
+        XCTAssertEqual(result.segments[0].start, 0.0)
+        XCTAssertEqual(result.segments[0].end, 1.25)
+        XCTAssertEqual(result.segments[1].text, "openrouter")
+        XCTAssertEqual(result.segments[1].start, 1.25)
+        XCTAssertEqual(result.segments[1].end, 2.5)
 
         let request = try XCTUnwrap(store.sessions.first?.requestedRequests.first)
         XCTAssertEqual(request.url?.path, "/api/v1/audio/transcriptions")
@@ -331,6 +357,8 @@ final class OpenRouterPluginTests: XCTestCase {
         XCTAssertEqual(body["model"] as? String, "openai/whisper-1")
         XCTAssertEqual(body["language"] as? String, "de")
         XCTAssertNil(body["prompt"])
+        XCTAssertEqual(body["response_format"] as? String, "verbose_json")
+        XCTAssertEqual(body["timestamp_granularities"] as? [String], ["segment"])
         let inputAudio = try XCTUnwrap(body["input_audio"] as? [String: Any])
         XCTAssertEqual(inputAudio["format"] as? String, "m4a")
     }
