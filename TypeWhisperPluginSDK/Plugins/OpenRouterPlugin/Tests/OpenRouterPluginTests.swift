@@ -312,6 +312,26 @@ final class OpenRouterPluginTests: XCTestCase {
         XCTAssertNil(body["timestamp_granularities"])
     }
 
+    func testTranscriptionRequestUsesVerboseJSONForCompatibleTimestampProviders() throws {
+        for modelId in [
+            "openai/whisper-1",
+            "groq/whisper-large-v3",
+            "together/whisper-large-v3",
+        ] {
+            let request = try OpenRouterPlugin.makeTranscriptionRequest(
+                uploadFile: Self.m4aUpload(),
+                apiKey: "openrouter-key",
+                modelId: modelId,
+                language: nil,
+                timeout: 120
+            )
+
+            let body = try Self.jsonBody(from: request)
+            XCTAssertEqual(body["response_format"] as? String, "verbose_json", modelId)
+            XCTAssertEqual(body["timestamp_granularities"] as? [String], ["segment"], modelId)
+        }
+    }
+
     func testTranscribeRequestsAndParsesTimedSegments() async throws {
         let host = try PluginTestHostServices(
             defaults: ["selectedModel": "openai/whisper-1"],
