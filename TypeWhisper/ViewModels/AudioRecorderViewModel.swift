@@ -824,12 +824,30 @@ final class AudioRecorderViewModel: ObservableObject {
     func deleteRecording(_ item: RecordingItem) {
         guard !isRetranscribing(item) else { return }
 
+        let sidecarURLs = [
+            transcriptURL(for: item.url),
+            transcriptMarkdownURL(for: item.url),
+            transcriptDocumentURL(for: item.url),
+            transcriptionFailureURL(for: item.url)
+        ]
+
         do {
-            try removeRecordingFileIfPresent(at: transcriptURL(for: item.url))
-            try removeRecordingFileIfPresent(at: transcriptMarkdownURL(for: item.url))
-            try removeRecordingFileIfPresent(at: transcriptDocumentURL(for: item.url))
-            try removeRecordingFileIfPresent(at: transcriptionFailureURL(for: item.url))
-            try removeRecordingFileIfPresent(at: item.url)
+            let sidecarSnapshots = try sidecarURLs.map(makeRecordingFileSnapshot(at:))
+            do {
+                for url in sidecarURLs {
+                    try removeRecordingFileIfPresent(at: url)
+                }
+                try removeRecordingFileIfPresent(at: item.url)
+            } catch {
+                do {
+                    try restoreRecordingFileSnapshots(sidecarSnapshots)
+                } catch {
+                    logger.error(
+                        "Failed to restore recording sidecars after deletion failed: \(error.localizedDescription, privacy: .public)"
+                    )
+                }
+                throw error
+            }
             transientTranscriptionFailures.removeValue(
                 forKey: transcriptionFailureKey(for: item.url)
             )
@@ -844,6 +862,28 @@ final class AudioRecorderViewModel: ObservableObject {
             try FileManager.default.removeItem(at: url)
         } catch let error as CocoaError where error.code == .fileNoSuchFile {
             return
+        }
+    }
+
+    private struct RecordingFileSnapshot {
+        let url: URL
+        let data: Data?
+    }
+
+    private func makeRecordingFileSnapshot(at url: URL) throws -> RecordingFileSnapshot {
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            return RecordingFileSnapshot(url: url, data: nil)
+        }
+        return RecordingFileSnapshot(url: url, data: try Data(contentsOf: url))
+    }
+
+    private func restoreRecordingFileSnapshots(_ snapshots: [RecordingFileSnapshot]) throws {
+        for snapshot in snapshots {
+            guard let data = snapshot.data,
+                  !FileManager.default.fileExists(atPath: snapshot.url.path) else {
+                continue
+            }
+            try data.write(to: snapshot.url, options: .atomic)
         }
     }
 
@@ -1209,13 +1249,17 @@ final class AudioRecorderViewModel: ObservableObject {
         calendarEvent: CalendarMeetingTranscriptMetadata?
     ) throws {
         let txtURL = transcriptURL(for: audioURL)
-        try text.write(to: txtURL, atomically: true, encoding: .utf8)
         if let calendarEvent {
-            try saveTranscriptDocument(
+            let documentWrites = try transcriptDocumentWrites(
                 text: text,
                 calendarEvent: calendarEvent,
                 for: audioURL
             )
+            try writeRecordingFilesTransactionally([
+                RecordingFileWrite(url: txtURL, data: Data(text.utf8))
+            ] + documentWrites)
+        } else {
+            try text.write(to: txtURL, atomically: true, encoding: .utf8)
         }
         clearTranscriptionFailure(for: audioURL)
     }
@@ -1233,6 +1277,32 @@ final class AudioRecorderViewModel: ObservableObject {
         calendarEvent: CalendarMeetingTranscriptMetadata,
         for audioURL: URL
     ) throws {
+        try writeRecordingFilesTransactionally(
+            try transcriptDocumentWrites(
+                text: text,
+                calendarEvent: calendarEvent,
+                for: audioURL
+            )
+        )
+    }
+
+    private struct RecordingFileWrite {
+        let url: URL
+        let data: Data
+    }
+
+    private struct RecordingFileCommit {
+        let write: RecordingFileWrite
+        let stagedURL: URL
+        let backupURL: URL?
+        var installedNewFile: Bool
+    }
+
+    private func transcriptDocumentWrites(
+        text: String?,
+        calendarEvent: CalendarMeetingTranscriptMetadata,
+        for audioURL: URL
+    ) throws -> [RecordingFileWrite] {
         let document = RecordingTranscriptDocument(
             text: text,
             calendarEvent: calendarEvent
@@ -1241,12 +1311,78 @@ final class AudioRecorderViewModel: ObservableObject {
         encoder.dateEncodingStrategy = .iso8601
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(document)
-        try data.write(to: transcriptDocumentURL(for: audioURL), options: .atomic)
         let markdown = RecordingTranscriptMarkdownRenderer.render(document)
-        try markdown.write(
-            to: transcriptMarkdownURL(for: audioURL),
-            atomically: true,
-            encoding: .utf8
+        return [
+            RecordingFileWrite(url: transcriptDocumentURL(for: audioURL), data: data),
+            RecordingFileWrite(url: transcriptMarkdownURL(for: audioURL), data: Data(markdown.utf8))
+        ]
+    }
+
+    private func writeRecordingFilesTransactionally(_ writes: [RecordingFileWrite]) throws {
+        let fileManager = FileManager.default
+        var stagedWrites: [(write: RecordingFileWrite, stagedURL: URL)] = []
+        var commits: [RecordingFileCommit] = []
+
+        do {
+            for write in writes {
+                let stagedURL = temporarySiblingURL(for: write.url, suffix: "staged")
+                try write.data.write(to: stagedURL, options: .atomic)
+                stagedWrites.append((write, stagedURL))
+            }
+
+            for stagedWrite in stagedWrites {
+                let backupURL: URL?
+                if fileManager.fileExists(atPath: stagedWrite.write.url.path) {
+                    let url = temporarySiblingURL(for: stagedWrite.write.url, suffix: "backup")
+                    try fileManager.moveItem(at: stagedWrite.write.url, to: url)
+                    backupURL = url
+                } else {
+                    backupURL = nil
+                }
+
+                commits.append(RecordingFileCommit(
+                    write: stagedWrite.write,
+                    stagedURL: stagedWrite.stagedURL,
+                    backupURL: backupURL,
+                    installedNewFile: false
+                ))
+                try fileManager.moveItem(at: stagedWrite.stagedURL, to: stagedWrite.write.url)
+                commits[commits.count - 1].installedNewFile = true
+            }
+        } catch {
+            for commit in commits.reversed() {
+                if commit.installedNewFile,
+                   fileManager.fileExists(atPath: commit.write.url.path) {
+                    try? fileManager.removeItem(at: commit.write.url)
+                }
+                if let backupURL = commit.backupURL,
+                   fileManager.fileExists(atPath: backupURL.path) {
+                    try? fileManager.moveItem(at: backupURL, to: commit.write.url)
+                }
+            }
+            for stagedWrite in stagedWrites where fileManager.fileExists(atPath: stagedWrite.stagedURL.path) {
+                try? fileManager.removeItem(at: stagedWrite.stagedURL)
+            }
+            throw error
+        }
+
+        for commit in commits {
+            if let backupURL = commit.backupURL,
+               fileManager.fileExists(atPath: backupURL.path) {
+                do {
+                    try fileManager.removeItem(at: backupURL)
+                } catch {
+                    logger.error(
+                        "Failed to remove transcript backup: \(error.localizedDescription, privacy: .public)"
+                    )
+                }
+            }
+        }
+    }
+
+    private func temporarySiblingURL(for url: URL, suffix: String) -> URL {
+        url.deletingLastPathComponent().appendingPathComponent(
+            ".\(url.lastPathComponent).\(UUID().uuidString).\(suffix)"
         )
     }
 
