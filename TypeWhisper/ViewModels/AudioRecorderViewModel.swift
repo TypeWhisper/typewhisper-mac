@@ -1115,15 +1115,7 @@ final class AudioRecorderViewModel: ObservableObject {
             let result = if let liveSessionResult = request.liveSessionResult {
                 liveSessionResult
             } else {
-                try await modelManager.transcribe(
-                    audioSamples: buffer,
-                    languageSelection: request.languageSelection,
-                    task: effectiveTask,
-                    engineOverrideId: request.providerId,
-                    cloudModelOverride: request.modelOverrideId,
-                    prompt: request.prompt,
-                    dictionaryTermHints: request.dictionaryTermHints
-                )
+                try await transcribeFinalRecording(request, task: effectiveTask)
             }
             let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
             if !text.isEmpty {
@@ -1162,15 +1154,7 @@ final class AudioRecorderViewModel: ObservableObject {
         let effectiveTask = resolvedTask(for: request)
 
         do {
-            let result = try await modelManager.transcribe(
-                audioSamples: request.buffer,
-                languageSelection: request.languageSelection,
-                task: effectiveTask,
-                engineOverrideId: request.providerId,
-                cloudModelOverride: request.modelOverrideId,
-                prompt: request.prompt,
-                dictionaryTermHints: request.dictionaryTermHints
-            )
+            let result = try await transcribeFinalRecording(request, task: effectiveTask)
             let text = result.text.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !text.isEmpty else {
                 let failure = makeTranscriptionFailure(
@@ -1198,6 +1182,23 @@ final class AudioRecorderViewModel: ObservableObject {
             }
             return .skipped
         }
+    }
+
+    private func transcribeFinalRecording(
+        _ request: FinalTranscriptionRequest,
+        task: TranscriptionTask
+    ) async throws -> TranscriptionResult {
+        try await modelManager.transcribe(
+            audioSamples: request.buffer,
+            languageSelection: request.languageSelection,
+            task: task,
+            engineOverrideId: request.providerId,
+            cloudModelOverride: request.modelOverrideId,
+            prompt: request.prompt,
+            dictionaryTermHints: request.dictionaryTermHints,
+            onProgress: { _ in true },
+            onSourceProgress: { _ in true }
+        )
     }
 
     private func resolvedTask(for request: FinalTranscriptionRequest) -> TranscriptionTask {

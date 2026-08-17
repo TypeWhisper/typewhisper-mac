@@ -524,6 +524,7 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertEqual(request.audioSampleCount, finalizedFileSamples.count)
         XCTAssertEqual(request.firstAudioSample, finalizedFileSamples.first)
         XCTAssertNotEqual(request.audioSampleCount, captureSamples.count)
+        XCTAssertTrue(request.usedFileTranscriptionPipeline)
         let recording = try XCTUnwrap(viewModel.recordings.first)
         XCTAssertEqual(recording.transcript, "complete meeting transcript")
         XCTAssertEqual(recording.calendarEvent, metadata)
@@ -901,6 +902,7 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertEqual(request.language, "de")
         XCTAssertTrue(request.translate)
         XCTAssertTrue(request.prompt?.contains("TypeWhisper") == true)
+        XCTAssertTrue(request.usedFileTranscriptionPipeline)
         XCTAssertTrue(plugin.selectedModelOverrides.contains("universal-3-5-pro"))
     }
 
@@ -1764,13 +1766,14 @@ private final class AudioRecorderRestorableTranscriptionPlugin: NSObject, Transc
     }
 }
 
-private final class AudioRecorderMockTranscriptionPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
+private final class AudioRecorderMockTranscriptionPlugin: NSObject, SourceProgressTranscriptionEnginePlugin, @unchecked Sendable {
     struct Request: Sendable {
         let language: String?
         let translate: Bool
         let prompt: String?
         let audioSampleCount: Int
         let firstAudioSample: Float?
+        let usedFileTranscriptionPipeline: Bool
     }
 
     enum TranscriptionBehavior {
@@ -1830,12 +1833,52 @@ private final class AudioRecorderMockTranscriptionPlugin: NSObject, Transcriptio
         translate: Bool,
         prompt: String?
     ) async throws -> PluginTranscriptionResult {
+        try performTranscription(
+            audio: audio,
+            language: language,
+            translate: translate,
+            prompt: prompt,
+            usedFileTranscriptionPipeline: false
+        )
+    }
+
+    func transcribe(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool,
+        onSourceProgress: @Sendable @escaping (PluginTranscriptionSourceProgress) -> Bool
+    ) async throws -> PluginTranscriptionResult {
+        let result = try performTranscription(
+            audio: audio,
+            language: language,
+            translate: translate,
+            prompt: prompt,
+            usedFileTranscriptionPipeline: true
+        )
+        _ = onProgress(result.text)
+        _ = onSourceProgress(PluginTranscriptionSourceProgress(
+            processedDuration: audio.duration,
+            totalDuration: audio.duration
+        ))
+        return result
+    }
+
+    private func performTranscription(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        usedFileTranscriptionPipeline: Bool
+    ) throws -> PluginTranscriptionResult {
         lastRequest = Request(
             language: language,
             translate: translate,
             prompt: prompt,
             audioSampleCount: audio.samples.count,
-            firstAudioSample: audio.samples.first
+            firstAudioSample: audio.samples.first,
+            usedFileTranscriptionPipeline: usedFileTranscriptionPipeline
         )
         return switch behavior {
         case .success(let text):
