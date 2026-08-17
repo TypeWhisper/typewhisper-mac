@@ -118,6 +118,49 @@ final class MeetingLinkParserTests: XCTestCase {
     }
 }
 
+final class RecordingTranscriptMarkdownRendererTests: XCTestCase {
+    func testRendersFlatObsidianPropertiesAndTranscriptBody() throws {
+        let metadata = makeCalendarMeetingTranscriptMetadata(
+            title: "Planning: \"Q3\"\nReview",
+            location: "Room A\\B\nFloor 2"
+        )
+        let document = RecordingTranscriptDocument(
+            text: "First line\n\n- Action item",
+            calendarEvent: metadata
+        )
+        let timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+
+        let markdown = RecordingTranscriptMarkdownRenderer.render(
+            document,
+            timeZone: timeZone
+        )
+
+        XCTAssertEqual(markdown, #"""
+        ---
+        type: "meeting-transcript"
+        schemaVersion: 1
+        title: "Planning: \"Q3\"\nReview"
+        date: 2033-05-18
+        startDate: 2033-05-18T03:33:20
+        endDate: 2033-05-18T04:33:20
+        timeZone: "GMT"
+        location: "Room A\\B\nFloor 2"
+        organizer: "Ada Organizer <ada@example.com> (accepted)"
+        attendees:
+          - "Marco Attendee <marco@example.com> (accepted, current-user)"
+        eventIdentifier: "event-1"
+        ---
+
+        # Planning: "Q3" Review
+
+        First line
+
+        - Action item
+
+        """#)
+    }
+}
+
 func makeCalendarMeetingTestOccurrence(
     eventID: String = "event-1",
     start: Date = Date(timeIntervalSince1970: 2_000_000_000),

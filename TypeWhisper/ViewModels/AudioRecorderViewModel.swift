@@ -826,6 +826,7 @@ final class AudioRecorderViewModel: ObservableObject {
 
         do {
             try removeRecordingFileIfPresent(at: transcriptURL(for: item.url))
+            try removeRecordingFileIfPresent(at: transcriptMarkdownURL(for: item.url))
             try removeRecordingFileIfPresent(at: transcriptDocumentURL(for: item.url))
             try removeRecordingFileIfPresent(at: transcriptionFailureURL(for: item.url))
             try removeRecordingFileIfPresent(at: item.url)
@@ -1223,6 +1224,10 @@ final class AudioRecorderViewModel: ObservableObject {
         audioURL.deletingPathExtension().appendingPathExtension("transcript.json")
     }
 
+    private func transcriptMarkdownURL(for audioURL: URL) -> URL {
+        audioURL.deletingPathExtension().appendingPathExtension("transcript.md")
+    }
+
     private func saveTranscriptDocument(
         text: String?,
         calendarEvent: CalendarMeetingTranscriptMetadata,
@@ -1237,6 +1242,12 @@ final class AudioRecorderViewModel: ObservableObject {
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode(document)
         try data.write(to: transcriptDocumentURL(for: audioURL), options: .atomic)
+        let markdown = RecordingTranscriptMarkdownRenderer.render(document)
+        try markdown.write(
+            to: transcriptMarkdownURL(for: audioURL),
+            atomically: true,
+            encoding: .utf8
+        )
     }
 
     private func loadTranscript(for audioURL: URL) -> String? {

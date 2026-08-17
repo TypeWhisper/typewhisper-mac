@@ -134,6 +134,118 @@ struct RecordingTranscriptDocument: Codable, Equatable, Sendable {
     }
 }
 
+enum RecordingTranscriptMarkdownRenderer {
+    static func render(
+        _ document: RecordingTranscriptDocument,
+        timeZone: TimeZone = .current
+    ) -> String {
+        let calendarEvent = document.calendarEvent
+        let dateFormatter = makeDateFormatter(timeZone: timeZone, format: "yyyy-MM-dd")
+        let dateTimeFormatter = makeDateFormatter(
+            timeZone: timeZone,
+            format: "yyyy-MM-dd'T'HH:mm:ss"
+        )
+        let type = yamlQuoted("meeting-transcript")
+        let location = yamlQuoted(calendarEvent.location ?? "")
+        let organizer = yamlQuoted(calendarEvent.organizer.map(participantDescription) ?? "")
+
+        var frontmatter = [
+            "---",
+            "type: \(type)",
+            "schemaVersion: \(document.schemaVersion)",
+            "title: \(yamlQuoted(calendarEvent.title))",
+            "date: \(dateFormatter.string(from: calendarEvent.startDate))",
+            "startDate: \(dateTimeFormatter.string(from: calendarEvent.startDate))",
+            "endDate: \(dateTimeFormatter.string(from: calendarEvent.endDate))",
+            "timeZone: \(yamlQuoted(timeZone.identifier))",
+            "location: \(location)",
+            "organizer: \(organizer)",
+        ]
+
+        if calendarEvent.attendees.isEmpty {
+            frontmatter.append("attendees: []")
+        } else {
+            frontmatter.append("attendees:")
+            frontmatter.append(contentsOf: calendarEvent.attendees.map {
+                "  - \(yamlQuoted(participantDescription($0)))"
+            })
+        }
+
+        frontmatter.append("eventIdentifier: \(yamlQuoted(calendarEvent.eventIdentifier))")
+        frontmatter.append("---")
+
+        let heading = calendarEvent.title
+            .components(separatedBy: .whitespacesAndNewlines)
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+        let renderedHeading = heading.isEmpty ? "Meeting Transcript" : heading
+        var markdown = frontmatter.joined(separator: "\n")
+        markdown += "\n\n# \(renderedHeading)\n"
+
+        if let text = document.text, !text.isEmpty {
+            markdown += "\n\(text)"
+            if !text.hasSuffix("\n") {
+                markdown += "\n"
+            }
+        }
+
+        return markdown
+    }
+
+    private static func makeDateFormatter(timeZone: TimeZone, format: String) -> DateFormatter {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.calendar = Calendar(identifier: .gregorian)
+        formatter.timeZone = timeZone
+        formatter.dateFormat = format
+        return formatter
+    }
+
+    private static func participantDescription(_ participant: CalendarMeetingParticipant) -> String {
+        let identity: String
+        switch (participant.name, participant.emailAddress) {
+        case let (name?, emailAddress?):
+            identity = "\(name) <\(emailAddress)>"
+        case let (name?, nil):
+            identity = name
+        case let (nil, emailAddress?):
+            identity = emailAddress
+        case (nil, nil):
+            identity = "Unnamed participant"
+        }
+
+        var details = [participant.status.rawValue]
+        if participant.isCurrentUser {
+            details.append("current-user")
+        }
+        return "\(identity) (\(details.joined(separator: ", ")))"
+    }
+
+    private static func yamlQuoted(_ value: String) -> String {
+        var quoted = "\""
+        for scalar in value.unicodeScalars {
+            switch scalar.value {
+            case 0x22:
+                quoted += "\\\""
+            case 0x5C:
+                quoted += "\\\\"
+            case 0x0A:
+                quoted += "\\n"
+            case 0x0D:
+                quoted += "\\r"
+            case 0x09:
+                quoted += "\\t"
+            case 0x00...0x1F, 0x7F, 0x85, 0x2028, 0x2029:
+                quoted += String(format: "\\u%04X", scalar.value)
+            default:
+                quoted.append(contentsOf: String(scalar))
+            }
+        }
+        quoted += "\""
+        return quoted
+    }
+}
+
 struct CalendarMeetingOccurrence: Identifiable, Equatable, Sendable {
     let eventIdentifier: String
     let occurrenceStart: Date
