@@ -872,7 +872,13 @@ final class AudioRecorderViewModelTests: XCTestCase {
         let recording = try XCTUnwrap(viewModel.recordings.first)
         viewModel.transcribeRecording(recording)
         XCTAssertFalse(viewModel.canToggleRecording)
-        try await waitForRetranscriptionToFinish(viewModel)
+        try await waitForRetranscriptionToFinish(
+            viewModel,
+            recordingsSatisfy: {
+                $0.recordings.first?.transcript == "fresh retranscription"
+                    && $0.recordings.first?.transcriptionFailure == nil
+            }
+        )
 
         XCTAssertEqual(loadedURL?.standardizedFileURL, audioURL.standardizedFileURL)
         XCTAssertEqual(try String(contentsOf: transcriptURL, encoding: .utf8), "fresh retranscription")
@@ -984,7 +990,12 @@ final class AudioRecorderViewModelTests: XCTestCase {
         try await waitForRecordingsToLoad(viewModel, count: 1)
 
         viewModel.transcribeRecording(try XCTUnwrap(viewModel.recordings.first))
-        try await waitForRetranscriptionToFinish(viewModel)
+        try await waitForRetranscriptionToFinish(
+            viewModel,
+            recordingsSatisfy: {
+                $0.recordings.first?.transcriptionFailure?.phase == .preparingFinalAudio
+            }
+        )
 
         XCTAssertEqual(try String(contentsOf: transcriptURL, encoding: .utf8), "keep me")
         XCTAssertEqual(viewModel.recordings.first?.transcriptionFailure?.phase, .preparingFinalAudio)
@@ -1012,7 +1023,12 @@ final class AudioRecorderViewModelTests: XCTestCase {
         try await waitForRecordingsToLoad(viewModel, count: 1)
 
         viewModel.transcribeRecording(try XCTUnwrap(viewModel.recordings.first))
-        try await waitForRetranscriptionToFinish(viewModel)
+        try await waitForRetranscriptionToFinish(
+            viewModel,
+            recordingsSatisfy: {
+                $0.recordings.first?.transcriptionFailure?.phase == .finalTranscription
+            }
+        )
 
         XCTAssertEqual(try String(contentsOf: transcriptURL, encoding: .utf8), "keep me")
         XCTAssertEqual(viewModel.recordings.first?.transcriptionFailure?.phase, .finalTranscription)
@@ -1038,7 +1054,12 @@ final class AudioRecorderViewModelTests: XCTestCase {
         try await waitForRecordingsToLoad(viewModel, count: 1)
 
         viewModel.transcribeRecording(try XCTUnwrap(viewModel.recordings.first))
-        try await waitForRetranscriptionToFinish(viewModel)
+        try await waitForRetranscriptionToFinish(
+            viewModel,
+            recordingsSatisfy: {
+                $0.recordings.first?.transcriptionFailure?.phase == .emptyResult
+            }
+        )
 
         XCTAssertNil(viewModel.recordings.first?.transcript)
         XCTAssertEqual(viewModel.recordings.first?.transcriptionFailure?.phase, .emptyResult)
@@ -1070,7 +1091,12 @@ final class AudioRecorderViewModelTests: XCTestCase {
         try await waitForRecordingsToLoad(viewModel, count: 1)
 
         viewModel.transcribeRecording(try XCTUnwrap(viewModel.recordings.first))
-        try await waitForRetranscriptionToFinish(viewModel)
+        try await waitForRetranscriptionToFinish(
+            viewModel,
+            recordingsSatisfy: {
+                $0.recordings.first?.transcriptionFailure?.phase == .savingTranscript
+            }
+        )
 
         XCTAssertEqual(viewModel.recordings.first?.transcriptionFailure?.phase, .savingTranscript)
         XCTAssertEqual(try String(contentsOf: transcriptURL, encoding: .utf8), "keep me")
@@ -1116,7 +1142,12 @@ final class AudioRecorderViewModelTests: XCTestCase {
         try await waitForRecordingsToLoad(viewModel, count: 1)
 
         viewModel.transcribeRecording(try XCTUnwrap(viewModel.recordings.first))
-        try await waitForRetranscriptionToFinish(viewModel)
+        try await waitForRetranscriptionToFinish(
+            viewModel,
+            recordingsSatisfy: {
+                $0.recordings.first?.transcriptionFailure?.phase == .savingTranscript
+            }
+        )
 
         XCTAssertEqual(viewModel.recordings.first?.transcriptionFailure?.phase, .savingTranscript)
         XCTAssertEqual(try String(contentsOf: transcriptURL, encoding: .utf8), "keep me")
@@ -1435,16 +1466,18 @@ final class AudioRecorderViewModelTests: XCTestCase {
 
     private func waitForRetranscriptionToFinish(
         _ viewModel: AudioRecorderViewModel,
+        recordingsSatisfy: (AudioRecorderViewModel) -> Bool = { _ in true },
         file: StaticString = #filePath,
         line: UInt = #line
     ) async throws {
         for _ in 0..<100 {
-            if viewModel.retranscribingRecordingURL == nil {
+            // The operation flag is cleared before loadRecordings() publishes its asynchronous refresh.
+            if viewModel.retranscribingRecordingURL == nil, recordingsSatisfy(viewModel) {
                 return
             }
             try await Task.sleep(for: .milliseconds(20))
         }
-        XCTFail("Recorder retranscription did not finish", file: file, line: line)
+        XCTFail("Recorder retranscription or recording reload did not finish", file: file, line: line)
     }
 
     private func waitForRecordingsToLoad(
