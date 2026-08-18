@@ -901,6 +901,7 @@ final class PluginRegistryService: ObservableObject {
             appSupportDirectory: AppConstants.appSupportDirectory,
             deleteData: deleteData
         )
+        updateAvailableUpdatesCount()
         logger.info("Uninstalled plugin: \(pluginId)")
 
         if let error = keychainError {

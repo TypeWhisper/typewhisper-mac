@@ -557,6 +557,78 @@ final class PluginRegistryServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testUninstallingPluginWithAvailableUpdateRefreshesCount() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginUpdateUninstall")
+        let cacheDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginUpdateUninstallCache")
+        defer {
+            TestSupport.remove(appSupportDirectory)
+            TestSupport.remove(cacheDirectory)
+        }
+
+        let previousPluginManager = PluginManager.shared
+        let pluginManager = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared = pluginManager
+        defer { PluginManager.shared = previousPluginManager }
+
+        let pluginId = "com.typewhisper.update-uninstall"
+        let bundleURL = pluginManager.pluginsDirectory
+            .appendingPathComponent("UpdateUninstallPlugin.bundle", isDirectory: true)
+        try Self.makePluginBundle(
+            at: bundleURL,
+            pluginId: pluginId,
+            pluginName: "Update Uninstall Plugin",
+            version: "1.0.0"
+        )
+        let bundle = try XCTUnwrap(Bundle(url: bundleURL))
+        pluginManager.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: pluginId,
+                    name: "Update Uninstall Plugin",
+                    version: "1.0.0",
+                    sdkCompatibilityVersion: PluginSDKCompatibility.currentVersion,
+                    principalClass: "RuntimeUpdatePlugin"
+                ),
+                instance: MockRuntimeUpdatePlugin(),
+                bundle: bundle,
+                sourceURL: bundleURL,
+                isEnabled: false
+            ),
+        ]
+
+        let service = PluginRegistryService(
+            registryBaseURL: URL(string: "https://example.com")!,
+            cacheDirectory: cacheDirectory,
+            deleteCredentials: { _ in },
+            fetchData: { _ in throw URLError(.badServerResponse) }
+        )
+        service.registry = [
+            Self.makeRegistryPlugin(
+                id: pluginId,
+                name: "Update Uninstall Plugin",
+                version: "1.1.0"
+            ),
+        ]
+        service.updateAvailableUpdatesCount()
+        XCTAssertEqual(service.availableUpdatesCount, 1)
+
+        try service.uninstallPlugin(pluginId, deleteData: true)
+
+        XCTAssertEqual(service.availableUpdatesCount, 0)
+        XCTAssertTrue(service.availableUpdatePlugins().isEmpty)
+        XCTAssertTrue(pluginManager.loadedPlugins.isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: bundleURL.path))
+
+        var installerWasCalled = false
+        let result = await service.updateAllAvailablePlugins { _ in
+            installerWasCalled = true
+            return true
+        }
+        XCTAssertEqual(result, .empty)
+        XCTAssertFalse(installerWasCalled)
+    }
+
+    @MainActor
     func testBulkUpdateContinuesAfterFailureAndReportsProgress() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginBulkUpdate")
         let cacheDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginBulkUpdateCache")
