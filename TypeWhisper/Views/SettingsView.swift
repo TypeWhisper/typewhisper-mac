@@ -38,7 +38,8 @@ struct SettingsView: View {
         guard AppConstants.isScreenshotAutomation else { return .home }
 
         switch AppConstants.screenshotState {
-        case "general": return .general
+        case "general", "indicator-settings": return .general
+        case "indicator": return .home
         case "recording": return .dictation
         case "recovery": return .dictationRecovery
         case "hotkeys": return .hotkeys
@@ -186,7 +187,15 @@ struct SettingsView: View {
     private func settingsDetail(for tab: SettingsTab) -> some View {
         switch tab {
         case .home:
+            #if DEBUG
+            if AppConstants.screenshotState == "indicator" {
+                ScreenshotIndicatorShowcaseView()
+            } else {
+                HomeSettingsView()
+            }
+            #else
             HomeSettingsView()
+            #endif
         case .general:
             GeneralSettingsView()
         case .dictation:

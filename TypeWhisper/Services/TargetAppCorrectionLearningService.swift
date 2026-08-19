@@ -264,7 +264,7 @@ final class TargetAppCorrectionLearningService: ObservableObject {
         latestAttempt = hasPremiumAccess
             ? TargetAppCorrectionLearningAttemptSnapshot(
                 outcome: .learned,
-                timestamp: Date(timeIntervalSince1970: 0),
+                timestamp: AppConstants.screenshotFixtureReferenceDate,
                 commitSignal: .returnKey,
                 learnedCorrectionCount: 1
             )

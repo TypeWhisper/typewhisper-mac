@@ -4347,7 +4347,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "自动备用"
+            "value" : "自动回退"
           }
         }
       }
@@ -12066,13 +12066,13 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Hallo, dies ist eine Live-Vorschau des Streaming-Texts..."
+            "value" : "Hallo, hier siehst du live, was gerade transkribiert wird …"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "こんにちは、これはストリーミングテキストのライブプレビューです..."
+            "value" : "こんにちは。文字起こしの内容がここにリアルタイムで表示されます…"
           }
         },
         "zh-Hans" : {

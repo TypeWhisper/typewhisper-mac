@@ -689,8 +689,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
         if AppConstants.isScreenshotAutomation {
             NSApp.setActivationPolicy(.regular)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) {
-                self.openSettingsWindow()
-                self.prepareScreenshotSettingsWindow()
+                self.openScreenshotWindow()
             }
             return
         }
@@ -841,6 +840,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
         ManagedAppWindowOpener.shared.open(id: "settings")
     }
 
+    private var screenshotPremiumDestination: PremiumSettingsDestination? {
+        switch AppConstants.screenshotState {
+        case "premium-access": .access
+        case "premium-calendar": .calendarMeeting
+        case "premium-learning": .correctionLearning
+        case "premium-sync": .cloudSync
+        default: nil
+        }
+    }
+
+    private func openScreenshotWindow() {
+        guard let destination = screenshotPremiumDestination else {
+            openSettingsWindow()
+            prepareScreenshotSettingsWindow()
+            return
+        }
+
+        PremiumSettingsWindowManager.shared.present(destination)
+        prepareScreenshotPremiumWindow(destination)
+    }
+
     private func prepareScreenshotSettingsWindow(remainingAttempts: Int = 8) {
         guard AppConstants.isScreenshotAutomation else { return }
 
@@ -854,7 +874,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
             return
         }
 
-        window.setContentSize(NSSize(width: 1_150, height: 890))
+        prepareScreenshotWindow(window, contentSize: NSSize(width: 1_150, height: 890))
+    }
+
+    private func prepareScreenshotPremiumWindow(
+        _ destination: PremiumSettingsDestination,
+        remainingAttempts: Int = 8
+    ) {
+        guard AppConstants.isScreenshotAutomation else { return }
+
+        guard let window = PremiumSettingsWindowManager.shared.managedWindow(for: destination) else {
+            guard remainingAttempts > 0 else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                self.prepareScreenshotPremiumWindow(
+                    destination,
+                    remainingAttempts: remainingAttempts - 1
+                )
+            }
+            return
+        }
+
+        let contentSize: NSSize? = switch destination {
+        case .calendarMeeting:
+            NSSize(width: 640, height: 820)
+        case .cloudSync:
+            NSSize(width: 640, height: 640)
+        case .access, .correctionLearning:
+            nil
+        }
+        prepareScreenshotWindow(window, contentSize: contentSize)
+    }
+
+    private func prepareScreenshotWindow(_ window: NSWindow, contentSize: NSSize? = nil) {
+        if let contentSize {
+            window.setContentSize(contentSize)
+        }
         window.center()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)

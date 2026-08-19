@@ -99,12 +99,17 @@ struct GeneralSettingsView: View {
         "\(Int(dictation.indicatorTranscriptPreviewFontSize(for: dictation.indicatorStyle))) pt"
     }
 
+    private var isIndicatorSettingsScreenshot: Bool {
+        AppConstants.isScreenshotAutomation && AppConstants.screenshotState == "indicator-settings"
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             SettingsPageHeader(String(localized: "General"))
             Divider()
 
             Form {
+                if !isIndicatorSettingsScreenshot {
                 Section(String(localized: "Spoken Language")) {
                 LanguageSelectionEditor(
                     selection: $settings.languageSelection,
@@ -176,6 +181,7 @@ struct GeneralSettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+                }
 
                 Section(String(localized: "Indicator")) {
                 IndicatorPreviewView()

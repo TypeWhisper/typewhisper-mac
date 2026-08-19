@@ -23,6 +23,16 @@ enum AppConstants {
         return URL(fileURLWithPath: path)
     }()
 
+    #if DEBUG
+    static let screenshotFixtureReferenceDate: Date = {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? calendar.timeZone
+        return calendar.date(
+            from: DateComponents(year: 2026, month: 8, day: 18, hour: 12)
+        ) ?? Date(timeIntervalSince1970: 0)
+    }()
+    #endif
+
     private static func screenshotArgumentValue(after name: String) -> String? {
         let arguments = ProcessInfo.processInfo.arguments
         guard let index = arguments.firstIndex(of: name), arguments.indices.contains(index + 1) else {

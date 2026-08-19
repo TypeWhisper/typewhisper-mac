@@ -25,6 +25,11 @@ See the [release readiness guide](docs/release-readiness.md), [support matrix](d
 </p>
 
 <p align="center">
+  <a href=".github/screenshots/indicator-settings.png"><img src=".github/screenshots/indicator-settings.png" width="270" alt="Indicator Settings"></a>
+  <a href=".github/screenshots/indicator.png"><img src=".github/screenshots/indicator.png" width="270" alt="Active Dictation Indicator"></a>
+</p>
+
+<p align="center">
   <a href=".github/screenshots/hotkeys.png"><img src=".github/screenshots/hotkeys.png" width="270" alt="Hotkeys"></a>
   <a href=".github/screenshots/workflows.png"><img src=".github/screenshots/workflows.png" width="270" alt="Workflows"></a>
   <a href=".github/screenshots/file-transcription.png"><img src=".github/screenshots/file-transcription.png" width="270" alt="File Transcription"></a>
@@ -44,8 +49,20 @@ See the [release readiness guide](docs/release-readiness.md), [support matrix](d
 
 <p align="center">
   <a href=".github/screenshots/integrations-available.png"><img src=".github/screenshots/integrations-available.png" width="270" alt="Integration Marketplace"></a>
-  <a href=".github/screenshots/premium.png"><img src=".github/screenshots/premium.png" width="270" alt="Premium"></a>
+  <a href=".github/screenshots/statistics.png"><img src=".github/screenshots/statistics.png" width="270" alt="Statistics"></a>
   <a href=".github/screenshots/license.png"><img src=".github/screenshots/license.png" width="270" alt="License"></a>
+</p>
+
+<p align="center">
+  <a href=".github/screenshots/premium.png"><img src=".github/screenshots/premium.png" width="270" alt="Premium Overview"></a>
+  <a href=".github/screenshots/premium-access.png"><img src=".github/screenshots/premium-access.png" width="270" alt="Premium Access"></a>
+  <a href=".github/screenshots/premium-calendar.png"><img src=".github/screenshots/premium-calendar.png" width="270" alt="Premium Calendar"></a>
+</p>
+
+<p align="center">
+  <a href=".github/screenshots/premium-learning.png"><img src=".github/screenshots/premium-learning.png" width="270" alt="Premium Correction Learning"></a>
+  <a href=".github/screenshots/premium-sync.png"><img src=".github/screenshots/premium-sync.png" width="270" alt="Premium Cloud Sync"></a>
+  <a href=".github/screenshots/premium-locked.png"><img src=".github/screenshots/premium-locked.png" width="270" alt="Premium Locked"></a>
 </p>
 
 <p align="center">

@@ -1091,7 +1091,7 @@ final class CloudFolderSyncController: ObservableObject {
         selectedFolderURL = nil
         mode = hasPremiumAccess ? .automaticICloud : .off
         provider = hasPremiumAccess ? .iCloudDrive : .custom
-        lastSyncDate = nil
+        lastSyncDate = hasPremiumAccess ? AppConstants.screenshotFixtureReferenceDate : nil
         pendingChanges = 0
         deviceCount = hasPremiumAccess ? 2 : 0
         isSyncing = false

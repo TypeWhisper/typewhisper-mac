@@ -257,6 +257,34 @@ struct IndicatorPreviewView: View {
     }
 }
 
+#if DEBUG
+struct ScreenshotIndicatorShowcaseView: View {
+    @ObservedObject private var dictation = DictationViewModel.shared
+    @StateObject private var countdownModel = CalendarMeetingCountdownModel()
+    @State private var prepared = false
+
+    var body: some View {
+        HomeSettingsView()
+            .overlay(alignment: .bottom) {
+                OverlayIndicatorView(countdownModel: countdownModel)
+                    .frame(width: 500, height: 200)
+                    .padding(.bottom, 28)
+                    .allowsHitTesting(false)
+            }
+            .onAppear {
+                guard !prepared else { return }
+                prepared = true
+                dictation.prepareScreenshotIndicatorFixture()
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+                    dictation.partialText = String(
+                        localized: "Hello, this is a live preview of the streaming text..."
+                    )
+                }
+            }
+    }
+}
+#endif
+
 // MARK: - Style Tile Picker
 
 struct IndicatorStylePicker: View {

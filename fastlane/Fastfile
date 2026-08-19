@@ -23,10 +23,11 @@ SCREENSHOT_LOCALES = {
   "ja-JP" => "ja_JP",
   "zh-Hans" => "zh_Hans",
 }.freeze
-SCREENSHOT_VARIANTS = %w[free premium].freeze
-SCREENSHOT_NAMES = %w[
+FREE_SCREENSHOT_NAMES = %w[
   home
   general
+  indicator-settings
+  indicator
   recording
   recovery
   hotkeys
@@ -45,14 +46,28 @@ SCREENSHOT_NAMES = %w[
   license
   about
 ].freeze
+PREMIUM_SCREENSHOT_NAMES = %w[
+  premium
+  premium-access
+  premium-calendar
+  premium-learning
+  premium-sync
+].freeze
+SCREENSHOT_NAMES_BY_VARIANT = {
+  "free" => FREE_SCREENSHOT_NAMES,
+  "premium" => PREMIUM_SCREENSHOT_NAMES,
+}.freeze
 SCREENSHOT_WINDOW_TIMEOUT = 30
 
 README_SCREENSHOT_ROWS = [
   [["Home Dashboard", "home.png"], ["Recording", "recording.png"], ["Recovery", "recovery.png"]],
+  [["Indicator Settings", "indicator-settings.png"], ["Active Dictation Indicator", "indicator.png"]],
   [["Hotkeys", "hotkeys.png"], ["Workflows", "workflows.png"], ["File Transcription", "file-transcription.png"]],
   [["Recorder API", "recorder.png"], ["History", "history.png"], ["Dictionary", "dictionary.png"]],
   [["Dictionary Term Packs", "dictionary-term-packs.png"], ["Snippets", "snippets.png"], ["Installed Integrations", "plugins.png"]],
-  [["Integration Marketplace", "integrations-available.png"], ["Premium", "premium.png"], ["License", "license.png"]],
+  [["Integration Marketplace", "integrations-available.png"], ["Statistics", "statistics.png"], ["License", "license.png"]],
+  [["Premium Overview", "premium.png"], ["Premium Access", "premium-access.png"], ["Premium Calendar", "premium-calendar.png"]],
+  [["Premium Correction Learning", "premium-learning.png"], ["Premium Cloud Sync", "premium-sync.png"], ["Premium Locked", "premium-locked.png"]],
   [["General Settings", "general.png"], ["Advanced Settings", "advanced.png"], ["About", "about.png"]],
 ].freeze
 
@@ -74,8 +89,8 @@ end
 
 def verify_raw_screenshots!(languages)
   expected = languages.flat_map do |language|
-    SCREENSHOT_VARIANTS.flat_map do |variant|
-      SCREENSHOT_NAMES.map do |name|
+    SCREENSHOT_NAMES_BY_VARIANT.flat_map do |variant, names|
+      names.map do |name|
         File.join(SCREENSHOT_OUTPUT, language, "Mac-#{variant}-#{name}.png")
       end
     end
@@ -248,8 +263,8 @@ def capture_screenshot_language!(language)
   FileUtils.rm_rf(destination)
   FileUtils.mkdir_p(destination)
 
-  SCREENSHOT_VARIANTS.each do |variant|
-    SCREENSHOT_NAMES.each do |name|
+  SCREENSHOT_NAMES_BY_VARIANT.each do |variant, names|
+    names.each do |name|
       UI.message("#{language} / #{variant} / #{name}")
       capture_screenshot!(
         language,
@@ -312,8 +327,19 @@ def publish_english_screenshots!
   destination = File.join(REPOSITORY_ROOT, ".github", "screenshots")
   FileUtils.mkdir_p(destination)
 
-  SCREENSHOT_NAMES.each do |name|
+  FREE_SCREENSHOT_NAMES.each do |name|
+    next if name == "premium"
+
     source = File.join(SCREENSHOT_OUTPUT, "en-US", "Mac-free-#{name}.png")
+    FileUtils.cp(source, File.join(destination, "#{name}.png"))
+  end
+
+  FileUtils.cp(
+    File.join(SCREENSHOT_OUTPUT, "en-US", "Mac-free-premium.png"),
+    File.join(destination, "premium-locked.png")
+  )
+  PREMIUM_SCREENSHOT_NAMES.each do |name|
+    source = File.join(SCREENSHOT_OUTPUT, "en-US", "Mac-premium-#{name}.png")
     FileUtils.cp(source, File.join(destination, "#{name}.png"))
   end
 end

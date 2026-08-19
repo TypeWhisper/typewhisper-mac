@@ -281,7 +281,10 @@ final class CalendarMeetingAutomationController: ObservableObject {
     }
 
     #if DEBUG
-    func prepareScreenshotFixture(hasPremiumAccess: Bool) {
+    func prepareScreenshotFixture(
+        hasPremiumAccess: Bool,
+        calendars: [CalendarMeetingCalendar]
+    ) {
         self.hasPremiumAccess = hasPremiumAccess
         startMode = hasPremiumAccess ? .automatic : .off
         autoStopEnabled = hasPremiumAccess
@@ -289,7 +292,7 @@ final class CalendarMeetingAutomationController: ObservableObject {
         enabledProviders = hasPremiumAccess ? Set(MeetingProvider.allCases) : []
         calendarAuthorization = hasPremiumAccess ? .fullAccess : .notDetermined
         notificationAuthorization = hasPremiumAccess ? .authorized : .notDetermined
-        calendars = []
+        self.calendars = hasPremiumAccess ? calendars : []
         isAutomationActive = hasPremiumAccess
         isCalendarAccessRequestInFlight = false
         calendarAccessRequestFailure = nil

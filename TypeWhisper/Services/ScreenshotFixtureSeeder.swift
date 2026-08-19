@@ -17,12 +17,18 @@ extension ServiceContainer {
         licenseService.supporterTier = nil
         premiumAccountService.prepareScreenshotFixture(hasPremiumAccess: variant.hasPremiumAccess)
         cloudFolderSyncController.prepareScreenshotFixture(hasPremiumAccess: variant.hasPremiumAccess)
-        calendarMeetingAutomationController.prepareScreenshotFixture(hasPremiumAccess: variant.hasPremiumAccess)
+        calendarMeetingAutomationController.prepareScreenshotFixture(
+            hasPremiumAccess: variant.hasPremiumAccess,
+            calendars: language.calendars
+        )
         targetAppCorrectionLearningService.prepareScreenshotFixture(hasPremiumAccess: variant.hasPremiumAccess)
         UserDefaults.standard.set(
             variant.hasPremiumAccess,
             forKey: UserDefaultsKeys.targetAppCorrectionLearningEnabled
         )
+        if ["indicator-settings", "indicator"].contains(AppConstants.screenshotState) {
+            dictationViewModel.prepareScreenshotIndicatorFixture()
+        }
 
         seedScreenshotHistory(content.history, languageCode: language.rawValue)
         usageStatisticsService.replaceWithHistoryRecords(historyService.records)
@@ -77,13 +83,18 @@ extension ServiceContainer {
     ) {
         historyService.clearAll()
 
-        let calendar = Calendar.current
-        let now = Date()
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0) ?? calendar.timeZone
+        let referenceDate = AppConstants.screenshotFixtureReferenceDate
         for index in 0..<14 {
             let sample = samples[index % samples.count]
             let dayOffset = index / 2
             let hour = index.isMultiple(of: 2) ? 9 : 15
-            let day = calendar.date(byAdding: .day, value: -dayOffset, to: now) ?? now
+            let day = calendar.date(
+                byAdding: .day,
+                value: -dayOffset,
+                to: referenceDate
+            ) ?? referenceDate
             let timestamp = calendar.date(
                 bySettingHour: hour,
                 minute: 10 + index,
@@ -262,6 +273,32 @@ private enum ScreenshotFixtureLanguage: String {
         if normalized.hasPrefix("ja") { return .japanese }
         if normalized.hasPrefix("zh") { return .simplifiedChinese }
         return .english
+    }
+
+    var calendars: [CalendarMeetingCalendar] {
+        let titles: [(title: String, source: String)] = switch self {
+        case .english:
+            [("Team Calendar", "Google Workspace"), ("Personal Calendar", "iCloud")]
+        case .german:
+            [("Teamkalender", "Google Workspace"), ("Privater Kalender", "iCloud")]
+        case .japanese:
+            [("チームカレンダー", "Google Workspace"), ("個人用カレンダー", "iCloud")]
+        case .simplifiedChinese:
+            [("团队日历", "Google Workspace"), ("个人日历", "iCloud")]
+        }
+
+        return [
+            CalendarMeetingCalendar(
+                id: "screenshot-team",
+                title: titles[0].title,
+                sourceTitle: titles[0].source
+            ),
+            CalendarMeetingCalendar(
+                id: "screenshot-personal",
+                title: titles[1].title,
+                sourceTitle: titles[1].source
+            ),
+        ]
     }
 
     var content: ScreenshotFixtureContent {
