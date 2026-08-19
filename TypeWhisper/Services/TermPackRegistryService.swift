@@ -80,6 +80,13 @@ final class TermPackRegistryService: ObservableObject {
 
     @discardableResult
     func fetchRegistry(force: Bool = false) async -> Bool {
+        #if DEBUG
+        if AppConstants.isScreenshotAutomation, !communityPacks.isEmpty {
+            fetchState = .loaded
+            return true
+        }
+        #endif
+
         if !force,
            let lastFetch = lastFetchDate,
            Date().timeIntervalSince(lastFetch) < cacheDuration,

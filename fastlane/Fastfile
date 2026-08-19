@@ -1,0 +1,349 @@
+require "cgi"
+require "fileutils"
+require "shellwords"
+require "tmpdir"
+require "timeout"
+
+FASTLANE_DIRECTORY = File.expand_path(FastlaneCore::FastlaneFolder.path || "fastlane")
+REPOSITORY_ROOT = File.expand_path("..", FASTLANE_DIRECTORY)
+SCREENSHOT_OUTPUT = File.join(FASTLANE_DIRECTORY, "screenshots")
+SCREENSHOT_DERIVED_DATA = File.join(REPOSITORY_ROOT, "build-screenshots")
+SCREENSHOT_APP_PATH = File.join(
+  SCREENSHOT_DERIVED_DATA,
+  "Build",
+  "Products",
+  "Debug",
+  "TypeWhisper.app"
+)
+SCREENSHOT_BUNDLE_ID = "com.typewhisper.mac.screenshots"
+SCREENSHOT_LANGUAGES = %w[en-US de-DE ja-JP zh-Hans].freeze
+SCREENSHOT_LOCALES = {
+  "en-US" => "en_US",
+  "de-DE" => "de_DE",
+  "ja-JP" => "ja_JP",
+  "zh-Hans" => "zh_Hans",
+}.freeze
+SCREENSHOT_VARIANTS = %w[free premium].freeze
+SCREENSHOT_NAMES = %w[
+  home
+  general
+  recording
+  recovery
+  hotkeys
+  file-transcription
+  recorder
+  history
+  statistics
+  dictionary
+  dictionary-term-packs
+  snippets
+  workflows
+  premium
+  plugins
+  integrations-available
+  advanced
+  license
+  about
+].freeze
+SCREENSHOT_WINDOW_TIMEOUT = 30
+
+README_SCREENSHOT_ROWS = [
+  [["Home Dashboard", "home.png"], ["Recording", "recording.png"], ["Recovery", "recovery.png"]],
+  [["Hotkeys", "hotkeys.png"], ["Workflows", "workflows.png"], ["File Transcription", "file-transcription.png"]],
+  [["Recorder API", "recorder.png"], ["History", "history.png"], ["Dictionary", "dictionary.png"]],
+  [["Dictionary Term Packs", "dictionary-term-packs.png"], ["Snippets", "snippets.png"], ["Installed Integrations", "plugins.png"]],
+  [["Integration Marketplace", "integrations-available.png"], ["Premium", "premium.png"], ["License", "license.png"]],
+  [["General Settings", "general.png"], ["Advanced Settings", "advanced.png"], ["About", "about.png"]],
+].freeze
+
+README_SCREENSHOT_START = "<!-- readme-screenshots:start -->"
+README_SCREENSHOT_END = "<!-- readme-screenshots:end -->"
+
+def selected_screenshot_languages(value)
+  requested = case value
+              when Array then value
+              else value.to_s.split(",")
+              end
+  requested = requested.map(&:strip).reject(&:empty?)
+  requested = SCREENSHOT_LANGUAGES if requested.empty?
+
+  unsupported = requested - SCREENSHOT_LANGUAGES
+  UI.user_error!("Unsupported screenshot languages: #{unsupported.join(', ')}") unless unsupported.empty?
+  requested
+end
+
+def verify_raw_screenshots!(languages)
+  expected = languages.flat_map do |language|
+    SCREENSHOT_VARIANTS.flat_map do |variant|
+      SCREENSHOT_NAMES.map do |name|
+        File.join(SCREENSHOT_OUTPUT, language, "Mac-#{variant}-#{name}.png")
+      end
+    end
+  end
+
+  missing = expected.reject { |path| File.file?(path) }
+  UI.user_error!("Missing generated screenshots:\n#{missing.join("\n")}") unless missing.empty?
+
+  png_signature = "\x89PNG\r\n\x1A\n".b
+  invalid = expected.select do |path|
+    File.size(path) <= 100_000 || File.binread(path, 8) != png_signature
+  end
+  UI.user_error!("Invalid generated screenshots:\n#{invalid.join("\n")}") unless invalid.empty?
+end
+
+def build_screenshot_app!
+  command = [
+    "xcodebuild",
+    "-project", File.join(REPOSITORY_ROOT, "TypeWhisper.xcodeproj"),
+    "-scheme", "TypeWhisper",
+    "-configuration", "Debug",
+    "-derivedDataPath", SCREENSHOT_DERIVED_DATA,
+    "-destination", "platform=macOS",
+    "CODE_SIGN_IDENTITY=-",
+    "CODE_SIGN_STYLE=Manual",
+    "CODE_SIGNING_REQUIRED=YES",
+    "CODE_SIGNING_ALLOWED=YES",
+    "CODE_SIGN_ENTITLEMENTS=",
+    "COMPILER_INDEX_STORE_ENABLE=NO",
+    "build",
+  ]
+  sh(Shellwords.join(command))
+
+  UI.user_error!("Missing screenshot app: #{SCREENSHOT_APP_PATH}") unless File.directory?(SCREENSHOT_APP_PATH)
+  info_plist = File.join(SCREENSHOT_APP_PATH, "Contents", "Info.plist")
+  sh(
+    "/usr/libexec/PlistBuddy -c #{Shellwords.escape("Set :CFBundleIdentifier #{SCREENSHOT_BUNDLE_ID}")} #{Shellwords.escape(info_plist)}",
+    log: false
+  )
+  sh(
+    "/usr/bin/codesign --force --sign - --preserve-metadata=entitlements,requirements,flags #{Shellwords.escape(SCREENSHOT_APP_PATH)}",
+    log: false
+  )
+  sh("/usr/bin/codesign --verify --deep --strict #{Shellwords.escape(SCREENSHOT_APP_PATH)}", log: false)
+end
+
+def screenshot_app_language(language)
+  normalized = language.downcase
+  return "de" if normalized.start_with?("de")
+  return "ja" if normalized.start_with?("ja")
+  return "zh-Hans" if normalized.start_with?("zh")
+
+  "en"
+end
+
+def screenshot_launch_arguments(language, state, variant, ready_file)
+  arguments = [
+    "--store-screenshots",
+    "--screenshot-state", state,
+    "--screenshot-ready-file", ready_file,
+    "-setupWizardCompleted", "YES",
+    "-showMenuBarIcon", "YES",
+    "-workUsagePromptDismissed", "YES",
+    "-selectedIntegrationTab", state == "plugins" ? "installed" : "discover",
+    "-ApplePersistenceIgnoreState", "YES",
+    "-NSQuitAlwaysKeepsWindows", "NO",
+    "-AppleLanguages", "(#{language})",
+    "-AppleLocale", SCREENSHOT_LOCALES.fetch(language),
+    "-preferredAppLanguage", screenshot_app_language(language),
+    "-FASTLANE_SNAPSHOT", "YES",
+  ]
+  arguments << "--screenshot-premium" if variant == "premium"
+  arguments
+end
+
+def screenshot_log_tail(path)
+  return "No application log was created." unless File.file?(path)
+
+  File.readlines(path).last(40).join
+end
+
+def wait_for_screenshot_window!(ready_file, process_id, log_file)
+  deadline = Time.now + SCREENSHOT_WINDOW_TIMEOUT
+  loop do
+    if File.file?(ready_file)
+      value = File.read(ready_file).strip
+      return Integer(value, 10) if value.match?(/\A[1-9]\d*\z/)
+    end
+
+    begin
+      Process.kill(0, process_id)
+    rescue Errno::ESRCH
+      UI.user_error!("Screenshot app exited before its window was ready.\n#{screenshot_log_tail(log_file)}")
+    end
+
+    if Time.now >= deadline
+      UI.user_error!("Timed out waiting for the screenshot window.\n#{screenshot_log_tail(log_file)}")
+    end
+    sleep(0.1)
+  end
+end
+
+def stop_screenshot_app(process_id)
+  Process.kill("TERM", process_id)
+  Timeout.timeout(5) { Process.wait(process_id) }
+rescue Errno::ESRCH, Errno::ECHILD
+  nil
+rescue Timeout::Error
+  Process.kill("KILL", process_id) rescue nil
+  Process.wait(process_id) rescue nil
+end
+
+def reset_screenshot_defaults!
+  system(
+    "/usr/bin/defaults",
+    "delete",
+    SCREENSHOT_BUNDLE_ID,
+    out: File::NULL,
+    err: File::NULL
+  )
+end
+
+def capture_screenshot!(language, state, variant, destination)
+  executable = File.join(SCREENSHOT_APP_PATH, "Contents", "MacOS", "TypeWhisper")
+  reset_screenshot_defaults!
+
+  Dir.mktmpdir("typewhisper-screenshot-run") do |run_directory|
+    ready_file = File.join(run_directory, "window-ready.txt")
+    log_file = File.join(run_directory, "application.log")
+    home_directory = File.join(run_directory, "home")
+    FileUtils.mkdir_p(home_directory)
+
+    environment = {
+      "CFFIXED_USER_HOME" => home_directory,
+      "LLVM_PROFILE_FILE" => File.join(run_directory, "%p.profraw"),
+      "NSUnbufferedIO" => "YES",
+    }
+    arguments = screenshot_launch_arguments(language, state, variant, ready_file)
+    log = File.open(log_file, "w")
+    process_id = Process.spawn(
+      environment,
+      executable,
+      *arguments,
+      chdir: REPOSITORY_ROOT,
+      out: log,
+      err: log
+    )
+    log.close
+
+    begin
+      window_id = wait_for_screenshot_window!(ready_file, process_id, log_file)
+      sh(
+        "/usr/sbin/screencapture -x -l #{window_id} #{Shellwords.escape(destination)}",
+        log: false
+      )
+      unless File.file?(destination) && File.size(destination) > 100_000
+        UI.user_error!("Screenshot capture did not produce a valid PNG: #{destination}")
+      end
+    ensure
+      stop_screenshot_app(process_id)
+      reset_screenshot_defaults!
+      FileUtils.rm_rf(File.join(Dir.tmpdir, "TypeWhisper-Screenshots-#{process_id}"))
+    end
+  end
+end
+
+def capture_screenshot_language!(language)
+  UI.header("Capturing #{language} screenshots")
+  destination = File.join(SCREENSHOT_OUTPUT, language)
+  FileUtils.rm_rf(destination)
+  FileUtils.mkdir_p(destination)
+
+  SCREENSHOT_VARIANTS.each do |variant|
+    SCREENSHOT_NAMES.each do |name|
+      UI.message("#{language} / #{variant} / #{name}")
+      capture_screenshot!(
+        language,
+        name,
+        variant,
+        File.join(destination, "Mac-#{variant}-#{name}.png")
+      )
+    end
+  end
+end
+
+def readme_screenshot_block
+  lines = [README_SCREENSHOT_START, ""]
+  README_SCREENSHOT_ROWS.each do |row|
+    lines << '<p align="center">'
+    row.each do |alt, filename|
+      path = ".github/screenshots/#{filename}"
+      lines << %(  <a href="#{path}"><img src="#{path}" width="270" alt="#{CGI.escapeHTML(alt)}"></a>)
+    end
+    lines << "</p>"
+    lines << ""
+  end
+  lines << README_SCREENSHOT_END
+  lines.join("\n")
+end
+
+def updated_readme
+  path = File.join(REPOSITORY_ROOT, "README.md")
+  current = File.read(path)
+  pattern = /#{Regexp.escape(README_SCREENSHOT_START)}.*?#{Regexp.escape(README_SCREENSHOT_END)}/m
+  UI.user_error!("README screenshot markers are missing") unless current.match?(pattern)
+  [path, current, current.sub(pattern, readme_screenshot_block)]
+end
+
+def verify_readme_screenshot_assets!
+  missing = README_SCREENSHOT_ROWS.flatten(1).filter_map do |_alt, filename|
+    path = File.join(REPOSITORY_ROOT, ".github", "screenshots", filename)
+    path unless File.file?(path)
+  end
+  UI.user_error!("Missing README screenshots:\n#{missing.join("\n")}") unless missing.empty?
+end
+
+def update_readme_screenshot_block!(check: false)
+  verify_readme_screenshot_assets!
+  path, current, updated = updated_readme
+
+  if check
+    UI.user_error!("README screenshot block is out of date") unless current == updated
+    UI.success("README screenshot block is up to date")
+  elsif current == updated
+    UI.message("README screenshot block is already up to date")
+  else
+    File.write(path, updated)
+    UI.success("Updated README screenshot block")
+  end
+end
+
+def publish_english_screenshots!
+  verify_raw_screenshots!(["en-US"])
+  destination = File.join(REPOSITORY_ROOT, ".github", "screenshots")
+  FileUtils.mkdir_p(destination)
+
+  SCREENSHOT_NAMES.each do |name|
+    source = File.join(SCREENSHOT_OUTPUT, "en-US", "Mac-free-#{name}.png")
+    FileUtils.cp(source, File.join(destination, "#{name}.png"))
+  end
+end
+
+default_platform(:mac)
+
+platform :mac do
+  desc "Capture deterministic localized macOS screenshots"
+  lane :screenshots do |options|
+    languages = selected_screenshot_languages(options[:languages])
+    build_screenshot_app!
+    languages.each { |language| capture_screenshot_language!(language) }
+    verify_raw_screenshots!(languages)
+  end
+
+  desc "Promote the generated English screenshots into the README assets"
+  lane :screenshots_publish do
+    publish_english_screenshots!
+    update_readme_screenshot_block!
+  end
+
+  desc "Capture every locale, publish English, and validate the README gallery"
+  lane :screenshots_release do
+    screenshots
+    screenshots_publish
+    update_readme_screenshot_block!(check: true)
+  end
+
+  desc "Validate the committed README screenshot gallery"
+  lane :screenshots_check do
+    update_readme_screenshot_block!(check: true)
+  end
+end

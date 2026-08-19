@@ -29,6 +29,7 @@ xcuserdata/
 Pods/
 
 # Fastlane
+vendor/bundle/
 fastlane/report.xml
 fastlane/Preview.html
 fastlane/screenshots/

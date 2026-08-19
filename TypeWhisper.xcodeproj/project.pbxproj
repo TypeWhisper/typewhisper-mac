@@ -522,6 +522,7 @@
 		AA00000000000000000301 /* LicenseSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000287 /* LicenseSettingsView.swift */; };
 		AA00000000000000000302 /* WelcomeSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000288 /* WelcomeSheet.swift */; };
 		AA00000000000000000303 /* SupporterBadgeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000289 /* SupporterBadgeView.swift */; };
+		F16000000000000000000001 /* ScreenshotFixtureSeeder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F16000000000000000000002 /* ScreenshotFixtureSeeder.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -1081,6 +1082,7 @@
 		BB00000000000000000287 /* LicenseSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LicenseSettingsView.swift; sourceTree = "<group>"; };
 		BB00000000000000000288 /* WelcomeSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeSheet.swift; sourceTree = "<group>"; };
 		BB00000000000000000289 /* SupporterBadgeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupporterBadgeView.swift; sourceTree = "<group>"; };
+		F16000000000000000000002 /* ScreenshotFixtureSeeder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotFixtureSeeder.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1694,6 +1696,7 @@
 				BB00000000000000000123 /* EventBus.swift */,
 				BB00000000000000000124 /* PluginManager.swift */,
 				BB00000000000000000152 /* PluginRegistryService.swift */,
+				F16000000000000000000002 /* ScreenshotFixtureSeeder.swift */,
 				BB00000000000000000125 /* HostServicesImpl.swift */,
 				BB00000000000000000126 /* PostProcessingPipeline.swift */,
 				BB00000000000000000180 /* WidgetDataService.swift */,
@@ -4355,6 +4358,7 @@
 					AA00000000000000000123 /* EventBus.swift in Sources */,
 					AA00000000000000000124 /* PluginManager.swift in Sources */,
 					AA00000000000000000160 /* PluginRegistryService.swift in Sources */,
+					F16000000000000000000001 /* ScreenshotFixtureSeeder.swift in Sources */,
 					AA00000000000000000125 /* HostServicesImpl.swift in Sources */,
 					AA00000000000000000205 /* OverlayIndicatorPanel.swift in Sources */,
 					AA00000000000000000206 /* OverlayIndicatorView.swift in Sources */,

@@ -56,6 +56,8 @@ See the [release readiness guide](docs/release-readiness.md), [support matrix](d
 
 <!-- readme-screenshots:end -->
 
+The localized macOS screenshot workflow is documented in [docs/screenshot-automation.md](docs/screenshot-automation.md).
+
 ## What's New in 1.5
 
 - **App-aware dictation insertion** - Dictation output now better respects sentence position, trailing spaces, terminal paste behavior, rich-text targets, and target-app context

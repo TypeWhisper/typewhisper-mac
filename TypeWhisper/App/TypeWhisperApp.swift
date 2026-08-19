@@ -427,17 +427,32 @@ struct TypeWhisperApp<WindowConfiguration: ManagedAppWindowSceneConfiguration>: 
         guard !AppConstants.isRunningTests else { return }
 
         // Trigger ServiceContainer initialization
-        _ = ServiceContainer.shared
+        let serviceContainer = ServiceContainer.shared
         SettingsNavigationCoordinator.shared = SettingsNavigationCoordinator()
         WorkflowsNavigationCoordinator.shared = WorkflowsNavigationCoordinator()
         PostUpdatePromptCoordinator.shared = PostUpdatePromptCoordinator()
 
-        Task { @MainActor in
-            await ServiceContainer.shared.initialize()
+        #if DEBUG
+        if AppConstants.isScreenshotAutomation {
+            serviceContainer.prepareScreenshotFixtures()
+        } else {
+            Task { @MainActor in
+                await serviceContainer.initialize()
+            }
         }
+        #else
+        Task { @MainActor in
+            await serviceContainer.initialize()
+        }
+        #endif
     }
 
     private func refreshStartupSheet() {
+        if AppConstants.isScreenshotAutomation {
+            startupSheet = nil
+            return
+        }
+
         if HomeViewModel.shared.showSetupWizard {
             startupSheet = nil
             return
@@ -671,6 +686,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
             return
         }
 
+        if AppConstants.isScreenshotAutomation {
+            NSApp.setActivationPolicy(.regular)
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.75) {
+                self.openSettingsWindow()
+                self.prepareScreenshotSettingsWindow()
+            }
+            return
+        }
+
         ServiceContainer.shared.calendarMeetingAutomationController
             .installNotificationRouterIfNeeded()
 
@@ -778,12 +802,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
-        guard !AppConstants.isRunningTests else { return }
+        guard !AppConstants.isRunningTests, !AppConstants.isScreenshotAutomation else { return }
         ServiceContainer.shared.calendarMeetingAutomationController.handleApplicationBecameActive()
         Task { await ServiceContainer.shared.cloudFolderSyncController.syncNow() }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        if AppConstants.isScreenshotAutomation {
+            try? FileManager.default.removeItem(at: AppConstants.appSupportDirectory)
+            return
+        }
+
         guard !AppConstants.isRunningTests else { return }
         ServiceContainer.shared.calendarMeetingAutomationController.shutdown()
     }
@@ -810,6 +839,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
 
     private func openSettingsWindow() {
         ManagedAppWindowOpener.shared.open(id: "settings")
+    }
+
+    private func prepareScreenshotSettingsWindow(remainingAttempts: Int = 8) {
+        guard AppConstants.isScreenshotAutomation else { return }
+
+        guard let window = NSApp.windows.first(where: {
+            $0.identifier?.rawValue.lowercased().contains("settings") == true
+        }) else {
+            guard remainingAttempts > 0 else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                self.prepareScreenshotSettingsWindow(remainingAttempts: remainingAttempts - 1)
+            }
+            return
+        }
+
+        window.setContentSize(NSSize(width: 1_150, height: 890))
+        window.center()
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+
+        guard let readyFileURL = AppConstants.screenshotReadyFileURL else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
+            do {
+                try "\(window.windowNumber)\n".write(
+                    to: readyFileURL,
+                    atomically: true,
+                    encoding: .utf8
+                )
+            } catch {
+                fputs("Could not write screenshot readiness marker: \(error)\n", stderr)
+            }
+        }
     }
 
     private func openSetupWindow() {

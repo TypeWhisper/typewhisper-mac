@@ -3,6 +3,35 @@ import SwiftData
 import os.log
 
 enum AppConstants {
+    static let isScreenshotAutomation: Bool = {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("--store-screenshots")
+        #else
+        false
+        #endif
+    }()
+
+    static let screenshotState: String? = {
+        guard isScreenshotAutomation else { return nil }
+        return screenshotArgumentValue(after: "--screenshot-state")
+    }()
+
+    static let screenshotReadyFileURL: URL? = {
+        guard isScreenshotAutomation,
+              let path = screenshotArgumentValue(after: "--screenshot-ready-file"),
+              path.hasPrefix("/") else { return nil }
+        return URL(fileURLWithPath: path)
+    }()
+
+    private static func screenshotArgumentValue(after name: String) -> String? {
+        let arguments = ProcessInfo.processInfo.arguments
+        guard let index = arguments.firstIndex(of: name), arguments.indices.contains(index + 1) else {
+            return nil
+        }
+        let value = arguments[index + 1].trimmingCharacters(in: .whitespacesAndNewlines)
+        return value.isEmpty ? nil : value
+    }
+
     enum ReleaseChannel: String, CaseIterable {
         case stable
         case releaseCandidate = "release-candidate"
@@ -67,6 +96,9 @@ enum AppConstants {
     }()
 
     static let keychainServicePrefix: String = {
+        if isScreenshotAutomation {
+            return "com.typewhisper.mac.screenshots.apikey."
+        }
         #if DEBUG
         return "com.typewhisper.mac.dev.apikey."
         #else
@@ -80,8 +112,19 @@ enum AppConstants {
         if let override = testAppSupportDirectoryOverride {
             return override
         }
+        if isScreenshotAutomation {
+            return screenshotAppSupportDirectory
+        }
         return defaultAppSupportDirectory
     }
+
+    private static let screenshotAppSupportDirectory: URL = {
+        FileManager.default.temporaryDirectory
+            .appendingPathComponent(
+                "TypeWhisper-Screenshots-\(ProcessInfo.processInfo.processIdentifier)",
+                isDirectory: true
+            )
+    }()
 
     static let defaultAppSupportDirectory: URL = {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
@@ -155,6 +198,10 @@ enum AppConstants {
     }()
 
     static let isRunningTests: Bool = {
+        if isScreenshotAutomation {
+            return false
+        }
+
         let environment = ProcessInfo.processInfo.environment
         if environment["XCTestConfigurationFilePath"] != nil ||
             environment["XCTestBundlePath"] != nil ||

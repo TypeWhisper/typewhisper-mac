@@ -18,6 +18,25 @@ final class PremiumSettingsViewTests: XCTestCase {
         ))
     }
 
+    func testCorrectionExamplesFollowTheSelectedLanguage() {
+        XCTAssertEqual(
+            PremiumCorrectionExamples.examples(for: "en").map(\.before),
+            ["teh", "recieve"]
+        )
+        XCTAssertEqual(
+            PremiumCorrectionExamples.examples(for: "de-DE").map(\.before),
+            ["Standart", "wiederspiegeln"]
+        )
+        XCTAssertEqual(
+            PremiumCorrectionExamples.examples(for: "ja-JP").map(\.after),
+            ["こんにちは", "すみません"]
+        )
+        XCTAssertEqual(
+            PremiumCorrectionExamples.examples(for: "zh-Hans").map(\.after),
+            ["应该", "再次"]
+        )
+    }
+
     @MainActor
     func testLockedOverviewStoresNoOSServiceControllerOrWindowPresenter() {
         let preview = PremiumLockedFeatureOverview(isSupporter: false, onUnlock: {})

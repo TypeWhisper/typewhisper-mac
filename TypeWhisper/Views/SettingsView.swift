@@ -22,13 +22,41 @@ private struct SettingsDestinationSection: Identifiable {
 }
 
 struct SettingsView: View {
-    @State private var selectedTab: SettingsTab = .home
+    @State private var selectedTab: SettingsTab
     @ObservedObject private var fileTranscription = FileTranscriptionViewModel.shared
     @ObservedObject private var dictationRecovery = DictationRecoveryViewModel.shared
     @ObservedObject private var registryService = PluginRegistryService.shared
     @ObservedObject private var homeViewModel = HomeViewModel.shared
     @ObservedObject private var promptActionsViewModel = PromptActionsViewModel.shared
     @ObservedObject private var settingsNavigation = SettingsNavigationCoordinator.shared
+
+    init() {
+        _selectedTab = State(initialValue: Self.initialScreenshotTab)
+    }
+
+    private static var initialScreenshotTab: SettingsTab {
+        guard AppConstants.isScreenshotAutomation else { return .home }
+
+        switch AppConstants.screenshotState {
+        case "general": return .general
+        case "recording": return .dictation
+        case "recovery": return .dictationRecovery
+        case "hotkeys": return .hotkeys
+        case "file-transcription": return .fileTranscription
+        case "recorder": return .recorder
+        case "history": return .history
+        case "statistics": return .statistics
+        case "dictionary", "dictionary-term-packs": return .dictionary
+        case "snippets": return .snippets
+        case "workflows": return .workflows
+        case "premium": return .premium
+        case "plugins", "integrations-available": return .integrations
+        case "advanced": return .advanced
+        case "license": return .license
+        case "about": return .about
+        default: return .home
+        }
+    }
 
     private var destinations: [SettingsDestination] {
         [

@@ -56,6 +56,7 @@ Link the successful runs instead of repeating checks already enforced by CI.
 
 ## UI, dictionary, and localization
 
+- [ ] The Fastlane macOS screenshot release lane completed, and the Free and Premium fixture sets were visually reviewed in English, German, Japanese, and Simplified Chinese.
 - [ ] Notch, Overlay, Minimal, and fullscreen indicators render correctly; the fullscreen menu-bar strip and top overlay behave correctly; transcript preview toggles independently.
 - [ ] Sound feedback can be enabled, disabled, and replaced with custom sounds.
 - [ ] Dictionary JSON import/export, localized term packs, learned-correction visibility, scrolling, and per-term CTC controls work.

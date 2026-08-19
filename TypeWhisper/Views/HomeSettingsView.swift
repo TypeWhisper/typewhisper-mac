@@ -40,24 +40,26 @@ struct HomeSettingsView: View {
                     recentTranscriptionsSection
 
                     #if DEBUG
-                    HStack(spacing: 8) {
-                        Spacer()
-                        Button("Seed Demo Data") {
-                            let historyService = ServiceContainer.shared.historyService
-                            historyService.seedDemoData()
-                            ServiceContainer.shared.usageStatisticsService.replaceWithHistoryRecords(historyService.records)
+                    if !AppConstants.isScreenshotAutomation {
+                        HStack(spacing: 8) {
+                            Spacer()
+                            Button("Seed Demo Data") {
+                                let historyService = ServiceContainer.shared.historyService
+                                historyService.seedDemoData()
+                                ServiceContainer.shared.usageStatisticsService.replaceWithHistoryRecords(historyService.records)
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.orange)
+                            .font(.caption)
+                            Button("Clear All Data") {
+                                let historyService = ServiceContainer.shared.historyService
+                                historyService.clearAll()
+                                ServiceContainer.shared.usageStatisticsService.clearUsageStatistics()
+                            }
+                            .buttonStyle(.plain)
+                            .foregroundStyle(.red)
+                            .font(.caption)
                         }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.orange)
-                        .font(.caption)
-                        Button("Clear All Data") {
-                            let historyService = ServiceContainer.shared.historyService
-                            historyService.clearAll()
-                            ServiceContainer.shared.usageStatisticsService.clearUsageStatistics()
-                        }
-                        .buttonStyle(.plain)
-                        .foregroundStyle(.red)
-                        .font(.caption)
                     }
                     #endif
                 }

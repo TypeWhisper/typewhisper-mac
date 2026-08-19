@@ -377,8 +377,9 @@ struct PremiumCorrectionLearningSettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
-                    PremiumCorrectionExampleRow(before: "teh", after: "the")
-                    PremiumCorrectionExampleRow(before: "recieve", after: "receive")
+                    ForEach(Array(PremiumCorrectionExamples.current.enumerated()), id: \.offset) { _, example in
+                        PremiumCorrectionExampleRow(before: example.before, after: example.after)
+                    }
                 }
             }
         }

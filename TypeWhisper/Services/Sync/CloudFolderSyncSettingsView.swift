@@ -297,13 +297,36 @@ final class PremiumAccountService: ObservableObject {
 
     var hasPremiumEntitlement: Bool { entitlement?.isActive == true }
 
+    #if DEBUG
+    func prepareScreenshotFixture(hasPremiumAccess: Bool) {
+        startupTokenTask?.cancel()
+        startupTokenTask = nil
+        isSignedIn = hasPremiumAccess
+        errorMessage = nil
+        entitlement = hasPremiumAccess
+            ? CrossDevicePremiumEntitlement(
+                status: "active",
+                tier: "individual",
+                source: "screenshot-fixture",
+                isLifetime: true,
+                expiresAt: nil,
+                deviceLimit: 3,
+                verifiedAt: Date(),
+                signature: nil
+            )
+            : nil
+    }
+    #endif
+
     init(
         defaults: UserDefaults = .standard,
         baseURL: URL? = nil,
         session: URLSession = .shared,
         requestExecutor: (@Sendable (URLRequest) async throws -> (Data, URLResponse))? = nil,
         appleWebAuthenticator: (any AppleWebAuthenticating)? = nil,
-        keychainService: String = "com.typewhisper.mac.premium-account",
+        keychainService: String = AppConstants.isScreenshotAutomation
+            ? "com.typewhisper.mac.screenshots.premium-account"
+            : "com.typewhisper.mac.premium-account",
         entitlementPublicKeyBase64: String = PremiumAccountService.productionEntitlementPublicKeyBase64,
         isSignedInOverride: Bool? = nil,
         automaticallyRefresh: Bool = true,
@@ -793,6 +816,11 @@ final class CloudFolderSyncController: ObservableObject {
     }
 
     func syncNow() async {
+        if AppConstants.isScreenshotAutomation {
+            isSyncing = false
+            return
+        }
+
         let syncMode = mode
         guard syncMode != .off else { return }
         guard let folderURL = activeFolderURL(for: syncMode) else { return }
@@ -1054,6 +1082,23 @@ final class CloudFolderSyncController: ObservableObject {
         return ((try? FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: nil)) ?? [])
             .filter { $0.pathExtension == "json" }.count
     }
+
+    #if DEBUG
+    func prepareScreenshotFixture(hasPremiumAccess: Bool) {
+        scheduledSyncTask?.cancel()
+        scheduledSyncTask = nil
+        stopICloudObservation()
+        selectedFolderURL = nil
+        mode = hasPremiumAccess ? .automaticICloud : .off
+        provider = hasPremiumAccess ? .iCloudDrive : .custom
+        lastSyncDate = nil
+        pendingChanges = 0
+        deviceCount = hasPremiumAccess ? 2 : 0
+        isSyncing = false
+        errorMessage = nil
+        statusMessage = nil
+    }
+    #endif
 
     func deletePrivateSyncFolder() async {
         guard !isSyncing else { return }

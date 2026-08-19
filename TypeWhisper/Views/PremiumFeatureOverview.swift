@@ -1,5 +1,44 @@
 import SwiftUI
 
+enum PremiumCorrectionExamples {
+    static var current: [(before: String, after: String)] {
+        examples(for: preferredAppLanguageCode())
+    }
+
+    static func examples(for languageCode: String) -> [(before: String, after: String)] {
+        let language = languageCode.lowercased()
+
+        if language.hasPrefix("de") {
+            return [
+                ("Standart", "Standard"),
+                ("wiederspiegeln", "widerspiegeln"),
+            ]
+        }
+        if language.hasPrefix("ja") {
+            return [
+                ("こんにちわ", "こんにちは"),
+                ("すいません", "すみません"),
+            ]
+        }
+        if language.hasPrefix("zh") {
+            return [
+                ("因该", "应该"),
+                ("在次", "再次"),
+            ]
+        }
+
+        return [
+            ("teh", "the"),
+            ("recieve", "receive"),
+        ]
+    }
+
+    static var primaryLine: String {
+        guard let example = current.first else { return "" }
+        return "\(example.before)  →  \(example.after)"
+    }
+}
+
 enum PremiumFeatureID: String, CaseIterable, Identifiable, Sendable {
     case calendarMeeting
     case correctionLearning
@@ -228,7 +267,7 @@ struct PremiumLockedFeatureOverview: View {
                     description: String(localized: "premium.hub.learning.description"),
                     status: String(localized: "premium.hub.status.premium"),
                     statusTone: .secondary,
-                    previewLines: ["teh  →  the"]
+                    previewLines: [PremiumCorrectionExamples.primaryLine]
                 )
             ),
             AnyView(
@@ -423,7 +462,7 @@ struct PremiumActiveFeatureOverview: View {
         let activity = correctionLearningService.latestAttempt.map {
             PremiumCorrectionLearningCopy.outcomeText($0.outcome)
         } ?? String(localized: "premium.hub.learning.preview")
-        return [activity, "teh  →  the"]
+        return [activity, PremiumCorrectionExamples.primaryLine]
     }
 
     private var syncStatus: String {

@@ -724,11 +724,13 @@ final class DictationViewModel: ObservableObject {
     }
 
     var needsMicPermission: Bool {
-        !audioRecordingService.hasMicrophonePermission
+        if AppConstants.isScreenshotAutomation { return false }
+        return !audioRecordingService.hasMicrophonePermission
     }
 
     var needsAccessibilityPermission: Bool {
-        !textInsertionService.isAccessibilityGranted
+        if AppConstants.isScreenshotAutomation { return false }
+        return !textInsertionService.isAccessibilityGranted
     }
 
     // MARK: - HTTP API
