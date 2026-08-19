@@ -1,0 +1,13 @@
+{
+  "id": "com.raysun.typewhisper.adaptive-dictionary",
+  "name": "Adaptive Dictation",
+  "author": "Ray Sun",
+  "description": "Clean dictation locally, learn vocabulary from committed edits, and use optional Gemma 4 semantic rewriting.",
+  "source": "community",
+  "category": "post-processor",
+  "categories": ["post-processor", "llm"],
+  "hosting": "local",
+  "requiresAPIKey": false,
+  "iconSystemName": "waveform.badge.checkmark",
+  "releases": []
+}
