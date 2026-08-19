@@ -1,8 +1,12 @@
 # TypeWhisper 1.x Release Readiness
 
-This document defines the release gates for the current `1.x` product path leading into the stable `1.6.0` release.
+This document defines the release and maintenance gates for the current `1.x`
+product path, with stable `1.6.0` as its published baseline.
 
-TypeWhisper `1.x` is a stable direct-download release line for macOS. The Mac App Store remains out of scope. The `main` branch is the `1.6` development line. The `release/1.5` branch is reserved for `1.5.x` hotfixes, and new feature work belongs on `1.6` unless it is explicitly backported.
+TypeWhisper `1.x` is a stable direct-download release line for macOS. The Mac
+App Store remains out of scope. The `main` branch is the current `1.6`
+development and maintenance line. The `release/1.5` branch is retained only for
+explicitly approved legacy backports; it is no longer the stable baseline.
 
 ## Audience
 
@@ -32,10 +36,12 @@ These surfaces remain part of `1.x`, but they are positioned as advanced or auto
 - Widgets
 - Watch Folder
 
-## `1.6` Focus Areas
+## `1.6` Maintenance Focus
 
-- Keep `main` on the `1.6.0` version line so daily builds publish as `v1.6.0-daily.*`.
-- Keep `1.5` stable and hotfix-only from `release/1.5`.
+- Keep `main` on the current `1.6` version line; daily builds currently publish
+  as `v1.6.0-daily.*`.
+- Treat stable `1.6.0` as the release baseline and `release/1.5` as a legacy
+  backport branch only.
 - Preserve the `1.x` stability contracts for the HTTP API, CLI, plugin SDK, widgets, and watch folders.
 - Avoid raising plugin `minHostVersion` values to `1.6.0` unless a plugin genuinely requires new host APIs.
 - Keep release-channel behavior stable: RC and daily builds are prereleases, while Homebrew and stable website messaging update only at the final stable tag.
@@ -70,7 +76,8 @@ These surfaces remain part of `1.x`, but they are positioned as advanced or auto
 
 ## Release Gates
 
-`1.6.0` is only tagged once all of the following conditions are met:
+Each stable `1.x` release is tagged only once all of the following conditions
+are met:
 
 - `xcodebuild test` for the app scheme passes.
 - `swift test --package-path TypeWhisperPluginSDK` passes.
@@ -78,9 +85,12 @@ These surfaces remain part of `1.x`, but they are positioned as advanced or auto
 - There are no first-party build warnings.
 - Plugin manifests validate successfully.
 - README, security guidance, support matrix, and plugin documentation are up to date.
-- The `1.6.0-rc*` line ran on real machines for multiple days without P0/P1 blockers before the stable tag.
+- The applicable release-candidate or daily line ran on real machines for
+  multiple days without P0/P1 blockers before the stable tag.
 - The default channel remains `stable`; `release-candidate` and `daily` exist as Sparkle channels for preview builds.
-- `1.6.0-rc*` and daily builds are distributed as GitHub prereleases, appear in the shared Sparkle appcast only on their own channels, and do not update Homebrew.
+- Release-candidate and daily builds are distributed as GitHub prereleases,
+  appear in the shared Sparkle appcast only on their own channels, and do not
+  update Homebrew.
 - The appcast entry for preview builds advertises `minimumSystemVersion` `14.0`.
 - Automatic private iCloud sync remains hidden in no-iCloud builds. Enabling it for a future release requires the explicit build flag, an embedded Developer ID provisioning profile, matching signed iCloud entitlements, Sparkle upgrade proof, and a real two-Mac sync validation.
 

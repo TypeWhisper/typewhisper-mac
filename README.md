@@ -4,11 +4,24 @@
 [![macOS](https://img.shields.io/badge/macOS-14.0%2B-black.svg)](https://www.apple.com/macos/)
 [![Swift](https://img.shields.io/badge/Swift-6-orange.svg)](https://swift.org)
 
-Speech-to-text and AI text processing for macOS. Transcribe audio using on-device AI models or cloud APIs (Groq, OpenAI, xAI/Grok), then transform the result with reusable workflows. Your voice data stays on your Mac with local models - or use cloud APIs for faster processing.
+Speech-to-text and AI text processing for macOS. Transcribe audio using
+on-device AI models or cloud APIs (Groq, OpenAI, xAI/Grok), then transform the
+result with reusable workflows. Your voice data stays on your Mac with local
+models - or use cloud APIs for faster processing.
 
-TypeWhisper `1.5` is the current stable release for macOS. It includes system-wide dictation, file transcription, unified workflows, history, dictionary, snippets, bundled integrations, the community plugin registry, local automation APIs, app-aware insertion, expanded provider support, and local-model reliability improvements. The `main` branch is now preparing the `1.6` release-candidate line; `1.5` receives hotfixes only from `release/1.5`.
+TypeWhisper `1.6` is the current stable release for macOS. It adds a redesigned
+Settings experience, privacy-friendly statistics and portable backups, faster
+and more resilient recording, calendar-aware meeting automation, expanded
+workflow integrations, Simplified Chinese localization, and reliability
+improvements across dictation, Recorder, local models, and cloud providers.
 
-See the [release readiness guide](docs/release-readiness.md), [support matrix](docs/support-matrix.md), and [release validation process](docs/release-checklist.md) for the active `1.6` release definition and ship gates. Manual ship checks are tracked per candidate with the [release checklist issue template](.github/ISSUE_TEMPLATE/release-checklist.md).
+See the [1.6.0 release notes](docs/release-notes/1.6.0.md),
+[release readiness guide](docs/release-readiness.md),
+[support matrix](docs/support-matrix.md), and
+[release validation process](docs/release-checklist.md) for the shipped feature
+set and ongoing `1.x` maintenance gates. Manual ship checks are tracked per
+candidate with the
+[release checklist issue template](.github/ISSUE_TEMPLATE/release-checklist.md).
 
 <p align="center">
   <video src="https://github.com/user-attachments/assets/22fe922d-4a4c-47d1-805e-684a148ebd03" autoplay loop muted playsinline width="270"></video>
@@ -75,22 +88,51 @@ See the [release readiness guide](docs/release-readiness.md), [support matrix](d
 
 The localized macOS screenshot workflow is documented in [docs/screenshot-automation.md](docs/screenshot-automation.md).
 
-## What's New in 1.5
+## What's New in 1.6
 
-- **App-aware dictation insertion** - Dictation output now better respects sentence position, trailing spaces, terminal paste behavior, rich-text targets, and target-app context
-- **Expanded speech and AI providers** - Gemini speech transcription, Cartesia speech transcription, Sber SaluteSpeech, OpenRouter speech-to-text, Reson8, Mistral AI, Soniox regions and TTS, and OpenAI-compatible profiles broaden the bundled provider set
-- **Local model reliability** - MLX memory-footprint controls, idle auto-unload behavior, stalled Gemma 4 download recovery, and Parakeet vocabulary repair improve local model setup and day-to-day stability
-- **Dictionary learning and normalization** - Auto-learned corrections, target-app correction learning, per-term CTC tuning plumbing, multilingual number-word normalization, English ordinals, digit sequences, and French decimal cleanup improve recognition output
-- **Workflow and hotkey reliability** - Hybrid modifier timing, non-Control modifier taps, global push-to-talk, Pages workflow hotkeys, menu-based dictation pause, Esc confirmation, and automatic workflow output resolution all received targeted fixes
-- **Recording and indicator polish** - Virtual audio input support, media pause/resume hardening, fullscreen indicator fixes, recorder final-failure surfacing, FaceTime built-in microphone capture, and TaskForge insertion fallback improve real-world capture and insertion flows
-- **Release and plugin metadata cleanup** - Cloud ASR upload fallback handling, plugin host-compatibility metadata, plugin uninstall cleanup, and GitHub Latest protection keep the 1.5 distribution path clean
+- **Redesigned Settings, statistics, and backups** - A consistent native
+  Settings experience now includes privacy-friendly usage insights plus portable
+  Backup & Restore for workflows, dictionary entries, snippets, profiles, prompt
+  actions, hotkeys, installed community plugins, history text, and supported
+  preferences
+- **Faster, more resilient recording** - Recording startup moved off the main
+  actor, eligible microphones are prewarmed, microphone priorities and route
+  recovery are more robust, and controlled tests measured lower
+  request-to-first-buffer times for built-in, USB, and AirPods inputs
+- **Calendar-aware meeting automation** - Optional reminders, countdown
+  controls, local meeting-activity checks, automatic Recorder sessions, sortable
+  filenames, transcript metadata, and Obsidian-ready Markdown sidecars support
+  Zoom, Microsoft Teams, Google Meet, and FaceTime meetings
+- **Improved dictation and indicators** - Live transcript updates can write
+  into active text fields, final insertion remains authoritative, contextual
+  insertion and target-app correction learning are more reliable, and Notch,
+  Overlay, and Minimal indicators gained better placement, visibility,
+  interaction, and screen-capture controls
+- **Expanded workflows and automation** - Ordered LLM provider fallbacks,
+  explicit API-driven dictation, the MCP Client action add-on, Obsidian live
+  sync and templates, bulk plugin updates, and clearer active-provider status
+  extend local automation
+- **Broader model and provider support** - Soniox live transcription, local
+  Cohere Transcribe, context-aware OpenAI transcription, dynamic ChatGPT model
+  discovery, richer OpenAI-compatible profiles, and reliability work across
+  Qwen3, Gemma 4, Granite, Voxtral, Parakeet, and WhisperKit expand the engine
+  ecosystem
+- **Localization and platform polish** - Simplified Chinese joins the existing
+  English, German, and Japanese UI, while macOS 27 Settings compatibility,
+  calendar permissions, distributed-build entitlements, and stable release
+  packaging received dedicated fixes
 
 ## Features
 
 ### Transcription
 
-- **Eleven engines** - WhisperKit (99+ languages, streaming, translation), Parakeet TDT v3 (25 European languages, extremely fast), Apple SpeechAnalyzer (macOS 26+, no model download needed), Granite Speech (MLX-based), Qwen3 ASR (MLX-based), Voxtral (local Voxtral Mini 4B, MLX-based), Groq Whisper, OpenAI Whisper, Smallest Pulse, xAI/Grok STT, and OpenAI Compatible (any OpenAI-compatible API)
-- **On-device or cloud** - All processing happens locally on your Mac, or use Groq/OpenAI/xAI APIs for faster processing
+- **Local and cloud engines** - Choose from WhisperKit, Parakeet TDT v3, Apple
+  SpeechAnalyzer, Granite Speech, Qwen3 ASR, Voxtral, Cohere Transcribe, Groq
+  Whisper, OpenAI Whisper, Soniox, Smallest Pulse, xAI/Grok STT, OpenAI
+  Compatible, and additional bundled or community providers
+- **On-device or cloud** - Keep audio on your Mac with a local engine, or
+  explicitly configure a cloud API for faster processing and additional model
+  choices
 - **Streaming preview** - See partial transcription in real-time while speaking (WhisperKit)
 - **Short-clip handling** - Better retention of brief utterances and fewer false no-speech discards
 - **File transcription** - Batch-process multiple audio/video files with drag & drop
@@ -120,9 +162,28 @@ The localized macOS screenshot workflow is documented in [docs/screenshot-automa
 - **Snippets** - Text shortcuts with trigger/replacement. Supports placeholders like `{{DATE}}`, `{{TIME}}`, and `{{CLIPBOARD}}`
 - **History** - Searchable transcription history with inline editing, correction detection, app context tracking, timeline grouping, filters, bulk delete, multi-select export, auto-retention, and a standalone window accessible from the tray menu
 
+### Premium
+
+- **Meeting automation** - Connect selected calendars for local reminders, start
+  and stop countdowns, optional automatic Recorder sessions, and structured
+  transcript output for supported meeting providers
+- **Correction learning** - Learn deliberate manual corrections in supported
+  target apps using conservative local matching and dictionary integration
+- **Cloud Folder Sync** - Sync Dictionary and Snippets data through a
+  user-selected iCloud Drive, Dropbox, OneDrive, Syncthing, or custom folder;
+  automatic private iCloud sync remains disabled in current distributed builds
+- **Clear entitlement states** - The Premium hub shows account access and the
+  exact availability of each feature for the current license or signed-in
+  Premium account
+
 ### Integration & Extensibility
 
-- **Plugin system** - Extend TypeWhisper with custom LLM providers, transcription engines, TTS providers, post-processors, and action plugins. Gemini, Granite, Groq, Linear, OpenAI / ChatGPT, OpenAI Compatible, Qwen3, Smallest Pulse, Supertonic, Voxtral, Webhook, and xAI/Grok ship as bundled plugins, alongside the local engine plugins. Linear plugin enables voice-to-issue creation. See [TypeWhisperPluginSDK/Plugins/README.md](TypeWhisperPluginSDK/Plugins/README.md)
+- **Plugin system** - Extend TypeWhisper with custom LLM providers,
+  transcription engines, TTS providers, post-processors, memory providers, and
+  action plugins. Bundled and registry integrations include local engines, major
+  cloud providers, MCP Client, Obsidian, Linear, Script Runner, Webhook
+  Notifications, and additional automation tools. See the
+  [plugin catalog](TypeWhisperPluginSDK/Plugins/README.md)
 - **Local model download controls** - Bundled Qwen3, Granite, Voxtral, and Supertonic plugins support an optional HuggingFace token for higher rate limits and clearer download errors. Supertonic requires explicit OpenRAIL-M model-license acceptance before model assets download.
 - **HTTP API** - Local REST API for integration with external tools and scripts
 - **CLI tool** - Shell-friendly transcription via the command line
@@ -131,10 +192,12 @@ The localized macOS screenshot workflow is documented in [docs/screenshot-automa
 ### General
 
 - **Home dashboard** - Usage statistics, activity chart, and onboarding tutorial
+- **Statistics and backups** - Inspect local aggregate usage and export or
+  restore supported settings and user data without uploading them to TypeWhisper
 - **Auto-update** - Built-in updates via Sparkle with stable, release-candidate, and daily channels
 - **Universal binary** - Runs natively on Apple Silicon and Intel Macs
 - **Widgets** - Desktop widgets for usage stats, last transcription, activity chart, and transcription history
-- **Multilingual UI** - English and German
+- **Multilingual UI** - English, German, Japanese, and Simplified Chinese
 - **Launch at Login** - Start automatically with macOS
 
 ## Install
