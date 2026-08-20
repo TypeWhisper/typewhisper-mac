@@ -104,7 +104,7 @@ jobs:
   verify-release-tools:
     needs: [prepare]
     if: needs.prepare.outputs.should_run == 'true'
-    runs-on: ubuntu-latest
+    runs-on: macos-15
     steps:
       - name: Checkout
         uses: actions/checkout@v7
