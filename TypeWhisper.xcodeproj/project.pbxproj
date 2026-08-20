@@ -205,6 +205,8 @@
 		AA7080000000000000000001 /* TargetAppCorrectionLearningService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB7080000000000000000001 /* TargetAppCorrectionLearningService.swift */; };
 		AA00000000000000000063 /* HistoryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000063 /* HistoryViewModel.swift */; };
 		AA00000000000000000064 /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000064 /* HistoryView.swift */; };
+		F83600000000000000000001 /* HistoryRecordViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F83600000000000000000011 /* HistoryRecordViews.swift */; };
+		F83600000000000000000002 /* HistorySettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F83600000000000000000012 /* HistorySettingsView.swift */; };
 		AA00000000000000000065 /* Profile.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000065 /* Profile.swift */; };
 		AA00000000000000000066 /* ProfileService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000066 /* ProfileService.swift */; };
 		AA00000000000000000067 /* ProfilesViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000067 /* ProfilesViewModel.swift */; };
@@ -229,6 +231,9 @@
 		C1F000000000000000000015 /* CloudFolderSyncTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F000000000000000000006 /* CloudFolderSyncTests.swift */; };
 		C1F000000000000000000016 /* UserDataSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F000000000000000000007 /* UserDataSync.swift */; };
 		C1F000000000000000000017 /* PremiumSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C1F000000000000000000008 /* PremiumSettingsView.swift */; };
+		D83600000000000000000001 /* HistoryUserDataSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = E83600000000000000000001 /* HistoryUserDataSync.swift */; };
+		D83600000000000000000002 /* HistorySyncAssetStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = E83600000000000000000002 /* HistorySyncAssetStore.swift */; };
+		D83600000000000000000003 /* HistorySyncPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = E83600000000000000000003 /* HistorySyncPreferences.swift */; };
 		AA00000000000000000082 /* DictionaryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000082 /* DictionaryViewModel.swift */; };
 		AA00000000000000000083 /* DictionarySettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000083 /* DictionarySettingsView.swift */; };
 		AA00000000000000000084 /* SnippetsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000084 /* SnippetsViewModel.swift */; };
@@ -749,6 +754,8 @@
 		BB7080000000000000000001 /* TargetAppCorrectionLearningService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TargetAppCorrectionLearningService.swift; sourceTree = "<group>"; };
 		BB00000000000000000063 /* HistoryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryViewModel.swift; sourceTree = "<group>"; };
 		BB00000000000000000064 /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryView.swift; sourceTree = "<group>"; };
+		F83600000000000000000011 /* HistoryRecordViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryRecordViews.swift; sourceTree = "<group>"; };
+		F83600000000000000000012 /* HistorySettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistorySettingsView.swift; sourceTree = "<group>"; };
 		BB00000000000000000065 /* Profile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Profile.swift; sourceTree = "<group>"; };
 		BB00000000000000000066 /* ProfileService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileService.swift; sourceTree = "<group>"; };
 		BB00000000000000000067 /* ProfilesViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfilesViewModel.swift; sourceTree = "<group>"; };
@@ -773,6 +780,9 @@
 		C1F000000000000000000006 /* CloudFolderSyncTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CloudFolderSyncTests.swift; sourceTree = "<group>"; };
 		C1F000000000000000000007 /* UserDataSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserDataSync.swift; sourceTree = "<group>"; };
 		C1F000000000000000000008 /* PremiumSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PremiumSettingsView.swift; sourceTree = "<group>"; };
+		E83600000000000000000001 /* HistoryUserDataSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryUserDataSync.swift; sourceTree = "<group>"; };
+		E83600000000000000000002 /* HistorySyncAssetStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistorySyncAssetStore.swift; sourceTree = "<group>"; };
+		E83600000000000000000003 /* HistorySyncPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistorySyncPreferences.swift; sourceTree = "<group>"; };
 		BB00000000000000000082 /* DictionaryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictionaryViewModel.swift; sourceTree = "<group>"; };
 		BB00000000000000000083 /* DictionarySettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictionarySettingsView.swift; sourceTree = "<group>"; };
 		BB00000000000000000084 /* SnippetsViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnippetsViewModel.swift; sourceTree = "<group>"; };
@@ -1780,6 +1790,9 @@
 			isa = PBXGroup;
 			children = (
 				C1F000000000000000000007 /* UserDataSync.swift */,
+				E83600000000000000000001 /* HistoryUserDataSync.swift */,
+				E83600000000000000000002 /* HistorySyncAssetStore.swift */,
+				E83600000000000000000003 /* HistorySyncPreferences.swift */,
 				C1F000000000000000000002 /* UserDataSyncIdentity.swift */,
 				C1F000000000000000000003 /* TypeWhisperUserDataSyncStore.swift */,
 				C1F000000000000000000004 /* CloudFolderSyncEngine.swift */,
@@ -1843,6 +1856,8 @@
 				BB00000000000000000340 /* SpokenPunctuationSettingsSection.swift */,
 				B40800000000000000000001 /* LanguageSelectionEditor.swift */,
 				BB00000000000000000064 /* HistoryView.swift */,
+				F83600000000000000000011 /* HistoryRecordViews.swift */,
+				F83600000000000000000012 /* HistorySettingsView.swift */,
 				BB00000000000000000068 /* ProfilesSettingsView.swift */,
 				BB00000000000000000075 /* TranslationHostWindow.swift */,
 				BB00000000000000000083 /* DictionarySettingsView.swift */,
@@ -4389,6 +4404,8 @@
 				AA7080000000000000000001 /* TargetAppCorrectionLearningService.swift in Sources */,
 				AA00000000000000000063 /* HistoryViewModel.swift in Sources */,
 				AA00000000000000000064 /* HistoryView.swift in Sources */,
+				F83600000000000000000001 /* HistoryRecordViews.swift in Sources */,
+				F83600000000000000000002 /* HistorySettingsView.swift in Sources */,
 				AA00000000000000000065 /* Profile.swift in Sources */,
 				AA00000000000000000356 /* Workflow.swift in Sources */,
 				AA00000000000000000066 /* ProfileService.swift in Sources */,
@@ -4415,6 +4432,9 @@
 				1C1000000000000000000002 /* PremiumICloudBridgeShared.swift in Sources */,
 				C1F000000000000000000016 /* UserDataSync.swift in Sources */,
 				C1F000000000000000000017 /* PremiumSettingsView.swift in Sources */,
+				D83600000000000000000001 /* HistoryUserDataSync.swift in Sources */,
+				D83600000000000000000002 /* HistorySyncAssetStore.swift in Sources */,
+				D83600000000000000000003 /* HistorySyncPreferences.swift in Sources */,
 				CA3E00000000000000000001 /* PremiumFeatureOverview.swift in Sources */,
 				CA3E00000000000000000002 /* PremiumSettingsWindowManager.swift in Sources */,
 				AA00000000000000000082 /* DictionaryViewModel.swift in Sources */,
@@ -4935,10 +4955,11 @@
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
+				ICLOUD_CONTAINER_ID = iCloud.com.typewhisper.sync.dev;
 				INFOPLIST_FILE = TypeWhisperICloudBridge/Info.plist;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 1.6.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.typewhisper-mac;
+				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.mac.dev.icloudbridge;
 				PRODUCT_NAME = TypeWhisperICloudBridge;
 				SKIP_INSTALL = YES;
 				SWIFT_STRICT_CONCURRENCY = targeted;
@@ -4957,6 +4978,7 @@
 				ENABLE_APP_SANDBOX = NO;
 				ENABLE_HARDENED_RUNTIME = YES;
 				GENERATE_INFOPLIST_FILE = NO;
+				ICLOUD_CONTAINER_ID = iCloud.com.typewhisper.sync;
 				INFOPLIST_FILE = TypeWhisperICloudBridge/Info.plist;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
 				MARKETING_VERSION = 1.6.0;
@@ -5160,6 +5182,7 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_LSUIElement = YES;
 				ICLOUD_CONTAINER_ID = iCloud.com.typewhisper.sync.dev;
+				ICLOUD_HELPER_BUNDLE_ID = com.typewhisper.mac.dev.icloudbridge;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",
@@ -5192,6 +5215,7 @@
 				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.productivity";
 				INFOPLIST_KEY_LSUIElement = YES;
 				ICLOUD_CONTAINER_ID = iCloud.com.typewhisper.sync;
+				ICLOUD_HELPER_BUNDLE_ID = com.typewhisper.typewhisper-mac;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/../Frameworks",

@@ -1,756 +1,547 @@
+import AppKit
 import SwiftUI
 
 struct HistoryView: View {
     @ObservedObject private var viewModel = HistoryViewModel.shared
-
-    private var hasSelection: Bool {
-        viewModel.hasVisibleSelection
-    }
+    @State private var columnVisibility: NavigationSplitViewVisibility = .all
+    @State private var deleteCandidateIDs: Set<UUID> = []
+    @State private var showingDeleteConfirmation = false
 
     var body: some View {
-        VStack(spacing: 0) {
-            SettingsPageHeader(String(localized: "History"))
-            Divider()
-
-            HStack(spacing: 0) {
-                listPanel
-                    .frame(minWidth: 280)
-
-                detailPanelContainer
-                    .frame(
-                        minWidth: hasSelection ? 300 : 0,
-                        idealWidth: hasSelection ? 340 : 0,
-                        maxWidth: hasSelection ? .infinity : 0
-                    )
-                    .clipped()
-            }
+        NavigationSplitView(columnVisibility: $columnVisibility) {
+            sidebar
+                .navigationSplitViewColumnWidth(min: 190, ideal: 230, max: 300)
+        } content: {
+            recordList
+                .navigationSplitViewColumnWidth(min: 300, ideal: 360, max: 480)
+        } detail: {
+            detail
+                .frame(minWidth: 420, maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(minHeight: 400)
+        .background(HistoryWindowCloseGuard(viewModel: viewModel))
+        .searchable(
+            text: $viewModel.searchQuery,
+            placement: .toolbar,
+            prompt: String(localized: "Search History")
+        )
+        .toolbar { workspaceToolbar }
+        .alert(
+            String(localized: "Save Changes?"),
+            isPresented: unsavedChangesBinding
+        ) {
+            Button(String(localized: "Save")) {
+                viewModel.saveAndContinue()
+            }
+            .disabled(!viewModel.canSaveDraft)
+            Button(String(localized: "Discard"), role: .destructive) {
+                viewModel.discardAndContinue()
+            }
+            Button(String(localized: "Cancel"), role: .cancel) {
+                viewModel.cancelPendingTransition()
+            }
+        } message: {
+            Text(String(localized: "Save or discard your changes before leaving this entry."))
+        }
+        .confirmationDialog(
+            deleteConfirmationTitle,
+            isPresented: $showingDeleteConfirmation,
+            titleVisibility: .visible
+        ) {
+            Button(String(localized: "Delete"), role: .destructive) {
+                deleteRecords(with: deleteCandidateIDs)
+            }
+            Button(String(localized: "Cancel"), role: .cancel) {}
+        } message: {
+            Text(deleteConfirmationMessage)
+        }
+        .onChange(of: viewModel.pendingDeletionIDs) { _, ids in
+            guard !ids.isEmpty else { return }
+            deleteCandidateIDs = ids
+            showingDeleteConfirmation = true
+            viewModel.consumePendingDeletion()
+        }
+        .frame(minWidth: 900, minHeight: 560)
     }
 
-    // MARK: - List Panel
-
-    private var listPanel: some View {
-        VStack(spacing: SettingsLayoutMetrics.cardSpacing) {
-            SettingsCard {
-                VStack(spacing: 12) {
-                    NativeSearchField(
-                        text: $viewModel.searchQuery,
-                        placeholder: String(localized: "Search...")
-                    )
-                    .frame(maxWidth: .infinity)
-                    .frame(height: 28)
-
-                    HStack(spacing: 8) {
-                        Picker(selection: Binding(
-                            get: { viewModel.selectedAppFilter ?? "" },
-                            set: { viewModel.selectedAppFilter = $0.isEmpty ? nil : $0 }
-                        )) {
-                            Text(String(localized: "All Apps")).tag("")
-                            if !viewModel.availableApps.isEmpty {
-                                Divider()
-                                ForEach(viewModel.availableApps) { app in
-                                    Text(app.name).tag(app.bundleId)
-                                }
-                            }
-                        } label: {
-                            EmptyView()
-                        }
-                        .fixedSize()
-
-                        Picker(selection: $viewModel.selectedTimeRange) {
-                            ForEach(HistoryTimeRange.allCases) { range in
-                                Text(range.displayName).tag(range)
-                            }
-                        } label: {
-                            EmptyView()
-                        }
-                        .fixedSize()
-
-                        Spacer()
-                    }
-                    .controlSize(.small)
-                }
-            }
-
-            SettingsCard {
-                if viewModel.filteredRecords.isEmpty {
-                    historyEmptyState
-                } else {
-                    VStack(spacing: 0) {
-                        historyList
-                        Divider()
-                        historyFooter
-                    }
-                }
-            }
-            .frame(maxHeight: .infinity)
-        }
-        .padding(SettingsLayoutMetrics.pagePadding)
+    private var unsavedChangesBinding: Binding<Bool> {
+        Binding {
+            viewModel.showsUnsavedChangesPrompt
+        } set: { _ in }
     }
 
-    private var historyList: some View {
-        List(selection: $viewModel.selectedRecordIDs) {
-            ForEach(viewModel.groupedSections) { section in
-                Section {
-                    if !viewModel.collapsedGroups.contains(section.group) {
-                        ForEach(section.records, id: \.id) { record in
-                            RecordRow(record: record)
-                                .tag(record.id)
-                                .contextMenu {
-                                    recordContextMenu(for: record)
-                                }
-                        }
-                    }
-                } header: {
-                    SectionHeader(
-                        group: section.group,
-                        count: section.records.count,
-                        isCollapsed: viewModel.collapsedGroups.contains(section.group)
-                    ) {
-                        viewModel.toggleSection(section.group)
-                    }
+    private var recordSelection: Binding<Set<UUID>> {
+        Binding {
+            viewModel.selectedRecordIDs
+        } set: { selection in
+            viewModel.requestRecordSelection(selection)
+        }
+    }
+
+    private var sidebar: some View {
+        List {
+            Section(String(localized: "Smart Mailboxes")) {
+                ForEach(HistoryCollectionScope.allCases) { mailbox in
+                    sidebarButton(
+                        title: mailbox.displayName,
+                        systemImage: mailbox.systemImage,
+                        count: viewModel.count(for: mailbox),
+                        selection: .smartMailbox(mailbox)
+                    )
+                }
+            }
+
+            Section(String(localized: "Devices")) {
+                ForEach(viewModel.deviceSections) { device in
+                    deviceGroup(device)
                 }
             }
         }
-        .listStyle(.plain)
-        .scrollContentBackground(.hidden)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .listStyle(.sidebar)
+        .navigationTitle(String(localized: "History"))
     }
 
     @ViewBuilder
-    private var historyEmptyState: some View {
-        if viewModel.hasActiveFilters || !viewModel.searchQuery.isEmpty {
-            SettingsEmptyState(
-                systemImage: "clock",
-                title: String(localized: "No Entries"),
-                message: String(localized: "No results for the active filters.")
+    private func deviceGroup(_ device: HistoryDeviceSection) -> some View {
+        if device.sources.isEmpty {
+            sidebarButton(
+                title: device.title,
+                systemImage: device.systemImage,
+                count: device.count,
+                selection: .device(device.id)
+            )
+        } else {
+            DisclosureGroup(
+                isExpanded: Binding(
+                    get: { viewModel.expandedDeviceIDs.contains(device.id) },
+                    set: { expanded in
+                        let isExpanded = viewModel.expandedDeviceIDs.contains(device.id)
+                        if expanded != isExpanded {
+                            viewModel.toggleDeviceExpansion(device.id)
+                        }
+                    }
+                )
             ) {
-                Button(String(localized: "Clear Filters")) {
-                    viewModel.clearAllFilters()
+                ForEach(device.sources) { source in
+                    sidebarButton(
+                        title: source.title,
+                        systemImage: source.systemImage,
+                        count: source.count,
+                        selection: .deviceSource(deviceID: device.id, source: source.source)
+                    )
+                }
+            } label: {
+                sidebarButtonLabel(
+                    title: device.title,
+                    systemImage: device.systemImage,
+                    count: device.count
+                )
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    viewModel.requestNavigationSelection(.device(device.id))
                 }
             }
-        } else {
-            SettingsEmptyState(
-                systemImage: "clock",
-                title: String(localized: "No Entries"),
-                message: String(localized: "Dictated text will appear here.")
+            .listRowBackground(
+                viewModel.navigationSelection == .device(device.id)
+                    ? Color.accentColor.opacity(0.16)
+                    : Color.clear
             )
         }
     }
 
-    private var historyFooter: some View {
-        HStack {
-            if viewModel.hasActiveFilters || !viewModel.searchQuery.isEmpty {
-                Text("\(viewModel.visibleRecordCount) \(String(localized: "entries")) (\(viewModel.totalRecords) \(String(localized: "total")))")
-            } else {
-                Text("\(viewModel.totalRecords) \(String(localized: "entries"))")
-            }
-
-            Spacer()
-
-            Button(String(localized: "Delete All Visible"), role: .destructive) {
-                viewModel.showDeleteAllVisibleConfirmation = true
-            }
-            .buttonStyle(.plain)
-            .foregroundStyle(.red)
+    private func sidebarButton(
+        title: String,
+        systemImage: String,
+        count: Int,
+        selection: HistoryNavigationSelection
+    ) -> some View {
+        Button {
+            viewModel.requestNavigationSelection(selection)
+        } label: {
+            sidebarButtonLabel(title: title, systemImage: systemImage, count: count)
         }
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .padding(.top, 10)
-        .confirmationDialog(
-            String(localized: "Delete Entries"),
-            isPresented: $viewModel.showDeleteAllVisibleConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button(String(localized: "Delete"), role: .destructive) {
-                viewModel.deleteAllVisible()
-            }
-            Button(String(localized: "Cancel"), role: .cancel) {}
-        } message: {
-            if viewModel.hasActiveFilters || !viewModel.searchQuery.isEmpty {
-                Text(String(localized: "Delete \(viewModel.visibleRecordCount) entries matching current filters?"))
-            } else {
-                Text(String(localized: "Delete all \(viewModel.visibleRecordCount) entries? This cannot be undone."))
-            }
-        }
+        .buttonStyle(.plain)
+        .listRowBackground(
+            viewModel.navigationSelection == selection
+                ? Color.accentColor.opacity(0.16)
+                : Color.clear
+        )
     }
 
-    // MARK: - Detail Panel
-
-    @ViewBuilder
-    private var detailPanelContainer: some View {
-        if hasSelection {
-            SettingsCard {
-                detailPanel
+    private func sidebarButtonLabel(title: String, systemImage: String, count: Int) -> some View {
+        HStack(spacing: 8) {
+            Label(title, systemImage: systemImage)
+                .lineLimit(1)
+            Spacer(minLength: 6)
+            if count > 0 {
+                Text(count, format: .number)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
-            .padding(.vertical, SettingsLayoutMetrics.pagePadding)
-            .padding(.trailing, SettingsLayoutMetrics.pagePadding)
-        } else {
-            Color.clear
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
     }
 
     @ViewBuilder
-    private var detailPanel: some View {
-        if viewModel.selectedRecordIDs.count > 1 {
-            SettingsEmptyState(
+    private var recordList: some View {
+        Group {
+            if viewModel.filteredRecords.isEmpty {
+                emptyListState
+            } else {
+                List(selection: recordSelection) {
+                    ForEach(viewModel.groupedSections) { section in
+                        Section {
+                            if !viewModel.collapsedGroups.contains(section.group) {
+                                ForEach(section.records, id: \.id) { record in
+                                    HistoryRecordRow(record: record)
+                                        .tag(record.id)
+                                        .contextMenu { recordContextMenu(for: record) }
+                                }
+                            }
+                        } header: {
+                            HistorySectionHeader(
+                                group: section.group,
+                                count: section.records.count,
+                                isCollapsed: viewModel.collapsedGroups.contains(section.group)
+                            ) {
+                                viewModel.toggleSection(section.group)
+                            }
+                        }
+                    }
+                }
+                .listStyle(.inset)
+                .id(viewModel.navigationSelection)
+            }
+        }
+        .navigationTitle(viewModel.navigationTitle)
+        .navigationSubtitle(viewModel.navigationSummary)
+    }
+
+    @ViewBuilder
+    private var emptyListState: some View {
+        if !viewModel.searchQuery.isEmpty || viewModel.hasActiveFilters {
+            ContentUnavailableView {
+                Label(String(localized: "No Results"), systemImage: "magnifyingglass")
+            } description: {
+                Text(String(localized: "No history entries match the current search and filters."))
+            } actions: {
+                Button(String(localized: "Clear Filters")) {
+                    viewModel.requestClearAllFilters()
+                }
+            }
+        } else if viewModel.selectedSmartMailbox == .inbox {
+            ContentUnavailableView(
+                String(localized: "Inbox is Empty"),
+                systemImage: "tray",
+                description: Text(String(localized: "New captures that need attention will appear here."))
+            )
+        } else if viewModel.selectedSmartMailbox == .failed {
+            ContentUnavailableView(
+                String(localized: "No Failed Entries"),
                 systemImage: "checkmark.circle",
-                title: String(localized: "\(viewModel.selectedRecordIDs.count) items selected"),
-                message: String(localized: "Right-click to export or delete selected entries.")
-            ) {
-                Button {
-                    viewModel.selectRecord(nil)
-                } label: {
-                    Label(String(localized: "Close"), systemImage: "xmark")
+                description: Text(String(localized: "Failed imports and transcriptions will appear here."))
+            )
+        } else {
+            ContentUnavailableView(
+                String(localized: "No History Yet"),
+                systemImage: "clock.arrow.circlepath",
+                description: Text(String(localized: "Your saved transcriptions will appear here."))
+            )
+        }
+    }
+
+    @ViewBuilder
+    private var detail: some View {
+        if viewModel.selectedRecordIDs.count > 1 {
+            ContentUnavailableView {
+                Label(
+                    String.localizedStringWithFormat(
+                        String(localized: "%lld Entries Selected"),
+                        Int64(viewModel.selectedRecordIDs.count)
+                    ),
+                    systemImage: "checkmark.circle"
+                )
+            } description: {
+                Text(String(localized: "Copy, export, complete, reopen, or delete the selected entries."))
+            } actions: {
+                HStack {
+                    Button(String(localized: "Copy")) { viewModel.copySelectedRecords() }
+                    if viewModel.selectedRecords.contains(where: \.isOpenInInbox) {
+                        Button(String(localized: "Mark Complete")) {
+                            viewModel.markComplete(viewModel.selectedRecords)
+                        }
+                    }
                 }
             }
         } else if let record = viewModel.selectedRecord {
-            RecordDetailView(record: record, viewModel: viewModel)
+            HistoryRecordDetailView(record: record, viewModel: viewModel)
+                .id(record.id)
+        } else {
+            ContentUnavailableView(
+                String(localized: "Select an Entry"),
+                systemImage: "text.page",
+                description: Text(String(localized: "Choose an entry to read and edit its text or inspect its details."))
+            )
+        }
+    }
+
+    @ToolbarContentBuilder
+    private var workspaceToolbar: some ToolbarContent {
+        ToolbarItemGroup(placement: .primaryAction) {
+            Menu {
+                Picker(
+                    String(localized: "Date"),
+                    selection: Binding(
+                        get: { viewModel.selectedTimeRange },
+                        set: { viewModel.requestTimeRange($0) }
+                    )
+                ) {
+                    ForEach(HistoryTimeRange.allCases) { range in
+                        Text(range.displayName).tag(range)
+                    }
+                }
+
+                Menu(String(localized: "App")) {
+                    Button {
+                        viewModel.requestAppFilter(nil)
+                    } label: {
+                        filterMenuLabel(
+                            String(localized: "All Apps"),
+                            selected: viewModel.selectedAppFilter == nil
+                        )
+                    }
+                    Divider()
+                    ForEach(viewModel.availableApps) { app in
+                        Button {
+                            viewModel.requestAppFilter(app.bundleId)
+                        } label: {
+                            filterMenuLabel(
+                                app.name,
+                                selected: viewModel.selectedAppFilter == app.bundleId
+                            )
+                        }
+                    }
+                }
+
+                if viewModel.hasActiveFilters || !viewModel.searchQuery.isEmpty {
+                    Divider()
+                    Button(String(localized: "Clear Filters")) {
+                        viewModel.requestClearAllFilters()
+                    }
+                }
+            } label: {
+                Label(String(localized: "Filter"), systemImage: "line.3.horizontal.decrease")
+            }
+            .help(String(localized: "Filter History"))
+
+            Menu {
+                ForEach(HistorySortOrder.allCases) { order in
+                    Button {
+                        viewModel.requestSortOrder(order)
+                    } label: {
+                        if viewModel.selectedSortOrder == order {
+                            Label(order.displayName, systemImage: "checkmark")
+                        } else {
+                            Text(order.displayName)
+                        }
+                    }
+                }
+            } label: {
+                Label(String(localized: "Sort"), systemImage: "arrow.up.arrow.down")
+            }
+            .help(String(localized: "Sort History"))
+
+            if let record = viewModel.selectedRecord {
+                if record.isOpenInInbox {
+                    Button {
+                        viewModel.markComplete([record])
+                    } label: {
+                        Label(String(localized: "Mark Complete"), systemImage: "checkmark.circle")
+                    }
+                } else if record.inboxState == .completed {
+                    Button {
+                        viewModel.reopen([record])
+                    } label: {
+                        Label(String(localized: "Reopen"), systemImage: "arrow.uturn.backward.circle")
+                    }
+                }
+
+                Button {
+                    viewModel.copyToClipboard(record.displayText)
+                } label: {
+                    Label(String(localized: "Copy"), systemImage: "doc.on.doc")
+                }
+                .keyboardShortcut("c", modifiers: .command)
+
+                if viewModel.isDirty {
+                    Button(String(localized: "Discard")) {
+                        viewModel.discardEditing()
+                    }
+                    Button(String(localized: "Save")) {
+                        viewModel.saveEditing()
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .keyboardShortcut("s", modifiers: .command)
+                    .disabled(!viewModel.canSaveDraft)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func filterMenuLabel(_ title: String, selected: Bool) -> some View {
+        if selected {
+            Label(title, systemImage: "checkmark")
+        } else {
+            Text(title)
         }
     }
 
     @ViewBuilder
     private func recordContextMenu(for record: TranscriptionRecord) -> some View {
-        if viewModel.selectedRecordIDs.count > 1 && viewModel.selectedRecordIDs.contains(record.id) {
-            let count = viewModel.selectedRecordIDs.count
-            Button(String(localized: "Copy")) {
-                let texts = viewModel.selectedRecords.map(\.finalText)
-                viewModel.copyToClipboard(texts.joined(separator: "\n\n"))
-            }
+        let selected = viewModel.selectedRecordIDs.contains(record.id) && viewModel.selectedRecordIDs.count > 1
+            ? viewModel.selectedRecords
+            : [record]
 
-            Menu(String(localized: "Export \(count) entries as...")) {
-                Button(String(localized: "Markdown (.md)")) {
-                    viewModel.exportSelectedRecords(format: .markdown)
-                }
-                Button(String(localized: "Plain Text (.txt)")) {
-                    viewModel.exportSelectedRecords(format: .plainText)
-                }
-                Button(String(localized: "JSON (.json)")) {
-                    viewModel.exportSelectedRecords(format: .json)
-                }
-            }
+        Button(String(localized: "Copy")) {
+            viewModel.copyToClipboard(selected.map(\.displayText).joined(separator: "\n\n"))
+        }
 
+        Menu(String(localized: "Export as…")) {
+            Button(String(localized: "Markdown (.md)")) { export(selected, as: .markdown) }
+            Button(String(localized: "Plain Text (.txt)")) { export(selected, as: .plainText) }
+            Button(String(localized: "JSON (.json)")) { export(selected, as: .json) }
+        }
+
+        if selected.contains(where: \.isOpenInInbox) {
             Divider()
-            Button(String(localized: "Delete \(count) entries"), role: .destructive) {
-                viewModel.deleteSelectedRecords()
-            }
-        } else {
-            Button(String(localized: "Copy")) {
-                viewModel.copyToClipboard(record.finalText)
-            }
-
-            Menu(String(localized: "Export as...")) {
-                Button(String(localized: "Markdown (.md)")) {
-                    viewModel.exportRecord(record, format: .markdown)
-                }
-                Button(String(localized: "Plain Text (.txt)")) {
-                    viewModel.exportRecord(record, format: .plainText)
-                }
-                Button(String(localized: "JSON (.json)")) {
-                    viewModel.exportRecord(record, format: .json)
-                }
-            }
-
+            Button(String(localized: "Mark Complete")) { viewModel.markComplete(selected) }
+        }
+        if selected.contains(where: { $0.inboxState == .completed }) {
             Divider()
-            Button(String(localized: "Delete"), role: .destructive) {
-                viewModel.deleteRecord(record)
-            }
+            Button(String(localized: "Reopen")) { viewModel.reopen(selected) }
+        }
+
+        Divider()
+        Button(String(localized: "Delete"), role: .destructive) {
+            viewModel.requestDeletion(of: Set(selected.map(\.id)))
         }
     }
-}
 
-// MARK: - Section Header
-
-private struct SectionHeader: View {
-    let group: HistoryDateGroup
-    let count: Int
-    let isCollapsed: Bool
-    let onToggle: () -> Void
-
-    var body: some View {
-        Button(action: onToggle) {
-            HStack(spacing: 4) {
-                Image(systemName: "chevron.right")
-                    .font(.caption2)
-                    .rotationEffect(.degrees(isCollapsed ? 0 : 90))
-                    .animation(.easeInOut(duration: 0.15), value: isCollapsed)
-                Text(group.displayName)
-                Text("(\(count))")
-                    .foregroundStyle(.tertiary)
-                Spacer()
-            }
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(String(localized: "\(group.displayName), \(count) entries"))
-        .accessibilityAddTraits(.isButton)
-        .accessibilityValue(isCollapsed ? String(localized: "Collapsed") : String(localized: "Expanded"))
-    }
-}
-
-// MARK: - Record Row
-
-private struct RecordRow: View {
-    let record: TranscriptionRecord
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(record.preview)
-                .lineLimit(2)
-                .font(.body)
-
-            HStack {
-                Text(relativeTime(record.timestamp))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                if let appName = record.appName {
-                    Text("- \(appName)")
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
-                if let domain = record.appDomain {
-                    Text("(\(domain))")
-                        .font(.caption)
-                        .foregroundStyle(.tertiary)
-                }
-
-                if record.wasPostProcessed {
-                    Image(systemName: "sparkles")
-                        .font(.caption2)
-                        .foregroundStyle(.purple.opacity(0.7))
-                        .help(String(localized: "AI enhanced"))
-                }
-
-                Spacer()
-
-                Text(formatDuration(record.durationSeconds))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-        }
-        .padding(.vertical, 2)
-        .accessibilityElement(children: .combine)
+    private var deleteConfirmationTitle: String {
+        deleteCandidateIDs.count == 1
+            ? String(localized: "Delete Entry?")
+            : String.localizedStringWithFormat(
+                String(localized: "Delete %lld Entries?"),
+                Int64(deleteCandidateIDs.count)
+            )
     }
 
-    private func relativeTime(_ date: Date) -> String {
-        let seconds = Date().timeIntervalSince(date)
-        let minutes = Int(seconds / 60)
-        let hours = Int(seconds / 3600)
-        let days = Int(seconds / 86400)
+    private var deleteConfirmationMessage: String {
+        if ServiceContainer.shared.historySyncPreferences.isEnabled {
+            return String(localized: "This removes the selected history from every synchronized device. This cannot be undone.")
+        }
+        return String(localized: "This removes the selected history from this Mac. This cannot be undone.")
+    }
 
-        if minutes < 1 {
-            return String(localized: "just_now")
-        } else if minutes < 60 {
-            return String(localized: "\(minutes) min ago")
-        } else if hours < 24 {
-            return String(localized: "\(hours) hr ago")
-        } else if Calendar.current.isDateInYesterday(date) {
-            return String(localized: "yesterday")
-        } else if days < 7 {
-            return String(localized: "\(days) days ago")
+    private func deleteRecords(with ids: Set<UUID>) {
+        let records = viewModel.records.filter { ids.contains($0.id) }
+        if records.count == 1, let record = records.first {
+            viewModel.deleteRecord(record)
         } else {
-            return date.formatted(.dateTime.day().month(.abbreviated))
+            viewModel.selectedRecordIDs = ids
+            viewModel.deleteSelectedRecords()
         }
+        deleteCandidateIDs = []
     }
 
-    private func formatDuration(_ seconds: Double) -> String {
-        let s = Int(seconds)
-        if s < 60 { return "\(s)s" }
-        return "\(s / 60)m \(s % 60)s"
+    private func export(_ records: [TranscriptionRecord], as format: HistoryExportFormat) {
+        viewModel.selectedRecordIDs = Set(records.map(\.id))
+        viewModel.exportSelectedRecords(format: format)
     }
 }
 
-// MARK: - Record Detail
-
-private struct RecordDetailView: View {
-    let record: TranscriptionRecord
+private struct HistoryWindowCloseGuard: NSViewRepresentable {
     @ObservedObject var viewModel: HistoryViewModel
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            // Header
-            VStack(alignment: .leading, spacing: 8) {
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(record.timestamp, format: .dateTime)
-                            .font(.headline)
-                        Text(formatDuration(record.durationSeconds) + " - " + "\(record.wordsCount) \(String(localized: "words"))")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    actionButtons
-                }
+    func makeCoordinator() -> Coordinator {
+        Coordinator(viewModel: viewModel)
+    }
 
-                // Metadata tags
-                HistoryFlowLayout(spacing: 6) {
-                    if let lang = record.language {
-                        metadataTag(lang.uppercased(), icon: "globe")
-                    }
-                    metadataTag(record.modelUsed ?? record.engineUsed, icon: "cpu")
-                    if let appName = record.appName {
-                        metadataTag(appName, icon: "app")
-                    }
-                    if let domain = record.appDomain {
-                        metadataTag(domain, icon: "globe.desk")
-                    }
-                    if !record.pipelineStepList.isEmpty {
-                        ForEach(record.pipelineStepList, id: \.self) { step in
-                            metadataTag(step, icon: "gearshape.2")
-                        }
-                    }
-                }
-            }
-            .padding(10)
-            .background(.bar)
-
-            // Audio Playback
-            if let audioURL = viewModel.audioFileURL(for: record) {
-                Divider()
-                AudioPlaybackBar(audioURL: audioURL, playbackService: viewModel.audioPlaybackService)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
-                    .background(.bar)
-            }
-
-            Divider()
-
-            // Correction Banner
-            if viewModel.showCorrectionBanner, !viewModel.correctionSuggestions.isEmpty {
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Image(systemName: "book.badge.checkmark")
-                        Text(String(localized: "Corrections added to dictionary"))
-                            .font(.subheadline.bold())
-                        Spacer()
-                        Button {
-                            viewModel.dismissCorrectionBanner()
-                        } label: {
-                            Image(systemName: "xmark")
-                        }
-                        .buttonStyle(.plain)
-                    }
-
-                    ForEach(viewModel.correctionSuggestions) { suggestion in
-                        HStack(spacing: 4) {
-                            Text(suggestion.original)
-                                .strikethrough()
-                                .foregroundStyle(.secondary)
-                            Image(systemName: "arrow.right")
-                                .font(.caption2)
-                            Text(suggestion.replacement)
-                                .bold()
-                        }
-                        .font(.caption)
-                    }
-                }
-                .padding(10)
-                .background(.orange.opacity(0.15))
-                .clipShape(RoundedRectangle(cornerRadius: 6))
-                .padding(.horizontal, 10)
-                .padding(.top, 8)
-            }
-
-            // Compare/Diff toggle
-            if record.wasPostProcessed && !viewModel.isEditing {
-                Picker("", selection: $viewModel.detailViewMode) {
-                    Text(String(localized: "Compare")).tag(HistoryDetailViewMode.compare)
-                    Text(String(localized: "Diff")).tag(HistoryDetailViewMode.diff)
-                }
-                .pickerStyle(.segmented)
-                .padding(.horizontal, 10)
-                .padding(.top, 8)
-            }
-
-            // Content
-            if viewModel.isEditing {
-                TextEditor(text: $viewModel.editedText)
-                    .font(.body)
-                    .padding(10)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else {
-                ScrollView {
-                    if viewModel.detailViewMode == .compare && record.wasPostProcessed {
-                        VStack(alignment: .leading, spacing: 0) {
-                            // Original STT section
-                            VStack(alignment: .leading, spacing: 4) {
-                                HStack {
-                                    Label(String(localized: "Original Transcription"), systemImage: "waveform")
-                                        .font(.caption.bold())
-                                        .foregroundStyle(.secondary)
-                                    Spacer()
-                                    Button {
-                                        viewModel.copyToClipboard(record.rawText)
-                                    } label: {
-                                        Image(systemName: "doc.on.doc")
-                                            .font(.caption2)
-                                    }
-                                    .buttonStyle(.borderless)
-                                    .help(String(localized: "Copy original"))
-                                }
-                                Text(record.rawText)
-                                    .textSelection(.enabled)
-                                    .font(.body)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                            .padding(10)
-
-                            Divider()
-                                .padding(.horizontal, 10)
-
-                            // AI Processed section
-                            VStack(alignment: .leading, spacing: 4) {
-                                HStack {
-                                    Label(String(localized: "AI Processed"), systemImage: "sparkles")
-                                        .font(.caption.bold())
-                                        .foregroundStyle(.secondary)
-                                    Spacer()
-                                    Button {
-                                        viewModel.copyToClipboard(record.finalText)
-                                    } label: {
-                                        Image(systemName: "doc.on.doc")
-                                            .font(.caption2)
-                                    }
-                                    .buttonStyle(.borderless)
-                                    .help(String(localized: "Copy processed"))
-                                }
-                                Text(record.finalText)
-                                    .textSelection(.enabled)
-                                    .font(.body)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                            }
-                            .padding(10)
-                        }
-                    } else if viewModel.detailViewMode == .diff && record.wasPostProcessed {
-                        Text(diffAttributedString(segments: viewModel.diffSegments(for: record)))
-                            .textSelection(.enabled)
-                            .font(.body)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(10)
-                    } else {
-                        Text(record.finalText)
-                            .textSelection(.enabled)
-                            .font(.body)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(10)
-                    }
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView(frame: .zero)
+        DispatchQueue.main.async {
+            context.coordinator.attach(to: view.window)
         }
-        .onChange(of: record.id) {
-            viewModel.cancelEditing()
-            viewModel.audioPlaybackService.stop()
-            viewModel.detailViewMode = .compare
+        return view
+    }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        DispatchQueue.main.async {
+            context.coordinator.attach(to: view.window)
         }
     }
 
-    @ViewBuilder
-    private var actionButtons: some View {
-        HStack(spacing: 4) {
-            if viewModel.isEditing {
-                Button(String(localized: "Cancel")) {
-                    viewModel.cancelEditing()
-                }
-                .controlSize(.small)
-                Button(String(localized: "Save")) {
-                    viewModel.saveEditing()
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-            } else {
-                Button {
-                    viewModel.copyToClipboard(record.finalText)
-                } label: {
-                    Image(systemName: "doc.on.doc")
-                }
-                .help(String(localized: "Copy"))
-                .accessibilityLabel(String(localized: "Copy"))
+    static func dismantleNSView(_ view: NSView, coordinator: Coordinator) {
+        coordinator.detach()
+    }
 
-                Button {
-                    viewModel.startEditing()
-                } label: {
-                    Image(systemName: "pencil")
-                }
-                .help(String(localized: "Edit"))
-                .accessibilityLabel(String(localized: "Edit"))
+    @MainActor
+    final class Coordinator: NSObject, NSWindowDelegate {
+        private let viewModel: HistoryViewModel
+        private weak var window: NSWindow?
+        private var previousDelegate: (any NSWindowDelegate)?
+        private var isClosingAfterConfirmation = false
 
-                Button(role: .destructive) {
-                    viewModel.deleteRecord(record)
-                } label: {
-                    Image(systemName: "trash")
-                }
-                .help(String(localized: "Delete"))
-                .accessibilityLabel(String(localized: "Delete"))
+        init(viewModel: HistoryViewModel) {
+            self.viewModel = viewModel
+        }
 
-                Divider()
-                    .frame(height: 14)
-
-                Button {
-                    viewModel.selectRecord(nil)
-                } label: {
-                    Image(systemName: "xmark")
-                }
-                .help(String(localized: "Close"))
-                .accessibilityLabel(String(localized: "Close"))
+        func attach(to window: NSWindow?) {
+            guard let window, self.window !== window else { return }
+            detach()
+            self.window = window
+            previousDelegate = window.delegate
+            window.delegate = self
+            viewModel.installCloseWindowHandler { [weak self] in
+                self?.closeAfterConfirmation()
             }
         }
-        .buttonStyle(.borderless)
-    }
 
-    private func diffAttributedString(segments: [DiffSegment]) -> AttributedString {
-        var result = AttributedString()
-        for (index, segment) in segments.enumerated() {
-            let word: String
-            switch segment {
-            case .unchanged(let text): word = text
-            case .removed(let text): word = text
-            case .added(let text): word = text
+        func detach() {
+            guard let window else { return }
+            if window.delegate === self {
+                window.delegate = previousDelegate
             }
-
-            var attr = AttributedString(word)
-            switch segment {
-            case .unchanged:
-                break
-            case .removed:
-                attr.foregroundColor = .red
-                attr.strikethroughStyle = .single
-                attr.backgroundColor = .red.opacity(0.15)
-            case .added:
-                attr.foregroundColor = .green
-                attr.backgroundColor = .green.opacity(0.15)
-            }
-            result += attr
-
-            if index < segments.count - 1 {
-                result += AttributedString(" ")
-            }
+            self.window = nil
+            previousDelegate = nil
         }
-        return result
-    }
 
-    private func metadataTag(_ text: String, icon: String) -> some View {
-        Label(text, systemImage: icon)
-            .font(.caption2)
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 6)
-            .padding(.vertical, 2)
-            .background(.quaternary, in: RoundedRectangle(cornerRadius: 4))
-    }
-
-    private func formatDuration(_ seconds: Double) -> String {
-        let s = Int(seconds)
-        if s < 60 { return "\(s)s" }
-        return "\(s / 60)m \(s % 60)s"
-    }
-}
-
-// MARK: - Audio Playback Bar
-
-private struct AudioPlaybackBar: View {
-    let audioURL: URL
-    @ObservedObject var playbackService: AudioPlaybackService
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Button {
-                playbackService.togglePlayPause(url: audioURL)
-            } label: {
-                Image(systemName: playbackService.isPlaying ? "pause.fill" : "play.fill")
-                    .font(.callout)
-                    .frame(width: 20)
+        func windowShouldClose(_ sender: NSWindow) -> Bool {
+            if isClosingAfterConfirmation {
+                return previousDelegate?.windowShouldClose?(sender) ?? true
             }
-            .buttonStyle(.borderless)
-            .accessibilityLabel(playbackService.isPlaying ? String(localized: "Pause") : String(localized: "Play"))
-
-            if playbackService.duration > 0 {
-                Slider(
-                    value: Binding(
-                        get: { playbackService.currentTime },
-                        set: { playbackService.seek(to: $0) }
-                    ),
-                    in: 0...playbackService.duration
-                )
-                .controlSize(.small)
-                .accessibilityLabel(String(localized: "Playback position"))
-
-                Text(formatTime(playbackService.currentTime) + " / " + formatTime(playbackService.duration))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .monospacedDigit()
-            } else {
-                Spacer()
-                Text(String(localized: "Audio"))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+            if viewModel.isDirty {
+                viewModel.requestWindowClose()
+                return false
             }
-
-            Button {
-                NSWorkspace.shared.activateFileViewerSelecting([audioURL])
-            } label: {
-                Image(systemName: "folder")
-                    .font(.callout)
-            }
-            .buttonStyle(.borderless)
-            .help(String(localized: "Show in Finder"))
-            .accessibilityLabel(String(localized: "Show in Finder"))
+            return previousDelegate?.windowShouldClose?(sender) ?? true
         }
-    }
 
-    private func formatTime(_ seconds: TimeInterval) -> String {
-        let s = Int(seconds)
-        let m = s / 60
-        let r = s % 60
-        return String(format: "%d:%02d", m, r)
-    }
-}
-
-// MARK: - Flow Layout
-
-private struct HistoryFlowLayout: Layout {
-    var spacing: CGFloat = 6
-
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        let rows = computeRows(proposal: proposal, subviews: subviews)
-        var height: CGFloat = 0
-        for (index, row) in rows.enumerated() {
-            let rowHeight = row.map { $0.sizeThatFits(.unspecified).height }.max() ?? 0
-            height += rowHeight
-            if index < rows.count - 1 { height += spacing }
-        }
-        return CGSize(width: proposal.width ?? 0, height: height)
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let rows = computeRows(proposal: proposal, subviews: subviews)
-        var y = bounds.minY
-        for row in rows {
-            let rowHeight = row.map { $0.sizeThatFits(.unspecified).height }.max() ?? 0
-            var x = bounds.minX
-            for subview in row {
-                let size = subview.sizeThatFits(.unspecified)
-                subview.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(size))
-                x += size.width + spacing
+        override func forwardingTarget(for selector: Selector!) -> Any? {
+            if let previousDelegate,
+               (previousDelegate as AnyObject).responds(to: selector) {
+                return previousDelegate
             }
-            y += rowHeight + spacing
+            return super.forwardingTarget(for: selector)
         }
-    }
 
-    private func computeRows(proposal: ProposedViewSize, subviews: Subviews) -> [[LayoutSubviews.Element]] {
-        let maxWidth = proposal.width ?? .infinity
-        var rows: [[LayoutSubviews.Element]] = [[]]
-        var currentWidth: CGFloat = 0
-        for subview in subviews {
-            let size = subview.sizeThatFits(.unspecified)
-            if currentWidth + size.width > maxWidth && !rows[rows.count - 1].isEmpty {
-                rows.append([])
-                currentWidth = 0
-            }
-            rows[rows.count - 1].append(subview)
-            currentWidth += size.width + spacing
+        private func closeAfterConfirmation() {
+            guard let window else { return }
+            isClosingAfterConfirmation = true
+            window.performClose(nil)
+            isClosingAfterConfirmation = false
         }
-        return rows
     }
 }

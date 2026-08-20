@@ -13,6 +13,22 @@ enum UserDataSyncIdentity {
         "snippet:\(encodedKey(normalizedKey(trigger)))"
     }
 
+    static func historyItemID(recordID: UUID) -> String {
+        "history:\(recordID.uuidString.lowercased())"
+    }
+
+    static func historyRecordID(from itemID: String) -> UUID? {
+        guard itemID.hasPrefix("history:") else { return nil }
+        return UUID(uuidString: String(itemID.dropFirst("history:".count)))
+    }
+
+    static func historyStateKey(
+        itemID: String,
+        component: UserDataSyncHistoryComponent
+    ) -> String {
+        "\(itemID)#\(component.rawValue)"
+    }
+
     static func normalizedKey(_ value: String) -> String {
         value
             .trimmingCharacters(in: .whitespacesAndNewlines)

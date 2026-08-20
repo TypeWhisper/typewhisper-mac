@@ -12,6 +12,7 @@ final class ServiceContainer: ObservableObject {
     let hotkeyService: HotkeyService
     let textInsertionService: TextInsertionService
     let historyService: HistoryService
+    let historySyncPreferences: HistorySyncPreferences
     let usageStatisticsService: UsageStatisticsService
     let recentTranscriptionStore: RecentTranscriptionStore
     let textDiffService: TextDiffService
@@ -83,7 +84,11 @@ final class ServiceContainer: ObservableObject {
         )
         hotkeyService = HotkeyService()
         textInsertionService = TextInsertionService()
-        historyService = HistoryService()
+        let historyPreferences = HistorySyncPreferences()
+        historySyncPreferences = historyPreferences
+        historyService = HistoryService(
+            historySyncPreferences: historyPreferences
+        )
         usageStatisticsService = UsageStatisticsService()
         recentTranscriptionStore = RecentTranscriptionStore()
         textDiffService = TextDiffService()
@@ -110,7 +115,9 @@ final class ServiceContainer: ObservableObject {
         snippetService = SnippetService()
         userDataSyncStore = TypeWhisperUserDataSyncStore(
             dictionaryService: dictionaryService,
-            snippetService: snippetService
+            snippetService: snippetService,
+            historyService: historyService,
+            historySyncPreferences: historyPreferences
         )
         soundService = SoundService()
         audioDeviceService = AudioDeviceService(
@@ -144,7 +151,9 @@ final class ServiceContainer: ObservableObject {
         supporterDiscordService = SupporterDiscordService(licenseService: licenseService)
         cloudFolderSyncController = CloudFolderSyncController(
             premiumAccountService: premiumAccountService,
-            syncStore: userDataSyncStore
+            syncStore: userDataSyncStore,
+            historyService: historyService,
+            historySyncPreferences: historyPreferences
         )
 
         // ViewModels (created before HTTP API so DictationViewModel is available)
@@ -245,7 +254,8 @@ final class ServiceContainer: ObservableObject {
         historyViewModel = HistoryViewModel(
             historyService: historyService,
             textDiffService: textDiffService,
-            dictionaryService: dictionaryService
+            dictionaryService: dictionaryService,
+            syncController: cloudFolderSyncController
         )
         profilesViewModel = ProfilesViewModel(
             profileService: profileService,

@@ -139,7 +139,7 @@ struct HistoryManagedAppWindowScene: Scene {
                 .disablesManagedAppWindowRestoration()
         }
         .windowResizability(.contentMinSize)
-        .defaultSize(width: 900, height: 500)
+        .defaultSize(width: 1180, height: 760)
     }
 }
 
@@ -857,6 +857,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
             return
         }
 
+        if AppConstants.screenshotState == "history" {
+            ManagedAppWindowOpener.shared.open(id: "history")
+            prepareScreenshotHistoryWindow()
+            return
+        }
+
         guard let destination = screenshotPremiumDestination else {
             openSettingsWindow()
             prepareScreenshotSettingsWindow()
@@ -897,6 +903,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
         }
 
         prepareScreenshotWindow(window, contentSize: NSSize(width: 1_150, height: 890))
+    }
+
+    private func prepareScreenshotHistoryWindow(remainingAttempts: Int = 8) {
+        guard AppConstants.isScreenshotAutomation else { return }
+
+        guard let window = NSApp.windows.first(where: {
+            $0.identifier?.rawValue.lowercased().contains("history") == true
+                || $0.title == String(localized: "History")
+        }) else {
+            guard remainingAttempts > 0 else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                self.prepareScreenshotHistoryWindow(remainingAttempts: remainingAttempts - 1)
+            }
+            return
+        }
+
+        prepareScreenshotWindow(window, contentSize: NSSize(width: 1_280, height: 780))
     }
 
     private func prepareScreenshotPremiumWindow(

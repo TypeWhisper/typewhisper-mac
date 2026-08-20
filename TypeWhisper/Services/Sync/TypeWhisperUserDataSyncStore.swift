@@ -5,6 +5,8 @@ import Foundation
 final class TypeWhisperUserDataSyncStore: UserDataSyncStore, @unchecked Sendable {
     private let dictionaryService: DictionaryService
     private let snippetService: SnippetService
+    private let historyService: HistoryService?
+    private let historySyncPreferences: HistorySyncPreferences?
     private let defaults: UserDefaults
     private var cancellables = Set<AnyCancellable>()
     private var observers: [UUID: @MainActor @Sendable () -> Void] = [:]
@@ -13,10 +15,14 @@ final class TypeWhisperUserDataSyncStore: UserDataSyncStore, @unchecked Sendable
     init(
         dictionaryService: DictionaryService,
         snippetService: SnippetService,
+        historyService: HistoryService? = nil,
+        historySyncPreferences: HistorySyncPreferences? = nil,
         defaults: UserDefaults = .standard
     ) {
         self.dictionaryService = dictionaryService
         self.snippetService = snippetService
+        self.historyService = historyService
+        self.historySyncPreferences = historySyncPreferences
         self.defaults = defaults
 
         dictionaryService.$entries
@@ -32,6 +38,19 @@ final class TypeWhisperUserDataSyncStore: UserDataSyncStore, @unchecked Sendable
                 self?.notifyLocalChange()
             }
             .store(in: &cancellables)
+
+        historyService?.$records
+            .dropFirst()
+            .sink { [weak self] _ in
+                self?.notifyLocalChange()
+            }
+            .store(in: &cancellables)
+
+        historySyncPreferences?.objectWillChange
+            .sink { [weak self] _ in
+                self?.notifyLocalChange()
+            }
+            .store(in: &cancellables)
     }
 
     func snapshot() -> UserDataSyncSnapshot {
@@ -41,7 +60,9 @@ final class TypeWhisperUserDataSyncStore: UserDataSyncStore, @unchecked Sendable
                 excludingTermItemIDs: excluded.terms,
                 excludingCorrectionItemIDs: excluded.corrections
             ),
-            snippets: snippetService.userDataSyncSnippets()
+            snippets: snippetService.userDataSyncSnippets(),
+            historyRecords: historyService?.userDataSyncHistoryRecords() ?? [],
+            deletedHistoryRecords: historyService?.userDataSyncHistoryDeletions() ?? []
         )
     }
 
@@ -52,6 +73,7 @@ final class TypeWhisperUserDataSyncStore: UserDataSyncStore, @unchecked Sendable
 
         try dictionaryService.applyUserDataSyncMutations(mutations)
         try snippetService.applyUserDataSyncMutations(mutations)
+        try historyService?.applyUserDataSyncMutations(mutations)
     }
 
     @discardableResult

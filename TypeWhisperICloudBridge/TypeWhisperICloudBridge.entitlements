@@ -8,7 +8,7 @@
 	</array>
 	<key>com.apple.developer.icloud-container-identifiers</key>
 	<array>
-		<string>iCloud.com.typewhisper.sync</string>
+		<string>$(ICLOUD_CONTAINER_ID)</string>
 	</array>
 	<key>com.apple.developer.icloud-services</key>
 	<array>
@@ -16,7 +16,7 @@
 	</array>
 	<key>com.apple.developer.ubiquity-container-identifiers</key>
 	<array>
-		<string>iCloud.com.typewhisper.sync</string>
+		<string>$(ICLOUD_CONTAINER_ID)</string>
 	</array>
 </dict>
 </plist>

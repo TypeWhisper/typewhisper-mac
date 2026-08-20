@@ -29,6 +29,7 @@ final class HistoryService: ObservableObject {
     private let modelContainer: ModelContainer
     private let modelContext: ModelContext
     private let eventEmitter: @MainActor (TypeWhisperEvent) -> Void
+    private let historySyncPreferences: HistorySyncPreferences?
 
     private(set) var totalRecords: Int = 0
     private(set) var totalWords: Int = 0
@@ -38,12 +39,14 @@ final class HistoryService: ObservableObject {
 
     init(
         appSupportDirectory: URL = AppConstants.appSupportDirectory,
+        historySyncPreferences: HistorySyncPreferences? = nil,
         eventEmitter: @escaping @MainActor (TypeWhisperEvent) -> Void = { event in
             EventBus.shared?.emit(event)
         }
     ) {
         let storeDir = appSupportDirectory
         self.eventEmitter = eventEmitter
+        self.historySyncPreferences = historySyncPreferences
 
         let audioDir = storeDir.appendingPathComponent("audio", isDirectory: true)
         try? FileManager.default.createDirectory(at: audioDir, withIntermediateDirectories: true)
@@ -121,6 +124,12 @@ final class HistoryService: ObservableObject {
             audioFileName: audioFileName
         )
         record.pipelineStepList = pipelineSteps ?? []
+        record.originDeviceID = historySyncPreferences?.deviceID ?? ""
+        record.originPlatformRaw = "macOS"
+        record.source = .mac
+        record.historySyncAudioEligible = historySyncPreferences?.isEnabled == true
+            && historySyncPreferences?.isAudioEnabled == true
+            && audioFileName != nil
         modelContext.insert(record)
         save()
         fetchRecords()
@@ -137,6 +146,7 @@ final class HistoryService: ObservableObject {
     func updateRecord(_ record: TranscriptionRecord, finalText: String) {
         record.finalText = finalText
         record.wordsCount = finalText.split(separator: " ").count
+        record.contentUpdatedAt = Date()
         save()
         fetchRecords()
         let payload = PluginSyncPayload(
@@ -171,6 +181,7 @@ final class HistoryService: ObservableObject {
     }
 
     func deleteRecord(_ record: TranscriptionRecord) {
+        historySyncPreferences?.recordExplicitDeletion(record.id)
         deleteAudioFile(for: record)
         modelContext.delete(record)
         save()
@@ -179,6 +190,7 @@ final class HistoryService: ObservableObject {
 
     func deleteRecords(_ records: [TranscriptionRecord]) {
         for record in records {
+            historySyncPreferences?.recordExplicitDeletion(record.id)
             deleteAudioFile(for: record)
             modelContext.delete(record)
         }
@@ -190,6 +202,7 @@ final class HistoryService: ObservableObject {
         do {
             let allRecords = try modelContext.fetch(FetchDescriptor<TranscriptionRecord>())
             for record in allRecords {
+                historySyncPreferences?.recordExplicitDeletion(record.id)
                 deleteAudioFile(for: record)
                 modelContext.delete(record)
             }
@@ -225,11 +238,231 @@ final class HistoryService: ObservableObject {
         let old = records.filter { $0.timestamp < cutoff }
         guard !old.isEmpty else { return }
         for record in old {
+            historySyncPreferences?.recordRetentionPrune(record.id)
             deleteAudioFile(for: record)
             modelContext.delete(record)
         }
         save()
         fetchRecords()
+    }
+
+    func completeInbox(_ record: TranscriptionRecord) {
+        guard record.inboxState == .open else { return }
+        record.inboxState = .completed
+        record.inboxCompletedAt = Date()
+        record.inboxUpdatedAt = Date()
+        save()
+        fetchRecords()
+    }
+
+    func reopenInbox(_ record: TranscriptionRecord) {
+        guard record.inboxState == .completed else { return }
+        record.inboxState = .open
+        record.inboxCompletedAt = nil
+        record.inboxUpdatedAt = Date()
+        save()
+        fetchRecords()
+    }
+
+    func userDataSyncHistoryRecords() -> [UserDataSyncHistoryRecord] {
+        guard historySyncPreferences?.isEnabled == true else { return [] }
+        return records.compactMap { record in
+            guard historySyncPreferences?.isSuppressed(record.id) != true,
+                  historySyncPreferences?.explicitDeletions[
+                    record.id.uuidString.lowercased()
+                  ] == nil else {
+                return nil
+            }
+            let content = UserDataSyncHistoryContentV1(
+                recordID: record.id,
+                createdAt: record.timestamp,
+                updatedAt: synchronizedTimestamp(record.contentUpdatedAt, fallback: record.timestamp),
+                originDeviceID: record.originDeviceID.isEmpty
+                    ? (historySyncPreferences?.deviceID ?? "")
+                    : record.originDeviceID,
+                originPlatform: record.originPlatformRaw,
+                source: record.sourceRaw,
+                processingState: record.processingStateRaw,
+                rawTranscript: record.rawText,
+                finalText: record.finalText,
+                renderedDocument: record.renderedDocument,
+                structuredDocument: record.synchronizedStructuredDocument,
+                appDisplayName: record.appName,
+                durationSeconds: record.durationSeconds,
+                detectedLanguage: record.language,
+                engineDisplayName: record.engineUsed,
+                modelDisplayName: record.modelUsed,
+                processingFailureCategory: record.processingFailureCategory,
+                processingFailureMessage: record.processingFailureMessage
+            )
+            let inbox = UserDataSyncHistoryInboxV1(
+                recordID: record.id,
+                updatedAt: synchronizedTimestamp(record.inboxUpdatedAt, fallback: record.timestamp),
+                state: record.inboxStateRaw,
+                kind: record.inboxKindRaw,
+                completionPolicy: UserDataSyncHistoryCompletionPolicy(
+                    rawValue: record.inboxCompletionPolicyRaw
+                ) ?? .explicit,
+                completedAt: record.inboxCompletedAt,
+                safeAction: record.inboxSafeActionData.flatMap {
+                    try? JSONDecoder().decode(
+                        UserDataSyncHistorySafeActionV1.self,
+                        from: $0
+                    )
+                }
+            )
+            return UserDataSyncHistoryRecord(
+                content: content,
+                inbox: inbox,
+                audio: synchronizedAudioDescriptor(for: record),
+                localAudioFileURL: audioFileURL(for: record),
+                audioEligible: record.historySyncAudioEligible
+            )
+        }
+    }
+
+    func userDataSyncHistoryDeletions() -> [UserDataSyncHistoryDeletion] {
+        guard historySyncPreferences?.isEnabled == true else { return [] }
+        return historySyncPreferences?.explicitDeletions.compactMap { key, date in
+            UUID(uuidString: key).map {
+                UserDataSyncHistoryDeletion(recordID: $0, deletedAt: date)
+            }
+        } ?? []
+    }
+
+    func applyUserDataSyncMutations(_ mutations: [UserDataSyncMutation]) throws {
+        for mutation in mutations {
+            switch mutation {
+            case .upsertHistoryContent(let content):
+                guard historySyncPreferences?.isSuppressed(content.recordID) != true else { continue }
+                let record = remoteRecord(for: content.recordID, timestamp: content.createdAt)
+                guard content.updatedAt >= synchronizedTimestamp(
+                    record.contentUpdatedAt,
+                    fallback: record.timestamp
+                ) else { continue }
+                record.timestamp = content.createdAt
+                record.rawText = content.rawTranscript
+                record.finalText = content.finalText
+                record.renderedDocument = content.renderedDocument
+                record.synchronizedStructuredDocument = content.structuredDocument
+                record.appName = content.appDisplayName
+                record.durationSeconds = content.durationSeconds
+                record.language = content.detectedLanguage
+                record.engineUsed = content.engineDisplayName
+                record.modelUsed = content.modelDisplayName
+                record.wordsCount = content.finalText.split(whereSeparator: \.isWhitespace).count
+                record.originDeviceID = content.originDeviceID
+                record.originPlatformRaw = content.originPlatform
+                record.sourceRaw = content.source
+                record.processingStateRaw = content.processingState
+                record.processingFailureCategory = content.processingFailureCategory
+                record.processingFailureMessage = content.processingFailureMessage
+                record.contentUpdatedAt = content.updatedAt
+            case .upsertHistoryInbox(let inbox):
+                guard historySyncPreferences?.isSuppressed(inbox.recordID) != true else { continue }
+                let record = remoteRecord(for: inbox.recordID, timestamp: inbox.updatedAt)
+                guard inbox.updatedAt >= synchronizedTimestamp(
+                    record.inboxUpdatedAt,
+                    fallback: record.timestamp
+                ) else { continue }
+                record.inboxStateRaw = inbox.state
+                record.inboxKindRaw = inbox.kind
+                record.inboxCompletionPolicyRaw = inbox.completionPolicy.rawValue
+                record.inboxCompletedAt = inbox.completedAt
+                record.inboxSafeActionData = inbox.safeAction.flatMap {
+                    try? JSONEncoder().encode($0)
+                }
+                record.inboxUpdatedAt = inbox.updatedAt
+            case .upsertHistoryAudio(let audio):
+                guard historySyncPreferences?.isSuppressed(audio.recordID) != true,
+                      audio.isValid else { continue }
+                let record = remoteRecord(for: audio.recordID, timestamp: audio.createdAt)
+                guard audio.updatedAt >= synchronizedTimestamp(
+                    record.audioUpdatedAt,
+                    fallback: record.timestamp
+                ) else { continue }
+                record.remoteAudioRelativePath = audio.relativeAssetPath
+                record.remoteAudioMediaType = audio.mediaType
+                record.remoteAudioByteCount = audio.byteCount
+                record.remoteAudioSHA256 = audio.sha256
+                record.remoteAudioCreatedAt = audio.createdAt
+                record.remoteAudioDurationSeconds = audio.durationSeconds
+                record.audioUpdatedAt = audio.updatedAt
+                record.historySyncAudioEligible = false
+            case .deleteHistory(let recordID):
+                if let record = records.first(where: { $0.id == recordID }) {
+                    deleteAudioFile(for: record)
+                    modelContext.delete(record)
+                }
+            case .upsertDictionary,
+                 .deleteDictionary,
+                 .upsertSnippet,
+                 .deleteSnippet:
+                continue
+            }
+        }
+        try modelContext.save()
+        fetchRecords()
+    }
+
+    func installSynchronizedAudio(recordID: UUID, sourceURL: URL) throws {
+        guard let record = records.first(where: { $0.id == recordID }) else { return }
+        let fileName = "\(recordID.uuidString.lowercased()).wav"
+        let destination = audioDirectory.appendingPathComponent(fileName)
+        let temporary = audioDirectory.appendingPathComponent(".\(UUID().uuidString).partial")
+        try FileManager.default.copyItem(at: sourceURL, to: temporary)
+        if FileManager.default.fileExists(atPath: destination.path) {
+            _ = try FileManager.default.replaceItemAt(destination, withItemAt: temporary)
+        } else {
+            try FileManager.default.moveItem(at: temporary, to: destination)
+        }
+        record.audioFileName = fileName
+        try modelContext.save()
+        fetchRecords()
+    }
+
+    func synchronizedAudioDescriptor(
+        for record: TranscriptionRecord
+    ) -> UserDataSyncHistoryAudioV1? {
+        guard let relativeAssetPath = record.remoteAudioRelativePath,
+              let mediaType = record.remoteAudioMediaType,
+              let sha256 = record.remoteAudioSHA256,
+              let createdAt = record.remoteAudioCreatedAt else {
+            return nil
+        }
+        let descriptor = UserDataSyncHistoryAudioV1(
+            recordID: record.id,
+            updatedAt: synchronizedTimestamp(record.audioUpdatedAt, fallback: record.timestamp),
+            relativeAssetPath: relativeAssetPath,
+            mediaType: mediaType,
+            byteCount: record.remoteAudioByteCount,
+            sha256: sha256,
+            createdAt: createdAt,
+            durationSeconds: record.remoteAudioDurationSeconds
+        )
+        return descriptor.isValid ? descriptor : nil
+    }
+
+    private func remoteRecord(for id: UUID, timestamp: Date) -> TranscriptionRecord {
+        if let existing = records.first(where: { $0.id == id }) { return existing }
+        let record = TranscriptionRecord(
+            id: id,
+            timestamp: timestamp,
+            rawText: "",
+            finalText: "",
+            durationSeconds: 0,
+            engineUsed: "remote"
+        )
+        record.source = .other
+        record.processingState = .importing
+        record.historySyncAudioEligible = false
+        modelContext.insert(record)
+        records.insert(record, at: 0)
+        return record
+    }
+
+    private func synchronizedTimestamp(_ value: Date, fallback: Date) -> Date {
+        value.timeIntervalSince1970 > 0 ? value : fallback
     }
 
     private func fetchRecords() {

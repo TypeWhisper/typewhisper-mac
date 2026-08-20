@@ -39,7 +39,7 @@ final class PremiumICloudBridgeService: NSObject, PremiumICloudBridgeXPCProtocol
         }
         guard let container = FileManager.default.url(
             forUbiquityContainerIdentifier:
-                PremiumICloudBridgeConstants.productionContainerIdentifier
+                PremiumICloudBridgeConstants.containerIdentifier()
         ) else {
             throw PremiumICloudBridgeError.iCloudUnavailable
         }

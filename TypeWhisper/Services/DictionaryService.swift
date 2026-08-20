@@ -1115,7 +1115,12 @@ final class DictionaryService: ObservableObject {
                 upsertSyncedDictionaryEntry(synced, context: context)
             case .deleteDictionary(let itemID):
                 deleteSyncedDictionaryEntry(itemID: itemID, context: context)
-            case .upsertSnippet, .deleteSnippet:
+            case .upsertSnippet,
+                 .deleteSnippet,
+                 .upsertHistoryContent,
+                 .upsertHistoryInbox,
+                 .upsertHistoryAudio,
+                 .deleteHistory:
                 continue
             }
         }

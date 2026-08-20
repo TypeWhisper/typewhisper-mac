@@ -11,6 +11,7 @@ struct PaidEntitlements: Sendable, Equatable {
 enum UserDataSyncCollection: String, Codable, Sendable {
     case dictionary
     case snippets
+    case history
 }
 
 enum UserDataSyncDictionaryEntryType: String, Codable, Sendable {
@@ -160,13 +161,19 @@ struct UserDataSyncSnippet: Codable, Equatable, Sendable {
 struct UserDataSyncSnapshot: Codable, Equatable, Sendable {
     let dictionaryEntries: [UserDataSyncDictionaryEntry]
     let snippets: [UserDataSyncSnippet]
+    let historyRecords: [UserDataSyncHistoryRecord]
+    let deletedHistoryRecords: [UserDataSyncHistoryDeletion]
 
     init(
         dictionaryEntries: [UserDataSyncDictionaryEntry] = [],
-        snippets: [UserDataSyncSnippet] = []
+        snippets: [UserDataSyncSnippet] = [],
+        historyRecords: [UserDataSyncHistoryRecord] = [],
+        deletedHistoryRecords: [UserDataSyncHistoryDeletion] = []
     ) {
         self.dictionaryEntries = dictionaryEntries
         self.snippets = snippets
+        self.historyRecords = historyRecords
+        self.deletedHistoryRecords = deletedHistoryRecords
     }
 }
 
@@ -175,6 +182,10 @@ enum UserDataSyncMutation: Equatable, Sendable {
     case deleteDictionary(itemID: String)
     case upsertSnippet(UserDataSyncSnippet)
     case deleteSnippet(itemID: String)
+    case upsertHistoryContent(UserDataSyncHistoryContentV1)
+    case upsertHistoryInbox(UserDataSyncHistoryInboxV1)
+    case upsertHistoryAudio(UserDataSyncHistoryAudioV1)
+    case deleteHistory(recordID: UUID)
 }
 
 @MainActor

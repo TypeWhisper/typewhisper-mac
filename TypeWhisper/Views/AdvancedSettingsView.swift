@@ -27,10 +27,6 @@ struct AdvancedSettingsView: View {
     @State private var exportBackupDraft: ExportBackupDraft?
     @State private var showImportSheet = false
 
-    @AppStorage(UserDefaultsKeys.historyEnabled) private var historyEnabled: Bool = true
-    @AppStorage(UserDefaultsKeys.historyRetentionDays) private var historyRetentionDays: Int = 0
-    @AppStorage(UserDefaultsKeys.saveAudioWithHistory) private var saveAudioWithHistory: Bool = false
-
     var body: some View {
         VStack(spacing: 0) {
             SettingsPageHeader(String(localized: "Advanced"))
@@ -325,53 +321,23 @@ struct AdvancedSettingsView: View {
 
                 SpokenPunctuationSettingsSection()
 
-                // MARK: - History
-                Section(String(localized: "History")) {
-                Toggle(isOn: $historyEnabled) {
-                    SettingsInfoLabel(
-                        title: String(localized: "Save history"),
-                        info: String(localized: "Saves transcriptions to the history tab.")
-                    )
-                }
-
-                if historyEnabled {
-                    Toggle(isOn: $saveAudioWithHistory) {
-                        SettingsInfoLabel(
-                            title: String(localized: "Save audio with transcriptions"),
-                            info: String(localized: "Stores a WAV recording alongside each transcription. Uses approximately 1 MB per 30 seconds.")
-                        )
-                    }
-
-                    Picker(selection: $historyRetentionDays) {
-                        Text(String(localized: "Unlimited")).tag(0)
-                        Text(String(localized: "30 days")).tag(30)
-                        Text(String(localized: "60 days")).tag(60)
-                        Text(String(localized: "90 days")).tag(90)
-                        Text(String(localized: "180 days")).tag(180)
+                Section(String(localized: "Usage Statistics")) {
+                    Button(role: .destructive) {
+                        showClearUsageStatisticsConfirmation = true
                     } label: {
-                        SettingsInfoLabel(
-                            title: String(localized: "Auto-delete after"),
-                            info: String(localized: "Older entries are automatically removed at app launch.")
-                        )
+                        Label(String(localized: "Clear Usage Statistics"), systemImage: "trash")
+                    }
+                    .confirmationDialog(
+                        String(localized: "Clear Usage Statistics?"),
+                        isPresented: $showClearUsageStatisticsConfirmation
+                    ) {
+                        Button(String(localized: "Clear Statistics"), role: .destructive) {
+                            ServiceContainer.shared.usageStatisticsService.clearUsageStatistics()
+                        }
+                    } message: {
+                        Text(String(localized: "This will permanently delete aggregate word, app, time-saved, and activity statistics. Transcription history entries are unchanged."))
                     }
                 }
-
-                Button(role: .destructive) {
-                    showClearUsageStatisticsConfirmation = true
-                } label: {
-                    Label(String(localized: "Clear Usage Statistics"), systemImage: "trash")
-                }
-                .confirmationDialog(
-                    String(localized: "Clear Usage Statistics?"),
-                    isPresented: $showClearUsageStatisticsConfirmation
-                ) {
-                    Button(String(localized: "Clear Statistics"), role: .destructive) {
-                        ServiceContainer.shared.usageStatisticsService.clearUsageStatistics()
-                    }
-                } message: {
-                    Text(String(localized: "This will permanently delete aggregate word, app, time-saved, and activity statistics. Transcription history entries are unchanged."))
-                }
-            }
 
                 // MARK: - API Server
                 Section(String(localized: "API Server")) {

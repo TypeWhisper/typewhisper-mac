@@ -20,6 +20,8 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
+	<key>TypeWhisperICloudContainer</key>
+	<string>$(ICLOUD_CONTAINER_ID)</string>
 	<key>XPCService</key>
 	<dict>
 		<key>ServiceType</key>

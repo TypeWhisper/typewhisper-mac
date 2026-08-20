@@ -40,19 +40,54 @@ struct CloudFolderSyncState: Codable, Equatable, Sendable {
     var exportedItemVersions: [String: String]
     var appliedOperationIDs: Set<String>
     var lastSyncAt: Date?
+    var historyGeneration: String
 
     init(
         deviceId: String = UUID().uuidString,
         knownLocalItemIDs: Set<String> = [],
         exportedItemVersions: [String: String] = [:],
         appliedOperationIDs: Set<String> = [],
-        lastSyncAt: Date? = nil
+        lastSyncAt: Date? = nil,
+        historyGeneration: String = "history-v1"
     ) {
         self.deviceId = deviceId
         self.knownLocalItemIDs = knownLocalItemIDs
         self.exportedItemVersions = exportedItemVersions
         self.appliedOperationIDs = appliedOperationIDs
         self.lastSyncAt = lastSyncAt
+        self.historyGeneration = historyGeneration
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case deviceId
+        case knownLocalItemIDs
+        case exportedItemVersions
+        case appliedOperationIDs
+        case lastSyncAt
+        case historyGeneration
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        deviceId = try container.decodeIfPresent(String.self, forKey: .deviceId)
+            ?? UUID().uuidString
+        knownLocalItemIDs = try container.decodeIfPresent(
+            Set<String>.self,
+            forKey: .knownLocalItemIDs
+        ) ?? []
+        exportedItemVersions = try container.decodeIfPresent(
+            [String: String].self,
+            forKey: .exportedItemVersions
+        ) ?? [:]
+        appliedOperationIDs = try container.decodeIfPresent(
+            Set<String>.self,
+            forKey: .appliedOperationIDs
+        ) ?? []
+        lastSyncAt = try container.decodeIfPresent(Date.self, forKey: .lastSyncAt)
+        historyGeneration = try container.decodeIfPresent(
+            String.self,
+            forKey: .historyGeneration
+        ) ?? "history-v1"
     }
 }
 
@@ -62,10 +97,17 @@ struct CloudFolderSyncResult: Equatable, Sendable {
     let mutationsApplied: Int
     let syncedAt: Date
     let diagnostics: [CloudFolderSyncDiagnostic]
+    let devices: [CloudFolderSyncDeviceRecord]
 }
 
 struct CloudFolderSyncDiagnostic: Equatable, Sendable {
-    enum Kind: String, Sendable { case unreadableFile, malformedOperation, unsupportedSchema }
+    enum Kind: String, Sendable {
+        case unreadableFile
+        case malformedOperation
+        case malformedDevice
+        case unsupportedSchema
+        case audioTransferFailed
+    }
     let kind: Kind
     let fileName: String
 }
@@ -78,9 +120,27 @@ struct CloudFolderSyncManifest: Codable, Equatable, Sendable {
 
 struct CloudFolderSyncDeviceRecord: Codable, Equatable, Sendable {
     let deviceId: String
+    let historyOriginDeviceID: String?
     let platform: String
     let appVersion: String
     let updatedAt: Date
+    let name: String?
+
+    init(
+        deviceId: String,
+        historyOriginDeviceID: String? = nil,
+        platform: String,
+        appVersion: String,
+        updatedAt: Date,
+        name: String? = nil
+    ) {
+        self.deviceId = deviceId
+        self.historyOriginDeviceID = historyOriginDeviceID
+        self.platform = platform
+        self.appVersion = appVersion
+        self.updatedAt = updatedAt
+        self.name = name
+    }
 }
 
 struct CloudFolderSyncOperation: Codable, Equatable, Sendable {
@@ -99,6 +159,12 @@ struct CloudFolderSyncOperation: Codable, Equatable, Sendable {
     let deletedAt: Date?
     let dictionary: UserDataSyncDictionaryEntry?
     let snippet: UserDataSyncSnippet?
+    let historyPayloadVersion: Int?
+    let historyGeneration: String?
+    let historyComponent: UserDataSyncHistoryComponent?
+    let historyContent: UserDataSyncHistoryContentV1?
+    let historyInbox: UserDataSyncHistoryInboxV1?
+    let historyAudio: UserDataSyncHistoryAudioV1?
 
     static func upsertDictionary(
         _ entry: UserDataSyncDictionaryEntry,
@@ -116,7 +182,13 @@ struct CloudFolderSyncOperation: Codable, Equatable, Sendable {
             updatedAt: entry.updatedAt,
             deletedAt: nil,
             dictionary: entry,
-            snippet: nil
+            snippet: nil,
+            historyPayloadVersion: nil,
+            historyGeneration: nil,
+            historyComponent: nil,
+            historyContent: nil,
+            historyInbox: nil,
+            historyAudio: nil
         )
     }
 
@@ -136,7 +208,44 @@ struct CloudFolderSyncOperation: Codable, Equatable, Sendable {
             updatedAt: snippet.updatedAt,
             deletedAt: nil,
             dictionary: nil,
-            snippet: snippet
+            snippet: snippet,
+            historyPayloadVersion: nil,
+            historyGeneration: nil,
+            historyComponent: nil,
+            historyContent: nil,
+            historyInbox: nil,
+            historyAudio: nil
+        )
+    }
+
+    static func upsertHistory(
+        itemID: String,
+        component: UserDataSyncHistoryComponent,
+        generation: String,
+        deviceId: String,
+        content: UserDataSyncHistoryContentV1? = nil,
+        inbox: UserDataSyncHistoryInboxV1? = nil,
+        audio: UserDataSyncHistoryAudioV1? = nil,
+        operationId: String = UUID().uuidString
+    ) -> CloudFolderSyncOperation {
+        let updatedAt = content?.updatedAt ?? inbox?.updatedAt ?? audio?.updatedAt ?? .distantPast
+        return CloudFolderSyncOperation(
+            schemaVersion: 1,
+            operationId: operationId,
+            deviceId: deviceId,
+            collection: .history,
+            itemId: itemID,
+            kind: .upsert,
+            updatedAt: updatedAt,
+            deletedAt: nil,
+            dictionary: nil,
+            snippet: nil,
+            historyPayloadVersion: 1,
+            historyGeneration: generation,
+            historyComponent: component,
+            historyContent: content,
+            historyInbox: inbox,
+            historyAudio: audio
         )
     }
 
@@ -157,7 +266,41 @@ struct CloudFolderSyncOperation: Codable, Equatable, Sendable {
             updatedAt: deletedAt,
             deletedAt: deletedAt,
             dictionary: nil,
-            snippet: nil
+            snippet: nil,
+            historyPayloadVersion: collection == .history ? 1 : nil,
+            historyGeneration: nil,
+            historyComponent: nil,
+            historyContent: nil,
+            historyInbox: nil,
+            historyAudio: nil
+        )
+    }
+
+    static func deleteHistory(
+        recordID: UUID,
+        generation: String,
+        deviceId: String,
+        deletedAt: Date,
+        operationId: String = UUID().uuidString
+    ) -> CloudFolderSyncOperation {
+        let itemID = UserDataSyncIdentity.historyItemID(recordID: recordID)
+        return CloudFolderSyncOperation(
+            schemaVersion: 1,
+            operationId: operationId,
+            deviceId: deviceId,
+            collection: .history,
+            itemId: itemID,
+            kind: .delete,
+            updatedAt: deletedAt,
+            deletedAt: deletedAt,
+            dictionary: nil,
+            snippet: nil,
+            historyPayloadVersion: 1,
+            historyGeneration: generation,
+            historyComponent: nil,
+            historyContent: nil,
+            historyInbox: nil,
+            historyAudio: nil
         )
     }
 }
@@ -192,6 +335,7 @@ enum CloudFolderSyncEngine {
         store: (any UserDataSyncStore)?,
         state: inout CloudFolderSyncState,
         entitlements: PaidEntitlements,
+        historyOriginDeviceID: String? = nil,
         now: Date = Date(),
         afterFileIO: (@Sendable () async -> Void)? = nil
     ) async throws -> CloudFolderSyncResult {
@@ -203,8 +347,9 @@ enum CloudFolderSyncEngine {
         }
 
         let initialSnapshot = await store.snapshot()
-        let initialRecords = records(from: initialSnapshot)
         let stateSnapshot = state
+        let deviceName = Host.current().localizedName
+            ?? ProcessInfo.processInfo.hostName
         let fileResult = try await Task.detached(priority: .utility) {
             let packageURL = packageURL(for: folderURL)
             let operationsURL = packageURL
@@ -226,11 +371,21 @@ enum CloudFolderSyncEngine {
                 packageURL: packageURL,
                 devicesURL: devicesURL,
                 deviceId: stateSnapshot.deviceId,
+                historyOriginDeviceID: historyOriginDeviceID,
+                deviceName: deviceName,
                 now: now
             )
 
+            let preparedSnapshot = try prepareHistoryAssets(
+                in: initialSnapshot,
+                packageURL: packageURL,
+                generation: stateSnapshot.historyGeneration
+            )
+            let initialRecords = records(from: preparedSnapshot)
+
             let localOperations = makeLocalOperations(
                 records: initialRecords,
+                deletedHistoryRecords: preparedSnapshot.deletedHistoryRecords,
                 state: stateSnapshot,
                 now: now
             )
@@ -238,16 +393,20 @@ enum CloudFolderSyncEngine {
             pruneExpiredTombstones(in: deviceOperationsURL, now: now)
 
             let readResult = try readOperations(from: operationsURL)
+            let deviceReadResult = try readDevices(from: devicesURL)
             let winners = winningOperations(from: readResult.operations)
             let mutations = makeMutations(
                 from: winners,
                 localRecords: initialRecords,
                 localDeviceId: stateSnapshot.deviceId,
+                historyGeneration: stateSnapshot.historyGeneration,
                 appliedOperationIDs: stateSnapshot.appliedOperationIDs
             )
             return (
+                initialRecords: initialRecords,
                 localOperations: localOperations,
                 readResult: readResult,
+                deviceReadResult: deviceReadResult,
                 mutations: mutations
             )
         }.value
@@ -259,9 +418,19 @@ enum CloudFolderSyncEngine {
             try await store.apply(mutations)
         }
 
-        let synchronizedRecords = records(afterApplying: mutations, to: initialRecords)
+        let finalSnapshot = await store.snapshot()
+        let synchronizedRecords = records(from: finalSnapshot)
         state.knownLocalItemIDs = Set(synchronizedRecords.keys)
         state.exportedItemVersions = synchronizedRecords.mapValues(\.version)
+        for operation in fileResult.localOperations {
+            let key = operationStateKey(operation)
+            if operation.kind == .delete {
+                state.exportedItemVersions[key] = versionString(for: operation.updatedAt)
+            } else if let record = fileResult.initialRecords[key] {
+                state.knownLocalItemIDs.insert(key)
+                state.exportedItemVersions[key] = record.version
+            }
+        }
         for itemID in dictionaryItemIDsRequiringRepublish(
             afterApplying: mutations
         ) {
@@ -276,6 +445,8 @@ enum CloudFolderSyncEngine {
             mutationsApplied: mutations.count,
             syncedAt: now,
             diagnostics: fileResult.readResult.diagnostics
+                + fileResult.deviceReadResult.diagnostics,
+            devices: fileResult.deviceReadResult.devices
         )
     }
 
@@ -290,7 +461,11 @@ enum CloudFolderSyncEngine {
                     updatedAt: entry.updatedAt,
                     version: dictionaryVersionString(for: entry),
                     dictionary: entry,
-                    snippet: nil
+                    snippet: nil,
+                    historyComponent: nil,
+                    historyContent: nil,
+                    historyInbox: nil,
+                    historyAudio: nil
                 ),
                 into: &records
             )
@@ -304,10 +479,69 @@ enum CloudFolderSyncEngine {
                     updatedAt: snippet.updatedAt,
                     version: versionString(for: snippet.updatedAt),
                     dictionary: nil,
-                    snippet: snippet
+                    snippet: snippet,
+                    historyComponent: nil,
+                    historyContent: nil,
+                    historyInbox: nil,
+                    historyAudio: nil
                 ),
                 into: &records
             )
+        }
+        for history in snapshot.historyRecords {
+            let itemID = UserDataSyncIdentity.historyItemID(
+                recordID: history.content.recordID
+            )
+            let contentKey = UserDataSyncIdentity.historyStateKey(
+                itemID: itemID,
+                component: .content
+            )
+            records[contentKey] = CloudFolderSyncRecord(
+                collection: .history,
+                itemID: itemID,
+                updatedAt: history.content.updatedAt,
+                version: versionString(for: history.content.updatedAt),
+                dictionary: nil,
+                snippet: nil,
+                historyComponent: .content,
+                historyContent: history.content,
+                historyInbox: nil,
+                historyAudio: nil
+            )
+            let inboxKey = UserDataSyncIdentity.historyStateKey(
+                itemID: itemID,
+                component: .inbox
+            )
+            records[inboxKey] = CloudFolderSyncRecord(
+                collection: .history,
+                itemID: itemID,
+                updatedAt: history.inbox.updatedAt,
+                version: versionString(for: history.inbox.updatedAt),
+                dictionary: nil,
+                snippet: nil,
+                historyComponent: .inbox,
+                historyContent: nil,
+                historyInbox: history.inbox,
+                historyAudio: nil
+            )
+            if let audio = history.audio, audio.isValid {
+                let audioKey = UserDataSyncIdentity.historyStateKey(
+                    itemID: itemID,
+                    component: .audio
+                )
+                records[audioKey] = CloudFolderSyncRecord(
+                    collection: .history,
+                    itemID: itemID,
+                    updatedAt: audio.updatedAt,
+                    version: versionString(for: audio.updatedAt),
+                    dictionary: nil,
+                    snippet: nil,
+                    historyComponent: .audio,
+                    historyContent: nil,
+                    historyInbox: nil,
+                    historyAudio: audio
+                )
+            }
         }
         return records
     }
@@ -334,6 +568,11 @@ enum CloudFolderSyncEngine {
                 records[itemID] = Self.records(
                     from: UserDataSyncSnapshot(snippets: [snippet])
                 )[itemID]
+            case .upsertHistoryContent,
+                 .upsertHistoryInbox,
+                 .upsertHistoryAudio,
+                 .deleteHistory:
+                break
             }
         }
         return records
@@ -398,37 +637,64 @@ enum CloudFolderSyncEngine {
     static func winningOperations(from operations: [CloudFolderSyncOperation]) -> [String: CloudFolderSyncOperation] {
         operations.reduce(into: [:]) { result, operation in
             guard operation.schemaVersion == 1 else { return }
-            guard operation.kind == .delete || operation.dictionary != nil || operation.snippet != nil else { return }
-            if let existing = result[operation.itemId] {
+            guard operationIsValid(operation) else { return }
+            let key = operationStateKey(operation)
+            if let existing = result[key] {
                 if prefers(operation, over: existing) {
-                    result[operation.itemId] = operation
+                    result[key] = operation
                 }
             } else {
-                result[operation.itemId] = operation
+                result[key] = operation
             }
         }
     }
 
     private static func makeLocalOperations(
         records: [String: CloudFolderSyncRecord],
+        deletedHistoryRecords: [UserDataSyncHistoryDeletion],
         state: CloudFolderSyncState,
         now: Date
     ) -> [CloudFolderSyncOperation] {
         var operations: [CloudFolderSyncOperation] = []
 
         for record in records.values.sorted(by: { $0.itemID < $1.itemID }) {
-            guard state.exportedItemVersions[record.itemID] != record.version else { continue }
+            guard state.exportedItemVersions[record.stateKey] != record.version else { continue }
             if let dictionary = record.dictionary {
                 operations.append(.upsertDictionary(dictionary, itemID: record.itemID, deviceId: state.deviceId))
             } else if let snippet = record.snippet {
                 operations.append(.upsertSnippet(snippet, itemID: record.itemID, deviceId: state.deviceId))
+            } else if let component = record.historyComponent {
+                operations.append(.upsertHistory(
+                    itemID: record.itemID,
+                    component: component,
+                    generation: state.historyGeneration,
+                    deviceId: state.deviceId,
+                    content: record.historyContent,
+                    inbox: record.historyInbox,
+                    audio: record.historyAudio
+                ))
             }
         }
 
-        let deletedItemIDs = state.knownLocalItemIDs.subtracting(records.keys)
+        let deletedItemIDs = state.knownLocalItemIDs
+            .subtracting(records.keys)
+            .filter { !$0.hasPrefix("history:") }
         for itemID in deletedItemIDs.sorted() {
             let collection: UserDataSyncCollection = itemID.hasPrefix("snippet:") ? .snippets : .dictionary
             operations.append(.delete(collection: collection, itemID: itemID, deviceId: state.deviceId, deletedAt: now))
+        }
+
+        for deletion in deletedHistoryRecords.sorted(by: { $0.recordID.uuidString < $1.recordID.uuidString }) {
+            let itemID = UserDataSyncIdentity.historyItemID(recordID: deletion.recordID)
+            let deleteKey = historyDeleteStateKey(itemID: itemID)
+            let version = versionString(for: deletion.deletedAt)
+            guard state.exportedItemVersions[deleteKey] != version else { continue }
+            operations.append(.deleteHistory(
+                recordID: deletion.recordID,
+                generation: state.historyGeneration,
+                deviceId: state.deviceId,
+                deletedAt: deletion.deletedAt
+            ))
         }
 
         return operations
@@ -438,11 +704,14 @@ enum CloudFolderSyncEngine {
         from winners: [String: CloudFolderSyncOperation],
         localRecords: [String: CloudFolderSyncRecord],
         localDeviceId: String,
+        historyGeneration: String,
         appliedOperationIDs: Set<String> = []
     ) -> [UserDataSyncMutation] {
         var mutations: [UserDataSyncMutation] = []
 
-        for operation in winners.values.sorted(by: { $0.itemId < $1.itemId }) {
+        for operation in winners.values
+            .filter({ $0.collection != .history })
+            .sorted(by: { $0.itemId < $1.itemId }) {
             guard !appliedOperationIDs.contains(operation.operationId) else { continue }
             let local = localRecords[operation.itemId]
             guard shouldApply(operation, over: local, localDeviceId: localDeviceId) else { continue }
@@ -460,10 +729,146 @@ enum CloudFolderSyncEngine {
                 if let snippet = operation.snippet {
                     mutations.append(.upsertSnippet(snippet))
                 }
+            case (_, .history):
+                break
+            }
+        }
+
+        let historyOperations = winners.values.filter {
+            $0.collection == .history
+                && $0.historyGeneration == historyGeneration
+                && !appliedOperationIDs.contains($0.operationId)
+        }
+        let historyItemIDs = Set(historyOperations.map(\.itemId))
+        for itemID in historyItemIDs.sorted() {
+            guard let recordID = UserDataSyncIdentity.historyRecordID(from: itemID) else { continue }
+            let itemOperations = historyOperations.filter { $0.itemId == itemID }
+            let deletion = itemOperations.first(where: { $0.kind == .delete })
+            let localComponents = UserDataSyncHistoryComponent.allCases.compactMap {
+                localRecords[UserDataSyncIdentity.historyStateKey(itemID: itemID, component: $0)]
+            }
+
+            if let deletion,
+               !localComponents.isEmpty,
+               shouldApply(
+                   deletion,
+                   over: localComponents.max(by: { $0.updatedAt < $1.updatedAt }),
+                   localDeviceId: localDeviceId
+               ) {
+                mutations.append(.deleteHistory(recordID: recordID))
+                continue
+            }
+
+            for component in UserDataSyncHistoryComponent.allCases {
+                let key = UserDataSyncIdentity.historyStateKey(itemID: itemID, component: component)
+                guard let operation = winners[key],
+                      operation.historyGeneration == historyGeneration,
+                      !appliedOperationIDs.contains(operation.operationId),
+                      deletion.map({ prefers($0, over: operation) }) != true,
+                      shouldApply(operation, over: localRecords[key], localDeviceId: localDeviceId) else {
+                    continue
+                }
+                switch component {
+                case .content:
+                    if let content = operation.historyContent {
+                        mutations.append(.upsertHistoryContent(content))
+                    }
+                case .inbox:
+                    if let inbox = operation.historyInbox {
+                        mutations.append(.upsertHistoryInbox(inbox))
+                    }
+                case .audio:
+                    if let audio = operation.historyAudio, audio.isValid {
+                        mutations.append(.upsertHistoryAudio(audio))
+                    }
+                }
             }
         }
 
         return mutations
+    }
+
+    private static func prepareHistoryAssets(
+        in snapshot: UserDataSyncSnapshot,
+        packageURL: URL,
+        generation: String
+    ) throws -> UserDataSyncSnapshot {
+        let historyRecords = try snapshot.historyRecords.map { record in
+            guard record.audioEligible, let sourceURL = record.localAudioFileURL else {
+                return record
+            }
+            let audio = try HistorySyncAssetStore.publish(
+                sourceURL: sourceURL,
+                packageURL: packageURL,
+                generation: generation,
+                recordID: record.content.recordID,
+                updatedAt: record.audio?.updatedAt ?? record.content.updatedAt,
+                durationSeconds: record.content.durationSeconds
+            )
+            return UserDataSyncHistoryRecord(
+                content: record.content,
+                inbox: record.inbox,
+                audio: audio,
+                localAudioFileURL: record.localAudioFileURL,
+                audioEligible: record.audioEligible
+            )
+        }
+        return UserDataSyncSnapshot(
+            dictionaryEntries: snapshot.dictionaryEntries,
+            snippets: snapshot.snippets,
+            historyRecords: historyRecords,
+            deletedHistoryRecords: snapshot.deletedHistoryRecords
+        )
+    }
+
+    private static func operationIsValid(_ operation: CloudFolderSyncOperation) -> Bool {
+        switch operation.collection {
+        case .dictionary:
+            return operation.kind == .delete || operation.dictionary != nil
+        case .snippets:
+            return operation.kind == .delete || operation.snippet != nil
+        case .history:
+            guard operation.historyPayloadVersion == 1,
+                  operation.historyGeneration != nil,
+                  UserDataSyncIdentity.historyRecordID(from: operation.itemId) != nil else {
+                return false
+            }
+            if operation.kind == .delete {
+                return operation.historyComponent == nil
+                    && operation.historyContent == nil
+                    && operation.historyInbox == nil
+                    && operation.historyAudio == nil
+            }
+            switch operation.historyComponent {
+            case .content:
+                return operation.historyContent?.recordID
+                    == UserDataSyncIdentity.historyRecordID(from: operation.itemId)
+                    && operation.historyInbox == nil && operation.historyAudio == nil
+            case .inbox:
+                return operation.historyInbox?.recordID
+                    == UserDataSyncIdentity.historyRecordID(from: operation.itemId)
+                    && operation.historyContent == nil && operation.historyAudio == nil
+            case .audio:
+                return operation.historyAudio?.recordID
+                    == UserDataSyncIdentity.historyRecordID(from: operation.itemId)
+                    && operation.historyAudio?.isValid == true
+                    && operation.historyContent == nil && operation.historyInbox == nil
+            case nil:
+                return false
+            }
+        }
+    }
+
+    private static func operationStateKey(_ operation: CloudFolderSyncOperation) -> String {
+        guard operation.collection == .history else { return operation.itemId }
+        guard let component = operation.historyComponent else {
+            return historyDeleteStateKey(itemID: operation.itemId)
+        }
+        return UserDataSyncIdentity.historyStateKey(itemID: operation.itemId, component: component)
+    }
+
+    private static func historyDeleteStateKey(itemID: String) -> String {
+        "\(itemID)#delete"
     }
 
     private static func shouldApply(
@@ -503,7 +908,14 @@ enum CloudFolderSyncEngine {
         return candidate.operationId > existing.operationId
     }
 
-    private static func writePackageMetadata(packageURL: URL, devicesURL: URL, deviceId: String, now: Date) throws {
+    private static func writePackageMetadata(
+        packageURL: URL,
+        devicesURL: URL,
+        deviceId: String,
+        historyOriginDeviceID: String?,
+        deviceName: String,
+        now: Date
+    ) throws {
         let manifest = CloudFolderSyncManifest(
             schemaVersion: 1,
             createdBy: "TypeWhisper",
@@ -513,11 +925,54 @@ enum CloudFolderSyncEngine {
 
         let device = CloudFolderSyncDeviceRecord(
             deviceId: deviceId,
+            historyOriginDeviceID: historyOriginDeviceID,
             platform: "macOS",
             appVersion: AppConstants.currentReleaseFingerprint,
-            updatedAt: now
+            updatedAt: now,
+            name: deviceName
         )
         try writeJSON(device, to: devicesURL.appendingPathComponent("\(deviceId).json"))
+    }
+
+    static func readDevices(
+        from devicesURL: URL
+    ) throws -> (devices: [CloudFolderSyncDeviceRecord], diagnostics: [CloudFolderSyncDiagnostic]) {
+        let files = try FileManager.default.contentsOfDirectory(
+            at: devicesURL,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        )
+        var devicesByIdentity: [String: CloudFolderSyncDeviceRecord] = [:]
+        var diagnostics: [CloudFolderSyncDiagnostic] = []
+
+        for file in files where file.pathExtension == "json" {
+            guard let data = try? Data(contentsOf: file) else {
+                diagnostics.append(.init(kind: .unreadableFile, fileName: file.lastPathComponent))
+                continue
+            }
+            guard let device = try? decoder.decode(CloudFolderSyncDeviceRecord.self, from: data),
+                  !device.deviceId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                  !device.platform.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                diagnostics.append(.init(kind: .malformedDevice, fileName: file.lastPathComponent))
+                continue
+            }
+            let identity = device.historyOriginDeviceID.flatMap { value in
+                let cleaned = value.trimmingCharacters(in: .whitespacesAndNewlines)
+                return cleaned.isEmpty ? nil : cleaned
+            } ?? "transport:\(device.deviceId)"
+            if let existing = devicesByIdentity[identity], existing.updatedAt >= device.updatedAt {
+                continue
+            }
+            devicesByIdentity[identity] = device
+        }
+
+        let devices = devicesByIdentity.values.sorted {
+            if $0.updatedAt != $1.updatedAt { return $0.updatedAt > $1.updatedAt }
+            return ($0.name ?? $0.platform).localizedStandardCompare(
+                $1.name ?? $1.platform
+            ) == .orderedAscending
+        }
+        return (devices, diagnostics)
     }
 
     private static func write(_ operations: [CloudFolderSyncOperation], to directory: URL, now: Date) throws {
@@ -703,4 +1158,16 @@ struct CloudFolderSyncRecord: Equatable, Sendable {
     let version: String
     let dictionary: UserDataSyncDictionaryEntry?
     let snippet: UserDataSyncSnippet?
+    let historyComponent: UserDataSyncHistoryComponent?
+    let historyContent: UserDataSyncHistoryContentV1?
+    let historyInbox: UserDataSyncHistoryInboxV1?
+    let historyAudio: UserDataSyncHistoryAudioV1?
+
+    var stateKey: String {
+        guard let historyComponent else { return itemID }
+        return UserDataSyncIdentity.historyStateKey(
+            itemID: itemID,
+            component: historyComponent
+        )
+    }
 }

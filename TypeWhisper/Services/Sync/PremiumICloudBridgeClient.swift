@@ -35,9 +35,12 @@ final class PremiumICloudBridgeClient: PremiumICloudBridging, @unchecked Sendabl
     init(
         bundle: Bundle = .main,
         fileManager: FileManager = .default,
-        serviceName: String = PremiumICloudBridgeConstants.serviceBundleIdentifier
+        serviceName: String? = nil
     ) {
         self.serviceName = serviceName
+            ?? PremiumICloudBridgeConstants.serviceBundleIdentifier(
+                infoDictionary: bundle.infoDictionary
+            )
         localFolderURL = PremiumICloudBridgeConstants.localRootURL(
             bundle: bundle,
             fileManager: fileManager

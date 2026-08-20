@@ -64,6 +64,8 @@
 	<string>$(APP_GROUP_ID)</string>
 	<key>TypeWhisperICloudContainer</key>
 	<string>$(ICLOUD_CONTAINER_ID)</string>
+	<key>TypeWhisperICloudBridgeServiceIdentifier</key>
+	<string>$(ICLOUD_HELPER_BUNDLE_ID)</string>
 	<key>TypeWhisperICloudEnabled</key>
 	<string>$(TYPEWHISPER_ICLOUD_ENABLED)</string>
 	<key>TypeWhisperAccountBaseURL</key>

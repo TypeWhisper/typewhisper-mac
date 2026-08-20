@@ -9,19 +9,30 @@ import XCTest
 private final class InMemoryUserDataSyncStore: UserDataSyncStore, @unchecked Sendable {
     var dictionaryEntries: [UserDataSyncDictionaryEntry]
     var snippets: [UserDataSyncSnippet]
+    var historyRecords: [UserDataSyncHistoryRecord]
+    var deletedHistoryRecords: [UserDataSyncHistoryDeletion]
     var appliedMutations: [UserDataSyncMutation] = []
     private var observers: [UUID: @MainActor @Sendable () -> Void] = [:]
 
     init(
         dictionaryEntries: [UserDataSyncDictionaryEntry] = [],
-        snippets: [UserDataSyncSnippet] = []
+        snippets: [UserDataSyncSnippet] = [],
+        historyRecords: [UserDataSyncHistoryRecord] = [],
+        deletedHistoryRecords: [UserDataSyncHistoryDeletion] = []
     ) {
         self.dictionaryEntries = dictionaryEntries
         self.snippets = snippets
+        self.historyRecords = historyRecords
+        self.deletedHistoryRecords = deletedHistoryRecords
     }
 
     func snapshot() -> UserDataSyncSnapshot {
-        UserDataSyncSnapshot(dictionaryEntries: dictionaryEntries, snippets: snippets)
+        UserDataSyncSnapshot(
+            dictionaryEntries: dictionaryEntries,
+            snippets: snippets,
+            historyRecords: historyRecords,
+            deletedHistoryRecords: deletedHistoryRecords
+        )
     }
 
     func apply(_ mutations: [UserDataSyncMutation]) throws {
@@ -72,8 +83,106 @@ private final class InMemoryUserDataSyncStore: UserDataSyncStore, @unchecked Sen
                 snippets.removeAll {
                     UserDataSyncIdentity.snippetItemID(trigger: $0.trigger) == itemID
                 }
+            case .upsertHistoryContent(let content):
+                upsertHistory(content: content)
+            case .upsertHistoryInbox(let inbox):
+                upsertHistory(inbox: inbox)
+            case .upsertHistoryAudio(let audio):
+                upsertHistory(audio: audio)
+            case .deleteHistory(let recordID):
+                historyRecords.removeAll { $0.content.recordID == recordID }
             }
         }
+    }
+
+    private func upsertHistory(content: UserDataSyncHistoryContentV1) {
+        let existing = historyRecords.first { $0.content.recordID == content.recordID }
+        replaceHistory(
+            UserDataSyncHistoryRecord(
+                content: content,
+                inbox: existing?.inbox ?? Self.placeholderInbox(
+                    recordID: content.recordID,
+                    updatedAt: content.createdAt
+                ),
+                audio: existing?.audio,
+                localAudioFileURL: existing?.localAudioFileURL,
+                audioEligible: existing?.audioEligible ?? false
+            )
+        )
+    }
+
+    private func upsertHistory(inbox: UserDataSyncHistoryInboxV1) {
+        let existing = historyRecords.first { $0.content.recordID == inbox.recordID }
+        replaceHistory(
+            UserDataSyncHistoryRecord(
+                content: existing?.content ?? Self.placeholderContent(
+                    recordID: inbox.recordID,
+                    updatedAt: inbox.updatedAt
+                ),
+                inbox: inbox,
+                audio: existing?.audio,
+                localAudioFileURL: existing?.localAudioFileURL,
+                audioEligible: existing?.audioEligible ?? false
+            )
+        )
+    }
+
+    private func upsertHistory(audio: UserDataSyncHistoryAudioV1) {
+        let existing = historyRecords.first { $0.content.recordID == audio.recordID }
+        replaceHistory(
+            UserDataSyncHistoryRecord(
+                content: existing?.content ?? Self.placeholderContent(
+                    recordID: audio.recordID,
+                    updatedAt: audio.createdAt
+                ),
+                inbox: existing?.inbox ?? Self.placeholderInbox(
+                    recordID: audio.recordID,
+                    updatedAt: audio.createdAt
+                ),
+                audio: audio,
+                localAudioFileURL: existing?.localAudioFileURL,
+                audioEligible: false
+            )
+        )
+    }
+
+    private func replaceHistory(_ record: UserDataSyncHistoryRecord) {
+        historyRecords.removeAll { $0.content.recordID == record.content.recordID }
+        historyRecords.append(record)
+    }
+
+    private static func placeholderContent(
+        recordID: UUID,
+        updatedAt: Date
+    ) -> UserDataSyncHistoryContentV1 {
+        UserDataSyncHistoryContentV1(
+            recordID: recordID,
+            createdAt: updatedAt,
+            updatedAt: updatedAt,
+            originDeviceID: "remote",
+            originPlatform: "unknown",
+            source: "other",
+            processingState: "importing",
+            rawTranscript: "",
+            finalText: "",
+            durationSeconds: 0,
+            engineDisplayName: "remote"
+        )
+    }
+
+    private static func placeholderInbox(
+        recordID: UUID,
+        updatedAt: Date
+    ) -> UserDataSyncHistoryInboxV1 {
+        UserDataSyncHistoryInboxV1(
+            recordID: recordID,
+            updatedAt: updatedAt,
+            state: "none",
+            kind: nil,
+            completionPolicy: .explicit,
+            completedAt: nil,
+            safeAction: nil
+        )
     }
 
     @discardableResult
@@ -1054,6 +1163,69 @@ final class CloudFolderSyncTests: XCTestCase {
         XCTAssertEqual(try Data(contentsOf: remoteManifest), Data("newest-local".utf8))
     }
 
+    func testICloudBridgeUsesConfiguredContainerIdentifier() {
+        XCTAssertEqual(
+            PremiumICloudBridgeConstants.containerIdentifier(
+                infoDictionary: [
+                    PremiumICloudBridgeConstants.containerIdentifierInfoKey:
+                        "iCloud.com.typewhisper.sync.dev"
+                ]
+            ),
+            "iCloud.com.typewhisper.sync.dev"
+        )
+        XCTAssertEqual(
+            PremiumICloudBridgeConstants.containerIdentifier(
+                infoDictionary: [
+                    PremiumICloudBridgeConstants.containerIdentifierInfoKey:
+                        "$(ICLOUD_CONTAINER_ID)"
+                ]
+            ),
+            PremiumICloudBridgeConstants.productionContainerIdentifier
+        )
+        XCTAssertEqual(
+            PremiumICloudBridgeConstants.containerIdentifier(
+                infoDictionary: nil
+            ),
+            PremiumICloudBridgeConstants.productionContainerIdentifier
+        )
+        XCTAssertEqual(
+            PremiumICloudBridgeConstants.serviceBundleIdentifier(
+                infoDictionary: [
+                    PremiumICloudBridgeConstants
+                        .serviceBundleIdentifierInfoKey:
+                        "com.typewhisper.mac.dev.icloudbridge"
+                ]
+            ),
+            "com.typewhisper.mac.dev.icloudbridge"
+        )
+        XCTAssertEqual(
+            PremiumICloudBridgeConstants.serviceBundleIdentifier(
+                infoDictionary: nil
+            ),
+            PremiumICloudBridgeConstants.productionServiceBundleIdentifier
+        )
+    }
+
+    func testICloudBridgeSeparatesNonProductionLocalMirror() {
+        XCTAssertNil(
+            PremiumICloudBridgeConstants.localMirrorNamespace(
+                infoDictionary: [
+                    PremiumICloudBridgeConstants.containerIdentifierInfoKey:
+                        PremiumICloudBridgeConstants.productionContainerIdentifier,
+                ]
+            )
+        )
+        XCTAssertEqual(
+            PremiumICloudBridgeConstants.localMirrorNamespace(
+                infoDictionary: [
+                    PremiumICloudBridgeConstants.containerIdentifierInfoKey:
+                        "iCloud.com.typewhisper.sync.dev",
+                ]
+            ),
+            "iCloud.com.typewhisper.sync.dev"
+        )
+    }
+
     func testICloudBridgeDeletionRemovesOnlySyncPackages() throws {
         let localRoot = try TestSupport.makeTemporaryDirectory(prefix: "ICloudBridgeDeleteLocal")
         let remoteRoot = try TestSupport.makeTemporaryDirectory(prefix: "ICloudBridgeDeleteRemote")
@@ -1094,6 +1266,7 @@ final class CloudFolderSyncTests: XCTestCase {
 
         let device: CloudFolderSyncDeviceRecord = try Self.decodeFixture("device-v1")
         XCTAssertEqual(device.platform, "macOS")
+        XCTAssertNil(device.historyOriginDeviceID)
 
         let legacy: CloudFolderSyncOperation = try Self.decodeFixture("upsert-snippet-legacy-v1")
         XCTAssertEqual(legacy.snippet?.tags, [])
@@ -1110,6 +1283,68 @@ final class CloudFolderSyncTests: XCTestCase {
         let unknown: CloudFolderSyncOperation = try Self.decodeFixture("unknown-schema")
         XCTAssertEqual(unknown.schemaVersion, 2)
         XCTAssertTrue(CloudFolderSyncEngine.winningOperations(from: [unknown]).isEmpty)
+    }
+
+    @MainActor
+    func testDeviceMetadataKeepsTransportAndHistoryOriginIDsSeparate() async throws {
+        let folder = try TestSupport.makeTemporaryDirectory(prefix: "CloudFolderSyncDeviceIdentity")
+        defer { TestSupport.remove(folder) }
+        let store = InMemoryUserDataSyncStore()
+        var state = CloudFolderSyncState(deviceId: "mac-transport")
+
+        let result = try await CloudFolderSyncEngine.sync(
+            folderURL: folder,
+            store: store,
+            state: &state,
+            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
+            historyOriginDeviceID: "mac-history-origin",
+            now: Self.date(20)
+        )
+
+        let device = try XCTUnwrap(result.devices.first)
+        XCTAssertEqual(device.deviceId, "mac-transport")
+        XCTAssertEqual(device.historyOriginDeviceID, "mac-history-origin")
+        XCTAssertEqual(device.platform, "macOS")
+    }
+
+    func testDeviceCatalogDeduplicatesHistoryIdentityAndSkipsMalformedFiles() throws {
+        let folder = try TestSupport.makeTemporaryDirectory(prefix: "CloudFolderSyncDeviceCatalog")
+        defer { TestSupport.remove(folder) }
+        let devicesURL = CloudFolderSyncEngine.packageURL(for: folder)
+            .appendingPathComponent("devices", isDirectory: true)
+        try FileManager.default.createDirectory(at: devicesURL, withIntermediateDirectories: true)
+        let older = CloudFolderSyncDeviceRecord(
+            deviceId: "transport-old",
+            historyOriginDeviceID: "history-device",
+            platform: "iOS",
+            appVersion: "1",
+            updatedAt: Self.date(10),
+            name: "Old Name"
+        )
+        let newer = CloudFolderSyncDeviceRecord(
+            deviceId: "transport-new",
+            historyOriginDeviceID: "history-device",
+            platform: "iOS",
+            appVersion: "2",
+            updatedAt: Self.date(20),
+            name: "Marco's iPhone"
+        )
+        try Self.entitlementEncoder.encode(older).write(
+            to: devicesURL.appendingPathComponent("old.json")
+        )
+        try Self.entitlementEncoder.encode(newer).write(
+            to: devicesURL.appendingPathComponent("new.json")
+        )
+        try Data("not-json".utf8).write(
+            to: devicesURL.appendingPathComponent("broken.json")
+        )
+
+        let result = try CloudFolderSyncEngine.readDevices(from: devicesURL)
+
+        XCTAssertEqual(result.devices, [newer])
+        XCTAssertEqual(result.diagnostics, [
+            .init(kind: .malformedDevice, fileName: "broken.json"),
+        ])
     }
 
     @MainActor
@@ -1406,6 +1641,330 @@ final class CloudFolderSyncTests: XCTestCase {
                     .path
             )
         )
+    }
+
+    @MainActor
+    func testHistoryContentAndInboxSyncAsIndependentComponents() async throws {
+        let folder = try TestSupport.makeTemporaryDirectory(prefix: "CloudFolderSyncHistoryComponents")
+        defer { TestSupport.remove(folder) }
+
+        let recordID = UUID(uuidString: "83600000-0000-4000-8000-000000000001")!
+        let initial = Self.historyRecord(
+            recordID: recordID,
+            finalText: "Watch capture",
+            contentUpdatedAt: Self.date(10),
+            inboxState: "open",
+            inboxUpdatedAt: Self.date(10)
+        )
+        let watch = InMemoryUserDataSyncStore(historyRecords: [initial])
+        let mac = InMemoryUserDataSyncStore()
+        var watchState = CloudFolderSyncState(deviceId: "ios-watch")
+        var macState = CloudFolderSyncState(deviceId: "mac-main")
+
+        let exported = try await CloudFolderSyncEngine.sync(
+            folderURL: folder,
+            store: watch,
+            state: &watchState,
+            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
+            now: Self.date(20)
+        )
+        let imported = try await CloudFolderSyncEngine.sync(
+            folderURL: folder,
+            store: mac,
+            state: &macState,
+            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
+            now: Self.date(30)
+        )
+
+        XCTAssertEqual(exported.operationsWritten, 2)
+        XCTAssertEqual(imported.mutationsApplied, 2)
+        XCTAssertEqual(mac.historyRecords.first?.content.finalText, "Watch capture")
+        XCTAssertEqual(mac.historyRecords.first?.inbox.state, "open")
+
+        let importedRecord = try XCTUnwrap(mac.historyRecords.first)
+        mac.historyRecords = [UserDataSyncHistoryRecord(
+            content: importedRecord.content,
+            inbox: UserDataSyncHistoryInboxV1(
+                recordID: recordID,
+                updatedAt: Self.date(40),
+                state: "completed",
+                kind: "watchRecording",
+                completionPolicy: .onOpen,
+                completedAt: Self.date(40),
+                safeAction: nil
+            ),
+            audio: importedRecord.audio,
+            localAudioFileURL: nil,
+            audioEligible: false
+        )]
+
+        let completionExport = try await CloudFolderSyncEngine.sync(
+            folderURL: folder,
+            store: mac,
+            state: &macState,
+            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
+            now: Self.date(50)
+        )
+        let completionImport = try await CloudFolderSyncEngine.sync(
+            folderURL: folder,
+            store: watch,
+            state: &watchState,
+            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
+            now: Self.date(60)
+        )
+
+        XCTAssertEqual(completionExport.operationsWritten, 1)
+        XCTAssertEqual(completionImport.mutationsApplied, 1)
+        XCTAssertEqual(watch.historyRecords.first?.content.finalText, "Watch capture")
+        XCTAssertEqual(watch.historyRecords.first?.inbox.state, "completed")
+    }
+
+    @MainActor
+    func testHistoryRetentionAbsenceDoesNotDeleteButExplicitJournalDoes() async throws {
+        let folder = try TestSupport.makeTemporaryDirectory(prefix: "CloudFolderSyncHistoryDeletion")
+        defer { TestSupport.remove(folder) }
+
+        let recordID = UUID(uuidString: "83600000-0000-4000-8000-000000000002")!
+        let record = Self.historyRecord(
+            recordID: recordID,
+            finalText: "Keep on the other device",
+            contentUpdatedAt: Self.date(10),
+            inboxState: "none",
+            inboxUpdatedAt: Self.date(10)
+        )
+        let first = InMemoryUserDataSyncStore(historyRecords: [record])
+        let second = InMemoryUserDataSyncStore()
+        var firstState = CloudFolderSyncState(deviceId: "ios-a")
+        var secondState = CloudFolderSyncState(deviceId: "mac-b")
+
+        _ = try await CloudFolderSyncEngine.sync(
+            folderURL: folder,
+            store: first,
+            state: &firstState,
+            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
+            now: Self.date(20)
+        )
+        _ = try await CloudFolderSyncEngine.sync(
+            folderURL: folder,
+            store: second,
+            state: &secondState,
+            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
+            now: Self.date(30)
+        )
+        XCTAssertEqual(second.historyRecords.count, 1)
+
+        first.historyRecords = []
+        let retentionPass = try await CloudFolderSyncEngine.sync(
+            folderURL: folder,
+            store: first,
+            state: &firstState,
+            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
+            now: Self.date(35)
+        )
+        XCTAssertEqual(retentionPass.operationsWritten, 0)
+
+        first.deletedHistoryRecords = [
+            UserDataSyncHistoryDeletion(recordID: recordID, deletedAt: Self.date(40))
+        ]
+        let deletionPass = try await CloudFolderSyncEngine.sync(
+            folderURL: folder,
+            store: first,
+            state: &firstState,
+            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
+            now: Self.date(45)
+        )
+        let deletionImport = try await CloudFolderSyncEngine.sync(
+            folderURL: folder,
+            store: second,
+            state: &secondState,
+            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
+            now: Self.date(50)
+        )
+
+        XCTAssertEqual(deletionPass.operationsWritten, 1)
+        XCTAssertEqual(deletionImport.mutationsApplied, 1)
+        XCTAssertTrue(second.historyRecords.isEmpty)
+    }
+
+    func testHistoryAudioAssetsUseContentAddressingAndVerifyIntegrity() async throws {
+        let folder = try TestSupport.makeTemporaryDirectory(prefix: "CloudFolderSyncHistoryAudio")
+        defer { TestSupport.remove(folder) }
+        let packageURL = CloudFolderSyncEngine.packageURL(for: folder)
+        let sourceURL = folder.appendingPathComponent("capture.wav")
+        try Data([0x52, 0x49, 0x46, 0x46, 0x01, 0x02, 0x03]).write(to: sourceURL)
+        let recordID = UUID(uuidString: "83600000-0000-4000-8000-000000000003")!
+
+        let descriptor = try HistorySyncAssetStore.publish(
+            sourceURL: sourceURL,
+            packageURL: packageURL,
+            generation: "history-v1",
+            recordID: recordID,
+            updatedAt: Self.date(10),
+            durationSeconds: 1.25
+        )
+        let verified = try await HistorySyncAssetStore.verifiedAssetURL(
+            packageURL: packageURL,
+            descriptor: descriptor
+        )
+
+        XCTAssertTrue(descriptor.isValid)
+        XCTAssertEqual(descriptor.byteCount, 7)
+        XCTAssertTrue(descriptor.relativeAssetPath.hasSuffix("/\(descriptor.sha256).wav"))
+        XCTAssertEqual(try Data(contentsOf: verified), try Data(contentsOf: sourceURL))
+
+        let unsafe = UserDataSyncHistoryAudioV1(
+            recordID: recordID,
+            updatedAt: Self.date(10),
+            relativeAssetPath: "../capture.wav",
+            mediaType: "audio/wav",
+            byteCount: 7,
+            sha256: descriptor.sha256,
+            createdAt: Self.date(10),
+            durationSeconds: 1.25
+        )
+        do {
+            _ = try await HistorySyncAssetStore.verifiedAssetURL(
+                packageURL: packageURL,
+                descriptor: unsafe
+            )
+            XCTFail("Expected an unsafe asset path to be rejected")
+        } catch HistorySyncAssetStoreError.invalidDescriptor {
+            // Expected.
+        }
+    }
+
+    @MainActor
+    func testControllerAutomaticallyInstallsVerifiedSynchronizedAudio() async throws {
+        let folder = try TestSupport.makeTemporaryDirectory(prefix: "CloudFolderSyncAutomaticAudio")
+        defer { TestSupport.remove(folder) }
+        let historyDirectory = folder.appendingPathComponent("history", isDirectory: true)
+        let suiteName = "CloudFolderSyncAutomaticAudio-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let preferences = HistorySyncPreferences(defaults: defaults)
+        preferences.isEnabled = true
+        preferences.isAudioEnabled = true
+        let historyService = HistoryService(
+            appSupportDirectory: historyDirectory,
+            historySyncPreferences: preferences
+        )
+        let recordID = UUID(uuidString: "83600000-0000-4000-8000-000000000030")!
+        let sourceURL = folder.appendingPathComponent("capture.wav")
+        try Data([0x52, 0x49, 0x46, 0x46, 0x09, 0x08, 0x07]).write(to: sourceURL)
+        let descriptor = try HistorySyncAssetStore.publish(
+            sourceURL: sourceURL,
+            packageURL: CloudFolderSyncEngine.packageURL(for: folder),
+            generation: "history-v1",
+            recordID: recordID,
+            updatedAt: Date(),
+            durationSeconds: 1.5
+        )
+        try historyService.applyUserDataSyncMutations([
+            .upsertHistoryContent(UserDataSyncHistoryContentV1(
+                recordID: recordID,
+                createdAt: Self.date(1),
+                updatedAt: Self.date(10),
+                originDeviceID: "ios-history-origin",
+                originPlatform: "iOS",
+                source: RecordingSource.iPhone.rawValue,
+                processingState: RecordingProcessingState.ready.rawValue,
+                rawTranscript: "Audio note",
+                finalText: "Audio note",
+                durationSeconds: 1.5,
+                detectedLanguage: "en",
+                engineDisplayName: "Apple Speech"
+            )),
+            .upsertHistoryAudio(descriptor),
+        ])
+        let account = PremiumAccountService(
+            defaults: defaults,
+            keychainService: suiteName,
+            isSignedInOverride: false,
+            automaticallyRefresh: false
+        )
+        let controller = CloudFolderSyncController(
+            premiumAccountService: account,
+            syncStore: InMemoryUserDataSyncStore(),
+            historyService: historyService,
+            historySyncPreferences: preferences,
+            defaults: defaults,
+            automaticICloudAvailable: false
+        )
+        defer { controller.deactivate() }
+
+        let diagnostics = await controller.installPendingSynchronizedAudio(in: folder)
+
+        XCTAssertTrue(diagnostics.isEmpty)
+        let record = try XCTUnwrap(historyService.records.first { $0.id == recordID })
+        let installedURL = try XCTUnwrap(historyService.audioFileURL(for: record))
+        XCTAssertEqual(try Data(contentsOf: installedURL), try Data(contentsOf: sourceURL))
+    }
+
+    @MainActor
+    func testControllerDoesNotBackfillAudioFromBeforeAudioSyncWasEnabled() async throws {
+        let folder = try TestSupport.makeTemporaryDirectory(prefix: "CloudFolderSyncNoAudioBackfill")
+        defer { TestSupport.remove(folder) }
+        let historyDirectory = folder.appendingPathComponent("history", isDirectory: true)
+        let suiteName = "CloudFolderSyncNoAudioBackfill-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let preferences = HistorySyncPreferences(defaults: defaults)
+        preferences.isEnabled = true
+        preferences.isAudioEnabled = false
+        let historyService = HistoryService(
+            appSupportDirectory: historyDirectory,
+            historySyncPreferences: preferences
+        )
+        let recordID = UUID(uuidString: "83600000-0000-4000-8000-000000000031")!
+        let sourceURL = folder.appendingPathComponent("old-capture.wav")
+        try Data([0x52, 0x49, 0x46, 0x46, 0x01]).write(to: sourceURL)
+        let oldDate = Date().addingTimeInterval(-24 * 60 * 60)
+        let descriptor = try HistorySyncAssetStore.publish(
+            sourceURL: sourceURL,
+            packageURL: CloudFolderSyncEngine.packageURL(for: folder),
+            generation: "history-v1",
+            recordID: recordID,
+            updatedAt: oldDate,
+            durationSeconds: 1
+        )
+        try historyService.applyUserDataSyncMutations([
+            .upsertHistoryContent(UserDataSyncHistoryContentV1(
+                recordID: recordID,
+                createdAt: oldDate,
+                updatedAt: oldDate,
+                originDeviceID: "ios-history-origin",
+                originPlatform: "iOS",
+                source: RecordingSource.iPhone.rawValue,
+                processingState: RecordingProcessingState.ready.rawValue,
+                rawTranscript: "Old audio note",
+                finalText: "Old audio note",
+                durationSeconds: 1,
+                engineDisplayName: "Apple Speech"
+            )),
+            .upsertHistoryAudio(descriptor),
+        ])
+        preferences.isAudioEnabled = true
+        let account = PremiumAccountService(
+            defaults: defaults,
+            keychainService: suiteName,
+            isSignedInOverride: false,
+            automaticallyRefresh: false
+        )
+        let controller = CloudFolderSyncController(
+            premiumAccountService: account,
+            syncStore: InMemoryUserDataSyncStore(),
+            historyService: historyService,
+            historySyncPreferences: preferences,
+            defaults: defaults,
+            automaticICloudAvailable: false
+        )
+        defer { controller.deactivate() }
+
+        let diagnostics = await controller.installPendingSynchronizedAudio(in: folder)
+
+        XCTAssertTrue(diagnostics.isEmpty)
+        let record = try XCTUnwrap(historyService.records.first { $0.id == recordID })
+        XCTAssertNil(historyService.audioFileURL(for: record))
     }
 
     @MainActor
@@ -2033,6 +2592,43 @@ final class CloudFolderSyncTests: XCTestCase {
             isEnabled: true,
             createdAt: date(1),
             updatedAt: updatedAt
+        )
+    }
+
+    private static func historyRecord(
+        recordID: UUID,
+        finalText: String,
+        contentUpdatedAt: Date,
+        inboxState: String,
+        inboxUpdatedAt: Date
+    ) -> UserDataSyncHistoryRecord {
+        UserDataSyncHistoryRecord(
+            content: UserDataSyncHistoryContentV1(
+                recordID: recordID,
+                createdAt: date(1),
+                updatedAt: contentUpdatedAt,
+                originDeviceID: "watch-origin",
+                originPlatform: "watchOS",
+                source: "appleWatch",
+                processingState: "ready",
+                rawTranscript: finalText,
+                finalText: finalText,
+                durationSeconds: 4,
+                detectedLanguage: "en",
+                engineDisplayName: "Apple Speech"
+            ),
+            inbox: UserDataSyncHistoryInboxV1(
+                recordID: recordID,
+                updatedAt: inboxUpdatedAt,
+                state: inboxState,
+                kind: "watchRecording",
+                completionPolicy: .onOpen,
+                completedAt: nil,
+                safeAction: nil
+            ),
+            audio: nil,
+            localAudioFileURL: nil,
+            audioEligible: false
         )
     }
 

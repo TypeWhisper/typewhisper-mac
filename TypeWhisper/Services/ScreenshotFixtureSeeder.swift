@@ -102,7 +102,18 @@ extension ServiceContainer {
                 of: day
             ) ?? day
 
+            let source: RecordingSource = switch index % 7 {
+            case 0: .appleWatch
+            case 2: .iPhone
+            case 3: .keyboard
+            case 5: .shortcut
+            default: .mac
+            }
+            let recordID = UUID()
+            let includesAudio = index.isMultiple(of: 4)
+
             _ = historyService.addRecord(
+                id: recordID,
                 timestamp: timestamp,
                 rawText: sample.text,
                 finalText: sample.text,
@@ -111,8 +122,35 @@ extension ServiceContainer {
                 durationSeconds: 5.5 + Double(index % 5),
                 language: languageCode,
                 engineUsed: index.isMultiple(of: 3) ? "parakeet" : "whisper",
-                modelUsed: index.isMultiple(of: 3) ? "Parakeet TDT 0.6B v3" : "Large v3 Turbo"
+                modelUsed: index.isMultiple(of: 3) ? "Parakeet TDT 0.6B v3" : "Large v3 Turbo",
+                audioSamples: includesAudio ? Array(repeating: Float.zero, count: 1_600) : nil
             )
+
+            guard let record = historyService.records.first(where: { $0.id == recordID }) else {
+                continue
+            }
+            record.source = source
+            record.originDeviceID = source == .mac
+                ? historySyncPreferences.deviceID
+                : "screenshot-iphone-history"
+            record.originPlatformRaw = switch source {
+            case .appleWatch: "watchOS"
+            case .iPhone, .keyboard, .shortcut: "iOS"
+            default: "macOS"
+            }
+            if index < 3 {
+                record.inboxState = .open
+                record.inboxCompletionPolicyRaw = UserDataSyncHistoryCompletionPolicy.explicit.rawValue
+            }
+            if index == 6 {
+                record.processingState = .failed
+                record.processingFailureMessage = "The source device could not finish this transcription."
+            }
+        }
+
+        if AppConstants.screenshotState == "history",
+           let selectedRecord = historyService.records.first(where: { $0.processingState == .ready }) {
+            historyViewModel.requestRecordSelection([selectedRecord.id])
         }
     }
 

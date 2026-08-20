@@ -1,9 +1,46 @@
 import Foundation
 
 enum PremiumICloudBridgeConstants {
-    static let serviceBundleIdentifier = "com.typewhisper.typewhisper-mac"
+    static let productionServiceBundleIdentifier =
+        "com.typewhisper.typewhisper-mac"
     static let productionContainerIdentifier = "iCloud.com.typewhisper.sync"
+    static let serviceBundleIdentifierInfoKey =
+        "TypeWhisperICloudBridgeServiceIdentifier"
+    static let containerIdentifierInfoKey = "TypeWhisperICloudContainer"
     static let packageDirectoryName = "typewhisper-sync"
+
+    static func serviceBundleIdentifier(
+        infoDictionary: [String: Any]? = Bundle.main.infoDictionary
+    ) -> String {
+        configuredIdentifier(
+            forKey: serviceBundleIdentifierInfoKey,
+            in: infoDictionary,
+            fallback: productionServiceBundleIdentifier
+        )
+    }
+
+    static func containerIdentifier(
+        infoDictionary: [String: Any]? = Bundle.main.infoDictionary
+    ) -> String {
+        configuredIdentifier(
+            forKey: containerIdentifierInfoKey,
+            in: infoDictionary,
+            fallback: productionContainerIdentifier
+        )
+    }
+
+    private static func configuredIdentifier(
+        forKey key: String,
+        in infoDictionary: [String: Any]?,
+        fallback: String
+    ) -> String {
+        guard let identifier = infoDictionary?[key] as? String,
+              !identifier.isEmpty,
+              !identifier.contains("$(") else {
+            return fallback
+        }
+        return identifier
+    }
 
     static func localRootURL(
         bundle: Bundle = .main,
@@ -17,11 +54,32 @@ enum PremiumICloudBridgeConstants {
               ) else {
             return nil
         }
-        return container
+        let root = container
             .appendingPathComponent("Library", isDirectory: true)
             .appendingPathComponent("Application Support", isDirectory: true)
             .appendingPathComponent("TypeWhisper", isDirectory: true)
             .appendingPathComponent("ICloudBridge", isDirectory: true)
+        guard let namespace = localMirrorNamespace(
+            infoDictionary: bundle.infoDictionary
+        ) else {
+            return root
+        }
+        return root
+            .appendingPathComponent("Containers", isDirectory: true)
+            .appendingPathComponent(namespace, isDirectory: true)
+    }
+
+    static func localMirrorNamespace(
+        infoDictionary: [String: Any]?
+    ) -> String? {
+        let identifier = containerIdentifier(
+            infoDictionary: infoDictionary
+        )
+        guard identifier != productionContainerIdentifier,
+              identifier == URL(fileURLWithPath: identifier).lastPathComponent else {
+            return nil
+        }
+        return identifier
     }
 
     static func embeddedServiceURL(bundle: Bundle = .main) -> URL {

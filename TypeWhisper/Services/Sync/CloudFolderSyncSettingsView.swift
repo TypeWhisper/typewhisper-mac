@@ -686,12 +686,15 @@ final class CloudFolderSyncController: ObservableObject {
     private let defaults: UserDefaults
     private let automaticICloudBridge: any PremiumICloudBridging
     private let automaticICloudAvailable: Bool
+    private let historyService: HistoryService?
+    let historySyncPreferences: HistorySyncPreferences?
     private var customState: CloudFolderSyncState
     private var automaticState: CloudFolderSyncState
     private var localChangeObserverId: UUID?
     private var scheduledSyncTask: Task<Void, Never>?
     private var automaticPollTask: Task<Void, Never>?
     private var entitlementCancellable: AnyCancellable?
+    private var needsResync = false
 
     @Published private(set) var mode: PremiumSyncMode
     @Published private(set) var selectedFolderURL: URL?
@@ -699,6 +702,7 @@ final class CloudFolderSyncController: ObservableObject {
     @Published private(set) var lastSyncDate: Date?
     @Published private(set) var pendingChanges = 0
     @Published private(set) var deviceCount = 0
+    @Published private(set) var devices: [CloudFolderSyncDeviceRecord] = []
     @Published private(set) var isSyncing = false
     @Published var errorMessage: String?
     @Published var statusMessage: String?
@@ -726,12 +730,16 @@ final class CloudFolderSyncController: ObservableObject {
     init(
         premiumAccountService: PremiumAccountService,
         syncStore: any UserDataSyncStore,
+        historyService: HistoryService? = nil,
+        historySyncPreferences: HistorySyncPreferences? = nil,
         defaults: UserDefaults = .standard,
         automaticICloudBridge: any PremiumICloudBridging = PremiumICloudBridgeClient(),
         automaticICloudAvailable: Bool? = nil
     ) {
         self.premiumAccountService = premiumAccountService
         self.syncStore = syncStore
+        self.historyService = historyService
+        self.historySyncPreferences = historySyncPreferences
         self.defaults = defaults
         self.automaticICloudBridge = automaticICloudBridge
         self.automaticICloudAvailable = automaticICloudAvailable
@@ -812,6 +820,21 @@ final class CloudFolderSyncController: ObservableObject {
         if isConfigured { await syncNow() }
     }
 
+    func setHistorySyncEnabled(_ enabled: Bool) async {
+        guard let historySyncPreferences,
+              historySyncPreferences.isEnabled != enabled else { return }
+        historySyncPreferences.isEnabled = enabled
+        objectWillChange.send()
+        if enabled, isConfigured, canUseSync {
+            await syncNow()
+        }
+    }
+
+    func setHistoryAudioSyncEnabled(_ enabled: Bool) {
+        historySyncPreferences?.isAudioEnabled = enabled
+        objectWillChange.send()
+    }
+
     func clearFolder() {
         guard !isSyncing else { return }
         scheduledSyncTask?.cancel()
@@ -820,6 +843,8 @@ final class CloudFolderSyncController: ObservableObject {
         resetCustomSyncState()
         removeDefault(forKey: Keys.folderBookmark, legacyKey: Keys.legacyFolderBookmark)
         pendingChanges = 0
+        devices = []
+        deviceCount = 0
         statusMessage = nil
         errorMessage = nil
         if mode == .cloudFolder {
@@ -841,7 +866,10 @@ final class CloudFolderSyncController: ObservableObject {
             return
         }
         guard let folderURL = activeFolderURL(for: syncMode) else { return }
-        guard !isSyncing else { return }
+        guard !isSyncing else {
+            needsResync = true
+            return
+        }
 
         errorMessage = nil
         isSyncing = true
@@ -851,6 +879,12 @@ final class CloudFolderSyncController: ObservableObject {
                 folderURL.stopAccessingSecurityScopedResource()
             }
             isSyncing = false
+            if needsResync {
+                needsResync = false
+                Task { @MainActor [weak self] in
+                    await self?.syncNow()
+                }
+            }
         }
 
         do {
@@ -862,25 +896,29 @@ final class CloudFolderSyncController: ObservableObject {
                 folderURL: folderURL,
                 store: syncStore,
                 state: &syncState,
-                entitlements: PaidEntitlements(canUseCloudFolderSync: canUseSync)
+                entitlements: PaidEntitlements(canUseCloudFolderSync: canUseSync),
+                historyOriginDeviceID: historySyncPreferences?.deviceID
             )
             setState(syncState, for: syncMode)
             if syncMode == .automaticICloud {
                 try await automaticICloudBridge.synchronize()
             }
+            _ = await installPendingSynchronizedAudio(in: folderURL)
             guard mode == syncMode else { return }
             lastSyncDate = result.syncedAt
             pendingChanges = 0
-            deviceCount = countDevices(in: folderURL)
+            devices = result.devices
+            deviceCount = devices.count
             let synchronizedChanges = result.operationsWritten + result.mutationsApplied
-            if result.diagnostics.isEmpty {
+            let diagnostics = result.diagnostics
+            if diagnostics.isEmpty {
                 statusMessage = String.localizedStringWithFormat(
                     String(localized: "Synced %lld changes."), Int64(synchronizedChanges)
                 )
             } else {
                 statusMessage = String.localizedStringWithFormat(
                     String(localized: "Synced %lld changes; skipped %lld invalid files."),
-                    Int64(synchronizedChanges), Int64(result.diagnostics.count)
+                    Int64(synchronizedChanges), Int64(diagnostics.count)
                 )
             }
         } catch {
@@ -951,6 +989,10 @@ final class CloudFolderSyncController: ObservableObject {
     private func scheduleSyncAfterLocalChange() {
         guard isConfigured, canUseSync else { return }
         pendingChanges += 1
+        if isSyncing {
+            needsResync = true
+            return
+        }
         scheduledSyncTask?.cancel()
         scheduledSyncTask = Task { [weak self] in
             do {
@@ -1067,10 +1109,49 @@ final class CloudFolderSyncController: ObservableObject {
         }
     }
 
-    private func countDevices(in folderURL: URL) -> Int {
-        let url = CloudFolderSyncEngine.packageURL(for: folderURL).appendingPathComponent("devices", isDirectory: true)
-        return ((try? FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: nil)) ?? [])
-            .filter { $0.pathExtension == "json" }.count
+    func installPendingSynchronizedAudio(
+        in folderURL: URL
+    ) async -> [CloudFolderSyncDiagnostic] {
+        guard let historySyncPreferences,
+              historySyncPreferences.isEnabled,
+              historySyncPreferences.isAudioEnabled,
+              let historyService else {
+            return []
+        }
+        let pending = historyService.records.compactMap { record -> (UUID, UserDataSyncHistoryAudioV1)? in
+            guard historyService.audioFileURL(for: record) == nil,
+                  let descriptor = historyService.synchronizedAudioDescriptor(for: record),
+                  historySyncPreferences.shouldReceiveSynchronizedAudio(
+                      createdAt: descriptor.createdAt
+                  ) else {
+                return nil
+            }
+            return (record.id, descriptor)
+        }
+        guard !pending.isEmpty else { return [] }
+
+        let packageURL = CloudFolderSyncEngine.packageURL(for: folderURL)
+        var diagnostics: [CloudFolderSyncDiagnostic] = []
+        for (recordID, descriptor) in pending {
+            do {
+                let sourceURL = try await Task.detached(priority: .utility) {
+                    try await HistorySyncAssetStore.verifiedAssetURL(
+                        packageURL: packageURL,
+                        descriptor: descriptor
+                    )
+                }.value
+                try historyService.installSynchronizedAudio(
+                    recordID: recordID,
+                    sourceURL: sourceURL
+                )
+            } catch {
+                diagnostics.append(.init(
+                    kind: .audioTransferFailed,
+                    fileName: descriptor.relativeAssetPath
+                ))
+            }
+        }
+        return diagnostics
     }
 
     #if DEBUG
@@ -1083,7 +1164,31 @@ final class CloudFolderSyncController: ObservableObject {
         provider = hasPremiumAccess ? .iCloudDrive : .custom
         lastSyncDate = hasPremiumAccess ? AppConstants.screenshotFixtureReferenceDate : nil
         pendingChanges = 0
-        deviceCount = hasPremiumAccess ? 2 : 0
+        if AppConstants.screenshotState == "history" {
+            deviceCount = 2
+            devices = [
+                CloudFolderSyncDeviceRecord(
+                    deviceId: "screenshot-mac",
+                    historyOriginDeviceID: historySyncPreferences?.deviceID
+                        ?? "screenshot-mac-history",
+                    platform: "macOS",
+                    appVersion: "1.7.0",
+                    updatedAt: AppConstants.screenshotFixtureReferenceDate,
+                    name: "MacBook Pro"
+                ),
+                CloudFolderSyncDeviceRecord(
+                    deviceId: "screenshot-iphone",
+                    historyOriginDeviceID: "screenshot-iphone-history",
+                    platform: "iOS",
+                    appVersion: "1.1.0",
+                    updatedAt: AppConstants.screenshotFixtureReferenceDate,
+                    name: "iPhone 16 Pro"
+                ),
+            ]
+        } else {
+            deviceCount = hasPremiumAccess ? 2 : 0
+            devices = []
+        }
         isSyncing = false
         errorMessage = nil
         statusMessage = nil
@@ -1112,6 +1217,7 @@ final class CloudFolderSyncController: ObservableObject {
             setState(CloudFolderSyncState(), for: deletedMode)
             lastSyncDate = nil
             deviceCount = 0
+            devices = []
             statusMessage = String(localized: "The private sync folder was deleted. Local data was kept.")
         } catch {
             errorMessage = error.localizedDescription
@@ -1134,6 +1240,7 @@ final class CloudFolderSyncController: ObservableObject {
 struct CloudFolderSyncSettingsView: View {
     @ObservedObject var controller: CloudFolderSyncController
     @State private var confirmingSyncFolderDeletion = false
+    @State private var confirmingHistorySync = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
@@ -1162,6 +1269,34 @@ struct CloudFolderSyncSettingsView: View {
                     .pickerStyle(.segmented)
                     .disabled(controller.isSyncing)
                     .accessibilityIdentifier("premium.sync.mode")
+
+                    Toggle(
+                        String(localized: "Sync History & Inbox"),
+                        isOn: Binding(
+                            get: { controller.historySyncPreferences?.isEnabled == true },
+                            set: { enabled in
+                                if enabled {
+                                    confirmingHistorySync = true
+                                } else {
+                                    Task { await controller.setHistorySyncEnabled(false) }
+                                }
+                            }
+                        )
+                    )
+                    .disabled(controller.mode == .off || controller.isSyncing)
+                    .accessibilityIdentifier("premium.sync.history")
+
+                    if controller.historySyncPreferences?.isEnabled == true {
+                        Toggle(
+                            String(localized: "Sync Audio for New Entries"),
+                            isOn: Binding(
+                                get: { controller.historySyncPreferences?.isAudioEnabled == true },
+                                set: { controller.setHistoryAudioSyncEnabled($0) }
+                            )
+                        )
+                        .disabled(controller.mode == .off || controller.isSyncing)
+                        .accessibilityIdentifier("premium.sync.historyAudio")
+                    }
 
                     Text(String(localized: "premium.window.sync.modeHelp"))
                         .font(.caption)
@@ -1262,6 +1397,17 @@ struct CloudFolderSyncSettingsView: View {
             Button(String(localized: "premium.common.cancel"), role: .cancel) {}
         } message: {
             Text(String(localized: "premium.window.sync.deleteConfirmationMessage"))
+        }
+        .confirmationDialog(
+            String(localized: "Sync History & Inbox?"),
+            isPresented: $confirmingHistorySync
+        ) {
+            Button(String(localized: "Enable History Sync")) {
+                Task { await controller.setHistorySyncEnabled(true) }
+            }
+            Button(String(localized: "premium.common.cancel"), role: .cancel) {}
+        } message: {
+            Text(String(localized: "Existing transcription text and metadata will be added to your private sync folder. Audio is synchronized only for new entries created after you enable this feature."))
         }
     }
 

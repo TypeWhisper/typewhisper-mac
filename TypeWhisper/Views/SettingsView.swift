@@ -78,7 +78,7 @@ struct SettingsView: View {
                 badge: nil
             ),
             SettingsDestination(tab: .fileTranscription, title: String(localized: "File Transcription"), systemImage: "doc.text", badge: nil),
-            SettingsDestination(tab: .history, title: String(localized: "History"), systemImage: "clock.arrow.circlepath", badge: nil),
+            SettingsDestination(tab: .history, title: String(localized: "History & Sync"), systemImage: "clock.arrow.circlepath", badge: nil),
             SettingsDestination(
                 tab: .statistics,
                 title: String(localized: "Statistics"),
@@ -209,7 +209,7 @@ struct SettingsView: View {
         case .fileTranscription:
             FileTranscriptionView()
         case .history:
-            HistoryView()
+            HistorySettingsView()
         case .statistics:
             StatisticsView()
         case .dictionary:
