@@ -596,9 +596,15 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         static let pluginId = "com.typewhisper.mock.action"
         static let pluginName = "Mock Action"
 
+        private let executionLock = NSLock()
+        nonisolated(unsafe) private var _executedInputs: [String] = []
         let actionName: String
         let actionId: String
         let actionIcon = "bolt"
+
+        var executedInputs: [String] {
+            executionLock.withLock { _executedInputs }
+        }
 
         required override init() {
             actionName = "Default Action"
@@ -616,7 +622,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         func deactivate() {}
 
         func execute(input: String, context: ActionContext) async throws -> ActionResult {
-            ActionResult(success: true, message: input)
+            executionLock.withLock { _executedInputs.append(input) }
+            return ActionResult(success: true, message: input)
         }
     }
 
@@ -5582,6 +5589,80 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(session.transcription?.text, "Ready to send")
         XCTAssertEqual(pasteboard.string(forType: .string), "Ready to send")
         XCTAssertEqual(returnCount, 1)
+    }
+
+    @MainActor
+    func testDictationRuntimeStripsSpokenSubmitCommandBeforeActionPluginWithoutPressingReturn() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            MockTranscriptionPlugin.reset()
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        MockTranscriptionPlugin.setResponseText("Ready to send press enter.")
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        let context = try XCTUnwrap(dictationContext)
+        let actionPlugin = MockActionPlugin(name: "Capture Action", id: "capture-action")
+        PluginManager.shared.loadedPlugins.append(LoadedPlugin(
+            manifest: PluginManifest(
+                id: MockActionPlugin.pluginId,
+                name: MockActionPlugin.pluginName,
+                version: "1.0.0",
+                principalClass: "APIRouterMockActionPlugin"
+            ),
+            instance: actionPlugin,
+            bundle: Bundle.main,
+            sourceURL: appSupportDirectory,
+            isEnabled: true
+        ))
+        _ = context.workflowService.addWorkflow(
+            name: "Spoken Submit Action",
+            template: .dictation,
+            trigger: .app("com.apple.Notes"),
+            output: WorkflowOutput(
+                autoEnterMode: .spokenCommand,
+                targetActionPluginId: actionPlugin.actionId
+            )
+        )
+
+        var returnCount = 0
+        context.textInsertionService.captureActiveAppOverride = {
+            ("Notes", "com.apple.Notes", nil)
+        }
+        context.textInsertionService.accessibilityGrantedOverride = true
+        context.textInsertionService.selectedTextOverride = { nil }
+        context.textInsertionService.focusedTextElementOverride = { nil }
+        context.textInsertionService.returnSimulatorOverride = {
+            returnCount += 1
+        }
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { _ in
+            Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
+        }
+
+        let sessionID = context.dictationViewModel.apiStartRecording()
+        await context.dictationViewModel.testingWaitForRecordingStart()
+        XCTAssertEqual(context.dictationViewModel.activeRuleName, "Spoken Submit Action")
+
+        _ = context.dictationViewModel.apiStopRecording()
+        for _ in 0..<40 {
+            if context.dictationViewModel.apiDictationSession(id: sessionID)?.status == .completed {
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+
+        let session = try XCTUnwrap(context.dictationViewModel.apiDictationSession(id: sessionID))
+        XCTAssertEqual(session.status, .completed)
+        XCTAssertEqual(session.transcription?.rawText, "Ready to send press enter.")
+        XCTAssertEqual(session.transcription?.text, "Ready to send")
+        XCTAssertEqual(actionPlugin.executedInputs, ["Ready to send"])
+        XCTAssertEqual(returnCount, 0)
     }
 
     @MainActor

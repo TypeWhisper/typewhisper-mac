@@ -1852,9 +1852,8 @@ final class DictationViewModel: ObservableObject {
                     return
                 }
 
-                let autoEnterMode = self.effectiveActionPluginId == nil
-                    ? self.effectiveAutoEnterMode
-                    : .never
+                let actionPluginId = self.effectiveActionPluginId
+                let autoEnterMode = self.effectiveAutoEnterMode
                 let autoEnterResolution = WorkflowAutoEnterResolver.resolve(
                     text: text,
                     mode: autoEnterMode
@@ -1907,9 +1906,10 @@ final class DictationViewModel: ObservableObject {
                     normalizeNumbers: self.effectiveNumberNormalizationOverride
                 )
                 text = ppResult.text
-                let shouldAutoEnterAfterInsertion = autoEnterMode == .always
-                    || (autoEnterResolution.shouldPressEnter
-                        && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                let shouldAutoEnterAfterInsertion = actionPluginId == nil
+                    && (autoEnterMode == .always
+                        || (autoEnterResolution.shouldPressEnter
+                            && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))
                 logger.info("Stop timing: post-processing done elapsedMs=\(stopElapsedMs(), privacy: .public)")
                 let transcriptionID = sessionID ?? UUID()
                 let completionTimestamp = Date()
@@ -1931,7 +1931,7 @@ final class DictationViewModel: ObservableObject {
                 }
 
                 // Route to action plugin or insert text
-                if let actionPluginId = self.effectiveActionPluginId,
+                if let actionPluginId,
                    let actionPlugin = PluginManager.shared.actionPlugin(for: actionPluginId) {
                     cancelLiveFieldTranscriptSession()
                     try await executeActionPlugin(
