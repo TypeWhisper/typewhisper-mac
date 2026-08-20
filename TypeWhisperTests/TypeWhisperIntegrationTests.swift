@@ -5606,7 +5606,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
         let context = try XCTUnwrap(dictationContext)
         let actionPlugin = MockActionPlugin(name: "Capture Action", id: "capture-action")
-        PluginManager.shared.loadedPlugins.append(LoadedPlugin(
+        let pluginManager: PluginManager = PluginManager.shared
+        pluginManager.loadedPlugins.append(LoadedPlugin(
             manifest: PluginManifest(
                 id: MockActionPlugin.pluginId,
                 name: MockActionPlugin.pluginName,
@@ -5618,6 +5619,9 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             sourceURL: appSupportDirectory,
             isEnabled: true
         ))
+        defer {
+            pluginManager.loadedPlugins.removeAll { $0.instance === actionPlugin }
+        }
         _ = context.workflowService.addWorkflow(
             name: "Spoken Submit Action",
             template: .dictation,
