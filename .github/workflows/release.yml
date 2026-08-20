@@ -225,7 +225,15 @@ jobs:
           MACOS_ICLOUD_HELPER_DEVELOPER_ID_PROVISIONING_PROFILE: ${{ secrets.MACOS_ICLOUD_HELPER_DEVELOPER_ID_PROVISIONING_PROFILE }}
         run: |
           PROFILE_PATH="${RUNNER_TEMP}/TypeWhisperICloudBridge.provisionprofile"
+          if [ -z "$MACOS_ICLOUD_HELPER_DEVELOPER_ID_PROVISIONING_PROFILE" ]; then
+            echo "MACOS_ICLOUD_HELPER_DEVELOPER_ID_PROVISIONING_PROFILE is not set; use without_icloud to build the fallback" >&2
+            exit 1
+          fi
           printf '%s' "$MACOS_ICLOUD_HELPER_DEVELOPER_ID_PROVISIONING_PROFILE" | base64 --decode > "$PROFILE_PATH"
+          if [ ! -s "$PROFILE_PATH" ]; then
+            echo "Decoded iCloud bridge provisioning profile is empty" >&2
+            exit 1
+          fi
           chmod 600 "$PROFILE_PATH"
           echo "MACOS_ICLOUD_HELPER_DEVELOPER_ID_PROVISIONING_PROFILE_PATH=$PROFILE_PATH" >> "$GITHUB_ENV"
 

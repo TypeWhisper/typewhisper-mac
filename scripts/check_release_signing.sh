@@ -46,7 +46,9 @@ plist_array_contains_or_wildcard() {
   local scalar_value
 
   scalar_value="$(/usr/libexec/PlistBuddy -c "Print :$key_path" "$plist_path" 2>/dev/null || true)"
-  [[ "$scalar_value" == "*" ]] || plist_array_contains "$plist_path" "$key_path" "$expected_value"
+  [[ "$scalar_value" == "*" ]] ||
+    plist_array_contains "$plist_path" "$key_path" "$expected_value" ||
+    plist_array_contains "$plist_path" "$key_path" '*'
 }
 
 plist_array_equals_single_value() {
@@ -89,6 +91,18 @@ contains_hardened_runtime_flag() {
 }
 
 self_test() {
+  (
+    wildcard_plist="$(mktemp "${TMPDIR:-/tmp}/typewhisper-wildcard-test.XXXXXX")"
+    trap 'rm -f "$wildcard_plist"' EXIT
+    plutil -create xml1 "$wildcard_plist"
+    /usr/libexec/PlistBuddy -c 'Add :services array' "$wildcard_plist"
+    /usr/libexec/PlistBuddy -c 'Add :services:0 string *' "$wildcard_plist"
+    if ! plist_array_contains_or_wildcard "$wildcard_plist" services CloudDocuments; then
+      echo "self-test failed: array wildcard was not accepted" >&2
+      exit 1
+    fi
+  ) || return 1
+
   # shellcheck disable=SC2016 # Exercise the literal unresolved marker.
   if printf '%s\n' '<string>$(ICLOUD_CONTAINER_ID)</string>' | contains_unresolved_variable; then
     :

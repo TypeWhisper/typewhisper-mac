@@ -55,7 +55,9 @@ plist_array_contains_or_wildcard() {
   local scalar_value
 
   scalar_value="$(/usr/libexec/PlistBuddy -c "Print :$key_path" "$plist_path" 2>/dev/null || true)"
-  [[ "$scalar_value" == "*" ]] || plist_array_contains "$plist_path" "$key_path" "$expected_value"
+  [[ "$scalar_value" == "*" ]] ||
+    plist_array_contains "$plist_path" "$key_path" "$expected_value" ||
+    plist_array_contains "$plist_path" "$key_path" '*'
 }
 
 while [[ $# -gt 0 ]]; do
