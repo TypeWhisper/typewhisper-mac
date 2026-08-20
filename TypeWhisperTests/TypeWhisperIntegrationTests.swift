@@ -4504,22 +4504,23 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
-    func testFirefoxFamilyForcesSingleSyntheticPasteInsteadOfDirectAccessibilityInsertion() async throws {
-        let browsers = [
+    func testMozillaFamilyForcesSingleSyntheticPasteInsteadOfDirectAccessibilityInsertion() async throws {
+        let applications = [
             (name: "Firefox", bundleIdentifier: "org.mozilla.firefox"),
             (name: "Firefox Developer Edition", bundleIdentifier: "org.mozilla.firefoxdeveloperedition"),
             (name: "Firefox Nightly", bundleIdentifier: "org.mozilla.nightly"),
-            (name: "Zen", bundleIdentifier: "app.zen-browser.zen")
+            (name: "Zen", bundleIdentifier: "app.zen-browser.zen"),
+            (name: "Thunderbird", bundleIdentifier: "org.mozilla.thunderbird")
         ]
 
-        for browser in browsers {
+        for application in applications {
             let service = TextInsertionService()
             let pasteboard = NSPasteboard.withUniqueName()
             let element = AXUIElementCreateSystemWide()
             service.accessibilityGrantedOverride = true
             service.pasteboardProvider = { pasteboard }
             service.focusedTextElementOverride = { element }
-            service.captureActiveAppOverride = { (browser.name, browser.bundleIdentifier, nil) }
+            service.captureActiveAppOverride = { (application.name, application.bundleIdentifier, nil) }
             service.verifiedRestoreGraceDelay = .milliseconds(1)
 
             var pasteCount = 0
@@ -4546,11 +4547,39 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
             XCTAssertFalse(
                 didAttemptDirectAXInsertion,
-                "\(browser.name) should bypass direct AX insertion"
+                "\(application.name) should bypass direct AX insertion"
             )
-            XCTAssertEqual(pasteCount, 1, "\(browser.name) should paste exactly once")
+            XCTAssertEqual(pasteCount, 1, "\(application.name) should paste exactly once")
             XCTAssertEqual(result, .pasted(verification: .verified))
             XCTAssertEqual(pasteboard.string(forType: .string), "Existing")
+        }
+    }
+
+    @MainActor
+    func testMozillaFamilyRejectsLiveFieldAccessibilityInsertion() {
+        let bundleIdentifiers = [
+            "org.mozilla.firefox",
+            "org.mozilla.firefoxdeveloperedition",
+            "org.mozilla.nightly",
+            "app.zen-browser.zen",
+            "org.mozilla.thunderbird"
+        ]
+
+        for bundleIdentifier in bundleIdentifiers {
+            let service = TextInsertionService()
+            let element = AXUIElementCreateSystemWide()
+            service.accessibilityGrantedOverride = true
+            service.captureActiveAppOverride = { ("Mozilla app", bundleIdentifier, nil) }
+            service.focusedTextElementOverride = { element }
+            service.liveFieldTargetEligibilityOverride = { _ in true }
+            service.focusedTextStateOverride = { _ in
+                (value: "", selectedText: nil, selectedRange: NSRange(location: 0, length: 0))
+            }
+
+            XCTAssertNil(
+                service.captureLiveFieldTarget(expectedBundleIdentifier: bundleIdentifier),
+                "\(bundleIdentifier) should bypass live AX insertion"
+            )
         }
     }
 
