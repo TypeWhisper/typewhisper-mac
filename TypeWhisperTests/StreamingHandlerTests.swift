@@ -167,6 +167,23 @@ final class StreamingHandlerTests: XCTestCase {
             )
         }
 
+        func transcribe(
+            audio: AudioData,
+            language: String?,
+            translate: Bool,
+            prompt: String?,
+            onProgress: @Sendable @escaping (String) -> Bool
+        ) async throws -> PluginTranscriptionResult {
+            let result = try await transcribe(
+                audio: audio,
+                language: language,
+                translate: translate,
+                prompt: prompt
+            )
+            _ = onProgress(result.text)
+            return result
+        }
+
         func releaseFirstCall() async {
             await recorder.releaseFirstCall()
         }
@@ -1118,6 +1135,7 @@ final class StreamingHandlerTests: XCTestCase {
             bufferDeltaProvider: { _ in ([], 0) },
             bufferedDurationProvider: { 1.0 }
         )
+        defer { handler.stop() }
 
         handler.start(
             streamPrompt: "Preview Terms",
@@ -1155,6 +1173,20 @@ final class StreamingHandlerTests: XCTestCase {
                 prompt: "Final Terms"
             )
         }
+        let finalCompleted = expectation(description: "final transcription completed")
+        var finalOutcome: Result<TranscriptionResult, Error>?
+        let finalWaitTask = Task { @MainActor in
+            do {
+                finalOutcome = .success(try await finalTask.value)
+            } catch {
+                finalOutcome = .failure(error)
+            }
+            finalCompleted.fulfill()
+        }
+        defer {
+            finalTask.cancel()
+            finalWaitTask.cancel()
+        }
 
         try await Task.sleep(for: .milliseconds(100))
         let blockedSnapshot = await plugin.snapshot()
@@ -1162,7 +1194,9 @@ final class StreamingHandlerTests: XCTestCase {
         XCTAssertEqual(blockedSnapshot.maxConcurrentTranscriptions, 1)
 
         await plugin.releaseFirstCall()
-        let finalResult = try await finalTask.value
+        await fulfillment(of: [finalCompleted], timeout: 10)
+        guard let finalOutcome else { return }
+        let finalResult = try finalOutcome.get()
         let finalSnapshot = await plugin.snapshot()
 
         XCTAssertEqual(finalResult.text, "result-Final Terms")
