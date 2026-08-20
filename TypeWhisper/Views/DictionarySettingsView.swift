@@ -85,65 +85,18 @@ struct DictionarySettingsView: View {
     }
 
     private var dictionaryHeader: some View {
-        HStack {
-            Picker("", selection: $viewModel.filterTab) {
-                Text(String(localized: "All")).tag(DictionaryViewModel.FilterTab.all)
-                Text(String(localized: "Terms")).tag(DictionaryViewModel.FilterTab.terms)
-                Text(String(localized: "Corrections")).tag(DictionaryViewModel.FilterTab.corrections)
-                Text(String(localized: "Auto-learned")).tag(DictionaryViewModel.FilterTab.autoLearned)
-                Text(String(localized: "Term Packs")).tag(DictionaryViewModel.FilterTab.termPacks)
-            }
-            .pickerStyle(.segmented)
-            .frame(width: 470)
-
-            Spacer()
-
-            if viewModel.filterTab != .termPacks {
-                Button {
-                    trainingService.reset()
-                    isTrainingPresented = true
-                } label: {
-                    Label(
-                        localizedAppText("Train Word...", de: "Wort trainieren..."),
-                        systemImage: "mic.badge.plus"
-                    )
-                }
-                Button {
-                    viewModel.startCreating(type: .correction)
-                } label: {
-                    Label(String(localized: "Correction"), systemImage: "plus")
-                }
-                Button {
-                    viewModel.startCreating(type: .term)
-                } label: {
-                    Label(String(localized: "Term"), systemImage: "plus")
-                }
+        ViewThatFits(in: .horizontal) {
+            HStack {
+                dictionarySegmentedFilter
+                Spacer(minLength: SettingsLayoutMetrics.sectionSpacing)
+                dictionaryHeaderActions
             }
 
-            Menu {
-                Button {
-                    viewModel.exportDictionary()
-                } label: {
-                    Label(String(localized: "Export..."), systemImage: "square.and.arrow.up")
-                }
-                .disabled(viewModel.entries.isEmpty)
-
-                Button {
-                    viewModel.importDictionary()
-                } label: {
-                    Label(String(localized: "Import..."), systemImage: "square.and.arrow.down")
-                }
-
-                Divider()
-
-                resetMenuButton(.clearAutoLearnedCorrections)
-                resetMenuButton(.resetCustomDictionary)
-                resetMenuButton(.deactivateAllTermPacks)
-            } label: {
-                Image(systemName: "ellipsis.circle")
+            HStack {
+                dictionaryCompactFilter
+                Spacer(minLength: SettingsLayoutMetrics.sectionSpacing)
+                dictionaryHeaderActions
             }
-            .menuStyle(.borderlessButton)
-            .frame(width: 28)
         }
         .padding(.horizontal, SettingsLayoutMetrics.pagePadding)
         .padding(.vertical, SettingsLayoutMetrics.sectionSpacing)
@@ -151,6 +104,82 @@ struct DictionarySettingsView: View {
         .overlay(alignment: .bottom) {
             Divider()
         }
+    }
+
+    private var dictionarySegmentedFilter: some View {
+        Picker("", selection: $viewModel.filterTab) {
+            dictionaryFilterOptions
+        }
+        .pickerStyle(.segmented)
+        .fixedSize(horizontal: true, vertical: false)
+    }
+
+    private var dictionaryCompactFilter: some View {
+        Picker("", selection: $viewModel.filterTab) {
+            dictionaryFilterOptions
+        }
+        .pickerStyle(.menu)
+        .labelsHidden()
+        .frame(minWidth: 150, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var dictionaryFilterOptions: some View {
+        Text(String(localized: "All")).tag(DictionaryViewModel.FilterTab.all)
+        Text(String(localized: "Terms")).tag(DictionaryViewModel.FilterTab.terms)
+        Text(String(localized: "Corrections")).tag(DictionaryViewModel.FilterTab.corrections)
+        Text(String(localized: "Auto-learned")).tag(DictionaryViewModel.FilterTab.autoLearned)
+        Text(String(localized: "Term Packs")).tag(DictionaryViewModel.FilterTab.termPacks)
+    }
+
+    @ViewBuilder
+    private var dictionaryHeaderActions: some View {
+        if viewModel.filterTab != .termPacks {
+            Button {
+                trainingService.reset()
+                isTrainingPresented = true
+            } label: {
+                Label(
+                    localizedAppText("Train Word...", de: "Wort trainieren..."),
+                    systemImage: "mic.badge.plus"
+                )
+            }
+            Button {
+                viewModel.startCreating(type: .correction)
+            } label: {
+                Label(String(localized: "Correction"), systemImage: "plus")
+            }
+            Button {
+                viewModel.startCreating(type: .term)
+            } label: {
+                Label(String(localized: "Term"), systemImage: "plus")
+            }
+        }
+
+        Menu {
+            Button {
+                viewModel.exportDictionary()
+            } label: {
+                Label(String(localized: "Export..."), systemImage: "square.and.arrow.up")
+            }
+            .disabled(viewModel.entries.isEmpty)
+
+            Button {
+                viewModel.importDictionary()
+            } label: {
+                Label(String(localized: "Import..."), systemImage: "square.and.arrow.down")
+            }
+
+            Divider()
+
+            resetMenuButton(.clearAutoLearnedCorrections)
+            resetMenuButton(.resetCustomDictionary)
+            resetMenuButton(.deactivateAllTermPacks)
+        } label: {
+            Image(systemName: "ellipsis.circle")
+        }
+        .menuStyle(.borderlessButton)
+        .frame(width: 28)
     }
 
     @ViewBuilder
