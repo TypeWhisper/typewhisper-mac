@@ -107,15 +107,22 @@ struct DictionarySettingsView: View {
     }
 
     private var dictionarySegmentedFilter: some View {
-        Picker("", selection: $viewModel.filterTab) {
+        Picker(
+            localizedAppText("Dictionary filter", de: "Wörterbuchfilter"),
+            selection: $viewModel.filterTab
+        ) {
             dictionaryFilterOptions
         }
         .pickerStyle(.segmented)
+        .labelsHidden()
         .fixedSize(horizontal: true, vertical: false)
     }
 
     private var dictionaryCompactFilter: some View {
-        Picker("", selection: $viewModel.filterTab) {
+        Picker(
+            localizedAppText("Dictionary filter", de: "Wörterbuchfilter"),
+            selection: $viewModel.filterTab
+        ) {
             dictionaryFilterOptions
         }
         .pickerStyle(.menu)
