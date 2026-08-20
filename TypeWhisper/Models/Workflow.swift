@@ -326,22 +326,122 @@ struct WorkflowBehavior: Codable, Equatable, Sendable {
     }
 }
 
+enum WorkflowAutoEnterMode: String, CaseIterable, Identifiable, Codable, Sendable {
+    case never
+    case spokenCommand
+    case always
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .never:
+            localizedAppText("Never", de: "Nie")
+        case .spokenCommand:
+            localizedAppText(
+                "When I say “press enter”",
+                de: "Wenn ich „press enter“ sage",
+                ja: "「press enter」と言ったとき"
+            )
+        case .always:
+            localizedAppText("Always", de: "Immer")
+        }
+    }
+
+    var helpText: String {
+        switch self {
+        case .never:
+            localizedAppText(
+                "TypeWhisper only inserts the dictated text.",
+                de: "TypeWhisper fügt nur den diktierten Text ein."
+            )
+        case .spokenCommand:
+            localizedAppText(
+                "Presses Enter when the dictation ends with “press enter” or “press return”.",
+                de: "Drückt Enter, wenn das Diktat mit „press enter“ oder „press return“ endet."
+            )
+        case .always:
+            localizedAppText(
+                "Presses Enter after every inserted dictation.",
+                de: "Drückt nach jedem eingefügten Diktat Enter."
+            )
+        }
+    }
+}
+
+struct WorkflowAutoEnterResolution: Equatable, Sendable {
+    let text: String
+    let shouldPressEnter: Bool
+}
+
+enum WorkflowAutoEnterResolver {
+    private static let spokenCommandPattern = #"^(.+?)\s+press\s+(?:enter|return)[\s\p{P}\p{S}]*$"#
+
+    static func resolve(text: String, mode: WorkflowAutoEnterMode) -> WorkflowAutoEnterResolution {
+        let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        switch mode {
+        case .never:
+            return WorkflowAutoEnterResolution(text: text, shouldPressEnter: false)
+        case .always:
+            return WorkflowAutoEnterResolution(text: text, shouldPressEnter: true)
+        case .spokenCommand:
+            break
+        }
+
+        guard let expression = try? NSRegularExpression(
+            pattern: spokenCommandPattern,
+            options: [.caseInsensitive, .dotMatchesLineSeparators]
+        ) else {
+            return WorkflowAutoEnterResolution(text: text, shouldPressEnter: false)
+        }
+
+        let fullRange = NSRange(trimmedText.startIndex..., in: trimmedText)
+        guard let match = expression.firstMatch(in: trimmedText, range: fullRange),
+              match.range == fullRange,
+              let contentRange = Range(match.range(at: 1), in: trimmedText) else {
+            return WorkflowAutoEnterResolution(text: text, shouldPressEnter: false)
+        }
+
+        let content = trimmedText[contentRange].trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !content.isEmpty else {
+            return WorkflowAutoEnterResolution(text: text, shouldPressEnter: false)
+        }
+
+        return WorkflowAutoEnterResolution(text: content, shouldPressEnter: true)
+    }
+}
+
 struct WorkflowOutput: Codable, Equatable, Sendable {
     var format: String?
     var autoEnter: Bool
+    var autoEnterModeRaw: String?
     var targetActionPluginId: String?
     var numberNormalizationModeRaw: String?
 
     init(
         format: String? = nil,
         autoEnter: Bool = false,
+        autoEnterMode: WorkflowAutoEnterMode? = nil,
         targetActionPluginId: String? = nil,
         numberNormalizationModeRaw: String? = nil
     ) {
         self.format = format
-        self.autoEnter = autoEnter
+        self.autoEnter = autoEnterMode.map { $0 == .always } ?? autoEnter
+        self.autoEnterModeRaw = autoEnterMode?.rawValue
         self.targetActionPluginId = targetActionPluginId
         self.numberNormalizationModeRaw = numberNormalizationModeRaw
+    }
+
+    var autoEnterMode: WorkflowAutoEnterMode {
+        get {
+            WorkflowAutoEnterMode(rawValue: autoEnterModeRaw ?? "")
+                ?? (autoEnter ? .always : .never)
+        }
+        set {
+            autoEnterModeRaw = newValue.rawValue
+            autoEnter = newValue == .always
+        }
     }
 
     var numberNormalizationMode: WorkflowNumberNormalizationMode {
@@ -782,6 +882,7 @@ private extension WorkflowOutput {
         PluginWorkflowOutput(
             format: format,
             autoEnter: autoEnter,
+            autoEnterMode: PluginWorkflowAutoEnterMode(rawValue: autoEnterMode.rawValue),
             targetActionPluginId: targetActionPluginId
         )
     }

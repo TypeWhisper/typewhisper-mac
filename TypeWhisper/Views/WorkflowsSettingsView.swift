@@ -1221,7 +1221,23 @@ private struct WorkflowEditorPage: View {
 
                             Divider()
 
-                            Toggle(localizedAppText("Press Enter after inserting", de: "Nach dem Einfügen Enter drücken"), isOn: $draft.autoEnter)
+                            VStack(alignment: .leading, spacing: 6) {
+                                Picker(
+                                    localizedAppText("Press Enter after inserting", de: "Nach dem Einfügen Enter drücken"),
+                                    selection: $draft.autoEnterMode
+                                ) {
+                                    ForEach(WorkflowAutoEnterMode.allCases) { mode in
+                                        Text(mode.displayName)
+                                            .tag(mode)
+                                    }
+                                }
+                                .pickerStyle(.menu)
+
+                                Text(draft.autoEnterMode.helpText)
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
+                            }
                         }
                         .padding(.top, 4)
                     }
@@ -2503,7 +2519,7 @@ struct WorkflowDraft {
     var translationProcessor: WorkflowTranslationProcessor
     var customInstruction: String
     var outputFormat: String
-    var autoEnter: Bool
+    var autoEnterMode: WorkflowAutoEnterMode
     var numberNormalizationMode: WorkflowNumberNormalizationMode
     var transcriptionEngineId: String?
     var transcriptionModelId: String?
@@ -2536,7 +2552,7 @@ struct WorkflowDraft {
             : ""
         self.customInstruction = ""
         self.outputFormat = ""
-        self.autoEnter = false
+        self.autoEnterMode = .never
         self.numberNormalizationMode = .inherit
         self.transcriptionEngineId = nil
         self.transcriptionModelId = nil
@@ -2568,7 +2584,7 @@ struct WorkflowDraft {
         }
         self.customInstruction = behavior.settings["instruction"] ?? behavior.settings["goal"] ?? behavior.settings["prompt"] ?? ""
         self.outputFormat = output.format ?? ""
-        self.autoEnter = output.autoEnter
+        self.autoEnterMode = output.autoEnterMode
         self.numberNormalizationMode = output.numberNormalizationMode
         self.transcriptionEngineId = workflow.template == .dictation ? behavior.transcriptionEngineId : nil
         self.transcriptionModelId = workflow.template == .dictation ? behavior.transcriptionModelId : nil
@@ -2922,7 +2938,7 @@ struct WorkflowDraft {
         let trimmedFormat = outputFormat.trimmingCharacters(in: .whitespacesAndNewlines)
         return WorkflowOutput(
             format: usesLLMProcessing && !trimmedFormat.isEmpty ? trimmedFormat : nil,
-            autoEnter: autoEnter,
+            autoEnterMode: autoEnterMode,
             targetActionPluginId: template == .dictation ? nil : targetActionPluginId,
             numberNormalizationModeRaw: numberNormalizationMode == .inherit ? nil : numberNormalizationMode.rawValue
         )

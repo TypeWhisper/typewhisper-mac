@@ -66,6 +66,7 @@ struct DiagnosticWorkflowInfo: Encodable, Equatable {
     let hotkeyBehavior: String?
     let outputFormat: String?
     let outputAutoEnter: Bool
+    let outputAutoEnterMode: String
     let targetActionPluginId: String?
     let llmProviderId: String?
     let llmCloudModel: String?
@@ -713,6 +714,7 @@ final class ErrorLogService: ObservableObject {
                     hotkeyBehavior: trigger?.hotkeyBehavior.rawValue,
                     outputFormat: trimmedOrNil(output.format),
                     outputAutoEnter: output.autoEnter,
+                    outputAutoEnterMode: output.autoEnterMode.rawValue,
                     targetActionPluginId: trimmedOrNil(output.targetActionPluginId),
                     llmProviderId: explicitProviderId ?? trimmedOrNil(inheritedFallbackItem?.providerId),
                     llmCloudModel: explicitProviderId == nil

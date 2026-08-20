@@ -1610,11 +1610,8 @@ final class DictationViewModel: ObservableObject {
         matchedWorkflow?.output.targetActionPluginId
     }
 
-    private var effectiveAutoEnterEnabled: Bool {
-        if let matchedWorkflow {
-            return matchedWorkflow.output.autoEnter
-        }
-        return false
+    private var effectiveAutoEnterMode: WorkflowAutoEnterMode {
+        matchedWorkflow?.output.autoEnterMode ?? .never
     }
 
     private func stopDictation() {
@@ -1855,6 +1852,18 @@ final class DictationViewModel: ObservableObject {
                     return
                 }
 
+                let autoEnterMode = self.effectiveActionPluginId == nil
+                    ? self.effectiveAutoEnterMode
+                    : .never
+                let autoEnterResolution = WorkflowAutoEnterResolver.resolve(
+                    text: text,
+                    mode: autoEnterMode
+                )
+                text = autoEnterResolution.text
+                if autoEnterMode == .spokenCommand, autoEnterResolution.shouldPressEnter {
+                    logger.info("Detected terminal spoken Enter command")
+                }
+
                 let llmHandler = buildLLMHandler(
                     translationTarget: translationTarget,
                     detectedLanguage: result.detectedLanguage,
@@ -1898,6 +1907,9 @@ final class DictationViewModel: ObservableObject {
                     normalizeNumbers: self.effectiveNumberNormalizationOverride
                 )
                 text = ppResult.text
+                let shouldAutoEnterAfterInsertion = autoEnterMode == .always
+                    || (autoEnterResolution.shouldPressEnter
+                        && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 logger.info("Stop timing: post-processing done elapsedMs=\(stopElapsedMs(), privacy: .public)")
                 let transcriptionID = sessionID ?? UUID()
                 let completionTimestamp = Date()
@@ -1956,7 +1968,7 @@ final class DictationViewModel: ObservableObject {
                                 ? finalObservation
                                 : nil
                             insertedTextForCorrectionTracking = insertionText
-                            if self.effectiveAutoEnterEnabled {
+                            if shouldAutoEnterAfterInsertion {
                                 try? await Task.sleep(for: .milliseconds(50))
                                 textInsertionService.simulateReturn()
                             }
@@ -1978,7 +1990,7 @@ final class DictationViewModel: ObservableObject {
                         let insertionResult = try await textInsertionService.insertText(
                             insertionText,
                             preserveClipboard: preserveClipboard,
-                            autoEnter: self.effectiveAutoEnterEnabled,
+                            autoEnter: shouldAutoEnterAfterInsertion,
                             outputFormat: resolvedOutputFormat
                         )
                         if case .pasted(.unverified(let reason)) = insertionResult {

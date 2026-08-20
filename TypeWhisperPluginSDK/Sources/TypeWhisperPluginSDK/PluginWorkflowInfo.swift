@@ -107,19 +107,33 @@ public struct PluginWorkflowBehavior: Codable, Sendable, Equatable {
     }
 }
 
+public enum PluginWorkflowAutoEnterMode: String, Codable, CaseIterable, Sendable, Equatable {
+    case never
+    case spokenCommand
+    case always
+}
+
 public struct PluginWorkflowOutput: Codable, Sendable, Equatable {
     public let format: String?
     public let autoEnter: Bool
+    public let autoEnterModeRaw: String?
     public let targetActionPluginId: String?
 
     public init(
         format: String? = nil,
         autoEnter: Bool = false,
+        autoEnterMode: PluginWorkflowAutoEnterMode? = nil,
         targetActionPluginId: String? = nil
     ) {
         self.format = format
-        self.autoEnter = autoEnter
+        self.autoEnter = autoEnterMode.map { $0 == .always } ?? autoEnter
+        self.autoEnterModeRaw = autoEnterMode?.rawValue
         self.targetActionPluginId = targetActionPluginId
+    }
+
+    public var autoEnterMode: PluginWorkflowAutoEnterMode {
+        PluginWorkflowAutoEnterMode(rawValue: autoEnterModeRaw ?? "")
+            ?? (autoEnter ? .always : .never)
     }
 }
 

@@ -92,7 +92,7 @@ final class WorkflowServiceTests: XCTestCase {
             ),
             output: WorkflowOutput(
                 format: "markdown",
-                autoEnter: true,
+                autoEnterMode: .spokenCommand,
                 targetActionPluginId: "com.example.action"
             ),
             createdAt: createdAt,
@@ -112,6 +112,8 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertEqual(snapshot.behavior.transcriptionEngineId, "whisperkit")
         XCTAssertEqual(snapshot.behavior.transcriptionModelId, "large-v3")
         XCTAssertEqual(snapshot.behavior.temperatureMode, .custom)
+        XCTAssertEqual(snapshot.output.autoEnterMode, .spokenCommand)
+        XCTAssertFalse(snapshot.output.autoEnter)
         XCTAssertEqual(snapshot.output.targetActionPluginId, "com.example.action")
         XCTAssertEqual(snapshot.createdAt, createdAt)
         XCTAssertEqual(snapshot.updatedAt, updatedAt)
@@ -173,6 +175,96 @@ final class WorkflowServiceTests: XCTestCase {
                 targetActionPluginId: "plugin.action"
             )
         )
+    }
+
+    func testStoredWorkflowOutputWithoutModePreservesLegacyAutoEnterBehavior() throws {
+        let enabledData = try JSONSerialization.data(withJSONObject: [
+            "format": "plain text",
+            "autoEnter": true,
+        ])
+        let disabledData = try JSONSerialization.data(withJSONObject: [
+            "autoEnter": false,
+        ])
+
+        let enabled = try JSONDecoder().decode(WorkflowOutput.self, from: enabledData)
+        let disabled = try JSONDecoder().decode(WorkflowOutput.self, from: disabledData)
+
+        XCTAssertEqual(enabled.autoEnterMode, .always)
+        XCTAssertEqual(disabled.autoEnterMode, .never)
+    }
+
+    func testWorkflowOutputPersistsSpokenAutoEnterModeWithoutEnablingAlwaysAutoEnter() throws {
+        let output = WorkflowOutput(autoEnterMode: .spokenCommand)
+
+        XCTAssertFalse(output.autoEnter)
+        XCTAssertEqual(output.autoEnterMode, .spokenCommand)
+
+        let encoded = try JSONEncoder().encode(output)
+        let decoded = try JSONDecoder().decode(WorkflowOutput.self, from: encoded)
+
+        XCTAssertFalse(decoded.autoEnter)
+        XCTAssertEqual(decoded.autoEnterMode, .spokenCommand)
+    }
+
+    func testWorkflowDraftPreservesSpokenAutoEnterMode() {
+        let workflow = Workflow(
+            name: "Spoken Submit",
+            template: .dictation,
+            trigger: .global(),
+            output: WorkflowOutput(autoEnterMode: .spokenCommand)
+        )
+
+        let draft = WorkflowDraft(workflow)
+        let output = draft.resolvedOutput()
+
+        XCTAssertEqual(draft.autoEnterMode, .spokenCommand)
+        XCTAssertEqual(output.autoEnterMode, .spokenCommand)
+        XCTAssertFalse(output.autoEnter)
+    }
+
+    func testSpokenAutoEnterResolverStripsTerminalCommands() {
+        let scenarios: [(input: String, expected: String)] = [
+            ("Draft ready press enter", "Draft ready"),
+            ("Draft ready. PRESS RETURN.", "Draft ready."),
+            ("First line\nsecond line press   enter!!!", "First line\nsecond line"),
+            ("Send this press enter.”", "Send this"),
+        ]
+
+        for scenario in scenarios {
+            let resolution = WorkflowAutoEnterResolver.resolve(
+                text: scenario.input,
+                mode: .spokenCommand
+            )
+
+            XCTAssertEqual(resolution.text, scenario.expected, scenario.input)
+            XCTAssertTrue(resolution.shouldPressEnter, scenario.input)
+        }
+    }
+
+    func testSpokenAutoEnterResolverDoesNotTreatNonTerminalOrEmptyCommandsAsActions() {
+        let scenarios = [
+            "press enter",
+            "press return!",
+            "Say press enter and keep dictating",
+            "The phrase press enter appears here, not at the end",
+        ]
+
+        for text in scenarios {
+            let resolution = WorkflowAutoEnterResolver.resolve(text: text, mode: .spokenCommand)
+
+            XCTAssertEqual(resolution.text, text, text)
+            XCTAssertFalse(resolution.shouldPressEnter, text)
+        }
+    }
+
+    func testAutoEnterResolverKeepsLegacyNeverAndAlwaysModes() {
+        let never = WorkflowAutoEnterResolver.resolve(text: "  Draft ready press enter  ", mode: .never)
+        let always = WorkflowAutoEnterResolver.resolve(text: "  Draft ready  ", mode: .always)
+
+        XCTAssertEqual(never.text, "  Draft ready press enter  ")
+        XCTAssertFalse(never.shouldPressEnter)
+        XCTAssertEqual(always.text, "  Draft ready  ")
+        XCTAssertTrue(always.shouldPressEnter)
     }
 
     func testStoredWorkflowTriggerWithoutHotkeyBehaviorDefaultsToStartDictation() throws {
@@ -541,6 +633,7 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertEqual(workflow.triggerKind, "global")
         XCTAssertEqual(workflow.outputFormat, "plain text")
         XCTAssertTrue(workflow.outputAutoEnter)
+        XCTAssertEqual(workflow.outputAutoEnterMode, "always")
         XCTAssertEqual(workflow.llmProviderId, promptProcessingService.primaryFallbackItem?.providerId)
         XCTAssertEqual(workflow.llmCloudModel, promptProcessingService.primaryFallbackItem?.modelId)
         XCTAssertEqual(workflow.transcriptionEngineId, "parakeet")

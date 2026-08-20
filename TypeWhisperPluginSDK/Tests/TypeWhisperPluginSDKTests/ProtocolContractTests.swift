@@ -593,7 +593,22 @@ final class ProtocolContractTests: XCTestCase {
         XCTAssertEqual(host.availableWorkflows.first?.behavior.settings["triggerWord"], "cleanup")
         XCTAssertEqual(host.availableWorkflows.first?.behavior.transcriptionEngineId, "whisperkit")
         XCTAssertEqual(host.availableWorkflows.first?.behavior.transcriptionModelId, "large-v3")
+        XCTAssertEqual(host.availableWorkflows.first?.output.autoEnterMode, .always)
         XCTAssertEqual(host.availableWorkflows.first?.output.targetActionPluginId, "com.example.action")
+    }
+
+    func testWorkflowOutputPreservesSpokenAutoEnterModeAndDecodesLegacyPayloads() throws {
+        let spokenOutput = PluginWorkflowOutput(autoEnterMode: .spokenCommand)
+        let spokenData = try JSONEncoder().encode(spokenOutput)
+        let decodedSpokenOutput = try JSONDecoder().decode(PluginWorkflowOutput.self, from: spokenData)
+
+        XCTAssertEqual(decodedSpokenOutput.autoEnterMode, .spokenCommand)
+        XCTAssertFalse(decodedSpokenOutput.autoEnter)
+
+        let legacyData = try JSONSerialization.data(withJSONObject: ["autoEnter": true])
+        let legacyOutput = try JSONDecoder().decode(PluginWorkflowOutput.self, from: legacyData)
+
+        XCTAssertEqual(legacyOutput.autoEnterMode, .always)
     }
 
     func testWorkflowBehaviorDecodesLegacyPayloadWithoutTranscriptionOverrides() throws {
