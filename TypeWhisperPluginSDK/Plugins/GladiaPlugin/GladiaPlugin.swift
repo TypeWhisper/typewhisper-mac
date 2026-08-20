@@ -436,6 +436,7 @@ final class GladiaPlugin: NSObject, TranscriptionEnginePlugin, LanguageHintTrans
         apiKey: String,
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> PluginTranscriptionResult {
+        try PluginHTTPClient.ensureNetworkAccessIsAllowed()
         let liveSession = try await createLiveSession(
             language: language,
             languageHints: languageHints,

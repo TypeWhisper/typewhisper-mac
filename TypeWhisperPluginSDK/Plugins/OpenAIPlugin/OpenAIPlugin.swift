@@ -1213,6 +1213,7 @@ final class OpenAIRealtimeTranscriptionSession: LiveTranscriptionSession, @unche
         configuration: OpenAIRealtimeTranscriptionConfiguration,
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> OpenAIRealtimeTranscriptionSession {
+        try PluginHTTPClient.ensureNetworkAccessIsAllowed()
         let request = try makeRequest(apiKey: apiKey)
         let openWaiter = OpenAIRealtimeWebSocketOpenWaiter()
         let delegate = OpenAIRealtimeWebSocketDelegate(openWaiter: openWaiter)

@@ -18,7 +18,23 @@ SCREENSHOT_APP_PATH = File.join(
   "TypeWhisper.app"
 )
 SCREENSHOT_BUNDLE_ID = "com.typewhisper.mac.screenshots"
-SCREENSHOT_ARCHITECTURE = RbConfig::CONFIG.fetch("host_cpu")
+
+def screenshot_hardware_architecture
+  if RUBY_PLATFORM.include?("darwin")
+    arm64_capable = IO.popen(
+      ["/usr/sbin/sysctl", "-in", "hw.optional.arm64"],
+      err: File::NULL,
+      &:read
+    ).strip
+    return "arm64" if arm64_capable == "1"
+  end
+
+  IO.popen(["/usr/bin/uname", "-m"], &:read).strip
+rescue Errno::ENOENT
+  RbConfig::CONFIG.fetch("host_cpu")
+end
+
+SCREENSHOT_ARCHITECTURE = screenshot_hardware_architecture
 SCREENSHOT_LANGUAGES = %w[en-US de-DE ja-JP zh-Hans].freeze
 SCREENSHOT_LOCALES = {
   "en-US" => "en_US",
@@ -441,8 +457,11 @@ def wait_for_plugin_screenshot_page!(ready_file, expected_page, process_id, log_
     end
 
     begin
+      if Process.waitpid(process_id, Process::WNOHANG)
+        UI.user_error!("Screenshot app exited before page #{expected_page} was ready.\n#{screenshot_log_tail(log_file)}")
+      end
       Process.kill(0, process_id)
-    rescue Errno::ESRCH
+    rescue Errno::ECHILD, Errno::ESRCH
       UI.user_error!("Screenshot app exited before page #{expected_page} was ready.\n#{screenshot_log_tail(log_file)}")
     end
 

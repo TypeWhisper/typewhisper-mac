@@ -68,8 +68,9 @@ final class PluginSettingsScreenshotCaptureController {
             scrollView = candidate
             candidate.hasVerticalScroller = false
             contentHeight = documentHeight(of: candidate)
-            viewportHeight = candidate.contentView.documentVisibleRect.height
-            let viewportRect = candidate.convert(candidate.bounds, to: nil)
+            let clipView = candidate.contentView
+            viewportHeight = clipView.documentVisibleRect.height
+            let viewportRect = clipView.convert(clipView.bounds, to: nil)
             scrollViewportMinY = viewportRect.minY
             scrollViewportMaxY = viewportRect.maxY
             pageOffsets = PluginScreenshotPagination.pageOffsets(

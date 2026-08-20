@@ -893,6 +893,7 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
         relativePath: String,
         destination: URL
     ) async throws {
+        try PluginHTTPClient.ensureNetworkAccessIsAllowed()
         var url = URL(string: Self.modelEndpoint)!
         for component in Self.modelRepo.split(separator: "/") {
             url.append(path: String(component))

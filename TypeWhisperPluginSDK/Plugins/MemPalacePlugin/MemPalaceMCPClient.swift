@@ -165,6 +165,7 @@ final class NonLoggingMemPalaceMCPHTTP: MemPalaceMCPHTTP, @unchecked Sendable {
     }
 
     func data(for request: URLRequest) async throws -> (Data, URLResponse) {
+        try PluginHTTPClient.ensureNetworkAccessIsAllowed()
         do {
             return try await session.data(for: request)
         } catch {

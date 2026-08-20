@@ -99,8 +99,12 @@ public enum PluginHTTPClient {
         return try await session.data(for: request)
     }
 
-    private static func ensureNetworkAccessIsAllowed() throws {
-        guard networkAccessAllowed(arguments: ProcessInfo.processInfo.arguments) else {
+    public static func ensureNetworkAccessIsAllowed() throws {
+        try ensureNetworkAccessIsAllowed(arguments: ProcessInfo.processInfo.arguments)
+    }
+
+    @_spi(Testing) public static func ensureNetworkAccessIsAllowed(arguments: [String]) throws {
+        guard networkAccessAllowed(arguments: arguments) else {
             throw URLError(.notConnectedToInternet)
         }
     }

@@ -524,6 +524,21 @@ final class PluginManager: ObservableObject {
             throw error
         }
 
+        guard ScreenshotPluginSourcePolicy.allowsCandidate(
+            isScreenshotAutomation: AppConstants.isScreenshotAutomation,
+            selectedPluginId: AppConstants.screenshotPluginId,
+            manifestId: manifest.id,
+            isBundledSource: isBundledSource,
+            isIsolatedScreenshotSource: url.deletingLastPathComponent()
+                .resolvingSymlinksInPath()
+                .standardizedFileURL == pluginsDirectory
+                .resolvingSymlinksInPath()
+                .standardizedFileURL
+        ) else {
+            logger.info("Skipping external screenshot plugin candidate \(manifest.id, privacy: .public)")
+            return
+        }
+
         if !isManifestCompatible(manifest) {
             let architecture = RuntimeArchitecture.current
             let reason = PluginCompatibility.incompatibilityReason(
@@ -862,5 +877,18 @@ final class PluginManager: ObservableObject {
         }
 
         return versionComparison == .orderedDescending
+    }
+}
+
+enum ScreenshotPluginSourcePolicy {
+    static func allowsCandidate(
+        isScreenshotAutomation: Bool,
+        selectedPluginId: String?,
+        manifestId: String,
+        isBundledSource: Bool,
+        isIsolatedScreenshotSource: Bool
+    ) -> Bool {
+        guard isScreenshotAutomation, selectedPluginId == manifestId else { return true }
+        return isBundledSource || isIsolatedScreenshotSource
     }
 }

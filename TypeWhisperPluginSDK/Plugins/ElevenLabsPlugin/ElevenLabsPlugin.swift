@@ -295,6 +295,7 @@ final class ElevenLabsPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTer
         apiKey: String,
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> PluginTranscriptionResult {
+        try PluginHTTPClient.ensureNetworkAccessIsAllowed()
         let url = try Self.realtimeURL(language: language, modelId: modelId)
 
         var request = URLRequest(url: url)

@@ -192,6 +192,11 @@ enum ScreenshotPluginFixture {
             return "tw-screenshot-client-secret"
         case "service-account-json":
             return #"{"type":"service_account","project_id":"typewhisper-screenshot","private_key_id":"screenshot","private_key":"-----BEGIN PRIVATE KEY-----\nSCREENSHOT FIXTURE\n-----END PRIVATE KEY-----\n","client_email":"screenshots@typewhisper-screenshot.iam.gserviceaccount.com"}"#
+        case "contributor-token":
+            return "tw-screenshot-contributor-token"
+        case "oauth-access-token", "oauth-refresh-token", "oauth-id-token":
+            // Keep the OpenAI screenshot in API-key mode instead of simulating a ChatGPT account.
+            return nil
         default:
             return nil
         }

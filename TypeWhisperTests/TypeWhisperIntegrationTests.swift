@@ -9386,6 +9386,99 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             JSONSerialization.jsonObject(with: Data(serviceAccount.utf8)) as? [String: Any]
         )
         XCTAssertEqual(decoded["project_id"] as? String, "typewhisper-screenshot")
+
+        XCTAssertEqual(
+            ScreenshotPluginFixture.secret(
+                selectedPluginId: "com.typewhisper.improve",
+                pluginId: "com.typewhisper.improve",
+                key: "contributor-token"
+            ),
+            "tw-screenshot-contributor-token"
+        )
+
+        for oauthKey in ["oauth-access-token", "oauth-refresh-token", "oauth-id-token"] {
+            XCTAssertNil(
+                ScreenshotPluginFixture.secret(
+                    selectedPluginId: "com.typewhisper.openai",
+                    pluginId: "com.typewhisper.openai",
+                    key: oauthKey
+                ),
+                "Screenshot fixtures should keep OpenAI in API-key mode"
+            )
+        }
+    }
+
+    func testScreenshotAppSupportOverrideMustStayInsideTemporaryDirectory() {
+        let temporaryDirectory = URL(fileURLWithPath: "/tmp/typewhisper-screenshot-root", isDirectory: true)
+        let fallback = temporaryDirectory.appendingPathComponent(
+            "TypeWhisper-Screenshots-42",
+            isDirectory: true
+        )
+        let validOverride = temporaryDirectory.appendingPathComponent("capture", isDirectory: true)
+
+        XCTAssertEqual(
+            AppConstants.resolveScreenshotAppSupportDirectory(
+                override: validOverride.path,
+                temporaryDirectory: temporaryDirectory,
+                processIdentifier: 42
+            ).standardizedFileURL.path,
+            validOverride.resolvingSymlinksInPath().standardizedFileURL.path
+        )
+        XCTAssertEqual(
+            AppConstants.resolveScreenshotAppSupportDirectory(
+                override: "/tmp/typewhisper-screenshot-root-escape",
+                temporaryDirectory: temporaryDirectory,
+                processIdentifier: 42
+            ),
+            fallback
+        )
+        XCTAssertEqual(
+            AppConstants.resolveScreenshotAppSupportDirectory(
+                override: "/Users/shared/typewhisper-screenshots",
+                temporaryDirectory: temporaryDirectory,
+                processIdentifier: 42
+            ),
+            fallback
+        )
+    }
+
+    func testScreenshotPluginSourcePolicyRejectsSelectedExternalCandidate() {
+        XCTAssertFalse(
+            ScreenshotPluginSourcePolicy.allowsCandidate(
+                isScreenshotAutomation: true,
+                selectedPluginId: "com.typewhisper.groq",
+                manifestId: "com.typewhisper.groq",
+                isBundledSource: false,
+                isIsolatedScreenshotSource: false
+            )
+        )
+        XCTAssertTrue(
+            ScreenshotPluginSourcePolicy.allowsCandidate(
+                isScreenshotAutomation: true,
+                selectedPluginId: "com.typewhisper.groq",
+                manifestId: "com.typewhisper.groq",
+                isBundledSource: true,
+                isIsolatedScreenshotSource: false
+            )
+        )
+        XCTAssertTrue(
+            ScreenshotPluginSourcePolicy.allowsCandidate(
+                isScreenshotAutomation: true,
+                selectedPluginId: "com.typewhisper.groq",
+                manifestId: "com.typewhisper.groq",
+                isBundledSource: false,
+                isIsolatedScreenshotSource: true
+            )
+        )
+        XCTAssertTrue(
+            ScreenshotPluginSourcePolicy.allowsCandidate(
+                isScreenshotAutomation: false,
+                selectedPluginId: "com.typewhisper.groq",
+                manifestId: "com.typewhisper.groq",
+                isBundledSource: false,
+                isIsolatedScreenshotSource: false
+            )
+        )
     }
 
     func testPluginScreenshotPaginationUsesOnePageWhenContentFits() {

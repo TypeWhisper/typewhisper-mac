@@ -81,6 +81,22 @@ final class PluginHTTPClientTests: XCTestCase {
         )
     }
 
+    func testDirectClientNetworkGateFailsClosedForScreenshotAutomation() throws {
+        XCTAssertThrowsError(
+            try PluginHTTPClient.ensureNetworkAccessIsAllowed(
+                arguments: ["TypeWhisper", "--store-screenshots"]
+            )
+        ) { error in
+            XCTAssertEqual((error as? URLError)?.code, .notConnectedToInternet)
+        }
+
+        XCTAssertNoThrow(
+            try PluginHTTPClient.ensureNetworkAccessIsAllowed(
+                arguments: ["TypeWhisper", "--ui-testing"]
+            )
+        )
+    }
+
     private static func request(path: String) -> URLRequest {
         var request = URLRequest(url: URL(string: "https://example.test\(path)")!)
         request.httpMethod = "POST"

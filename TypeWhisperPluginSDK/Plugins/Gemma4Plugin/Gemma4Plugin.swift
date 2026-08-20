@@ -600,6 +600,9 @@ final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemp
         try Task.checkCancellation()
         let downloadedDirectory = usableModelDirectory(for: modelDef)
         let isAlreadyDownloaded = downloadedDirectory != nil
+        if !isAlreadyDownloaded {
+            try PluginHTTPClient.ensureNetworkAccessIsAllowed()
+        }
         let loadGeneration = beginModelLoad(for: modelDef, isAlreadyDownloaded: isAlreadyDownloaded)
         startModelLoadTimeout(generation: loadGeneration, modelName: modelDef.displayName)
         do {

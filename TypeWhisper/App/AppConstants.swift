@@ -149,18 +149,39 @@ enum AppConstants {
         return defaultAppSupportDirectory
     }
 
-    private static let screenshotAppSupportDirectory: URL = {
-        if let override = screenshotArgumentValue(after: "--screenshot-app-support"),
-           override.hasPrefix("/") {
-            return URL(fileURLWithPath: override, isDirectory: true)
-        }
+    private static let screenshotAppSupportDirectory: URL =
+        resolveScreenshotAppSupportDirectory(
+            override: screenshotArgumentValue(after: "--screenshot-app-support"),
+            temporaryDirectory: FileManager.default.temporaryDirectory,
+            processIdentifier: ProcessInfo.processInfo.processIdentifier
+        )
 
-        return FileManager.default.temporaryDirectory
+    static func resolveScreenshotAppSupportDirectory(
+        override: String?,
+        temporaryDirectory: URL,
+        processIdentifier: Int32
+    ) -> URL {
+        let fallback = temporaryDirectory
             .appendingPathComponent(
-                "TypeWhisper-Screenshots-\(ProcessInfo.processInfo.processIdentifier)",
+                "TypeWhisper-Screenshots-\(processIdentifier)",
                 isDirectory: true
             )
-    }()
+
+        guard let override, override.hasPrefix("/") else { return fallback }
+
+        let temporaryRoot = temporaryDirectory
+            .resolvingSymlinksInPath()
+            .standardizedFileURL
+        let candidate = URL(fileURLWithPath: override, isDirectory: true)
+            .resolvingSymlinksInPath()
+            .standardizedFileURL
+        let temporaryPrefix = temporaryRoot.path.hasSuffix("/")
+            ? temporaryRoot.path
+            : temporaryRoot.path + "/"
+
+        guard candidate.path.hasPrefix(temporaryPrefix) else { return fallback }
+        return candidate
+    }
 
     static let defaultAppSupportDirectory: URL = {
         let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!

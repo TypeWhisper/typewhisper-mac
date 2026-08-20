@@ -749,6 +749,7 @@ final class XAIPlugin: NSObject,
     }
 
     func speak(_ request: TTSSpeakRequest) async throws -> any TTSPlaybackSession {
+        try PluginHTTPClient.ensureNetworkAccessIsAllowed()
         guard let apiKey = normalizedAPIKey else {
             throw PluginTranscriptionError.notConfigured
         }
@@ -1016,6 +1017,7 @@ final class XAIPlugin: NSObject,
         language: String?,
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> XAILiveTranscriptionSession {
+        try PluginHTTPClient.ensureNetworkAccessIsAllowed()
         let request = try Self.makeSTTStreamingRequest(apiKey: apiKey, language: language, interimResults: true)
         let task = URLSession.shared.webSocketTask(with: request)
         task.resume()

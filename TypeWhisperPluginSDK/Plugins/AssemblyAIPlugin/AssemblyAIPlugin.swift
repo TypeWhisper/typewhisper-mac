@@ -469,6 +469,7 @@ final class AssemblyAIPlugin: NSObject, StructuredTranscriptionEnginePlugin, Dic
         apiKey: String,
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> PluginTranscriptionResult {
+        try PluginHTTPClient.ensureNetworkAccessIsAllowed()
         let keytermsPrompt = streamingKeytermsPromptJSON(from: prompt, modelId: modelId)
         guard let url = Self.makeStreamingURL(
             modelId: modelId,

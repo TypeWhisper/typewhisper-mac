@@ -317,6 +317,7 @@ public final class PluginOpenAIRealtimeTranscriptionSession: LiveTranscriptionSe
         configuration: PluginOpenAIRealtimeTranscriptionConfiguration,
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> PluginOpenAIRealtimeTranscriptionSession {
+        try PluginHTTPClient.ensureNetworkAccessIsAllowed()
         let openWaiter = PluginOpenAIRealtimeWebSocketOpenWaiter()
         let delegate = PluginOpenAIRealtimeWebSocketDelegate(openWaiter: openWaiter)
         let urlSession = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)

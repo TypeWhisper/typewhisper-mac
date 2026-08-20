@@ -394,6 +394,7 @@ final class SpeechmaticsPlugin: NSObject, TranscriptionEnginePlugin, DictionaryT
         apiKey: String,
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> PluginTranscriptionResult {
+        try PluginHTTPClient.ensureNetworkAccessIsAllowed()
         let urlString = "wss://\(wsHost)/v2"
 
         guard let url = URL(string: urlString) else {

@@ -226,6 +226,7 @@ final class CrispAsrServer: @unchecked Sendable {
         process: Process,
         baseURL: String
     ) async throws {
+        try PluginHTTPClient.ensureNetworkAccessIsAllowed()
         guard let healthURL = URL(string: "\(baseURL)/health") else {
             throw CohereLocalPluginError.invalidLocalServerURL
         }

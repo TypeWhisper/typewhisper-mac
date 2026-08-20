@@ -40,6 +40,7 @@ private final class RawWebSocket: @unchecked Sendable {
 
     private let streamTask: URLSessionStreamTask
     private let hostName: String
+    private let usesTLS: Bool
     private let path: String
     private let extraHeaders: [(String, String)]
     private let logger = Logger(subsystem: "com.typewhisper.deepgram", category: "WebSocket")
@@ -48,18 +49,20 @@ private final class RawWebSocket: @unchecked Sendable {
 
     init(host: String, port: Int, usesTLS: Bool, path: String, headers: [(String, String)]) {
         self.hostName = host
+        self.usesTLS = usesTLS
         self.path = path
         self.extraHeaders = headers
 
         self.streamTask = URLSession.shared.streamTask(withHostName: host, port: port)
-        if usesTLS {
-            streamTask.startSecureConnection()
-        }
     }
 
     // MARK: - Connect + Upgrade
 
     func connect() async throws {
+        try PluginHTTPClient.ensureNetworkAccessIsAllowed()
+        if usesTLS {
+            streamTask.startSecureConnection()
+        }
         streamTask.resume()
         logger.info("Stream task started, performing WebSocket upgrade to \(self.hostName)")
         try await performUpgrade()

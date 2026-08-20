@@ -101,6 +101,7 @@ struct CohereLocalModelAssets: Sendable {
         bearerToken: String? = nil,
         progressHandler: @Sendable @escaping (Double) -> Void
     ) async throws {
+        try PluginHTTPClient.ensureNetworkAccessIsAllowed()
         migrateLegacyRootIfNeeded()
         try FileManager.default.createDirectory(
             at: rootDirectory,

@@ -626,6 +626,7 @@ final class SonioxLiveTranscriptionSession: LiveTranscriptionSession, @unchecked
         onProgress: @Sendable @escaping (String) -> Bool,
         webSocketURLOverride: URL? = nil
     ) async throws -> SonioxLiveTranscriptionSession {
+        try PluginHTTPClient.ensureNetworkAccessIsAllowed()
         guard let url = webSocketURLOverride ?? URL(string: region.sttRealtimeWebSocketURL) else {
             throw PluginTranscriptionError.apiError("Invalid Soniox WebSocket URL")
         }
