@@ -4,7 +4,7 @@ set -euo pipefail
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 project_dir="$(dirname "$script_dir")"
 build_dir="$project_dir/build-release"
-profile_path="${MACOS_DEVELOPER_ID_PROVISIONING_PROFILE_PATH:-}"
+profile_path="${MACOS_ICLOUD_HELPER_DEVELOPER_ID_PROVISIONING_PROFILE_PATH:-${MACOS_DEVELOPER_ID_PROVISIONING_PROFILE_PATH:-}}"
 release_tag=""
 build_number=""
 skip_dmg=false
@@ -13,7 +13,7 @@ without_icloud=false
 usage() {
   cat >&2 <<'USAGE'
 Usage: scripts/build-release-local.sh \
-  [--profile PATH | --without-icloud] \
+  [--profile ICLOUD_HELPER_PROFILE | --without-icloud] \
   [--release-tag TAG] \
   [--build-number NUMBER] \
   [--skip-dmg]
@@ -37,7 +37,7 @@ if [[ "$without_icloud" == true && -n "$profile_path" ]]; then
   exit 2
 fi
 if [[ "$without_icloud" == false && -z "$profile_path" ]]; then
-  echo "error: --profile or MACOS_DEVELOPER_ID_PROVISIONING_PROFILE_PATH is required" >&2
+  echo "error: --profile or MACOS_ICLOUD_HELPER_DEVELOPER_ID_PROVISIONING_PROFILE_PATH is required" >&2
   exit 2
 fi
 if [[ -z "$release_tag" ]]; then

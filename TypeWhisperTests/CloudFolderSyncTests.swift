@@ -164,6 +164,30 @@ private final class BlockingPremiumTokenReader: @unchecked Sendable {
     }
 }
 
+private final class RecordingPremiumICloudBridge: PremiumICloudBridging, @unchecked Sendable {
+    let isAvailable = true
+    let localFolderURL: URL?
+
+    private let lock = NSLock()
+    private var storedSynchronizeCount = 0
+    private var storedDeleteCount = 0
+
+    var synchronizeCount: Int { lock.withLock { storedSynchronizeCount } }
+    var deleteCount: Int { lock.withLock { storedDeleteCount } }
+
+    init(localFolderURL: URL) {
+        self.localFolderURL = localFolderURL
+    }
+
+    func synchronize() async throws {
+        lock.withLock { storedSynchronizeCount += 1 }
+    }
+
+    func deleteRemotePackage() async throws {
+        lock.withLock { storedDeleteCount += 1 }
+    }
+}
+
 @MainActor
 private final class PremiumAppleWebAuthenticator: AppleWebAuthenticating {
     private(set) var authorizationURLs: [URL] = []
@@ -848,6 +872,61 @@ final class CloudFolderSyncTests: XCTestCase {
     }
 
     @MainActor
+    func testAutomaticSyncMirrorsThroughBridgeBeforeAndAfterEngine() async throws {
+        let suiteName = "PremiumSyncBridge-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let folder = try TestSupport.makeTemporaryDirectory(prefix: "PremiumSyncBridge")
+        defer { TestSupport.remove(folder) }
+
+        let privateKey = P256.Signing.PrivateKey()
+        let entitlement = try Self.signedEntitlement(privateKey: privateKey)
+        defaults.set(
+            try Self.entitlementEncoder.encode(entitlement),
+            forKey: "premium.account.cachedEntitlement"
+        )
+        defaults.set(PremiumSyncMode.off.rawValue, forKey: "premiumSync.mode")
+
+        let account = PremiumAccountService(
+            defaults: defaults,
+            keychainService: suiteName,
+            entitlementPublicKeyBase64: privateKey.publicKey.rawRepresentation.base64EncodedString(),
+            isSignedInOverride: true,
+            automaticallyRefresh: false
+        )
+        let store = InMemoryUserDataSyncStore(dictionaryEntries: [
+            UserDataSyncDictionaryEntry(
+                entryType: .term,
+                original: "bridge-test",
+                replacement: "Bridge Test",
+                caseSensitive: false,
+                isEnabled: true,
+                source: .manual,
+                ctcMinSimilarity: nil,
+                createdAt: Self.date(10),
+                updatedAt: Self.date(10)
+            ),
+        ])
+        let bridge = RecordingPremiumICloudBridge(localFolderURL: folder)
+        let controller = CloudFolderSyncController(
+            premiumAccountService: account,
+            syncStore: store,
+            defaults: defaults,
+            automaticICloudBridge: bridge,
+            automaticICloudAvailable: true
+        )
+        defer { controller.deactivate() }
+
+        await controller.setMode(.automaticICloud)
+
+        XCTAssertEqual(bridge.synchronizeCount, 2)
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: CloudFolderSyncEngine.packageURL(for: folder).path
+        ))
+        XCTAssertNil(controller.errorMessage)
+    }
+
+    @MainActor
     func testNoICloudBuildHidesAutomaticModeWithoutOverwritingStoredChoice() async throws {
         let suiteName = "PremiumSyncNoICloud-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
@@ -918,25 +997,91 @@ final class CloudFolderSyncTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: packageURL.path))
     }
 
-    @MainActor
-    func testObservedICloudChangesWaitForCooldownExpiry() {
-        let now = Self.date(20)
-        XCTAssertEqual(
-            CloudFolderSyncController.observedICloudSyncDelay(
-                lastLocalSyncFinishedAt: now.addingTimeInterval(-3),
-                now: now
-            ),
-            7,
-            accuracy: 0.001
+    func testICloudBridgeMirrorCopiesBothDirectionsAndKeepsNewestContent() throws {
+        let localRoot = try TestSupport.makeTemporaryDirectory(prefix: "ICloudBridgeLocal")
+        let remoteRoot = try TestSupport.makeTemporaryDirectory(prefix: "ICloudBridgeRemote")
+        defer {
+            TestSupport.remove(localRoot)
+            TestSupport.remove(remoteRoot)
+        }
+
+        let localPackage = localRoot.appendingPathComponent("typewhisper-sync", isDirectory: true)
+        let remotePackage = remoteRoot.appendingPathComponent("typewhisper-sync", isDirectory: true)
+        let localOnly = localPackage.appendingPathComponent("ops/mac/local.json")
+        let remoteOnly = remotePackage.appendingPathComponent("ops/ios/remote.json")
+        let localManifest = localPackage.appendingPathComponent("manifest.json")
+        let remoteManifest = remotePackage.appendingPathComponent("manifest.json")
+
+        for file in [localOnly, remoteOnly, localManifest, remoteManifest] {
+            try FileManager.default.createDirectory(
+                at: file.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+        }
+        try Data("local-operation".utf8).write(to: localOnly)
+        try Data("remote-operation".utf8).write(to: remoteOnly)
+        try Data("old-local".utf8).write(to: localManifest)
+        try Data("new-remote".utf8).write(to: remoteManifest)
+        try FileManager.default.setAttributes(
+            [.modificationDate: Self.date(10)],
+            ofItemAtPath: localManifest.path
         )
-        XCTAssertEqual(
-            CloudFolderSyncController.observedICloudSyncDelay(
-                lastLocalSyncFinishedAt: now.addingTimeInterval(-11),
-                now: now
-            ),
-            2,
-            accuracy: 0.001
+        try FileManager.default.setAttributes(
+            [.modificationDate: Self.date(20)],
+            ofItemAtPath: remoteManifest.path
         )
+
+        try PremiumICloudBridgeFileMirror.synchronize(
+            localRoot: localRoot,
+            remoteRoot: remoteRoot
+        )
+
+        XCTAssertEqual(try Data(contentsOf: remotePackage.appendingPathComponent("ops/mac/local.json")), Data("local-operation".utf8))
+        XCTAssertEqual(try Data(contentsOf: localPackage.appendingPathComponent("ops/ios/remote.json")), Data("remote-operation".utf8))
+        XCTAssertEqual(try Data(contentsOf: localManifest), Data("new-remote".utf8))
+        XCTAssertEqual(try Data(contentsOf: remoteManifest), Data("new-remote".utf8))
+
+        try Data("newest-local".utf8).write(to: localManifest)
+        try FileManager.default.setAttributes(
+            [.modificationDate: Self.date(30)],
+            ofItemAtPath: localManifest.path
+        )
+        try PremiumICloudBridgeFileMirror.synchronize(
+            localRoot: localRoot,
+            remoteRoot: remoteRoot
+        )
+
+        XCTAssertEqual(try Data(contentsOf: remoteManifest), Data("newest-local".utf8))
+    }
+
+    func testICloudBridgeDeletionRemovesOnlySyncPackages() throws {
+        let localRoot = try TestSupport.makeTemporaryDirectory(prefix: "ICloudBridgeDeleteLocal")
+        let remoteRoot = try TestSupport.makeTemporaryDirectory(prefix: "ICloudBridgeDeleteRemote")
+        defer {
+            TestSupport.remove(localRoot)
+            TestSupport.remove(remoteRoot)
+        }
+        let unrelated = remoteRoot.appendingPathComponent("keep.txt")
+        try Data("keep".utf8).write(to: unrelated)
+        for root in [localRoot, remoteRoot] {
+            try FileManager.default.createDirectory(
+                at: root.appendingPathComponent("typewhisper-sync", isDirectory: true),
+                withIntermediateDirectories: true
+            )
+        }
+
+        try PremiumICloudBridgeFileMirror.deletePackages(
+            localRoot: localRoot,
+            remoteRoot: remoteRoot
+        )
+
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: localRoot.appendingPathComponent("typewhisper-sync").path
+        ))
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: remoteRoot.appendingPathComponent("typewhisper-sync").path
+        ))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: unrelated.path))
     }
 
     func testCrossPlatformGoldenFixturesDecode() throws {

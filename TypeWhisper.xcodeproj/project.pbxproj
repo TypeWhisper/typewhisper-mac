@@ -7,6 +7,12 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		1C1000000000000000000001 /* PremiumICloudBridgeClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C1000000000000000000011 /* PremiumICloudBridgeClient.swift */; };
+		1C1000000000000000000002 /* PremiumICloudBridgeShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C1000000000000000000012 /* PremiumICloudBridgeShared.swift */; };
+		1C1000000000000000000003 /* PremiumICloudBridgeShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C1000000000000000000012 /* PremiumICloudBridgeShared.swift */; };
+		1C1000000000000000000004 /* PremiumICloudBridgeService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C1000000000000000000013 /* PremiumICloudBridgeService.swift */; };
+		1C1000000000000000000005 /* main.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C1000000000000000000014 /* main.swift */; };
+		1C1000000000000000000006 /* TypeWhisperICloudBridge.xpc in Embed XPC Services */ = {isa = PBXBuildFile; fileRef = 1C1000000000000000000018 /* TypeWhisperICloudBridge.xpc */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		CA1E00000000000000000001 /* CalendarMeetingAutomationModels.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA1F00000000000000000001 /* CalendarMeetingAutomationModels.swift */; };
 		CA1E00000000000000000002 /* MeetingLinkParser.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA1F00000000000000000002 /* MeetingLinkParser.swift */; };
 		CA1E00000000000000000003 /* BrowserURLResolver.swift in Sources */ = {isa = PBXBuildFile; fileRef = CA1F00000000000000000003 /* BrowserURLResolver.swift */; };
@@ -526,6 +532,13 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
+		1C1000000000000000000044 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 1C1000000000000000000040;
+			remoteInfo = TypeWhisperICloudBridge;
+		};
 		57FEFF69CD7DAE99D665A583 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = EE00000000000000000001 /* Project object */;
@@ -557,6 +570,17 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
+		1C1000000000000000000030 /* Embed XPC Services */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/XPCServices";
+			dstSubfolderSpec = 16;
+			files = (
+				1C1000000000000000000006 /* TypeWhisperICloudBridge.xpc in Embed XPC Services */,
+			);
+			name = "Embed XPC Services";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		FF00000000000000000004 /* CopyFiles */ = {
 			isa = PBXCopyFilesBuildPhase;
 			buildActionMask = 2147483647;
@@ -604,6 +628,13 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		1C1000000000000000000011 /* PremiumICloudBridgeClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PremiumICloudBridgeClient.swift; sourceTree = "<group>"; };
+		1C1000000000000000000012 /* PremiumICloudBridgeShared.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PremiumICloudBridgeShared.swift; sourceTree = "<group>"; };
+		1C1000000000000000000013 /* PremiumICloudBridgeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PremiumICloudBridgeService.swift; sourceTree = "<group>"; };
+		1C1000000000000000000014 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+		1C1000000000000000000015 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		1C1000000000000000000016 /* TypeWhisperICloudBridge.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TypeWhisperICloudBridge.entitlements; sourceTree = "<group>"; };
+		1C1000000000000000000018 /* TypeWhisperICloudBridge.xpc */ = {isa = PBXFileReference; explicitFileType = "wrapper.xpc-service"; includeInIndex = 0; path = TypeWhisperICloudBridge.xpc; sourceTree = BUILT_PRODUCTS_DIR; };
 		CA1F00000000000000000001 /* CalendarMeetingAutomationModels.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarMeetingAutomationModels.swift; sourceTree = "<group>"; };
 		CA1F00000000000000000002 /* MeetingLinkParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MeetingLinkParser.swift; sourceTree = "<group>"; };
 		CA1F00000000000000000003 /* BrowserURLResolver.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BrowserURLResolver.swift; sourceTree = "<group>"; };
@@ -1086,6 +1117,13 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		1C1000000000000000000032 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		A5DCBFE5A7ECF9AFC7B5EA6D /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -1533,6 +1571,7 @@
 			children = (
 				BB00000000000000000194 /* CodeSigning.xcconfig */,
 				CC00000000000000000002 /* TypeWhisper */,
+				1C1000000000000000000020 /* TypeWhisperICloudBridge */,
 				CC00000000000000000013 /* typewhisper-cli */,
 				CC00000000000000000015 /* WebhookPlugin */,
 				CC00000000000000000016 /* GroqPlugin */,
@@ -1745,6 +1784,7 @@
 				C1F000000000000000000003 /* TypeWhisperUserDataSyncStore.swift */,
 				C1F000000000000000000004 /* CloudFolderSyncEngine.swift */,
 				C1F000000000000000000005 /* CloudFolderSyncSettingsView.swift */,
+				1C1000000000000000000011 /* PremiumICloudBridgeClient.swift */,
 			);
 			path = Sync;
 			sourceTree = "<group>";
@@ -2438,6 +2478,7 @@
 			children = (
 				DD00000000000000000098 /* typewhisper-cli */,
 				DD00000000000000000099 /* TypeWhisper.app */,
+				1C1000000000000000000018 /* TypeWhisperICloudBridge.xpc */,
 				BB00000000000000000133 /* WebhookPlugin.bundle */,
 				BB00000000000000000134 /* GroqPlugin.bundle */,
 				BB00000000000000000135 /* OpenAIPlugin.bundle */,
@@ -2487,6 +2528,18 @@
 				E6F8E5940EF4832A7B8D735D /* TypeWhisperTests.xctest */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		1C1000000000000000000020 /* TypeWhisperICloudBridge */ = {
+			isa = PBXGroup;
+			children = (
+				1C1000000000000000000012 /* PremiumICloudBridgeShared.swift */,
+				1C1000000000000000000013 /* PremiumICloudBridgeService.swift */,
+				1C1000000000000000000014 /* main.swift */,
+				1C1000000000000000000015 /* Info.plist */,
+				1C1000000000000000000016 /* TypeWhisperICloudBridge.entitlements */,
+			);
+			path = TypeWhisperICloudBridge;
 			sourceTree = "<group>";
 		};
 		D310CE5CC61C8F01487BBDF4 /* TypeWhisperTests */ = {
@@ -2605,6 +2658,7 @@
 				FF00000000000000000036 /* Embed Frameworks */,
 				FF00000000000000000081 /* Embed App Extensions */,
 				5E7A00000000000000000002 /* Embed Built-In Plugins */,
+				1C1000000000000000000030 /* Embed XPC Services */,
 			);
 			buildRules = (
 			);
@@ -2612,6 +2666,7 @@
 				GG00000000000000000001 /* PBXTargetDependency */,
 				GG00000000000000000009 /* PBXTargetDependency */,
 				5E7A00000000000000000004 /* PBXTargetDependency */,
+				1C1000000000000000000045 /* PBXTargetDependency */,
 			);
 			name = TypeWhisper;
 			packageProductDependencies = (
@@ -2622,6 +2677,23 @@
 			productName = TypeWhisper;
 			productReference = DD00000000000000000099 /* TypeWhisper.app */;
 			productType = "com.apple.product-type.application";
+		};
+		1C1000000000000000000040 /* TypeWhisperICloudBridge */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1C1000000000000000000043 /* Build configuration list for PBXNativeTarget "TypeWhisperICloudBridge" */;
+			buildPhases = (
+				1C1000000000000000000031 /* Sources */,
+				1C1000000000000000000032 /* Frameworks */,
+				1C1000000000000000000033 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = TypeWhisperICloudBridge;
+			productName = TypeWhisperICloudBridge;
+			productReference = 1C1000000000000000000018 /* TypeWhisperICloudBridge.xpc */;
+			productType = "com.apple.product-type.xpc-service";
 		};
 		DD00000000000000000002 /* typewhisper-cli */ = {
 			isa = PBXNativeTarget;
@@ -3580,6 +3652,9 @@
 				LastSwiftUpdateCheck = 2620;
 				LastUpgradeCheck = 2620;
 				TargetAttributes = {
+					1C1000000000000000000040 = {
+						CreatedOnToolsVersion = 26.0;
+					};
 					DD00000000000000000001 = {
 						CreatedOnToolsVersion = 16.0;
 					};
@@ -3623,6 +3698,7 @@
 			projectRoot = "";
 			targets = (
 				DD00000000000000000001 /* TypeWhisper */,
+				1C1000000000000000000040 /* TypeWhisperICloudBridge */,
 				DD00000000000000000002 /* typewhisper-cli */,
 				DD00000000000000000003 /* WebhookPlugin */,
 				DD00000000000000000004 /* GroqPlugin */,
@@ -3676,6 +3752,13 @@
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		1C1000000000000000000033 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		247A5DE2C113AA399A91B4AD /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -4109,6 +4192,16 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		1C1000000000000000000031 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				1C1000000000000000000003 /* PremiumICloudBridgeShared.swift in Sources */,
+				1C1000000000000000000004 /* PremiumICloudBridgeService.swift in Sources */,
+				1C1000000000000000000005 /* main.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		D7199BC8CB6EE00511EFCC10 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -4318,6 +4411,8 @@
 				C1F000000000000000000012 /* TypeWhisperUserDataSyncStore.swift in Sources */,
 				C1F000000000000000000013 /* CloudFolderSyncEngine.swift in Sources */,
 				C1F000000000000000000014 /* CloudFolderSyncSettingsView.swift in Sources */,
+				1C1000000000000000000001 /* PremiumICloudBridgeClient.swift in Sources */,
+				1C1000000000000000000002 /* PremiumICloudBridgeShared.swift in Sources */,
 				C1F000000000000000000016 /* UserDataSync.swift in Sources */,
 				C1F000000000000000000017 /* PremiumSettingsView.swift in Sources */,
 				CA3E00000000000000000001 /* PremiumFeatureOverview.swift in Sources */,
@@ -4801,6 +4896,11 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		1C1000000000000000000045 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 1C1000000000000000000040 /* TypeWhisperICloudBridge */;
+			targetProxy = 1C1000000000000000000044 /* PBXContainerItemProxy */;
+		};
 		701928C4B060B13DB9739A39 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			name = TypeWhisper;
@@ -4825,6 +4925,52 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		1C1000000000000000000041 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "$(TYPEWHISPER_ICLOUD_HELPER_ENTITLEMENTS)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = "$(MARKETING_VERSION)";
+				DEAD_CODE_STRIPPING = YES;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = TypeWhisperICloudBridge/Info.plist;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.6.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.typewhisper-mac;
+				PRODUCT_NAME = TypeWhisperICloudBridge;
+				SKIP_INSTALL = YES;
+				SWIFT_STRICT_CONCURRENCY = targeted;
+				SWIFT_VERSION = 6.0;
+				TYPEWHISPER_ICLOUD_HELPER_ENTITLEMENTS = TypeWhisperICloudBridge/TypeWhisperICloudBridge.entitlements;
+			};
+			name = Debug;
+		};
+		1C1000000000000000000042 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = "$(TYPEWHISPER_ICLOUD_HELPER_ENTITLEMENTS)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = "$(MARKETING_VERSION)";
+				DEAD_CODE_STRIPPING = YES;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = TypeWhisperICloudBridge/Info.plist;
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.6.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.typewhisper-mac;
+				PRODUCT_NAME = TypeWhisperICloudBridge;
+				PROVISIONING_PROFILE_SPECIFIER = "$(TYPEWHISPER_ICLOUD_HELPER_PROFILE_SPECIFIER)";
+				SKIP_INSTALL = YES;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_STRICT_CONCURRENCY = targeted;
+				SWIFT_VERSION = 6.0;
+				TYPEWHISPER_ICLOUD_HELPER_ENTITLEMENTS = TypeWhisperICloudBridge/TypeWhisperICloudBridge.entitlements;
+			};
+			name = Release;
+		};
 		7DB490C75F885EBA825A8F8D /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -5053,7 +5199,6 @@
 				MARKETING_VERSION = 1.6.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.mac;
 				PRODUCT_NAME = TypeWhisper;
-				PROVISIONING_PROFILE_SPECIFIER = "$(TYPEWHISPER_DEVELOPER_ID_PROFILE_SPECIFIER)";
 				SWIFT_OBJC_BRIDGING_HEADER = TypeWhisper/TypeWhisper-Bridging-Header.h;
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_STRICT_CONCURRENCY = targeted;
@@ -7332,6 +7477,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		1C1000000000000000000043 /* Build configuration list for PBXNativeTarget "TypeWhisperICloudBridge" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				1C1000000000000000000041 /* Debug */,
+				1C1000000000000000000042 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		52E9F6F513650CA6EC4DDCA3 /* Build configuration list for PBXNativeTarget "TypeWhisperTests" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

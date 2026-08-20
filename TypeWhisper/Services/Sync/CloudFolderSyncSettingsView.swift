@@ -684,14 +684,13 @@ final class CloudFolderSyncController: ObservableObject {
     private let premiumAccountService: PremiumAccountService
     private let syncStore: any UserDataSyncStore
     private let defaults: UserDefaults
+    private let automaticICloudBridge: any PremiumICloudBridging
     private let automaticICloudAvailable: Bool
     private var customState: CloudFolderSyncState
     private var automaticState: CloudFolderSyncState
     private var localChangeObserverId: UUID?
     private var scheduledSyncTask: Task<Void, Never>?
-    private var metadataQuery: NSMetadataQuery?
-    private var metadataObservers: [NSObjectProtocol] = []
-    private var lastLocalSyncFinishedAt: Date?
+    private var automaticPollTask: Task<Void, Never>?
     private var entitlementCancellable: AnyCancellable?
 
     @Published private(set) var mode: PremiumSyncMode
@@ -705,7 +704,8 @@ final class CloudFolderSyncController: ObservableObject {
     @Published var statusMessage: String?
 
     var canUseSync: Bool {
-        premiumAccountService.isSignedIn && premiumAccountService.hasPremiumEntitlement
+        AppConstants.isPremiumSyncSmokeTest
+            || (premiumAccountService.isSignedIn && premiumAccountService.hasPremiumEntitlement)
     }
 
     var availableModes: [PremiumSyncMode] {
@@ -727,17 +727,22 @@ final class CloudFolderSyncController: ObservableObject {
         premiumAccountService: PremiumAccountService,
         syncStore: any UserDataSyncStore,
         defaults: UserDefaults = .standard,
-        automaticICloudAvailable: Bool = TypeWhisperBuildCapabilities.iCloudSyncEnabled
+        automaticICloudBridge: any PremiumICloudBridging = PremiumICloudBridgeClient(),
+        automaticICloudAvailable: Bool? = nil
     ) {
         self.premiumAccountService = premiumAccountService
         self.syncStore = syncStore
         self.defaults = defaults
+        self.automaticICloudBridge = automaticICloudBridge
         self.automaticICloudAvailable = automaticICloudAvailable
+            ?? (TypeWhisperBuildCapabilities.iCloudSyncEnabled && automaticICloudBridge.isAvailable)
         self.customState = Self.loadState(from: defaults, key: Keys.syncState, legacyKey: Keys.legacySyncState)
         self.automaticState = Self.loadState(from: defaults, key: Keys.automaticSyncState)
         let storedMode = defaults.string(forKey: Keys.mode).flatMap(PremiumSyncMode.init(rawValue:))
-        let requestedMode = storedMode ?? (defaults.data(forKey: Keys.folderBookmark) != nil ? .cloudFolder : .off)
-        self.mode = requestedMode == .automaticICloud && !automaticICloudAvailable ? .off : requestedMode
+        let requestedMode = AppConstants.isPremiumSyncSmokeTest
+            ? PremiumSyncMode.automaticICloud
+            : storedMode ?? (defaults.data(forKey: Keys.folderBookmark) != nil ? .cloudFolder : .off)
+        self.mode = requestedMode == .automaticICloud && !self.automaticICloudAvailable ? .off : requestedMode
         self.lastSyncDate = mode == .automaticICloud ? automaticState.lastSyncAt : customState.lastSyncAt
 
         restoreSelectedFolder()
@@ -753,10 +758,18 @@ final class CloudFolderSyncController: ObservableObject {
                     await self.syncNow()
                 }
             }
+        if isConfigured, canUseSync {
+            Task { @MainActor [weak self] in
+                await Task.yield()
+                guard let self, self.isConfigured, self.canUseSync else { return }
+                await self.syncNow()
+            }
+        }
     }
 
     deinit {
         scheduledSyncTask?.cancel()
+        automaticPollTask?.cancel()
     }
 
     func deactivate() {
@@ -823,11 +836,11 @@ final class CloudFolderSyncController: ObservableObject {
 
         let syncMode = mode
         guard syncMode != .off else { return }
-        guard let folderURL = activeFolderURL(for: syncMode) else { return }
         guard canUseSync else {
             errorMessage = CloudFolderSyncError.notEntitled.localizedDescription
             return
         }
+        guard let folderURL = activeFolderURL(for: syncMode) else { return }
         guard !isSyncing else { return }
 
         errorMessage = nil
@@ -838,10 +851,12 @@ final class CloudFolderSyncController: ObservableObject {
                 folderURL.stopAccessingSecurityScopedResource()
             }
             isSyncing = false
-            lastLocalSyncFinishedAt = Date()
         }
 
         do {
+            if syncMode == .automaticICloud {
+                try await automaticICloudBridge.synchronize()
+            }
             var syncState = state(for: syncMode) ?? CloudFolderSyncState()
             let result = try await CloudFolderSyncEngine.sync(
                 folderURL: folderURL,
@@ -850,6 +865,9 @@ final class CloudFolderSyncController: ObservableObject {
                 entitlements: PaidEntitlements(canUseCloudFolderSync: canUseSync)
             )
             setState(syncState, for: syncMode)
+            if syncMode == .automaticICloud {
+                try await automaticICloudBridge.synchronize()
+            }
             guard mode == syncMode else { return }
             lastSyncDate = result.syncedAt
             pendingChanges = 0
@@ -949,55 +967,28 @@ final class CloudFolderSyncController: ObservableObject {
 
     private func updateICloudObservation() {
         stopICloudObservation()
-        guard mode == .automaticICloud, let folderURL = activeFolderURL() else { return }
-        let query = NSMetadataQuery()
-        query.searchScopes = [NSMetadataQueryUbiquitousDocumentsScope]
-        query.predicate = NSPredicate(
-            format: "%K BEGINSWITH %@",
-            NSMetadataItemPathKey,
-            CloudFolderSyncEngine.packageURL(for: folderURL).path
-        )
-        for name in [Notification.Name.NSMetadataQueryDidUpdate, .NSMetadataQueryDidFinishGathering] {
-            metadataObservers.append(NotificationCenter.default.addObserver(
-                forName: name,
-                object: query,
-                queue: .main
-            ) { [weak self] _ in
-                Task { @MainActor [weak self] in self?.handleObservedICloudChange() }
-            })
+        guard mode == .automaticICloud, automaticICloudBridge.isAvailable else { return }
+        automaticPollTask = Task { [weak self] in
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(for: .seconds(30))
+                    try Task.checkCancellation()
+                    guard let self, self.mode == .automaticICloud, self.canUseSync else {
+                        continue
+                    }
+                    await self.syncNow()
+                } catch is CancellationError {
+                    return
+                } catch {
+                    return
+                }
+            }
         }
-        metadataQuery = query
-        query.start()
     }
 
     private func stopICloudObservation() {
-        metadataQuery?.stop()
-        metadataQuery = nil
-        for observer in metadataObservers { NotificationCenter.default.removeObserver(observer) }
-        metadataObservers.removeAll()
-    }
-
-    private func handleObservedICloudChange() {
-        guard mode == .automaticICloud, !isSyncing else { return }
-        let delay = Self.observedICloudSyncDelay(
-            lastLocalSyncFinishedAt: lastLocalSyncFinishedAt,
-            now: Date()
-        )
-        scheduledSyncTask?.cancel()
-        scheduledSyncTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(delay))
-            guard !Task.isCancelled else { return }
-            await self?.syncNow()
-        }
-    }
-
-    static func observedICloudSyncDelay(
-        lastLocalSyncFinishedAt: Date?,
-        now: Date
-    ) -> TimeInterval {
-        guard let lastLocalSyncFinishedAt else { return 2 }
-        let remainingCooldown = 10 - now.timeIntervalSince(lastLocalSyncFinishedAt)
-        return remainingCooldown > 0 ? remainingCooldown : 2
+        automaticPollTask?.cancel()
+        automaticPollTask = nil
     }
 
     private func resetCustomSyncState() {
@@ -1068,12 +1059,11 @@ final class CloudFolderSyncController: ObservableObject {
             }
             return selectedFolderURL
         case .automaticICloud:
-            guard let identifier = Bundle.main.object(forInfoDictionaryKey: "TypeWhisperICloudContainer") as? String,
-                  let container = FileManager.default.url(forUbiquityContainerIdentifier: identifier) else {
-                errorMessage = String(localized: "Sign in to iCloud and enable iCloud Drive to use automatic sync.")
+            guard let folderURL = automaticICloudBridge.localFolderURL else {
+                errorMessage = PremiumICloudBridgeError.appGroupUnavailable.localizedDescription
                 return nil
             }
-            return container.appendingPathComponent("Documents", isDirectory: true)
+            return folderURL
         }
     }
 
@@ -1114,6 +1104,9 @@ final class CloudFolderSyncController: ObservableObject {
         let accessed = deletedMode == .cloudFolder && folderURL.startAccessingSecurityScopedResource()
         defer { if accessed { folderURL.stopAccessingSecurityScopedResource() } }
         do {
+            if deletedMode == .automaticICloud {
+                try await automaticICloudBridge.deleteRemotePackage()
+            }
             let packageURL = CloudFolderSyncEngine.packageURL(for: folderURL)
             if FileManager.default.fileExists(atPath: packageURL.path) { try FileManager.default.removeItem(at: packageURL) }
             setState(CloudFolderSyncState(), for: deletedMode)

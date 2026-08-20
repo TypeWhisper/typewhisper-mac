@@ -3,6 +3,14 @@ import SwiftData
 import os.log
 
 enum AppConstants {
+    static let isPremiumSyncSmokeTest: Bool = {
+        #if DEBUG
+        ProcessInfo.processInfo.arguments.contains("--premium-sync-smoke-test")
+        #else
+        false
+        #endif
+    }()
+
     static let isScreenshotAutomation: Bool = {
         #if DEBUG
         ProcessInfo.processInfo.arguments.contains("--store-screenshots")

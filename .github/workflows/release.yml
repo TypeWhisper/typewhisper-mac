@@ -14,7 +14,7 @@ on:
         required: false
         type: string
       without_icloud:
-        description: Build without iCloud entitlements while the production App ID is unavailable
+        description: Build the bridge without iCloud (fallback when its Developer ID profile is unavailable)
         required: false
         default: false
         type: boolean
@@ -51,11 +51,9 @@ jobs:
           SCHEDULED_WITHOUT_ICLOUD: ${{ vars.MACOS_SCHEDULED_WITHOUT_ICLOUD }}
         run: |
           WITHOUT_ICLOUD="false"
-          # Tagged app releases remain on the proven no-iCloud distribution path
-          # until the production container and Developer ID profile are approved.
-          # Scheduled and manually dispatched builds retain their existing controls.
-          if [ "$EVENT_NAME" = "push" ] ||
-            [ "$REQUESTED_WITHOUT_ICLOUD" = "true" ] ||
+          # Tagged releases use the dedicated iCloud bridge profile. Scheduled
+          # and manually dispatched builds retain their explicit fallback controls.
+          if [ "$REQUESTED_WITHOUT_ICLOUD" = "true" ] ||
             { [ "$EVENT_NAME" = "schedule" ] && [ "$SCHEDULED_WITHOUT_ICLOUD" = "true" ]; }; then
             WITHOUT_ICLOUD="true"
           fi
@@ -221,15 +219,15 @@ jobs:
           bash scripts/check_release_binary_instrumentation.sh --self-test
           bash scripts/check_release_signing.sh --self-test
 
-      - name: Decode Developer ID Provisioning Profile
+      - name: Decode iCloud Bridge Developer ID Provisioning Profile
         if: needs.prepare.outputs.without_icloud != 'true'
         env:
-          MACOS_DEVELOPER_ID_PROVISIONING_PROFILE: ${{ secrets.MACOS_DEVELOPER_ID_PROVISIONING_PROFILE }}
+          MACOS_ICLOUD_HELPER_DEVELOPER_ID_PROVISIONING_PROFILE: ${{ secrets.MACOS_ICLOUD_HELPER_DEVELOPER_ID_PROVISIONING_PROFILE }}
         run: |
-          PROFILE_PATH="${RUNNER_TEMP}/TypeWhisper.provisionprofile"
-          printf '%s' "$MACOS_DEVELOPER_ID_PROVISIONING_PROFILE" | base64 --decode > "$PROFILE_PATH"
+          PROFILE_PATH="${RUNNER_TEMP}/TypeWhisperICloudBridge.provisionprofile"
+          printf '%s' "$MACOS_ICLOUD_HELPER_DEVELOPER_ID_PROVISIONING_PROFILE" | base64 --decode > "$PROFILE_PATH"
           chmod 600 "$PROFILE_PATH"
-          echo "MACOS_DEVELOPER_ID_PROVISIONING_PROFILE_PATH=$PROFILE_PATH" >> "$GITHUB_ENV"
+          echo "MACOS_ICLOUD_HELPER_DEVELOPER_ID_PROVISIONING_PROFILE_PATH=$PROFILE_PATH" >> "$GITHUB_ENV"
 
       - name: Archive and Export Developer ID App
         env:
@@ -265,7 +263,7 @@ jobs:
           if [ "$WITHOUT_ICLOUD" = "true" ]; then
             ARCHIVE_ARGS+=(--without-icloud)
           else
-            ARCHIVE_ARGS+=(--profile "$MACOS_DEVELOPER_ID_PROVISIONING_PROFILE_PATH")
+            ARCHIVE_ARGS+=(--profile "$MACOS_ICLOUD_HELPER_DEVELOPER_ID_PROVISIONING_PROFILE_PATH")
           fi
 
           set -o pipefail
