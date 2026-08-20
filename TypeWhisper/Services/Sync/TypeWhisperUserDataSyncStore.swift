@@ -46,11 +46,16 @@ final class TypeWhisperUserDataSyncStore: UserDataSyncStore, @unchecked Sendable
             }
             .store(in: &cancellables)
 
-        historySyncPreferences?.objectWillChange
-            .sink { [weak self] _ in
-                self?.notifyLocalChange()
-            }
-            .store(in: &cancellables)
+        if let historySyncPreferences {
+            historySyncPreferences.$explicitDeletions
+                .combineLatest(historySyncPreferences.$suppressedRecordIDs)
+                .dropFirst()
+                .debounce(for: .milliseconds(50), scheduler: RunLoop.main)
+                .sink { [weak self] _ in
+                    self?.notifyLocalChange()
+                }
+                .store(in: &cancellables)
+        }
     }
 
     func snapshot() -> UserDataSyncSnapshot {

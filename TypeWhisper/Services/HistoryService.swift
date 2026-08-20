@@ -145,6 +145,8 @@ final class HistoryService: ObservableObject {
 
     func updateRecord(_ record: TranscriptionRecord, finalText: String) {
         record.finalText = finalText
+        record.renderedDocument = nil
+        record.synchronizedStructuredDocument = nil
         record.wordsCount = finalText.split(separator: " ").count
         record.contentUpdatedAt = Date()
         save()
@@ -189,8 +191,8 @@ final class HistoryService: ObservableObject {
     }
 
     func deleteRecords(_ records: [TranscriptionRecord]) {
+        historySyncPreferences?.recordExplicitDeletions(records.map(\.id))
         for record in records {
-            historySyncPreferences?.recordExplicitDeletion(record.id)
             deleteAudioFile(for: record)
             modelContext.delete(record)
         }
@@ -201,8 +203,8 @@ final class HistoryService: ObservableObject {
     func clearAll() {
         do {
             let allRecords = try modelContext.fetch(FetchDescriptor<TranscriptionRecord>())
+            historySyncPreferences?.recordExplicitDeletions(allRecords.map(\.id))
             for record in allRecords {
-                historySyncPreferences?.recordExplicitDeletion(record.id)
                 deleteAudioFile(for: record)
                 modelContext.delete(record)
             }
@@ -237,8 +239,8 @@ final class HistoryService: ObservableObject {
         let cutoff = Calendar.current.date(byAdding: .day, value: -retentionDays, to: Date()) ?? Date()
         let old = records.filter { $0.timestamp < cutoff }
         guard !old.isEmpty else { return }
+        historySyncPreferences?.recordRetentionPrunes(old.map(\.id))
         for record in old {
-            historySyncPreferences?.recordRetentionPrune(record.id)
             deleteAudioFile(for: record)
             modelContext.delete(record)
         }
@@ -315,7 +317,9 @@ final class HistoryService: ObservableObject {
                 content: content,
                 inbox: inbox,
                 audio: synchronizedAudioDescriptor(for: record),
-                localAudioFileURL: audioFileURL(for: record),
+                localAudioFileURL: record.historySyncAudioEligible
+                    ? audioFileURL(for: record)
+                    : nil,
                 audioEligible: record.historySyncAudioEligible
             )
         }
@@ -411,6 +415,11 @@ final class HistoryService: ObservableObject {
         let destination = audioDirectory.appendingPathComponent(fileName)
         let temporary = audioDirectory.appendingPathComponent(".\(UUID().uuidString).partial")
         try FileManager.default.copyItem(at: sourceURL, to: temporary)
+        defer {
+            if FileManager.default.fileExists(atPath: temporary.path) {
+                try? FileManager.default.removeItem(at: temporary)
+            }
+        }
         if FileManager.default.fileExists(atPath: destination.path) {
             _ = try FileManager.default.replaceItemAt(destination, withItemAt: temporary)
         } else {

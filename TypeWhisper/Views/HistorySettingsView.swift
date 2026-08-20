@@ -90,7 +90,7 @@ struct HistorySettingsView: View {
             titleVisibility: .visible
         ) {
             Button(String(localized: "Delete"), role: .destructive) {
-                HistoryViewModel.shared.clearAll()
+                ServiceContainer.shared.historyService.clearAll()
             }
             Button(String(localized: "Cancel"), role: .cancel) {}
         } message: {

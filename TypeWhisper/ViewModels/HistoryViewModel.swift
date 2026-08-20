@@ -285,10 +285,18 @@ final class HistoryViewModel: ObservableObject {
     }
 
     var navigationSummary: String {
-        String.localizedStringWithFormat(
-            String(localized: "%lld entries, %lld words"),
-            Int64(visibleRecordCount),
+        let entries = String.localizedStringWithFormat(
+            String(localized: "%lld entries"),
+            Int64(visibleRecordCount)
+        )
+        let words = String.localizedStringWithFormat(
+            String(localized: "%lld words"),
             Int64(visibleWordCount)
+        )
+        return String.localizedStringWithFormat(
+            String(localized: "%@, %@"),
+            entries,
+            words
         )
     }
 
@@ -459,8 +467,12 @@ final class HistoryViewModel: ObservableObject {
     }
 
     func deleteRecord(_ record: TranscriptionRecord) {
-        selectedRecordIDs.remove(record.id)
-        historyService.deleteRecord(record)
+        deleteRecords([record])
+    }
+
+    func deleteRecords(_ records: [TranscriptionRecord]) {
+        selectedRecordIDs.subtract(records.map(\.id))
+        historyService.deleteRecords(records)
     }
 
     func deleteSelectedRecords() {
@@ -484,7 +496,16 @@ final class HistoryViewModel: ObservableObject {
     }
 
     func exportRecord(_ record: TranscriptionRecord, format: HistoryExportFormat) {
-        HistoryExporter.saveToFile(record, format: format)
+        exportRecords([record], format: format)
+    }
+
+    func exportRecords(_ records: [TranscriptionRecord], format: HistoryExportFormat) {
+        guard !records.isEmpty else { return }
+        if records.count == 1, let record = records.first {
+            HistoryExporter.saveToFile(record, format: format)
+        } else {
+            HistoryExporter.saveMultipleToFile(records, format: format)
+        }
     }
 
     func exportSelectedRecords(format: HistoryExportFormat) {
@@ -849,7 +870,7 @@ final class HistoryViewModel: ObservableObject {
     }
 
     private static func hasAudio(_ record: TranscriptionRecord) -> Bool {
-        record.audioFileName != nil
+        record.audioFileName != nil || record.hasRemoteAudio
     }
 
     private static func visibleRecordIDs(

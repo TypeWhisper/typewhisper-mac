@@ -1224,6 +1224,16 @@ final class CloudFolderSyncTests: XCTestCase {
             ),
             "iCloud.com.typewhisper.sync.dev"
         )
+        for invalidIdentifier in [".", "..", "nested/container", "nested\\container"] {
+            XCTAssertNil(
+                PremiumICloudBridgeConstants.localMirrorNamespace(
+                    infoDictionary: [
+                        PremiumICloudBridgeConstants.containerIdentifierInfoKey:
+                            invalidIdentifier,
+                    ]
+                )
+            )
+        }
     }
 
     func testICloudBridgeDeletionRemovesOnlySyncPackages() throws {
@@ -1831,6 +1841,78 @@ final class CloudFolderSyncTests: XCTestCase {
         } catch HistorySyncAssetStoreError.invalidDescriptor {
             // Expected.
         }
+
+        let outsideURL = folder.appendingPathComponent("outside.wav")
+        try Data([0x52, 0x49, 0x46, 0x46]).write(to: outsideURL)
+        let symlinkURL = packageURL
+            .appendingPathComponent("assets/history", isDirectory: true)
+            .appendingPathComponent("escaped.wav")
+        try FileManager.default.createDirectory(
+            at: symlinkURL.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try FileManager.default.createSymbolicLink(
+            at: symlinkURL,
+            withDestinationURL: outsideURL
+        )
+        let outsideDigest = try HistorySyncAssetStore.sha256AndSize(of: outsideURL)
+        let symlinkDescriptor = UserDataSyncHistoryAudioV1(
+            recordID: recordID,
+            updatedAt: Self.date(10),
+            relativeAssetPath: "assets/history/escaped.wav",
+            mediaType: "audio/wav",
+            byteCount: outsideDigest.byteCount,
+            sha256: outsideDigest.sha256,
+            createdAt: Self.date(10),
+            durationSeconds: 1.25
+        )
+        do {
+            _ = try await HistorySyncAssetStore.verifiedAssetURL(
+                packageURL: packageURL,
+                descriptor: symlinkDescriptor
+            )
+            XCTFail("Expected a symlink outside the sync package to be rejected")
+        } catch HistorySyncAssetStoreError.invalidDescriptor {
+            // Expected.
+        }
+    }
+
+    @MainActor
+    func testHistoryAudioPublishFailureDoesNotAbortTextSync() async throws {
+        let folder = try TestSupport.makeTemporaryDirectory(prefix: "CloudFolderSyncAudioFailure")
+        defer { TestSupport.remove(folder) }
+        let record = Self.historyRecord(
+            recordID: UUID(),
+            finalText: "Text survives missing audio",
+            contentUpdatedAt: Self.date(10),
+            inboxState: "none",
+            inboxUpdatedAt: Self.date(10)
+        )
+        let missingAudio = folder.appendingPathComponent("missing.wav")
+        let store = InMemoryUserDataSyncStore(historyRecords: [
+            UserDataSyncHistoryRecord(
+                content: record.content,
+                inbox: record.inbox,
+                audio: nil,
+                localAudioFileURL: missingAudio,
+                audioEligible: true
+            ),
+        ])
+        var state = CloudFolderSyncState(deviceId: "mac-audio-failure")
+
+        let result = try await CloudFolderSyncEngine.sync(
+            folderURL: folder,
+            store: store,
+            state: &state,
+            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
+            now: Self.date(20)
+        )
+
+        XCTAssertEqual(result.operationsWritten, 2)
+        XCTAssertEqual(
+            result.diagnostics,
+            [CloudFolderSyncDiagnostic(kind: .audioTransferFailed, fileName: "missing.wav")]
+        )
     }
 
     @MainActor
@@ -2363,6 +2445,123 @@ final class CloudFolderSyncTests: XCTestCase {
 
         XCTAssertEqual(firstCalls, 1)
         XCTAssertEqual(secondCalls, 2)
+    }
+
+    @MainActor
+    func testHistoryJournalObserverSeesPostChangeSnapshot() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(
+            prefix: "CloudFolderSyncHistoryJournalObserver"
+        )
+        defer { TestSupport.remove(appSupportDirectory) }
+        let suiteName = "CloudFolderSyncHistoryJournalObserver-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let preferences = HistorySyncPreferences(defaults: defaults)
+        preferences.isEnabled = true
+        let historyService = HistoryService(
+            appSupportDirectory: appSupportDirectory,
+            historySyncPreferences: preferences
+        )
+        let store = TypeWhisperUserDataSyncStore(
+            dictionaryService: DictionaryService(appSupportDirectory: appSupportDirectory),
+            snippetService: SnippetService(appSupportDirectory: appSupportDirectory),
+            historyService: historyService,
+            historySyncPreferences: preferences,
+            defaults: defaults
+        )
+        let recordID = UUID()
+        let notified = expectation(description: "Journal change notification")
+        var observedDeletion = false
+        let observerID = store.observeLocalChanges {
+            observedDeletion = store.snapshot().deletedHistoryRecords.contains {
+                $0.recordID == recordID
+            }
+            notified.fulfill()
+        }
+        defer { store.removeLocalChangeObserver(observerID) }
+
+        preferences.recordExplicitDeletion(recordID)
+        await fulfillment(of: [notified], timeout: 1)
+
+        XCTAssertTrue(observedDeletion)
+    }
+
+    @MainActor
+    func testHistorySyncPreferencesDefaultAudioOffAndPruneExpiredSuppressions() throws {
+        let suiteName = "CloudFolderSyncHistoryPreferences-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let expiredID = UUID()
+        let expiredSuppressions = [
+            expiredID.uuidString.lowercased(): Date().addingTimeInterval(-91 * 24 * 60 * 60),
+        ]
+        defaults.set(
+            try JSONEncoder().encode(expiredSuppressions),
+            forKey: "premiumSync.historySuppressedRecordIDs"
+        )
+
+        let preferences = HistorySyncPreferences(defaults: defaults)
+
+        XCTAssertFalse(preferences.isAudioEnabled)
+        XCTAssertFalse(preferences.isSuppressed(expiredID))
+    }
+
+    func testHistoryPayloadDecodingSanitizesForwardCompatibleValues() throws {
+        let recordID = UUID()
+        let content = UserDataSyncHistoryContentV1(
+            recordID: recordID,
+            createdAt: Self.date(1),
+            updatedAt: Self.date(2),
+            originDeviceID: "ios-origin",
+            originPlatform: "iOS",
+            source: "iPhone",
+            processingState: "ready",
+            rawTranscript: "Test",
+            finalText: "Test",
+            durationSeconds: 5,
+            engineDisplayName: "test"
+        )
+        var contentJSON = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: JSONEncoder().encode(content)) as? [String: Any]
+        )
+        contentJSON["durationSeconds"] = -5
+        let decodedContent = try JSONDecoder().decode(
+            UserDataSyncHistoryContentV1.self,
+            from: JSONSerialization.data(withJSONObject: contentJSON)
+        )
+
+        let inbox = UserDataSyncHistoryInboxV1(
+            recordID: recordID,
+            updatedAt: Self.date(2),
+            state: "open",
+            kind: nil,
+            completionPolicy: .explicit,
+            completedAt: nil,
+            safeAction: nil
+        )
+        var inboxJSON = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: JSONEncoder().encode(inbox)) as? [String: Any]
+        )
+        inboxJSON["completionPolicy"] = "futurePolicy"
+        let decodedInbox = try JSONDecoder().decode(
+            UserDataSyncHistoryInboxV1.self,
+            from: JSONSerialization.data(withJSONObject: inboxJSON)
+        )
+        let localRecord = UserDataSyncHistoryRecord(
+            content: content,
+            inbox: inbox,
+            audio: nil,
+            localAudioFileURL: URL(fileURLWithPath: "/private/local.wav"),
+            audioEligible: true
+        )
+        let encodedRecord = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: JSONEncoder().encode(localRecord)) as? [String: Any]
+        )
+
+        XCTAssertEqual(decodedContent.durationSeconds, 0)
+        XCTAssertEqual(decodedInbox.completionPolicy, .explicit)
+        XCTAssertNil(encodedRecord["localAudioFileURL"])
+        XCTAssertNil(encodedRecord["audioEligible"])
     }
 
     @MainActor

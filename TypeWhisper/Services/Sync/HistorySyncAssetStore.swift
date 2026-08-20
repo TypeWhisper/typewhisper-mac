@@ -79,7 +79,19 @@ enum HistorySyncAssetStore {
         guard descriptor.isValid else {
             throw HistorySyncAssetStoreError.invalidDescriptor
         }
-        let url = packageURL.appendingPathComponent(descriptor.relativeAssetPath)
+        let resolvedPackageURL = packageURL
+            .resolvingSymlinksInPath()
+            .standardizedFileURL
+        let url = packageURL
+            .appendingPathComponent(descriptor.relativeAssetPath)
+            .resolvingSymlinksInPath()
+            .standardizedFileURL
+        let packagePath = resolvedPackageURL.path.hasSuffix("/")
+            ? resolvedPackageURL.path
+            : resolvedPackageURL.path + "/"
+        guard url.path.hasPrefix(packagePath) else {
+            throw HistorySyncAssetStoreError.invalidDescriptor
+        }
         try? FileManager.default.startDownloadingUbiquitousItem(at: url)
 
         for attempt in 0..<40 {

@@ -997,9 +997,39 @@
     "%lld entries" : {
       "localizations" : {
         "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%1$lld Einträge"
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Eintrag"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld Einträge"
+                }
+              }
+            }
+          }
+        },
+        "en" : {
+          "variations" : {
+            "plural" : {
+              "one" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld entry"
+                }
+              },
+              "other" : {
+                "stringUnit" : {
+                  "state" : "translated",
+                  "value" : "%lld entries"
+                }
+              }
+            }
           }
         },
         "ja" : {
@@ -40190,7 +40220,7 @@
         }
       }
     },
-    "%lld Entries Selected" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"%lld Einträge ausgewählt"}},"ja":{"stringUnit":{"state":"translated","value":"%lld件を選択"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"已选择 %lld 个条目"}}}},
+    "%lld Entries Selected" : {"localizations":{"de":{"variations":{"plural":{"one":{"stringUnit":{"state":"translated","value":"%lld Eintrag ausgewählt"}},"other":{"stringUnit":{"state":"translated","value":"%lld Einträge ausgewählt"}}}}},"en":{"variations":{"plural":{"one":{"stringUnit":{"state":"translated","value":"%lld Entry Selected"}},"other":{"stringUnit":{"state":"translated","value":"%lld Entries Selected"}}}}},"ja":{"stringUnit":{"state":"translated","value":"%lld件を選択"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"已选择 %lld 个条目"}}}},
     "All History" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Gesamter Verlauf"}},"ja":{"stringUnit":{"state":"translated","value":"すべての履歴"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"所有历史记录"}}}},
     "App Name" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"App-Name"}},"ja":{"stringUnit":{"state":"translated","value":"アプリ名"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"应用名称"}}}},
     "Apple Watch" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Apple Watch"}},"ja":{"stringUnit":{"state":"translated","value":"Apple Watch"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"Apple Watch"}}}},
@@ -40201,7 +40231,7 @@
     "Choose an entry to read its text, audio, and details." : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Wähle einen Eintrag aus, um Text, Audio und Details anzuzeigen."}},"ja":{"stringUnit":{"state":"translated","value":"テキスト、音声、詳細を表示する項目を選択してください。"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"选择一个条目以查看文本、音频和详细信息。"}}}},
     "Copy, export, complete, reopen, or delete the selected entries." : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Ausgewählte Einträge kopieren, exportieren, abschließen, erneut öffnen oder löschen."}},"ja":{"stringUnit":{"state":"translated","value":"選択した項目をコピー、書き出し、完了、再開、削除できます。"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"可以复制、导出、完成、重新打开或删除所选条目。"}}}},
     "Corrections added to the dictionary" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Korrekturen zum Wörterbuch hinzugefügt"}},"ja":{"stringUnit":{"state":"translated","value":"修正を辞書に追加しました"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"已将更正添加到词典"}}}},
-    "Delete %lld Entries?" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"%lld Einträge löschen?"}},"ja":{"stringUnit":{"state":"translated","value":"%lld件の項目を削除しますか？"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"删除 %lld 个条目？"}}}},
+    "Delete %lld Entries?" : {"localizations":{"de":{"variations":{"plural":{"one":{"stringUnit":{"state":"translated","value":"%lld Eintrag löschen?"}},"other":{"stringUnit":{"state":"translated","value":"%lld Einträge löschen?"}}}}},"en":{"variations":{"plural":{"one":{"stringUnit":{"state":"translated","value":"Delete %lld Entry?"}},"other":{"stringUnit":{"state":"translated","value":"Delete %lld Entries?"}}}}},"ja":{"stringUnit":{"state":"translated","value":"%lld件の項目を削除しますか？"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"删除 %lld 个条目？"}}}},
     "Delete All History?" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Gesamten Verlauf löschen?"}},"ja":{"stringUnit":{"state":"translated","value":"すべての履歴を削除しますか？"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"删除所有历史记录？"}}}},
     "Delete Entry?" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Eintrag löschen?"}},"ja":{"stringUnit":{"state":"translated","value":"項目を削除しますか？"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"删除条目？"}}}},
     "Delete History" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Verlauf löschen"}},"ja":{"stringUnit":{"state":"translated","value":"履歴を削除"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"删除历史记录"}}}},
@@ -40275,7 +40305,6 @@
     "Your saved text and Inbox state will be added to your private sync folder and become available on your other enabled TypeWhisper devices." : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Gespeicherter Text und der Posteingangsstatus werden deinem privaten Sync-Ordner hinzugefügt und auf deinen anderen aktivierten TypeWhisper-Geräten verfügbar."}},"ja":{"stringUnit":{"state":"translated","value":"保存済みのテキストと受信箱の状態がプライベート同期フォルダに追加され、有効化した他のTypeWhisperデバイスでも利用できるようになります。"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"已保存的文本和收件箱状态将添加到你的私人同步文件夹，并可在其他已启用的 TypeWhisper 设备上使用。"}}}},
     "Your saved transcriptions will appear here." : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Deine gespeicherten Transkriptionen erscheinen hier."}},"ja":{"stringUnit":{"state":"translated","value":"保存した文字起こしがここに表示されます。"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"你保存的转录会显示在这里。"}}}},
     "iPhone & iPad" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"iPhone & iPad"}},"ja":{"stringUnit":{"state":"translated","value":"iPhoneとiPad"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"iPhone 和 iPad"}}}},
-    "%lld entries, %lld words" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"%1$lld Einträge, %2$lld Wörter"}},"ja":{"stringUnit":{"state":"translated","value":"%1$lld件、%2$lld語"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"%1$lld 个条目，%2$lld 个词"}}}},
     "Choose an entry to read and edit its text or inspect its details." : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Wähle einen Eintrag aus, um seinen Text zu lesen und zu bearbeiten oder seine Details anzusehen."}},"ja":{"stringUnit":{"state":"translated","value":"項目を選択してテキストを読んだり編集したり、詳細を確認したりできます。"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"选择一个条目以阅读和编辑文本，或查看其详细信息。"}}}},
     "Device" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Gerät"}},"ja":{"stringUnit":{"state":"translated","value":"デバイス"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"设备"}}}},
     "Failed" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Fehlgeschlagen"}},"ja":{"stringUnit":{"state":"translated","value":"失敗"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"失败"}}}},

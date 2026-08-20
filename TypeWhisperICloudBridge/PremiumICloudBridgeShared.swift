@@ -76,6 +76,10 @@ enum PremiumICloudBridgeConstants {
             infoDictionary: infoDictionary
         )
         guard identifier != productionContainerIdentifier,
+              identifier != ".",
+              identifier != "..",
+              !identifier.contains("/"),
+              !identifier.contains("\\"),
               identifier == URL(fileURLWithPath: identifier).lastPathComponent else {
             return nil
         }

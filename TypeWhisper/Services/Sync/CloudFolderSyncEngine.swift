@@ -376,11 +376,12 @@ enum CloudFolderSyncEngine {
                 now: now
             )
 
-            let preparedSnapshot = try prepareHistoryAssets(
+            let assetPreparation = prepareHistoryAssets(
                 in: initialSnapshot,
                 packageURL: packageURL,
                 generation: stateSnapshot.historyGeneration
             )
+            let preparedSnapshot = assetPreparation.snapshot
             let initialRecords = records(from: preparedSnapshot)
 
             let localOperations = makeLocalOperations(
@@ -407,7 +408,8 @@ enum CloudFolderSyncEngine {
                 localOperations: localOperations,
                 readResult: readResult,
                 deviceReadResult: deviceReadResult,
-                mutations: mutations
+                mutations: mutations,
+                assetDiagnostics: assetPreparation.diagnostics
             )
         }.value
         let operations = fileResult.readResult.operations
@@ -445,7 +447,8 @@ enum CloudFolderSyncEngine {
             mutationsApplied: mutations.count,
             syncedAt: now,
             diagnostics: fileResult.readResult.diagnostics
-                + fileResult.deviceReadResult.diagnostics,
+                + fileResult.deviceReadResult.diagnostics
+                + fileResult.assetDiagnostics,
             devices: fileResult.deviceReadResult.devices
         )
     }
@@ -792,32 +795,50 @@ enum CloudFolderSyncEngine {
         in snapshot: UserDataSyncSnapshot,
         packageURL: URL,
         generation: String
-    ) throws -> UserDataSyncSnapshot {
-        let historyRecords = try snapshot.historyRecords.map { record in
+    ) -> (snapshot: UserDataSyncSnapshot, diagnostics: [CloudFolderSyncDiagnostic]) {
+        var diagnostics: [CloudFolderSyncDiagnostic] = []
+        let historyRecords = snapshot.historyRecords.map { record in
             guard record.audioEligible, let sourceURL = record.localAudioFileURL else {
                 return record
             }
-            let audio = try HistorySyncAssetStore.publish(
-                sourceURL: sourceURL,
-                packageURL: packageURL,
-                generation: generation,
-                recordID: record.content.recordID,
-                updatedAt: record.audio?.updatedAt ?? record.content.updatedAt,
-                durationSeconds: record.content.durationSeconds
-            )
-            return UserDataSyncHistoryRecord(
-                content: record.content,
-                inbox: record.inbox,
-                audio: audio,
-                localAudioFileURL: record.localAudioFileURL,
-                audioEligible: record.audioEligible
-            )
+            do {
+                let audio = try HistorySyncAssetStore.publish(
+                    sourceURL: sourceURL,
+                    packageURL: packageURL,
+                    generation: generation,
+                    recordID: record.content.recordID,
+                    updatedAt: record.audio?.updatedAt ?? record.content.updatedAt,
+                    durationSeconds: record.content.durationSeconds
+                )
+                return UserDataSyncHistoryRecord(
+                    content: record.content,
+                    inbox: record.inbox,
+                    audio: audio,
+                    localAudioFileURL: record.localAudioFileURL,
+                    audioEligible: record.audioEligible
+                )
+            } catch {
+                diagnostics.append(.init(
+                    kind: .audioTransferFailed,
+                    fileName: sourceURL.lastPathComponent
+                ))
+                return UserDataSyncHistoryRecord(
+                    content: record.content,
+                    inbox: record.inbox,
+                    audio: nil,
+                    localAudioFileURL: record.localAudioFileURL,
+                    audioEligible: record.audioEligible
+                )
+            }
         }
-        return UserDataSyncSnapshot(
-            dictionaryEntries: snapshot.dictionaryEntries,
-            snippets: snapshot.snippets,
-            historyRecords: historyRecords,
-            deletedHistoryRecords: snapshot.deletedHistoryRecords
+        return (
+            UserDataSyncSnapshot(
+                dictionaryEntries: snapshot.dictionaryEntries,
+                snippets: snapshot.snippets,
+                historyRecords: historyRecords,
+                deletedHistoryRecords: snapshot.deletedHistoryRecords
+            ),
+            diagnostics
         )
     }
 

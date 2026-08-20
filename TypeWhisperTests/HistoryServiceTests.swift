@@ -146,6 +146,7 @@ final class HistoryServiceTests: XCTestCase {
             engineUsed: "test"
         )
         older.source = .mac
+        older.remoteAudioRelativePath = "assets/history/history-v1/remote/audio.wav"
 
         let inbox = HistoryViewModel.applyFilters(
             records: [older, newest],
@@ -167,7 +168,7 @@ final class HistoryServiceTests: XCTestCase {
         )
 
         XCTAssertEqual(inbox.map(\.id), [newest.id])
-        XCTAssertEqual(audio.map(\.id), [newest.id])
+        XCTAssertEqual(audio.map(\.id), [older.id, newest.id])
         XCTAssertEqual(
             HistoryViewModel.computeSections([newest, older])
                 .flatMap(\.records)
@@ -367,6 +368,41 @@ final class HistoryServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testDeletingUnselectedContextRecordKeepsCurrentDraftSelection() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(
+            prefix: "HistoryContextDeletion"
+        )
+        defer { TestSupport.remove(appSupportDirectory) }
+        let historyService = HistoryService(appSupportDirectory: appSupportDirectory)
+        let selectedID = UUID()
+        let contextID = UUID()
+        for (id, text) in [(selectedID, "Selected"), (contextID, "Context")] {
+            historyService.addRecord(
+                id: id,
+                rawText: text,
+                finalText: text,
+                appName: nil,
+                appBundleIdentifier: nil,
+                durationSeconds: 1,
+                language: "en",
+                engineUsed: "test"
+            )
+        }
+        let viewModel = HistoryViewModel(
+            historyService: historyService,
+            textDiffService: TextDiffService(),
+            dictionaryService: DictionaryService(appSupportDirectory: appSupportDirectory)
+        )
+        viewModel.requestRecordSelection([selectedID])
+        let contextRecord = try XCTUnwrap(historyService.records.first { $0.id == contextID })
+
+        viewModel.deleteRecords([contextRecord])
+
+        XCTAssertEqual(viewModel.selectedRecordIDs, [selectedID])
+        XCTAssertEqual(historyService.records.map(\.id), [selectedID])
+    }
+
+    @MainActor
     func testUpdateRecordEmitsCompletePluginSyncPayloadWithoutChangingSDKABI() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
@@ -393,7 +429,17 @@ final class HistoryServiceTests: XCTestCase {
         )
 
         let record = try XCTUnwrap(service.records.first)
+        record.renderedDocument = "Rendered document"
+        record.synchronizedStructuredDocument = UserDataSyncHistoryStructuredDocumentV1(
+            kind: "note",
+            body: "Rendered document",
+            renderedText: "Rendered document"
+        )
         service.updateRecord(record, finalText: "Corrected text")
+
+        XCTAssertNil(record.renderedDocument)
+        XCTAssertNil(record.synchronizedStructuredDocument)
+        XCTAssertEqual(record.displayText, "Corrected text")
 
         XCTAssertEqual(emittedEvents.count, 1)
         guard case .actionCompleted(let event) = try XCTUnwrap(emittedEvents.first) else {

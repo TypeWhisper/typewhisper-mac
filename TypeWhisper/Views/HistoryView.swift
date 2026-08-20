@@ -447,18 +447,12 @@ struct HistoryView: View {
 
     private func deleteRecords(with ids: Set<UUID>) {
         let records = viewModel.records.filter { ids.contains($0.id) }
-        if records.count == 1, let record = records.first {
-            viewModel.deleteRecord(record)
-        } else {
-            viewModel.selectedRecordIDs = ids
-            viewModel.deleteSelectedRecords()
-        }
+        viewModel.deleteRecords(records)
         deleteCandidateIDs = []
     }
 
     private func export(_ records: [TranscriptionRecord], as format: HistoryExportFormat) {
-        viewModel.selectedRecordIDs = Set(records.map(\.id))
-        viewModel.exportSelectedRecords(format: format)
+        viewModel.exportRecords(records, format: format)
     }
 }
 
@@ -491,7 +485,9 @@ private struct HistoryWindowCloseGuard: NSViewRepresentable {
     final class Coordinator: NSObject, NSWindowDelegate {
         private let viewModel: HistoryViewModel
         private weak var window: NSWindow?
-        private var previousDelegate: (any NSWindowDelegate)?
+        // AppKit invokes window delegates on the main thread, while NSObject's
+        // forwarding hooks are imported as nonisolated.
+        nonisolated(unsafe) private weak var previousDelegate: (any NSWindowDelegate)?
         private var isClosingAfterConfirmation = false
 
         init(viewModel: HistoryViewModel) {
@@ -510,8 +506,7 @@ private struct HistoryWindowCloseGuard: NSViewRepresentable {
         }
 
         func detach() {
-            guard let window else { return }
-            if window.delegate === self {
+            if let window, window.delegate === self {
                 window.delegate = previousDelegate
             }
             self.window = nil
@@ -529,7 +524,14 @@ private struct HistoryWindowCloseGuard: NSViewRepresentable {
             return previousDelegate?.windowShouldClose?(sender) ?? true
         }
 
-        override func forwardingTarget(for selector: Selector!) -> Any? {
+        override nonisolated func responds(to selector: Selector!) -> Bool {
+            if super.responds(to: selector) {
+                return true
+            }
+            return (previousDelegate as AnyObject?)?.responds(to: selector) == true
+        }
+
+        override nonisolated func forwardingTarget(for selector: Selector!) -> Any? {
             if let previousDelegate,
                (previousDelegate as AnyObject).responds(to: selector) {
                 return previousDelegate

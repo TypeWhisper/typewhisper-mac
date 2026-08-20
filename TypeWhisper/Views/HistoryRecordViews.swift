@@ -112,7 +112,10 @@ struct HistoryRecordRow: View {
                 .help(String(localized: "Audio available"))
                 .accessibilityLabel(String(localized: "Audio available"))
         }
-        if record.originPlatformRaw != "macOS" {
+        let originPlatform = record.originPlatformRaw
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !originPlatform.isEmpty
+            && originPlatform.caseInsensitiveCompare("macOS") != .orderedSame {
             Image(systemName: "icloud")
                 .help(String(localized: "Synchronized"))
                 .accessibilityLabel(String(localized: "Synchronized"))

@@ -29,6 +29,27 @@ struct UserDataSyncHistoryStructuredDocumentV1: Codable, Equatable, Sendable {
 }
 
 struct UserDataSyncHistoryContentV1: Codable, Equatable, Sendable {
+    private enum CodingKeys: String, CodingKey {
+        case recordID
+        case createdAt
+        case updatedAt
+        case originDeviceID
+        case originPlatform
+        case source
+        case processingState
+        case rawTranscript
+        case finalText
+        case renderedDocument
+        case structuredDocument
+        case appDisplayName
+        case durationSeconds
+        case detectedLanguage
+        case engineDisplayName
+        case modelDisplayName
+        case processingFailureCategory
+        case processingFailureMessage
+    }
+
     let recordID: UUID
     let createdAt: Date
     let updatedAt: Date
@@ -89,6 +110,40 @@ struct UserDataSyncHistoryContentV1: Codable, Equatable, Sendable {
         self.processingFailureCategory = processingFailureCategory
         self.processingFailureMessage = processingFailureMessage
     }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        recordID = try container.decode(UUID.self, forKey: .recordID)
+        createdAt = try container.decode(Date.self, forKey: .createdAt)
+        updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+        originDeviceID = try container.decode(String.self, forKey: .originDeviceID)
+        originPlatform = try container.decode(String.self, forKey: .originPlatform)
+        source = try container.decode(String.self, forKey: .source)
+        processingState = try container.decode(String.self, forKey: .processingState)
+        rawTranscript = try container.decode(String.self, forKey: .rawTranscript)
+        finalText = try container.decode(String.self, forKey: .finalText)
+        renderedDocument = try container.decodeIfPresent(String.self, forKey: .renderedDocument)
+        structuredDocument = try container.decodeIfPresent(
+            UserDataSyncHistoryStructuredDocumentV1.self,
+            forKey: .structuredDocument
+        )
+        appDisplayName = try container.decodeIfPresent(String.self, forKey: .appDisplayName)
+        let decodedDuration = try container.decode(Double.self, forKey: .durationSeconds)
+        durationSeconds = decodedDuration.isFinite && decodedDuration >= 0
+            ? decodedDuration
+            : 0
+        detectedLanguage = try container.decodeIfPresent(String.self, forKey: .detectedLanguage)
+        engineDisplayName = try container.decode(String.self, forKey: .engineDisplayName)
+        modelDisplayName = try container.decodeIfPresent(String.self, forKey: .modelDisplayName)
+        processingFailureCategory = try container.decodeIfPresent(
+            String.self,
+            forKey: .processingFailureCategory
+        )
+        processingFailureMessage = try container.decodeIfPresent(
+            String.self,
+            forKey: .processingFailureMessage
+        )
+    }
 }
 
 enum UserDataSyncHistoryCompletionPolicy: String, Codable, Sendable {
@@ -110,6 +165,16 @@ struct UserDataSyncHistorySafeActionV1: Codable, Equatable, Sendable {
 }
 
 struct UserDataSyncHistoryInboxV1: Codable, Equatable, Sendable {
+    private enum CodingKeys: String, CodingKey {
+        case recordID
+        case updatedAt
+        case state
+        case kind
+        case completionPolicy
+        case completedAt
+        case safeAction
+    }
+
     let recordID: UUID
     let updatedAt: Date
     let state: String
@@ -117,6 +182,40 @@ struct UserDataSyncHistoryInboxV1: Codable, Equatable, Sendable {
     let completionPolicy: UserDataSyncHistoryCompletionPolicy
     let completedAt: Date?
     let safeAction: UserDataSyncHistorySafeActionV1?
+
+    init(
+        recordID: UUID,
+        updatedAt: Date,
+        state: String,
+        kind: String?,
+        completionPolicy: UserDataSyncHistoryCompletionPolicy,
+        completedAt: Date?,
+        safeAction: UserDataSyncHistorySafeActionV1?
+    ) {
+        self.recordID = recordID
+        self.updatedAt = updatedAt
+        self.state = state
+        self.kind = kind
+        self.completionPolicy = completionPolicy
+        self.completedAt = completedAt
+        self.safeAction = safeAction
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        recordID = try container.decode(UUID.self, forKey: .recordID)
+        updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+        state = try container.decode(String.self, forKey: .state)
+        kind = try container.decodeIfPresent(String.self, forKey: .kind)
+        let rawPolicy = try container.decodeIfPresent(String.self, forKey: .completionPolicy)
+        completionPolicy = rawPolicy.flatMap(UserDataSyncHistoryCompletionPolicy.init(rawValue:))
+            ?? .explicit
+        completedAt = try container.decodeIfPresent(Date.self, forKey: .completedAt)
+        safeAction = try container.decodeIfPresent(
+            UserDataSyncHistorySafeActionV1.self,
+            forKey: .safeAction
+        )
+    }
 }
 
 struct UserDataSyncHistoryAudioV1: Codable, Equatable, Sendable {
@@ -139,18 +238,47 @@ struct UserDataSyncHistoryAudioV1: Codable, Equatable, Sendable {
     }
 
     static func isSafeRelativePath(_ path: String) -> Bool {
-        guard !path.isEmpty, !path.hasPrefix("/") else { return false }
+        guard path.hasPrefix("assets/history/"), !path.hasPrefix("/") else { return false }
         let components = path.split(separator: "/", omittingEmptySubsequences: false)
         return !components.contains(where: { $0.isEmpty || $0 == "." || $0 == ".." })
     }
 }
 
 struct UserDataSyncHistoryRecord: Codable, Equatable, Sendable {
+    private enum CodingKeys: String, CodingKey {
+        case content
+        case inbox
+        case audio
+    }
+
     let content: UserDataSyncHistoryContentV1
     let inbox: UserDataSyncHistoryInboxV1
     let audio: UserDataSyncHistoryAudioV1?
     let localAudioFileURL: URL?
     let audioEligible: Bool
+
+    init(
+        content: UserDataSyncHistoryContentV1,
+        inbox: UserDataSyncHistoryInboxV1,
+        audio: UserDataSyncHistoryAudioV1?,
+        localAudioFileURL: URL?,
+        audioEligible: Bool
+    ) {
+        self.content = content
+        self.inbox = inbox
+        self.audio = audio
+        self.localAudioFileURL = localAudioFileURL
+        self.audioEligible = audioEligible
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        content = try container.decode(UserDataSyncHistoryContentV1.self, forKey: .content)
+        inbox = try container.decode(UserDataSyncHistoryInboxV1.self, forKey: .inbox)
+        audio = try container.decodeIfPresent(UserDataSyncHistoryAudioV1.self, forKey: .audio)
+        localAudioFileURL = nil
+        audioEligible = false
+    }
 }
 
 struct UserDataSyncHistoryDeletion: Codable, Equatable, Sendable {

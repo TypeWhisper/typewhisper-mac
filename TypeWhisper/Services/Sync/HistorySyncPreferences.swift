@@ -35,7 +35,7 @@ final class HistorySyncPreferences: ObservableObject {
     }
     @Published private(set) var audioReceiveSince: Date?
     @Published private(set) var explicitDeletions: [String: Date]
-    @Published private(set) var suppressedRecordIDs: Set<String>
+    @Published private(set) var suppressedRecordIDs: [String: Date]
 
     init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
@@ -45,9 +45,7 @@ final class HistorySyncPreferences: ObservableObject {
             defaults.set(deviceID, forKey: Keys.deviceID)
         }
         isEnabled = defaults.bool(forKey: Keys.enabled)
-        let storedAudioEnabled = defaults.object(forKey: Keys.audioEnabled) == nil
-            ? true
-            : defaults.bool(forKey: Keys.audioEnabled)
+        let storedAudioEnabled = defaults.bool(forKey: Keys.audioEnabled)
         isAudioEnabled = storedAudioEnabled
         if storedAudioEnabled {
             if let stored = defaults.object(forKey: Keys.audioReceiveSince) as? Date {
@@ -64,11 +62,16 @@ final class HistorySyncPreferences: ObservableObject {
             [String: Date].self,
             from: defaults.data(forKey: Keys.explicitDeletions)
         ) ?? [:]
-        suppressedRecordIDs = Set(Self.decode(
-            [String].self,
-            from: defaults.data(forKey: Keys.suppressedRecordIDs)
-        ) ?? [])
-        pruneExpiredDeletions()
+        let storedSuppressions = defaults.data(forKey: Keys.suppressedRecordIDs)
+        if let timestamped = Self.decode([String: Date].self, from: storedSuppressions) {
+            suppressedRecordIDs = timestamped
+        } else {
+            suppressedRecordIDs = Dictionary(
+                uniqueKeysWithValues: (Self.decode([String].self, from: storedSuppressions) ?? [])
+                    .map { ($0, Date()) }
+            )
+        }
+        pruneExpiredJournals()
     }
 
     func shouldReceiveSynchronizedAudio(createdAt: Date) -> Bool {
@@ -78,18 +81,31 @@ final class HistorySyncPreferences: ObservableObject {
     }
 
     func recordExplicitDeletion(_ recordID: UUID, at date: Date = Date()) {
-        explicitDeletions[recordID.uuidString.lowercased()] = date
-        suppressedRecordIDs.remove(recordID.uuidString.lowercased())
+        recordExplicitDeletions([recordID], at: date)
+    }
+
+    func recordExplicitDeletions(_ recordIDs: [UUID], at date: Date = Date()) {
+        for recordID in recordIDs {
+            let key = recordID.uuidString.lowercased()
+            explicitDeletions[key] = date
+            suppressedRecordIDs.removeValue(forKey: key)
+        }
         persistJournal()
     }
 
-    func recordRetentionPrune(_ recordID: UUID) {
-        suppressedRecordIDs.insert(recordID.uuidString.lowercased())
+    func recordRetentionPrune(_ recordID: UUID, at date: Date = Date()) {
+        recordRetentionPrunes([recordID], at: date)
+    }
+
+    func recordRetentionPrunes(_ recordIDs: [UUID], at date: Date = Date()) {
+        for recordID in recordIDs {
+            suppressedRecordIDs[recordID.uuidString.lowercased()] = date
+        }
         persistJournal()
     }
 
     func isSuppressed(_ recordID: UUID) -> Bool {
-        suppressedRecordIDs.contains(recordID.uuidString.lowercased())
+        suppressedRecordIDs[recordID.uuidString.lowercased()] != nil
     }
 
     func restoreSuppressedHistory() {
@@ -102,18 +118,21 @@ final class HistorySyncPreferences: ObservableObject {
         persistJournal()
     }
 
-    private func pruneExpiredDeletions(now: Date = Date()) {
+    private func pruneExpiredJournals(now: Date = Date()) {
         let cutoff = now.addingTimeInterval(-90 * 24 * 60 * 60)
         explicitDeletions = explicitDeletions.filter { $0.value >= cutoff }
+        suppressedRecordIDs = suppressedRecordIDs.filter { $0.value >= cutoff }
         persistJournal()
     }
 
     private func persistJournal() {
-        defaults.set(try? JSONEncoder().encode(explicitDeletions), forKey: Keys.explicitDeletions)
-        defaults.set(
-            try? JSONEncoder().encode(suppressedRecordIDs.sorted()),
-            forKey: Keys.suppressedRecordIDs
-        )
+        let encoder = JSONEncoder()
+        guard let deletionsData = try? encoder.encode(explicitDeletions),
+              let suppressionsData = try? encoder.encode(suppressedRecordIDs) else {
+            return
+        }
+        defaults.set(deletionsData, forKey: Keys.explicitDeletions)
+        defaults.set(suppressionsData, forKey: Keys.suppressedRecordIDs)
     }
 
     private static func decode<T: Decodable>(_ type: T.Type, from data: Data?) -> T? {

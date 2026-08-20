@@ -903,14 +903,14 @@ final class CloudFolderSyncController: ObservableObject {
             if syncMode == .automaticICloud {
                 try await automaticICloudBridge.synchronize()
             }
-            _ = await installPendingSynchronizedAudio(in: folderURL)
+            let audioDiagnostics = await installPendingSynchronizedAudio(in: folderURL)
             guard mode == syncMode else { return }
             lastSyncDate = result.syncedAt
             pendingChanges = 0
             devices = result.devices
             deviceCount = devices.count
             let synchronizedChanges = result.operationsWritten + result.mutationsApplied
-            let diagnostics = result.diagnostics
+            let diagnostics = result.diagnostics + audioDiagnostics
             if diagnostics.isEmpty {
                 statusMessage = String.localizedStringWithFormat(
                     String(localized: "Synced %lld changes."), Int64(synchronizedChanges)
