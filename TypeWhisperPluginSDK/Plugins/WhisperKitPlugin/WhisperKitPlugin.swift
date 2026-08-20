@@ -554,6 +554,7 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
                 downloadProgress = 0.05
 
                 var lastProgress = 0.0
+                try PluginHTTPClient.ensureNetworkAccessIsAllowed()
                 modelFolder = try await WhisperKit.download(
                     variant: modelDef.id,
                     downloadBase: downloadBase,
