@@ -2,12 +2,189 @@ import AppKit
 import SwiftUI
 import TypeWhisperPluginSDK
 
+struct PluginScreenshotPagination {
+    static let overlap: CGFloat = 48
+
+    static func pageOffsets(
+        contentHeight: CGFloat,
+        viewportHeight: CGFloat
+    ) -> [CGFloat] {
+        guard contentHeight > viewportHeight + 1, viewportHeight > overlap + 1 else {
+            return [0]
+        }
+
+        let maximumOffset = contentHeight - viewportHeight
+        let stride = viewportHeight - overlap
+        let additionalPageCount = Int(ceil(maximumOffset / stride))
+        return (0...additionalPageCount).map { pageIndex in
+            min(CGFloat(pageIndex) * stride, maximumOffset)
+        }
+    }
+}
+
+private struct PluginScreenshotScrollState: Codable {
+    let windowNumber: Int
+    let pageIndex: Int
+    let pageCount: Int
+    let contentHeight: Double
+    let viewportHeight: Double
+    let scrollOffset: Double
+    let backingScaleFactor: Double
+    let windowFrameHeight: Double
+    let titlebarHeight: Double
+    let scrollViewportMinY: Double
+    let scrollViewportMaxY: Double
+}
+
+@MainActor
+final class PluginSettingsScreenshotCaptureController {
+    private let window: NSWindow
+    private let readyFileURL: URL
+    private let commandFileURL: URL
+    private var scrollView: NSScrollView?
+    private var pageOffsets: [CGFloat] = [0]
+    private var contentHeight: CGFloat = 0
+    private var viewportHeight: CGFloat = 0
+    private var scrollViewportMinY: CGFloat = 0
+    private var scrollViewportMaxY: CGFloat = 0
+    private var lastCommand: String?
+    private var commandMonitor: Task<Void, Never>?
+
+    init(window: NSWindow, readyFileURL: URL, commandFileURL: URL) {
+        self.window = window
+        self.readyFileURL = readyFileURL
+        self.commandFileURL = commandFileURL
+    }
+
+    deinit {
+        commandMonitor?.cancel()
+    }
+
+    func start() {
+        window.contentView?.layoutSubtreeIfNeeded()
+        window.displayIfNeeded()
+
+        if let candidate = primaryScrollableView() {
+            scrollView = candidate
+            candidate.hasVerticalScroller = false
+            contentHeight = documentHeight(of: candidate)
+            viewportHeight = candidate.contentView.documentVisibleRect.height
+            let viewportRect = candidate.convert(candidate.bounds, to: nil)
+            scrollViewportMinY = viewportRect.minY
+            scrollViewportMaxY = viewportRect.maxY
+            pageOffsets = PluginScreenshotPagination.pageOffsets(
+                contentHeight: contentHeight,
+                viewportHeight: viewportHeight
+            )
+            scroll(toPage: 0)
+        } else {
+            contentHeight = window.contentLayoutRect.height
+            viewportHeight = contentHeight
+            scrollViewportMinY = 0
+            scrollViewportMaxY = viewportHeight
+        }
+
+        writeReadyState(pageIndex: 0)
+        guard pageOffsets.count > 1 else { return }
+
+        commandMonitor = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .milliseconds(100))
+                guard let self else { return }
+                self.processCommandIfNeeded()
+            }
+        }
+    }
+
+    private func processCommandIfNeeded() {
+        guard let value = try? String(contentsOf: commandFileURL, encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines),
+              !value.isEmpty,
+              value != lastCommand,
+              let pageIndex = Int(value),
+              pageOffsets.indices.contains(pageIndex) else { return }
+
+        lastCommand = value
+        scroll(toPage: pageIndex)
+
+        Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(250))
+            self?.writeReadyState(pageIndex: pageIndex)
+        }
+    }
+
+    private func scroll(toPage pageIndex: Int) {
+        guard let scrollView, let documentView = scrollView.documentView else { return }
+        let offset = pageOffsets[pageIndex]
+        let maximumOffset = max(0, contentHeight - viewportHeight)
+        let targetY = documentView.isFlipped ? offset : maximumOffset - offset
+        scrollView.contentView.scroll(
+            to: NSPoint(x: scrollView.contentView.bounds.minX, y: targetY)
+        )
+        scrollView.reflectScrolledClipView(scrollView.contentView)
+        window.displayIfNeeded()
+    }
+
+    private func writeReadyState(pageIndex: Int) {
+        let state = PluginScreenshotScrollState(
+            windowNumber: window.windowNumber,
+            pageIndex: pageIndex,
+            pageCount: pageOffsets.count,
+            contentHeight: contentHeight,
+            viewportHeight: viewportHeight,
+            scrollOffset: pageOffsets[pageIndex],
+            backingScaleFactor: window.backingScaleFactor,
+            windowFrameHeight: window.frame.height,
+            titlebarHeight: window.frame.height - window.contentLayoutRect.height,
+            scrollViewportMinY: scrollViewportMinY,
+            scrollViewportMaxY: scrollViewportMaxY
+        )
+
+        do {
+            let data = try JSONEncoder().encode(state)
+            try data.write(to: readyFileURL, options: .atomic)
+        } catch {
+            fputs("Could not write plugin screenshot state: \(error)\n", stderr)
+        }
+    }
+
+    private func primaryScrollableView() -> NSScrollView? {
+        guard let contentView = window.contentView else { return nil }
+        return scrollViews(in: contentView)
+            .filter { scrollView in
+                documentHeight(of: scrollView) > scrollView.contentView.documentVisibleRect.height + 1
+            }
+            .max { lhs, rhs in
+                let lhsOverflow = documentHeight(of: lhs) - lhs.contentView.documentVisibleRect.height
+                let rhsOverflow = documentHeight(of: rhs) - rhs.contentView.documentVisibleRect.height
+                if lhsOverflow == rhsOverflow {
+                    return lhs.contentView.bounds.width < rhs.contentView.bounds.width
+                }
+                return lhsOverflow < rhsOverflow
+            }
+    }
+
+    private func scrollViews(in view: NSView) -> [NSScrollView] {
+        let current = (view as? NSScrollView).map { [$0] } ?? []
+        return current + view.subviews.flatMap(scrollViews(in:))
+    }
+
+    private func documentHeight(of scrollView: NSScrollView) -> CGFloat {
+        guard let documentView = scrollView.documentView else { return 0 }
+        return max(documentView.bounds.height, documentView.frame.height)
+    }
+}
+
 @MainActor
 final class PluginSettingsWindowManager {
     static let shared = PluginSettingsWindowManager()
 
     private var windows: [String: NSWindow] = [:]
     private var delegates: [String: PluginSettingsWindowDelegate] = [:]
+
+    func managedWindow(for pluginId: String) -> NSWindow? {
+        windows[pluginId]
+    }
 
     func present(_ plugin: LoadedPlugin) {
         guard let settingsView = plugin.instance.settingsView else { return }

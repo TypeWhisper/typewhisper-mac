@@ -56,6 +56,10 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, @
     // MARK: - Keychain
 
     func storeSecret(key: String, value: String) throws {
+        if AppConstants.isScreenshotAutomation {
+            return
+        }
+
         let scopedService = "\(pluginId).\(key)"
         if value.isEmpty {
             try KeychainService.delete(service: scopedService)
@@ -65,6 +69,14 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, @
     }
 
     func loadSecret(key: String) -> String? {
+        if AppConstants.isScreenshotAutomation {
+            return ScreenshotPluginFixture.secret(
+                selectedPluginId: AppConstants.screenshotPluginId,
+                pluginId: pluginId,
+                key: key
+            )
+        }
+
         let scopedService = "\(pluginId).\(key)"
         return KeychainService.load(service: scopedService)
     }
@@ -157,6 +169,31 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, @
             MainActor.assumeIsolated {
                 body()
             }
+        }
+    }
+}
+
+enum ScreenshotPluginFixture {
+    static func secret(selectedPluginId: String?, pluginId: String, key: String) -> String? {
+        guard selectedPluginId == pluginId else { return nil }
+
+        switch key {
+        case "api-key":
+            return "tw-screenshot-api-key"
+        case let value where value.hasPrefix("api-key."):
+            return "tw-screenshot-api-key"
+        case "hf-token":
+            return "hf_tw_screenshot_fixture"
+        case "authorization-key":
+            return "tw-screenshot-authorization-key"
+        case "cf-client-id":
+            return "tw-screenshot-client-id"
+        case "cf-client-secret":
+            return "tw-screenshot-client-secret"
+        case "service-account-json":
+            return #"{"type":"service_account","project_id":"typewhisper-screenshot","private_key_id":"screenshot","private_key":"-----BEGIN PRIVATE KEY-----\nSCREENSHOT FIXTURE\n-----END PRIVATE KEY-----\n","client_email":"screenshots@typewhisper-screenshot.iam.gserviceaccount.com"}"#
+        default:
+            return nil
         }
     }
 }

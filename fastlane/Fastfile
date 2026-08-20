@@ -1,5 +1,7 @@
 require "cgi"
 require "fileutils"
+require "json"
+require "rbconfig"
 require "shellwords"
 require "tmpdir"
 require "timeout"
@@ -16,6 +18,7 @@ SCREENSHOT_APP_PATH = File.join(
   "TypeWhisper.app"
 )
 SCREENSHOT_BUNDLE_ID = "com.typewhisper.mac.screenshots"
+SCREENSHOT_ARCHITECTURE = RbConfig::CONFIG.fetch("host_cpu")
 SCREENSHOT_LANGUAGES = %w[en-US de-DE ja-JP zh-Hans].freeze
 SCREENSHOT_LOCALES = {
   "en-US" => "en_US",
@@ -23,6 +26,51 @@ SCREENSHOT_LOCALES = {
   "ja-JP" => "ja_JP",
   "zh-Hans" => "zh_Hans",
 }.freeze
+PLUGIN_SCREENSHOT_LANGUAGES = %w[en-US de-DE].freeze
+PLUGIN_SCREENSHOTS = [
+  { slug: "apple-speech", target: "SpeechAnalyzerPlugin", id: "com.typewhisper.speechanalyzer" },
+  { slug: "assemblyai", target: "AssemblyAIPlugin", id: "com.typewhisper.assemblyai" },
+  { slug: "cartesia", target: "CartesiaPlugin", id: "com.typewhisper.cartesia" },
+  { slug: "cerebras", target: "CerebrasPlugin", id: "com.typewhisper.cerebras" },
+  { slug: "claude", target: "ClaudePlugin", id: "com.typewhisper.claude" },
+  { slug: "cloudflare-asr", target: "CloudflareASRPlugin", id: "com.typewhisper.cloudflare-asr" },
+  { slug: "cohere", target: "CoherePlugin", id: "com.typewhisper.cohere" },
+  { slug: "cohere-local", target: "CohereLocalPlugin", id: "com.typewhisper.cohere-transcribe" },
+  { slug: "deepgram", target: "DeepgramPlugin", id: "com.typewhisper.deepgram" },
+  { slug: "elevenlabs", target: "ElevenLabsPlugin", id: "com.typewhisper.elevenlabs" },
+  { slug: "file-memory", target: "FileMemoryPlugin", id: "com.typewhisper.memory.file" },
+  { slug: "filler-words", target: "FillerWordsPlugin", id: "com.typewhisper.filler-words" },
+  { slug: "fireworks", target: "FireworksPlugin", id: "com.typewhisper.fireworks" },
+  { slug: "gemini", target: "GeminiPlugin", id: "com.typewhisper.gemini" },
+  { slug: "gemma4", target: "Gemma4Plugin", id: "com.typewhisper.gemma4", size: [560, 661] },
+  { slug: "gladia", target: "GladiaPlugin", id: "com.typewhisper.gladia" },
+  { slug: "google-cloud-stt", target: "GoogleCloudSTTPlugin", id: "com.typewhisper.google-cloud-stt" },
+  { slug: "granite", target: "GranitePlugin", id: "com.typewhisper.granite" },
+  { slug: "groq", target: "GroqPlugin", id: "com.typewhisper.groq" },
+  { slug: "improve-typewhisper", target: "ContributorPlugin", id: "com.typewhisper.improve" },
+  { slug: "linear", target: "LinearPlugin", id: "com.typewhisper.linear" },
+  { slug: "live-transcript", target: "LiveTranscriptPlugin", id: "com.typewhisper.livetranscript" },
+  { slug: "mcp-client", target: "MCPClientPlugin", id: "com.typewhisper.mcp-client" },
+  { slug: "mistral", target: "MistralAIPlugin", id: "com.minerale.mistralai" },
+  { slug: "obsidian", target: "ObsidianPlugin", id: "com.typewhisper.obsidian" },
+  { slug: "openai", target: "OpenAIPlugin", id: "com.typewhisper.openai", size: [560, 627] },
+  { slug: "openai-compatible", target: "OpenAICompatiblePlugin", id: "com.typewhisper.openai-compatible" },
+  { slug: "openai-vector-memory", target: "OpenAIVectorMemoryPlugin", id: "com.typewhisper.memory.openai-vector" },
+  { slug: "openrouter", target: "OpenRouterPlugin", id: "com.typewhisper.openrouter" },
+  { slug: "parakeet", target: "ParakeetPlugin", id: "com.typewhisper.parakeet" },
+  { slug: "qwen3-asr", target: "Qwen3Plugin", id: "com.typewhisper.qwen3", size: [560, 954] },
+  { slug: "reson8", target: "Reson8Plugin", id: "com.typewhisper.reson8" },
+  { slug: "sber-salutespeech", target: "SaluteSpeechPlugin", id: "com.typewhisper.sber-salutespeech" },
+  { slug: "script-runner", target: "ScriptPlugin", id: "com.typewhisper.script" },
+  { slug: "smallest-pulse", target: "SmallestAIPlugin", id: "com.typewhisper.smallest-pulse", size: [534, 414] },
+  { slug: "soniox", target: "SonioxPlugin", id: "com.typewhisper.soniox" },
+  { slug: "speechmatics", target: "SpeechmaticsPlugin", id: "com.typewhisper.speechmatics" },
+  { slug: "supertonic", target: "SupertonicPlugin", id: "com.typewhisper.tts.supertonic", size: [560, 536] },
+  { slug: "voxtral", target: "VoxtralPlugin", id: "com.typewhisper.voxtral" },
+  { slug: "webhook", target: "WebhookPlugin", id: "com.typewhisper.webhook" },
+  { slug: "whisperkit", target: "WhisperKitPlugin", id: "com.typewhisper.whisperkit", size: [560, 557] },
+  { slug: "xai-grok", target: "XAIPlugin", id: "com.typewhisper.xai" },
+].freeze
 FREE_SCREENSHOT_NAMES = %w[
   home
   general
@@ -87,6 +135,38 @@ def selected_screenshot_languages(value)
   requested
 end
 
+def selected_plugin_screenshot_languages(value)
+  requested = case value
+              when Array then value
+              else value.to_s.split(",")
+              end
+  requested = requested.map(&:strip).reject(&:empty?)
+  requested = PLUGIN_SCREENSHOT_LANGUAGES if requested.empty?
+
+  unsupported = requested - PLUGIN_SCREENSHOT_LANGUAGES
+  unless unsupported.empty?
+    UI.user_error!(
+      "Unsupported plugin screenshot languages: #{unsupported.join(', ')}. " \
+      "Website add-on assets support #{PLUGIN_SCREENSHOT_LANGUAGES.join(', ')}."
+    )
+  end
+  requested
+end
+
+def selected_plugin_screenshots(value)
+  requested = case value
+              when Array then value
+              else value.to_s.split(",")
+              end
+  requested = requested.map(&:strip).reject(&:empty?)
+  return PLUGIN_SCREENSHOTS if requested.empty?
+
+  available = PLUGIN_SCREENSHOTS.to_h { |plugin| [plugin.fetch(:slug), plugin] }
+  unsupported = requested - available.keys
+  UI.user_error!("Unknown plugin screenshot slugs: #{unsupported.join(', ')}") unless unsupported.empty?
+  requested.map { |slug| available.fetch(slug) }
+end
+
 def verify_raw_screenshots!(languages)
   expected = languages.flat_map do |language|
     SCREENSHOT_NAMES_BY_VARIANT.flat_map do |variant, names|
@@ -104,6 +184,23 @@ def verify_raw_screenshots!(languages)
     File.size(path) <= 100_000 || File.binread(path, 8) != png_signature
   end
   UI.user_error!("Invalid generated screenshots:\n#{invalid.join("\n")}") unless invalid.empty?
+end
+
+def verify_raw_plugin_screenshots!(languages, plugins)
+  expected = languages.flat_map do |language|
+    plugins.map do |plugin|
+      File.join(SCREENSHOT_OUTPUT, language, "plugins", "#{plugin.fetch(:slug)}.png")
+    end
+  end
+
+  missing = expected.reject { |path| File.file?(path) }
+  UI.user_error!("Missing generated plugin screenshots:\n#{missing.join("\n")}") unless missing.empty?
+
+  png_signature = "\x89PNG\r\n\x1A\n".b
+  invalid = expected.select do |path|
+    File.size(path) <= 100_000 || File.binread(path, 8) != png_signature
+  end
+  UI.user_error!("Invalid generated plugin screenshots:\n#{invalid.join("\n")}") unless invalid.empty?
 end
 
 def build_screenshot_app!
@@ -135,6 +232,48 @@ def build_screenshot_app!
     log: false
   )
   sh("/usr/bin/codesign --verify --deep --strict #{Shellwords.escape(SCREENSHOT_APP_PATH)}", log: false)
+end
+
+def plugin_screenshot_bundle_path(plugin)
+  File.join(
+    SCREENSHOT_DERIVED_DATA,
+    "Build",
+    "Products",
+    "Debug",
+    "#{plugin.fetch(:target)}.bundle"
+  )
+end
+
+def build_plugin_screenshot_targets!(plugins)
+  targets = plugins.map { |plugin| plugin.fetch(:target) }.uniq
+  command = [
+    "xcodebuild",
+    "-project", File.join(REPOSITORY_ROOT, "TypeWhisper.xcodeproj"),
+  ]
+  targets.each do |target|
+    command.concat(["-target", target])
+  end
+  command.concat([
+    "-configuration", "Debug",
+    "SYMROOT=#{File.join(SCREENSHOT_DERIVED_DATA, 'Build', 'Products')}",
+    "OBJROOT=#{File.join(SCREENSHOT_DERIVED_DATA, 'Build', 'Intermediates.noindex')}",
+    "SDKROOT=macosx",
+    "CODE_SIGN_IDENTITY=-",
+    "CODE_SIGN_STYLE=Manual",
+    "CODE_SIGNING_REQUIRED=YES",
+    "CODE_SIGNING_ALLOWED=YES",
+    "COMPILER_INDEX_STORE_ENABLE=NO",
+    "ARCHS=#{SCREENSHOT_ARCHITECTURE}",
+    "ONLY_ACTIVE_ARCH=YES",
+    "build",
+  ])
+  sh(Shellwords.join(command))
+
+  missing = plugins.filter_map do |plugin|
+    path = plugin_screenshot_bundle_path(plugin)
+    path unless File.directory?(path)
+  end
+  UI.user_error!("Missing built plugin bundles:\n#{missing.join("\n")}") unless missing.empty?
 end
 
 def screenshot_app_language(language)
@@ -257,6 +396,244 @@ def capture_screenshot!(language, state, variant, destination)
   end
 end
 
+def stage_plugin_screenshot_bundle!(plugin, app_support_directory)
+  source = plugin_screenshot_bundle_path(plugin)
+  UI.user_error!("Missing built plugin bundle: #{source}") unless File.directory?(source)
+
+  plugins_directory = File.join(app_support_directory, "Plugins")
+  FileUtils.mkdir_p(plugins_directory)
+  destination = File.join(plugins_directory, File.basename(source))
+  FileUtils.rm_rf(destination)
+  FileUtils.cp_r(source, destination)
+end
+
+def plugin_screenshot_launch_arguments(
+  language,
+  plugin,
+  ready_file,
+  app_support_directory,
+  scroll_command_file
+)
+  arguments = screenshot_launch_arguments(language, "plugins", "free", ready_file) + [
+    "--screenshot-plugin-id", plugin.fetch(:id),
+    "--screenshot-app-support", app_support_directory,
+    "--screenshot-scroll-command-file", scroll_command_file,
+  ]
+  if plugin[:size]
+    arguments.concat([
+      "--screenshot-window-width", plugin.fetch(:size).fetch(0).to_s,
+      "--screenshot-window-height", plugin.fetch(:size).fetch(1).to_s,
+    ])
+  end
+  arguments
+end
+
+def wait_for_plugin_screenshot_page!(ready_file, expected_page, process_id, log_file)
+  deadline = Time.now + SCREENSHOT_WINDOW_TIMEOUT
+  loop do
+    if File.file?(ready_file)
+      begin
+        state = JSON.parse(File.read(ready_file))
+        return state if state.fetch("pageIndex") == expected_page
+      rescue JSON::ParserError, KeyError
+        # The app writes the state atomically, but tolerate a stale or incomplete read.
+      end
+    end
+
+    begin
+      Process.kill(0, process_id)
+    rescue Errno::ESRCH
+      UI.user_error!("Screenshot app exited before page #{expected_page} was ready.\n#{screenshot_log_tail(log_file)}")
+    end
+
+    if Time.now >= deadline
+      UI.user_error!("Timed out waiting for plugin screenshot page #{expected_page}.\n#{screenshot_log_tail(log_file)}")
+    end
+    sleep(0.1)
+  end
+end
+
+def request_plugin_screenshot_page!(command_file, page_index)
+  temporary = "#{command_file}.tmp"
+  File.write(temporary, "#{page_index}\n")
+  File.rename(temporary, command_file)
+end
+
+def capture_plugin_screenshot_page!(window_id, destination)
+  sh(
+    "/usr/sbin/screencapture -x -l #{window_id} #{Shellwords.escape(destination)}",
+    log: false
+  )
+  unless File.file?(destination) && File.size(destination) > 100_000
+    UI.user_error!("Plugin screenshot page did not produce a valid PNG: #{destination}")
+  end
+end
+
+def plugin_screenshot_opaque_bounds!(magick, path)
+  output = Actions.sh(
+    Shellwords.join([
+      magick,
+      "-quiet",
+      path,
+      "-channel", "A",
+      "-threshold", "99%",
+      "-format", "%@ %w %h",
+      "info:",
+    ]),
+    log: false
+  ).strip
+  match = output.match(/\A(\d+)x(\d+)\+(\d+)\+(\d+)\s+(\d+)\s+(\d+)\z/)
+  UI.user_error!("Could not determine screenshot window bounds for #{path}: #{output}") unless match
+  {
+    opaque_width: Integer(match[1], 10),
+    opaque_height: Integer(match[2], 10),
+    opaque_x: Integer(match[3], 10),
+    opaque_y: Integer(match[4], 10),
+    image_width: Integer(match[5], 10),
+    image_height: Integer(match[6], 10),
+  }
+end
+
+def stitch_plugin_screenshot_pages!(page_paths, states, destination)
+  if page_paths.one?
+    FileUtils.mv(page_paths.first, destination)
+    return
+  end
+
+  magick = required_executable!("magick")
+  piece_paths = []
+  previous_document_end = 0.0
+
+  page_paths.each_with_index do |page_path, index|
+    state = states.fetch(index)
+    bounds = plugin_screenshot_opaque_bounds!(magick, page_path)
+    scale = Float(state.fetch("backingScaleFactor"))
+    content_top = bounds.fetch(:opaque_y) + (Float(state.fetch("titlebarHeight")) * scale).round
+    content_bottom = bounds.fetch(:opaque_y) + (Float(state.fetch("windowFrameHeight")) * scale).round
+    scroll_view_top = content_bottom - (Float(state.fetch("scrollViewportMaxY")) * scale).round
+    scroll_view_bottom = content_bottom - (Float(state.fetch("scrollViewportMinY")) * scale).round
+    seam_inset = (16 * scale).round
+    unless content_top.positive? &&
+           content_top <= scroll_view_top &&
+           scroll_view_top < scroll_view_bottom &&
+           scroll_view_bottom <= content_bottom &&
+           content_bottom <= bounds.fetch(:image_height)
+      UI.user_error!("Plugin screenshot window was clipped on page #{index}: #{page_path}")
+    end
+
+    crop_top = if index.zero?
+                 0
+               else
+                 overlap = [previous_document_end - Float(state.fetch("scrollOffset")), 0].max
+                 scroll_view_top + (overlap * scale).round - seam_inset
+               end
+    crop_bottom = if index == page_paths.length - 1
+                    bounds.fetch(:image_height)
+                  else
+                    scroll_view_bottom - seam_inset
+                  end
+    crop_height = crop_bottom - crop_top
+    UI.user_error!("Invalid plugin screenshot crop on page #{index}: #{page_path}") unless crop_height.positive?
+
+    piece_path = File.join(File.dirname(page_path), "piece-#{index}.png")
+    sh(
+      Shellwords.join([
+        magick,
+        page_path,
+        "-crop", "#{bounds.fetch(:image_width)}x#{crop_height}+0+#{crop_top}",
+        "+repage",
+        piece_path,
+      ]),
+      log: false
+    )
+    piece_paths << piece_path
+    previous_document_end = [
+      previous_document_end,
+      Float(state.fetch("scrollOffset")) + Float(state.fetch("viewportHeight")),
+    ].max
+  end
+
+  sh(Shellwords.join([magick, *piece_paths, "-append", "+repage", destination]), log: false)
+end
+
+def capture_plugin_screenshot!(language, plugin, destination)
+  executable = File.join(SCREENSHOT_APP_PATH, "Contents", "MacOS", "TypeWhisper")
+  reset_screenshot_defaults!
+
+  Dir.mktmpdir("typewhisper-plugin-screenshot-run") do |run_directory|
+    ready_file = File.join(run_directory, "window-ready.txt")
+    scroll_command_file = File.join(run_directory, "scroll-command.txt")
+    log_file = File.join(run_directory, "application.log")
+    home_directory = File.join(run_directory, "home")
+    app_support_directory = File.join(run_directory, "app-support")
+    FileUtils.mkdir_p(home_directory)
+    stage_plugin_screenshot_bundle!(plugin, app_support_directory)
+
+    environment = {
+      "CFFIXED_USER_HOME" => home_directory,
+      "LLVM_PROFILE_FILE" => File.join(run_directory, "%p.profraw"),
+      "NSUnbufferedIO" => "YES",
+    }
+    arguments = plugin_screenshot_launch_arguments(
+      language,
+      plugin,
+      ready_file,
+      app_support_directory,
+      scroll_command_file
+    )
+    log = File.open(log_file, "w")
+    process_id = Process.spawn(
+      environment,
+      executable,
+      *arguments,
+      chdir: REPOSITORY_ROOT,
+      out: log,
+      err: log
+    )
+    log.close
+
+    begin
+      first_state = wait_for_plugin_screenshot_page!(ready_file, 0, process_id, log_file)
+      page_count = Integer(first_state.fetch("pageCount"))
+      states = [first_state]
+      page_paths = []
+
+      page_count.times do |page_index|
+        if page_index.positive?
+          request_plugin_screenshot_page!(scroll_command_file, page_index)
+          states << wait_for_plugin_screenshot_page!(ready_file, page_index, process_id, log_file)
+        end
+        page_path = File.join(run_directory, "page-#{page_index}.png")
+        capture_plugin_screenshot_page!(Integer(states.fetch(page_index).fetch("windowNumber")), page_path)
+        page_paths << page_path
+      end
+
+      stitch_plugin_screenshot_pages!(page_paths, states, destination)
+      unless File.file?(destination) && File.size(destination) > 100_000
+        UI.user_error!("Plugin screenshot capture did not produce a valid PNG: #{destination}")
+      end
+    ensure
+      stop_screenshot_app(process_id)
+      reset_screenshot_defaults!
+    end
+  end
+end
+
+def capture_plugin_screenshot_language!(language, plugins)
+  UI.header("Capturing #{language} plugin screenshots")
+  destination = File.join(SCREENSHOT_OUTPUT, language, "plugins")
+  FileUtils.mkdir_p(destination)
+
+  plugins.each do |plugin|
+    UI.message("#{language} / #{plugin.fetch(:slug)}")
+    capture_plugin_screenshot!(
+      language,
+      plugin,
+      File.join(destination, "#{plugin.fetch(:slug)}.png")
+    )
+  end
+end
+
 def capture_screenshot_language!(language)
   UI.header("Capturing #{language} screenshots")
   destination = File.join(SCREENSHOT_OUTPUT, language)
@@ -344,6 +721,75 @@ def publish_english_screenshots!
   end
 end
 
+def required_executable!(name)
+  directory = ENV.fetch("PATH", "").split(File::PATH_SEPARATOR).find do |directory|
+    candidate = File.join(directory, name)
+    File.file?(candidate) && File.executable?(candidate)
+  end
+  path = File.join(directory, name) if directory
+  UI.user_error!("Required executable is unavailable: #{name}") unless path
+  path
+end
+
+def validated_website_path(value)
+  UI.user_error!("Pass website_path:/absolute/path/to/typewhisper.com") if value.to_s.strip.empty?
+  path = File.expand_path(value.to_s)
+  required = [
+    File.join(path, "package.json"),
+    File.join(path, "public", "screenshots"),
+  ]
+  missing = required.reject { |candidate| File.exist?(candidate) }
+  UI.user_error!("Not a TypeWhisper website checkout: #{path}") unless missing.empty?
+  path
+end
+
+def publish_plugin_screenshots!(website_path, languages, plugins)
+  verify_raw_plugin_screenshots!(languages, plugins)
+  cwebp = required_executable!("cwebp")
+  oxipng = required_executable!("oxipng")
+  identify = required_executable!("identify")
+  locale_directories = {
+    "en-US" => "en",
+    "de-DE" => "de",
+  }
+  published_pngs = []
+
+  languages.each do |language|
+    locale = locale_directories.fetch(language)
+    plugins.each do |plugin|
+      slug = plugin.fetch(:slug)
+      source = File.join(SCREENSHOT_OUTPUT, language, "plugins", "#{slug}.png")
+      localized = File.join(website_path, "public", "screenshots", locale, "plugins", "#{slug}.png")
+      FileUtils.mkdir_p(File.dirname(localized))
+      FileUtils.cp(source, localized)
+      published_pngs << localized
+
+      next unless language == "en-US"
+
+      fallback = File.join(website_path, "public", "screenshots", "plugins", "#{slug}.png")
+      FileUtils.mkdir_p(File.dirname(fallback))
+      FileUtils.cp(source, fallback)
+      published_pngs << fallback
+    end
+  end
+
+  published_pngs.uniq.each do |png|
+    webp = png.sub(/\.png\z/, ".webp")
+    sh(Shellwords.join([cwebp, "-quiet", "-q", "85", png, "-o", webp]), log: false)
+  end
+  sh(
+    Shellwords.join([oxipng, "-o", "4", "--strip", "safe", *published_pngs.uniq]),
+    log: false
+  )
+
+  published_assets = published_pngs.uniq.flat_map { |png| [png, png.sub(/\.png\z/, ".webp")] }
+  sh(
+    Shellwords.join([identify, "-format", "%f %wx%h %b\\n", *published_assets]),
+    log: false
+  )
+  UI.success("Published #{published_assets.count} optimized website plugin screenshot assets")
+end
+
 default_platform(:mac)
 
 platform :mac do
@@ -371,5 +817,40 @@ platform :mac do
   desc "Validate the committed README screenshot gallery"
   lane :screenshots_check do
     update_readme_screenshot_block!(check: true)
+  end
+
+  desc "Capture localized add-on screenshots for first-party plugin settings windows"
+  lane :plugin_screenshots do |options|
+    languages = selected_plugin_screenshot_languages(options[:languages])
+    plugins = selected_plugin_screenshots(options[:plugins])
+    unless options[:skip_build].to_s.casecmp("true").zero?
+      build_screenshot_app!
+      build_plugin_screenshot_targets!(plugins)
+    end
+    UI.user_error!("Missing screenshot app: #{SCREENSHOT_APP_PATH}") unless File.directory?(SCREENSHOT_APP_PATH)
+    languages.each { |language| capture_plugin_screenshot_language!(language, plugins) }
+    verify_raw_plugin_screenshots!(languages, plugins)
+  end
+
+  desc "Optimize and publish generated plugin screenshots into a typewhisper.com checkout"
+  lane :plugin_screenshots_publish do |options|
+    languages = selected_plugin_screenshot_languages(options[:languages])
+    plugins = selected_plugin_screenshots(options[:plugins])
+    website_path = validated_website_path(options[:website_path])
+    publish_plugin_screenshots!(website_path, languages, plugins)
+  end
+
+  desc "Capture plugin screenshots and publish their PNG/WebP website assets"
+  lane :plugin_screenshots_release do |options|
+    plugin_screenshots(
+      languages: options[:languages],
+      plugins: options[:plugins],
+      skip_build: options[:skip_build]
+    )
+    plugin_screenshots_publish(
+      languages: options[:languages],
+      plugins: options[:plugins],
+      website_path: options[:website_path]
+    )
   end
 end

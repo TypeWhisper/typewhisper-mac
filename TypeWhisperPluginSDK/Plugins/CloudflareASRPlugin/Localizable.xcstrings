@@ -3,6 +3,12 @@
   "strings": {
     "API Key": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "API-Schlüssel"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -19,6 +25,12 @@
     },
     "All credentials are stored securely in the macOS Keychain.": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Alle Zugangsdaten werden sicher im macOS-Schlüsselbund gespeichert."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -35,6 +47,12 @@
     },
     "Cloudflare Tunnel Auth": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cloudflare-Tunnel-Authentifizierung"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -51,6 +69,12 @@
     },
     "Connected": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbunden"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -67,6 +91,12 @@
     },
     "Connection Failed": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbindung fehlgeschlagen"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -81,8 +111,36 @@
         }
       }
     },
+    "e.g. https://asr.example.com": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "z. B. https://asr.example.com"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "例: https://asr.example.com"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "例如：https://asr.example.com"
+          }
+        }
+      }
+    },
     "Model": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modell"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -99,6 +157,12 @@
     },
     "Model name": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modellname"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -115,6 +179,12 @@
     },
     "No models found. Enter model name manually.": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Modelle gefunden. Gib den Modellnamen manuell ein."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -131,6 +201,12 @@
     },
     "None": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keines"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -147,6 +223,12 @@
     },
     "Optional Bearer token for the upstream API behind the tunnel.": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Optionales Bearer-Token für die Upstream-API hinter dem Tunnel."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -163,6 +245,12 @@
     },
     "Refresh": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aktualisieren"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -179,6 +267,12 @@
     },
     "Save": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speichern"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -195,6 +289,12 @@
     },
     "Server URL": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Server-URL"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -211,6 +311,12 @@
     },
     "Service token credentials for Cloudflare Access. Stored in macOS Keychain.": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zugangsdaten für das Service-Token von Cloudflare Access. Sie werden im macOS-Schlüsselbund gespeichert."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -227,6 +333,12 @@
     },
     "Test Connection": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbindung testen"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -243,6 +355,12 @@
     },
     "Testing...": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wird getestet …"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -259,6 +377,12 @@
     },
     "Transcription Model": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkriptionsmodell"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",

@@ -74,13 +74,15 @@ public enum PluginHTTPClient {
     }
 
     public static func data(for request: URLRequest) async throws -> (Data, URLResponse) {
-        try await data(for: request, allowsRetry: true)
+        try ensureNetworkAccessIsAllowed()
+        return try await data(for: request, allowsRetry: true)
     }
 
     public static func data(
         for request: URLRequest,
         resourceTimeout: TimeInterval?
     ) async throws -> (Data, URLResponse) {
+        try ensureNetworkAccessIsAllowed()
         guard let resourceTimeout, resourceTimeout > longRunningResourceTimeout else {
             return try await data(for: request, allowsRetry: true)
         }
@@ -95,6 +97,20 @@ public enum PluginHTTPClient {
         let url = request.url?.absoluteString ?? "unknown"
         logger.info("\(method) \(url) (dedicated session, resourceTimeout=\(resourceTimeout))")
         return try await session.data(for: request)
+    }
+
+    private static func ensureNetworkAccessIsAllowed() throws {
+        guard networkAccessAllowed(arguments: ProcessInfo.processInfo.arguments) else {
+            throw URLError(.notConnectedToInternet)
+        }
+    }
+
+    static func networkAccessAllowed(arguments: [String]) -> Bool {
+        #if DEBUG
+        return !arguments.contains("--store-screenshots")
+        #else
+        return true
+        #endif
     }
 
     public static func resetSharedSession(reason: String? = nil) {

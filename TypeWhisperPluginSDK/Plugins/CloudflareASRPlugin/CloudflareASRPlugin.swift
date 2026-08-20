@@ -408,7 +408,10 @@ private struct CloudflareASRSettingsView: View {
                 Text("Server URL", bundle: bundle)
                     .font(.headline)
 
-                TextField("e.g. https://asr.example.com", text: $baseURLInput)
+                TextField(
+                    String(localized: "e.g. https://asr.example.com", bundle: bundle),
+                    text: $baseURLInput
+                )
                     .textFieldStyle(.roundedBorder)
                     .font(.system(.body, design: .monospaced))
             }

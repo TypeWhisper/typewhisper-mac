@@ -16,9 +16,30 @@ enum AppConstants {
         return screenshotArgumentValue(after: "--screenshot-state")
     }()
 
+    static let screenshotPluginId: String? = {
+        guard isScreenshotAutomation else { return nil }
+        return screenshotArgumentValue(after: "--screenshot-plugin-id")
+    }()
+
+    static let screenshotPluginWindowSize: CGSize? = {
+        guard isScreenshotAutomation,
+              let widthValue = screenshotArgumentValue(after: "--screenshot-window-width"),
+              let heightValue = screenshotArgumentValue(after: "--screenshot-window-height"),
+              let width = Double(widthValue), width > 0,
+              let height = Double(heightValue), height > 0 else { return nil }
+        return CGSize(width: width, height: height)
+    }()
+
     static let screenshotReadyFileURL: URL? = {
         guard isScreenshotAutomation,
               let path = screenshotArgumentValue(after: "--screenshot-ready-file"),
+              path.hasPrefix("/") else { return nil }
+        return URL(fileURLWithPath: path)
+    }()
+
+    static let screenshotScrollCommandFileURL: URL? = {
+        guard isScreenshotAutomation,
+              let path = screenshotArgumentValue(after: "--screenshot-scroll-command-file"),
               path.hasPrefix("/") else { return nil }
         return URL(fileURLWithPath: path)
     }()
@@ -129,7 +150,12 @@ enum AppConstants {
     }
 
     private static let screenshotAppSupportDirectory: URL = {
-        FileManager.default.temporaryDirectory
+        if let override = screenshotArgumentValue(after: "--screenshot-app-support"),
+           override.hasPrefix("/") {
+            return URL(fileURLWithPath: override, isDirectory: true)
+        }
+
+        return FileManager.default.temporaryDirectory
             .appendingPathComponent(
                 "TypeWhisper-Screenshots-\(ProcessInfo.processInfo.processIdentifier)",
                 isDirectory: true

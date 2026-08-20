@@ -72,6 +72,15 @@ final class PluginHTTPClientTests: XCTestCase {
         XCTAssertEqual(store.sessions.first?.requestedRequests.first?.timeoutInterval, 600)
     }
 
+    func testHTTPClientDisablesNetworkForScreenshotAutomation() {
+        XCTAssertFalse(
+            PluginHTTPClient.networkAccessAllowed(arguments: ["TypeWhisper", "--store-screenshots"])
+        )
+        XCTAssertTrue(
+            PluginHTTPClient.networkAccessAllowed(arguments: ["TypeWhisper", "--ui-testing"])
+        )
+    }
+
     private static func request(path: String) -> URLRequest {
         var request = URLRequest(url: URL(string: "https://example.test\(path)")!)
         request.httpMethod = "POST"

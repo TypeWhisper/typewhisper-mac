@@ -3,6 +3,12 @@
   "strings": {
     "Cloud Speech-to-Text API is not enabled for this Google Cloud project. Enable speech.googleapis.com in Google Cloud, wait a few minutes, and retry.": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Cloud Speech-to-Text API ist für dieses Google-Cloud-Projekt nicht aktiviert. Aktiviere speech.googleapis.com in Google Cloud, warte einige Minuten und versuche es erneut."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -19,6 +25,12 @@
     },
     "Credentials look valid and Speech-to-Text is reachable.": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Zugangsdaten sind gültig und Speech-to-Text ist erreichbar."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -35,6 +47,12 @@
     },
     "Default Language": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Standardsprache"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -51,6 +69,12 @@
     },
     "Google Cloud billing is not enabled for this project. Enable billing for the project and retry.": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Für dieses Projekt ist die Google-Cloud-Abrechnung nicht aktiviert. Aktiviere die Abrechnung für das Projekt und versuche es erneut."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -67,6 +91,12 @@
     },
     "Google Cloud rate-limited the request. Please wait a moment and retry.": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google Cloud hat die Anfrage gedrosselt. Warte kurz und versuche es erneut."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -83,6 +113,12 @@
     },
     "Google denied access to Speech-to-Text. Make sure the API is enabled and the service account has the Cloud Speech Client role.": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google hat den Zugriff auf Speech-to-Text verweigert. Stelle sicher, dass die API aktiviert ist und das Dienstkonto die Rolle „Cloud Speech Client“ besitzt."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -99,6 +135,12 @@
     },
     "Google rejected the service-account credentials.": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google hat die Dienstkonto-Zugangsdaten abgelehnt."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -115,6 +157,12 @@
     },
     "Google rejected the service-account credentials. Check that you pasted the full JSON key file for the correct project.": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google hat die Dienstkonto-Zugangsdaten abgelehnt. Prüfe, ob du die vollständige JSON-Schlüsseldatei für das richtige Projekt eingefügt hast."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -131,6 +179,12 @@
     },
     "Google Speech-to-Text does not accept simple API keys. Paste a Google Cloud service-account JSON key here. Credentials are stored in the macOS Keychain.": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Google Speech-to-Text akzeptiert keine einfachen API-Schlüssel. Füge hier den JSON-Schlüssel eines Google-Cloud-Dienstkontos ein. Die Zugangsdaten werden im macOS-Schlüsselbund gespeichert."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -147,6 +201,12 @@
     },
     "If TypeWhisper already passes a spoken language, that value wins. Otherwise this BCP-47 code is used for Google recognition requests.": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wenn TypeWhisper bereits eine gesprochene Sprache übergibt, hat dieser Wert Vorrang. Andernfalls wird dieser BCP-47-Code für die Spracherkennungsanfragen an Google verwendet."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -163,6 +223,12 @@
     },
     "Model": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modell"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -179,6 +245,12 @@
     },
     "No Google recognition model is selected.": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Es ist kein Google-Spracherkennungsmodell ausgewählt."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -195,6 +267,12 @@
     },
     "No service-account JSON is configured yet.": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Es ist noch kein Dienstkonto-JSON konfiguriert."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -211,6 +289,12 @@
     },
     "Remove": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entfernen"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -227,6 +311,12 @@
     },
     "Replace Credentials": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zugangsdaten ersetzen"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -243,6 +333,12 @@
     },
     "Save Credentials": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zugangsdaten speichern"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -259,6 +355,12 @@
     },
     "Service Account JSON": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Dienstkonto-JSON"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -275,6 +377,12 @@
     },
     "Stored credentials are active. Paste a new JSON key above to replace them.": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die gespeicherten Zugangsdaten sind aktiv. Füge oben einen neuen JSON-Schlüssel ein, um sie zu ersetzen."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -291,6 +399,12 @@
     },
     "Test Stored Credentials": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gespeicherte Zugangsdaten testen"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -307,6 +421,12 @@
     },
     "The JSON could not be parsed. Paste the full Google service-account JSON file.": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das JSON konnte nicht gelesen werden. Füge die vollständige JSON-Datei des Google-Dienstkontos ein."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -323,6 +443,12 @@
     },
     "The verification audio was rejected as too large.": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Audiodatei zur Überprüfung wurde als zu groß abgelehnt."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -339,6 +465,12 @@
     },
     "Use `default` or `command_and_search` for the broadest language coverage. The newer `latest_*` models can be more restrictive depending on language support.": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verwende `default` oder `command_and_search`, um möglichst viele Sprachen abzudecken. Die neueren `latest_*`-Modelle können je nach Sprachunterstützung stärker eingeschränkt sein."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -355,6 +487,12 @@
     },
     "Validating...": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wird überprüft …"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",

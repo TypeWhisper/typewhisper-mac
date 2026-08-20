@@ -47,6 +47,30 @@ Capture every locale, publish English, and validate the README gallery
 
 Validate the committed README screenshot gallery
 
+### mac plugin_screenshots
+
+```sh
+[bundle exec] fastlane mac plugin_screenshots
+```
+
+Capture localized add-on screenshots for first-party plugin settings windows
+
+### mac plugin_screenshots_publish
+
+```sh
+[bundle exec] fastlane mac plugin_screenshots_publish
+```
+
+Optimize and publish generated plugin screenshots into a typewhisper.com checkout
+
+### mac plugin_screenshots_release
+
+```sh
+[bundle exec] fastlane mac plugin_screenshots_release
+```
+
+Capture plugin screenshots and publish their PNG/WebP website assets
+
 ----
 
 This README.md is auto-generated and will be re-generated every time [_fastlane_](https://fastlane.tools) is run.

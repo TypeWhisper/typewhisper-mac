@@ -635,6 +635,11 @@ final class PluginManager: ObservableObject {
     }
 
     private func resolvedEnabledState(for manifest: PluginManifest, isBundledSource: Bool) -> Bool {
+        if AppConstants.isScreenshotAutomation,
+           AppConstants.screenshotPluginId == manifest.id {
+            return true
+        }
+
         let enabledKey = "plugin.\(manifest.id).enabled"
         if let stored = UserDefaults.standard.object(forKey: enabledKey) as? Bool {
             return stored

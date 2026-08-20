@@ -639,6 +639,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
     private var appActivationObserver: NSObjectProtocol?
     private var workspaceWakeObserver: NSObjectProtocol?
     private var hasInteractiveForegroundContent = false
+    private var pluginScreenshotCaptureController: PluginSettingsScreenshotCaptureController?
     private lazy var updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: self, userDriverDelegate: nil)
 
     var updateChecker: UpdateChecker {
@@ -851,6 +852,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
     }
 
     private func openScreenshotWindow() {
+        if let pluginId = AppConstants.screenshotPluginId {
+            openScreenshotPluginWindow(pluginId: pluginId)
+            return
+        }
+
         guard let destination = screenshotPremiumDestination else {
             openSettingsWindow()
             prepareScreenshotSettingsWindow()
@@ -859,6 +865,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
 
         PremiumSettingsWindowManager.shared.present(destination)
         prepareScreenshotPremiumWindow(destination)
+    }
+
+    private func openScreenshotPluginWindow(pluginId: String) {
+        guard let plugin = PluginManager.shared.loadedPlugins.first(where: { $0.id == pluginId }) else {
+            fputs("Screenshot plugin was not loaded: \(pluginId)\n", stderr)
+            NSApp.terminate(nil)
+            return
+        }
+        guard plugin.supportsSettingsWindow else {
+            fputs("Screenshot plugin has no settings window: \(pluginId)\n", stderr)
+            NSApp.terminate(nil)
+            return
+        }
+
+        PluginSettingsWindowManager.shared.present(plugin)
+        prepareScreenshotPluginWindow(pluginId: pluginId)
     }
 
     private func prepareScreenshotSettingsWindow(remainingAttempts: Int = 8) {
@@ -905,7 +927,56 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
         prepareScreenshotWindow(window, contentSize: contentSize)
     }
 
-    private func prepareScreenshotWindow(_ window: NSWindow, contentSize: NSSize? = nil) {
+    private func prepareScreenshotPluginWindow(
+        pluginId: String,
+        remainingAttempts: Int = 8
+    ) {
+        guard AppConstants.isScreenshotAutomation else { return }
+
+        guard let window = PluginSettingsWindowManager.shared.managedWindow(for: pluginId) else {
+            guard remainingAttempts > 0 else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                self.prepareScreenshotPluginWindow(
+                    pluginId: pluginId,
+                    remainingAttempts: remainingAttempts - 1
+                )
+            }
+            return
+        }
+
+        var contentSize = AppConstants.screenshotPluginWindowSize
+        if let requestedSize = contentSize,
+           let visibleFrame = window.screen?.visibleFrame ?? NSScreen.main?.visibleFrame {
+            let titlebarHeight = window.frame.height - window.contentLayoutRect.height
+            let maximumHeight = max(400, visibleFrame.height - titlebarHeight - 80)
+            contentSize = NSSize(width: requestedSize.width, height: min(requestedSize.height, maximumHeight))
+        }
+
+        guard let readyFileURL = AppConstants.screenshotReadyFileURL,
+              let commandFileURL = AppConstants.screenshotScrollCommandFileURL else {
+            prepareScreenshotWindow(window, contentSize: contentSize)
+            return
+        }
+
+        prepareScreenshotWindow(window, contentSize: contentSize, writesReadyMarker: false)
+        Task { @MainActor [weak self, weak window] in
+            try? await Task.sleep(for: .seconds(1))
+            guard let self, let window else { return }
+            let controller = PluginSettingsScreenshotCaptureController(
+                window: window,
+                readyFileURL: readyFileURL,
+                commandFileURL: commandFileURL
+            )
+            self.pluginScreenshotCaptureController = controller
+            controller.start()
+        }
+    }
+
+    private func prepareScreenshotWindow(
+        _ window: NSWindow,
+        contentSize: NSSize? = nil,
+        writesReadyMarker: Bool = true
+    ) {
         if let contentSize {
             window.setContentSize(contentSize)
         }
@@ -913,7 +984,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
 
-        guard let readyFileURL = AppConstants.screenshotReadyFileURL else { return }
+        guard writesReadyMarker,
+              let readyFileURL = AppConstants.screenshotReadyFileURL else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 1) {
             do {
                 try "\(window.windowNumber)\n".write(

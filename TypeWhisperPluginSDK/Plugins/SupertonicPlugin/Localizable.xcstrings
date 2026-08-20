@@ -3,6 +3,12 @@
   "strings": {
     "Balanced": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ausgewogen"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -19,6 +25,12 @@
     },
     "Delete cached model": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Zwischengespeichertes Modell löschen"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -35,6 +47,12 @@
     },
     "Download & Load": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Herunterladen und laden"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -51,6 +69,12 @@
     },
     "Fast": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schnell"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -67,6 +91,12 @@
     },
     "High": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hoch"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -83,6 +113,12 @@
     },
     "Hugging Face Token": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hugging-Face-Token"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -99,6 +135,12 @@
     },
     "I have read and accept the Supertonic 3 model license terms": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ich habe die Lizenzbedingungen für das Supertonic-3-Modell gelesen und akzeptiere sie"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -115,6 +157,12 @@
     },
     "Invalid Hugging Face token": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ungültiges Hugging-Face-Token"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -131,6 +179,12 @@
     },
     "Local text-to-speech powered by Supertonic 3 ONNX models. Model assets are downloaded only after you accept the model license.": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lokale Text-zu-Sprache-Ausgabe mit den ONNX-Modellen von Supertonic 3. Die Modelldateien werden erst heruntergeladen, nachdem du die Modelllizenz akzeptiert hast."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -147,6 +201,12 @@
     },
     "Model": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modell"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -163,6 +223,12 @@
     },
     "Model License": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modelllizenz"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -179,6 +245,12 @@
     },
     "Open Supertonic 3 OpenRAIL-M license": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OpenRAIL-M-Lizenz für Supertonic 3 öffnen"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -195,6 +267,12 @@
     },
     "Optional. It can increase download rate limits for the model download.": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Optional. Das Token kann die Download-Limits für das Modell erhöhen."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -211,6 +289,12 @@
     },
     "Quality": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qualität"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -227,6 +311,12 @@
     },
     "Ready": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bereit"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -243,6 +333,12 @@
     },
     "Remove": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entfernen"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -259,6 +355,12 @@
     },
     "Save": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speichern"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -275,6 +377,12 @@
     },
     "Speed": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Geschwindigkeit"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -291,6 +399,12 @@
     },
     "Supertonic (Experimental)": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Supertonic (experimentell)"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -307,6 +421,12 @@
     },
     "Supertonic 3 model assets are licensed under OpenRAIL-M and include use restrictions. Review the full license before downloading the model.": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Modelldateien von Supertonic 3 stehen unter der OpenRAIL-M-Lizenz und unterliegen Nutzungsbeschränkungen. Lies vor dem Download die vollständige Lizenz."
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -323,6 +443,12 @@
     },
     "Valid Hugging Face token": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gültiges Hugging-Face-Token"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
@@ -339,6 +465,12 @@
     },
     "Voice": {
       "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stimme"
+          }
+        },
         "ja": {
           "stringUnit": {
             "state": "translated",
