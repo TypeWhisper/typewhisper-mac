@@ -94,6 +94,88 @@ final class StreamingHandlerTests: XCTestCase {
         }
     }
 
+    private actor BlockingPreviewFallbackRecorder {
+        private var activeTranscriptions = 0
+        private var maxConcurrentTranscriptions = 0
+        private var prompts: [String?] = []
+        private var firstCallReleased = false
+        private var firstCallReleaseContinuation: CheckedContinuation<Void, Never>?
+
+        func begin(prompt: String?) -> Int {
+            activeTranscriptions += 1
+            maxConcurrentTranscriptions = max(maxConcurrentTranscriptions, activeTranscriptions)
+            prompts.append(prompt)
+            return prompts.count
+        }
+
+        func waitForFirstCallRelease() async {
+            guard !firstCallReleased else { return }
+            await withCheckedContinuation { continuation in
+                firstCallReleaseContinuation = continuation
+            }
+        }
+
+        func releaseFirstCall() {
+            guard !firstCallReleased else { return }
+            firstCallReleased = true
+            firstCallReleaseContinuation?.resume()
+            firstCallReleaseContinuation = nil
+        }
+
+        func end() {
+            activeTranscriptions -= 1
+        }
+
+        func snapshot() -> (callCount: Int, maxConcurrentTranscriptions: Int, prompts: [String?]) {
+            (prompts.count, maxConcurrentTranscriptions, prompts)
+        }
+    }
+
+    private final class MockBlockingPreviewFallbackPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
+        static var pluginId: String { "com.typewhisper.mock.blocking-preview-fallback" }
+        static var pluginName: String { "Mock Blocking Preview Fallback" }
+
+        var providerId: String { "mock-blocking-preview-fallback" }
+        var providerDisplayName: String { "Mock Blocking Preview Fallback" }
+        var isConfigured: Bool { true }
+        var transcriptionModels: [PluginModelInfo] { [] }
+        var selectedModelId: String? { nil }
+        var supportsTranslation: Bool { false }
+        var supportsStreaming: Bool { true }
+        var supportedLanguages: [String] { ["en"] }
+
+        private let recorder = BlockingPreviewFallbackRecorder()
+
+        func activate(host: HostServices) {}
+        func deactivate() {}
+        func selectModel(_ modelId: String) {}
+
+        func transcribe(
+            audio: AudioData,
+            language: String?,
+            translate: Bool,
+            prompt: String?
+        ) async throws -> PluginTranscriptionResult {
+            let callIndex = await recorder.begin(prompt: prompt)
+            if callIndex == 1 {
+                await recorder.waitForFirstCallRelease()
+            }
+            await recorder.end()
+            return PluginTranscriptionResult(
+                text: "result-\(prompt ?? "none")",
+                detectedLanguage: language
+            )
+        }
+
+        func releaseFirstCall() async {
+            await recorder.releaseFirstCall()
+        }
+
+        func snapshot() async -> (callCount: Int, maxConcurrentTranscriptions: Int, prompts: [String?]) {
+            await recorder.snapshot()
+        }
+    }
+
     private final class MockPreviewFallbackOptOutPlugin: NSObject, TranscriptionEnginePlugin, TranscriptPreviewFallbackPolicyProviding, @unchecked Sendable {
         static var pluginId: String { "com.typewhisper.mock.preview-opt-out" }
         static var pluginName: String { "Mock Preview Opt Out" }
@@ -1000,6 +1082,93 @@ final class StreamingHandlerTests: XCTestCase {
         XCTAssertEqual(snapshot.callCount, 1)
         XCTAssertEqual(snapshot.maxConcurrentTranscriptions, 1)
         XCTAssertEqual(snapshot.prompts, ["Final Terms"])
+    }
+
+    func testFinishWaitsForInFlightFallbackPreviewBeforeFinalTranscription() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let plugin = MockBlockingPreviewFallbackPlugin()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.blocking-preview-fallback",
+                    name: "Mock Blocking Preview Fallback",
+                    version: "1.0.0",
+                    principalClass: "MockBlockingPreviewFallbackPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider(plugin.providerId)
+
+        let handler = StreamingHandler(
+            modelManager: modelManager,
+            bufferProvider: {
+                XCTFail("full buffer provider should not be used for fallback previews")
+                return []
+            },
+            recentBufferProvider: { _ in Array(repeating: 0.5, count: 16_000) },
+            bufferDeltaProvider: { _ in ([], 0) },
+            bufferedDurationProvider: { 1.0 }
+        )
+
+        handler.start(
+            streamPrompt: "Preview Terms",
+            engineOverrideId: plugin.providerId,
+            selectedProviderId: plugin.providerId,
+            languageSelection: .exact("en"),
+            task: .transcribe,
+            cloudModelOverride: nil,
+            allowLiveTranscription: true,
+            stateCheck: { true }
+        )
+
+        var previewStarted = false
+        for _ in 0..<50 {
+            if await plugin.snapshot().callCount == 1 {
+                previewStarted = true
+                break
+            }
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        XCTAssertTrue(previewStarted)
+        guard previewStarted else {
+            handler.stop()
+            return
+        }
+
+        let finalTask = Task { @MainActor in
+            _ = await handler.finish()
+            return try await modelManager.transcribe(
+                audioSamples: Array(repeating: 0.5, count: 16_000),
+                languageSelection: .exact("en"),
+                task: .transcribe,
+                engineOverrideId: plugin.providerId,
+                cloudModelOverride: nil,
+                prompt: "Final Terms"
+            )
+        }
+
+        try await Task.sleep(for: .milliseconds(100))
+        let blockedSnapshot = await plugin.snapshot()
+        XCTAssertEqual(blockedSnapshot.callCount, 1)
+        XCTAssertEqual(blockedSnapshot.maxConcurrentTranscriptions, 1)
+
+        await plugin.releaseFirstCall()
+        let finalResult = try await finalTask.value
+        let finalSnapshot = await plugin.snapshot()
+
+        XCTAssertEqual(finalResult.text, "result-Final Terms")
+        XCTAssertEqual(finalSnapshot.callCount, 2)
+        XCTAssertEqual(finalSnapshot.maxConcurrentTranscriptions, 1)
+        XCTAssertEqual(finalSnapshot.prompts, ["Preview Terms", "Final Terms"])
     }
 
     func testLiveSessionConsumesOnlyIncrementalAudioDeltas() async throws {

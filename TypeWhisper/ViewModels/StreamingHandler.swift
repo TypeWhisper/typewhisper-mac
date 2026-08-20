@@ -181,8 +181,13 @@ final class StreamingHandler: @unchecked Sendable {
         let finishStart = CFAbsoluteTimeGetCurrent()
         func elapsedMs() -> String { String(format: "%.0f", (CFAbsoluteTimeGetCurrent() - finishStart) * 1000) }
 
-        streamingTask?.cancel()
+        let previewTask = streamingTask
         streamingTask = nil
+        previewTask?.cancel()
+        if let previewTask {
+            await previewTask.value
+            logger.info("Finish timing: preview task stopped elapsedMs=\(elapsedMs(), privacy: .public)")
+        }
 
         guard let handle = claimLiveSessionHandleForFinish() else {
             clearStreamingState(notifyStreamingStopped: true)
@@ -319,8 +324,10 @@ final class StreamingHandler: @unchecked Sendable {
                             return true
                         }
                     )
+                    guard !Task.isCancelled else { return }
                     _ = processPreviewUpdate(result.text, audioGate: nil, persist: true)
                 } catch {
+                    guard !Task.isCancelled else { return }
                     logger.warning("Streaming preview error: \(error.localizedDescription)")
                 }
             }
