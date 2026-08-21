@@ -266,6 +266,12 @@ if [[ "$without_icloud" == false ]]; then
     -c "Set :com.apple.security.application-groups:0 $app_group" \
     "$expanded_helper_entitlements"
   /usr/libexec/PlistBuddy \
+    -c "Set :com.apple.developer.icloud-container-identifiers:0 $icloud_container" \
+    "$expanded_helper_entitlements"
+  /usr/libexec/PlistBuddy \
+    -c "Set :com.apple.developer.ubiquity-container-identifiers:0 $icloud_container" \
+    "$expanded_helper_entitlements"
+  /usr/libexec/PlistBuddy \
     -c "Add :com.apple.application-identifier string $team_id.$helper_bundle_id" \
     "$expanded_helper_entitlements"
   /usr/libexec/PlistBuddy \
