@@ -32,9 +32,10 @@ private func recorderAudioHasAudibleTail(
     let analysisStride = 8
     let requiredActiveFrames = 10
     let speechRMSFloor = 0.004
+    let analysisStartOffset = startTime > 0 ? 0.5 : 0
     let startIndex = min(
         samples.count,
-        max(0, Int((startTime + 0.5) * sampleRate))
+        max(0, Int((startTime + analysisStartOffset) * sampleRate))
     )
     guard startIndex < samples.count else { return false }
 

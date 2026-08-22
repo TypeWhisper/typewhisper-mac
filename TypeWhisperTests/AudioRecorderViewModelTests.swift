@@ -954,6 +954,49 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertTrue(plugin.requests[0].prompt?.contains("TypeWhisper") == true)
     }
 
+    func testWhisperKitEmptyFinalTranscriptionRetriesForAudibleRecordingStart() async throws {
+        try preserveStandardDefaults()
+        let plugin = setupWhisperPluginManager(
+            behavior: .conditionedShortFallbackComplete(
+                shortText: "",
+                completeText: "recovered transcript"
+            )
+        )
+        let defaults = try makeDefaults()
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider("whisper")
+        let recordingsDirectory = makeTemporaryDirectory()
+        let sampleRate = Int(AudioRecorderService.transcriptionSampleRate)
+        let samples = Array(repeating: Float(0.1), count: sampleRate)
+            + Array(repeating: Float.zero, count: sampleRate * 89)
+        let dictionaryService = DictionaryService(appSupportDirectory: makeTemporaryDirectory())
+        dictionaryService.addEntry(type: .term, original: "TypeWhisper")
+        let viewModel = makeViewModel(
+            defaults: defaults,
+            modelManager: modelManager,
+            recorderService: makeRecorderService(
+                recordingsDirectory: recordingsDirectory,
+                samples: samples
+            ),
+            dictionaryService: dictionaryService,
+            audioSamplesLoader: { _ in samples }
+        )
+        viewModel.transcriptionEnabled = true
+        viewModel.livePreviewEnabled = false
+
+        let sessionID = try await viewModel.apiStartRecording(
+            micEnabled: true,
+            systemAudioEnabled: false
+        )
+        _ = try viewModel.apiStopRecording()
+
+        let session = try await waitForRecorderSession(viewModel, id: sessionID, status: .completed)
+        XCTAssertEqual(session.text, "recovered transcript")
+        XCTAssertEqual(plugin.requests.count, 2)
+        XCTAssertTrue(plugin.requests[0].prompt?.contains("TypeWhisper") == true)
+        XCTAssertNil(plugin.requests[1].prompt)
+    }
+
     func testFailureSidecarWriteErrorStillShowsRecorderFailure() async throws {
         try preserveStandardDefaults()
         setupPluginManager(groqBehavior: .failure("HTTP 500: provider unavailable"))
