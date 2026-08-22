@@ -278,6 +278,25 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertTrue(defaults.bool(forKey: UserDefaultsKeys.recorderLivePreviewEnabled))
     }
 
+    func testRecorderLanguageSelectionPersistsSeparatelyFromFileTranscription() throws {
+        let defaults = try makeDefaults()
+        defaults.set("fr", forKey: UserDefaultsKeys.fileTranscriptionLanguage)
+
+        let viewModel = makeViewModel(defaults: defaults)
+        XCTAssertEqual(viewModel.languageSelection, .auto)
+
+        viewModel.languageSelection = .hints(["nl", "en"])
+
+        XCTAssertEqual(
+            defaults.string(forKey: UserDefaultsKeys.recorderTranscriptionLanguage),
+            "[\"nl\",\"en\"]"
+        )
+        XCTAssertEqual(defaults.string(forKey: UserDefaultsKeys.fileTranscriptionLanguage), "fr")
+
+        let restoredViewModel = makeViewModel(defaults: defaults)
+        XCTAssertEqual(restoredViewModel.languageSelection, .hints(["nl", "en"]))
+    }
+
     func testLivePreviewStartsOnlyWhenTranscriptAndPreviewAreEnabled() async throws {
         try preserveStandardDefaults()
         setupPluginManager()
@@ -780,6 +799,92 @@ final class AudioRecorderViewModelTests: XCTestCase {
         let session = try await waitForRecorderSession(viewModel, id: sessionID, status: .completed)
         XCTAssertEqual(session.text, "unforced whisper-large-v3")
         XCTAssertEqual(plugin.selectedModelOverrides, [])
+    }
+
+    func testWhisperKitFinalTranscriptionRetriesWithoutDictionaryConditioningForAudibleTail() async throws {
+        try preserveStandardDefaults()
+        let plugin = setupWhisperPluginManager(
+            behavior: .conditionedShortFallbackComplete(
+                shortText: "short conditioned transcript",
+                completeText: "complete unconditioned transcript"
+            )
+        )
+        let defaults = try makeDefaults()
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider("whisper")
+        let recordingsDirectory = makeTemporaryDirectory()
+        let samples = Array(
+            repeating: Float(0.1),
+            count: Int(AudioRecorderService.transcriptionSampleRate * 90)
+        )
+        let dictionaryService = DictionaryService(appSupportDirectory: makeTemporaryDirectory())
+        dictionaryService.addEntry(type: .term, original: "TypeWhisper")
+        let viewModel = makeViewModel(
+            defaults: defaults,
+            modelManager: modelManager,
+            recorderService: makeRecorderService(
+                recordingsDirectory: recordingsDirectory,
+                samples: samples
+            ),
+            dictionaryService: dictionaryService,
+            audioSamplesLoader: { _ in samples }
+        )
+        viewModel.transcriptionEnabled = true
+        viewModel.livePreviewEnabled = false
+
+        let sessionID = try await viewModel.apiStartRecording(
+            micEnabled: true,
+            systemAudioEnabled: false
+        )
+        _ = try viewModel.apiStopRecording()
+
+        let session = try await waitForRecorderSession(viewModel, id: sessionID, status: .completed)
+        XCTAssertEqual(session.text, "complete unconditioned transcript")
+        XCTAssertEqual(plugin.requests.count, 2)
+        XCTAssertTrue(plugin.requests[0].prompt?.contains("TypeWhisper") == true)
+        XCTAssertNil(plugin.requests[1].prompt)
+    }
+
+    func testWhisperKitFinalTranscriptionKeepsConditionedResultWhenRemainingTailIsSilent() async throws {
+        try preserveStandardDefaults()
+        let plugin = setupWhisperPluginManager(
+            behavior: .conditionedShortFallbackComplete(
+                shortText: "complete speech before silence",
+                completeText: "unexpected retry"
+            )
+        )
+        let defaults = try makeDefaults()
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider("whisper")
+        let recordingsDirectory = makeTemporaryDirectory()
+        let sampleRate = Int(AudioRecorderService.transcriptionSampleRate)
+        let samples = Array(repeating: Float(0.1), count: sampleRate * 18)
+            + Array(repeating: Float.zero, count: sampleRate * 72)
+        let dictionaryService = DictionaryService(appSupportDirectory: makeTemporaryDirectory())
+        dictionaryService.addEntry(type: .term, original: "TypeWhisper")
+        let viewModel = makeViewModel(
+            defaults: defaults,
+            modelManager: modelManager,
+            recorderService: makeRecorderService(
+                recordingsDirectory: recordingsDirectory,
+                samples: samples
+            ),
+            dictionaryService: dictionaryService,
+            audioSamplesLoader: { _ in samples }
+        )
+        viewModel.transcriptionEnabled = true
+        viewModel.livePreviewEnabled = false
+
+        let sessionID = try await viewModel.apiStartRecording(
+            micEnabled: true,
+            systemAudioEnabled: false
+        )
+        _ = try viewModel.apiStopRecording()
+
+        let session = try await waitForRecorderSession(viewModel, id: sessionID, status: .completed)
+        XCTAssertEqual(session.text, "complete speech before silence")
+        XCTAssertEqual(plugin.requests.count, 1)
+        XCTAssertTrue(plugin.requests[0].prompt?.contains("TypeWhisper") == true)
     }
 
     func testFailureSidecarWriteErrorStillShowsRecorderFailure() async throws {
@@ -1685,6 +1790,46 @@ final class AudioRecorderViewModelTests: XCTestCase {
         return plugin
     }
 
+    private func setupWhisperPluginManager(
+        behavior: AudioRecorderMockTranscriptionPlugin.TranscriptionBehavior
+    ) -> AudioRecorderMockTranscriptionPlugin {
+        let previousPluginManager = PluginManager.shared
+        addTeardownBlock {
+            PluginManager.shared = previousPluginManager
+        }
+
+        let appSupportDirectory = makeTemporaryDirectory()
+        let plugin = AudioRecorderMockTranscriptionPlugin(
+            providerId: "whisper",
+            displayName: "WhisperKit",
+            models: [
+                PluginModelInfo(
+                    id: "openai_whisper-large-v3",
+                    displayName: "Whisper Large V3"
+                )
+            ],
+            selectedModelId: "openai_whisper-large-v3",
+            behavior: behavior
+        )
+        let pluginManager = PluginManager(appSupportDirectory: appSupportDirectory)
+        pluginManager.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.whisperkit",
+                    name: "WhisperKit",
+                    version: "1.0.0",
+                    principalClass: "AudioRecorderMockTranscriptionPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+        PluginManager.shared = pluginManager
+        return plugin
+    }
+
     private func preserveStandardDefaults(additionalKeys: [String] = []) throws {
         let keys = Array(Set([
             UserDefaultsKeys.selectedEngine,
@@ -1813,6 +1958,7 @@ private final class AudioRecorderMockTranscriptionPlugin: NSObject, SourceProgre
         case success(String)
         case empty
         case failure(String)
+        case conditionedShortFallbackComplete(shortText: String, completeText: String)
     }
 
     static let pluginId = "com.typewhisper.mock.audio-recorder"
@@ -1826,6 +1972,7 @@ private final class AudioRecorderMockTranscriptionPlugin: NSObject, SourceProgre
     var supportsTranslation = true
     private let behavior: TranscriptionBehavior
     private(set) var lastRequest: Request?
+    private(set) var requests: [Request] = []
     private(set) var selectedModelOverrides: [String] = []
 
     required override init() {
@@ -1891,8 +2038,12 @@ private final class AudioRecorderMockTranscriptionPlugin: NSObject, SourceProgre
             usedFileTranscriptionPipeline: true
         )
         _ = onProgress(result.text)
+        let processedDuration = result.segments
+            .map(\.end)
+            .filter(\.isFinite)
+            .max() ?? audio.duration
         _ = onSourceProgress(PluginTranscriptionSourceProgress(
-            processedDuration: audio.duration,
+            processedDuration: processedDuration,
             totalDuration: audio.duration
         ))
         return result
@@ -1905,7 +2056,7 @@ private final class AudioRecorderMockTranscriptionPlugin: NSObject, SourceProgre
         prompt: String?,
         usedFileTranscriptionPipeline: Bool
     ) throws -> PluginTranscriptionResult {
-        lastRequest = Request(
+        let request = Request(
             language: language,
             translate: translate,
             prompt: prompt,
@@ -1913,6 +2064,8 @@ private final class AudioRecorderMockTranscriptionPlugin: NSObject, SourceProgre
             firstAudioSample: audio.samples.first,
             usedFileTranscriptionPipeline: usedFileTranscriptionPipeline
         )
+        lastRequest = request
+        requests.append(request)
         return switch behavior {
         case .success(let text):
             PluginTranscriptionResult(text: text)
@@ -1920,6 +2073,30 @@ private final class AudioRecorderMockTranscriptionPlugin: NSObject, SourceProgre
             PluginTranscriptionResult(text: "")
         case .failure(let message):
             throw PluginTranscriptionError.apiError(message)
+        case .conditionedShortFallbackComplete(let shortText, let completeText):
+            if let prompt, !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                PluginTranscriptionResult(
+                    text: shortText,
+                    segments: [
+                        PluginTranscriptionSegment(
+                            text: shortText,
+                            start: 0,
+                            end: audio.duration * 0.2
+                        )
+                    ]
+                )
+            } else {
+                PluginTranscriptionResult(
+                    text: completeText,
+                    segments: [
+                        PluginTranscriptionSegment(
+                            text: completeText,
+                            start: 0,
+                            end: audio.duration
+                        )
+                    ]
+                )
+            }
         }
     }
 }

@@ -7,6 +7,69 @@ import TypeWhisperPluginSDK
 
 private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "typewhisper-mac", category: "AudioRecorderViewModel")
 
+private final class RecorderTranscriptionSourceProgressCapture: @unchecked Sendable {
+    private let maximumProcessedDuration = OSAllocatedUnfairLock(initialState: TimeInterval.zero)
+
+    func record(_ progress: PluginTranscriptionSourceProgress) -> Bool {
+        guard progress.processedDuration.isFinite else { return true }
+        maximumProcessedDuration.withLock { current in
+            current = max(current, progress.processedDuration)
+        }
+        return true
+    }
+
+    var processedDuration: TimeInterval {
+        maximumProcessedDuration.withLock { $0 }
+    }
+}
+
+private func recorderAudioHasAudibleTail(
+    samples: [Float],
+    startingAt startTime: TimeInterval,
+    sampleRate: Double = AudioRecorderService.transcriptionSampleRate
+) -> Bool {
+    let frameSampleCount = max(1, Int(sampleRate * 0.1))
+    let analysisStride = 8
+    let requiredActiveFrames = 10
+    let speechRMSFloor = 0.004
+    let startIndex = min(
+        samples.count,
+        max(0, Int((startTime + 0.5) * sampleRate))
+    )
+    guard startIndex < samples.count else { return false }
+
+    var activeFrames = 0
+    var frameStart = startIndex
+    while frameStart < samples.count {
+        guard !Task.isCancelled else { return false }
+        let frameEnd = min(samples.count, frameStart + frameSampleCount)
+        var squaredSum = 0.0
+        var analyzedSamples = 0
+        var index = frameStart
+        while index < frameEnd {
+            let sample = Double(samples[index])
+            if sample.isFinite {
+                squaredSum += sample * sample
+                analyzedSamples += 1
+            }
+            index += analysisStride
+        }
+
+        if analyzedSamples > 0 {
+            let rms = sqrt(squaredSum / Double(analyzedSamples))
+            if rms >= speechRMSFloor {
+                activeFrames += 1
+                if activeFrames >= requiredActiveFrames {
+                    return true
+                }
+            }
+        }
+        frameStart = frameEnd
+    }
+
+    return false
+}
+
 @MainActor
 final class AudioRecorderViewModel: ObservableObject {
     typealias AudioSamplesLoader = @MainActor (URL) async throws -> [Float]
@@ -191,7 +254,14 @@ final class AudioRecorderViewModel: ObservableObject {
     @Published var selectedModel: String? {
         didSet { defaults.set(selectedModel, forKey: UserDefaultsKeys.recorderTranscriptionModel) }
     }
-    @Published var languageSelection: LanguageSelection = .auto
+    @Published var languageSelection: LanguageSelection = .auto {
+        didSet {
+            defaults.set(
+                languageSelection.storedValue(nilBehavior: .auto),
+                forKey: UserDefaultsKeys.recorderTranscriptionLanguage
+            )
+        }
+    }
     @Published var selectedTask: TranscriptionTask = .transcribe
     @Published var recordings: [RecordingItem] = []
     @Published var errorMessage: String?
@@ -339,6 +409,10 @@ final class AudioRecorderViewModel: ObservableObject {
         }
         self.selectedEngine = defaults.string(forKey: UserDefaultsKeys.recorderTranscriptionEngine)
         self.selectedModel = defaults.string(forKey: UserDefaultsKeys.recorderTranscriptionModel)
+        self.languageSelection = LanguageSelection(
+            storedValue: defaults.string(forKey: UserDefaultsKeys.recorderTranscriptionLanguage),
+            nilBehavior: .auto
+        )
 
         recorderService.micDuckingMode = micDuckingMode
         recorderService.trackMode = trackMode
@@ -1188,17 +1262,132 @@ final class AudioRecorderViewModel: ObservableObject {
         _ request: FinalTranscriptionRequest,
         task: TranscriptionTask
     ) async throws -> TranscriptionResult {
-        try await modelManager.transcribe(
+        let initialPass = try await transcribeFinalRecordingPass(
+            request,
+            task: task,
+            prompt: request.prompt,
+            dictionaryTermHints: request.dictionaryTermHints
+        )
+
+        guard await shouldRetryWhisperKitWithoutConditioning(
+            request: request,
+            pass: initialPass
+        ) else {
+            return initialPass.result
+        }
+
+        logger.warning(
+            "WhisperKit final transcription stopped with audible audio remaining; retrying without dictionary conditioning [processedDuration=\(initialPass.processedDuration, privacy: .public), audioDuration=\(initialPass.result.duration, privacy: .public)]"
+        )
+
+        do {
+            try Task.checkCancellation()
+            let retryPass = try await transcribeFinalRecordingPass(
+                request,
+                task: task,
+                prompt: nil,
+                dictionaryTermHints: []
+            )
+            return preferredFinalTranscriptionResult(
+                initial: initialPass,
+                retry: retryPass
+            )
+        } catch is CancellationError {
+            throw CancellationError()
+        } catch {
+            logger.warning(
+                "WhisperKit final transcription retry without dictionary conditioning failed; keeping the initial result: \(error.localizedDescription, privacy: .public)"
+            )
+            return initialPass.result
+        }
+    }
+
+    private struct FinalTranscriptionPass {
+        let result: TranscriptionResult
+        let processedDuration: TimeInterval
+    }
+
+    private func transcribeFinalRecordingPass(
+        _ request: FinalTranscriptionRequest,
+        task: TranscriptionTask,
+        prompt: String?,
+        dictionaryTermHints: [PluginDictionaryTermHint]
+    ) async throws -> FinalTranscriptionPass {
+        let progressCapture = RecorderTranscriptionSourceProgressCapture()
+        let result = try await modelManager.transcribe(
             audioSamples: request.buffer,
             languageSelection: request.languageSelection,
             task: task,
             engineOverrideId: request.providerId,
             cloudModelOverride: request.modelOverrideId,
-            prompt: request.prompt,
-            dictionaryTermHints: request.dictionaryTermHints,
+            prompt: prompt,
+            dictionaryTermHints: dictionaryTermHints,
             onProgress: { _ in true },
-            onSourceProgress: { _ in true }
+            onSourceProgress: progressCapture.record
         )
+        let segmentDuration = result.segments
+            .map(\.end)
+            .filter(\.isFinite)
+            .max() ?? 0
+        return FinalTranscriptionPass(
+            result: result,
+            processedDuration: max(progressCapture.processedDuration, segmentDuration)
+        )
+    }
+
+    private func shouldRetryWhisperKitWithoutConditioning(
+        request: FinalTranscriptionRequest,
+        pass: FinalTranscriptionPass
+    ) async -> Bool {
+        guard request.providerId == "whisper",
+              let prompt = request.prompt?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !prompt.isEmpty else {
+            return false
+        }
+
+        let text = pass.result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if text.isEmpty {
+            return true
+        }
+
+        let audioDuration = Double(request.buffer.count) / AudioRecorderService.transcriptionSampleRate
+        guard audioDuration >= 60,
+              pass.processedDuration > 0,
+              audioDuration - pass.processedDuration >= 30 else {
+            return false
+        }
+
+        let samples = request.buffer
+        let processedDuration = pass.processedDuration
+        let analysisTask = Task.detached(priority: .utility) {
+            recorderAudioHasAudibleTail(
+                samples: samples,
+                startingAt: processedDuration
+            )
+        }
+        return await withTaskCancellationHandler {
+            await analysisTask.value
+        } onCancel: {
+            analysisTask.cancel()
+        }
+    }
+
+    private func preferredFinalTranscriptionResult(
+        initial: FinalTranscriptionPass,
+        retry: FinalTranscriptionPass
+    ) -> TranscriptionResult {
+        let initialText = initial.result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        let retryText = retry.result.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !retryText.isEmpty else { return initial.result }
+        guard !initialText.isEmpty else { return retry.result }
+
+        if retry.processedDuration > initial.processedDuration + 5 {
+            return retry.result
+        }
+        if retryText.count > Int(Double(initialText.count) * 1.2) {
+            return retry.result
+        }
+        return initial.result
     }
 
     private func resolvedTask(for request: FinalTranscriptionRequest) -> TranscriptionTask {

@@ -134,6 +134,7 @@ enum UserDefaultsKeys {
     static let recorderLivePreviewEnabled = "recorderLivePreviewEnabled"
     static let recorderTranscriptionEngine = "recorderTranscriptionEngine"
     static let recorderTranscriptionModel = "recorderTranscriptionModel"
+    static let recorderTranscriptionLanguage = "recorderTranscriptionLanguage"
     static let recorderMicDuckingMode = "recorderMicDuckingMode"
     static let recorderTrackMode = "recorderTrackMode"
 
