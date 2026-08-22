@@ -426,14 +426,19 @@ curl -X DELETE http://localhost:8978/v1/dictionary/corrections \
 
 ### Settings Backup
 
-The settings endpoints use the same JSON backup schema and merge/skip behavior as Settings > Advanced > Backup & Restore. Import applies every category present in the backup.
+The settings endpoints use the same JSON backup schema and merge/skip behavior as Settings > Advanced > Backup & Restore. Import applies every category present in the backup. While the API server is running, scripts can read its current bearer token from the owner-only discovery file:
 
 ```bash
+TYPEWHISPER_API_TOKEN="$(jq -r '.token' "$HOME/Library/Application Support/TypeWhisper/api-discovery.json")"
+
 # Export the current settings backup
-curl http://localhost:8978/v1/settings/export > typewhisper-settings.json
+curl http://localhost:8978/v1/settings/export \
+  -H "Authorization: Bearer $TYPEWHISPER_API_TOKEN" \
+  > typewhisper-settings.json
 
 # Import all categories from a settings backup
 curl -X POST http://localhost:8978/v1/settings/import \
+  -H "Authorization: Bearer $TYPEWHISPER_API_TOKEN" \
   -H "Content-Type: application/json" \
   --data-binary @typewhisper-settings.json
 ```
