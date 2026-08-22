@@ -430,6 +430,32 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertTrue(summary.contains("HTTP 413"))
     }
 
+    func testCancelledFinalTranscriptionDoesNotPersistRecorderFailure() async throws {
+        try preserveStandardDefaults()
+        setupPluginManager(groqBehavior: .cancellation)
+        let defaults = try makeDefaults()
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider("groq")
+        let viewModel = makeFinalTranscriptionViewModel(defaults: defaults, modelManager: modelManager)
+
+        let sessionID = try await viewModel.apiStartRecording(micEnabled: true, systemAudioEnabled: false)
+        _ = try viewModel.apiStopRecording()
+
+        let session = try await waitForRecorderSession(viewModel, id: sessionID, status: .completed)
+        let outputFile = try XCTUnwrap(session.outputFile)
+        XCTAssertNil(session.text)
+        XCTAssertNil(session.error)
+        XCTAssertNil(viewModel.errorMessage)
+        XCTAssertFalse(
+            FileManager.default.fileExists(
+                atPath: failureSidecarURL(for: URL(fileURLWithPath: outputFile)).path
+            )
+        )
+
+        try await waitForRecordingsToLoad(viewModel, count: 1)
+        XCTAssertNil(viewModel.recordings.first?.transcriptionFailure)
+    }
+
     func testEmptyFinalTranscriptionPersistsRecorderFailure() async throws {
         try preserveStandardDefaults()
         setupPluginManager(groqBehavior: .empty)
@@ -801,7 +827,7 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertEqual(plugin.selectedModelOverrides, [])
     }
 
-    func testWhisperKitFinalTranscriptionRetriesWithoutDictionaryConditioningForAudibleTail() async throws {
+    func testWhisperKitFinalTranscriptionRetriesWithLivePreviewEnabledForAudibleTail() async throws {
         try preserveStandardDefaults()
         let plugin = setupWhisperPluginManager(
             behavior: .conditionedShortFallbackComplete(
@@ -819,6 +845,7 @@ final class AudioRecorderViewModelTests: XCTestCase {
         )
         let dictionaryService = DictionaryService(appSupportDirectory: makeTemporaryDirectory())
         dictionaryService.addEntry(type: .term, original: "TypeWhisper")
+        var livePreviewStartCount = 0
         let viewModel = makeViewModel(
             defaults: defaults,
             modelManager: modelManager,
@@ -827,10 +854,11 @@ final class AudioRecorderViewModelTests: XCTestCase {
                 samples: samples
             ),
             dictionaryService: dictionaryService,
-            audioSamplesLoader: { _ in samples }
+            audioSamplesLoader: { _ in samples },
+            livePreviewStartObserver: { livePreviewStartCount += 1 }
         )
         viewModel.transcriptionEnabled = true
-        viewModel.livePreviewEnabled = false
+        viewModel.livePreviewEnabled = true
 
         let sessionID = try await viewModel.apiStartRecording(
             micEnabled: true,
@@ -840,6 +868,7 @@ final class AudioRecorderViewModelTests: XCTestCase {
 
         let session = try await waitForRecorderSession(viewModel, id: sessionID, status: .completed)
         XCTAssertEqual(session.text, "complete unconditioned transcript")
+        XCTAssertEqual(livePreviewStartCount, 1)
         XCTAssertEqual(plugin.requests.count, 2)
         XCTAssertTrue(plugin.requests[0].prompt?.contains("TypeWhisper") == true)
         XCTAssertNil(plugin.requests[1].prompt)
@@ -1958,6 +1987,7 @@ private final class AudioRecorderMockTranscriptionPlugin: NSObject, SourceProgre
         case success(String)
         case empty
         case failure(String)
+        case cancellation
         case conditionedShortFallbackComplete(shortText: String, completeText: String)
     }
 
@@ -2073,6 +2103,8 @@ private final class AudioRecorderMockTranscriptionPlugin: NSObject, SourceProgre
             PluginTranscriptionResult(text: "")
         case .failure(let message):
             throw PluginTranscriptionError.apiError(message)
+        case .cancellation:
+            throw CancellationError()
         case .conditionedShortFallbackComplete(let shortText, let completeText):
             if let prompt, !prompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 PluginTranscriptionResult(

@@ -1207,6 +1207,8 @@ final class AudioRecorderViewModel: ObservableObject {
                 errorMessage = recorderTranscriptionFailureAPISummary(recordedFailure)
                 return .failed(recordedFailure)
             }
+        } catch is CancellationError {
+            return .skipped
         } catch {
             logger.error("Final transcription failed: \(error.localizedDescription)")
             // Fall back to streaming result
@@ -1242,6 +1244,8 @@ final class AudioRecorderViewModel: ObservableObject {
             }
 
             return saveTranscriptOutcome(text, for: request.outputURL, request: request)
+        } catch is CancellationError {
+            return .skipped
         } catch {
             recordRetranscriptionFailure(
                 phase: .finalTranscription,
