@@ -12,6 +12,7 @@ final class APIHandlers: @unchecked Sendable {
     private let dictionaryService: DictionaryService
     private let dictationViewModel: DictationViewModel
     private let audioRecorderViewModel: AudioRecorderViewModel
+    private let settingsBackupService: SettingsBackupAutomationService
 
     init(
         modelManager: ModelManagerService,
@@ -21,7 +22,8 @@ final class APIHandlers: @unchecked Sendable {
         workflowService: WorkflowService,
         dictionaryService: DictionaryService,
         dictationViewModel: DictationViewModel,
-        audioRecorderViewModel: AudioRecorderViewModel
+        audioRecorderViewModel: AudioRecorderViewModel,
+        settingsBackupService: SettingsBackupAutomationService
     ) {
         self.modelManager = modelManager
         self.audioFileService = audioFileService
@@ -31,6 +33,7 @@ final class APIHandlers: @unchecked Sendable {
         self.dictionaryService = dictionaryService
         self.dictationViewModel = dictationViewModel
         self.audioRecorderViewModel = audioRecorderViewModel
+        self.settingsBackupService = settingsBackupService
     }
 
     func register(on router: APIRouter) {
@@ -58,6 +61,36 @@ final class APIHandlers: @unchecked Sendable {
         router.register("GET", "/v1/dictionary/corrections", handler: handleGetDictionaryCorrections)
         router.register("PUT", "/v1/dictionary/corrections", handler: handlePutDictionaryCorrections)
         router.register("DELETE", "/v1/dictionary/corrections", handler: handleDeleteDictionaryCorrections)
+        router.register("GET", "/v1/settings/export", handler: handleExportSettings)
+        router.register("POST", "/v1/settings/import", handler: handleImportSettings)
+    }
+
+    // MARK: - /v1/settings
+
+    private func handleExportSettings(_ request: HTTPRequest) async -> HTTPResponse {
+        do {
+            let data = try await settingsBackupService.exportData()
+            return HTTPResponse(status: 200, contentType: "application/json", body: data)
+        } catch {
+            apiLogger.error("Settings export failed: \(error.localizedDescription, privacy: .public)")
+            return .error(status: 500, message: "Could not export TypeWhisper settings")
+        }
+    }
+
+    private func handleImportSettings(_ request: HTTPRequest) async -> HTTPResponse {
+        guard !request.body.isEmpty else {
+            return .error(status: 400, message: "Request body must contain a TypeWhisper settings backup")
+        }
+
+        do {
+            let result = try await settingsBackupService.importData(request.body)
+            return .json(result)
+        } catch SettingsBackupExporter.ImportError.invalidFile {
+            return .error(status: 400, message: "Request body is not a valid TypeWhisper settings backup")
+        } catch {
+            apiLogger.error("Settings import failed: \(error.localizedDescription, privacy: .public)")
+            return .error(status: 500, message: "Could not import TypeWhisper settings")
+        }
     }
 
     // MARK: - POST /v1/transcribe

@@ -85,6 +85,20 @@ struct CLIClient {
         try await get("/v1/models")
     }
 
+    func exportSettings() async throws -> Data {
+        try await get("/v1/settings/export", timeout: 300)
+    }
+
+    func importSettings(_ data: Data) async throws -> Data {
+        let url = URL(string: "\(baseURL)/v1/settings/import")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = data
+        request.timeoutInterval = 300
+        return try await performRequest(request)
+    }
+
     func transcribe(
         fileURL: URL?,
         language: String?,
@@ -219,10 +233,10 @@ struct CLIClient {
         return try await performRequest(request)
     }
 
-    private func get(_ path: String) async throws -> Data {
+    private func get(_ path: String, timeout: TimeInterval = 10) async throws -> Data {
         let url = URL(string: "\(baseURL)\(path)")!
         var request = URLRequest(url: url)
-        request.timeoutInterval = 10
+        request.timeoutInterval = timeout
         return try await performRequest(request)
     }
 

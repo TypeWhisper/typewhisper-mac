@@ -81,6 +81,51 @@ enum OutputFormatter {
         return lines.joined(separator: "\n")
     }
 
+    static func formatSettingsExport(path: String, bytes: Int, json: Bool) -> String {
+        guard json else {
+            return "Exported settings to \(path)"
+        }
+
+        struct ExportResult: Encodable {
+            let file: String
+            let bytes: Int
+        }
+        let data = (try? JSONEncoder().encode(ExportResult(file: path, bytes: bytes))) ?? Data()
+        return prettyJSON(data)
+    }
+
+    static func formatSettingsImport(_ data: Data, json: Bool) -> String {
+        if json {
+            return prettyJSON(data)
+        }
+        guard let result = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return prettyJSON(data)
+        }
+
+        func integer(_ key: String) -> Int {
+            result[key] as? Int ?? 0
+        }
+
+        var lines = [
+            "Workflows: \(integer("workflowsImported")) imported",
+            "Dictionary: \(integer("dictionaryImported")) imported, \(integer("dictionarySkipped")) skipped",
+            "Snippets: \(integer("snippetsImported")) imported, \(integer("snippetsSkipped")) skipped",
+            "Prompt Actions: \(integer("promptActionsImported")) imported",
+            "Profiles: \(integer("profilesImported")) imported",
+            "Hotkeys: \(integer("hotkeysApplied")) applied, \(integer("hotkeysSkipped")) skipped",
+            "Plugins: \(integer("pluginsInstalled")) installed, \(integer("pluginsSkipped")) skipped",
+            "History: \(integer("historyImported")) imported, \(integer("historySkippedByRetention")) skipped by retention",
+            "Preferences: \(integer("preferencesApplied")) applied",
+        ]
+        if result["updateChannelApplied"] as? Bool == true {
+            lines.append("Update channel applied")
+        }
+        if result["pluginsRegistryFetchFailed"] as? Bool == true {
+            lines.append("Warning: The plugin marketplace could not be reached; some plugins may have been skipped.")
+        }
+        return lines.joined(separator: "\n")
+    }
+
     private static func prettyJSON(_ data: Data) -> String {
         if let obj = try? JSONSerialization.jsonObject(with: data),
            let pretty = try? JSONSerialization.data(withJSONObject: obj, options: [.prettyPrinted, .sortedKeys]),

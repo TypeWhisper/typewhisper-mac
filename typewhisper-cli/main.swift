@@ -126,6 +126,29 @@ do {
         let data = try await client.models()
         print(OutputFormatter.formatModels(data, json: jsonOutput))
 
+    case "export":
+        guard positionalArgs.count == 1 else {
+            printError("Error: export requires exactly one output file.")
+            exit(1)
+        }
+        let fileURL = settingsFileURL(for: positionalArgs[0])
+        let data = try await client.exportSettings()
+        try data.write(to: fileURL, options: .atomic)
+        print(OutputFormatter.formatSettingsExport(path: fileURL.path, bytes: data.count, json: jsonOutput))
+
+    case "import":
+        guard positionalArgs.count == 1 else {
+            printError("Error: import requires exactly one input file.")
+            exit(1)
+        }
+        let fileURL = settingsFileURL(for: positionalArgs[0])
+        guard FileManager.default.fileExists(atPath: fileURL.path) else {
+            throw CLIError.fileNotFound(fileURL.path)
+        }
+        let backupData = try Data(contentsOf: fileURL)
+        let result = try await client.importSettings(backupData)
+        print(OutputFormatter.formatSettingsImport(result, json: jsonOutput))
+
     case "transcribe":
         let fileURL: URL?
         if let path = positionalArgs.first, path != "-" {
@@ -163,6 +186,16 @@ func printError(_ message: String) {
     FileHandle.standardError.write(Data((message + "\n").utf8))
 }
 
+func settingsFileURL(for path: String) -> URL {
+    let expandedPath = NSString(string: path).expandingTildeInPath
+    if expandedPath.hasPrefix("/") {
+        return URL(fileURLWithPath: expandedPath).standardizedFileURL
+    }
+    return URL(fileURLWithPath: FileManager.default.currentDirectoryPath, isDirectory: true)
+        .appendingPathComponent(expandedPath)
+        .standardizedFileURL
+}
+
 func printUsage() {
     let usage = """
         Usage: typewhisper <command> [options]
@@ -171,6 +204,8 @@ func printUsage() {
           transcribe <file>    Transcribe an audio file (or - for stdin)
           status               Show server status
           models               List available models
+          export <file>        Export a settings backup as JSON
+          import <file>        Import all settings from a JSON backup
 
         Global options:
           --port <N>           Server port (default: auto-detect)
@@ -192,6 +227,8 @@ func printUsage() {
 
         Examples:
           typewhisper status
+          typewhisper export typewhisper-settings.json
+          typewhisper import typewhisper-settings.json
           typewhisper transcribe recording.wav
           typewhisper transcribe recording.wav --language de --json
           typewhisper transcribe recording.wav --language-hint de --language-hint en

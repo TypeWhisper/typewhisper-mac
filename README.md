@@ -186,7 +186,7 @@ The localized macOS screenshot workflow is documented in [docs/screenshot-automa
   [plugin catalog](TypeWhisperPluginSDK/Plugins/README.md)
 - **Local model download controls** - Bundled Qwen3, Granite, Voxtral, and Supertonic plugins support an optional HuggingFace token for higher rate limits and clearer download errors. Supertonic requires explicit OpenRAIL-M model-license acceptance before model assets download.
 - **HTTP API** - Local REST API for integration with external tools and scripts
-- **CLI tool** - Shell-friendly transcription via the command line
+- **CLI tool** - Shell-friendly transcription and settings backup via the command line
 - **Discord claim service** - Optional external service for Polar supporter and GitHub Sponsors Discord role claims
 
 ### General
@@ -424,6 +424,20 @@ curl -X DELETE http://localhost:8978/v1/dictionary/corrections \
   -d '{"original":"teh"}'
 ```
 
+### Settings Backup
+
+The settings endpoints use the same JSON backup schema and merge/skip behavior as Settings > Advanced > Backup & Restore. Import applies every category present in the backup.
+
+```bash
+# Export the current settings backup
+curl http://localhost:8978/v1/settings/export > typewhisper-settings.json
+
+# Import all categories from a settings backup
+curl -X POST http://localhost:8978/v1/settings/import \
+  -H "Content-Type: application/json" \
+  --data-binary @typewhisper-settings.json
+```
+
 ### Workflows
 
 ```bash
@@ -535,6 +549,8 @@ Install via Settings > Advanced > CLI Tool > Install. This places the `typewhisp
 typewhisper status              # Show server status
 typewhisper models              # List available models
 typewhisper transcribe file.wav # Transcribe an audio file
+typewhisper export settings.json # Export all supported settings
+typewhisper import settings.json # Import all categories in a backup
 ```
 
 ### Options
@@ -563,6 +579,12 @@ cat audio.wav | typewhisper transcribe -
 
 # Use in a script
 typewhisper transcribe meeting.m4a --json | jq -r '.text'
+
+# Keep a portable backup in a dotfiles repository
+typewhisper export ~/.config/typewhisper/settings.json
+
+# Restore it and receive a machine-readable import summary
+typewhisper import ~/.config/typewhisper/settings.json --json
 ```
 
 The CLI requires the API server to be running (Settings > Advanced) and follows the documented command and flag surface for the current stable release.
@@ -609,7 +631,7 @@ See [TypeWhisperPluginSDK/Plugins/README.md](TypeWhisperPluginSDK/Plugins/README
 
 ```
 TypeWhisper/
-├── typewhisper-cli/           # Command-line tool (status, models, transcribe)
+├── typewhisper-cli/           # Command-line tool (transcription and settings backup)
 ├── PluginRegistry/            # Source registry entries for community plugin feeds
 ├── Plugins/                # Redirect docs and legacy entrypoint for moved first-party plugin sources
 ├── TypeWhisperPluginSDK/   # Plugin SDK (Swift package)

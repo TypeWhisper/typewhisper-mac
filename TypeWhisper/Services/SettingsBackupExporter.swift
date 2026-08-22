@@ -261,7 +261,7 @@ enum SettingsBackupExporter {
         let preferences: PreferencesDTO
     }
 
-    struct ImportResult {
+    struct ImportResult: Encodable, Sendable {
         var workflowsImported = 0
         var dictionaryImported = 0
         var dictionarySkipped = 0
@@ -899,5 +899,85 @@ enum SettingsBackupExporter {
         let formatter = DateFormatter()
         formatter.dateFormat = "yyyy-MM-dd"
         return "typewhisper-backup-\(formatter.string(from: Date())).json"
+    }
+}
+
+/// Main-actor bridge used by headless automation surfaces. It keeps the HTTP
+/// layer independent from the individual settings stores while guaranteeing
+/// that exports and imports use the same schema and side effects as the UI.
+@MainActor
+final class SettingsBackupAutomationService {
+    private let workflowService: WorkflowService
+    private let dictionaryService: DictionaryService
+    private let snippetService: SnippetService
+    private let profileService: ProfileService
+    private let promptActionService: PromptActionService
+    private let pluginManager: PluginManager
+    private let pluginRegistryService: PluginRegistryService
+    private let historyService: HistoryService
+    private let usageStatisticsService: UsageStatisticsService
+    private let userDefaults: UserDefaults
+    private let liveFieldTranscriptEnabledDidChange: ((Bool) -> Void)?
+    private let recoveryRetentionPolicyDidChange: ((DictationRecoveryRetentionPolicy) -> Void)?
+
+    init(
+        workflowService: WorkflowService,
+        dictionaryService: DictionaryService,
+        snippetService: SnippetService,
+        profileService: ProfileService,
+        promptActionService: PromptActionService,
+        pluginManager: PluginManager,
+        pluginRegistryService: PluginRegistryService,
+        historyService: HistoryService,
+        usageStatisticsService: UsageStatisticsService,
+        userDefaults: UserDefaults = .standard,
+        liveFieldTranscriptEnabledDidChange: ((Bool) -> Void)? = nil,
+        recoveryRetentionPolicyDidChange: ((DictationRecoveryRetentionPolicy) -> Void)? = nil
+    ) {
+        self.workflowService = workflowService
+        self.dictionaryService = dictionaryService
+        self.snippetService = snippetService
+        self.profileService = profileService
+        self.promptActionService = promptActionService
+        self.pluginManager = pluginManager
+        self.pluginRegistryService = pluginRegistryService
+        self.historyService = historyService
+        self.usageStatisticsService = usageStatisticsService
+        self.userDefaults = userDefaults
+        self.liveFieldTranscriptEnabledDidChange = liveFieldTranscriptEnabledDidChange
+        self.recoveryRetentionPolicyDidChange = recoveryRetentionPolicyDidChange
+    }
+
+    func exportData() throws -> Data {
+        let backup = SettingsBackupExporter.buildBackup(
+            workflowService: workflowService,
+            dictionaryService: dictionaryService,
+            snippetService: snippetService,
+            profileService: profileService,
+            promptActionService: promptActionService,
+            pluginManager: pluginManager,
+            historyService: historyService,
+            userDefaults: userDefaults
+        )
+        return try SettingsBackupExporter.encodedJSON(backup)
+    }
+
+    func importData(_ data: Data) async throws -> SettingsBackupExporter.ImportResult {
+        let backup = try SettingsBackupExporter.parse(data)
+        return await SettingsBackupExporter.importBackup(
+            backup,
+            workflowService: workflowService,
+            dictionaryService: dictionaryService,
+            snippetService: snippetService,
+            profileService: profileService,
+            promptActionService: promptActionService,
+            pluginManager: pluginManager,
+            pluginRegistryService: pluginRegistryService,
+            historyService: historyService,
+            usageStatisticsService: usageStatisticsService,
+            userDefaults: userDefaults,
+            liveFieldTranscriptEnabledDidChange: liveFieldTranscriptEnabledDidChange,
+            recoveryRetentionPolicyDidChange: recoveryRetentionPolicyDidChange
+        )
     }
 }

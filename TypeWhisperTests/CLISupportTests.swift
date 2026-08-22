@@ -26,6 +26,17 @@ final class CLISupportTests: XCTestCase {
         XCTAssertEqual(OutputFormatter.formatStatus(statusJSON, json: false), "Ready - parakeet (tiny)")
         XCTAssertTrue(OutputFormatter.formatModels(modelsJSON, json: false).contains("tiny"))
         XCTAssertTrue(OutputFormatter.formatModels(modelsJSON, json: false).contains("*"))
+        XCTAssertEqual(
+            OutputFormatter.formatSettingsExport(path: "/tmp/settings.json", bytes: 123, json: false),
+            "Exported settings to /tmp/settings.json"
+        )
+
+        let importJSON = Data(#"{"workflowsImported":2,"dictionaryImported":1,"dictionarySkipped":3,"snippetsImported":0,"snippetsSkipped":0,"promptActionsImported":0,"profilesImported":0,"hotkeysApplied":1,"hotkeysSkipped":0,"pluginsInstalled":0,"pluginsSkipped":0,"pluginsRegistryFetchFailed":false,"historyImported":0,"historySkippedByRetention":0,"updateChannelApplied":false,"preferencesApplied":4}"#.utf8)
+        let importSummary = OutputFormatter.formatSettingsImport(importJSON, json: false)
+        XCTAssertTrue(importSummary.contains("Workflows: 2 imported"))
+        XCTAssertTrue(importSummary.contains("Dictionary: 1 imported, 3 skipped"))
+        XCTAssertTrue(importSummary.contains("Preferences: 4 applied"))
+        XCTAssertTrue(OutputFormatter.formatSettingsImport(importJSON, json: true).contains("\"workflowsImported\" : 2"))
     }
 
     func testPortDiscoveryUsesConfiguredPortFileAndFallback() throws {
@@ -160,6 +171,53 @@ final class CLISupportTests: XCTestCase {
 
         let request = try XCTUnwrap(recorder.recordedRequest)
         XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer cli-token")
+    }
+
+    func testCLIClientExportsSettingsFromAuthenticatedEndpoint() async throws {
+        let recorder = RequestRecorder()
+        let exportedBackup = Data(#"{"schemaVersion":1}"#.utf8)
+        let client = CLIClient(
+            port: 9876,
+            apiToken: "cli-token",
+            transport: { request in
+                recorder.record(request)
+                return (exportedBackup, Self.httpResponse(url: request.url!, statusCode: 200))
+            }
+        )
+
+        let result = try await client.exportSettings()
+
+        XCTAssertEqual(result, exportedBackup)
+        let request = try XCTUnwrap(recorder.recordedRequest)
+        XCTAssertEqual(request.url?.path, "/v1/settings/export")
+        XCTAssertEqual(request.httpMethod, "GET")
+        XCTAssertEqual(request.timeoutInterval, 300)
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer cli-token")
+    }
+
+    func testCLIClientImportsSettingsBackupAsJSON() async throws {
+        let recorder = RequestRecorder()
+        let backup = Data(#"{"schemaVersion":1,"workflows":[]}"#.utf8)
+        let responseBody = Data(#"{"workflowsImported":0}"#.utf8)
+        let client = CLIClient(
+            port: 9876,
+            apiToken: "cli-token",
+            transport: { request in
+                recorder.record(request)
+                return (responseBody, Self.httpResponse(url: request.url!, statusCode: 200))
+            }
+        )
+
+        let result = try await client.importSettings(backup)
+
+        XCTAssertEqual(result, responseBody)
+        let request = try XCTUnwrap(recorder.recordedRequest)
+        XCTAssertEqual(request.url?.path, "/v1/settings/import")
+        XCTAssertEqual(request.httpMethod, "POST")
+        XCTAssertEqual(request.timeoutInterval, 300)
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/json")
+        XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer cli-token")
+        XCTAssertEqual(request.httpBody, backup)
     }
 
     func testCLIClientTranscribeStdinKeepsMultipartUploadPath() async throws {

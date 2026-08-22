@@ -1787,6 +1787,67 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual((toggledRules["rules"] as? [[String: Any]])?.first?["is_enabled"] as? Bool, false)
     }
 
+    func testSettingsBackupEndpointsExportImportAndRejectInvalidFiles() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var context: APIContext?
+        defer {
+            context = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        context = await MainActor.run { () -> APIContext in
+            let context = Self.makeAPIContext(appSupportDirectory: appSupportDirectory)
+            _ = context.workflowService.addWorkflow(
+                name: "CLI Backup Workflow",
+                template: .cleanedText,
+                trigger: .manual()
+            )
+            return context
+        }
+        let apiContext = try XCTUnwrap(context)
+        let router = apiContext.router
+
+        let exportResponse = await router.route(
+            HTTPRequest(method: "GET", path: "/v1/settings/export", queryParams: [:], headers: [:], body: Data())
+        )
+        XCTAssertEqual(exportResponse.status, 200)
+        XCTAssertEqual(exportResponse.contentType, "application/json")
+        let exported = try Self.jsonObject(exportResponse)
+        XCTAssertEqual(exported["schemaVersion"] as? Int, 1)
+        XCTAssertEqual((exported["workflows"] as? [[String: Any]])?.first?["name"] as? String, "CLI Backup Workflow")
+
+        let importResponse = await router.route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/settings/import",
+                queryParams: [:],
+                headers: ["content-type": "application/json"],
+                body: exportResponse.body
+            )
+        )
+        XCTAssertEqual(importResponse.status, 200)
+        let importResult = try Self.jsonObject(importResponse)
+        XCTAssertEqual(importResult["workflowsImported"] as? Int, 1)
+        let workflowCount = await MainActor.run { apiContext.workflowService.workflows.count }
+        XCTAssertEqual(workflowCount, 2)
+
+        let invalidResponse = await router.route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/settings/import",
+                queryParams: [:],
+                headers: ["content-type": "application/json"],
+                body: Data(#"{"not":"a backup"}"#.utf8)
+            )
+        )
+        XCTAssertEqual(invalidResponse.status, 400)
+        let invalidBody = try Self.jsonObject(invalidResponse)
+        XCTAssertEqual(
+            (invalidBody["error"] as? [String: Any])?["message"] as? String,
+            "Request body is not a valid TypeWhisper settings backup"
+        )
+    }
+
     func testDictionaryTermsEndpointsReplaceMergeAndDeleteSingleTerm() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         var context: APIContext?
@@ -7514,6 +7575,23 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             audioDeviceService: audioDeviceService
         )
 
+        let pluginRegistryService = PluginRegistryService(
+            cacheDirectory: appSupportDirectory.appendingPathComponent("MarketplaceCache", isDirectory: true),
+            fetchData: { _ in throw URLError(.notConnectedToInternet) }
+        )
+        let usageStatisticsService = UsageStatisticsService(appSupportDirectory: appSupportDirectory)
+        let settingsBackupService = SettingsBackupAutomationService(
+            workflowService: workflowService,
+            dictionaryService: dictionaryService,
+            snippetService: snippetService,
+            profileService: profileService,
+            promptActionService: promptActionService,
+            pluginManager: PluginManager.shared,
+            pluginRegistryService: pluginRegistryService,
+            historyService: historyService,
+            usageStatisticsService: usageStatisticsService
+        )
+
         let router = APIRouter()
         let handlers = APIHandlers(
             modelManager: modelManager,
@@ -7523,7 +7601,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             workflowService: workflowService,
             dictionaryService: dictionaryService,
             dictationViewModel: dictationViewModel,
-            audioRecorderViewModel: audioRecorderViewModel
+            audioRecorderViewModel: audioRecorderViewModel,
+            settingsBackupService: settingsBackupService
         )
         handlers.register(on: router)
 
@@ -7566,6 +7645,9 @@ final class TypeWhisperIntegrationTests: XCTestCase {
                 settingsViewModel,
                 dictationViewModel,
                 audioRecorderViewModel,
+                pluginRegistryService,
+                usageStatisticsService,
+                settingsBackupService,
                 router,
                 handlers
             ]

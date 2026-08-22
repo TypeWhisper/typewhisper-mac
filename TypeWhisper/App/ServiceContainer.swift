@@ -238,6 +238,23 @@ final class ServiceContainer: ObservableObject {
         // HTTP API
         let apiAuthenticator = LocalAPIAuthenticator()
         let router = APIRouter(apiTokenProvider: apiAuthenticator.tokenForEnforcedRequests)
+        let settingsBackupService = SettingsBackupAutomationService(
+            workflowService: workflowService,
+            dictionaryService: dictionaryService,
+            snippetService: snippetService,
+            profileService: profileService,
+            promptActionService: promptActionService,
+            pluginManager: pluginManager,
+            pluginRegistryService: pluginRegistryService,
+            historyService: historyService,
+            usageStatisticsService: usageStatisticsService,
+            liveFieldTranscriptEnabledDidChange: { [dictationViewModel] enabled in
+                dictationViewModel.liveFieldTranscriptEnabled = enabled
+            },
+            recoveryRetentionPolicyDidChange: { [audioRecordingService] policy in
+                _ = audioRecordingService.updateRecoveryRetentionPolicy(policy)
+            }
+        )
         let handlers = APIHandlers(
             modelManager: modelManagerService,
             audioFileService: audioFileService,
@@ -246,7 +263,8 @@ final class ServiceContainer: ObservableObject {
             workflowService: workflowService,
             dictionaryService: dictionaryService,
             dictationViewModel: dictationViewModel,
-            audioRecorderViewModel: audioRecorderViewModel
+            audioRecorderViewModel: audioRecorderViewModel,
+            settingsBackupService: settingsBackupService
         )
         handlers.register(on: router)
         httpServer = HTTPServer(router: router)
