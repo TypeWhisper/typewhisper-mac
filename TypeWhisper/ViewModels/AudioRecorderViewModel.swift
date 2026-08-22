@@ -1272,8 +1272,9 @@ final class AudioRecorderViewModel: ObservableObject {
             prompt: request.prompt,
             dictionaryTermHints: request.dictionaryTermHints
         )
+        try Task.checkCancellation()
 
-        guard await shouldRetryWhisperKitWithoutConditioning(
+        guard try await shouldRetryWhisperKitWithoutConditioning(
             request: request,
             pass: initialPass
         ) else {
@@ -1342,7 +1343,7 @@ final class AudioRecorderViewModel: ObservableObject {
     private func shouldRetryWhisperKitWithoutConditioning(
         request: FinalTranscriptionRequest,
         pass: FinalTranscriptionPass
-    ) async -> Bool {
+    ) async throws -> Bool {
         guard request.providerId == "whisper",
               let prompt = request.prompt?.trimmingCharacters(in: .whitespacesAndNewlines),
               !prompt.isEmpty else {
@@ -1350,30 +1351,33 @@ final class AudioRecorderViewModel: ObservableObject {
         }
 
         let text = pass.result.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if text.isEmpty {
-            return true
-        }
-
         let audioDuration = Double(request.buffer.count) / AudioRecorderService.transcriptionSampleRate
-        guard audioDuration >= 60,
-              pass.processedDuration > 0,
-              audioDuration - pass.processedDuration >= 30 else {
-            return false
+        let analysisStartTime: TimeInterval
+        if text.isEmpty {
+            analysisStartTime = 0
+        } else {
+            guard audioDuration >= 60,
+                  pass.processedDuration > 0,
+                  audioDuration - pass.processedDuration >= 30 else {
+                return false
+            }
+            analysisStartTime = pass.processedDuration
         }
 
         let samples = request.buffer
-        let processedDuration = pass.processedDuration
         let analysisTask = Task.detached(priority: .utility) {
             recorderAudioHasAudibleTail(
                 samples: samples,
-                startingAt: processedDuration
+                startingAt: analysisStartTime
             )
         }
-        return await withTaskCancellationHandler {
+        let hasAudibleAudio = await withTaskCancellationHandler {
             await analysisTask.value
         } onCancel: {
             analysisTask.cancel()
         }
+        try Task.checkCancellation()
+        return hasAudibleAudio
     }
 
     private func preferredFinalTranscriptionResult(
