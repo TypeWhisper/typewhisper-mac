@@ -432,12 +432,13 @@ The settings endpoints use the same JSON backup schema and merge/skip behavior a
 TYPEWHISPER_API_TOKEN="$(jq -r '.token' "$HOME/Library/Application Support/TypeWhisper/api-discovery.json")"
 
 # Export the current settings backup
-curl http://localhost:8978/v1/settings/export \
+curl --fail --silent --show-error http://localhost:8978/v1/settings/export \
   -H "Authorization: Bearer $TYPEWHISPER_API_TOKEN" \
-  > typewhisper-settings.json
+  --output typewhisper-settings.json.tmp && \
+  mv typewhisper-settings.json.tmp typewhisper-settings.json
 
 # Import all categories from a settings backup
-curl -X POST http://localhost:8978/v1/settings/import \
+curl --fail --silent --show-error -X POST http://localhost:8978/v1/settings/import \
   -H "Authorization: Bearer $TYPEWHISPER_API_TOKEN" \
   -H "Content-Type: application/json" \
   --data-binary @typewhisper-settings.json
