@@ -411,6 +411,7 @@ final class ElevenLabsPluginTests: XCTestCase {
             "Removes filler words, false starts, and other speech disfluencies using ElevenLabs' native non-verbatim mode.",
             "Audio events",
             "Include non-speech events such as [laughter] or [background music]. Applies to REST transcription only.",
+            "Audio events and Clean transcript can be enabled together.",
             "Speaker count",
             "Choose Automatic or the maximum number of speakers (1–32). Applies to REST transcription only.",
             "Use TypeWhisper dictionary terms",

@@ -287,6 +287,28 @@
         }
       }
     },
+    "Audio events and Clean transcript can be enabled together.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "„Audioereignisse“ und „Bereinigtes Transkript“ können gleichzeitig aktiviert werden."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「音声イベント」と「クリーンな文字起こし」は同時に有効にできます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“音频事件”和“清理转录”可以同时启用。"
+          }
+        }
+      }
+    },
     "Automatic": {
       "localizations": {
         "de": {
