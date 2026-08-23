@@ -264,6 +264,226 @@
           }
         }
       }
+    },
+    "Audio events": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Audioereignisse"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "音声イベント"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "音频事件"
+          }
+        }
+      }
+    },
+    "Automatic": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatisch"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自動"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自动"
+          }
+        }
+      }
+    },
+    "Choose Automatic or the maximum number of speakers (1–32). Applies to REST transcription only.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wählen Sie „Automatisch“ oder die maximale Anzahl der Sprecher (1–32). Gilt nur für die REST-Transkription."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自動、または話者の最大人数（1～32）を選択します。REST文字起こしにのみ適用されます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "选择“自动”或最大说话人数（1–32）。仅适用于 REST 转录。"
+          }
+        }
+      }
+    },
+    "Clean transcript": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bereinigtes Transkript"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "クリーンな文字起こし"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "清理转录"
+          }
+        }
+      }
+    },
+    "Include non-speech events such as [laughter] or [background music]. Applies to REST transcription only.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nichtsprachliche Ereignisse wie [Lachen] oder [Hintergrundmusik] einschließen. Gilt nur für die REST-Transkription."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "[笑い声]や[背景音楽]などの非音声イベントを含めます。REST文字起こしにのみ適用されます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "包括[笑声]或[背景音乐]等非语音事件。仅适用于 REST 转录。"
+          }
+        }
+      }
+    },
+    "Removes filler words, false starts, and other speech disfluencies using ElevenLabs' native non-verbatim mode.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Entfernt Füllwörter, Fehlstarts und andere Sprechunflüssigkeiten mit dem nativen Nicht-Verbatim-Modus von ElevenLabs."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ElevenLabsのネイティブ非逐語モードを使用して、フィラーワード、言い直し、その他の発話の乱れを除去します。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用 ElevenLabs 原生非逐字模式移除填充词、错误开头和其他言语不流畅内容。"
+          }
+        }
+      }
+    },
+    "Sends active TypeWhisper dictionary terms to ElevenLabs as recognition keyterms. ElevenLabs adds a 20% keyterm surcharge.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sendet aktive TypeWhisper-Wörterbucheinträge als Erkennungsschlüsselbegriffe an ElevenLabs. ElevenLabs berechnet für Schlüsselbegriffe einen Aufschlag von 20 %."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有効なTypeWhisper辞書用語を認識キータームとしてElevenLabsに送信します。ElevenLabsではキータームに20%の追加料金がかかります。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将启用的 TypeWhisper 词典术语作为识别关键词发送给 ElevenLabs。ElevenLabs 会对关键词提示加收 20% 的费用。"
+          }
+        }
+      }
+    },
+    "Speaker count": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sprecheranzahl"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "話者数"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "说话人数"
+          }
+        }
+      }
+    },
+    "Transcription options": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkriptionsoptionen"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文字起こしオプション"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "转录选项"
+          }
+        }
+      }
+    },
+    "Use TypeWhisper dictionary terms": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TypeWhisper-Wörterbucheinträge verwenden"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TypeWhisperの辞書用語を使用"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用 TypeWhisper 词典术语"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
