@@ -124,6 +124,88 @@ final class AuthenticatedCLIPluginTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(recorder.requests.count, 6)
     }
 
+    func testSelectedExecutableChangeRejectsStaleFullRefresh() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AuthenticatedCLISelectionRace-\(UUID().uuidString)", isDirectory: true)
+        let oldDirectory = root.appendingPathComponent("old", isDirectory: true)
+        let newDirectory = root.appendingPathComponent("new", isDirectory: true)
+        try FileManager.default.createDirectory(at: oldDirectory, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: newDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        let oldExecutable = oldDirectory.appendingPathComponent("codex")
+        let newExecutable = newDirectory.appendingPathComponent("codex")
+        for executable in [oldExecutable, newExecutable] {
+            try Data("#!/bin/sh\nexit 0\n".utf8).write(to: executable)
+            try FileManager.default.setAttributes(
+                [.posixPermissions: 0o755],
+                ofItemAtPath: executable.path
+            )
+        }
+
+        let oldProbeGate = AsyncGate()
+        let recorder = ProcessRequestRecorder()
+        let runner = AsyncStubProcessRunner { request in
+            recorder.record(request)
+            if request.executableURL == oldExecutable,
+               request.arguments == ["--version"] {
+                await oldProbeGate.wait()
+            }
+            switch request.arguments {
+            case ["--version"]:
+                return CLIProcessResult(
+                    exitCode: 0,
+                    standardOutput: Data("codex-cli 0.149.0\n".utf8),
+                    standardError: Data()
+                )
+            case ["exec", "--help"]:
+                return CLIProcessResult(
+                    exitCode: 0,
+                    standardOutput: Data(CLIProviderKind.codex.requiredHelpTokens.joined(separator: " ").utf8),
+                    standardError: Data()
+                )
+            case ["login", "status"]:
+                return CLIProcessResult(
+                    exitCode: 0,
+                    standardOutput: Data("Logged in using ChatGPT\n".utf8),
+                    standardError: Data()
+                )
+            default:
+                return CLIProcessResult(exitCode: 2, standardOutput: Data(), standardError: Data())
+            }
+        }
+        let plugin = AuthenticatedCLIPlugin(
+            runner: runner,
+            codexModelCatalogLoader: ExecutableCodexModelCatalogLoader(),
+            environment: ["PATH": oldDirectory.path],
+            homeDirectory: root
+        )
+        plugin.activate(host: try PluginTestHostServices())
+        defer { plugin.deactivate() }
+
+        let startDeadline = ContinuousClock.now + .seconds(1)
+        while !recorder.requests.contains(where: {
+            $0.executableURL == oldExecutable && $0.arguments == ["--version"]
+        }), ContinuousClock.now < startDeadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        await plugin.setSelectedExecutable(newExecutable, for: .codex)
+        XCTAssertEqual(plugin.status(for: .codex).executableURL, newExecutable)
+        XCTAssertEqual(plugin.supportedModels(for: .codex).map(\.id), ["new-model"])
+
+        await oldProbeGate.open()
+        let finishDeadline = ContinuousClock.now + .seconds(2)
+        while plugin.isRefreshingAvailability, ContinuousClock.now < finishDeadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        XCTAssertFalse(plugin.isRefreshingAvailability)
+        XCTAssertEqual(plugin.selectedPath(for: .codex), newExecutable.path)
+        XCTAssertEqual(plugin.status(for: .codex).executableURL, newExecutable)
+        XCTAssertEqual(plugin.supportedModels(for: .codex).map(\.id), ["new-model"])
+    }
+
     func testEffortDisplayNamesHaveGermanLocalizations() throws {
         let localizationURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
@@ -378,6 +460,38 @@ final class AuthenticatedCLIPluginTests: XCTestCase {
         {"conversation_id":"abc","status":"SUCCESS","response":"{\\"text\\":\\"Antigravity result\\"}\\n","structured_output":{"text":"Antigravity result"}}
         """
         XCTAssertEqual(try CLIOutputParser.parse(.antigravity, stdout: Data(antigravity.utf8)), "Antigravity result")
+    }
+
+    func testProviderParsersIgnoreNonJSONLinesAroundStructuredResults() throws {
+        let codex = """
+        Update available; continuing with the installed version.
+        {"type":"item.completed","item":{"type":"agent_message","text":"{\\"text\\":\\"Codex result\\"}"}}
+        {"type":"turn.completed"}
+        """
+        XCTAssertEqual(try CLIOutputParser.parse(.codex, stdout: Data(codex.utf8)), "Codex result")
+
+        let antigravity = """
+        Warning: using cached credentials.
+        {"event":"result","result":{"status":"SUCCESS","structured_output":{"text":"Antigravity result"}}}
+        """
+        XCTAssertEqual(
+            try CLIOutputParser.parse(.antigravity, stdout: Data(antigravity.utf8)),
+            "Antigravity result"
+        )
+
+        let failedCodex = """
+        Update available; continuing with the installed version.
+        {"type":"turn.failed","error":{"message":"Authentication expired"}}
+        """
+        XCTAssertEqual(
+            CLIOutputParser.failureMessage(
+                .codex,
+                stdout: Data(failedCodex.utf8),
+                stderr: Data(),
+                exitCode: 1
+            ),
+            "Authentication expired"
+        )
     }
 
     func testProviderParsersRejectPartialOrUnstructuredOutput() {
@@ -990,5 +1104,50 @@ private final class ProcessRequestRecorder: @unchecked Sendable {
         lock.lock()
         storage.append(request)
         lock.unlock()
+    }
+}
+
+private actor AsyncGate {
+    private var isOpen = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async {
+        guard !isOpen else { return }
+        await withCheckedContinuation { continuation in
+            waiters.append(continuation)
+        }
+    }
+
+    func open() {
+        isOpen = true
+        let pending = waiters
+        waiters.removeAll()
+        for waiter in pending {
+            waiter.resume()
+        }
+    }
+}
+
+private struct ExecutableCodexModelCatalogLoader: CodexModelCatalogLoading {
+    func loadModels(
+        executableURL: URL,
+        environment: [String: String],
+        workingDirectory: URL
+    ) async throws -> CodexModelCatalog {
+        let selection = executableURL.deletingLastPathComponent().lastPathComponent
+        let modelID = "\(selection)-model"
+        return CodexModelCatalog(
+            models: [
+                CodexCLIModel(
+                    id: modelID,
+                    displayName: modelID,
+                    isDefault: true,
+                    supportedReasoningEfforts: [CodexReasoningEffort(id: "medium")],
+                    defaultReasoningEffort: "medium"
+                ),
+            ],
+            defaultModelID: modelID,
+            fetchedAt: Date()
+        )
     }
 }

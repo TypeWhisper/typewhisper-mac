@@ -658,8 +658,8 @@ enum CLIOutputParser {
 
         switch kind {
         case .codex:
-            if let output = String(data: stdout, encoding: .utf8),
-               let events = try? jsonLines(output) {
+            if let output = String(data: stdout, encoding: .utf8) {
+                let events = jsonLines(output)
                 for event in events.reversed() {
                     if event["type"] as? String == "error",
                        let message = event["message"] as? String,
@@ -717,7 +717,7 @@ enum CLIOutputParser {
     private static func parseCodex(_ output: String) throws -> String {
         var result: String?
         var completed = false
-        for object in try jsonLines(output) {
+        for object in jsonLines(output) {
             guard let type = object["type"] as? String else { continue }
             if type == "turn.completed" {
                 completed = true
@@ -760,7 +760,7 @@ enum CLIOutputParser {
         }
 
         let output = String(decoding: data, as: UTF8.self)
-        for event in try jsonLines(output).reversed()
+        for event in jsonLines(output).reversed()
         where event["event"] as? String == "result" {
             guard let result = event["result"] as? [String: Any],
                   result["status"] as? String == "SUCCESS",
@@ -772,15 +772,14 @@ enum CLIOutputParser {
         throw CLIPluginError.invalidOutput("Antigravity did not emit a terminal structured result.")
     }
 
-    private static func jsonLines(_ output: String) throws -> [[String: Any]] {
-        try output
+    private static func jsonLines(_ output: String) -> [[String: Any]] {
+        output
             .split(whereSeparator: \Character.isNewline)
-            .map { line in
+            .compactMap { line in
                 guard let data = String(line).data(using: .utf8),
-                      let object = try JSONSerialization.jsonObject(with: data) as? [String: Any]
-                else {
-                    throw CLIPluginError.invalidOutput("A JSON Lines event could not be decoded.")
-                }
+                      let decoded = try? JSONSerialization.jsonObject(with: data),
+                      let object = decoded as? [String: Any]
+                else { return nil }
                 return object
             }
     }

@@ -101,6 +101,15 @@ final class AuthenticatedCLIPlugin: NSObject,
                 host: host
             )
         }
+        let selectedPaths: [CLIProviderKind: String] = Dictionary(
+            uniqueKeysWithValues: CLIProviderKind.allCases.compactMap { kind in
+                let key = Self.selectedExecutableKeyPrefix + kind.rawValue
+                guard let path = host.userDefault(forKey: key) as? String,
+                      !path.isEmpty
+                else { return nil }
+                return (kind, path)
+            }
+        )
 
         state.withLock { state in
             state.isActive = true
@@ -114,15 +123,7 @@ final class AuthenticatedCLIPlugin: NSObject,
             state.codexModelRefreshError = nil
             state.antigravityModelCatalog = cachedAntigravityCatalog
             state.antigravityModelRefreshError = nil
-            state.selectedPaths = Dictionary(
-                uniqueKeysWithValues: CLIProviderKind.allCases.compactMap { kind in
-                    let key = Self.selectedExecutableKeyPrefix + kind.rawValue
-                    guard let path = host.userDefault(forKey: key) as? String,
-                          !path.isEmpty
-                    else { return nil }
-                    return (kind, path)
-                }
-            )
+            state.selectedPaths = selectedPaths
         }
 
         if isScreenshotAutomation {
@@ -320,31 +321,45 @@ final class AuthenticatedCLIPlugin: NSObject,
             guard state.isActive, state.generation == generation else {
                 return (nil, nil, nil)
             }
-            state.statuses = results
+            for kind in CLIProviderKind.allCases
+            where state.selectedPaths[kind] == selectedPaths[kind] {
+                state.statuses[kind] = results[kind]
+            }
+            let codexSelectionIsCurrent = state.selectedPaths[.codex] == selectedPaths[.codex]
+            let antigravitySelectionIsCurrent = state.selectedPaths[.antigravity]
+                == selectedPaths[.antigravity]
             let codexCatalogToPersist: CodexModelCatalog?
-            switch catalogOutcomes.0 {
-            case .notAttempted:
-                state.codexModelRefreshError = nil
-                codexCatalogToPersist = nil
-            case .success(let catalog):
-                state.codexModelCatalog = catalog
-                state.codexModelRefreshError = nil
-                codexCatalogToPersist = catalog
-            case .failure(let message):
-                state.codexModelRefreshError = message
+            if codexSelectionIsCurrent {
+                switch catalogOutcomes.0 {
+                case .notAttempted:
+                    state.codexModelRefreshError = nil
+                    codexCatalogToPersist = nil
+                case .success(let catalog):
+                    state.codexModelCatalog = catalog
+                    state.codexModelRefreshError = nil
+                    codexCatalogToPersist = catalog
+                case .failure(let message):
+                    state.codexModelRefreshError = message
+                    codexCatalogToPersist = nil
+                }
+            } else {
                 codexCatalogToPersist = nil
             }
             let antigravityCatalogToPersist: AntigravityModelCatalog?
-            switch catalogOutcomes.1 {
-            case .notAttempted:
-                state.antigravityModelRefreshError = nil
-                antigravityCatalogToPersist = nil
-            case .success(let catalog):
-                state.antigravityModelCatalog = catalog
-                state.antigravityModelRefreshError = nil
-                antigravityCatalogToPersist = catalog
-            case .failure(let message):
-                state.antigravityModelRefreshError = message
+            if antigravitySelectionIsCurrent {
+                switch catalogOutcomes.1 {
+                case .notAttempted:
+                    state.antigravityModelRefreshError = nil
+                    antigravityCatalogToPersist = nil
+                case .success(let catalog):
+                    state.antigravityModelCatalog = catalog
+                    state.antigravityModelRefreshError = nil
+                    antigravityCatalogToPersist = catalog
+                case .failure(let message):
+                    state.antigravityModelRefreshError = message
+                    antigravityCatalogToPersist = nil
+                }
+            } else {
                 antigravityCatalogToPersist = nil
             }
             state.isRefreshing = false
@@ -464,7 +479,10 @@ final class AuthenticatedCLIPlugin: NSObject,
             : .notAttempted
         let committed = state.withLock {
             state -> (HostServices?, CodexModelCatalog?, AntigravityModelCatalog?) in
-            guard state.isActive, state.generation == snapshot.0 else { return (nil, nil, nil) }
+            guard state.isActive,
+                  state.generation == snapshot.0,
+                  state.selectedPaths[kind] == snapshot.2
+            else { return (nil, nil, nil) }
             state.statuses[kind] = status
             let codexCatalogToPersist: CodexModelCatalog?
             switch codexModelOutcome {
