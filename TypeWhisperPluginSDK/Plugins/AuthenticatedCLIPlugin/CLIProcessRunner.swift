@@ -1,4 +1,5 @@
 import Darwin
+import Dispatch
 import Foundation
 import os
 
@@ -61,6 +62,12 @@ protocol CLIJSONRPCProcessRunning: Sendable {
 }
 
 struct CLIProcessRunner: CLIProcessRunning, CLIJSONRPCProcessRunning, Sendable {
+    private static let blockingQueue = DispatchQueue(
+        label: "com.typewhisper.authenticated-cli.process-io",
+        qos: .utility,
+        attributes: .concurrent
+    )
+
     private enum Event: Sendable {
         case inputFinished
         case standardOutput(Data)
@@ -92,25 +99,35 @@ struct CLIProcessRunner: CLIProcessRunning, CLIJSONRPCProcessRunning, Sendable {
             do {
                 return try await withThrowingTaskGroup(of: Event.self) { group in
                     group.addTask {
-                        try Self.write(request.standardInput, to: process.standardInput)
-                        return .inputFinished
+                        try await Self.runBlocking {
+                            try Self.write(request.standardInput, to: process.standardInput)
+                            return .inputFinished
+                        }
                     }
                     group.addTask {
-                        .standardOutput(try Self.read(
-                            from: process.standardOutput,
-                            limit: request.standardOutputLimit,
-                            limitError: .standardOutputTooLarge
-                        ))
+                        try await Self.runBlocking {
+                            .standardOutput(try Self.read(
+                                from: process.standardOutput,
+                                limit: request.standardOutputLimit,
+                                limitError: .standardOutputTooLarge
+                            ))
+                        }
                     }
                     group.addTask {
-                        .standardError(try Self.read(
-                            from: process.standardError,
-                            limit: request.standardErrorLimit,
-                            limitError: .standardErrorTooLarge
-                        ))
+                        try await Self.runBlocking {
+                            .standardError(try Self.read(
+                                from: process.standardError,
+                                limit: request.standardErrorLimit,
+                                limitError: .standardErrorTooLarge
+                            ))
+                        }
                     }
                     group.addTask {
-                        .exited(try Self.wait(for: process.processIdentifier))
+                        try await Self.runBlocking {
+                            let exitCode = try Self.wait(for: process.processIdentifier)
+                            controller.markReaped()
+                            return .exited(exitCode)
+                        }
                     }
                     group.addTask {
                         try await Task.sleep(for: .seconds(request.timeout))
@@ -134,9 +151,6 @@ struct CLIProcessRunner: CLIProcessRunning, CLIJSONRPCProcessRunning, Sendable {
                                 standardError = data
                             case .exited(let code):
                                 exitCode = code
-                                // Reap the direct child, then terminate any descendants that
-                                // inherited its process group and might still hold our pipes.
-                                controller.terminateProcessGroup()
                             case .timedOut:
                                 controller.terminateProcessGroup()
                                 group.cancelAll()
@@ -191,17 +205,25 @@ struct CLIProcessRunner: CLIProcessRunning, CLIJSONRPCProcessRunning, Sendable {
             do {
                 return try await withThrowingTaskGroup(of: JSONRPCEvent.self) { group in
                     group.addTask {
-                        .response(try Self.exchangeJSONRPC(request, with: process))
+                        try await Self.runBlocking {
+                            .response(try Self.exchangeJSONRPC(request, with: process))
+                        }
                     }
                     group.addTask {
-                        .standardError(try Self.read(
-                            from: process.standardError,
-                            limit: processRequest.standardErrorLimit,
-                            limitError: .standardErrorTooLarge
-                        ))
+                        try await Self.runBlocking {
+                            .standardError(try Self.read(
+                                from: process.standardError,
+                                limit: processRequest.standardErrorLimit,
+                                limitError: .standardErrorTooLarge
+                            ))
+                        }
                     }
                     group.addTask {
-                        .exited(try Self.wait(for: process.processIdentifier))
+                        try await Self.runBlocking {
+                            let exitCode = try Self.wait(for: process.processIdentifier)
+                            controller.markReaped()
+                            return .exited(exitCode)
+                        }
                     }
                     group.addTask {
                         try await Task.sleep(for: .seconds(processRequest.timeout))
@@ -223,7 +245,6 @@ struct CLIProcessRunner: CLIProcessRunning, CLIJSONRPCProcessRunning, Sendable {
                                 standardError = data
                             case .exited(let code):
                                 exitCode = code
-                                controller.terminateProcessGroup()
                             case .timedOut:
                                 controller.terminateProcessGroup()
                                 group.cancelAll()
@@ -397,6 +418,20 @@ struct CLIProcessRunner: CLIProcessRunning, CLIJSONRPCProcessRunning, Sendable {
         }
     }
 
+    private static func runBlocking<Value: Sendable>(
+        _ operation: @escaping @Sendable () throws -> Value
+    ) async throws -> Value {
+        try await withCheckedThrowingContinuation { continuation in
+            blockingQueue.async {
+                do {
+                    continuation.resume(returning: try operation())
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
+    }
+
     private static func write(_ data: Data, to descriptor: Int32) throws {
         defer { Darwin.close(descriptor) }
         try writeKeepingOpen(data, to: descriptor)
@@ -466,7 +501,7 @@ struct CLIProcessRunner: CLIProcessRunning, CLIJSONRPCProcessRunning, Sendable {
                       responseID.intValue == id
                 else { continue }
 
-                if let error = object["error"] {
+                if let error = object["error"], !(error is NSNull) {
                     let description = String(describing: error).prefix(1_024)
                     throw CLIProcessError.outputReadFailed("JSON-RPC request failed: \(description)")
                 }
@@ -557,7 +592,9 @@ struct CLIProcessRunner: CLIProcessRunning, CLIJSONRPCProcessRunning, Sendable {
 private final class CLIProcessController: @unchecked Sendable {
     private struct State {
         var processIdentifier: pid_t?
-        var terminated = false
+        var terminationRequested = false
+        var reaped = false
+        var terminationSignalSent = false
     }
 
     private let state = OSAllocatedUnfairLock(initialState: State())
@@ -565,26 +602,50 @@ private final class CLIProcessController: @unchecked Sendable {
     func install(processIdentifier: pid_t) {
         let terminateImmediately = state.withLock { state -> Bool in
             state.processIdentifier = processIdentifier
-            return state.terminated
+            guard state.terminationRequested,
+                  !state.reaped,
+                  !state.terminationSignalSent
+            else { return false }
+            state.terminationSignalSent = true
+            return true
         }
         if terminateImmediately {
-            Self.killProcessGroup(processIdentifier)
+            Self.killProcessAndGroup(processIdentifier)
+        }
+    }
+
+    func markReaped() {
+        let processIdentifier = state.withLock { state -> pid_t? in
+            state.reaped = true
+            guard !state.terminationSignalSent else { return nil }
+            state.terminationSignalSent = true
+            return state.processIdentifier
+        }
+        if let processIdentifier {
+            Self.killDescendantProcessGroup(processIdentifier)
         }
     }
 
     func terminateProcessGroup() {
         let processIdentifier = state.withLock { state -> pid_t? in
-            state.terminated = true
+            state.terminationRequested = true
+            guard !state.reaped, !state.terminationSignalSent else { return nil }
+            state.terminationSignalSent = true
             return state.processIdentifier
         }
         if let processIdentifier {
-            Self.killProcessGroup(processIdentifier)
+            Self.killProcessAndGroup(processIdentifier)
         }
     }
 
-    private static func killProcessGroup(_ processIdentifier: pid_t) {
+    private static func killProcessAndGroup(_ processIdentifier: pid_t) {
         guard processIdentifier > 1 else { return }
         _ = Darwin.kill(-processIdentifier, SIGKILL)
         _ = Darwin.kill(processIdentifier, SIGKILL)
+    }
+
+    private static func killDescendantProcessGroup(_ processIdentifier: pid_t) {
+        guard processIdentifier > 1 else { return }
+        _ = Darwin.kill(-processIdentifier, SIGKILL)
     }
 }

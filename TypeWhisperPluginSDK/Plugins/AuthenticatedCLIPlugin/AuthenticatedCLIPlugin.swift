@@ -105,6 +105,7 @@ final class AuthenticatedCLIPlugin: NSObject,
         state.withLock { state in
             state.isActive = true
             state.generation &+= 1
+            state.isRefreshing = false
             state.host = host
             if isScreenshotAutomation {
                 state.statuses = Self.screenshotStatuses
@@ -601,8 +602,13 @@ final class AuthenticatedCLIPlugin: NSObject,
 
     static func effortDisplayName(_ id: String) -> String {
         switch id.lowercased() {
-        case "xhigh": "XHigh"
-        case "ultracode": "Ultracode"
+        case "minimal": String(localized: "Minimal", bundle: .module)
+        case "low": String(localized: "Low", bundle: .module)
+        case "medium": String(localized: "Medium", bundle: .module)
+        case "high": String(localized: "High", bundle: .module)
+        case "xhigh": String(localized: "XHigh", bundle: .module)
+        case "max": String(localized: "Max", bundle: .module)
+        case "ultracode": String(localized: "Ultracode", bundle: .module)
         default: id.capitalized
         }
     }

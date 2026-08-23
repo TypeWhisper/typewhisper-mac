@@ -15,8 +15,13 @@
     "CLI documentation": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"CLI-Dokumentation"}},"ja":{"stringUnit":{"state":"translated","value":"CLIドキュメント"}}}},
     "Default effort": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Standard-Effort"}},"ja":{"stringUnit":{"state":"translated","value":"デフォルトのエフォート"}}}},
     "Executable": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Programm"}},"ja":{"stringUnit":{"state":"translated","value":"実行ファイル"}}}},
+    "High": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Hoch"}},"ja":{"stringUnit":{"state":"translated","value":"高"}}}},
     "Incompatible": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Nicht kompatibel"}},"ja":{"stringUnit":{"state":"translated","value":"互換性なし"}}}},
     "Installed and authenticated.": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Installiert und angemeldet."}},"ja":{"stringUnit":{"state":"translated","value":"インストール済みで認証されています。"}}}},
+    "Low": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Niedrig"}},"ja":{"stringUnit":{"state":"translated","value":"低"}}}},
+    "Max": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Maximum"}},"ja":{"stringUnit":{"state":"translated","value":"最大"}}}},
+    "Medium": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Mittel"}},"ja":{"stringUnit":{"state":"translated","value":"中"}}}},
+    "Minimal": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Minimal"}},"ja":{"stringUnit":{"state":"translated","value":"最小"}}}},
     "Models and model-specific effort levels are loaded from the signed-in Codex CLI and refreshed automatically.": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Modelle und modellspezifische Effort-Stufen werden aus der angemeldeten Codex-CLI geladen und automatisch aktualisiert."}},"ja":{"stringUnit":{"state":"translated","value":"モデルとモデル固有のエフォートレベルは、サインイン済みのCodex CLIから読み込まれ、自動的に更新されます。"}}}},
     "Models are loaded from the signed-in Antigravity CLI. Effort can be set to Low, Medium, or High.": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Die Modelle werden aus der angemeldeten Antigravity-CLI geladen. Effort kann auf Niedrig, Mittel oder Hoch gesetzt werden."}},"ja":{"stringUnit":{"state":"translated","value":"モデルはサインイン済みのAntigravity CLIから読み込まれます。エフォートは低、中、高に設定できます。"}}}},
     "Not installed": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Nicht installiert"}},"ja":{"stringUnit":{"state":"translated","value":"未インストール"}}}},
@@ -31,9 +36,11 @@
     "Support follows the documented Antigravity headless CLI contract. No signed-in installation was available for a live test.": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Die Unterstützung folgt dem dokumentierten Headless-CLI-Vertrag von Antigravity. Für einen Live-Test war keine angemeldete Installation verfügbar."}},"ja":{"stringUnit":{"state":"translated","value":"サポートは文書化されたAntigravityヘッドレスCLIの仕様に準拠しています。ライブテストに使用できるサインイン済みの環境はありませんでした。"}}}},
     "The CLI is installed, but no signed-in account was detected.": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Die CLI ist installiert, aber es wurde kein angemeldetes Konto erkannt."}},"ja":{"stringUnit":{"state":"translated","value":"CLIはインストールされていますが、サインイン済みアカウントが見つかりません。"}}}},
     "The CLI was not found in common installation locations.": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Die CLI wurde an den üblichen Installationsorten nicht gefunden."}},"ja":{"stringUnit":{"state":"translated","value":"一般的なインストール先にCLIが見つかりません。"}}}},
+    "Ultracode": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Ultracode"}},"ja":{"stringUnit":{"state":"translated","value":"ウルトラコード"}}}},
     "Use automatic detection": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Automatische Erkennung verwenden"}},"ja":{"stringUnit":{"state":"translated","value":"自動検出を使用"}}}},
     "Use the accounts already signed in to supported provider CLIs. No separate API key is stored in TypeWhisper.": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Verwende die Konten, mit denen du bereits in unterstützten Anbieter-CLIs angemeldet bist. TypeWhisper speichert keinen separaten API-Key."}},"ja":{"stringUnit":{"state":"translated","value":"対応するプロバイダーCLIですでにサインインしているアカウントを使用します。TypeWhisperに別のAPIキーは保存されません。"}}}},
-    "Version": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Version"}},"ja":{"stringUnit":{"state":"translated","value":"バージョン"}}}}
+    "Version": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Version"}},"ja":{"stringUnit":{"state":"translated","value":"バージョン"}}}},
+    "XHigh": {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Sehr hoch"}},"ja":{"stringUnit":{"state":"translated","value":"非常に高"}}}}
   },
   "version": "1.0"
 }

@@ -119,7 +119,8 @@ struct CLIAvailabilityProbe: Sendable {
                 executableURL: executableURL,
                 arguments: kind.authenticationArguments,
                 environment: environment,
-                workingDirectory: temporaryDirectory
+                workingDirectory: temporaryDirectory,
+                timeout: 15
             )
             let authenticated: Bool
             switch kind {
@@ -164,7 +165,8 @@ struct CLIAvailabilityProbe: Sendable {
         executableURL: URL,
         arguments: [String],
         environment: [String: String],
-        workingDirectory: URL
+        workingDirectory: URL,
+        timeout: TimeInterval = 5
     ) async throws -> CLIProcessResult {
         try await runner.run(CLIProcessRequest(
             executableURL: executableURL,
@@ -172,7 +174,7 @@ struct CLIAvailabilityProbe: Sendable {
             environment: environment,
             workingDirectory: workingDirectory,
             standardInput: Data(),
-            timeout: 5,
+            timeout: timeout,
             standardOutputLimit: 128 * 1024,
             standardErrorLimit: 64 * 1024
         ))

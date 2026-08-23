@@ -68,6 +68,91 @@ final class AuthenticatedCLIPluginTests: XCTestCase {
         )
     }
 
+    func testReactivationDoesNotLeaveAvailabilityRefreshStuck() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AuthenticatedCLIReactivation-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        for name in CLIProviderKind.allCases.map(\.executableName) {
+            let executable = root.appendingPathComponent(name)
+            try Data("#!/bin/sh\nexit 0\n".utf8).write(to: executable)
+            try FileManager.default.setAttributes(
+                [.posixPermissions: 0o755],
+                ofItemAtPath: executable.path
+            )
+        }
+
+        let recorder = ProcessRequestRecorder()
+        let runner = AsyncStubProcessRunner { request in
+            recorder.record(request)
+            try await Task.sleep(for: .milliseconds(100))
+            return CLIProcessResult(
+                exitCode: 1,
+                standardOutput: Data(),
+                standardError: Data()
+            )
+        }
+        let plugin = AuthenticatedCLIPlugin(
+            runner: runner,
+            environment: ["PATH": root.path],
+            homeDirectory: root
+        )
+        let host = try PluginTestHostServices()
+        plugin.activate(host: host)
+        defer { plugin.deactivate() }
+
+        let startDeadline = ContinuousClock.now + .seconds(1)
+        while recorder.requests.isEmpty, ContinuousClock.now < startDeadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertFalse(recorder.requests.isEmpty, "The initial refresh did not start")
+
+        plugin.activate(host: host)
+
+        let restartDeadline = ContinuousClock.now + .seconds(2)
+        while recorder.requests.count < 4, ContinuousClock.now < restartDeadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertGreaterThanOrEqual(recorder.requests.count, 4, "The replacement refresh did not start")
+
+        let finishDeadline = ContinuousClock.now + .seconds(2)
+        while plugin.isRefreshingAvailability, ContinuousClock.now < finishDeadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertFalse(plugin.isRefreshingAvailability)
+        XCTAssertGreaterThanOrEqual(recorder.requests.count, 6)
+    }
+
+    func testEffortDisplayNamesHaveGermanLocalizations() throws {
+        let localizationURL = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .appendingPathComponent("Localizable.xcstrings")
+        let data = try Data(contentsOf: localizationURL)
+        let catalog = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: data) as? [String: Any]
+        )
+        let strings = try XCTUnwrap(catalog["strings"] as? [String: Any])
+        let expected = [
+            "Minimal": "Minimal",
+            "Low": "Niedrig",
+            "Medium": "Mittel",
+            "High": "Hoch",
+            "XHigh": "Sehr hoch",
+            "Max": "Maximum",
+            "Ultracode": "Ultracode",
+        ]
+
+        for (key, value) in expected {
+            let entry = try XCTUnwrap(strings[key] as? [String: Any], "Missing key \(key)")
+            let localizations = try XCTUnwrap(entry["localizations"] as? [String: Any])
+            let german = try XCTUnwrap(localizations["de"] as? [String: Any])
+            let stringUnit = try XCTUnwrap(german["stringUnit"] as? [String: Any])
+            XCTAssertEqual(stringUnit["value"] as? String, value, "Wrong German value for \(key)")
+        }
+    }
+
     func testRequestEnvelopeKeepsInstructionSeparateFromUntrustedInput() throws {
         let data = try CLIRequestEnvelope.encode(
             instruction: "Correct punctuation.",
@@ -152,6 +237,38 @@ final class AuthenticatedCLIPluginTests: XCTestCase {
         IFS= read -r initialized
         IFS= read -r request
         printf '%s\\n' '{"id":1,"result":{"data":[],"nextCursor":null}}'
+        """
+        let process = CLIProcessRequest(
+            executableURL: URL(fileURLWithPath: "/bin/sh"),
+            arguments: ["-c", script],
+            environment: ["PATH": "/usr/bin:/bin"],
+            workingDirectory: FileManager.default.temporaryDirectory,
+            standardInput: Data(),
+            timeout: 2,
+            standardOutputLimit: 1024,
+            standardErrorLimit: 1024
+        )
+
+        let response = try await CLIProcessRunner().exchange(CLIJSONRPCExchangeRequest(
+            process: process,
+            initializeRequest: Data("{\"method\":\"initialize\",\"id\":0,\"params\":{}}".utf8),
+            initializedNotification: Data("{\"method\":\"initialized\",\"params\":{}}".utf8),
+            request: Data("{\"method\":\"model/list\",\"id\":1,\"params\":{}}".utf8),
+            initializeResponseID: 0,
+            responseID: 1
+        ))
+
+        let object = try XCTUnwrap(JSONSerialization.jsonObject(with: response) as? [String: Any])
+        XCTAssertEqual(object["id"] as? Int, 1)
+    }
+
+    func testJSONRPCProcessRunnerAcceptsExplicitNullErrors() async throws {
+        let script = """
+        IFS= read -r initialize
+        printf '%s\\n' '{"id":0,"result":{},"error":null}'
+        IFS= read -r initialized
+        IFS= read -r request
+        printf '%s\\n' '{"id":1,"result":{"data":[],"nextCursor":null},"error":null}'
         """
         let process = CLIProcessRequest(
             executableURL: URL(fileURLWithPath: "/bin/sh"),
@@ -445,6 +562,50 @@ final class AuthenticatedCLIPluginTests: XCTestCase {
         XCTAssertEqual(status.version, "codex-cli 0.149.0")
     }
 
+    func testAuthenticationProbeUsesLongerTimeoutThanLocalProbes() async throws {
+        let executable = try makeExecutable(named: "codex")
+        defer { try? FileManager.default.removeItem(at: executable.deletingLastPathComponent()) }
+        let recorder = ProcessRequestRecorder()
+        let runner = StubProcessRunner { request in
+            recorder.record(request)
+            switch request.arguments {
+            case ["--version"]:
+                return CLIProcessResult(
+                    exitCode: 0,
+                    standardOutput: Data("codex-cli 0.149.0\n".utf8),
+                    standardError: Data()
+                )
+            case ["exec", "--help"]:
+                return CLIProcessResult(
+                    exitCode: 0,
+                    standardOutput: Data(CLIProviderKind.codex.requiredHelpTokens.joined(separator: " ").utf8),
+                    standardError: Data()
+                )
+            case ["login", "status"]:
+                return CLIProcessResult(
+                    exitCode: 0,
+                    standardOutput: Data("Logged in using ChatGPT\n".utf8),
+                    standardError: Data()
+                )
+            default:
+                return CLIProcessResult(exitCode: 2, standardOutput: Data(), standardError: Data())
+            }
+        }
+        let probe = CLIAvailabilityProbe(
+            runner: runner,
+            baseEnvironment: [:],
+            homeDirectory: FileManager.default.homeDirectoryForCurrentUser
+        )
+
+        let status = await probe.probe(.codex, selectedPath: executable.path)
+
+        XCTAssertEqual(status.state, .ready)
+        let requests = recorder.requests
+        XCTAssertEqual(requests.first { $0.arguments == ["--version"] }?.timeout, 5)
+        XCTAssertEqual(requests.first { $0.arguments == ["exec", "--help"] }?.timeout, 5)
+        XCTAssertEqual(requests.first { $0.arguments == ["login", "status"] }?.timeout, 15)
+    }
+
     func testLiveCodexProviderWhenExplicitlyEnabled() async throws {
         guard ProcessInfo.processInfo.environment["TYPEWHISPER_LIVE_CODEX_TEST"] == "1" else {
             throw XCTSkip("Set TYPEWHISPER_LIVE_CODEX_TEST=1 to exercise the installed signed-in Codex CLI.")
@@ -727,6 +888,40 @@ final class AuthenticatedCLIPluginTests: XCTestCase {
         XCTAssertTrue(isGone, "The descendant process survived timeout cleanup")
     }
 
+    func testNormalExitTerminatesDescendantHoldingInheritedPipes() async throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AuthenticatedCLIExitedChildren-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let childPIDFile = root.appendingPathComponent("child.pid")
+        let script = "sleep 30 & child=$!; printf '%s' \"$child\" > '\(childPIDFile.path)'; exit 0"
+        let request = CLIProcessRequest(
+            executableURL: URL(fileURLWithPath: "/bin/sh"),
+            arguments: ["-c", script],
+            environment: ["PATH": "/usr/bin:/bin"],
+            workingDirectory: root,
+            standardInput: Data(),
+            timeout: 2,
+            standardOutputLimit: 1024,
+            standardErrorLimit: 1024
+        )
+
+        let result = try await CLIProcessRunner().run(request)
+
+        XCTAssertEqual(result.exitCode, 0)
+        let pidString = try String(contentsOf: childPIDFile, encoding: .utf8)
+        let childPID = try XCTUnwrap(pid_t(pidString))
+        var isGone = false
+        for _ in 0..<50 {
+            if Darwin.kill(childPID, 0) == -1, errno == ESRCH {
+                isGone = true
+                break
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertTrue(isGone, "The descendant process survived normal-exit cleanup")
+    }
+
     private func makeExecutable(named name: String) throws -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("AuthenticatedCLIExecutable-\(UUID().uuidString)", isDirectory: true)
@@ -766,5 +961,34 @@ private struct StubJSONRPCProcessRunner: CLIJSONRPCProcessRunning {
 
     func exchange(_ request: CLIJSONRPCExchangeRequest) async throws -> Data {
         try handler(request)
+    }
+}
+
+private struct AsyncStubProcessRunner: CLIProcessRunning {
+    let handler: @Sendable (CLIProcessRequest) async throws -> CLIProcessResult
+
+    init(handler: @escaping @Sendable (CLIProcessRequest) async throws -> CLIProcessResult) {
+        self.handler = handler
+    }
+
+    func run(_ request: CLIProcessRequest) async throws -> CLIProcessResult {
+        try await handler(request)
+    }
+}
+
+private final class ProcessRequestRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage: [CLIProcessRequest] = []
+
+    var requests: [CLIProcessRequest] {
+        lock.lock()
+        defer { lock.unlock() }
+        return storage
+    }
+
+    func record(_ request: CLIProcessRequest) {
+        lock.lock()
+        storage.append(request)
+        lock.unlock()
     }
 }

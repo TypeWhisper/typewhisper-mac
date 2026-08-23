@@ -429,6 +429,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         private let requestLock = NSLock()
         nonisolated(unsafe) private var _lastModel: String?
         nonisolated(unsafe) private var _lastEffort: String?
+        nonisolated(unsafe) var exposesCatalog = true
 
         required override init() {}
 
@@ -440,14 +441,16 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         var providerDisplayName: String { providerName }
         var isAvailable: Bool { true }
         var supportedModels: [PluginModelInfo] {
-            [PluginModelInfo(id: "reasoning-model", displayName: "Reasoning Model")]
+            exposesCatalog
+                ? [PluginModelInfo(id: "reasoning-model", displayName: "Reasoning Model")]
+                : []
         }
 
         var lastModel: String? { requestLock.withLock { _lastModel } }
         var lastEffort: String? { requestLock.withLock { _lastEffort } }
 
         func supportedEfforts(for model: String?) -> [PluginLLMEffortInfo] {
-            guard model == "reasoning-model" else { return [] }
+            guard exposesCatalog, model == "reasoning-model" else { return [] }
             return [
                 PluginLLMEffortInfo(id: "low", displayName: "Low"),
                 PluginLLMEffortInfo(id: "high", displayName: "High"),
@@ -455,7 +458,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         }
 
         func defaultEffortId(for model: String?) -> String? {
-            model == "reasoning-model" ? "low" : nil
+            exposesCatalog && model == "reasoning-model" ? "low" : nil
         }
 
         func process(systemPrompt: String, userText: String, model: String?) async throws -> String {
@@ -8991,6 +8994,58 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(workflowResult, "effort-aware")
         XCTAssertEqual(plugin.lastModel, "reasoning-model")
         XCTAssertEqual(plugin.lastEffort, "low")
+
+        let fallback = try XCTUnwrap(service.fallbackPriorityList.first)
+        service.updateLLMFallback(
+            fallback,
+            providerId: plugin.providerId,
+            modelId: "reasoning-model",
+            effortId: "unsupported"
+        )
+        do {
+            _ = try await service.process(prompt: "Fix grammar", text: "hello world")
+            XCTFail("Expected a known model to reject an unsupported effort")
+        } catch let error as LLMFallbackExhaustedError {
+            XCTAssertEqual(error.failures.first?.effortId, "unsupported")
+        }
+    }
+
+    @MainActor
+    func testPromptProcessingUsesProviderDefaultWhileEffortCatalogIsUnavailable() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let isolatedDefaults = Self.makeEmptyLLMFallbackDefaults()
+        defer { isolatedDefaults.defaults.removePersistentDomain(forName: isolatedDefaults.suiteName) }
+
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let plugin = MockEffortLLMProviderPlugin()
+        plugin.exposesCatalog = false
+        let manifest = PluginManifest(
+            id: MockEffortLLMProviderPlugin.pluginId,
+            name: MockEffortLLMProviderPlugin.pluginName,
+            version: "1.0.0",
+            principalClass: "APIRouterMockEffortLLMProviderPlugin"
+        )
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: manifest,
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let service = PromptProcessingService(userDefaults: isolatedDefaults.defaults)
+        service.addLLMFallback(providerId: plugin.providerId, effortId: "high")
+
+        let result = try await service.process(prompt: "Fix grammar", text: "hello world")
+
+        XCTAssertEqual(result, "effort-aware")
+        XCTAssertNil(plugin.lastModel)
+        XCTAssertNil(plugin.lastEffort)
     }
 
     @MainActor

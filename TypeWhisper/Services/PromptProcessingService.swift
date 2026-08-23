@@ -754,14 +754,17 @@ class PromptProcessingService: ObservableObject {
         guard let requestedEffortId = Self.normalizedEffortId(requestedEffortId) else {
             return nil
         }
-        guard let effortProvider = plugin as? any LLMEffortControllableProvider,
-              effortProvider.supportedEfforts(for: model).contains(where: {
-                  $0.id == requestedEffortId
-              })
-        else {
+        guard let effortProvider = plugin as? any LLMEffortControllableProvider else {
             throw LLMFallbackAttemptError.effortUnavailable(requestedEffortId)
         }
-        return requestedEffortId
+        let supportedEfforts = effortProvider.supportedEfforts(for: model)
+        if supportedEfforts.contains(where: { $0.id == requestedEffortId }) {
+            return requestedEffortId
+        }
+        if supportedEfforts.isEmpty, plugin.supportedModels.isEmpty {
+            return nil
+        }
+        throw LLMFallbackAttemptError.effortUnavailable(requestedEffortId)
     }
 
     private func inputText(
