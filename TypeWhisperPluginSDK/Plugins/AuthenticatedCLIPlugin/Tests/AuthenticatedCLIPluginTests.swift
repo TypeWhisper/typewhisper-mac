@@ -189,6 +189,12 @@ final class AuthenticatedCLIPluginTests: XCTestCase {
         }), ContinuousClock.now < startDeadline {
             try await Task.sleep(for: .milliseconds(10))
         }
+        XCTAssertTrue(
+            recorder.requests.contains {
+                $0.executableURL == oldExecutable && $0.arguments == ["--version"]
+            },
+            "The original availability refresh did not start"
+        )
 
         await plugin.setSelectedExecutable(newExecutable, for: .codex)
         XCTAssertEqual(plugin.status(for: .codex).executableURL, newExecutable)
