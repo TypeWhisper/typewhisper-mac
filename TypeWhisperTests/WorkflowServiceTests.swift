@@ -323,6 +323,22 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertNil(behavior.transcriptionEngineId)
         XCTAssertNil(behavior.transcriptionModelId)
         XCTAssertNil(behavior.microphoneBoostOverride)
+        XCTAssertNil(behavior.effortId)
+    }
+
+    func testWorkflowBehaviorRoundTripsEffortOverride() throws {
+        let behavior = WorkflowBehavior(
+            providerId: "authenticated-cli-codex",
+            cloudModel: "gpt-5.6-sol",
+            effortId: "high"
+        )
+
+        let decoded = try JSONDecoder().decode(
+            WorkflowBehavior.self,
+            from: JSONEncoder().encode(behavior)
+        )
+
+        XCTAssertEqual(decoded.effortId, "high")
     }
 
     func testWorkflowServicePersistsCombinedTriggerArrays() throws {

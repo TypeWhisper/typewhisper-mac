@@ -202,6 +202,36 @@ final class PromptProcessingModelResolutionTests: XCTestCase {
         XCTAssertEqual(reloaded.fallbackPriorityList.map(\.providerId), ["Mistral", "Groq"])
     }
 
+    func testFallbackEffortPersistsAndLegacyPayloadDefaultsToProviderSetting() throws {
+        let suiteName = "PromptProcessingModelResolutionTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        defaults.set(
+            try JSONSerialization.data(withJSONObject: [[
+                "id": UUID().uuidString,
+                "providerId": "legacy-provider",
+                "modelId": "legacy-model",
+            ]]),
+            forKey: UserDefaultsKeys.llmFallbackPriorityList
+        )
+
+        let service = PromptProcessingService(userDefaults: defaults)
+        XCTAssertNil(service.fallbackPriorityList.first?.effortId)
+
+        service.addLLMFallback(
+            providerId: "Codex CLI",
+            modelId: "gpt-5.6-sol",
+            effortId: "high"
+        )
+
+        let reloaded = PromptProcessingService(userDefaults: defaults)
+        let codex = try XCTUnwrap(reloaded.fallbackPriorityList.last)
+        XCTAssertEqual(codex.providerId, "Codex CLI")
+        XCTAssertEqual(codex.modelId, "gpt-5.6-sol")
+        XCTAssertEqual(codex.effortId, "high")
+    }
+
     func testFallbackListRejectsDuplicatePairsAndPersistsRemoval() throws {
         let suiteName = "PromptProcessingModelResolutionTests-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))

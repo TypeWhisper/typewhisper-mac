@@ -17,12 +17,22 @@ struct WorkflowTextProcessingService {
         _ temperatureDirective: PluginLLMTemperatureDirective
     ) async throws -> String
 
+    typealias EffortPromptProcessor = (
+        _ prompt: String,
+        _ text: String,
+        _ providerId: String?,
+        _ cloudModel: String?,
+        _ temperatureDirective: PluginLLMTemperatureDirective,
+        _ effortId: String?
+    ) async throws -> String
+
     typealias AppleTranslator = (
         _ text: String,
         _ targetLanguageCode: String,
         _ sourceLanguageCode: String?
     ) async throws -> String
     private let promptProcessor: PromptProcessor
+    private let effortPromptProcessor: EffortPromptProcessor?
     private let appleTranslator: AppleTranslator?
 
     init(
@@ -30,6 +40,7 @@ struct WorkflowTextProcessingService {
         appleTranslator: AppleTranslator?
     ) {
         self.promptProcessor = promptProcessor
+        self.effortPromptProcessor = nil
         self.appleTranslator = appleTranslator
     }
 
@@ -41,6 +52,16 @@ struct WorkflowTextProcessingService {
                 providerOverride: providerId,
                 cloudModelOverride: cloudModel,
                 temperatureDirective: temperatureDirective
+            )
+        }
+        self.effortPromptProcessor = { prompt, text, providerId, cloudModel, temperatureDirective, effortId in
+            try await promptProcessingService.processWorkflow(
+                prompt: prompt,
+                text: text,
+                providerOverride: providerId,
+                cloudModelOverride: cloudModel,
+                temperatureDirective: temperatureDirective,
+                effortOverride: effortId
             )
         }
 
@@ -91,6 +112,16 @@ struct WorkflowTextProcessingService {
         }
 
         let behavior = workflow.behavior
+        if let effortPromptProcessor {
+            return try await effortPromptProcessor(
+                systemPrompt,
+                text,
+                Self.trimmedOrNil(behavior.providerId),
+                Self.trimmedOrNil(behavior.cloudModel),
+                behavior.temperatureDirective,
+                Self.trimmedOrNil(behavior.effortId)
+            )
+        }
         return try await promptProcessor(
             systemPrompt,
             text,

@@ -416,6 +416,66 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         }
     }
 
+    @objc(APIRouterMockEffortLLMProviderPlugin)
+    private final class MockEffortLLMProviderPlugin: NSObject,
+        LLMProviderPlugin,
+        LLMProviderIdentityProviding,
+        LLMEffortControllableProvider,
+        @unchecked Sendable
+    {
+        static var pluginId: String { "com.typewhisper.mock.effort-llm" }
+        static var pluginName: String { "Mock Effort LLM" }
+
+        private let requestLock = NSLock()
+        nonisolated(unsafe) private var _lastModel: String?
+        nonisolated(unsafe) private var _lastEffort: String?
+
+        required override init() {}
+
+        func activate(host: HostServices) {}
+        func deactivate() {}
+
+        var providerName: String { "Mock Effort LLM" }
+        var providerId: String { "mock-effort-llm" }
+        var providerDisplayName: String { providerName }
+        var isAvailable: Bool { true }
+        var supportedModels: [PluginModelInfo] {
+            [PluginModelInfo(id: "reasoning-model", displayName: "Reasoning Model")]
+        }
+
+        var lastModel: String? { requestLock.withLock { _lastModel } }
+        var lastEffort: String? { requestLock.withLock { _lastEffort } }
+
+        func supportedEfforts(for model: String?) -> [PluginLLMEffortInfo] {
+            guard model == "reasoning-model" else { return [] }
+            return [
+                PluginLLMEffortInfo(id: "low", displayName: "Low"),
+                PluginLLMEffortInfo(id: "high", displayName: "High"),
+            ]
+        }
+
+        func defaultEffortId(for model: String?) -> String? {
+            model == "reasoning-model" ? "low" : nil
+        }
+
+        func process(systemPrompt: String, userText: String, model: String?) async throws -> String {
+            "legacy"
+        }
+
+        func process(
+            systemPrompt: String,
+            userText: String,
+            model: String?,
+            effort: String?
+        ) async throws -> String {
+            requestLock.withLock {
+                _lastModel = model
+                _lastEffort = effort
+            }
+            return "effort-aware"
+        }
+    }
+
     @MainActor
     private func waitForAutoUnloadCount(
         _ plugin: MockLLMProviderPlugin,
@@ -8876,6 +8936,61 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         XCTAssertEqual(plugin.lastRequestedModel, "gemini-2.5-pro")
         XCTAssertEqual(plugin.lastTemperatureDirective, .custom(0.8))
+    }
+
+    @MainActor
+    func testPromptProcessingPassesGlobalAndWorkflowEffortToEffortAwareProvider() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let isolatedDefaults = Self.makeEmptyLLMFallbackDefaults()
+        defer { isolatedDefaults.defaults.removePersistentDomain(forName: isolatedDefaults.suiteName) }
+
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let plugin = MockEffortLLMProviderPlugin()
+        let manifest = PluginManifest(
+            id: MockEffortLLMProviderPlugin.pluginId,
+            name: MockEffortLLMProviderPlugin.pluginName,
+            version: "1.0.0",
+            principalClass: "APIRouterMockEffortLLMProviderPlugin"
+        )
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: manifest,
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let service = PromptProcessingService(userDefaults: isolatedDefaults.defaults)
+        service.addLLMFallback(
+            providerId: plugin.providerId,
+            modelId: "reasoning-model",
+            effortId: "high"
+        )
+
+        let result = try await service.process(prompt: "Fix grammar", text: "hello world")
+
+        XCTAssertEqual(result, "effort-aware")
+        XCTAssertEqual(plugin.lastModel, "reasoning-model")
+        XCTAssertEqual(plugin.lastEffort, "high")
+
+        let workflowResult = try await service.processWorkflow(
+            prompt: "Fix grammar",
+            text: "hello world",
+            behavior: WorkflowBehavior(
+                providerId: plugin.providerId,
+                cloudModel: "reasoning-model",
+                effortId: "low"
+            )
+        )
+
+        XCTAssertEqual(workflowResult, "effort-aware")
+        XCTAssertEqual(plugin.lastModel, "reasoning-model")
+        XCTAssertEqual(plugin.lastEffort, "low")
     }
 
     @MainActor

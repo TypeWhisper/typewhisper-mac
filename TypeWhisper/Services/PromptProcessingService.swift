@@ -42,17 +42,25 @@ struct LLMFallbackPriorityItem: Identifiable, Codable, Equatable, Sendable {
     let id: UUID
     var providerId: String
     var modelId: String?
+    var effortId: String?
 
-    init(id: UUID = UUID(), providerId: String, modelId: String? = nil) {
+    init(
+        id: UUID = UUID(),
+        providerId: String,
+        modelId: String? = nil,
+        effortId: String? = nil
+    ) {
         self.id = id
         self.providerId = providerId
         self.modelId = modelId
+        self.effortId = effortId
     }
 }
 
 struct LLMFallbackAttemptFailure: Equatable, Sendable {
     let providerId: String
     let modelId: String?
+    let effortId: String?
     let reason: String
 }
 
@@ -65,7 +73,10 @@ struct LLMFallbackExhaustedError: LocalizedError, Equatable {
         }
 
         let details = failures.map { failure in
-            let target = failure.modelId.map { "\(failure.providerId) (\($0))" } ?? failure.providerId
+            let selections = [failure.modelId, failure.effortId].compactMap { $0 }
+            let target = selections.isEmpty
+                ? failure.providerId
+                : "\(failure.providerId) (\(selections.joined(separator: ", ")))"
             return "\(target): \(failure.reason)"
         }.joined(separator: " · ")
         return "No configured LLM fallback could process this text. \(details)"
@@ -75,6 +86,7 @@ struct LLMFallbackExhaustedError: LocalizedError, Equatable {
 private enum LLMFallbackAttemptError: LocalizedError {
     case emptyResult
     case modelUnavailable(String)
+    case effortUnavailable(String)
 
     var errorDescription: String? {
         switch self {
@@ -82,6 +94,8 @@ private enum LLMFallbackAttemptError: LocalizedError {
             "The LLM returned an empty result."
         case .modelUnavailable(let modelId):
             "The selected model \(modelId) is not available for this provider."
+        case .effortUnavailable(let effortId):
+            "The selected effort \(effortId) is not available for this provider and model."
         }
     }
 }
@@ -178,6 +192,34 @@ class PromptProcessingService: ObservableObject {
         return PluginManager.shared?.llmProvider(for: providerId)?.supportedModels ?? []
     }
 
+    func effortsForProvider(_ providerId: String, modelId: String?) -> [PluginLLMEffortInfo] {
+        guard providerId != Self.appleIntelligenceId,
+              let provider = PluginManager.shared?.llmProvider(for: providerId),
+              let effortProvider = provider as? any LLMEffortControllableProvider
+        else { return [] }
+
+        let resolvedModel = resolvedModelHint(
+            for: provider,
+            providerId: providerId,
+            requestedModelId: modelId
+        )
+        return effortProvider.supportedEfforts(for: resolvedModel)
+    }
+
+    func defaultEffortId(for providerId: String, modelId: String?) -> String? {
+        guard providerId != Self.appleIntelligenceId,
+              let provider = PluginManager.shared?.llmProvider(for: providerId),
+              let effortProvider = provider as? any LLMEffortControllableProvider
+        else { return nil }
+
+        let resolvedModel = resolvedModelHint(
+            for: provider,
+            providerId: providerId,
+            requestedModelId: modelId
+        )
+        return effortProvider.defaultEffortId(for: resolvedModel)
+    }
+
     /// Returns display name for a provider ID, retaining an unknown saved ID so
     /// the user can repair it rather than silently losing that fallback entry.
     func displayName(for providerId: String) -> String {
@@ -232,17 +274,26 @@ class PromptProcessingService: ObservableObject {
 
     // MARK: - Fallback list management
 
-    func addLLMFallback(providerId: String, modelId: String? = nil) {
+    func addLLMFallback(
+        providerId: String,
+        modelId: String? = nil,
+        effortId: String? = nil
+    ) {
         let normalizedProviderId = normalizeProviderId(providerId)
         guard !normalizedProviderId.isEmpty else { return }
         let normalizedModelId = Self.normalizedModelId(modelId)
+        let normalizedEffortId = Self.normalizedEffortId(effortId)
         guard !fallbackPriorityList.contains(where: {
             $0.providerId == normalizedProviderId && $0.modelId == normalizedModelId
         }) else { return }
 
         setFallbackPriorityList(
             fallbackPriorityList + [
-                LLMFallbackPriorityItem(providerId: normalizedProviderId, modelId: normalizedModelId)
+                LLMFallbackPriorityItem(
+                    providerId: normalizedProviderId,
+                    modelId: normalizedModelId,
+                    effortId: normalizedEffortId
+                )
             ],
             normalizeProviderIds: true
         )
@@ -251,12 +302,14 @@ class PromptProcessingService: ObservableObject {
     func updateLLMFallback(
         _ item: LLMFallbackPriorityItem,
         providerId: String,
-        modelId: String? = nil
+        modelId: String? = nil,
+        effortId: String? = nil
     ) {
         guard let index = fallbackPriorityList.firstIndex(where: { $0.id == item.id }) else { return }
         let normalizedProviderId = normalizeProviderId(providerId)
         guard !normalizedProviderId.isEmpty else { return }
         let normalizedModelId = Self.normalizedModelId(modelId)
+        let normalizedEffortId = Self.normalizedEffortId(effortId)
         guard !fallbackPriorityList.enumerated().contains(where: { otherIndex, otherItem in
             otherIndex != index
                 && otherItem.providerId == normalizedProviderId
@@ -266,6 +319,7 @@ class PromptProcessingService: ObservableObject {
         var updated = fallbackPriorityList
         updated[index].providerId = normalizedProviderId
         updated[index].modelId = normalizedModelId
+        updated[index].effortId = normalizedEffortId
         setFallbackPriorityList(updated, normalizeProviderIds: true)
     }
 
@@ -309,6 +363,7 @@ class PromptProcessingService: ObservableObject {
             providerOverride: providerOverride,
             cloudModelOverride: cloudModelOverride,
             temperatureDirective: .inheritProviderSetting,
+            effortOverride: nil,
             skipMemoryInjection: skipMemoryInjection
         )
     }
@@ -319,7 +374,8 @@ class PromptProcessingService: ObservableObject {
             text: text,
             providerOverride: behavior.providerId,
             cloudModelOverride: behavior.cloudModel,
-            temperatureDirective: behavior.temperatureDirective
+            temperatureDirective: behavior.temperatureDirective,
+            effortOverride: behavior.effortId
         )
     }
 
@@ -328,7 +384,8 @@ class PromptProcessingService: ObservableObject {
         text: String,
         providerOverride: String?,
         cloudModelOverride: String?,
-        temperatureDirective: PluginLLMTemperatureDirective
+        temperatureDirective: PluginLLMTemperatureDirective,
+        effortOverride: String? = nil
     ) async throws -> String {
         try await execute(
             prompt: prompt,
@@ -336,6 +393,7 @@ class PromptProcessingService: ObservableObject {
             providerOverride: providerOverride,
             cloudModelOverride: cloudModelOverride,
             temperatureDirective: temperatureDirective,
+            effortOverride: effortOverride,
             skipMemoryInjection: true,
             processingKind: .workflow(originalText: text)
         )
@@ -354,6 +412,7 @@ class PromptProcessingService: ObservableObject {
         providerOverride: String? = nil,
         cloudModelOverride: String? = nil,
         temperatureDirective: PluginLLMTemperatureDirective = .inheritProviderSetting,
+        effortOverride: String? = nil,
         skipMemoryInjection: Bool = false
     ) async throws -> String {
         try await execute(
@@ -362,6 +421,7 @@ class PromptProcessingService: ObservableObject {
             providerOverride: providerOverride,
             cloudModelOverride: cloudModelOverride,
             temperatureDirective: temperatureDirective,
+            effortOverride: effortOverride,
             skipMemoryInjection: skipMemoryInjection,
             processingKind: .prompt
         )
@@ -373,6 +433,7 @@ class PromptProcessingService: ObservableObject {
         providerOverride: String?,
         cloudModelOverride: String?,
         temperatureDirective: PluginLLMTemperatureDirective,
+        effortOverride: String?,
         skipMemoryInjection: Bool,
         processingKind: ProcessingKind
     ) async throws -> String {
@@ -398,7 +459,8 @@ class PromptProcessingService: ObservableObject {
             candidates = [
                 LLMFallbackPriorityItem(
                     providerId: normalizeProviderId(explicitProviderId),
-                    modelId: Self.normalizedModelId(cloudModelOverride)
+                    modelId: Self.normalizedModelId(cloudModelOverride),
+                    effortId: Self.normalizedEffortId(effortOverride)
                 )
             ]
         } else {
@@ -432,6 +494,7 @@ class PromptProcessingService: ObservableObject {
                 let providerResult = try await processSingleProvider(
                     providerId: providerId,
                     requestedModelId: candidate.modelId,
+                    requestedEffortId: candidate.effortId,
                     prompt: effectivePrompt,
                     text: attemptText,
                     temperatureDirective: temperatureDirective,
@@ -469,6 +532,7 @@ class PromptProcessingService: ObservableObject {
                 let failure = LLMFallbackAttemptFailure(
                     providerId: providerId,
                     modelId: candidate.modelId,
+                    effortId: candidate.effortId,
                     reason: Self.failureReason(for: error)
                 )
                 failures.append(failure)
@@ -482,6 +546,7 @@ class PromptProcessingService: ObservableObject {
     private func processSingleProvider(
         providerId: String,
         requestedModelId: String?,
+        requestedEffortId: String?,
         prompt: String,
         text: String,
         temperatureDirective: PluginLLMTemperatureDirective,
@@ -526,6 +591,11 @@ class PromptProcessingService: ObservableObject {
             providerId: providerId,
             requestedModelId: requestedModelId
         )
+        let effort = try resolvedEffortId(
+            for: plugin,
+            model: model,
+            requestedEffortId: requestedEffortId
+        )
         logger.info("Processing prompt with plugin \(providerId)")
         let providerStart = ContinuousClock.now
         do {
@@ -535,7 +605,8 @@ class PromptProcessingService: ObservableObject {
                     prompt: prompt,
                     text: text,
                     model: model,
-                    temperatureDirective: temperatureDirective
+                    temperatureDirective: temperatureDirective,
+                    effort: effort
                 )
             }
             logger.info("Prompt provider call finished in \(ContinuousClock.now - providerStart)")
@@ -551,8 +622,28 @@ class PromptProcessingService: ObservableObject {
         prompt: String,
         text: String,
         model: String?,
-        temperatureDirective: PluginLLMTemperatureDirective
+        temperatureDirective: PluginLLMTemperatureDirective,
+        effort: String?
     ) async throws -> String {
+        if let combinedPlugin = plugin as? any LLMTemperatureAndEffortControllableProvider {
+            return try await combinedPlugin.process(
+                systemPrompt: prompt,
+                userText: text,
+                model: model,
+                temperatureDirective: temperatureDirective,
+                effort: effort
+            )
+        }
+
+        if let effortAwarePlugin = plugin as? any LLMEffortControllableProvider {
+            return try await effortAwarePlugin.process(
+                systemPrompt: prompt,
+                userText: text,
+                model: model,
+                effort: effort
+            )
+        }
+
         if let temperatureAwarePlugin = plugin as? any LLMTemperatureControllableProvider {
             return try await temperatureAwarePlugin.process(
                 systemPrompt: prompt,
@@ -617,6 +708,18 @@ class PromptProcessingService: ObservableObject {
         (PluginManager.shared?.llmProvider(for: providerId) as? LLMModelSelectable)?.defaultModelId as? String
     }
 
+    private func resolvedModelHint(
+        for plugin: any LLMProviderPlugin,
+        providerId: String,
+        requestedModelId: String?
+    ) -> String? {
+        (try? resolvedModelId(
+            for: plugin,
+            providerId: providerId,
+            requestedModelId: requestedModelId
+        )) ?? Self.normalizedModelId(requestedModelId)
+    }
+
     private func resolvedModelId(
         for plugin: any LLMProviderPlugin,
         providerId: String,
@@ -641,6 +744,24 @@ class PromptProcessingService: ObservableObject {
             return providerDefaultModelId
         }
         return availableModels.first?.id
+    }
+
+    private func resolvedEffortId(
+        for plugin: any LLMProviderPlugin,
+        model: String?,
+        requestedEffortId: String?
+    ) throws -> String? {
+        guard let requestedEffortId = Self.normalizedEffortId(requestedEffortId) else {
+            return nil
+        }
+        guard let effortProvider = plugin as? any LLMEffortControllableProvider,
+              effortProvider.supportedEfforts(for: model).contains(where: {
+                  $0.id == requestedEffortId
+              })
+        else {
+            throw LLMFallbackAttemptError.effortUnavailable(requestedEffortId)
+        }
+        return requestedEffortId
     }
 
     private func inputText(
@@ -728,7 +849,8 @@ class PromptProcessingService: ObservableObject {
             return LLMFallbackPriorityItem(
                 id: item.id,
                 providerId: normalizeProviderIds ? normalizeProviderId(rawProviderId) : rawProviderId,
-                modelId: Self.normalizedModelId(item.modelId)
+                modelId: Self.normalizedModelId(item.modelId),
+                effortId: Self.normalizedEffortId(item.effortId)
             )
         }
         return Self.deduplicatedFallbackPriorityList(normalizedItems)
@@ -755,7 +877,8 @@ class PromptProcessingService: ObservableObject {
                 return LLMFallbackPriorityItem(
                     id: item.id,
                     providerId: providerId,
-                    modelId: normalizedModelId(item.modelId)
+                    modelId: normalizedModelId(item.modelId),
+                    effortId: normalizedEffortId(item.effortId)
                 )
             })
             persistInitialFallbackPriorityList(normalized, to: defaults)
@@ -825,7 +948,8 @@ class PromptProcessingService: ObservableObject {
                 LLMFallbackPriorityItem(
                     id: identifier,
                     providerId: item.providerId,
-                    modelId: item.modelId
+                    modelId: item.modelId,
+                    effortId: item.effortId
                 )
             )
         }
@@ -834,6 +958,10 @@ class PromptProcessingService: ObservableObject {
 
     private static func normalizedModelId(_ modelId: String?) -> String? {
         trimmedOrNil(modelId)
+    }
+
+    private static func normalizedEffortId(_ effortId: String?) -> String? {
+        trimmedOrNil(effortId)
     }
 
     private static func trimmedOrNil(_ value: String?) -> String? {

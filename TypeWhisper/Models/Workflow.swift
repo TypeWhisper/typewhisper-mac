@@ -289,6 +289,7 @@ struct WorkflowBehavior: Codable, Equatable, Sendable {
     var fineTuning: String
     var providerId: String?
     var cloudModel: String?
+    var effortId: String?
     var transcriptionEngineId: String?
     var transcriptionModelId: String?
     var microphoneBoostOverride: Bool?
@@ -300,6 +301,7 @@ struct WorkflowBehavior: Codable, Equatable, Sendable {
         fineTuning: String = "",
         providerId: String? = nil,
         cloudModel: String? = nil,
+        effortId: String? = nil,
         transcriptionEngineId: String? = nil,
         transcriptionModelId: String? = nil,
         microphoneBoostOverride: Bool? = nil,
@@ -310,6 +312,7 @@ struct WorkflowBehavior: Codable, Equatable, Sendable {
         self.fineTuning = fineTuning
         self.providerId = providerId
         self.cloudModel = cloudModel
+        self.effortId = effortId
         self.transcriptionEngineId = transcriptionEngineId
         self.transcriptionModelId = transcriptionModelId
         self.microphoneBoostOverride = microphoneBoostOverride
@@ -869,6 +872,7 @@ private extension WorkflowBehavior {
             fineTuning: fineTuning,
             providerId: providerId,
             cloudModel: cloudModel,
+            effortId: effortId,
             transcriptionEngineId: transcriptionEngineId,
             transcriptionModelId: transcriptionModelId,
             temperatureMode: temperatureMode,

@@ -106,6 +106,16 @@ let package = Package(
             ]
         ),
         .target(
+            name: "AuthenticatedCLIPlugin",
+            dependencies: ["TypeWhisperPluginSDK"],
+            path: "Plugins/AuthenticatedCLIPlugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("Localizable.xcstrings"),
+                .process("manifest.json"),
+            ]
+        ),
+        .target(
             name: "Qwen3Plugin",
             dependencies: [
                 "TypeWhisperPluginSDK",
@@ -431,6 +441,15 @@ let package = Package(
                 "ClaudePlugin",
             ],
             path: "Plugins/ClaudePlugin/Tests"
+        ),
+        .testTarget(
+            name: "AuthenticatedCLIPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "AuthenticatedCLIPlugin",
+            ],
+            path: "Plugins/AuthenticatedCLIPlugin/Tests"
         ),
         .testTarget(
             name: "Qwen3PluginTests",

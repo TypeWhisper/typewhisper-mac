@@ -521,6 +521,10 @@ private struct LLMFallbackPriorityRow: View {
         promptProcessingService.modelsForProvider(item.providerId)
     }
 
+    private var availableEfforts: [PluginLLMEffortInfo] {
+        promptProcessingService.effortsForProvider(item.providerId, modelId: item.modelId)
+    }
+
     private var providerOptions: [(id: String, displayName: String)] {
         let otherFallbacks = promptProcessingService.fallbackPriorityList.filter { $0.id != item.id }
         var providers = promptProcessingService.availableProviders.filter { provider in
@@ -555,6 +559,7 @@ private struct LLMFallbackPriorityRow: View {
     private var canMoveUp: Bool { index > 0 }
     private var canMoveDown: Bool { index < count - 1 }
     private var showsModelPicker: Bool { !availableModels.isEmpty || item.modelId != nil }
+    private var showsEffortPicker: Bool { !availableEfforts.isEmpty || item.effortId != nil }
     private var isReady: Bool { promptProcessingService.isProviderReady(item.providerId) }
     private var statusText: String {
         isReady
@@ -649,6 +654,9 @@ private struct LLMFallbackPriorityRow: View {
         if showsModelPicker {
             modelPicker
         }
+        if showsEffortPicker {
+            effortPicker
+        }
     }
 
     private var providerPicker: some View {
@@ -685,6 +693,41 @@ private struct LLMFallbackPriorityRow: View {
         .frame(width: 170, alignment: .leading)
     }
 
+    private var effortPicker: some View {
+        Picker(localizedAppText("Effort", de: "Effort"), selection: effortBinding) {
+            Text(providerDefaultEffortLabel)
+                .tag(nil as String?)
+
+            if let selectedEffortID = item.effortId,
+               !availableEfforts.contains(where: { $0.id == selectedEffortID }) {
+                Text(selectedEffortID).tag(selectedEffortID as String?)
+            }
+
+            ForEach(availableEfforts, id: \.id) { effort in
+                Text(effort.displayName).tag(effort.id as String?)
+            }
+        }
+        .labelsHidden()
+        .pickerStyle(.menu)
+        .controlSize(.small)
+        .frame(width: 125, alignment: .leading)
+    }
+
+    private var providerDefaultEffortLabel: String {
+        guard let defaultEffortID = promptProcessingService.defaultEffortId(
+            for: item.providerId,
+            modelId: item.modelId
+        ),
+        let displayName = availableEfforts.first(where: { $0.id == defaultEffortID })?.displayName
+        else {
+            return localizedAppText("Provider Default", de: "Provider-Standard")
+        }
+        return localizedAppText(
+            "Provider Default (\(displayName))",
+            de: "Provider-Standard (\(displayName))"
+        )
+    }
+
     private var statusLabel: some View {
         ViewThatFits(in: .horizontal) {
             Label(statusText, systemImage: isReady ? "checkmark.circle" : "exclamationmark.triangle")
@@ -703,7 +746,12 @@ private struct LLMFallbackPriorityRow: View {
         Binding(
             get: { item.providerId },
             set: { providerID in
-                promptProcessingService.updateLLMFallback(item, providerId: providerID, modelId: nil)
+                promptProcessingService.updateLLMFallback(
+                    item,
+                    providerId: providerID,
+                    modelId: nil,
+                    effortId: nil
+                )
             }
         )
     }
@@ -712,7 +760,26 @@ private struct LLMFallbackPriorityRow: View {
         Binding(
             get: { item.modelId },
             set: { modelID in
-                promptProcessingService.updateLLMFallback(item, providerId: item.providerId, modelId: modelID)
+                promptProcessingService.updateLLMFallback(
+                    item,
+                    providerId: item.providerId,
+                    modelId: modelID,
+                    effortId: nil
+                )
+            }
+        )
+    }
+
+    private var effortBinding: Binding<String?> {
+        Binding(
+            get: { item.effortId },
+            set: { effortID in
+                promptProcessingService.updateLLMFallback(
+                    item,
+                    providerId: item.providerId,
+                    modelId: item.modelId,
+                    effortId: effortID
+                )
             }
         )
     }
@@ -1570,6 +1637,41 @@ private struct WorkflowEditorPage: View {
                         .foregroundStyle(.secondary)
                     }
 
+                    let efforts = promptProcessingService.effortsForProvider(
+                        providerId,
+                        modelId: draft.cloudModel
+                    )
+                    if !efforts.isEmpty || draft.effortId != nil {
+                        Picker(
+                            localizedAppText("Effort", de: "Effort"),
+                            selection: workflowEffortOverrideBinding
+                        ) {
+                            Text(workflowProviderDefaultEffortLabel(
+                                providerId: providerId,
+                                efforts: efforts
+                            ))
+                            .tag(nil as String?)
+
+                            if let selectedEffortID = draft.effortId,
+                               !efforts.contains(where: { $0.id == selectedEffortID }) {
+                                Text(selectedEffortID).tag(selectedEffortID as String?)
+                            }
+
+                            ForEach(efforts, id: \.id) { effort in
+                                Text(effort.displayName).tag(effort.id as String?)
+                            }
+                        }
+
+                        Text(
+                            localizedAppText(
+                                "Leave effort on Provider Default to follow the selected model's recommended setting.",
+                                de: "Lass Effort auf Provider-Standard, um der empfohlenen Einstellung des ausgewählten Modells zu folgen."
+                            )
+                        )
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    }
+
                     if !promptProcessingService.isProviderReady(providerId) {
                         Text(
                             localizedAppText(
@@ -1595,6 +1697,24 @@ private struct WorkflowEditorPage: View {
             "Use Global Fallback List (starts with \(providerName))",
             de: "Globale Fallback-Liste verwenden (beginnt mit \(providerName))",
             ja: "グローバルフォールバックリストを使用（最初: \(providerName)）"
+        )
+    }
+
+    private func workflowProviderDefaultEffortLabel(
+        providerId: String,
+        efforts: [PluginLLMEffortInfo]
+    ) -> String {
+        guard let defaultEffortID = promptProcessingService.defaultEffortId(
+            for: providerId,
+            modelId: draft.cloudModel
+        ),
+        let displayName = efforts.first(where: { $0.id == defaultEffortID })?.displayName
+        else {
+            return localizedAppText("Provider Default", de: "Provider-Standard")
+        }
+        return localizedAppText(
+            "Provider Default (\(displayName))",
+            de: "Provider-Standard (\(displayName))"
         )
     }
 
@@ -2042,16 +2162,23 @@ private struct WorkflowEditorPage: View {
         Binding(
             get: { draft.providerId },
             set: { providerId in
+                let providerChanged = draft.providerId != providerId
                 draft.providerId = providerId
                 if providerId == nil {
                     draft.cloudModel = nil
+                    draft.effortId = nil
                     return
+                }
+
+                if providerChanged {
+                    draft.effortId = nil
                 }
 
                 if let cloudModel = draft.cloudModel,
                    let providerId,
                    !promptProcessingService.modelsForProvider(providerId).contains(where: { $0.id == cloudModel }) {
                     draft.cloudModel = nil
+                    draft.effortId = nil
                 }
             }
         )
@@ -2061,7 +2188,19 @@ private struct WorkflowEditorPage: View {
         Binding(
             get: { draft.cloudModel },
             set: { modelId in
+                if draft.cloudModel != modelId {
+                    draft.effortId = nil
+                }
                 draft.cloudModel = modelId
+            }
+        )
+    }
+
+    private var workflowEffortOverrideBinding: Binding<String?> {
+        Binding(
+            get: { draft.effortId },
+            set: { effortId in
+                draft.effortId = effortId
             }
         )
     }
@@ -2528,6 +2667,7 @@ struct WorkflowDraft {
     private var preservedBehaviorSettings: [String: String]
     var providerId: String?
     var cloudModel: String?
+    var effortId: String?
     private let temperatureModeRaw: String?
     private let temperatureValue: Double?
     var targetActionPluginId: String?
@@ -2560,6 +2700,7 @@ struct WorkflowDraft {
         self.preservedBehaviorSettings = [:]
         self.providerId = nil
         self.cloudModel = nil
+        self.effortId = nil
         self.temperatureModeRaw = nil
         self.temperatureValue = nil
         self.targetActionPluginId = nil
@@ -2593,6 +2734,7 @@ struct WorkflowDraft {
         self.preservedBehaviorSettings = behavior.settings
         self.providerId = behavior.providerId
         self.cloudModel = behavior.cloudModel
+        self.effortId = behavior.effortId
         self.temperatureModeRaw = behavior.temperatureModeRaw
         self.temperatureValue = behavior.temperatureValue
         self.targetActionPluginId = workflow.template == .dictation ? nil : output.targetActionPluginId
@@ -2711,6 +2853,7 @@ struct WorkflowDraft {
             outputFormat = ""
             providerId = nil
             cloudModel = nil
+            effortId = nil
             targetActionPluginId = nil
             if triggerMode == .manual {
                 triggerMode = .automatic
@@ -2919,6 +3062,7 @@ struct WorkflowDraft {
 
         let trimmedProviderId = providerId?.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedCloudModel = cloudModel?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedEffortId = effortId?.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedTranscriptionEngineId = template == .dictation ? Self.trimmedOptional(transcriptionEngineId) : nil
 
         return WorkflowBehavior(
@@ -2926,6 +3070,7 @@ struct WorkflowDraft {
             fineTuning: usesLLMProcessing ? fineTuning.trimmingCharacters(in: .whitespacesAndNewlines) : "",
             providerId: usesLLMProcessing && trimmedProviderId?.isEmpty == false ? trimmedProviderId : nil,
             cloudModel: usesLLMProcessing && trimmedCloudModel?.isEmpty == false ? trimmedCloudModel : nil,
+            effortId: usesLLMProcessing && trimmedEffortId?.isEmpty == false ? trimmedEffortId : nil,
             transcriptionEngineId: trimmedTranscriptionEngineId,
             transcriptionModelId: trimmedTranscriptionEngineId != nil ? Self.trimmedOptional(transcriptionModelId) : nil,
             microphoneBoostOverride: microphoneBoostOverride,

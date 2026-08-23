@@ -1,0 +1,20 @@
+{
+    "id": "com.typewhisper.authenticated-cli",
+    "name": "Authenticated Provider CLIs",
+    "version": "1.0.0",
+    "minHostVersion": "1.6.0",
+    "sdkCompatibilityVersion": "v1",
+    "minOSVersion": "14.0",
+    "author": "TypeWhisper",
+    "description": "Use existing signed-in provider CLIs as LLM providers without separate API keys.",
+    "descriptions": {
+        "de": "Bereits angemeldete Anbieter-CLIs ohne separate API-Keys als LLM-Anbieter verwenden.",
+        "ja": "サインイン済みのプロバイダーCLIを、別のAPIキーなしでLLMプロバイダーとして使用します。"
+    },
+    "category": "llm",
+    "hosting": "cloud",
+    "iconSystemName": "terminal",
+    "principalClass": "AuthenticatedCLIPlugin",
+    "requiresAPIKey": false,
+    "detailsURL": "https://www.typewhisper.com/addons/authenticated-cli/macos/"
+}

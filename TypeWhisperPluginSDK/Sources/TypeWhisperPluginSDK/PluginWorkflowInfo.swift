@@ -77,6 +77,7 @@ public struct PluginWorkflowBehavior: Codable, Sendable, Equatable {
     public let fineTuning: String
     public let providerId: String?
     public let cloudModel: String?
+    public let effortId: String?
     public let transcriptionEngineId: String?
     public let transcriptionModelId: String?
     public let temperatureMode: PluginLLMTemperatureMode
@@ -87,6 +88,7 @@ public struct PluginWorkflowBehavior: Codable, Sendable, Equatable {
         fineTuning: String = "",
         providerId: String? = nil,
         cloudModel: String? = nil,
+        effortId: String? = nil,
         transcriptionEngineId: String? = nil,
         transcriptionModelId: String? = nil,
         temperatureMode: PluginLLMTemperatureMode = .inheritProviderSetting,
@@ -96,6 +98,7 @@ public struct PluginWorkflowBehavior: Codable, Sendable, Equatable {
         self.fineTuning = fineTuning
         self.providerId = providerId
         self.cloudModel = cloudModel
+        self.effortId = effortId
         self.transcriptionEngineId = transcriptionEngineId
         self.transcriptionModelId = transcriptionModelId
         self.temperatureMode = temperatureMode

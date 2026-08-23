@@ -46,6 +46,7 @@ PLUGIN_SCREENSHOT_LANGUAGES = %w[en-US de-DE].freeze
 PLUGIN_SCREENSHOTS = [
   { slug: "apple-speech", target: "SpeechAnalyzerPlugin", id: "com.typewhisper.speechanalyzer" },
   { slug: "assemblyai", target: "AssemblyAIPlugin", id: "com.typewhisper.assemblyai" },
+  { slug: "authenticated-cli", target: "AuthenticatedCLIPlugin", id: "com.typewhisper.authenticated-cli" },
   { slug: "cartesia", target: "CartesiaPlugin", id: "com.typewhisper.cartesia" },
   { slug: "cerebras", target: "CerebrasPlugin", id: "com.typewhisper.cerebras" },
   { slug: "claude", target: "ClaudePlugin", id: "com.typewhisper.claude" },

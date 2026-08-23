@@ -77,7 +77,7 @@ separate from the Settings-window matrix.
 
 ## Plugin screenshots for typewhisper.com
 
-The plugin lane covers the 42 current first-party bundles. It builds each
+The plugin lane covers the 43 current first-party bundles. It builds each
 selected bundle, stages only that bundle in a temporary Application Support
 directory, opens its native settings window, and captures English and German
 website assets:
