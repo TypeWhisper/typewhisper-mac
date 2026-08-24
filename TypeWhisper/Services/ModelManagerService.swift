@@ -298,13 +298,12 @@ final class ModelManagerService: ObservableObject {
             throw ModelLifecycleError.modelNotFound(engineId: providerId, modelId: modelId)
         }
 
-        selectProvider(providerId)
-
         if pluginConfiguredState(
             plugin,
             selectedModelId: modelId,
             stopOnMismatchedSelection: true
         ) == true {
+            selectProvider(providerId)
             PluginManager.shared.notifyPluginStateChanged()
             return
         }
@@ -328,6 +327,7 @@ final class ModelManagerService: ObservableObject {
                 selectedModelId: plugin.selectedModelId == nil ? nil : modelId,
                 stopOnMismatchedSelection: true
             ) == true {
+                selectProvider(providerId)
                 PluginManager.shared.notifyPluginStateChanged()
                 return
             }
@@ -352,6 +352,7 @@ final class ModelManagerService: ObservableObject {
             selectedModelId: identityCheckModelId
         ) {
         case .configured:
+            selectProvider(providerId)
             PluginManager.shared.notifyPluginStateChanged()
         case .failed(let message):
             throw TranscriptionEngineError.modelLoadFailed(message)
@@ -378,7 +379,8 @@ final class ModelManagerService: ObservableObject {
             throw ModelLifecycleError.unloadUnsupported(providerId)
         }
 
-        let modelId = plugin.selectedModelId
+        let modelId = plugin.modelCatalog.first(where: { $0.loaded == true })?.id
+            ?? plugin.selectedModelId
         _ = object.perform(unloadSelector)
         guard !plugin.isConfigured else {
             throw ModelLifecycleError.unloadFailed(providerId)

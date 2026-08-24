@@ -1337,7 +1337,9 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         var configured = false
         var currentModelId: String?
+        var reportedLoadedModelId: String?
         var downloadedModelIds: Set<String> = ["tiny"]
+        var allowsRestore = true
         var allowsUnload = true
         var restoreInvocationCount = 0
 
@@ -1360,7 +1362,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
                     id: modelId,
                     displayName: modelId.capitalized,
                     downloaded: downloadedModelIds.contains(modelId),
-                    loaded: configured && currentModelId == modelId
+                    loaded: configured && (reportedLoadedModelId ?? currentModelId) == modelId
                 )
             }
         }
@@ -1380,6 +1382,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
                 return
             }
             restoreInvocationCount += 1
+            guard allowsRestore else { return }
             currentModelId = modelId
             downloadedModelIds.insert(modelId)
             configured = true
@@ -11054,6 +11057,61 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testModelsLoadEndpointPreservesProviderSelectionWhenRestoreFails() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let originalProvider = UserDefaults.standard.object(forKey: UserDefaultsKeys.selectedEngine)
+        defer { Self.restoreUserDefault(originalProvider, forKey: UserDefaultsKeys.selectedEngine) }
+
+        let context = Self.makeAPIContext(
+            appSupportDirectory: appSupportDirectory,
+            withMockTranscriptionPlugin: false
+        )
+        context.modelManager.selectProvider("original-provider")
+        context.modelManager.setPluginRestoreWaitConfigurationForTesting(
+            initialAttempts: 0,
+            busyAttempts: 0,
+            pollInterval: .zero
+        )
+
+        let plugin = ModelLifecycleTranscriptionPlugin()
+        plugin.allowsRestore = false
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: ModelLifecycleTranscriptionPlugin.pluginId,
+                    name: ModelLifecycleTranscriptionPlugin.pluginName,
+                    version: "1.0.0",
+                    sdkCompatibilityVersion: PluginSDKCompatibility.currentVersion,
+                    principalClass: "APIRouterModelLifecycleTranscriptionPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let response = await context.router.route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/models/load",
+                queryParams: [:],
+                headers: ["content-type": "application/json"],
+                body: Data(#"{"engine":"model-lifecycle-mock","model":"large"}"#.utf8)
+            )
+        )
+
+        XCTAssertEqual(response.status, 409)
+        XCTAssertEqual(context.modelManager.selectedProviderId, "original-provider")
+        XCTAssertEqual(
+            UserDefaults.standard.string(forKey: UserDefaultsKeys.selectedEngine),
+            "original-provider"
+        )
+        XCTAssertFalse(plugin.isConfigured)
+    }
+
+    @MainActor
     func testModelsUnloadEndpointReflectsExternalUnloadImmediately() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
@@ -11142,6 +11200,51 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(response.status, 409)
         XCTAssertTrue(plugin.isConfigured)
         XCTAssertEqual(plugin.selectedModelId, "tiny")
+    }
+
+    @MainActor
+    func testModelsUnloadEndpointReturnsActuallyLoadedModel() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let context = Self.makeAPIContext(
+            appSupportDirectory: appSupportDirectory,
+            withMockTranscriptionPlugin: false
+        )
+        let plugin = ModelLifecycleTranscriptionPlugin()
+        plugin.currentModelId = "large"
+        plugin.reportedLoadedModelId = "tiny"
+        plugin.configured = true
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: ModelLifecycleTranscriptionPlugin.pluginId,
+                    name: ModelLifecycleTranscriptionPlugin.pluginName,
+                    version: "1.0.0",
+                    sdkCompatibilityVersion: PluginSDKCompatibility.currentVersion,
+                    principalClass: "APIRouterModelLifecycleTranscriptionPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let response = await context.router.route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/models/unload",
+                queryParams: [:],
+                headers: ["content-type": "application/json"],
+                body: Data(#"{"engine":"model-lifecycle-mock"}"#.utf8)
+            )
+        )
+        let json = try Self.jsonObject(response)
+
+        XCTAssertEqual(response.status, 200)
+        XCTAssertEqual(json["model"] as? String, "tiny")
+        XCTAssertFalse(plugin.isConfigured)
     }
 
     @MainActor
