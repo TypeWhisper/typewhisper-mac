@@ -256,6 +256,19 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
 
     @objc func triggerAutoUnload() { unloadModel(clearPersistence: false) }
     @objc func triggerRestoreModel() { Task { await restoreLoadedModel(allowDownloads: true) } }
+    @objc(triggerRestoreModelForModel:)
+    func triggerRestoreModel(forModel modelId: NSString?) {
+        guard let modelId = modelId.map(String.init),
+              let modelDef = Self.availableModels.first(where: { $0.id == modelId }) else {
+            return
+        }
+        if loadedModelId != nil, loadedModelId != modelId {
+            unloadModel(clearPersistence: true)
+        }
+        _selectedModelId = modelId
+        host?.setUserDefault(modelId, forKey: "selectedModel")
+        Task { try? await loadModel(modelDef) }
+    }
 
     func unloadModel(clearPersistence: Bool = true) {
         model = nil

@@ -378,11 +378,41 @@ curl http://localhost:8978/v1/models
     {
       "id": "openai_whisper-large-v3_turbo",
       "engine": "whisper",
-      "ready": true
+      "name": "Large v3 Turbo",
+      "status": "ready",
+      "selected": true,
+      "downloaded": true,
+      "loaded": true
     }
   ]
 }
 ```
+
+### Manage Models
+
+Download (if needed), load, and select a model. The request returns after the model is ready or the load fails:
+
+```bash
+curl -X POST http://localhost:8978/v1/models/load \
+  -H "Content-Type: application/json" \
+  -d '{"engine":"whisper","model":"openai_whisper-large-v3_turbo"}'
+```
+
+Unload the active model while keeping its downloaded files:
+
+```bash
+curl -X POST http://localhost:8978/v1/models/unload \
+  -H "Content-Type: application/json" \
+  -d '{"engine":"whisper"}'
+```
+
+Delete downloaded model files:
+
+```bash
+curl -X DELETE "http://localhost:8978/v1/models?engine=whisper&model=openai_whisper-large-v3_turbo"
+```
+
+Deleting the final downloaded model for a plugin disables that plugin. If API authentication is enabled, include the same bearer token used by the other protected endpoints.
 
 ### History
 

@@ -472,9 +472,11 @@ final class CohereLocalPlugin: NSObject, TranscriptionEnginePlugin, Transcriptio
             return
         }
         if let modelId = modelId.map(String.init) {
-            state.withLock { $0.selectedModelId = modelId }
+            selectModel(modelId)
         }
-        triggerRestoreModel()
+        Task { [weak self] in
+            await self?.loadModel(allowDownloads: true)
+        }
     }
 
     private func beginModelLoad() -> (

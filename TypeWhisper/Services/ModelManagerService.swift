@@ -28,6 +28,29 @@ enum TranscriptionEngineError: LocalizedError {
     }
 }
 
+enum ModelLifecycleError: LocalizedError {
+    case engineNotFound(String)
+    case modelNotFound(engineId: String, modelId: String)
+    case loadUnsupported(String)
+    case unloadUnsupported(String)
+    case unloadFailed(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .engineNotFound(let engineId):
+            "Unknown engine '\(engineId)'."
+        case .modelNotFound(let engineId, let modelId):
+            "Model '\(modelId)' is not offered by engine '\(engineId)'."
+        case .loadUnsupported(let engineId):
+            "Engine '\(engineId)' does not support explicit model loading."
+        case .unloadUnsupported(let engineId):
+            "Engine '\(engineId)' does not support unloading its active model."
+        case .unloadFailed(let engineId):
+            "Engine '\(engineId)' did not unload its active model because it is currently in use."
+        }
+    }
+}
+
 extension TranscriptionEnginePlugin {
     var acceptsLanguageHints: Bool {
         self is LanguageHintTranscriptionEnginePlugin
@@ -264,6 +287,104 @@ final class ModelManagerService: ObservableObject {
     func selectModel(_ providerId: String, modelId: String) {
         selectProvider(providerId)
         PluginManager.shared.transcriptionEngine(for: providerId)?.selectModel(modelId)
+    }
+
+    func loadModel(_ providerId: String, modelId: String) async throws {
+        guard let plugin = PluginManager.shared.transcriptionEngine(for: providerId) else {
+            throw ModelLifecycleError.engineNotFound(providerId)
+        }
+        let catalog = plugin.modelCatalog
+        guard catalog.isEmpty || catalog.contains(where: { $0.id == modelId }) else {
+            throw ModelLifecycleError.modelNotFound(engineId: providerId, modelId: modelId)
+        }
+
+        selectProvider(providerId)
+
+        if pluginConfiguredState(
+            plugin,
+            selectedModelId: modelId,
+            stopOnMismatchedSelection: true
+        ) == true {
+            PluginManager.shared.notifyPluginStateChanged()
+            return
+        }
+
+        let preferredRestoreSelector = NSSelectorFromString("triggerRestoreModelForModel:")
+        let genericRestoreSelector = NSSelectorFromString("triggerRestoreModel")
+        let object = plugin as? NSObject
+        var initiatedLoad = false
+        var requiresRequestedModelIdentity = false
+
+        if let object, object.responds(to: preferredRestoreSelector) {
+            _ = object.perform(preferredRestoreSelector, with: modelId as NSString)
+            initiatedLoad = true
+            requiresRequestedModelIdentity = true
+        } else {
+            plugin.selectModel(modelId)
+            await Task.yield()
+
+            if pluginConfiguredState(
+                plugin,
+                selectedModelId: plugin.selectedModelId == nil ? nil : modelId,
+                stopOnMismatchedSelection: true
+            ) == true {
+                PluginManager.shared.notifyPluginStateChanged()
+                return
+            }
+
+            if pluginSettingsActivity(plugin) != nil {
+                initiatedLoad = true
+            } else if let object, object.responds(to: genericRestoreSelector) {
+                _ = object.perform(genericRestoreSelector)
+                initiatedLoad = true
+            }
+        }
+
+        guard initiatedLoad else {
+            throw ModelLifecycleError.loadUnsupported(providerId)
+        }
+
+        let identityCheckModelId = requiresRequestedModelIdentity || plugin.selectedModelId != nil
+            ? modelId
+            : nil
+        switch await waitForPluginRestoreConfigured(
+            plugin,
+            selectedModelId: identityCheckModelId
+        ) {
+        case .configured:
+            PluginManager.shared.notifyPluginStateChanged()
+        case .failed(let message):
+            throw TranscriptionEngineError.modelLoadFailed(message)
+        case .timedOut(let activity):
+            if let activity {
+                throw TranscriptionEngineError.modelLoadFailed(
+                    Self.restoreTimeoutMessage(activity: activity)
+                )
+            }
+            throw ModelLifecycleError.loadUnsupported(providerId)
+        }
+    }
+
+    @discardableResult
+    func unloadModel(_ providerId: String) throws -> String? {
+        guard let plugin = PluginManager.shared.transcriptionEngine(for: providerId) else {
+            throw ModelLifecycleError.engineNotFound(providerId)
+        }
+        guard let object = plugin as? NSObject else {
+            throw ModelLifecycleError.unloadUnsupported(providerId)
+        }
+        let unloadSelector = NSSelectorFromString("triggerAutoUnload")
+        guard object.responds(to: unloadSelector) else {
+            throw ModelLifecycleError.unloadUnsupported(providerId)
+        }
+
+        let modelId = plugin.selectedModelId
+        _ = object.perform(unloadSelector)
+        guard !plugin.isConfigured else {
+            throw ModelLifecycleError.unloadFailed(providerId)
+        }
+        PluginManager.shared.notifyPluginStateChanged()
+        return modelId
     }
 
     func observePluginManager() {

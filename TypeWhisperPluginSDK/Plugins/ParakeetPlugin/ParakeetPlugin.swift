@@ -746,6 +746,21 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
 
     @objc func triggerAutoUnload() { unloadModel(clearPersistence: false) }
     @objc func triggerRestoreModel() { Task { await restoreLoadedModel(allowDownloads: true) } }
+    @objc(triggerRestoreModelForModel:)
+    func triggerRestoreModel(forModel modelId: NSString?) {
+        guard let modelId = modelId.map(String.init),
+              let version = ParakeetVersion.from(modelId: modelId) else {
+            return
+        }
+        if loadedModelId != nil, loadedModelId != modelId {
+            unloadModel(clearPersistence: false)
+        }
+        _selectedModelId = modelId
+        selectedVersion = version
+        host?.setUserDefault(modelId, forKey: "selectedModel")
+        host?.setUserDefault(version.rawValue, forKey: "selectedVersion")
+        Task { await loadModel() }
+    }
 
     func unloadModel(clearPersistence: Bool = true) {
         clearVocabularyBoostingState(resetModelState: true)
@@ -776,7 +791,7 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         await loadModel()
     }
 
-    private func isModelDownloaded(version: ParakeetVersion) -> Bool {
+    fileprivate func isModelDownloaded(version: ParakeetVersion) -> Bool {
         let cacheDir = AsrModels.defaultCacheDirectory(for: version.asrModelVersion)
         return AsrModels.modelsExist(at: cacheDir, version: version.asrModelVersion)
     }
@@ -956,7 +971,7 @@ private struct ParakeetSettingsView: View {
     @State private var selectedVersion: ParakeetVersion = .v3
     @State private var modelState: ParakeetModelState = .notLoaded
     @State private var downloadProgress: Double = 0
-    @State private var isPolling = false
+    @State private var selectedModelDownloaded = false
     @State private var hfTokenInput = ""
     @State private var showHfToken = false
     @State private var isValidatingToken = false
@@ -1089,15 +1104,16 @@ private struct ParakeetSettingsView: View {
 
                     switch modelState {
                     case .notLoaded:
-                        Button(String(localized: "Download & Load", bundle: bundle)) {
+                        Button(
+                            selectedModelDownloaded
+                                ? String(localized: "Load", bundle: bundle)
+                                : String(localized: "Download & Load", bundle: bundle)
+                        ) {
                             modelState = .downloading
                             downloadProgress = 0.05
-                            isPolling = true
                             Task {
                                 await plugin.loadModel()
-                                isPolling = false
-                                modelState = plugin.modelState
-                                downloadProgress = plugin.downloadProgress
+                                syncViewStateFromPlugin()
                             }
                         }
                         .buttonStyle(.borderedProminent)
@@ -1138,12 +1154,9 @@ private struct ParakeetSettingsView: View {
                             }
                             Button(String(localized: "Retry", bundle: bundle)) {
                                 modelState = .downloading
-                                isPolling = true
                                 Task {
                                     await plugin.loadModel()
-                                    isPolling = false
-                                    modelState = plugin.modelState
-                                    downloadProgress = plugin.downloadProgress
+                                    syncViewStateFromPlugin()
                                 }
                             }
                             .buttonStyle(.bordered)
@@ -1178,46 +1191,29 @@ private struct ParakeetSettingsView: View {
             }
         }
         .onAppear {
-            selectedVersion = plugin.selectedVersion
-            modelState = plugin.modelState
-            downloadProgress = plugin.downloadProgress
-            boostingEnabled = plugin.vocabularyBoostingEnabled
-            ctcModelState = plugin.ctcModelState
-            boostingTermCount = plugin.lastBoostingTermCount
+            syncViewStateFromPlugin()
             if let token = plugin._hfToken, !token.isEmpty {
                 hfTokenInput = token
             }
-            if case .downloading = plugin.modelState { isPolling = true }
         }
         .onChange(of: selectedVersion) { _, newVersion in
             guard newVersion != plugin.selectedVersion else { return }
             plugin.selectedVersion = newVersion
             plugin.host?.setUserDefault(newVersion.rawValue, forKey: "selectedVersion")
+            selectedModelDownloaded = plugin.isModelDownloaded(version: newVersion)
             if plugin.loadedModelId != nil {
                 // Reload with new version
                 modelState = .downloading
                 downloadProgress = 0.05
-                isPolling = true
                 Task {
                     plugin.unloadModel(clearPersistence: false)
                     await plugin.loadModel()
-                    isPolling = false
-                    modelState = plugin.modelState
-                    downloadProgress = plugin.downloadProgress
+                    syncViewStateFromPlugin()
                 }
             }
         }
         .onReceive(pollTimer) { _ in
-            guard isPolling else { return }
-            downloadProgress = plugin.downloadProgress
-            let pluginState = plugin.modelState
-            if pluginState != .notLoaded {
-                modelState = pluginState
-            }
-            ctcModelState = plugin.ctcModelState
-            boostingTermCount = plugin.lastBoostingTermCount
-            if case .ready = pluginState { isPolling = false }
-            else if case .error = pluginState { isPolling = false }
+            syncViewStateFromPlugin()
         }
         .onChange(of: hfTokenInput) { _, newValue in
             let trimmedValue = newValue.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -1257,11 +1253,9 @@ private struct ParakeetSettingsView: View {
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         Button(String(localized: "Download Now", bundle: bundle)) {
-                            isPolling = true
                             Task {
                                 await plugin.downloadCtcModel()
-                                ctcModelState = plugin.ctcModelState
-                                isPolling = false
+                                syncViewStateFromPlugin()
                             }
                         }
                         .buttonStyle(.bordered)
@@ -1297,11 +1291,9 @@ private struct ParakeetSettingsView: View {
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                         Button(String(localized: "Retry", bundle: bundle)) {
-                            isPolling = true
                             Task {
                                 await plugin.downloadCtcModel()
-                                ctcModelState = plugin.ctcModelState
-                                isPolling = false
+                                syncViewStateFromPlugin()
                             }
                         }
                         .buttonStyle(.bordered)
@@ -1310,6 +1302,16 @@ private struct ParakeetSettingsView: View {
                 }
             }
         }
+    }
+
+    private func syncViewStateFromPlugin() {
+        selectedVersion = plugin.selectedVersion
+        modelState = plugin.modelState
+        downloadProgress = plugin.downloadProgress
+        selectedModelDownloaded = plugin.isModelDownloaded(version: plugin.selectedVersion)
+        boostingEnabled = plugin.vocabularyBoostingEnabled
+        ctcModelState = plugin.ctcModelState
+        boostingTermCount = plugin.lastBoostingTermCount
     }
 
     private func validateAndSaveHuggingFaceToken() {

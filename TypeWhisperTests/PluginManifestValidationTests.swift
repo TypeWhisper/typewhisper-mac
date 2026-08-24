@@ -1667,18 +1667,40 @@ private final class TestEventBus: EventBusProtocol, @unchecked Sendable {
 }
 
 final class WhisperKitSettingsStateTests: XCTestCase {
+    func testApplyingExternalDeletionClearsStaleActiveModel() {
+        let initial = WhisperKitSettingsPollState(
+            modelState: .notLoaded,
+            downloadProgress: 0,
+            activeModelId: "openai_whisper-large-v3_turbo",
+            downloadedModelIds: ["openai_whisper-large-v3_turbo"],
+            isPolling: false
+        )
+
+        let updated = initial.applyingPolledPluginState(
+            .notLoaded,
+            downloadProgress: 0,
+            selectedModelId: nil,
+            downloadedModelIds: []
+        )
+
+        XCTAssertNil(updated.activeModelId)
+        XCTAssertTrue(updated.downloadedModelIds.isEmpty)
+    }
+
     func testApplyingNotLoadedStateClearsStaleLoadingAndStopsPolling() {
         let initial = WhisperKitSettingsPollState(
             modelState: .loading(phase: "loading"),
             downloadProgress: 0.9,
             activeModelId: "openai_whisper-large-v3_turbo",
+            downloadedModelIds: ["openai_whisper-large-v3_turbo"],
             isPolling: true
         )
 
         let updated = initial.applyingPolledPluginState(
             .notLoaded,
             downloadProgress: 0,
-            selectedModelId: "openai_whisper-large-v3_turbo"
+            selectedModelId: "openai_whisper-large-v3_turbo",
+            downloadedModelIds: ["openai_whisper-large-v3_turbo"]
         )
 
         XCTAssertEqual(updated.modelState, .notLoaded)
@@ -1692,6 +1714,7 @@ final class WhisperKitSettingsStateTests: XCTestCase {
             modelState: .loading(phase: "prewarming"),
             downloadProgress: 0.9,
             activeModelId: "openai_whisper-large-v3_turbo",
+            downloadedModelIds: ["openai_whisper-large-v3_turbo"],
             isPolling: true
         )
 

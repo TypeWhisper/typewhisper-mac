@@ -299,8 +299,16 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
     @objc func triggerAutoUnload() { unloadModel(clearPersistence: false) }
     @objc func triggerRestoreModel() { Task { await restoreLoadedModel(allowDownloads: false) } }
     @objc(triggerRestoreModelForModel:) func triggerRestoreModel(forModel modelId: NSString?) {
-        let preferredModelId = modelId.map(String.init)
-        Task { await restoreLoadedModel(allowDownloads: false, preferredModelId: preferredModelId) }
+        guard let preferredModelId = modelId.map(String.init),
+              Self.availableModels.contains(where: { $0.id == preferredModelId }) else {
+            return
+        }
+        if loadedModelId != nil, loadedModelId != preferredModelId {
+            unloadModel(clearPersistence: true)
+        }
+        _selectedModelId = preferredModelId
+        host?.setUserDefault(preferredModelId, forKey: "selectedModel")
+        Task { await restoreLoadedModel(allowDownloads: true, preferredModelId: preferredModelId) }
     }
 
     func unloadModel(clearPersistence: Bool = true) {

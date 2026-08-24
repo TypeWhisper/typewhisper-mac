@@ -1330,6 +1330,82 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         }
     }
 
+    @objc(APIRouterModelLifecycleTranscriptionPlugin)
+    private final class ModelLifecycleTranscriptionPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding, PluginDownloadedModelManaging, @unchecked Sendable {
+        static var pluginId: String { "com.typewhisper.mock.model-lifecycle" }
+        static var pluginName: String { "Model Lifecycle Mock" }
+
+        var configured = false
+        var currentModelId: String?
+        var downloadedModelIds: Set<String> = ["tiny"]
+        var allowsUnload = true
+        var restoreInvocationCount = 0
+
+        required override init() {}
+
+        func activate(host: HostServices) {}
+
+        func deactivate() {
+            configured = false
+            currentModelId = nil
+        }
+
+        var providerId: String { "model-lifecycle-mock" }
+        var providerDisplayName: String { "Model Lifecycle Mock" }
+        var isConfigured: Bool { configured }
+        var transcriptionModels: [PluginModelInfo] { availableModels }
+        var availableModels: [PluginModelInfo] {
+            ["tiny", "large"].map { modelId in
+                PluginModelInfo(
+                    id: modelId,
+                    displayName: modelId.capitalized,
+                    downloaded: downloadedModelIds.contains(modelId),
+                    loaded: configured && currentModelId == modelId
+                )
+            }
+        }
+        var downloadedModels: [PluginModelInfo] {
+            availableModels.filter { $0.downloaded == true }
+        }
+        var selectedModelId: String? { currentModelId }
+
+        func selectModel(_ modelId: String) {
+            currentModelId = modelId
+        }
+
+        @objc(triggerRestoreModelForModel:)
+        func triggerRestoreModel(forModel modelId: NSString?) {
+            guard let modelId = modelId.map(String.init),
+                  availableModels.contains(where: { $0.id == modelId }) else {
+                return
+            }
+            restoreInvocationCount += 1
+            currentModelId = modelId
+            downloadedModelIds.insert(modelId)
+            configured = true
+        }
+
+        @objc func triggerAutoUnload() {
+            if allowsUnload {
+                configured = false
+            }
+        }
+
+        func deleteDownloadedModel(_ modelId: String) async throws {
+            downloadedModelIds.remove(modelId)
+            if currentModelId == modelId {
+                configured = false
+                currentModelId = nil
+            }
+        }
+
+        var supportsTranslation: Bool { false }
+
+        func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+            PluginTranscriptionResult(text: "transcribed", detectedLanguage: language)
+        }
+    }
+
     @objc(APIRouterMockTTSPlugin)
     private final class MockTTSProviderPlugin: NSObject, TTSProviderPlugin, @unchecked Sendable {
         static var pluginId: String { "com.typewhisper.mock.tts" }
@@ -1828,7 +1904,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         )
 
         XCTAssertEqual(status["status"] as? String, "no_model")
-        XCTAssertEqual(status["api_version"] as? String, "1.1")
+        XCTAssertEqual(status["api_version"] as? String, "1.2")
         XCTAssertEqual(status["supports_workflow_dictation"] as? Bool, true)
         XCTAssertEqual((history["entries"] as? [[String: Any]])?.count, 1)
         XCTAssertEqual((rules["rules"] as? [[String: Any]])?.first?["name"] as? String, "Docs")
@@ -10884,6 +10960,232 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(legacyIds, ["tiny"])
         XCTAssertEqual(catalogIds.sorted(), ["large", "tiny"])
         XCTAssertEqual(expandedIds, ["inception-whisper"])
+    }
+
+    @MainActor
+    func testModelsLoadEndpointDownloadsLoadsAndSelectsRequestedModel() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let context = Self.makeAPIContext(
+            appSupportDirectory: appSupportDirectory,
+            withMockTranscriptionPlugin: false
+        )
+        let plugin = ModelLifecycleTranscriptionPlugin()
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: ModelLifecycleTranscriptionPlugin.pluginId,
+                    name: ModelLifecycleTranscriptionPlugin.pluginName,
+                    version: "1.0.0",
+                    sdkCompatibilityVersion: PluginSDKCompatibility.currentVersion,
+                    principalClass: "APIRouterModelLifecycleTranscriptionPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let response = await context.router.route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/models/load",
+                queryParams: [:],
+                headers: ["content-type": "application/json"],
+                body: Data(#"{"engine":"model-lifecycle-mock","model":"large"}"#.utf8)
+            )
+        )
+        let json = try Self.jsonObject(response)
+
+        XCTAssertEqual(response.status, 200)
+        XCTAssertEqual(json["engine"] as? String, plugin.providerId)
+        XCTAssertEqual(json["model"] as? String, "large")
+        XCTAssertEqual(json["status"] as? String, "ready")
+        XCTAssertEqual(context.modelManager.selectedProviderId, plugin.providerId)
+        XCTAssertEqual(plugin.selectedModelId, "large")
+        XCTAssertTrue(plugin.isConfigured)
+        XCTAssertTrue(plugin.downloadedModelIds.contains("large"))
+    }
+
+    @MainActor
+    func testModelsLoadEndpointDoesNotReloadAlreadyReadyModel() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let context = Self.makeAPIContext(
+            appSupportDirectory: appSupportDirectory,
+            withMockTranscriptionPlugin: false
+        )
+        let plugin = ModelLifecycleTranscriptionPlugin()
+        plugin.currentModelId = "tiny"
+        plugin.configured = true
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: ModelLifecycleTranscriptionPlugin.pluginId,
+                    name: ModelLifecycleTranscriptionPlugin.pluginName,
+                    version: "1.0.0",
+                    sdkCompatibilityVersion: PluginSDKCompatibility.currentVersion,
+                    principalClass: "APIRouterModelLifecycleTranscriptionPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let response = await context.router.route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/models/load",
+                queryParams: [:],
+                headers: ["content-type": "application/json"],
+                body: Data(#"{"engine":"model-lifecycle-mock","model":"tiny"}"#.utf8)
+            )
+        )
+
+        XCTAssertEqual(response.status, 200)
+        XCTAssertEqual(plugin.restoreInvocationCount, 0)
+        XCTAssertEqual(plugin.selectedModelId, "tiny")
+        XCTAssertTrue(plugin.isConfigured)
+    }
+
+    @MainActor
+    func testModelsUnloadEndpointReflectsExternalUnloadImmediately() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let context = Self.makeAPIContext(
+            appSupportDirectory: appSupportDirectory,
+            withMockTranscriptionPlugin: false
+        )
+        let plugin = ModelLifecycleTranscriptionPlugin()
+        plugin.currentModelId = "tiny"
+        plugin.configured = true
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: ModelLifecycleTranscriptionPlugin.pluginId,
+                    name: ModelLifecycleTranscriptionPlugin.pluginName,
+                    version: "1.0.0",
+                    sdkCompatibilityVersion: PluginSDKCompatibility.currentVersion,
+                    principalClass: "APIRouterModelLifecycleTranscriptionPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let response = await context.router.route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/models/unload",
+                queryParams: [:],
+                headers: ["content-type": "application/json"],
+                body: Data(#"{"engine":"model-lifecycle-mock"}"#.utf8)
+            )
+        )
+        let json = try Self.jsonObject(response)
+
+        XCTAssertEqual(response.status, 200)
+        XCTAssertEqual(json["engine"] as? String, plugin.providerId)
+        XCTAssertEqual(json["model"] as? String, "tiny")
+        XCTAssertEqual(json["status"] as? String, "unloaded")
+        XCTAssertFalse(plugin.isConfigured)
+        XCTAssertTrue(plugin.downloadedModelIds.contains("tiny"))
+    }
+
+    @MainActor
+    func testModelsUnloadEndpointRejectsModelThatRemainsInUse() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let context = Self.makeAPIContext(
+            appSupportDirectory: appSupportDirectory,
+            withMockTranscriptionPlugin: false
+        )
+        let plugin = ModelLifecycleTranscriptionPlugin()
+        plugin.currentModelId = "tiny"
+        plugin.configured = true
+        plugin.allowsUnload = false
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: ModelLifecycleTranscriptionPlugin.pluginId,
+                    name: ModelLifecycleTranscriptionPlugin.pluginName,
+                    version: "1.0.0",
+                    sdkCompatibilityVersion: PluginSDKCompatibility.currentVersion,
+                    principalClass: "APIRouterModelLifecycleTranscriptionPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let response = await context.router.route(
+            HTTPRequest(
+                method: "POST",
+                path: "/v1/models/unload",
+                queryParams: [:],
+                headers: ["content-type": "application/json"],
+                body: Data(#"{"engine":"model-lifecycle-mock"}"#.utf8)
+            )
+        )
+
+        XCTAssertEqual(response.status, 409)
+        XCTAssertTrue(plugin.isConfigured)
+        XCTAssertEqual(plugin.selectedModelId, "tiny")
+    }
+
+    @MainActor
+    func testModelsDeleteEndpointRemovesDownloadedModelThroughPluginManager() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let context = Self.makeAPIContext(
+            appSupportDirectory: appSupportDirectory,
+            withMockTranscriptionPlugin: false
+        )
+        let plugin = ModelLifecycleTranscriptionPlugin()
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: ModelLifecycleTranscriptionPlugin.pluginId,
+                    name: ModelLifecycleTranscriptionPlugin.pluginName,
+                    version: "1.0.0",
+                    sdkCompatibilityVersion: PluginSDKCompatibility.currentVersion,
+                    principalClass: "APIRouterModelLifecycleTranscriptionPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let response = await context.router.route(
+            HTTPRequest(
+                method: "DELETE",
+                path: "/v1/models",
+                queryParams: ["engine": plugin.providerId, "model": "tiny"],
+                headers: [:],
+                body: Data()
+            )
+        )
+        let json = try Self.jsonObject(response)
+
+        XCTAssertEqual(response.status, 200)
+        XCTAssertEqual(json["engine"] as? String, plugin.providerId)
+        XCTAssertEqual(json["model"] as? String, "tiny")
+        XCTAssertEqual(json["status"] as? String, "deleted")
+        XCTAssertFalse(plugin.downloadedModelIds.contains("tiny"))
     }
 
     @MainActor

@@ -305,6 +305,24 @@ final class SpeechAnalyzerPlugin: NSObject, LiveTranscriptionCapablePlugin, Tran
 
     @objc func triggerAutoUnload() { unloadModel(clearPersistence: false) }
     @objc func triggerRestoreModel() { Task { await restoreLoadedModel(allowDownloads: true) } }
+    @objc(triggerRestoreModelForModel:)
+    func triggerRestoreModel(forModel modelId: NSString?) {
+        guard let modelId = modelId.map(String.init) else { return }
+        if loadedModelId != nil, loadedModelId != modelId {
+            unloadModel(clearPersistence: false)
+        }
+        Task {
+            if cachedModels.isEmpty {
+                await populateModels()
+            }
+            guard let modelDef = cachedModels.first(where: { $0.id == modelId }) else {
+                modelState = .error("Unknown Apple Speech model '\(modelId)'.")
+                host?.notifyCapabilitiesChanged()
+                return
+            }
+            await loadModel(modelDef)
+        }
+    }
     @objc(triggerRestoreModelForLanguage:)
     func triggerRestoreModel(forLanguage languageCode: NSString?) {
         let requestedLanguage = languageCode as String?

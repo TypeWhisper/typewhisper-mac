@@ -651,8 +651,16 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
     @objc func triggerRestoreModel() { Task { await restoreLoadedModel(allowDownloads: true) } }
     @objc(triggerRestoreModelForModel:)
     func triggerRestoreModel(forModel modelId: NSString?) {
-        let preferredModelId = modelId.map(String.init)
-        Task { await restoreLoadedModel(allowDownloads: false, preferredModelId: preferredModelId) }
+        guard let preferredModelId = modelId.map(String.init),
+              Self.availableModels.contains(where: { $0.id == preferredModelId }) else {
+            return
+        }
+        if loadedModelId != nil, loadedModelId != preferredModelId {
+            unloadModel(clearPersistence: true)
+        }
+        _selectedModelId = preferredModelId
+        host?.setUserDefault(preferredModelId, forKey: "selectedModel")
+        Task { await restoreLoadedModel(allowDownloads: true, preferredModelId: preferredModelId) }
     }
 
     func unloadModel(clearPersistence: Bool = true) {
@@ -1123,6 +1131,7 @@ struct WhisperKitSettingsPollState: Equatable {
     var modelState: WhisperModelState
     var downloadProgress: Double
     var activeModelId: String?
+    var downloadedModelIds: Set<String>
     var isPolling: Bool
 
     var isBusy: Bool {
@@ -1137,20 +1146,23 @@ struct WhisperKitSettingsPollState: Equatable {
     func applyingPolledPluginState(
         _ pluginState: WhisperModelState,
         downloadProgress: Double,
-        selectedModelId: String?
+        selectedModelId: String?,
+        downloadedModelIds: Set<String>
     ) -> WhisperKitSettingsPollState {
         var updated = self
         updated.modelState = pluginState
         updated.downloadProgress = downloadProgress
+        updated.downloadedModelIds = downloadedModelIds
 
         switch pluginState {
-        case .ready:
-            updated.activeModelId = selectedModelId ?? updated.activeModelId
+        case .ready(let loadedModelId):
+            updated.activeModelId = selectedModelId ?? loadedModelId
             updated.isPolling = false
         case .downloading, .loading:
+            updated.activeModelId = selectedModelId ?? updated.activeModelId
             updated.isPolling = true
         case .notLoaded, .error:
-            updated.activeModelId = selectedModelId ?? updated.activeModelId
+            updated.activeModelId = selectedModelId
             updated.isPolling = false
         }
 
@@ -1166,6 +1178,7 @@ private struct WhisperKitSettingsView: View {
     @State private var modelState: WhisperModelState = .notLoaded
     @State private var downloadProgress: Double = 0
     @State private var activeModelId: String?
+    @State private var downloadedModelIds: Set<String> = []
     @State private var isPolling = false
     @State private var hfTokenInput = ""
     @State private var showHfToken = false
@@ -1313,8 +1326,10 @@ private struct WhisperKitSettingsView: View {
                 modelState: normalizedPluginModelState,
                 downloadProgress: plugin.downloadProgress,
                 activeModelId: plugin._selectedModelId,
+                downloadedModelIds: Set(plugin.downloadedModels.map(\.id)),
                 isPolling: false
             ).isBusy
+            downloadedModelIds = Set(plugin.downloadedModels.map(\.id))
 
             if plugin.whisperKit == nil,
                plugin.loadedModelId == nil,
@@ -1336,16 +1351,19 @@ private struct WhisperKitSettingsView: View {
                 modelState: modelState,
                 downloadProgress: downloadProgress,
                 activeModelId: activeModelId,
+                downloadedModelIds: downloadedModelIds,
                 isPolling: isPolling
             ).applyingPolledPluginState(
                 normalizedPluginModelState,
                 downloadProgress: plugin.downloadProgress,
-                selectedModelId: plugin._selectedModelId
+                selectedModelId: plugin._selectedModelId,
+                downloadedModelIds: Set(plugin.downloadedModels.map(\.id))
             )
 
             modelState = updatedState.modelState
             downloadProgress = updatedState.downloadProgress
             activeModelId = updatedState.activeModelId
+            downloadedModelIds = updatedState.downloadedModelIds
             isPolling = updatedState.isPolling
         }
         .onChange(of: hfTokenInput) { _, newValue in
@@ -1386,11 +1404,12 @@ private struct WhisperKitSettingsView: View {
 
     @ViewBuilder
     private func modelStatusView(_ modelDef: WhisperModelDef) -> some View {
-        let isDownloaded = plugin.isModelDownloaded(modelDef)
+        let isDownloaded = downloadedModelIds.contains(modelDef.id)
         let viewState = WhisperKitSettingsPollState(
             modelState: modelState,
             downloadProgress: downloadProgress,
             activeModelId: activeModelId,
+            downloadedModelIds: downloadedModelIds,
             isPolling: isPolling
         )
 
@@ -1471,15 +1490,15 @@ private struct WhisperKitSettingsView: View {
         modelState = normalizedPluginModelState
         downloadProgress = plugin.downloadProgress
         activeModelId = plugin._selectedModelId
+        downloadedModelIds = Set(plugin.downloadedModels.map(\.id))
         isPolling = false
     }
 
     private func removeDownloadedModel(_ modelDef: WhisperModelDef) {
-        if case .ready(let loadedId) = modelState, loadedId == modelDef.id {
-            plugin.unloadModel()
+        Task {
+            try? await plugin.deleteDownloadedModel(modelDef.id)
+            syncViewStateFromPlugin()
         }
-        try? plugin.deleteModelFiles(modelDef)
-        syncViewStateFromPlugin()
     }
 
     private func phaseText(_ phase: String) -> String {

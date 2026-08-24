@@ -41,6 +41,9 @@ final class APIHandlers: @unchecked Sendable {
         router.register("POST", "/v1/transcribe/local-file", handler: handleTranscribeLocalFile)
         router.register("GET", "/v1/status", handler: handleStatus)
         router.register("GET", "/v1/models", handler: handleModels)
+        router.register("POST", "/v1/models/load", handler: handleLoadModel)
+        router.register("POST", "/v1/models/unload", handler: handleUnloadModel)
+        router.register("DELETE", "/v1/models", handler: handleDeleteModel)
         router.register("GET", "/v1/history", handler: handleGetHistory)
         router.register("DELETE", "/v1/history", handler: handleDeleteHistory)
         router.register("GET", "/v1/rules", handler: handleGetRules)
@@ -666,7 +669,7 @@ final class APIHandlers: @unchecked Sendable {
             status: isReady ? "ready" : "no_model",
             engine: providerId,
             model: modelId,
-            api_version: "1.1",
+            api_version: "1.2",
             supports_workflow_dictation: true,
             supports_streaming: supportsStreaming,
             supports_translation: supportsTranslation
@@ -675,6 +678,17 @@ final class APIHandlers: @unchecked Sendable {
     }
 
     // MARK: - GET /v1/models
+
+    private struct ModelActionRequest: Decodable {
+        let engine: String
+        let model: String?
+    }
+
+    private struct ModelActionResponse: Encodable {
+        let engine: String
+        let model: String?
+        let status: String
+    }
 
     @MainActor
     private func handleModels(_ request: HTTPRequest) async -> HTTPResponse {
@@ -712,6 +726,96 @@ final class APIHandlers: @unchecked Sendable {
 
         struct ModelsResponse: Encodable { let models: [ModelEntry] }
         return .json(ModelsResponse(models: models))
+    }
+
+    // MARK: - POST /v1/models/load
+
+    @MainActor
+    private func handleLoadModel(_ request: HTTPRequest) async -> HTTPResponse {
+        let payload: ModelActionRequest
+        do {
+            payload = try JSONDecoder().decode(ModelActionRequest.self, from: request.body)
+        } catch {
+            return .error(status: 400, message: "Expected JSON with 'engine' and 'model'")
+        }
+
+        let engineId = payload.engine.trimmingCharacters(in: .whitespacesAndNewlines)
+        let modelId = payload.model?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !engineId.isEmpty, !modelId.isEmpty else {
+            return .error(status: 400, message: "Both 'engine' and 'model' are required")
+        }
+
+        do {
+            try await modelManager.loadModel(engineId, modelId: modelId)
+            return .json(ModelActionResponse(engine: engineId, model: modelId, status: "ready"))
+        } catch ModelLifecycleError.engineNotFound {
+            return .error(status: 404, message: "Engine '\(engineId)' was not found")
+        } catch ModelLifecycleError.modelNotFound {
+            return .error(status: 404, message: "Model '\(modelId)' was not found for engine '\(engineId)'")
+        } catch ModelLifecycleError.loadUnsupported {
+            return .error(status: 409, message: "Engine '\(engineId)' does not support explicit model loading")
+        } catch {
+            return .error(status: 409, message: error.localizedDescription)
+        }
+    }
+
+    // MARK: - POST /v1/models/unload
+
+    @MainActor
+    private func handleUnloadModel(_ request: HTTPRequest) async -> HTTPResponse {
+        let payload: ModelActionRequest
+        do {
+            payload = try JSONDecoder().decode(ModelActionRequest.self, from: request.body)
+        } catch {
+            return .error(status: 400, message: "Expected JSON with 'engine'")
+        }
+
+        let engineId = payload.engine.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !engineId.isEmpty else {
+            return .error(status: 400, message: "'engine' is required")
+        }
+
+        do {
+            let modelId = try modelManager.unloadModel(engineId)
+            return .json(ModelActionResponse(engine: engineId, model: modelId, status: "unloaded"))
+        } catch ModelLifecycleError.engineNotFound {
+            return .error(status: 404, message: "Engine '\(engineId)' was not found")
+        } catch ModelLifecycleError.unloadUnsupported {
+            return .error(status: 409, message: "Engine '\(engineId)' does not support unloading")
+        } catch {
+            return .error(status: 409, message: error.localizedDescription)
+        }
+    }
+
+    // MARK: - DELETE /v1/models
+
+    @MainActor
+    private func handleDeleteModel(_ request: HTTPRequest) async -> HTTPResponse {
+        let engineId = request.queryParams["engine"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let modelId = request.queryParams["model"]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        guard !engineId.isEmpty, !modelId.isEmpty else {
+            return .error(status: 400, message: "Both 'engine' and 'model' query parameters are required")
+        }
+
+        guard let loadedPlugin = PluginManager.shared.loadedPlugins.first(where: {
+            PluginManager.shared.transcriptionProviderIds(exposedBy: $0.instance).contains(engineId)
+        }) else {
+            return .error(status: 404, message: "Engine '\(engineId)' was not found")
+        }
+
+        do {
+            try await PluginManager.shared.deleteDownloadedModel(
+                pluginId: loadedPlugin.manifest.id,
+                modelId: modelId
+            )
+            return .json(ModelActionResponse(engine: engineId, model: modelId, status: "deleted"))
+        } catch PluginModelManagementError.modelNotFound {
+            return .error(status: 404, message: "Downloaded model '\(modelId)' was not found")
+        } catch PluginModelManagementError.unsupported {
+            return .error(status: 409, message: "Engine '\(engineId)' does not support deleting downloaded models")
+        } catch {
+            return .error(status: 409, message: error.localizedDescription)
+        }
     }
 
     // MARK: - GET /v1/history

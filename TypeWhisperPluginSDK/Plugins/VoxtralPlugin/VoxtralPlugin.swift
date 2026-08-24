@@ -9,7 +9,7 @@ import MLXAudioSTT
 // MARK: - Plugin Entry Point
 
 @objc(VoxtralPlugin)
-final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding, DictionaryTermsCapabilityProviding, PluginDownloadedModelManaging, @unchecked Sendable {
+final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding, DictionaryTermsCapabilityProviding, PluginSettingsActivityReporting, PluginDownloadedModelManaging, @unchecked Sendable {
     static let pluginId = "com.typewhisper.voxtral"
     static let pluginName = "Voxtral"
 
@@ -263,6 +263,19 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
 
     @objc func triggerAutoUnload() { unloadModel(clearPersistence: false) }
     @objc func triggerRestoreModel() { Task { await restoreLoadedModel(allowDownloads: true) } }
+    @objc(triggerRestoreModelForModel:)
+    func triggerRestoreModel(forModel modelId: NSString?) {
+        guard let modelId = modelId.map(String.init),
+              let modelDef = Self.availableModels.first(where: { $0.id == modelId }) else {
+            return
+        }
+        if loadedModelId != nil, loadedModelId != modelId {
+            unloadModel(clearPersistence: true)
+        }
+        _selectedModelId = modelId
+        host?.setUserDefault(modelId, forKey: "selectedModel")
+        Task { try? await loadModel(modelDef) }
+    }
 
     func unloadModel(clearPersistence: Bool = true) {
         model = nil
@@ -357,6 +370,17 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
     }
 
     // MARK: - Settings View
+
+    var currentSettingsActivity: PluginSettingsActivity? {
+        switch modelState {
+        case .notLoaded, .ready:
+            return nil
+        case .loading:
+            return PluginSettingsActivity(message: "Preparing model")
+        case .error(let message):
+            return PluginSettingsActivity(message: message, isError: true)
+        }
+    }
 
     var settingsView: AnyView? {
         AnyView(VoxtralSettingsView(plugin: self))
