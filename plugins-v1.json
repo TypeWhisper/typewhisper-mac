@@ -2370,6 +2370,17 @@
       "detailsURL": "https://www.typewhisper.com/addons/granite/",
       "releases": [
         {
+          "version": "1.0.10",
+          "minHostVersion": "1.6.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 19582049,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-granite-v1.0.10/GranitePlugin.zip",
+          "minOSVersion": "14.0",
+          "supportedArchitectures": [
+            "arm64"
+          ]
+        },
+        {
           "version": "1.0.9",
           "minHostVersion": "1.6.0",
           "sdkCompatibilityVersion": "v1",
