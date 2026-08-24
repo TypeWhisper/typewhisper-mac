@@ -2457,6 +2457,17 @@
       "detailsURL": "https://www.typewhisper.com/addons/voxtral/",
       "releases": [
         {
+          "version": "1.0.14",
+          "minHostVersion": "1.6.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 19583710,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-voxtral-v1.0.14/VoxtralPlugin.zip",
+          "minOSVersion": "14.0",
+          "supportedArchitectures": [
+            "arm64"
+          ]
+        },
+        {
           "version": "1.0.13",
           "minHostVersion": "1.6.0",
           "sdkCompatibilityVersion": "v1",
