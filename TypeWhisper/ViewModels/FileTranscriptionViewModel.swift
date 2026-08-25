@@ -574,8 +574,13 @@ final class FileTranscriptionViewModel: ObservableObject {
     }
 
     private static func validateImportedMedia(_ media: PluginImportedMedia) throws {
+        var isDirectory: ObjCBool = false
         guard media.localFileURL.isFileURL,
-              FileManager.default.fileExists(atPath: media.localFileURL.path),
+              FileManager.default.fileExists(
+                atPath: media.localFileURL.path,
+                isDirectory: &isDirectory
+              ),
+              !isDirectory.boolValue,
               AudioFileService.supportedExtensions.contains(
                 media.localFileURL.pathExtension.lowercased()
               ) else {

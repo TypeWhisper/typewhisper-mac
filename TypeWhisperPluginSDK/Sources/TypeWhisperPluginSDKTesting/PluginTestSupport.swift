@@ -48,6 +48,7 @@ public final class PluginTestHostServices: HostServices, HostModelLifecyclePolic
         var capabilitiesChangedCount = 0
         var openedSettingsSidebarItemIds: [String] = []
         var enqueuedImportedMedia: [PluginImportedMedia] = []
+        var enqueuedMediaImporterIds: [String] = []
         var streamingDisplayActiveValues: [Bool] = []
     }
 
@@ -140,9 +141,13 @@ public final class PluginTestHostServices: HostServices, HostModelLifecyclePolic
         }
     }
 
-    public func enqueueImportedMediaForTranscription(_ media: PluginImportedMedia) async -> Bool {
+    public func enqueueImportedMediaForTranscription(
+        _ media: PluginImportedMedia,
+        fromMediaImporterId mediaImporterId: String
+    ) async -> Bool {
         lock.withLock {
             state.enqueuedImportedMedia.append(media)
+            state.enqueuedMediaImporterIds.append(mediaImporterId)
         }
         return true
     }
@@ -163,6 +168,10 @@ public final class PluginTestHostServices: HostServices, HostModelLifecyclePolic
 
     public var enqueuedImportedMedia: [PluginImportedMedia] {
         lock.withLock { state.enqueuedImportedMedia }
+    }
+
+    public var enqueuedMediaImporterIds: [String] {
+        lock.withLock { state.enqueuedMediaImporterIds }
     }
 
     public var streamingDisplayActiveValues: [Bool] {
