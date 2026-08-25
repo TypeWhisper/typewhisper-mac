@@ -394,9 +394,13 @@ final class WebLinkPlugin: NSObject,
         host.notifyCapabilitiesChanged()
     }
 
+    @MainActor
     func enqueueImportedMediaForTranscription(_ media: PluginImportedMedia) async -> Bool {
         guard let host = state.withLock({ $0.host }) else { return false }
-        return await host.enqueueImportedMediaForTranscription(media)
+        return await host.enqueueImportedMediaForTranscription(
+            media,
+            fromMediaImporterId: mediaImportId
+        )
     }
 
     func openSettingsWindow() {

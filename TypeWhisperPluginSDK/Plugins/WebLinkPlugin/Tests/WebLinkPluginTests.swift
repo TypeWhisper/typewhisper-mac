@@ -168,6 +168,7 @@ final class WebLinkPluginTests: XCTestCase {
         let wasEnqueued = await plugin.enqueueImportedMediaForTranscription(importedMedia)
         XCTAssertTrue(wasEnqueued)
         XCTAssertEqual(host.enqueuedImportedMedia, [importedMedia])
+        XCTAssertEqual(host.enqueuedMediaImporterIds, ["web-link"])
     }
 
     private func temporaryDirectory() throws -> URL {
