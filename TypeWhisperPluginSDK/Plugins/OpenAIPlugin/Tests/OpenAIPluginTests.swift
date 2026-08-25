@@ -938,6 +938,30 @@ final class OpenAIPluginTests: XCTestCase {
         XCTAssertEqual(input.first?["role"] as? String, "user")
     }
 
+    func testOpenAIResponsesRequestPreservesCustomTemperatureForGPT51AtNone() async throws {
+        try await assertOpenAIResponsesRequestTemperature(
+            model: "gpt-5.1",
+            reasoningEffort: "none",
+            expectedTemperature: 0.7
+        )
+    }
+
+    func testOpenAIResponsesRequestPreservesCustomTemperatureForGPT52AtNone() async throws {
+        try await assertOpenAIResponsesRequestTemperature(
+            model: "gpt-5.2",
+            reasoningEffort: "none",
+            expectedTemperature: 0.7
+        )
+    }
+
+    func testOpenAIResponsesRequestOmitsCustomTemperatureForGPT52AboveNone() async throws {
+        try await assertOpenAIResponsesRequestTemperature(
+            model: "gpt-5.2",
+            reasoningEffort: "medium",
+            expectedTemperature: nil
+        )
+    }
+
     func testOpenAIResponsesParserExtractsOutputText() throws {
         let data = Data(
             """
@@ -1206,6 +1230,51 @@ final class OpenAIPluginTests: XCTestCase {
             httpVersion: nil,
             headerFields: nil
         )!
+    }
+
+    private func assertOpenAIResponsesRequestTemperature(
+        model: String,
+        reasoningEffort: String,
+        expectedTemperature: Double?
+    ) async throws {
+        let host = try PluginTestHostServices(
+            defaults: ["reasoningEffort": reasoningEffort],
+            secrets: ["api-key": "sk-live"]
+        )
+        let plugin = OpenAIPlugin()
+        plugin.activate(host: host)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(
+                        #"{"output":[{"type":"message","content":[{"type":"output_text","text":"Done"}]}]}"#.utf8
+                    ),
+                    Self.httpResponse(url: "https://api.openai.com/v1/responses", statusCode: 200)
+                ),
+            ])
+        }
+
+        let result = try await plugin.process(
+            systemPrompt: "Fix grammar",
+            userText: "hello",
+            model: model,
+            temperatureDirective: .custom(0.7)
+        )
+
+        XCTAssertEqual(result, "Done")
+        let request = try XCTUnwrap(store.sessions.first?.requestedRequests.first)
+        let requestData = try XCTUnwrap(request.httpBody)
+        let requestBody = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: requestData) as? [String: Any]
+        )
+        XCTAssertEqual(requestBody["model"] as? String, model)
+        XCTAssertEqual(
+            (requestBody["reasoning"] as? [String: Any])?["effort"] as? String,
+            reasoningEffort
+        )
+        XCTAssertEqual(requestBody["temperature"] as? Double, expectedTemperature)
     }
 }
 

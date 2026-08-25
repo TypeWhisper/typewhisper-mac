@@ -496,7 +496,8 @@ struct OpenAIResponsesClient: Sendable {
         systemPrompt: String,
         userText: String,
         model: String,
-        reasoningEffort: String?
+        reasoningEffort: String?,
+        temperature: Double?
     ) async throws -> String {
         guard let url = URL(string: "https://api.openai.com/v1/responses") else {
             throw OpenAIPluginError.invalidURL("https://api.openai.com/v1/responses")
@@ -512,7 +513,8 @@ struct OpenAIResponsesClient: Sendable {
                 model: model,
                 systemPrompt: systemPrompt,
                 userText: userText,
-                reasoningEffort: reasoningEffort
+                reasoningEffort: reasoningEffort,
+                temperature: temperature
             )
         )
 
@@ -537,7 +539,8 @@ struct OpenAIResponsesClient: Sendable {
         model: String,
         systemPrompt: String,
         userText: String,
-        reasoningEffort: String?
+        reasoningEffort: String?,
+        temperature: Double? = nil
     ) -> [String: Any] {
         let instructions = systemPrompt.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? "You are a helpful assistant."
@@ -562,6 +565,9 @@ struct OpenAIResponsesClient: Sendable {
 
         if let reasoningEffort, !reasoningEffort.isEmpty {
             body["reasoning"] = ["effort": reasoningEffort]
+        }
+        if let temperature {
+            body["temperature"] = temperature
         }
 
         return body
@@ -2380,7 +2386,12 @@ final class OpenAIPlugin: NSObject,
                     systemPrompt: systemPrompt,
                     userText: userText,
                     model: modelId,
-                    reasoningEffort: reasoningEffort
+                    reasoningEffort: reasoningEffort,
+                    temperature: resolvedTemperature(
+                        for: modelId,
+                        reasoningEffort: reasoningEffort,
+                        temperatureDirective: temperatureDirective
+                    )
                 )
             }
             return try await chatHelper.process(
@@ -3244,8 +3255,12 @@ final class OpenAIPlugin: NSObject,
 
     nonisolated static func chatCompletionTemperature(for modelID: String, reasoningEffort: String?) -> Double? {
         let lowered = modelID.lowercased()
-        if lowered.hasPrefix("gpt-5"), reasoningEffort?.isEmpty == false {
-            return nil
+        if lowered.hasPrefix("gpt-5") {
+            let supportsTemperatureAtNone = lowered.hasPrefix("gpt-5.1")
+                || lowered.hasPrefix("gpt-5.2")
+            return supportsTemperatureAtNone && reasoningEffort == OpenAIReasoningEffort.none.rawValue
+                ? 0.3
+                : nil
         }
         return 0.3
     }
