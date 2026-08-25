@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 import TypeWhisperPluginSDK
 import XCTest
 @testable import TypeWhisper
@@ -283,6 +284,7 @@ final class PromptPaletteHandlerTests: XCTestCase {
 
         var capturedPrompt: String?
         var pasteCount = 0
+        let pasteExpectation = expectation(description: "Rich-text workflow pastes its result")
         let controller = PromptPaletteControllerSpy()
         let handler = PromptPaletteHandler(
             textInsertionService: textInsertionService,
@@ -306,6 +308,7 @@ final class PromptPaletteHandlerTests: XCTestCase {
         )
         textInsertionService.pasteSimulatorOverride = {
             pasteCount += 1
+            pasteExpectation.fulfill()
         }
 
         handler.processWorkflowDirectly(
@@ -314,7 +317,7 @@ final class PromptPaletteHandlerTests: XCTestCase {
             soundFeedbackEnabled: false
         )
 
-        try await Task.sleep(for: .milliseconds(100))
+        await fulfillment(of: [pasteExpectation], timeout: 2.0)
 
         XCTAssertFalse(controller.isVisible)
         XCTAssertNil(insertedText)
@@ -761,6 +764,59 @@ private final class PromptPaletteActionPluginSpy: NSObject, ActionPlugin, @unche
         ActionResult(success: true, message: "Done")
     }
 }
+
+@MainActor
+final class SelectionPaletteControllerTests: XCTestCase {
+    func testHostedPaletteDoesNotPropagateSwiftUISizingIntoPanelConstraints() throws {
+        let controller = SelectionPaletteController()
+        controller.show(
+            configuration: SelectionPaletteConfiguration(
+                panelWidth: 420,
+                panelHeight: 360,
+                searchPrompt: "Search prompts",
+                emptyStateTitle: "No prompts"
+            ),
+            items: [
+                SelectionPaletteItem(id: UUID(), title: "Translate to English"),
+                SelectionPaletteItem(id: UUID(), title: "Summarize"),
+            ],
+            onSelect: { _ in }
+        )
+        defer { controller.hide() }
+
+        let panel = try XCTUnwrap(activePanel(in: controller))
+        let hostingView = try XCTUnwrap(panel.contentView as? any HostingSizingOptionsProviding)
+
+        XCTAssertEqual(hostingView.sizingOptions, [])
+    }
+
+    private func activePanel(in controller: SelectionPaletteController) -> NSPanel? {
+        Mirror(reflecting: controller)
+            .descendant("panel", "some") as? NSPanel
+    }
+}
+
+@MainActor
+private protocol HostingSizingOptionsProviding {
+    var sizingOptions: NSHostingSizingOptions { get }
+}
+
+extension NSHostingView: HostingSizingOptionsProviding {}
+
+#if canImport(Translation)
+@available(macOS 15, *)
+@MainActor
+final class TranslationHostWindowTests: XCTestCase {
+    func testHostedTranslationViewDoesNotPropagateSwiftUISizingIntoWindowConstraints() throws {
+        let window = TranslationHostWindow(translationService: TranslationService())
+        defer { window.orderOut(nil) }
+
+        let hostingView = try XCTUnwrap(window.contentView as? any HostingSizingOptionsProviding)
+
+        XCTAssertEqual(hostingView.sizingOptions, [])
+    }
+}
+#endif
 
 @MainActor
 final class SelectionPaletteInteractionModelTests: XCTestCase {
