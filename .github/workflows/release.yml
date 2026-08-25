@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: Optional exact release tag (for example v1.6.0-daily.20260719.1)
+        description: Optional exact release tag (for example v1.7.0-daily.20260825.1)
         required: false
         type: string
       without_icloud:

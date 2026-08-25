@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import SwiftUI
 import TypeWhisperPluginSDK
 import os.log
 
@@ -234,6 +235,20 @@ enum PluginModelManagementError: LocalizedError {
 // MARK: - Plugin Manager
 
 @MainActor
+struct PluginUserInterfaceContribution {
+    let pluginId: String
+    let pluginName: String
+    let provider: any PluginUserInterfaceProviding
+    let appMenuCommands: [PluginCommandDescriptor]
+    let primaryMenuBarCommands: [PluginCommandDescriptor]
+    let settingsSidebarItems: [PluginSettingsSidebarItemDescriptor]
+
+    var allCommands: [PluginCommandDescriptor] {
+        appMenuCommands + primaryMenuBarCommands
+    }
+}
+
+@MainActor
 final class PluginManager: ObservableObject {
     nonisolated(unsafe) static var shared: PluginManager!
 
@@ -245,6 +260,41 @@ final class PluginManager: ObservableObject {
     private var ruleNamesProvider: @MainActor () -> [String] = { [] }
     private var workflowProvider: @MainActor () -> [PluginWorkflowInfo] = { [] }
     private var deletingModelPluginIds = Set<String>()
+
+    var userInterfaceContributions: [PluginUserInterfaceContribution] {
+        loadedPlugins.compactMap { plugin in
+            guard plugin.isEnabled,
+                  let provider = plugin.instance as? any PluginUserInterfaceProviding else {
+                return nil
+            }
+            return PluginUserInterfaceContribution(
+                pluginId: plugin.manifest.id,
+                pluginName: plugin.manifest.name,
+                provider: provider,
+                appMenuCommands: provider.appMenuCommands,
+                primaryMenuBarCommands: provider.primaryMenuBarCommands,
+                settingsSidebarItems: provider.settingsSidebarItems
+            )
+        }
+    }
+
+    func settingsSidebarView(pluginId: String, itemId: String) -> AnyView? {
+        guard let contribution = userInterfaceContributions.first(where: { $0.pluginId == pluginId }),
+              contribution.settingsSidebarItems.contains(where: { $0.id == itemId }) else {
+            return nil
+        }
+        return contribution.provider.settingsSidebarView(for: itemId)
+    }
+
+    @discardableResult
+    func performPluginCommand(pluginId: String, commandId: String) -> Bool {
+        guard let contribution = userInterfaceContributions.first(where: { $0.pluginId == pluginId }),
+              contribution.allCommands.contains(where: { $0.id == commandId && $0.isEnabled }) else {
+            return false
+        }
+        contribution.provider.performPluginCommand(commandId)
+        return true
+    }
 
     var postProcessors: [PostProcessorPlugin] {
         loadedPlugins
@@ -258,6 +308,21 @@ final class PluginManager: ObservableObject {
             .filter { $0.isEnabled }
             .compactMap { $0.instance as? FileJobAutomationPlugin }
             .sorted { $0.priority < $1.priority }
+    }
+
+    var mediaImportPlugins: [any MediaImportPlugin] {
+        loadedPlugins
+            .filter { $0.isEnabled }
+            .flatMap { plugin -> [any MediaImportPlugin] in
+                var importers: [any MediaImportPlugin] = []
+                if let importer = plugin.instance as? any MediaImportPlugin {
+                    importers.append(importer)
+                }
+                if let expanded = plugin.instance as? any AdditionalMediaImportPluginsProviding {
+                    importers.append(contentsOf: expanded.additionalMediaImportPlugins)
+                }
+                return importers
+            }
     }
 
     var llmProviders: [LLMProviderPlugin] {

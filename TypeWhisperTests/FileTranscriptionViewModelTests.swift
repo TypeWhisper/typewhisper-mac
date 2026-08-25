@@ -5,6 +5,93 @@ import XCTest
 
 @MainActor
 final class FileTranscriptionViewModelTests: XCTestCase {
+    func testImportedPluginMediaCanBeAddedToTranscriptionQueue() throws {
+        let previousPluginManager = PluginManager.shared
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer {
+            PluginManager.shared = previousPluginManager
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        let downloadedFile = makeTemporaryFile(named: "downloaded-web-link.m4a")
+        let plugin = FileTranscriptionMediaImportPlugin(downloadedFile: downloadedFile)
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let viewModel = FileTranscriptionViewModel(
+            modelManager: ModelManagerService(),
+            audioFileService: AudioFileService(),
+            dictionaryService: makeDictionaryService(),
+            defaults: try makeDefaults()
+        )
+
+        let accepted = viewModel.enqueueImportedMedia(
+            PluginImportedMedia(
+                localFileURL: downloadedFile,
+                displayName: "Downloaded episode",
+                cleanupToken: "cleanup"
+            ),
+            from: plugin
+        )
+
+        XCTAssertTrue(accepted)
+        XCTAssertEqual(viewModel.files.map(\.url), [downloadedFile])
+        XCTAssertEqual(viewModel.files.map(\.fileName), ["Downloaded episode"])
+    }
+
+    func testImportedPluginMediaRejectsUnsupportedFile() throws {
+        let previousPluginManager = PluginManager.shared
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer {
+            PluginManager.shared = previousPluginManager
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        let unsupportedFile = makeTemporaryFile(named: "downloaded-web-link.txt")
+        let plugin = FileTranscriptionMediaImportPlugin(downloadedFile: unsupportedFile)
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let viewModel = FileTranscriptionViewModel(
+            modelManager: ModelManagerService(),
+            audioFileService: AudioFileService(),
+            dictionaryService: makeDictionaryService(),
+            defaults: try makeDefaults()
+        )
+
+        let accepted = viewModel.enqueueImportedMedia(
+            PluginImportedMedia(localFileURL: unsupportedFile),
+            from: plugin
+        )
+
+        XCTAssertFalse(accepted)
+        XCTAssertTrue(viewModel.files.isEmpty)
+    }
+
+    func testImportedPluginMediaRejectsDuplicateQueueItem() throws {
+        let previousPluginManager = PluginManager.shared
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer {
+            PluginManager.shared = previousPluginManager
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        let downloadedFile = makeTemporaryFile(named: "downloaded-web-link.m4a")
+        let plugin = FileTranscriptionMediaImportPlugin(downloadedFile: downloadedFile)
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let viewModel = FileTranscriptionViewModel(
+            modelManager: ModelManagerService(),
+            audioFileService: AudioFileService(),
+            dictionaryService: makeDictionaryService(),
+            defaults: try makeDefaults()
+        )
+
+        let imported = PluginImportedMedia(localFileURL: downloadedFile)
+        XCTAssertTrue(viewModel.enqueueImportedMedia(imported, from: plugin))
+        XCTAssertFalse(viewModel.enqueueImportedMedia(imported, from: plugin))
+
+        XCTAssertEqual(viewModel.files.count, 1)
+    }
+
     func testEngineSwitchPreservesFullLanguageSelectionAndPersistence() throws {
         let previousPluginManager = PluginManager.shared
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
@@ -785,6 +872,10 @@ final class FileTranscriptionViewModelTests: XCTestCase {
     func testRecoverySettingsTabRemainsAvailableWithoutRecoveryContent() {
         XCTAssertEqual(SettingsView.availableTab(.dictationRecovery), .dictationRecovery)
         XCTAssertEqual(SettingsView.availableTab(.fileTranscription), .fileTranscription)
+        XCTAssertEqual(
+            SettingsView.availableTab(.plugin(pluginId: "com.example.player", itemId: "player")),
+            .plugin(pluginId: "com.example.player", itemId: "player")
+        )
     }
 
     func testAutomaticRecoveryFallbackAllowsKnownRecoverableErrors() {
@@ -1016,6 +1107,47 @@ private actor AsyncGate {
 }
 
 private struct UnknownTranscriptionError: Error {}
+
+private final class FileTranscriptionMediaImportPlugin: NSObject, MediaImportPlugin, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.mock.media-import"
+    static let pluginName = "Media Import"
+
+    let mediaImportId = "mock-media-import"
+    let mediaImportDisplayName = "Mock Media Import"
+    private let downloadedFile: URL
+    private(set) var requestedURLs: [URL] = []
+    private(set) var removedMedia: [PluginImportedMedia] = []
+
+    required override convenience init() {
+        self.init(downloadedFile: URL(fileURLWithPath: "/tmp/mock-media-import.m4a"))
+    }
+
+    init(downloadedFile: URL) {
+        self.downloadedFile = downloadedFile
+        super.init()
+    }
+
+    func activate(host: HostServices) {}
+    func deactivate() {}
+    func canImportMedia(from url: URL) -> Bool { url.scheme == "https" }
+
+    func importMedia(
+        from url: URL,
+        onProgress: @Sendable @escaping (PluginMediaImportProgress) -> Bool
+    ) async throws -> PluginImportedMedia {
+        requestedURLs.append(url)
+        _ = onProgress(PluginMediaImportProgress(fractionCompleted: 0.5, status: "Downloading"))
+        return PluginImportedMedia(
+            localFileURL: downloadedFile,
+            displayName: "Downloaded episode",
+            cleanupToken: UUID().uuidString
+        )
+    }
+
+    func removeImportedMedia(_ media: PluginImportedMedia) async {
+        removedMedia.append(media)
+    }
+}
 
 private final class FileTranscriptionLanguageSelectionPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
     static let pluginId = "com.typewhisper.mock.file-transcription-language-selection"

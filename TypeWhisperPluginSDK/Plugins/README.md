@@ -19,6 +19,8 @@ The first-party plugin sources that ship with this repository now live under
 | `TTSProviderPlugin` | Add text-to-speech providers for spoken feedback and readback | Yes (playback session) |
 | `TranscriptionEnginePlugin` | Custom transcription engines | Yes (transcription result) |
 | `ActionPlugin` | Route LLM output to custom actions (e.g. create Linear issues) | Yes (action result) |
+| `MediaImportPlugin` | Resolve a remote media link into a temporary local file | Yes (imported media) |
+| `PluginUserInterfaceProviding` | Add host-rendered menu commands and plugin-owned settings-sidebar pages | No |
 
 For transcription plugins, dictionary-term support remains optional. Engines that
 have documented input limits can additionally conform to `DictionaryTermsBudgetProviding`
@@ -75,7 +77,35 @@ Each plugin receives a `HostServices` object providing:
 - **Rules**: `availableRuleNames` - list of user-defined rule names
 - **Event Bus**: `eventBus` for subscribing to events
 - **Capabilities**: `notifyCapabilitiesChanged()` - notify the host when plugin state changes (e.g. model loaded/unloaded)
+- **Settings**: `openPluginSettings()` - ask TypeWhisper to open this plugin's host-managed settings window
+- **Settings sidebar**: `openSettingsSidebarItem(_:)` - open a sidebar page contributed by this plugin
+- **Imported media**: `enqueueImportedMediaForTranscription(_:)` - hand downloaded media to TypeWhisper's transcription queue
 - **Streaming display hint**: `setStreamingDisplayActive(_:)` - tell TypeWhisper that your plugin renders its own streaming UI
+
+### Menu and menu-bar contributions (TypeWhisper 1.7+)
+
+Plugins can optionally conform to `PluginUserInterfaceProviding` and return
+localized `PluginCommandDescriptor` values in one or more placements:
+
+- `appMenuCommands` appear in TypeWhisper's **Integrations** application menu,
+  grouped in a submenu named after the plugin.
+- `primaryMenuBarCommands` appear in the existing TypeWhisper menu-bar menu.
+- `settingsSidebarItems` appear in the **Integrations** group of TypeWhisper's
+  settings sidebar. The host requests their SwiftUI content through
+  `settingsSidebarView(for:)`.
+
+TypeWhisper owns the native menu objects, removes commands when the plugin is
+disabled, and routes declared command identifiers back through
+`performPluginCommand(_:)`. If a plugin changes its descriptors at runtime, it
+must call `HostServices.notifyCapabilitiesChanged()`. Plugins using this API
+should declare `"minHostVersion": "1.7.0"` in their manifest.
+
+Media-import plugins download or otherwise resolve a URL into a local media
+file. They can hand that file to the host with
+`enqueueImportedMediaForTranscription(_:)`, while the host retains
+responsibility for audio loading, transcription-engine selection, progress,
+subtitles, and batch processing. The host returns temporary imports to the
+plugin for cleanup when a queue item is removed.
 
 Bundled MLX plugins such as Qwen3, Granite, and Voxtral store their optional HuggingFace token via the same plugin-scoped keychain helpers.
 

@@ -30,6 +30,68 @@ public extension PluginSettingsWindowLayoutProviding {
     var minimumSettingsWindowSize: CGSize? { nil }
 }
 
+// MARK: - Plugin User Interface Contributions
+
+/// A host-rendered command contributed by a plugin.
+///
+/// Titles must already be localized by the plugin. Command identifiers are
+/// scoped to the plugin and are passed back to `performPluginCommand(_:)`.
+public struct PluginCommandDescriptor: Identifiable, Sendable, Equatable {
+    public let id: String
+    public let title: String
+    public let systemImageName: String?
+    public let isEnabled: Bool
+
+    public init(
+        id: String,
+        title: String,
+        systemImageName: String? = nil,
+        isEnabled: Bool = true
+    ) {
+        self.id = id
+        self.title = title
+        self.systemImageName = systemImageName
+        self.isEnabled = isEnabled
+    }
+}
+
+/// A plugin-owned destination rendered in TypeWhisper's settings sidebar.
+///
+/// Titles must already be localized by the plugin. Identifiers are scoped to
+/// the plugin and are passed to `settingsSidebarView(for:)` when selected.
+public struct PluginSettingsSidebarItemDescriptor: Identifiable, Sendable, Equatable {
+    public let id: String
+    public let title: String
+    public let systemImageName: String
+
+    public init(id: String, title: String, systemImageName: String) {
+        self.id = id
+        self.title = title
+        self.systemImageName = systemImageName
+    }
+}
+
+/// Optional capability for contributing commands to TypeWhisper's application
+/// menu and primary menu-bar menu, plus plugin-owned settings-sidebar pages.
+///
+/// The host owns all native menu objects. Call
+/// `HostServices.notifyCapabilitiesChanged()` after changing a descriptor so
+/// the host refreshes the rendered menus and sidebar.
+public protocol PluginUserInterfaceProviding: TypeWhisperPlugin {
+    @MainActor var appMenuCommands: [PluginCommandDescriptor] { get }
+    @MainActor var primaryMenuBarCommands: [PluginCommandDescriptor] { get }
+    @MainActor var settingsSidebarItems: [PluginSettingsSidebarItemDescriptor] { get }
+    @MainActor func settingsSidebarView(for itemId: String) -> AnyView?
+    @MainActor func performPluginCommand(_ commandId: String)
+}
+
+public extension PluginUserInterfaceProviding {
+    @MainActor var appMenuCommands: [PluginCommandDescriptor] { [] }
+    @MainActor var primaryMenuBarCommands: [PluginCommandDescriptor] { [] }
+    @MainActor var settingsSidebarItems: [PluginSettingsSidebarItemDescriptor] { [] }
+    @MainActor func settingsSidebarView(for itemId: String) -> AnyView? { nil }
+}
+
 public protocol HostModelLifecyclePolicyAwarePlugin: TypeWhisperPlugin {}
 
 // MARK: - Shared Settings Activity
@@ -392,6 +454,75 @@ public protocol FileJobAutomationPlugin: TypeWhisperPlugin {
 
 public extension FileJobAutomationPlugin {
     var priority: Int { 400 }
+}
+
+// MARK: - Media Import Plugin
+
+/// Progress emitted while a plugin resolves a remote media source into a local file.
+public struct PluginMediaImportProgress: Sendable, Equatable {
+    public let fractionCompleted: Double?
+    public let status: String?
+
+    public init(fractionCompleted: Double? = nil, status: String? = nil) {
+        self.fractionCompleted = fractionCompleted
+        self.status = status
+    }
+}
+
+/// A local media file produced by a media-import plugin.
+///
+/// `cleanupToken` is opaque to the host. The host returns the complete value to
+/// `removeImportedMedia(_:)` when the queue item is removed or reset.
+public struct PluginImportedMedia: Sendable, Equatable {
+    public let localFileURL: URL
+    public let displayName: String?
+    public let cleanupToken: String?
+
+    public init(
+        localFileURL: URL,
+        displayName: String? = nil,
+        cleanupToken: String? = nil
+    ) {
+        self.localFileURL = localFileURL
+        self.displayName = displayName
+        self.cleanupToken = cleanupToken
+    }
+}
+
+public struct PluginMediaImportAvailability: Sendable, Equatable {
+    public let isAvailable: Bool
+    public let unavailableReason: String?
+
+    public init(isAvailable: Bool, unavailableReason: String? = nil) {
+        self.isAvailable = isAvailable
+        self.unavailableReason = unavailableReason
+    }
+
+    public static let available = PluginMediaImportAvailability(isAvailable: true)
+}
+
+/// Optional plugin capability for turning a remote URL into a local audio or
+/// video file that the host can feed through its regular file-transcription pipeline.
+public protocol MediaImportPlugin: TypeWhisperPlugin {
+    @MainActor var mediaImportId: String { get }
+    @MainActor var mediaImportDisplayName: String { get }
+    @MainActor var mediaImportAvailability: PluginMediaImportAvailability { get }
+    @MainActor func canImportMedia(from url: URL) -> Bool
+    @MainActor func importMedia(
+        from url: URL,
+        onProgress: @Sendable @escaping (PluginMediaImportProgress) -> Bool
+    ) async throws -> PluginImportedMedia
+    @MainActor func removeImportedMedia(_ media: PluginImportedMedia) async
+}
+
+public extension MediaImportPlugin {
+    @MainActor var mediaImportAvailability: PluginMediaImportAvailability { .available }
+    @MainActor func removeImportedMedia(_ media: PluginImportedMedia) async {}
+}
+
+/// Optional extension for bundles that expose more than one media importer.
+public protocol AdditionalMediaImportPluginsProviding: TypeWhisperPlugin {
+    @MainActor var additionalMediaImportPlugins: [any MediaImportPlugin] { get }
 }
 
 // MARK: - Transcription Engine Plugin

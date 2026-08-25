@@ -1,4 +1,5 @@
 import Combine
+import SwiftUI
 import XCTest
 import TypeWhisperPluginSDK
 @testable import TypeWhisper
@@ -171,6 +172,104 @@ final class PluginManifestValidationTests: XCTestCase {
         XCTAssertEqual(manager.readinessRevision, initialRevision + 1)
         wait(for: [notification], timeout: 1)
         withExtendedLifetime(cancellable) {}
+    }
+}
+
+@MainActor
+final class PluginUserInterfaceContributionTests: XCTestCase {
+    private final class MockPlugin: NSObject, TypeWhisperPlugin, PluginUserInterfaceProviding, @unchecked Sendable {
+        static let pluginId = "com.typewhisper.tests.user-interface"
+        static let pluginName = "User Interface Test"
+
+        private(set) var performedCommandIds: [String] = []
+
+        required override init() {}
+
+        func activate(host: HostServices) {}
+        func deactivate() {}
+
+        var appMenuCommands: [PluginCommandDescriptor] {
+            [PluginCommandDescriptor(id: "open", title: "Open Player", systemImageName: "play.circle")]
+        }
+
+        var primaryMenuBarCommands: [PluginCommandDescriptor] {
+            [PluginCommandDescriptor(id: "pause", title: "Pause Player")]
+        }
+
+        var settingsSidebarItems: [PluginSettingsSidebarItemDescriptor] {
+            [PluginSettingsSidebarItemDescriptor(id: "player", title: "Player", systemImageName: "play.rectangle")]
+        }
+
+        func settingsSidebarView(for itemId: String) -> AnyView? {
+            itemId == "player" ? AnyView(Text("Player")) : nil
+        }
+
+        func performPluginCommand(_ commandId: String) {
+            performedCommandIds.append(commandId)
+        }
+    }
+
+    func testManagerExposesUserInterfaceContributionsFromEnabledPluginsOnly() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginUserInterface")
+        defer { TestSupport.remove(appSupportDirectory) }
+        let manager = PluginManager(appSupportDirectory: appSupportDirectory)
+        let enabledPlugin = MockPlugin()
+        let disabledPlugin = MockPlugin()
+        manager.loadedPlugins = [
+            loadedPlugin(enabledPlugin, id: "com.typewhisper.tests.ui.enabled", enabled: true, source: appSupportDirectory),
+            loadedPlugin(disabledPlugin, id: "com.typewhisper.tests.ui.disabled", enabled: false, source: appSupportDirectory),
+        ]
+
+        XCTAssertEqual(manager.userInterfaceContributions.count, 1)
+        let contribution = try XCTUnwrap(manager.userInterfaceContributions.first)
+
+        XCTAssertEqual(contribution.pluginId, "com.typewhisper.tests.ui.enabled")
+        XCTAssertEqual(contribution.pluginName, "User Interface Test")
+        XCTAssertEqual(contribution.appMenuCommands.map(\.id), ["open"])
+        XCTAssertEqual(contribution.primaryMenuBarCommands.map(\.id), ["pause"])
+        XCTAssertEqual(contribution.settingsSidebarItems.map(\.id), ["player"])
+        XCTAssertNotNil(manager.settingsSidebarView(
+            pluginId: "com.typewhisper.tests.ui.enabled",
+            itemId: "player"
+        ))
+        XCTAssertNil(manager.settingsSidebarView(
+            pluginId: "com.typewhisper.tests.ui.disabled",
+            itemId: "player"
+        ))
+    }
+
+    func testManagerRoutesCommandsOnlyToEnabledContributingPlugin() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginUserInterfaceActions")
+        defer { TestSupport.remove(appSupportDirectory) }
+        let manager = PluginManager(appSupportDirectory: appSupportDirectory)
+        let plugin = MockPlugin()
+        manager.loadedPlugins = [
+            loadedPlugin(plugin, id: "com.typewhisper.tests.ui.actions", enabled: true, source: appSupportDirectory)
+        ]
+
+        XCTAssertTrue(manager.performPluginCommand(pluginId: "com.typewhisper.tests.ui.actions", commandId: "open"))
+        XCTAssertEqual(plugin.performedCommandIds, ["open"])
+        XCTAssertFalse(manager.performPluginCommand(pluginId: "missing", commandId: "open"))
+    }
+
+    private func loadedPlugin(
+        _ plugin: MockPlugin,
+        id: String,
+        enabled: Bool,
+        source: URL
+    ) -> LoadedPlugin {
+        LoadedPlugin(
+            manifest: PluginManifest(
+                id: id,
+                name: MockPlugin.pluginName,
+                version: "1.0.0",
+                principalClass: "MockPlugin"
+            ),
+            instance: plugin,
+            bundle: Bundle.main,
+            sourceURL: source,
+            isEnabled: enabled
+        )
     }
 }
 

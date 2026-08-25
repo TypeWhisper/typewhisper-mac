@@ -353,6 +353,7 @@ struct TypeWhisperApp<WindowConfiguration: ManagedAppWindowSceneConfiguration>: 
             CommandGroup(after: .appInfo) {
                 ManagedWindowOpenerRegistrar()
             }
+            PluginAppCommands(pluginManager: ServiceContainer.shared.pluginManager)
         }
 
         WindowConfiguration.settings(content: AnyView(settingsContent))

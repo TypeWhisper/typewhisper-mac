@@ -1,5 +1,6 @@
 import Foundation
 import os
+import SwiftUI
 import XCTest
 @testable import TypeWhisperPluginSDK
 
@@ -170,6 +171,45 @@ private final class MockAuthRoleStatusPlugin: NSObject, TypeWhisperPlugin, Plugi
                 requiredCredentialLabel: "API key"
             )
             : .available
+    }
+}
+
+@objc(MockUserInterfacePlugin)
+private final class MockUserInterfacePlugin: NSObject, TypeWhisperPlugin, PluginUserInterfaceProviding, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.mock.user-interface"
+    static let pluginName = "Mock User Interface"
+
+    @MainActor private(set) var performedCommandIds: [String] = []
+
+    required override init() {}
+
+    func activate(host: HostServices) {}
+    func deactivate() {}
+
+    @MainActor var appMenuCommands: [PluginCommandDescriptor] {
+        [PluginCommandDescriptor(id: "open-player", title: "Open Player", systemImageName: "play.circle")]
+    }
+
+    @MainActor var primaryMenuBarCommands: [PluginCommandDescriptor] {
+        [PluginCommandDescriptor(id: "pause-player", title: "Pause", isEnabled: false)]
+    }
+
+    @MainActor var settingsSidebarItems: [PluginSettingsSidebarItemDescriptor] {
+        [
+            PluginSettingsSidebarItemDescriptor(
+                id: "player",
+                title: "Player",
+                systemImageName: "play.rectangle"
+            )
+        ]
+    }
+
+    @MainActor func settingsSidebarView(for itemId: String) -> AnyView? {
+        itemId == "player" ? AnyView(Text("Player")) : nil
+    }
+
+    @MainActor func performPluginCommand(_ commandId: String) {
+        performedCommandIds.append(commandId)
     }
 }
 
@@ -430,6 +470,29 @@ private final class MockTTSPlugin: NSObject, TTSProviderPlugin, @unchecked Senda
 }
 
 final class ProtocolContractTests: XCTestCase {
+    @MainActor
+    func testPluginUserInterfaceDescriptorsSupportMenusAndSettingsSidebarItems() {
+        let plugin = MockUserInterfacePlugin()
+
+        XCTAssertEqual(plugin.appMenuCommands, [
+            PluginCommandDescriptor(id: "open-player", title: "Open Player", systemImageName: "play.circle")
+        ])
+        XCTAssertEqual(plugin.primaryMenuBarCommands.first?.isEnabled, false)
+        XCTAssertEqual(plugin.settingsSidebarItems, [
+            PluginSettingsSidebarItemDescriptor(
+                id: "player",
+                title: "Player",
+                systemImageName: "play.rectangle"
+            )
+        ])
+        XCTAssertNotNil(plugin.settingsSidebarView(for: "player"))
+        XCTAssertNil(plugin.settingsSidebarView(for: "missing"))
+
+        plugin.performPluginCommand("open-player")
+
+        XCTAssertEqual(plugin.performedCommandIds, ["open-player"])
+    }
+
     func testLocalInferenceGateSerializesConcurrentOperations() async throws {
         let gate = PluginLocalInferenceGate()
         let state = GateConcurrencyState()

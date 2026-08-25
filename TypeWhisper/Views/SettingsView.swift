@@ -5,6 +5,7 @@ import TypeWhisperPluginSDK
 enum SettingsTab: Hashable {
     case home, general, dictation, hotkeys, recorder
     case dictationRecovery, fileTranscription, history, statistics, dictionary, snippets, workflows, profiles, prompts, premium, integrations, advanced, license, about
+    case plugin(pluginId: String, itemId: String)
 }
 
 private struct SettingsDestination: Identifiable, Hashable {
@@ -29,6 +30,7 @@ struct SettingsView: View {
     @ObservedObject private var homeViewModel = HomeViewModel.shared
     @ObservedObject private var promptActionsViewModel = PromptActionsViewModel.shared
     @ObservedObject private var settingsNavigation = SettingsNavigationCoordinator.shared
+    @ObservedObject private var pluginManager = PluginManager.shared
 
     init() {
         _selectedTab = State(initialValue: Self.initialScreenshotTab)
@@ -60,7 +62,7 @@ struct SettingsView: View {
     }
 
     private var destinations: [SettingsDestination] {
-        [
+        let builtInDestinations = [
             SettingsDestination(tab: .home, title: String(localized: "Home"), systemImage: "house", badge: nil),
             SettingsDestination(tab: .general, title: String(localized: "General"), systemImage: "gear", badge: nil),
             SettingsDestination(tab: .dictation, title: String(localized: "Dictation"), systemImage: "mic.fill", badge: nil),
@@ -109,6 +111,19 @@ struct SettingsView: View {
             SettingsDestination(tab: .license, title: String(localized: "License"), systemImage: "key", badge: nil),
             SettingsDestination(tab: .about, title: String(localized: "About"), systemImage: "info.circle", badge: nil)
         ].compactMap { $0 }
+
+        let pluginDestinations = pluginManager.userInterfaceContributions.flatMap { contribution in
+            contribution.settingsSidebarItems.map { item in
+                SettingsDestination(
+                    tab: .plugin(pluginId: contribution.pluginId, itemId: item.id),
+                    title: item.title,
+                    systemImage: item.systemImageName,
+                    badge: nil
+                )
+            }
+        }
+
+        return builtInDestinations + pluginDestinations
     }
 
     private var destinationSections: [SettingsDestinationSection] {
@@ -232,6 +247,16 @@ struct SettingsView: View {
             LicenseSettingsView()
         case .about:
             AboutSettingsView()
+        case .plugin(let pluginId, let itemId):
+            if let view = pluginManager.settingsSidebarView(pluginId: pluginId, itemId: itemId) {
+                view
+            } else {
+                ContentUnavailableView(
+                    String(localized: "Integration Unavailable"),
+                    systemImage: "puzzlepiece.extension",
+                    description: Text(String(localized: "Enable the integration to open this page."))
+                )
+            }
         }
     }
 }
@@ -494,7 +519,7 @@ private func settingsDestinationSections(_ destinations: [SettingsDestination]) 
         settingsDestination(destinations, .recorder)
     ])
 
-    var workspaceDestinations = [
+    let workspaceDestinations = [
         settingsDestination(destinations, .history),
         settingsDestination(destinations, .statistics),
         settingsDestination(destinations, .dictionary),
@@ -503,7 +528,12 @@ private func settingsDestinationSections(_ destinations: [SettingsDestination]) 
         settingsDestination(destinations, .premium)
     ]
 
-    workspaceDestinations.append(settingsDestination(destinations, .integrations))
+    let pluginDestinations = destinations.filter {
+        if case .plugin = $0.tab { return true }
+        return false
+    }
+
+    let integrationDestinations = [settingsDestination(destinations, .integrations)] + pluginDestinations
 
     return [
         SettingsDestinationSection(
@@ -517,6 +547,10 @@ private func settingsDestinationSections(_ destinations: [SettingsDestination]) 
         SettingsDestinationSection(
             id: "workspace",
             destinations: workspaceDestinations
+        ),
+        SettingsDestinationSection(
+            id: "integrations",
+            destinations: integrationDestinations
         ),
         SettingsDestinationSection(
             id: "system",
