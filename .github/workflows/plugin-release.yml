@@ -114,6 +114,7 @@ jobs:
             google-cloud-stt) TARGET="GoogleCloudSTTPlugin" ;;
             claude) TARGET="ClaudePlugin" ;;
             authenticated-cli) TARGET="AuthenticatedCLIPlugin" ;;
+            web-link) TARGET="WebLinkPlugin" ;;
             cerebras) TARGET="CerebrasPlugin" ;;
             openrouter) TARGET="OpenRouterPlugin" ;;
             soniox) TARGET="SonioxPlugin" ;;

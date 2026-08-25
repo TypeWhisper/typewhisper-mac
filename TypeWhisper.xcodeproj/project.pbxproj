@@ -492,6 +492,11 @@
 		AC1100000000000000000006 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = AC1100000000000000000016 /* manifest.json */; };
 		AC1100000000000000000007 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = AC1100000000000000000017 /* Localizable.xcstrings */; };
 		AC1100000000000000000008 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = AC1100000000000000000040 /* TypeWhisperPluginSDK */; };
+		AB1200000000000000000001 /* WebLinkPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1200000000000000000011 /* WebLinkPlugin.swift */; };
+		AB1200000000000000000002 /* WebLinkProcessRunner.swift in Sources */ = {isa = PBXBuildFile; fileRef = AB1200000000000000000012 /* WebLinkProcessRunner.swift */; };
+		AB1200000000000000000003 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = AB1200000000000000000013 /* manifest.json */; };
+		AB1200000000000000000004 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = AB1200000000000000000014 /* Localizable.xcstrings */; };
+		AB1200000000000000000005 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = AB1200000000000000000040 /* TypeWhisperPluginSDK */; };
 		AA00000000000000000279 /* GladiaPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000267 /* GladiaPlugin.swift */; };
 		AA00000000000000000280 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000268 /* manifest.json */; };
 		AA00000000000000000281 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000269 /* Localizable.xcstrings */; };
@@ -1095,6 +1100,11 @@
 		AC1100000000000000000016 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		AC1100000000000000000017 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		AC1100000000000000000018 /* AuthenticatedCLIPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AuthenticatedCLIPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
+		AB1200000000000000000011 /* WebLinkPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebLinkPlugin.swift; sourceTree = "<group>"; };
+		AB1200000000000000000012 /* WebLinkProcessRunner.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WebLinkProcessRunner.swift; sourceTree = "<group>"; };
+		AB1200000000000000000013 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
+		AB1200000000000000000014 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		AB1200000000000000000015 /* WebLinkPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = WebLinkPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB00000000000000000267 /* GladiaPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GladiaPlugin.swift; sourceTree = "<group>"; };
 		BB00000000000000000268 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		BB00000000000000000269 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
@@ -1505,6 +1515,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AB1200000000000000000032 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AB1200000000000000000005 /* TypeWhisperPluginSDK in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		FF00000000000000000140 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -1644,6 +1662,7 @@
 				CC00000000000000000038 /* CerebrasPlugin */,
 				CC00000000000000000039 /* ClaudePlugin */,
 				AC1100000000000000000020 /* AuthenticatedCLIPlugin */,
+				AB1200000000000000000020 /* WebLinkPlugin */,
 				CC00000000000000000041 /* GladiaPlugin */,
 				CC00000000000000000040 /* ElevenLabsPlugin */,
 				CC00000000000000000091 /* OpenRouterPlugin */,
@@ -2428,6 +2447,18 @@
 			path = TypeWhisperPluginSDK/Plugins/AuthenticatedCLIPlugin;
 			sourceTree = "<group>";
 		};
+		AB1200000000000000000020 /* WebLinkPlugin */ = {
+			isa = PBXGroup;
+			children = (
+				AB1200000000000000000011 /* WebLinkPlugin.swift */,
+				AB1200000000000000000012 /* WebLinkProcessRunner.swift */,
+				AB1200000000000000000013 /* manifest.json */,
+				AB1200000000000000000014 /* Localizable.xcstrings */,
+			);
+			name = WebLinkPlugin;
+			path = TypeWhisperPluginSDK/Plugins/WebLinkPlugin;
+			sourceTree = "<group>";
+		};
 		CC00000000000000000041 /* GladiaPlugin */ = {
 			isa = PBXGroup;
 			children = (
@@ -2570,6 +2601,7 @@
 				BB00000000000000000257 /* CerebrasPlugin.bundle */,
 				BB00000000000000000262 /* ClaudePlugin.bundle */,
 				AC1100000000000000000018 /* AuthenticatedCLIPlugin.bundle */,
+				AB1200000000000000000015 /* WebLinkPlugin.bundle */,
 				BB00000000000000000270 /* GladiaPlugin.bundle */,
 				BB00000000000000000266 /* ElevenLabsPlugin.bundle */,
 				BB00000000000000000277 /* OpenRouterPlugin.bundle */,
@@ -3535,6 +3567,26 @@
 			productReference = AC1100000000000000000018 /* AuthenticatedCLIPlugin.bundle */;
 			productType = "com.apple.product-type.bundle";
 		};
+		AB1200000000000000000030 /* WebLinkPlugin */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AB1200000000000000000052 /* Build configuration list for PBXNativeTarget "WebLinkPlugin" */;
+			buildPhases = (
+				AB1200000000000000000031 /* Sources */,
+				AB1200000000000000000032 /* Frameworks */,
+				AB1200000000000000000033 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = WebLinkPlugin;
+			packageProductDependencies = (
+				AB1200000000000000000040 /* TypeWhisperPluginSDK */,
+			);
+			productName = WebLinkPlugin;
+			productReference = AB1200000000000000000015 /* WebLinkPlugin.bundle */;
+			productType = "com.apple.product-type.bundle";
+		};
 		DD00000000000000000029 /* GladiaPlugin */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = FF00000000000000000142 /* Build configuration list for PBXNativeTarget "GladiaPlugin" */;
@@ -3812,6 +3864,7 @@
 				DD00000000000000000026 /* CerebrasPlugin */,
 				DD00000000000000000027 /* ClaudePlugin */,
 				AC1100000000000000000030 /* AuthenticatedCLIPlugin */,
+				AB1200000000000000000030 /* WebLinkPlugin */,
 				DD00000000000000000029 /* GladiaPlugin */,
 				DD00000000000000000028 /* ElevenLabsPlugin */,
 				DD00000000000000000030 /* OpenRouterPlugin */,
@@ -4191,6 +4244,15 @@
 			files = (
 				AC1100000000000000000006 /* manifest.json in Resources */,
 				AC1100000000000000000007 /* Localizable.xcstrings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AB1200000000000000000033 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AB1200000000000000000003 /* manifest.json in Resources */,
+				AB1200000000000000000004 /* Localizable.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -4920,6 +4982,15 @@
 				AC1100000000000000000003 /* CLIAvailabilityProbe.swift in Sources */,
 				AC1100000000000000000004 /* CLIProcessRunner.swift in Sources */,
 				AC1100000000000000000005 /* CLIProviderContracts.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AB1200000000000000000031 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AB1200000000000000000001 /* WebLinkPlugin.swift in Sources */,
+				AB1200000000000000000002 /* WebLinkProcessRunner.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -7245,6 +7316,54 @@
 			};
 			name = Release;
 		};
+		AB1200000000000000000050 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Web Link Transcription";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = WebLinkPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.web-link";
+				PRODUCT_NAME = WebLinkPlugin;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Debug;
+		};
+		AB1200000000000000000051 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Web Link Transcription";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = WebLinkPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.web-link";
+				PRODUCT_NAME = WebLinkPlugin;
+				SDKROOT = macosx;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Release;
+		};
 		XX00000000000000000117 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -8028,6 +8147,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		AB1200000000000000000052 /* Build configuration list for PBXNativeTarget "WebLinkPlugin" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AB1200000000000000000050 /* Debug */,
+				AB1200000000000000000051 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		FF00000000000000000142 /* Build configuration list for PBXNativeTarget "GladiaPlugin" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -8393,6 +8521,10 @@
 			productName = TypeWhisperPluginSDK;
 		};
 		AC1100000000000000000040 /* TypeWhisperPluginSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = TypeWhisperPluginSDK;
+		};
+		AB1200000000000000000040 /* TypeWhisperPluginSDK */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = TypeWhisperPluginSDK;
 		};
