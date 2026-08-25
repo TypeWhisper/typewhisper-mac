@@ -35,9 +35,13 @@ final class TranslationHostWindow: NSWindow {
         level = .init(rawValue: Int(CGWindowLevelForKey(.minimumWindow)) - 1)
         collectionBehavior = [.canJoinAllSpaces, .stationary]
 
-        contentView = NSHostingView(
+        let hostingView = NSHostingView(
             rootView: TranslationHostView(translationService: translationService)
         )
+        // This window owns its fixed 1x1 size while SwiftUI recreates the
+        // translation task. Do not feed SwiftUI sizing back into AppKit.
+        hostingView.sizingOptions = []
+        contentView = hostingView
 
         orderFrontRegardless()
     }
