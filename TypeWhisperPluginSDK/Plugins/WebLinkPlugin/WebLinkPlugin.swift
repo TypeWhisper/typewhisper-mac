@@ -329,7 +329,28 @@ final class WebLinkPlugin: NSObject,
                 outputDirectory: jobDirectory,
                 environment: environment
             )
-            let result = try await runner.run(request)
+            let downloadingProgress = PluginMediaImportProgress(
+                status: webLinkLocalized("Downloading media…")
+            )
+            let result = try await withThrowingTaskGroup(of: WebLinkProcessResult.self) { group in
+                group.addTask { [runner] in
+                    try await runner.run(request)
+                }
+                group.addTask {
+                    while true {
+                        try await Task.sleep(for: .milliseconds(100))
+                        guard onProgress(downloadingProgress) else {
+                            throw CancellationError()
+                        }
+                    }
+                }
+
+                guard let result = try await group.next() else {
+                    throw CancellationError()
+                }
+                group.cancelAll()
+                return result
+            }
             try Task.checkCancellation()
             guard result.exitCode == 0 else {
                 throw WebLinkPluginError.downloadFailed(Self.userFacingDiagnostic(result.diagnosticOutput))
@@ -455,8 +476,20 @@ final class WebLinkPlugin: NSObject,
     }
 }
 
+private final class WebLinkImportActivity: @unchecked Sendable {
+    private let isActive = OSAllocatedUnfairLock(initialState: true)
+
+    var shouldContinue: Bool {
+        isActive.withLock { $0 }
+    }
+
+    func cancel() {
+        isActive.withLock { $0 = false }
+    }
+}
+
 @MainActor
-private final class WebLinkTranscriptionSidebarViewModel: ObservableObject {
+final class WebLinkTranscriptionSidebarViewModel: ObservableObject {
     @Published var link = ""
     @Published var progress: PluginMediaImportProgress?
     @Published var errorMessage: String?
@@ -465,6 +498,8 @@ private final class WebLinkTranscriptionSidebarViewModel: ObservableObject {
 
     let plugin: WebLinkPlugin
     private var importTask: Task<Void, Never>?
+    private var activeImportID: UUID?
+    private var importActivity: WebLinkImportActivity?
 
     init(plugin: WebLinkPlugin) {
         self.plugin = plugin
@@ -492,6 +527,10 @@ private final class WebLinkTranscriptionSidebarViewModel: ObservableObject {
         errorMessage = nil
         successMessage = nil
         progress = PluginMediaImportProgress(status: webLinkLocalized("Preparing web link download"))
+        let importID = UUID()
+        let activity = WebLinkImportActivity()
+        activeImportID = importID
+        importActivity = activity
 
         importTask = Task { [weak self] in
             guard let self else { return }
@@ -499,34 +538,48 @@ private final class WebLinkTranscriptionSidebarViewModel: ObservableObject {
                 let importedMedia = try await plugin.importMedia(
                     from: sourceURL,
                     onProgress: { [weak self] progress in
+                        guard activity.shouldContinue else { return false }
                         Task { @MainActor [weak self] in
-                            guard self?.isImporting == true else { return }
+                            guard self?.activeImportID == importID else { return }
                             self?.progress = progress
                         }
-                        return true
+                        return activity.shouldContinue
                     }
                 )
                 try Task.checkCancellation()
+                guard activeImportID == importID else {
+                    await plugin.removeImportedMedia(importedMedia)
+                    return
+                }
                 guard await plugin.enqueueImportedMediaForTranscription(importedMedia) else {
                     await plugin.removeImportedMedia(importedMedia)
                     throw WebLinkPluginError.transcriptionQueueRejected
                 }
 
+                guard activeImportID == importID else { return }
                 link = ""
                 successMessage = webLinkLocalized("The downloaded media was added to the transcription queue.")
             } catch is CancellationError {
                 // Cancellation is an explicit user action and needs no error banner.
             } catch {
+                guard activeImportID == importID else { return }
                 errorMessage = error.localizedDescription
             }
 
+            guard activeImportID == importID else { return }
+            activity.cancel()
             progress = nil
             isImporting = false
             importTask = nil
+            activeImportID = nil
+            importActivity = nil
         }
     }
 
     func cancelImport() {
+        importActivity?.cancel()
+        importActivity = nil
+        activeImportID = nil
         importTask?.cancel()
         importTask = nil
         progress = nil

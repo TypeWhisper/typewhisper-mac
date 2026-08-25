@@ -1,4 +1,5 @@
 import Foundation
+import os
 import XCTest
 @testable import WebLinkPlugin
 import TypeWhisperPluginSDK
@@ -95,6 +96,104 @@ final class WebLinkPluginTests: XCTestCase {
     }
 
     @MainActor
+    func testProgressCancellationCancelsRunnerAndRemovesJobDirectory() async throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let bin = try makeToolDirectory(in: root)
+        let runner = CancellationTrackingWebLinkProcessRunner()
+        let plugin = WebLinkPlugin(
+            runner: runner,
+            environment: ["PATH": bin.path],
+            homeDirectory: root
+        )
+        let pluginDataDirectory = root.appendingPathComponent("plugin-data", isDirectory: true)
+        let host = try PluginTestHostServices(pluginDataDirectory: pluginDataDirectory)
+        plugin.activate(host: host)
+        let callbackCount = OSAllocatedUnfairLock(initialState: 0)
+
+        let importTask = Task {
+            try await plugin.importMedia(
+                from: URL(string: "https://youtu.be/cancel-after-launch")!,
+                onProgress: { _ in
+                    callbackCount.withLock { count in
+                        count += 1
+                        return count < 2
+                    }
+                }
+            )
+        }
+
+        let cancellationWasPolled = await waitUntil {
+            callbackCount.withLock { $0 >= 2 }
+        }
+        if !cancellationWasPolled {
+            importTask.cancel()
+        }
+
+        do {
+            _ = try await importTask.value
+            XCTFail("Expected progress cancellation to stop the import")
+        } catch is CancellationError {
+            // Expected.
+        }
+
+        XCTAssertTrue(cancellationWasPolled)
+        XCTAssertTrue(runner.wasCancelled)
+        let importsDirectory = pluginDataDirectory.appendingPathComponent("Imports", isDirectory: true)
+        let remainingJobs = (try? FileManager.default.contentsOfDirectory(
+            at: importsDirectory,
+            includingPropertiesForKeys: nil
+        )) ?? []
+        XCTAssertTrue(remainingJobs.isEmpty)
+    }
+
+    @MainActor
+    func testCancelledImportCannotClearNewerImportState() async throws {
+        let root = try temporaryDirectory()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let bin = try makeToolDirectory(in: root)
+        let runner = SequencedWebLinkProcessRunner()
+        let plugin = WebLinkPlugin(
+            runner: runner,
+            environment: ["PATH": bin.path],
+            homeDirectory: root
+        )
+        let pluginDataDirectory = root.appendingPathComponent("plugin-data", isDirectory: true)
+        let host = try PluginTestHostServices(pluginDataDirectory: pluginDataDirectory)
+        plugin.activate(host: host)
+        let viewModel = WebLinkTranscriptionSidebarViewModel(plugin: plugin)
+
+        viewModel.link = "https://example.com/first"
+        viewModel.importLink()
+        await runner.firstStarted.wait()
+
+        viewModel.cancelImport()
+        viewModel.link = "https://example.com/second"
+        viewModel.importLink()
+        await runner.secondStarted.wait()
+        await runner.releaseFirst.open()
+
+        let staleImportWasCleaned = await waitUntil {
+            let importsDirectory = pluginDataDirectory.appendingPathComponent("Imports", isDirectory: true)
+            let jobs = (try? FileManager.default.contentsOfDirectory(
+                at: importsDirectory,
+                includingPropertiesForKeys: nil
+            )) ?? []
+            return jobs.count == 1
+        }
+        XCTAssertTrue(staleImportWasCleaned)
+        await Task.yield()
+
+        XCTAssertTrue(viewModel.isImporting)
+        XCTAssertNotNil(viewModel.progress)
+
+        await runner.releaseSecond.open()
+        let secondImportFinished = await waitUntil { !viewModel.isImporting }
+        XCTAssertTrue(secondImportFinished)
+        XCTAssertNotNil(viewModel.successMessage)
+    }
+
+    @MainActor
     func testPluginImportsDownloadedM4AAndReturnsCleanupToken() async throws {
         let root = try temporaryDirectory()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -177,6 +276,29 @@ final class WebLinkPluginTests: XCTestCase {
         try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         return url
     }
+
+    private func makeToolDirectory(in root: URL) throws -> URL {
+        let bin = root.appendingPathComponent("bin", isDirectory: true)
+        try FileManager.default.createDirectory(at: bin, withIntermediateDirectories: true)
+        for name in ["yt-dlp", "ffmpeg"] {
+            let executable = bin.appendingPathComponent(name)
+            try Data().write(to: executable)
+            try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executable.path)
+        }
+        return bin
+    }
+
+    @MainActor
+    private func waitUntil(
+        attempts: Int = 100,
+        condition: @escaping @MainActor () async -> Bool
+    ) async -> Bool {
+        for _ in 0..<attempts {
+            if await condition() { return true }
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        return await condition()
+    }
 }
 
 private actor RecordingWebLinkProcessRunner: WebLinkProcessRunning {
@@ -198,5 +320,67 @@ private actor RecordingWebLinkProcessRunner: WebLinkProcessRunning {
 
     func recordedRequests() -> [WebLinkProcessRequest] {
         requests
+    }
+}
+
+private final class CancellationTrackingWebLinkProcessRunner: WebLinkProcessRunning, @unchecked Sendable {
+    private let state = OSAllocatedUnfairLock(initialState: false)
+
+    var wasCancelled: Bool {
+        state.withLock { $0 }
+    }
+
+    func run(_ request: WebLinkProcessRequest) async throws -> WebLinkProcessResult {
+        try await withTaskCancellationHandler {
+            while true {
+                try Task.checkCancellation()
+                try await Task.sleep(for: .milliseconds(10))
+            }
+        } onCancel: {
+            state.withLock { $0 = true }
+        }
+    }
+}
+
+private actor SequencedWebLinkProcessRunner: WebLinkProcessRunning {
+    let firstStarted = WebLinkTestGate()
+    let secondStarted = WebLinkTestGate()
+    let releaseFirst = WebLinkTestGate()
+    let releaseSecond = WebLinkTestGate()
+    private var invocationCount = 0
+
+    func run(_ request: WebLinkProcessRequest) async throws -> WebLinkProcessResult {
+        invocationCount += 1
+        let invocation = invocationCount
+        if invocation == 1 {
+            await firstStarted.open()
+            await releaseFirst.wait()
+        } else {
+            await secondStarted.open()
+            await releaseSecond.wait()
+        }
+
+        let mediaURL = request.workingDirectory.appendingPathComponent("downloaded-\(invocation).m4a")
+        try Data([UInt8(invocation)]).write(to: mediaURL)
+        return WebLinkProcessResult(exitCode: 0, diagnosticOutput: "")
+    }
+}
+
+private actor WebLinkTestGate {
+    private var isOpen = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async {
+        guard !isOpen else { return }
+        await withCheckedContinuation { continuation in
+            waiters.append(continuation)
+        }
+    }
+
+    func open() {
+        isOpen = true
+        let currentWaiters = waiters
+        waiters.removeAll()
+        currentWaiters.forEach { $0.resume() }
     }
 }
