@@ -38,9 +38,13 @@ public protocol HostServices: Sendable {
     // Open a settings-sidebar page contributed by this plugin.
     func openSettingsSidebarItem(_ itemId: String)
 
-    // Add media produced by this plugin to TypeWhisper's transcription queue.
-    // Returns false when the plugin is inactive or the media is rejected.
-    func enqueueImportedMediaForTranscription(_ media: PluginImportedMedia) async -> Bool
+    // Add media produced by one of this plugin's importers to TypeWhisper's
+    // transcription queue. Returns false when the plugin/importer is inactive
+    // or the media is rejected.
+    func enqueueImportedMediaForTranscription(
+        _ media: PluginImportedMedia,
+        fromMediaImporterId mediaImporterId: String
+    ) async -> Bool
 
     // Streaming display: call with true when the plugin provides its own streaming text UI,
     // so the built-in indicator suppresses its streaming text display.
@@ -62,7 +66,10 @@ public extension HostServices {
 
     func openSettingsSidebarItem(_ itemId: String) {}
 
-    func enqueueImportedMediaForTranscription(_ media: PluginImportedMedia) async -> Bool { false }
+    func enqueueImportedMediaForTranscription(
+        _ media: PluginImportedMedia,
+        fromMediaImporterId mediaImporterId: String
+    ) async -> Bool { false }
 
     @available(*, deprecated, renamed: "availableRuleNames")
     var availableProfileNames: [String] { availableRuleNames }

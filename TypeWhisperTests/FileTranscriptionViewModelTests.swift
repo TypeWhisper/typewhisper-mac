@@ -66,6 +66,95 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         XCTAssertTrue(viewModel.files.isEmpty)
     }
 
+    func testImportedPluginMediaRejectsDirectoryWithSupportedExtension() throws {
+        let directory = makeTemporaryDirectory()
+            .appendingPathComponent("downloaded-web-link.m4a", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let plugin = FileTranscriptionMediaImportPlugin(downloadedFile: directory)
+        let viewModel = FileTranscriptionViewModel(
+            modelManager: ModelManagerService(),
+            audioFileService: AudioFileService(),
+            dictionaryService: makeDictionaryService(),
+            defaults: try makeDefaults()
+        )
+
+        let accepted = viewModel.enqueueImportedMedia(
+            PluginImportedMedia(localFileURL: directory),
+            from: plugin
+        )
+
+        XCTAssertFalse(accepted)
+        XCTAssertTrue(viewModel.files.isEmpty)
+    }
+
+    func testHostServicesRetainsOriginatingMediaImporterForCleanup() async throws {
+        let previousPluginManager = PluginManager.shared
+        let previousViewModel = FileTranscriptionViewModel._shared
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer {
+            PluginManager.shared = previousPluginManager
+            FileTranscriptionViewModel._shared = previousViewModel
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        let downloadedFile = makeTemporaryFile(named: "downloaded-web-link.m4a")
+        let firstImporter = FileTranscriptionMediaImportPlugin(
+            mediaImportId: "first-importer",
+            downloadedFile: downloadedFile
+        )
+        let secondImporter = FileTranscriptionMediaImportPlugin(
+            mediaImportId: "second-importer",
+            downloadedFile: downloadedFile
+        )
+        let plugin = MultipleFileTranscriptionMediaImportPlugin(
+            importers: [firstImporter, secondImporter]
+        )
+        let pluginManager = PluginManager(appSupportDirectory: appSupportDirectory)
+        pluginManager.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: MultipleFileTranscriptionMediaImportPlugin.pluginId,
+                    name: "Multiple Media Import",
+                    version: "1.0.0",
+                    principalClass: "MultipleFileTranscriptionMediaImportPlugin"
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+        PluginManager.shared = pluginManager
+
+        let viewModel = FileTranscriptionViewModel(
+            modelManager: ModelManagerService(),
+            audioFileService: AudioFileService(),
+            dictionaryService: makeDictionaryService(),
+            defaults: try makeDefaults()
+        )
+        FileTranscriptionViewModel._shared = viewModel
+        let host = HostServicesImpl(
+            pluginId: MultipleFileTranscriptionMediaImportPlugin.pluginId,
+            eventBus: FileTranscriptionTestEventBus(),
+            ruleNamesProvider: { [] }
+        )
+
+        let media = PluginImportedMedia(localFileURL: downloadedFile, cleanupToken: "cleanup")
+        let accepted = await host.enqueueImportedMediaForTranscription(
+            media,
+            fromMediaImporterId: secondImporter.mediaImportId
+        )
+
+        XCTAssertTrue(accepted)
+        XCTAssertEqual(viewModel.files.first?.mediaImporter?.mediaImportId, "second-importer")
+
+        viewModel.reset()
+        try await waitUntil {
+            secondImporter.removedMedia == [media]
+        }
+        XCTAssertTrue(firstImporter.removedMedia.isEmpty)
+    }
+
     func testImportedPluginMediaRejectsDuplicateQueueItem() throws {
         let previousPluginManager = PluginManager.shared
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
@@ -1108,21 +1197,37 @@ private actor AsyncGate {
 
 private struct UnknownTranscriptionError: Error {}
 
+private final class FileTranscriptionTestEventBus: EventBusProtocol, @unchecked Sendable {
+    func subscribe(handler: @escaping @Sendable (TypeWhisperEvent) async -> Void) -> UUID {
+        UUID()
+    }
+
+    func unsubscribe(id: UUID) {}
+}
+
 private final class FileTranscriptionMediaImportPlugin: NSObject, MediaImportPlugin, @unchecked Sendable {
-    static let pluginId = "com.typewhisper.mock.media-import"
+    static let pluginId = MultipleFileTranscriptionMediaImportPlugin.pluginId
     static let pluginName = "Media Import"
 
-    let mediaImportId = "mock-media-import"
+    let mediaImportId: String
     let mediaImportDisplayName = "Mock Media Import"
     private let downloadedFile: URL
     private(set) var requestedURLs: [URL] = []
     private(set) var removedMedia: [PluginImportedMedia] = []
 
     required override convenience init() {
-        self.init(downloadedFile: URL(fileURLWithPath: "/tmp/mock-media-import.m4a"))
+        self.init(
+            mediaImportId: "mock-media-import",
+            downloadedFile: URL(fileURLWithPath: "/tmp/mock-media-import.m4a")
+        )
     }
 
-    init(downloadedFile: URL) {
+    convenience init(downloadedFile: URL) {
+        self.init(mediaImportId: "mock-media-import", downloadedFile: downloadedFile)
+    }
+
+    init(mediaImportId: String, downloadedFile: URL) {
+        self.mediaImportId = mediaImportId
         self.downloadedFile = downloadedFile
         super.init()
     }
@@ -1147,6 +1252,30 @@ private final class FileTranscriptionMediaImportPlugin: NSObject, MediaImportPlu
     func removeImportedMedia(_ media: PluginImportedMedia) async {
         removedMedia.append(media)
     }
+}
+
+private final class MultipleFileTranscriptionMediaImportPlugin:
+    NSObject,
+    TypeWhisperPlugin,
+    AdditionalMediaImportPluginsProviding,
+    @unchecked Sendable
+{
+    static let pluginId = "com.typewhisper.mock.media-import"
+    static let pluginName = "Multiple Media Import"
+
+    let additionalMediaImportPlugins: [any MediaImportPlugin]
+
+    required override convenience init() {
+        self.init(importers: [])
+    }
+
+    init(importers: [any MediaImportPlugin]) {
+        self.additionalMediaImportPlugins = importers
+        super.init()
+    }
+
+    func activate(host: HostServices) {}
+    func deactivate() {}
 }
 
 private final class FileTranscriptionLanguageSelectionPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {

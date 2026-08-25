@@ -168,10 +168,13 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, @
         }
     }
 
-    func enqueueImportedMediaForTranscription(_ media: PluginImportedMedia) async -> Bool {
+    func enqueueImportedMediaForTranscription(
+        _ media: PluginImportedMedia,
+        fromMediaImporterId mediaImporterId: String
+    ) async -> Bool {
         await MainActor.run { [pluginId] in
             guard let importer = PluginManager.shared?.mediaImportPlugins.first(where: {
-                type(of: $0).pluginId == pluginId
+                type(of: $0).pluginId == pluginId && $0.mediaImportId == mediaImporterId
             }) else {
                 return false
             }
