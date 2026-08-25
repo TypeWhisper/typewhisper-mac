@@ -14,14 +14,21 @@ private enum OpenAIAuthMode: String, Codable, CaseIterable, Hashable, Sendable {
     case chatGPT = "chatgpt"
 }
 
-private enum OpenAIReasoningEffort: String, Codable, CaseIterable, Hashable, Sendable {
+enum OpenAIReasoningEffort: String, Codable, CaseIterable, Hashable, Sendable {
+    case none
+    case minimal
     case low
     case medium
     case high
     case xhigh
+    case max
 
     var localizedKey: String {
         switch self {
+        case .none:
+            return "None"
+        case .minimal:
+            return "Minimal"
         case .low:
             return "Low"
         case .medium:
@@ -30,6 +37,8 @@ private enum OpenAIReasoningEffort: String, Codable, CaseIterable, Hashable, Sen
             return "High"
         case .xhigh:
             return "X High"
+        case .max:
+            return "Maximum"
         }
     }
 }
@@ -2359,7 +2368,7 @@ final class OpenAIPlugin: NSObject,
         temperatureDirective: PluginLLMTemperatureDirective
     ) async throws -> String {
         let modelId = model ?? _selectedLLMModelId ?? supportedModels.first!.id
-        let reasoningEffort = Self.supportsReasoningEffort(for: modelId) ? _reasoningEffort.rawValue : nil
+        let reasoningEffort = Self.effectiveReasoningEffort(_reasoningEffort, for: modelId)?.rawValue
 
         switch _authMode {
         case .apiKey:
@@ -2504,12 +2513,16 @@ final class OpenAIPlugin: NSObject,
     }
 
     fileprivate var chatGPTPlanType: String? { _oauthPlanType }
-    fileprivate func supportsReasoningEffort(for modelID: String) -> Bool {
-        Self.supportsReasoningEffort(for: modelID)
+    fileprivate func supportedReasoningEfforts(for modelID: String) -> [OpenAIReasoningEffort] {
+        Self.supportedReasoningEfforts(for: modelID)
+    }
+
+    fileprivate func effectiveReasoningEffort(for modelID: String) -> OpenAIReasoningEffort? {
+        Self.effectiveReasoningEffort(_reasoningEffort, for: modelID)
     }
 
     fileprivate func supportsCustomTemperature(for modelID: String) -> Bool {
-        let reasoningEffort = Self.supportsReasoningEffort(for: modelID) ? _reasoningEffort.rawValue : nil
+        let reasoningEffort = Self.effectiveReasoningEffort(_reasoningEffort, for: modelID)?.rawValue
         return Self.supportsCustomTemperature(for: modelID, reasoningEffort: reasoningEffort)
     }
 
@@ -2961,8 +2974,8 @@ final class OpenAIPlugin: NSObject,
         ]
 
         var mutableRequestBody = requestBody
-        if Self.supportsReasoningEffort(for: model) {
-            mutableRequestBody["reasoning"] = ["effort": _reasoningEffort.rawValue]
+        if let reasoningEffort = Self.effectiveReasoningEffort(_reasoningEffort, for: model) {
+            mutableRequestBody["reasoning"] = ["effort": reasoningEffort.rawValue]
         }
 
         var request = URLRequest(url: endpoint)
@@ -3129,12 +3142,96 @@ final class OpenAIPlugin: NSObject,
     }
 
     nonisolated static func supportsReasoningEffort(for modelID: String) -> Bool {
+        !supportedReasoningEfforts(for: modelID).isEmpty
+    }
+
+    nonisolated static func supportedReasoningEfforts(for modelID: String) -> [OpenAIReasoningEffort] {
+        // Keep this matrix aligned with the per-model values in
+        // https://developers.openai.com/api/docs/guides/reasoning.
         let lowered = modelID.lowercased()
-        return lowered.hasPrefix("gpt-5")
-            || lowered.hasPrefix("o1")
+        guard !lowered.contains("-chat") else { return [] }
+
+        if lowered.hasPrefix("gpt-5.6") {
+            return [.none, .low, .medium, .high, .xhigh, .max]
+        }
+
+        if lowered.hasPrefix("gpt-5.5-pro")
+            || lowered.hasPrefix("gpt-5.4-pro")
+            || lowered.hasPrefix("gpt-5.2-pro") {
+            return [.medium, .high, .xhigh]
+        }
+
+        if lowered.hasPrefix("gpt-5-pro") {
+            return [.high]
+        }
+
+        if lowered.hasPrefix("gpt-5.3-codex")
+            || lowered.hasPrefix("gpt-5.2-codex")
+            || lowered.hasPrefix("gpt-5.1-codex-max") {
+            return [.low, .medium, .high, .xhigh]
+        }
+
+        if lowered.contains("codex") {
+            return [.low, .medium, .high]
+        }
+
+        if lowered.hasPrefix("gpt-5.5")
+            || lowered.hasPrefix("gpt-5.4")
+            || lowered.hasPrefix("gpt-5.2") {
+            return [.none, .low, .medium, .high, .xhigh]
+        }
+
+        if lowered.hasPrefix("gpt-5.1") {
+            return [.none, .low, .medium, .high]
+        }
+
+        if lowered.hasPrefix("gpt-5") {
+            return [.minimal, .low, .medium, .high]
+        }
+
+        if lowered.hasPrefix("o1-mini")
+            || lowered.hasPrefix("o1-preview")
+            || lowered.hasPrefix("o1-pro")
+            || lowered.hasPrefix("o3-pro") {
+            return []
+        }
+
+        if lowered.hasPrefix("o1")
             || lowered.hasPrefix("o3")
-            || lowered.hasPrefix("o4")
-            || lowered.contains("codex")
+            || lowered.hasPrefix("o4") {
+            return [.low, .medium, .high]
+        }
+
+        return []
+    }
+
+    nonisolated static func defaultReasoningEffort(for modelID: String) -> OpenAIReasoningEffort? {
+        let lowered = modelID.lowercased()
+        let supported = supportedReasoningEfforts(for: modelID)
+        guard !supported.isEmpty else { return nil }
+
+        if lowered.hasPrefix("gpt-5.5-pro") || lowered.hasPrefix("gpt-5-pro") {
+            return .high
+        }
+
+        if (lowered.hasPrefix("gpt-5.4") && !lowered.hasPrefix("gpt-5.4-pro"))
+            || (lowered.hasPrefix("gpt-5.2") && !lowered.hasPrefix("gpt-5.2-pro") && !lowered.contains("codex"))
+            || (lowered.hasPrefix("gpt-5.1") && !lowered.contains("codex")) {
+            return OpenAIReasoningEffort.none
+        }
+
+        return supported.contains(.medium) ? .medium : supported[0]
+    }
+
+    nonisolated static func effectiveReasoningEffort(
+        _ preferred: OpenAIReasoningEffort,
+        for modelID: String
+    ) -> OpenAIReasoningEffort? {
+        let supported = supportedReasoningEfforts(for: modelID)
+        if supported.contains(preferred) {
+            return preferred
+        }
+        return defaultReasoningEffort(for: modelID)
     }
 
     nonisolated static func usesResponsesAPI(for modelID: String) -> Bool {
@@ -3249,6 +3346,7 @@ private struct OpenAISettingsView: View {
     @State private var selectedReasoningEffort: OpenAIReasoningEffort = .medium
     @State private var llmTemperatureMode: PluginLLMTemperatureMode = .providerDefault
     @State private var llmTemperatureValue: Double = 0.3
+    @State private var isAdvancedExpanded = false
     @State private var fetchedLLMModels: [OpenAIFetchedModel] = []
     @State private var isRefreshingLLMModels = false
     @State private var llmRefreshMessage: String?
@@ -3271,6 +3369,7 @@ private struct OpenAISettingsView: View {
                 .onChange(of: authMode) {
                     plugin.setAuthMode(authMode)
                     selectedLLMModel = plugin.selectedLLMModelId ?? plugin.supportedModels.first?.id ?? ""
+                    syncReasoningEffortWithSelectedModel()
                     llmRefreshMessage = nil
                     oauthErrorMessage = nil
                     oauthStatusMessage = nil
@@ -3376,7 +3475,7 @@ private struct OpenAISettingsView: View {
             ttsInstructions = plugin.ttsInstructions
             transcriptionContext = plugin.transcriptionContext
             liveTranscriptionDelay = plugin.liveTranscriptionDelay
-            selectedReasoningEffort = plugin.reasoningEffort
+            syncReasoningEffortWithSelectedModel()
             llmTemperatureMode = plugin.llmTemperatureMode
             llmTemperatureValue = plugin.llmTemperatureValue
             fetchedLLMModels = plugin._fetchedLLMModels
@@ -3576,27 +3675,7 @@ private struct OpenAISettingsView: View {
             .labelsHidden()
             .onChange(of: selectedLLMModel) {
                 plugin.selectLLMModel(selectedLLMModel)
-            }
-
-            if plugin.supportsReasoningEffort(for: selectedLLMModel) {
-                VStack(alignment: .leading, spacing: 6) {
-                    Text("Reasoning Effort", bundle: bundle)
-                        .font(.headline)
-
-                    Picker("Reasoning Effort", selection: $selectedReasoningEffort) {
-                        ForEach(OpenAIReasoningEffort.allCases, id: \.self) { effort in
-                            Text(LocalizedStringKey(effort.localizedKey), bundle: bundle).tag(effort)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .onChange(of: selectedReasoningEffort) {
-                        plugin.setReasoningEffort(selectedReasoningEffort)
-                    }
-
-                    Text("Controls how much thinking time the model spends before answering.", bundle: bundle)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
+                syncReasoningEffortWithSelectedModel()
             }
 
             if authMode == .chatGPT {
@@ -3622,13 +3701,45 @@ private struct OpenAISettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
-            if authMode == .apiKey {
+            if !supportedReasoningEfforts.isEmpty || authMode == .apiKey {
                 Divider()
+                DisclosureGroup(
+                    String(localized: "Advanced", bundle: bundle),
+                    isExpanded: $isAdvancedExpanded
+                ) {
+                    advancedLLMSettings
+                        .padding(.top, 8)
+                }
+            }
+        }
+    }
 
+    private var supportedReasoningEfforts: [OpenAIReasoningEffort] {
+        plugin.supportedReasoningEfforts(for: selectedLLMModel)
+    }
+
+    private var advancedLLMSettings: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if !supportedReasoningEfforts.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Picker("Reasoning Effort", selection: $selectedReasoningEffort) {
+                        ForEach(supportedReasoningEfforts, id: \.self) { effort in
+                            Text(LocalizedStringKey(effort.localizedKey), bundle: bundle).tag(effort)
+                        }
+                    }
+                    .pickerStyle(.menu)
+                    .onChange(of: selectedReasoningEffort) {
+                        plugin.setReasoningEffort(selectedReasoningEffort)
+                    }
+
+                    Text("Controls how much thinking time the model spends before answering.", bundle: bundle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if authMode == .apiKey {
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Temperature", bundle: bundle)
-                        .font(.headline)
-
                     Picker("Temperature Mode", selection: $llmTemperatureMode) {
                         Text("Provider Default", bundle: bundle).tag(PluginLLMTemperatureMode.providerDefault)
                         Text("Custom", bundle: bundle).tag(PluginLLMTemperatureMode.custom)
@@ -3665,6 +3776,10 @@ private struct OpenAISettingsView: View {
         }
     }
 
+    private func syncReasoningEffortWithSelectedModel() {
+        selectedReasoningEffort = plugin.effectiveReasoningEffort(for: selectedLLMModel) ?? .medium
+    }
+
     private func saveApiKey() {
         let trimmedKey = apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedKey.isEmpty else { return }
@@ -3683,6 +3798,7 @@ private struct OpenAISettingsView: View {
                     if !models.isEmpty {
                         fetchedLLMModels = models
                         selectedLLMModel = plugin.selectedLLMModelId ?? models.first?.id ?? selectedLLMModel
+                        syncReasoningEffortWithSelectedModel()
                     }
                 }
             } else {
@@ -3707,6 +3823,7 @@ private struct OpenAISettingsView: View {
                 if !models.isEmpty {
                     fetchedLLMModels = plugin._fetchedLLMModels
                     selectedLLMModel = plugin.selectedLLMModelId ?? models.first?.id ?? selectedLLMModel
+                    syncReasoningEffortWithSelectedModel()
                     if showStatus {
                         if authMode == .apiKey {
                             llmRefreshMessage = String(localized: "Fetched \(models.count) OpenAI API models.", bundle: bundle)
@@ -3733,7 +3850,7 @@ private struct OpenAISettingsView: View {
                     oauthBusy = false
                     oauthStatusMessage = String(localized: "ChatGPT login connected.", bundle: bundle)
                     selectedLLMModel = plugin.selectedLLMModelId ?? plugin.supportedModels.first?.id ?? ""
-                    selectedReasoningEffort = plugin.reasoningEffort
+                    syncReasoningEffortWithSelectedModel()
                     refreshLLMModels(showStatus: false)
                 }
             } catch {
@@ -3753,7 +3870,7 @@ private struct OpenAISettingsView: View {
             try plugin.importCodexLogin()
             oauthStatusMessage = String(localized: "Imported your existing Codex login.", bundle: bundle)
             selectedLLMModel = plugin.selectedLLMModelId ?? plugin.supportedModels.first?.id ?? ""
-            selectedReasoningEffort = plugin.reasoningEffort
+            syncReasoningEffortWithSelectedModel()
             refreshLLMModels(showStatus: false)
         } catch {
             oauthErrorMessage = error.localizedDescription
