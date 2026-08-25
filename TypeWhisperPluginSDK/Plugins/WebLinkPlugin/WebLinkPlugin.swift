@@ -546,8 +546,7 @@ final class WebLinkTranscriptionSidebarViewModel: ObservableObject {
                         return activity.shouldContinue
                     }
                 )
-                try Task.checkCancellation()
-                guard activeImportID == importID else {
+                guard !Task.isCancelled, activeImportID == importID else {
                     await plugin.removeImportedMedia(importedMedia)
                     return
                 }
