@@ -40,6 +40,7 @@ log "running Python script tests"
 python3 scripts/test_assemble_community_plugin_registry.py
 python3 scripts/test_plugin_registry_metadata.py
 python3 scripts/test_verify_appcast_publication.py
+python3 scripts/test_check_plugin_sdk_symbol_compatibility.py
 
 log "checking main-app localization completeness"
 python3 scripts/check_localization_completeness.py

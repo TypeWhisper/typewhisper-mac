@@ -238,6 +238,33 @@ jobs:
             MARKETING_VERSION="$PLUGIN_VERSION" \
             $EXTRA_SETTINGS
 
+      - name: Verify plugin loads on minHostVersion
+        run: |
+          MANIFEST="TypeWhisperPluginSDK/Plugins/${TARGET}/manifest.json"
+          MIN_HOST_VERSION=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["minHostVersion"])' "$MANIFEST")
+
+          WORKDIR="$RUNNER_TEMP/min-host-sdk"
+          mkdir -p "$WORKDIR"
+          HOST_ZIP_URL="https://github.com/${GITHUB_REPOSITORY}/releases/download/v${MIN_HOST_VERSION}/TypeWhisper-v${MIN_HOST_VERSION}.zip"
+
+          if ! curl -sSfL --retry 3 -o "$WORKDIR/host.zip" "$HOST_ZIP_URL"; then
+            echo "::error::No published host release for minHostVersion ${MIN_HOST_VERSION} ($HOST_ZIP_URL)"
+            echo "::error::minHostVersion must name a shipped host release so its Plugin SDK ABI can be verified."
+            exit 1
+          fi
+
+          ditto -x -k "$WORKDIR/host.zip" "$WORKDIR/app"
+          HOST_SDK=$(find "$WORKDIR/app" -path '*TypeWhisperPluginSDK.framework/Versions/A/TypeWhisperPluginSDK' -type f | head -1)
+          if [ -z "$HOST_SDK" ]; then
+            echo "::error::TypeWhisperPluginSDK.framework not found in host release ${MIN_HOST_VERSION}"
+            exit 1
+          fi
+
+          python3 scripts/check_plugin_sdk_symbol_compatibility.py \
+            --plugin-binary "build/Release/${TARGET}.bundle/Contents/MacOS/${TARGET}" \
+            --host-sdk "$HOST_SDK" \
+            --min-host-version "$MIN_HOST_VERSION"
+
       - name: Import Signing Certificate
         env:
           MACOS_SIGNING_P12: ${{ secrets.MACOS_SIGNING_P12 }}
