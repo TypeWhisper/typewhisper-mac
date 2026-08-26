@@ -461,15 +461,6 @@ jobs:
           else
             echo "No existing release. Generating notes from commits..."
 
-            if [ "$RELEASE_CHANNEL" = "stable" ]; then
-              # Stable notes should compare against the previous stable release,
-              # not against an RC or daily tag that may point at the same commit.
-              PREV_TAG=$(git tag --sort=-v:refname | grep '^v[0-9][0-9.]*$' | grep -v "^${TAG}$" | head -1)
-            else
-              # Pre-release notes can compare against the latest app tag of any prerelease type.
-              PREV_TAG=$(git tag --sort=-v:refname | grep '^v[0-9]' | grep -v "^${TAG}$" | head -1)
-            fi
-
             RANGE_END="$TAG"
             RELEASE_TARGET=""
             if ! git rev-parse "$TAG" >/dev/null 2>&1; then
@@ -477,10 +468,29 @@ jobs:
               RELEASE_TARGET="$RANGE_END"
             fi
 
+            # Version sorting does not reflect release order for tags such as
+            # daily builds and RCs. Find the nearest prior app release on the
+            # branch instead, so notes contain only changes since that release.
+            DESCRIBE_ARGS=(
+              --tags
+              --abbrev=0
+              --first-parent
+              --match 'v[0-9]*'
+              --exclude "$TAG"
+            )
+            if [ "$RELEASE_CHANNEL" = "stable" ]; then
+              # Stable notes should compare against the previous stable release,
+              # not against an RC or daily tag that may point at the same commit.
+              DESCRIBE_ARGS+=(--exclude 'v*-*')
+            fi
+            PREV_TAG=$(git describe "${DESCRIBE_ARGS[@]}" "$RANGE_END" 2>/dev/null || true)
+
             if [ -n "$PREV_TAG" ]; then
               RANGE="${PREV_TAG}..${RANGE_END}"
+              echo "Generating release notes for $RANGE"
             else
               RANGE="$RANGE_END"
+              echo "No previous release tag found; generating notes through $RANGE_END"
             fi
 
             RELEASE_NOTES_FILE="docs/release-notes/${RAW_VERSION}.md"
