@@ -2973,6 +2973,17 @@
       "detailsURL": "https://github.com/TypeWhisper/typewhisper-mac/issues/1031",
       "releases": [
         {
+          "version": "1.0.0",
+          "minHostVersion": "1.6.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 1201840,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-cohere-transcribe-v1.0.0/CohereLocalPlugin.zip",
+          "minOSVersion": "14.0",
+          "supportedArchitectures": [
+            "arm64"
+          ]
+        },
+        {
           "version": "0.1.1",
           "minHostVersion": "1.5.0",
           "sdkCompatibilityVersion": "v1",
