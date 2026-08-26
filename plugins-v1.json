@@ -2956,7 +2956,7 @@
         },
         {
           "version": "0.1.1",
-          "minHostVersion": "1.5.0",
+          "minHostVersion": "1.7.0",
           "sdkCompatibilityVersion": "v1",
           "size": 1199932,
           "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-cohere-transcribe-v0.1.1/CohereLocalPlugin.zip",
@@ -2968,7 +2968,7 @@
         },
         {
           "version": "0.1.0",
-          "minHostVersion": "1.5.0",
+          "minHostVersion": "1.6.0",
           "sdkCompatibilityVersion": "v1",
           "size": 1191762,
           "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-cohere-transcribe-v0.1.0/CohereLocalPlugin.zip",
