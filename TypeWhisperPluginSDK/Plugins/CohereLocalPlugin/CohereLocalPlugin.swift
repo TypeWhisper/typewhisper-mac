@@ -3,6 +3,17 @@ import SwiftUI
 import TypeWhisperPluginSDK
 import os
 
+// Keep this policy plugin-local because the SDK network guard was added after TypeWhisper 1.6.0.
+enum CohereLocalNetworkAccessPolicy {
+    static func ensureAccessIsAllowed(
+        arguments: [String] = ProcessInfo.processInfo.arguments
+    ) throws {
+        guard !arguments.contains("--store-screenshots") else {
+            throw URLError(.notConnectedToInternet)
+        }
+    }
+}
+
 // MARK: - Plugin Entry Point
 
 @objc(CohereLocalPlugin)
