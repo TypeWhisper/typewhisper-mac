@@ -83,6 +83,7 @@ actor MCPServerSession {
     private var errorPipe: Pipe?
     private var cachedTools: [MCPToolDescriptor] = []
     private var catalogIsStale = true
+    private var catalogGeneration = 0
     private var callIsActive = false
     private var callWaiters: [CheckedContinuation<Void, Never>] = []
     private let standardError = MCPStandardErrorBuffer()
@@ -102,7 +103,7 @@ actor MCPServerSession {
         let hadUsableConnection = hasUsableConnection
         try await ensureConnected()
         if forceRefresh, hadUsableConnection {
-            catalogIsStale = true
+            markCatalogStale()
         }
         if catalogIsStale {
             try await refreshToolsWithTimeout()
@@ -208,7 +209,7 @@ actor MCPServerSession {
         outputPipe = nil
         errorPipe = nil
         cachedTools = []
-        catalogIsStale = true
+        markCatalogStale()
     }
 
     private func ensureConnected() async throws {
@@ -361,6 +362,7 @@ actor MCPServerSession {
             throw MCPClientError.invalidConfiguration(MCPClientLocalization.string("The MCP client is not connected."))
         }
 
+        let refreshGeneration = catalogGeneration
         var allTools: [Tool] = []
         var cursor: String?
         repeat {
@@ -370,7 +372,8 @@ actor MCPServerSession {
         } while cursor != nil
 
         cachedTools = try allTools.map(MCPToolDescriptor.init)
-        catalogIsStale = false
+        // Preserve an invalidation delivered while listTools() suspended this actor.
+        catalogIsStale = catalogGeneration != refreshGeneration
     }
 
     private func refreshToolsWithTimeout() async throws {
@@ -408,6 +411,7 @@ actor MCPServerSession {
     }
 
     private func markCatalogStale() {
+        catalogGeneration &+= 1
         catalogIsStale = true
     }
 
@@ -427,7 +431,7 @@ actor MCPServerSession {
     private func processDidTerminate(processIdentifier: Int32) async {
         guard process?.processIdentifier == processIdentifier else { return }
         isConnected = false
-        catalogIsStale = true
+        markCatalogStale()
         if let client {
             await client.disconnect()
         } else if let transport {
