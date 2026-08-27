@@ -1351,7 +1351,7 @@ final class StreamingHandlerTests: XCTestCase {
         XCTAssertEqual(recorded, [firstChunk.count, tailChunk.count])
     }
 
-    func testLiveSessionProgressAllowsProviderCorrections() async throws {
+    func testLiveSessionProgressReplacesProviderSnapshotsWithoutDuplication() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
 
@@ -1359,6 +1359,7 @@ final class StreamingHandlerTests: XCTestCase {
         await plugin.session.setProgressUpdates([
             "Ich bin an Koin.",
             "Ich bin an Koeln.",
+            "Вот так вот. Я взагалі не розумію, що відбувається далі.",
         ])
         PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
         PluginManager.shared.loadedPlugins = [
@@ -1383,6 +1384,7 @@ final class StreamingHandlerTests: XCTestCase {
         let chunks = [
             Array(repeating: Float(0.2), count: 4000),
             Array(repeating: Float(0.3), count: 4000),
+            Array(repeating: Float(0.4), count: 4000),
         ]
         let indexLock = NSLock()
         var index = 0
@@ -1422,7 +1424,7 @@ final class StreamingHandlerTests: XCTestCase {
             allowLiveTranscription: true,
             stateCheck: {
                 activeChecks += 1
-                return activeChecks <= 3
+                return activeChecks <= 4
             }
         )
 
@@ -1430,8 +1432,11 @@ final class StreamingHandlerTests: XCTestCase {
         handler.stop()
 
         let updates = updatesLock.withLock { $0 }
-        XCTAssertEqual(updates.last, "Ich bin an Koeln.")
-        XCTAssertFalse(updates.contains("Ich bin an Koin.eln."))
+        XCTAssertEqual(updates, [
+            "Ich bin an Koin.",
+            "Ich bin an Koeln.",
+            "Вот так вот. Я взагалі не розумію, що відбувається далі.",
+        ])
     }
 
     func testLiveSessionSuppressesAdditiveProgressDuringSustainedSilence() async throws {

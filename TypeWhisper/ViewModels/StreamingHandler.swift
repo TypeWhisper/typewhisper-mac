@@ -140,7 +140,8 @@ final class StreamingHandler: @unchecked Sendable {
                     _ = self.processPreviewUpdate(
                         text,
                         audioGate: self.currentLivePreviewAudioGateSnapshot(),
-                        persist: true
+                        persist: true,
+                        replacesPreviousPreview: true
                     )
                     return true
                 }
@@ -387,13 +388,16 @@ final class StreamingHandler: @unchecked Sendable {
     private func processPreviewUpdate(
         _ text: String,
         audioGate: LivePreviewAudioGateSnapshot?,
-        persist: Bool
+        persist: Bool,
+        replacesPreviousPreview: Bool = false
     ) -> Bool {
         let preview = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !preview.isEmpty else { return false }
 
         let confirmed = progressText.withLock { $0 }
-        let stable = Self.stabilizeText(confirmed: confirmed, new: preview)
+        let stable = replacesPreviousPreview
+            ? preview
+            : Self.stabilizeText(confirmed: confirmed, new: preview)
         if Self.shouldSuppressLivePreviewUpdate(confirmed: confirmed, stable: stable, audioGate: audioGate) {
             logger.debug("Live transcript preview update suppressed during sustained silence")
             return false

@@ -353,17 +353,19 @@ actor SonioxTranscriptCollector {
         let usedInterimPreview: Bool
     }
 
-    private var finals: [String] = []
+    private var finalTranscript: String = ""
     private var interim: String = ""
     private var lastInterimPreview: String = ""
     private var lastInterimLanguage: String?
     private var _detectedLanguage: String?
     private var _error: String?
+    private var _finishRequested = false
+    private var _finishAcknowledged = false
+    private var _streamFinished = false
 
     func addFinal(_ text: String, language: String? = nil) {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty {
-            finals.append(trimmed)
+        if !text.isEmpty {
+            finalTranscript.append(text)
         }
         interim = ""
         if let language, !language.isEmpty {
@@ -372,7 +374,7 @@ actor SonioxTranscriptCollector {
     }
 
     func setInterim(_ text: String, language: String? = nil) {
-        interim = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        interim = text
         let preview = currentText()
         if !preview.isEmpty {
             lastInterimPreview = preview
@@ -386,6 +388,13 @@ actor SonioxTranscriptCollector {
     func setError(_ message: String) {
         _error = message
     }
+
+    func beginFinish() {
+        _finishRequested = true
+        _finishAcknowledged = false
+    }
+
+    var shouldStopReceiving: Bool { _finishAcknowledged || _streamFinished }
 
     var error: String? { _error }
 
@@ -404,6 +413,7 @@ actor SonioxTranscriptCollector {
         // them before clearing the interim state.
         if json["finished"] as? Bool == true {
             interim = ""
+            _streamFinished = true
         }
 
         guard let tokens = json["tokens"] as? [[String: Any]] else {
@@ -416,8 +426,16 @@ actor SonioxTranscriptCollector {
 
         for token in tokens {
             guard let tokenText = token["text"] as? String,
-                  !tokenText.isEmpty,
-                  !isSonioxTranscriptSentinel(tokenText) else {
+                  !tokenText.isEmpty else {
+                continue
+            }
+
+            if isSonioxTranscriptSentinel(tokenText) {
+                interim = ""
+                if tokenText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "<fin>",
+                   _finishRequested {
+                    _finishAcknowledged = true
+                }
                 continue
             }
 
@@ -455,15 +473,15 @@ actor SonioxTranscriptCollector {
     }
 
     func currentText() -> String {
-        var parts = finals
+        var text = finalTranscript
         if !interim.isEmpty {
-            parts.append(interim)
+            text.append(interim)
         }
-        return parts.joined(separator: " ")
+        return text
     }
 
     func finalResult() -> String {
-        finals.joined(separator: " ")
+        finalTranscript
     }
 
     func detectedLanguage(fallback: String?) -> String? {
@@ -637,6 +655,7 @@ final class SonioxLiveTranscriptionSession: LiveTranscriptionSession, @unchecked
         let webSocketTask = URLSession.shared.webSocketTask(with: request)
         let collector = SonioxTranscriptCollector()
         let receiveTask = Task { [webSocketTask, collector, onProgress] in
+            var hasCompletedFinish = false
             do {
                 while !Task.isCancelled {
                     let message = try await webSocketTask.receive()
@@ -645,7 +664,14 @@ final class SonioxLiveTranscriptionSession: LiveTranscriptionSession, @unchecked
                        !text.isEmpty {
                         _ = onProgress(text)
                     }
-                    if Self.isFinishedResponse(data) {
+                    if !hasCompletedFinish, await collector.shouldStopReceiving {
+                        hasCompletedFinish = true
+                        let current = await collector.finalResult()
+                        if !current.isEmpty {
+                            _ = onProgress(current)
+                        }
+                    }
+                    if Self.isFinishedResponse(data) || hasCompletedFinish {
                         break
                     }
                 }
@@ -721,6 +747,7 @@ final class SonioxLiveTranscriptionSession: LiveTranscriptionSession, @unchecked
 
         if shouldFinish {
             let finishStart = CFAbsoluteTimeGetCurrent()
+            await collector.beginFinish()
             do {
                 try await webSocketTask.send(.string(#"{"type":"finalize"}"#))
                 try await webSocketTask.send(.data(Data()))
@@ -734,7 +761,7 @@ final class SonioxLiveTranscriptionSession: LiveTranscriptionSession, @unchecked
                 await collector.setError(error.localizedDescription)
                 throw PluginTranscriptionError.networkError(error.localizedDescription)
             }
-            let finishedCleanly = await waitForReceiveTask()
+            let finishedCleanly = await waitForReceiveTask(collector: collector)
             let elapsedMs = (CFAbsoluteTimeGetCurrent() - finishStart) * 1000
             if finishedCleanly {
                 Self.logger.info("Live finish: server confirmed finished in \(String(format: "%.0f", elapsedMs), privacy: .public)ms")
@@ -765,16 +792,29 @@ final class SonioxLiveTranscriptionSession: LiveTranscriptionSession, @unchecked
         webSocketTask.cancel(with: .goingAway, reason: nil)
     }
 
-    /// Waits for the receive loop to observe the server's `finished` response.
+    /// Waits for the receive loop to observe `<fin>` for our explicit finalize
+    /// request or the server's terminal `finished` response.
     /// Returns `false` on timeout. The task group cannot exit while the receive
     /// loop is still blocked in `receive()` — awaiting `receiveTask.value` does
     /// not react to cancellation — so on timeout the socket is torn down first
     /// to unblock the receive loop; otherwise this method would silently wait
     /// until the server closes the connection (~10s) despite the timeout.
-    private func waitForReceiveTask() async -> Bool {
+    private func waitForReceiveTask(collector: SonioxTranscriptCollector) async -> Bool {
         await withTaskGroup(of: Bool.self) { group in
             group.addTask { [receiveTask] in
                 await receiveTask.value
+                return true
+            }
+            group.addTask { [collector] in
+                while !Task.isCancelled {
+                    if await collector.shouldStopReceiving {
+                        return true
+                    }
+                    if await collector.error != nil {
+                        return false
+                    }
+                    try? await Task.sleep(nanoseconds: 10_000_000)
+                }
                 return true
             }
             group.addTask {
