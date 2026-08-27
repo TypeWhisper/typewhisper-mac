@@ -10,6 +10,40 @@ final class OpenAIPluginTests: XCTestCase {
         super.tearDown()
     }
 
+    func testStableHostCompatibilityAvoidsPost16NetworkGuardSDKSymbol() throws {
+        let pluginDirectory = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let sourceURLs = try FileManager.default.contentsOfDirectory(
+            at: pluginDirectory,
+            includingPropertiesForKeys: nil
+        ).filter { $0.pathExtension == "swift" }
+
+        for sourceURL in sourceURLs {
+            let source = try String(contentsOf: sourceURL, encoding: .utf8)
+            XCTAssertFalse(
+                source.contains("PluginHTTPClient.ensureNetworkAccessIsAllowed"),
+                "\(sourceURL.lastPathComponent) must remain loadable by the declared TypeWhisper 1.6.0 host"
+            )
+        }
+    }
+
+    func testLocalNetworkPolicyAllowsNormalRuntime() {
+        XCTAssertNoThrow(
+            try OpenAINetworkAccessPolicy.ensureAccessIsAllowed(arguments: ["TypeWhisper"])
+        )
+    }
+
+    func testLocalNetworkPolicyBlocksScreenshotAutomation() {
+        XCTAssertThrowsError(
+            try OpenAINetworkAccessPolicy.ensureAccessIsAllowed(
+                arguments: ["TypeWhisper", "--store-screenshots"]
+            )
+        ) { error in
+            XCTAssertEqual((error as? URLError)?.code, .notConnectedToInternet)
+        }
+    }
+
     func testOpenAIPluginAdvertisesLiveSTTAndTTSProtocols() {
         let plugin: Any = OpenAIPlugin()
 

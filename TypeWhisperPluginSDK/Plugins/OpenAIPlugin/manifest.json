@@ -1,8 +1,8 @@
 {
     "id": "com.typewhisper.openai",
     "name": "OpenAI / ChatGPT",
-    "version": "1.3.2",
-    "minHostVersion": "1.5.0",
+    "version": "1.3.3",
+    "minHostVersion": "1.6.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
     "author": "TypeWhisper",

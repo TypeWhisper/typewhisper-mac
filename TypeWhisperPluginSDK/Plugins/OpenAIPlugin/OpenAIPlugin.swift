@@ -7,6 +7,17 @@ import SwiftUI
 import TypeWhisperPluginSDK
 import os
 
+// Keep this policy plugin-local because the SDK network guard was added after TypeWhisper 1.6.0.
+enum OpenAINetworkAccessPolicy {
+    static func ensureAccessIsAllowed(
+        arguments: [String] = ProcessInfo.processInfo.arguments
+    ) throws {
+        guard !arguments.contains("--store-screenshots") else {
+            throw URLError(.notConnectedToInternet)
+        }
+    }
+}
+
 // MARK: - OAuth Helpers
 
 private enum OpenAIAuthMode: String, Codable, CaseIterable, Hashable, Sendable {
@@ -1228,7 +1239,7 @@ final class OpenAIRealtimeTranscriptionSession: LiveTranscriptionSession, @unche
         configuration: OpenAIRealtimeTranscriptionConfiguration,
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> OpenAIRealtimeTranscriptionSession {
-        try PluginHTTPClient.ensureNetworkAccessIsAllowed()
+        try OpenAINetworkAccessPolicy.ensureAccessIsAllowed()
         let request = try makeRequest(apiKey: apiKey)
         let openWaiter = OpenAIRealtimeWebSocketOpenWaiter()
         let delegate = OpenAIRealtimeWebSocketDelegate(openWaiter: openWaiter)
@@ -2720,7 +2731,7 @@ final class OpenAIPlugin: NSObject,
     private static var chatGPTModelsClientVersion: String {
         let bundle = Bundle(for: OpenAIPlugin.self)
         return bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
-            ?? "1.3.2"
+            ?? "1.3.3"
     }
 
     fileprivate var ttsInstructions: String { _ttsInstructions }
