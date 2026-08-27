@@ -7,6 +7,152 @@ import os.log
 
 private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper", category: "TextInsertionService")
 
+@MainActor
+final class TargetAppAccessibilityObservationLease {
+    private var endAction: (() -> Void)?
+
+    init(endAction: @escaping () -> Void) {
+        self.endAction = endAction
+    }
+
+    func end() {
+        let action = endAction
+        endAction = nil
+        action?()
+    }
+}
+
+@MainActor
+final class ChromiumAccessibilityObservationController {
+    struct RunningApplicationTarget: Equatable {
+        let processIdentifier: pid_t
+        let bundleIdentifier: String
+        let bundleURL: URL
+    }
+
+    typealias ResolveApplication = (String) -> RunningApplicationTarget?
+    typealias IsElectronApplication = (URL) -> Bool
+    typealias ReadManualAccessibility = (pid_t) -> (error: AXError, enabled: Bool?)
+    typealias SetManualAccessibility = (pid_t, Bool) -> AXError
+    typealias ValidateApplication = (RunningApplicationTarget) -> Bool
+
+    private static let manualAccessibilityAttribute = "AXManualAccessibility" as CFString
+    private static let chromiumBrowserBundleIdentifiers = SupportedMeetingBrowser
+        .automaticURLBundleIdentifiers
+        .subtracting([SupportedMeetingBrowser.safari])
+
+    private let resolveApplication: ResolveApplication
+    private let isElectronApplicationAtURL: IsElectronApplication
+    private let readManualAccessibility: ReadManualAccessibility
+    private let setManualAccessibility: SetManualAccessibility
+    private let validateApplication: ValidateApplication
+
+    init(
+        resolveApplication: ResolveApplication? = nil,
+        isElectronApplication: IsElectronApplication? = nil,
+        readManualAccessibility: ReadManualAccessibility? = nil,
+        setManualAccessibility: SetManualAccessibility? = nil,
+        validateApplication: ValidateApplication? = nil
+    ) {
+        self.resolveApplication = resolveApplication ?? Self.resolveRunningApplication
+        self.isElectronApplicationAtURL = isElectronApplication ?? Self.containsElectronFramework
+        self.readManualAccessibility = readManualAccessibility ?? Self.readManualAccessibilityValue
+        self.setManualAccessibility = setManualAccessibility ?? Self.setManualAccessibilityValue
+        self.validateApplication = validateApplication ?? Self.isSameRunningApplication
+    }
+
+    func beginObservation(bundleIdentifier: String?) -> TargetAppAccessibilityObservationLease? {
+        guard let bundleIdentifier,
+              let target = resolveApplication(bundleIdentifier),
+              Self.chromiumBrowserBundleIdentifiers.contains(target.bundleIdentifier)
+                || isElectronApplicationAtURL(target.bundleURL) else {
+            return nil
+        }
+
+        let currentState = readManualAccessibility(target.processIdentifier)
+        guard currentState.error == .success,
+              currentState.enabled == false,
+              setManualAccessibility(target.processIdentifier, true) == .success else {
+            return nil
+        }
+
+        return TargetAppAccessibilityObservationLease {
+            guard self.validateApplication(target) else { return }
+            _ = self.setManualAccessibility(target.processIdentifier, false)
+        }
+    }
+
+    func isElectronApplication(bundleIdentifier: String) -> Bool {
+        guard let target = resolveApplication(bundleIdentifier) else { return false }
+        return isElectronApplicationAtURL(target.bundleURL)
+    }
+
+    private static func resolveRunningApplication(
+        bundleIdentifier: String
+    ) -> RunningApplicationTarget? {
+        let runningApplication = NSRunningApplication
+            .runningApplications(withBundleIdentifier: bundleIdentifier)
+            .first
+        let frontmostApplication = NSWorkspace.shared.frontmostApplication
+        let application = runningApplication
+            ?? (frontmostApplication?.bundleIdentifier == bundleIdentifier
+                ? frontmostApplication
+                : nil)
+        guard let application,
+              let resolvedBundleIdentifier = application.bundleIdentifier,
+              let bundleURL = application.bundleURL else {
+            return nil
+        }
+
+        return RunningApplicationTarget(
+            processIdentifier: application.processIdentifier,
+            bundleIdentifier: resolvedBundleIdentifier,
+            bundleURL: bundleURL
+        )
+    }
+
+    private static func containsElectronFramework(bundleURL: URL) -> Bool {
+        let electronFrameworkURL = bundleURL
+            .appendingPathComponent("Contents", isDirectory: true)
+            .appendingPathComponent("Frameworks", isDirectory: true)
+            .appendingPathComponent("Electron Framework.framework", isDirectory: true)
+        return FileManager.default.fileExists(atPath: electronFrameworkURL.path)
+    }
+
+    private static func readManualAccessibilityValue(
+        processIdentifier: pid_t
+    ) -> (error: AXError, enabled: Bool?) {
+        let application = AXUIElementCreateApplication(processIdentifier)
+        var value: AnyObject?
+        let error = AXUIElementCopyAttributeValue(
+            application,
+            manualAccessibilityAttribute,
+            &value
+        )
+        return (error, (value as? NSNumber)?.boolValue)
+    }
+
+    private static func setManualAccessibilityValue(
+        processIdentifier: pid_t,
+        enabled: Bool
+    ) -> AXError {
+        AXUIElementSetAttributeValue(
+            AXUIElementCreateApplication(processIdentifier),
+            manualAccessibilityAttribute,
+            NSNumber(value: enabled)
+        )
+    }
+
+    private static func isSameRunningApplication(_ target: RunningApplicationTarget) -> Bool {
+        guard let application = NSRunningApplication(processIdentifier: target.processIdentifier),
+              !application.isTerminated else {
+            return false
+        }
+        return application.bundleIdentifier == target.bundleIdentifier
+            && application.bundleURL == target.bundleURL
+    }
+}
+
 private final class LiveFieldApplicationActivationObservation: @unchecked Sendable {
     private let notificationCenter: NotificationCenter
     private let token: NSObjectProtocol
@@ -48,6 +194,7 @@ final class TextInsertionService {
     private static let liveFieldMessagingTimeout: Float = 0.05
 
     private let browserURLResolver: BrowserURLResolver
+    private let chromiumAccessibilityObservationController: ChromiumAccessibilityObservationController
     private let syntheticPastePreferredBundleIdentifiers: Set<String> = [
         "com.apple.Terminal",
         "com.googlecode.iterm2",
@@ -80,6 +227,7 @@ final class TextInsertionService {
     var liveFieldTargetEligibilityOverride: ((AXUIElement) -> Bool)?
     var liveFieldApplicationEligibilityOverride: ((String) -> Bool)?
     var liveFieldElectronApplicationOverride: ((String) -> Bool)?
+    var chromiumAccessibilityObservationOverride: ((String?) -> TargetAppAccessibilityObservationLease?)?
     var setMessagingTimeoutOverride: ((AXUIElement, Float) -> Void)?
     var setSelectedRangeOverride: ((AXUIElement, NSRange) -> Bool)?
     var textSelectionOverride: (() -> TextSelection?)?
@@ -99,8 +247,13 @@ final class TextInsertionService {
     var copySelectionRetryDelay: Duration = .milliseconds(120)
     var copySelectionReadSettleDelay: Duration = .milliseconds(20)
 
-    init(browserURLResolver: BrowserURLResolver = BrowserURLResolver()) {
+    init(
+        browserURLResolver: BrowserURLResolver = BrowserURLResolver(),
+        chromiumAccessibilityObservationController: ChromiumAccessibilityObservationController =
+            ChromiumAccessibilityObservationController()
+    ) {
         self.browserURLResolver = browserURLResolver
+        self.chromiumAccessibilityObservationController = chromiumAccessibilityObservationController
     }
 
     enum InsertionResult: Equatable {
@@ -154,6 +307,17 @@ final class TextInsertionService {
         let app = NSWorkspace.shared.frontmostApplication
         let bundleId = app?.bundleIdentifier
         return (app?.localizedName, bundleId, nil)
+    }
+
+    func beginChromiumAccessibilityObservation(
+        bundleIdentifier: String?
+    ) -> TargetAppAccessibilityObservationLease? {
+        if let chromiumAccessibilityObservationOverride {
+            return chromiumAccessibilityObservationOverride(bundleIdentifier)
+        }
+        return chromiumAccessibilityObservationController.beginObservation(
+            bundleIdentifier: bundleIdentifier
+        )
     }
 
     func resolveBrowserURL(bundleId: String) async -> String? {
@@ -1295,23 +1459,9 @@ final class TextInsertionService {
             return liveFieldElectronApplicationOverride(bundleIdentifier)
         }
 
-        let runningApplication = NSRunningApplication
-            .runningApplications(withBundleIdentifier: bundleIdentifier)
-            .first
-        let frontmostApplication = NSWorkspace.shared.frontmostApplication
-        let application = runningApplication
-            ?? (frontmostApplication?.bundleIdentifier == bundleIdentifier
-                ? frontmostApplication
-                : nil)
-        guard let bundleURL = application?.bundleURL else {
-            return false
-        }
-
-        let electronFrameworkURL = bundleURL
-            .appendingPathComponent("Contents", isDirectory: true)
-            .appendingPathComponent("Frameworks", isDirectory: true)
-            .appendingPathComponent("Electron Framework.framework", isDirectory: true)
-        return FileManager.default.fileExists(atPath: electronFrameworkURL.path)
+        return chromiumAccessibilityObservationController.isElectronApplication(
+            bundleIdentifier: bundleIdentifier
+        )
     }
 
     private func observation(from state: FocusedTextState) -> FocusedTextObservation {

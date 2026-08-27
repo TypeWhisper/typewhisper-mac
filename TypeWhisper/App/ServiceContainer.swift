@@ -147,7 +147,12 @@ final class ServiceContainer: ObservableObject {
         speechFeedbackService = SpeechFeedbackService()
         errorLogService = ErrorLogService()
         licenseService = LicenseService()
-        premiumAccountService = PremiumAccountService()
+        premiumAccountService = AppConstants.isRunningTests
+            ? PremiumAccountService(
+                isSignedInOverride: false,
+                automaticallyRefresh: false
+            )
+            : PremiumAccountService()
         supporterDiscordService = SupporterDiscordService(licenseService: licenseService)
         cloudFolderSyncController = CloudFolderSyncController(
             premiumAccountService: premiumAccountService,
