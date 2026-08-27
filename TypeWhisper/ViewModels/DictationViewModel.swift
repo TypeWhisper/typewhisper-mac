@@ -2960,7 +2960,10 @@ final class DictationViewModel: ObservableObject {
         bundleIdentifier: String?
     ) {
         endTargetAppAccessibilityObservation()
-        guard shouldTrackTargetAppCorrectionLearning else { return }
+        guard shouldTrackTargetAppCorrectionLearning
+                || improveTypeWhisperCaptureEnabled else {
+            return
+        }
         targetAppAccessibilityObservationLease = textInsertionService
             .beginChromiumAccessibilityObservation(bundleIdentifier: bundleIdentifier)
     }

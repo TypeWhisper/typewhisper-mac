@@ -6053,6 +6053,80 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testContributionOnlyDictationBeginsChromiumAccessibilityObservation() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let learningEnabledKey = UserDefaultsKeys.targetAppCorrectionLearningEnabled
+        let improveCaptureKey = UserDefaultsKeys.improveTypeWhisperCaptureEnabled
+        let preserveClipboardKey = UserDefaultsKeys.preserveClipboard
+        let saveAudioKey = UserDefaultsKeys.saveAudioWithHistory
+        let originalLearningEnabled = UserDefaults.standard.object(forKey: learningEnabledKey)
+        let originalImproveCapture = UserDefaults.standard.object(forKey: improveCaptureKey)
+        let originalPreserveClipboard = UserDefaults.standard.object(forKey: preserveClipboardKey)
+        let originalSaveAudio = UserDefaults.standard.object(forKey: saveAudioKey)
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            Self.restoreUserDefault(originalLearningEnabled, forKey: learningEnabledKey)
+            Self.restoreUserDefault(originalImproveCapture, forKey: improveCaptureKey)
+            Self.restoreUserDefault(originalPreserveClipboard, forKey: preserveClipboardKey)
+            Self.restoreUserDefault(originalSaveAudio, forKey: saveAudioKey)
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        UserDefaults.standard.set(false, forKey: learningEnabledKey)
+        UserDefaults.standard.set(true, forKey: improveCaptureKey)
+        UserDefaults.standard.set(false, forKey: preserveClipboardKey)
+        UserDefaults.standard.set(false, forKey: saveAudioKey)
+
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        let context = try XCTUnwrap(dictationContext)
+        context.dictationViewModel.preserveClipboard = false
+        let pasteboard = NSPasteboard.withUniqueName()
+        context.textInsertionService.pasteboardProvider = { pasteboard }
+        context.textInsertionService.captureActiveAppOverride = {
+            ("Electron Target", "com.example.electron", nil)
+        }
+        context.textInsertionService.accessibilityGrantedOverride = true
+        context.textInsertionService.selectedTextOverride = { nil }
+        context.textInsertionService.focusedTextElementOverride = { nil }
+        context.textInsertionService.pasteSimulatorOverride = {}
+        var accessibilityObservationBundleIdentifiers: [String?] = []
+        var accessibilityObservationEndCount = 0
+        context.textInsertionService.chromiumAccessibilityObservationOverride = { bundleIdentifier in
+            accessibilityObservationBundleIdentifiers.append(bundleIdentifier)
+            return TargetAppAccessibilityObservationLease {
+                accessibilityObservationEndCount += 1
+            }
+        }
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { _ in
+            Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
+        }
+
+        let sessionID = context.dictationViewModel.apiStartRecording()
+        await context.dictationViewModel.testingWaitForRecordingStart()
+        _ = context.dictationViewModel.apiStopRecording()
+
+        for _ in 0..<80 {
+            if context.dictationViewModel.apiDictationSession(id: sessionID)?.status == .completed,
+               context.targetAppCorrectionLearningService.latestAttempt != nil,
+               accessibilityObservationEndCount == 1 {
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+
+        XCTAssertEqual(
+            context.targetAppCorrectionLearningService.latestAttempt?.outcome,
+            .unsupportedTextObservation
+        )
+        XCTAssertEqual(accessibilityObservationBundleIdentifiers, ["com.example.electron"])
+        XCTAssertEqual(accessibilityObservationEndCount, 1)
+    }
+
+    @MainActor
     func testDictationDirectInsertionUsesContextWhenAppAwareFormattingIsEnabled() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         let historyEnabledKey = UserDefaultsKeys.historyEnabled
