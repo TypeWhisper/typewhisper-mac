@@ -324,9 +324,7 @@ final class PremiumAccountService: ObservableObject {
         session: URLSession = .shared,
         requestExecutor: (@Sendable (URLRequest) async throws -> (Data, URLResponse))? = nil,
         appleWebAuthenticator: (any AppleWebAuthenticating)? = nil,
-        keychainService: String = AppConstants.isScreenshotAutomation
-            ? "com.typewhisper.mac.screenshots.premium-account"
-            : "com.typewhisper.mac.premium-account",
+        keychainService: String = AppConstants.premiumAccountKeychainService,
         entitlementPublicKeyBase64: String = PremiumAccountService.productionEntitlementPublicKeyBase64,
         isSignedInOverride: Bool? = nil,
         automaticallyRefresh: Bool = true,
