@@ -307,8 +307,18 @@ final class StreamingHandlerTests: XCTestCase {
         var supportsTranslation: Bool { false }
         var supportsStreaming: Bool { true }
         var supportedLanguages: [String] { ["en"] }
-        let session = MockLiveSession()
+        let session: MockLiveSession
         private(set) var lastPrompt: String?
+
+        override init() {
+            session = MockLiveSession(progressMode: .rollingWindow)
+            super.init()
+        }
+
+        init(progressMode: LiveTranscriptionProgressMode) {
+            session = MockLiveSession(progressMode: progressMode)
+            super.init()
+        }
 
         func activate(host: HostServices) {}
         func deactivate() {}
@@ -401,10 +411,15 @@ final class StreamingHandlerTests: XCTestCase {
         }
     }
 
-    private actor MockLiveSession: LiveTranscriptionSession {
+    private actor MockLiveSession: LiveTranscriptionSession, LiveTranscriptionProgressModeProviding {
+        nonisolated let liveTranscriptionProgressMode: LiveTranscriptionProgressMode
         private var appendedChunkSizes: [Int] = []
         private var onProgress: (@Sendable (String) -> Bool)?
         private var progressUpdates: [String] = []
+
+        init(progressMode: LiveTranscriptionProgressMode = .rollingWindow) {
+            liveTranscriptionProgressMode = progressMode
+        }
 
         func setOnProgress(_ onProgress: @escaping @Sendable (String) -> Bool) {
             self.onProgress = onProgress
@@ -960,9 +975,10 @@ final class StreamingHandlerTests: XCTestCase {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
 
-        let plugin = MockLivePlugin()
+        let plugin = MockLivePlugin(progressMode: .rollingWindow)
         await plugin.session.setProgressUpdates([
-            "English and Russian meaningful preview text",
+            "Early words stay in the transcript",
+            "the transcript while later words arrive",
         ])
         await plugin.session.setFinishError(PluginTranscriptionError.networkError("timeout"))
         PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
@@ -986,7 +1002,7 @@ final class StreamingHandlerTests: XCTestCase {
         modelManager.selectProvider(plugin.providerId)
 
         let deltaLock = NSLock()
-        var sentDelta = false
+        var sentDeltaCount = 0
         let handler = StreamingHandler(
             modelManager: modelManager,
             bufferProvider: { [] },
@@ -994,9 +1010,9 @@ final class StreamingHandlerTests: XCTestCase {
             bufferDeltaProvider: { offset in
                 deltaLock.lock()
                 defer { deltaLock.unlock() }
-                guard !sentDelta else { return ([], offset) }
-                sentDelta = true
-                return (Array(repeating: 0.2, count: 4000), 4000)
+                guard sentDeltaCount < 2 else { return ([], offset) }
+                sentDeltaCount += 1
+                return (Array(repeating: 0.2, count: 4000), sentDeltaCount * 4000)
             },
             bufferedDurationProvider: { 0.25 }
         )
@@ -1015,7 +1031,7 @@ final class StreamingHandlerTests: XCTestCase {
         try await Task.sleep(for: .milliseconds(500))
         let result = await handler.finish()
 
-        XCTAssertEqual(result?.text, "English and Russian meaningful preview text")
+        XCTAssertEqual(result?.text, "Early words stay in the transcript while later words arrive")
         XCTAssertEqual(result?.engineUsed, plugin.providerId)
     }
 
@@ -1355,7 +1371,7 @@ final class StreamingHandlerTests: XCTestCase {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
 
-        let plugin = MockLivePlugin()
+        let plugin = MockLivePlugin(progressMode: .completeSnapshot)
         await plugin.session.setProgressUpdates([
             "Ich bin an Koin.",
             "Ich bin an Koeln.",

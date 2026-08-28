@@ -1356,10 +1356,16 @@ final class SonioxPluginTests: XCTestCase {
         XCTAssertEqual(result.text, "speech-to-text, especially long")
     }
 
-    func testLiveSessionFinishReturnsPromptlyOnFinToken() async throws {
+    func testLiveSessionWaitsForFinishedAfterFinToCollectDelayedTranslation() async throws {
         let server = try LocalWebSocketServer { text, server in
             guard text.contains("finalize") else { return }
-            server.sendText(#"{"tokens":[{"text":"hello","is_final":true},{"text":" world","is_final":true},{"text":"<fin>","is_final":true}]}"#)
+            server.sendText(#"{"tokens":[{"text":"Hallo","is_final":true,"translation_status":"original","language":"de"},{"text":"<fin>","is_final":true}]}"#)
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.05) {
+                server.sendText(#"{"tokens":[{"text":"Hello","is_final":true,"translation_status":"translation","source_language":"de"},{"text":" world","is_final":true,"translation_status":"translation","source_language":"de"}]}"#)
+                DispatchQueue.global().asyncAfter(deadline: .now() + 0.05) {
+                    server.sendText(#"{"tokens":[],"finished":true}"#)
+                }
+            }
         }
         defer { server.stop() }
         let port = try await server.start()
@@ -1368,19 +1374,17 @@ final class SonioxPluginTests: XCTestCase {
             apiKey: "test-key",
             region: .unitedStates,
             modelId: "stt-rt-v5",
-            languageSelection: PluginLanguageSelection(requestedLanguage: "en"),
-            translate: false,
+            languageSelection: PluginLanguageSelection(requestedLanguage: "de"),
+            translate: true,
             prompt: nil,
             onProgress: { _ in true },
             webSocketURLOverride: URL(string: "ws://127.0.0.1:\(port)")!
         )
 
-        let start = CFAbsoluteTimeGetCurrent()
         let result = try await session.finish()
-        let elapsed = CFAbsoluteTimeGetCurrent() - start
 
-        XCTAssertEqual(result.text, "hello world")
-        XCTAssertLessThan(elapsed, 0.5)
+        XCTAssertEqual(result.text, "Hello world")
+        XCTAssertEqual(result.detectedLanguage, "de")
     }
 
     func testLiveSessionContinuesReceivingAfterEndpointToken() async throws {

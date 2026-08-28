@@ -141,7 +141,7 @@ final class StreamingHandler: @unchecked Sendable {
                         text,
                         audioGate: self.currentLivePreviewAudioGateSnapshot(),
                         persist: true,
-                        replacesPreviousPreview: true
+                        replacesPreviousPreview: self.liveSessionProgressReplacesPreviousPreview()
                     )
                     return true
                 }
@@ -382,6 +382,15 @@ final class StreamingHandler: @unchecked Sendable {
 
     private func currentLivePreviewAudioGateSnapshot() -> LivePreviewAudioGateSnapshot {
         sharedState.withLock { $0.livePreviewAudioGate.snapshot }
+    }
+
+    private func liveSessionProgressReplacesPreviousPreview() -> Bool {
+        sharedState.withLock { state in
+            guard let session = state.liveSessionHandle?.session as? LiveTranscriptionProgressModeProviding else {
+                return false
+            }
+            return session.liveTranscriptionProgressMode == .completeSnapshot
+        }
     }
 
     @discardableResult
