@@ -413,7 +413,7 @@ final class GeminiPluginTests: XCTestCase {
             ),
             apiKey: "gemini-key",
             modelId: "gemini-3.5-transcribe",
-            language: " de-DE ",
+            language: " de ",
             prompt: "TypeWhisper, Gemini",
             timeout: 900
         )
@@ -432,6 +432,22 @@ final class GeminiPluginTests: XCTestCase {
         XCTAssertEqual(transcriptionConfig["mode"] as? String, "smart")
         XCTAssertEqual(transcriptionConfig["language_codes"] as? [String], ["de-DE"])
         XCTAssertEqual(transcriptionConfig["custom_vocabulary"] as? [String], ["TypeWhisper", "Gemini"])
+    }
+
+    func testTranscriptionLanguageCodesUseGeminiBCP47Locales() {
+        let codes = GeminiPlugin.resolvedLanguageCodes(
+            from: PluginLanguageSelection(
+                requestedLanguage: " de ",
+                languageHints: ["en_GB", "no", "de-DE", "auto"]
+            )
+        )
+
+        XCTAssertEqual(codes, ["de-DE", "en-GB", "nb-NO"])
+        XCTAssertNil(GeminiPlugin.resolvedTranscriptionLanguageCode("auto"))
+        XCTAssertEqual(
+            GeminiPlugin.resolvedTranscriptionLanguageCode("zh"),
+            "cmn-Hans-CN"
+        )
     }
 
     func testDedicatedTranscriptionResponseParsesOutputText() throws {

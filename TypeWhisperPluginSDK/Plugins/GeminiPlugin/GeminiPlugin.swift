@@ -267,6 +267,37 @@ final class GeminiPlugin: NSObject,
         ]
     }
 
+    private static let transcriptionLanguageCodeOverrides: [String: String] = [
+        "ar": "ar-EG",
+        "cs": "cs-CZ",
+        "da": "da-DK",
+        "de": "de-DE",
+        "el": "el-GR",
+        "en": "en-US",
+        "es": "es-419",
+        "fi": "fi-FI",
+        "fr": "fr-FR",
+        "he": "he-IL",
+        "hi": "hi-IN",
+        "hu": "hu-HU",
+        "id": "id-ID",
+        "it": "it-IT",
+        "ja": "ja-JP",
+        "ko": "ko-KR",
+        "nl": "nl-NL",
+        "no": "nb-NO",
+        "pl": "pl-PL",
+        "pt": "pt-BR",
+        "ro": "ro-RO",
+        "ru": "ru-RU",
+        "sv": "sv-SE",
+        "th": "th-TH",
+        "tr": "tr-TR",
+        "uk": "uk-UA",
+        "vi": "vi-VN",
+        "zh": "cmn-Hans-CN",
+    ]
+
     func transcribe(
         audio: AudioData,
         language: String?,
@@ -389,13 +420,26 @@ final class GeminiPlugin: NSObject,
         )
     }
 
-    nonisolated private static func resolvedLanguageCodes(
+    nonisolated static func resolvedLanguageCodes(
         from selection: PluginLanguageSelection
     ) -> [String] {
         var seen = Set<String>()
         return ([selection.requestedLanguage] + selection.languageHints.map(Optional.some))
-            .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty && seen.insert($0.lowercased()).inserted }
+            .compactMap(resolvedTranscriptionLanguageCode)
+            .filter { seen.insert($0.lowercased()).inserted }
+    }
+
+    nonisolated static func resolvedTranscriptionLanguageCode(_ language: String?) -> String? {
+        guard let language else { return nil }
+        let normalized = language
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .replacingOccurrences(of: "_", with: "-")
+        guard !normalized.isEmpty,
+              normalized.caseInsensitiveCompare("auto") != .orderedSame else {
+            return nil
+        }
+        guard !normalized.contains("-") else { return normalized }
+        return transcriptionLanguageCodeOverrides[normalized.lowercased()] ?? normalized
     }
 
     private func transcribeDedicated(
@@ -521,9 +565,8 @@ final class GeminiPlugin: NSObject,
         }
 
         var transcriptionConfig: [String: Any] = ["mode": "smart"]
-        if let language = language?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !language.isEmpty {
-            transcriptionConfig["language_codes"] = [language]
+        if let languageCode = resolvedTranscriptionLanguageCode(language) {
+            transcriptionConfig["language_codes"] = [languageCode]
         }
 
         let dictionaryTerms = PluginDictionaryTerms.clippedTerms(
