@@ -89,18 +89,18 @@ final class PluginManifestValidationTests: XCTestCase {
     }
 
     func testSourceFootageProgressPluginsDeclareCapability() throws {
-        let manifestPaths = [
-            "TypeWhisperPluginSDK/Plugins/WhisperKitPlugin/manifest.json",
-            "TypeWhisperPluginSDK/Plugins/ParakeetPlugin/manifest.json",
-            "TypeWhisperPluginSDK/Plugins/SonioxPlugin/manifest.json",
+        let manifestExpectations = [
+            ("TypeWhisperPluginSDK/Plugins/WhisperKitPlugin/manifest.json", "1.5.0"),
+            ("TypeWhisperPluginSDK/Plugins/ParakeetPlugin/manifest.json", "1.5.0"),
+            ("TypeWhisperPluginSDK/Plugins/SonioxPlugin/manifest.json", "1.7.0"),
         ]
 
-        for relativePath in manifestPaths {
+        for (relativePath, expectedMinHostVersion) in manifestExpectations {
             let manifestURL = TestSupport.repoRoot.appendingPathComponent(relativePath)
             let data = try Data(contentsOf: manifestURL)
             let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
             XCTAssertTrue(manifest.supportsCapability(.sourceFootageProgress), relativePath)
-            XCTAssertEqual(manifest.minHostVersion, "1.5.0", relativePath)
+            XCTAssertEqual(manifest.minHostVersion, expectedMinHostVersion, relativePath)
         }
     }
 
