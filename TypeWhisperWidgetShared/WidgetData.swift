@@ -49,7 +49,9 @@ struct WidgetData: Codable {
             let dir = url.deletingLastPathComponent()
             try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
             do {
-                try data.write(to: url)
+                // Atomic: the widget extension reads this file from another process,
+                // so it must never observe a partially written payload.
+                try data.write(to: url, options: .atomic)
             } catch {
                 return
             }
