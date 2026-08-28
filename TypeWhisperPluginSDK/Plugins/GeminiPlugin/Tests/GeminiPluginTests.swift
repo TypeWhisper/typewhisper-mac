@@ -332,6 +332,53 @@ final class GeminiPluginTests: XCTestCase {
         )
     }
 
+    func testModelCatalogFetchRejectsRepeatedPaginationToken() async throws {
+        let host = try PluginTestHostServices(
+            defaults: try Self.configuredDefaults(),
+            secrets: ["api-key": "gemini-key"]
+        )
+        let plugin = GeminiPlugin()
+        plugin.activate(host: host)
+        defer { plugin.deactivate() }
+
+        let page = Data(
+            """
+            {
+              "models": [{
+                "name": "models/gemini-2.5-pro",
+                "displayName": "Gemini 2.5 Pro",
+                "supportedGenerationMethods": ["generateContent"]
+              }],
+              "nextPageToken": "repeated-page"
+            }
+            """.utf8
+        )
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    page,
+                    Self.httpResponse(
+                        url: "https://generativelanguage.googleapis.com/v1beta/models",
+                        statusCode: 200
+                    )
+                ),
+                .success(
+                    page,
+                    Self.httpResponse(
+                        url: "https://generativelanguage.googleapis.com/v1beta/models",
+                        statusCode: 200
+                    )
+                ),
+            ])
+        }
+
+        let catalog = await plugin.fetchModelCatalog()
+
+        XCTAssertTrue(catalog.isEmpty)
+        XCTAssertEqual(try XCTUnwrap(store.sessions.first).requestedRequests.count, 2)
+    }
+
     func testActivationAutomaticallyRefreshesAndCachesModelCatalog() async throws {
         let store = PluginHTTPClientSessionStore()
         PluginHTTPClientTestHarness.configure { _ in
@@ -558,8 +605,11 @@ final class GeminiPluginTests: XCTestCase {
         XCTAssertEqual(audio["data"] as? String, pcm.base64EncodedString())
 
         var collector = GeminiLiveTranscriptCollector()
+        XCTAssertFalse(collector.hasUncommittedInterimText)
         XCTAssertEqual(collector.apply(interimText: "Hello", finalText: nil), "Hello")
+        XCTAssertTrue(collector.hasUncommittedInterimText)
         XCTAssertEqual(collector.apply(interimText: nil, finalText: "Hello"), "Hello")
+        XCTAssertFalse(collector.hasUncommittedInterimText)
         XCTAssertEqual(collector.apply(interimText: "world", finalText: nil), "Hello world")
         XCTAssertEqual(collector.apply(interimText: nil, finalText: "world"), "Hello world")
         XCTAssertEqual(collector.resultText, "Hello world")

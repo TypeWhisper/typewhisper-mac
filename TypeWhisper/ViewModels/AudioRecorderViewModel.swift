@@ -1039,11 +1039,12 @@ final class AudioRecorderViewModel: ObservableObject {
 
     func loadRecordingsIfNeeded() {
         guard !hasRequestedInitialRecordingsLoad else { return }
+        hasRequestedInitialRecordingsLoad = true
         loadRecordings()
     }
 
     func loadRecordings() {
-        hasRequestedInitialRecordingsLoad = true
+        guard hasRequestedInitialRecordingsLoad else { return }
         let dir = recorderService.recordingsDirectory
         let transientFailures = transientTranscriptionFailures
         let loader = recordingsLoader

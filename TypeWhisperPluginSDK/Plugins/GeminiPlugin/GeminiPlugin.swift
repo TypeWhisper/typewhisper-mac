@@ -1,4 +1,5 @@
 import Foundation
+import os
 import SwiftUI
 import TypeWhisperPluginSDK
 
@@ -27,6 +28,8 @@ final class GeminiPlugin: NSObject,
     private static let transcriptionRequestTimeout: TimeInterval = 60
     private static let dedicatedTranscriptionRequestTimeout: TimeInterval = 900
     private static let modelCatalogRefreshInterval: TimeInterval = 24 * 60 * 60
+    private static let maxModelCatalogPages = 100
+    fileprivate static let dictionaryTermsMaxCount = 1_000
     private static let modelIdPrefix = "models/"
     private static let excludedCompatibleModelTokens = [
         "embedding",
@@ -41,14 +44,50 @@ final class GeminiPlugin: NSObject,
         "translate",
     ]
 
-    fileprivate var host: HostServices?
-    fileprivate var _apiKey: String?
-    fileprivate var _selectedLLMModelId: String?
-    fileprivate var _selectedTranscriptionModelId: String?
-    fileprivate var _llmTemperatureModeRaw: String = PluginLLMTemperatureMode.providerDefault.rawValue
-    fileprivate var _llmTemperatureValue: Double = 0.3
-    fileprivate var _fetchedLLMModels: [GeminiFetchedModel] = []
-    fileprivate var _fetchedTranscriptionModels: [GeminiFetchedTranscriptionModel] = []
+    private struct State {
+        var host: HostServices?
+        var apiKey: String?
+        var selectedLLMModelId: String?
+        var selectedTranscriptionModelId: String?
+        var llmTemperatureModeRaw = PluginLLMTemperatureMode.providerDefault.rawValue
+        var llmTemperatureValue = 0.3
+        var fetchedLLMModels: [GeminiFetchedModel] = []
+        var fetchedTranscriptionModels: [GeminiFetchedTranscriptionModel] = []
+    }
+
+    private let state = OSAllocatedUnfairLock(initialState: State())
+    fileprivate var host: HostServices? {
+        get { state.withLock { $0.host } }
+        set { state.withLock { $0.host = newValue } }
+    }
+    fileprivate var _apiKey: String? {
+        get { state.withLock { $0.apiKey } }
+        set { state.withLock { $0.apiKey = newValue } }
+    }
+    fileprivate var _selectedLLMModelId: String? {
+        get { state.withLock { $0.selectedLLMModelId } }
+        set { state.withLock { $0.selectedLLMModelId = newValue } }
+    }
+    fileprivate var _selectedTranscriptionModelId: String? {
+        get { state.withLock { $0.selectedTranscriptionModelId } }
+        set { state.withLock { $0.selectedTranscriptionModelId = newValue } }
+    }
+    fileprivate var _llmTemperatureModeRaw: String {
+        get { state.withLock { $0.llmTemperatureModeRaw } }
+        set { state.withLock { $0.llmTemperatureModeRaw = newValue } }
+    }
+    fileprivate var _llmTemperatureValue: Double {
+        get { state.withLock { $0.llmTemperatureValue } }
+        set { state.withLock { $0.llmTemperatureValue = newValue } }
+    }
+    fileprivate var _fetchedLLMModels: [GeminiFetchedModel] {
+        get { state.withLock { $0.fetchedLLMModels } }
+        set { state.withLock { $0.fetchedLLMModels = newValue } }
+    }
+    fileprivate var _fetchedTranscriptionModels: [GeminiFetchedTranscriptionModel] {
+        get { state.withLock { $0.fetchedTranscriptionModels } }
+        set { state.withLock { $0.fetchedTranscriptionModels = newValue } }
+    }
     private var modelCatalogRefreshTask: Task<Void, Never>?
 
     private let chatHelper = PluginOpenAIChatHelper(
@@ -257,7 +296,9 @@ final class GeminiPlugin: NSObject,
         liveTranscriptionModelId(for: selectedModelId) != nil
     }
     var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
-    var dictionaryTermsBudget: DictionaryTermsBudget { DictionaryTermsBudget(maxTerms: 1_000) }
+    var dictionaryTermsBudget: DictionaryTermsBudget {
+        DictionaryTermsBudget(maxTerms: Self.dictionaryTermsMaxCount)
+    }
 
     var supportedLanguages: [String] {
         [
@@ -571,7 +612,7 @@ final class GeminiPlugin: NSObject,
 
         let dictionaryTerms = PluginDictionaryTerms.clippedTerms(
             from: PluginDictionaryTerms.terms(fromPrompt: prompt),
-            budget: DictionaryTermsBudget(maxTerms: 1_000)
+            budget: DictionaryTermsBudget(maxTerms: Self.dictionaryTermsMaxCount)
         )
         if !dictionaryTerms.isEmpty {
             transcriptionConfig["custom_vocabulary"] = dictionaryTerms
@@ -780,9 +821,19 @@ final class GeminiPlugin: NSObject,
     nonisolated private static func fetchModelCatalog(apiKey: String) async -> GeminiModelCatalog {
         var apiModels: [GeminiAPIModel] = []
         var nextPageToken: String?
+        var requestedPageTokens = Set<String>()
+        var pageCount = 0
 
         do {
             repeat {
+                try Task.checkCancellation()
+                guard pageCount < Self.maxModelCatalogPages else { return .empty }
+                if let nextPageToken,
+                   !requestedPageTokens.insert(nextPageToken).inserted {
+                    return .empty
+                }
+                pageCount += 1
+
                 guard let request = Self.makeModelsRequest(
                     apiKey: apiKey,
                     pageSize: 1_000,
@@ -951,7 +1002,7 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
         "wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent"
     private static let pcmChunkSampleCount = 1_600
     private static let setupTimeout: Duration = .seconds(10)
-    private static let finishTimeout: Duration = .seconds(2)
+    private static let finishTimeout: Duration = .seconds(10)
 
     private let urlSession: URLSession
     private let webSocketTask: URLSessionWebSocketTask
@@ -960,6 +1011,7 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
     private var collector = GeminiLiveTranscriptCollector()
     private var setupComplete = false
     private var finalRevision = 0
+    private var turnCompleteRevision = 0
     private var latestError: String?
     private var finished = false
     private var cancelled = false
@@ -1062,10 +1114,12 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
         finished = true
 
         let revisionBeforeFinish = finalRevision
+        let turnCompleteRevisionBeforeFinish = turnCompleteRevision
         do {
             try await webSocketTask.send(.string(Self.audioStreamEndMessage))
         } catch {
             if collector.resultText.isEmpty {
+                closeSocket(code: .abnormalClosure)
                 throw PluginTranscriptionError.networkError(error.localizedDescription)
             }
         }
@@ -1073,12 +1127,19 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
         let clock = ContinuousClock()
         let deadline = clock.now.advanced(by: Self.finishTimeout)
         while finalRevision == revisionBeforeFinish,
+              turnCompleteRevision == turnCompleteRevisionBeforeFinish,
               latestError == nil,
               clock.now < deadline {
             try? await Task.sleep(for: .milliseconds(25))
         }
 
         closeSocket(code: .normalClosure)
+        if finalRevision == revisionBeforeFinish,
+           collector.hasUncommittedInterimText {
+            throw PluginTranscriptionError.networkError(
+                "Timed out while finalizing Gemini Live transcription."
+            )
+        }
         return try finalResult()
     }
 
@@ -1146,6 +1207,9 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
         if finalText?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false {
             finalRevision += 1
         }
+        if serverContent.turnComplete == true {
+            turnCompleteRevision += 1
+        }
         if let preview, !preview.isEmpty {
             _ = onProgress(preview)
         }
@@ -1179,7 +1243,9 @@ actor GeminiLiveTranscriptionSession: LiveTranscriptionSession {
             transcriptionConfig["languageCodes"] = languageCodes
         }
         if !customVocabulary.isEmpty {
-            transcriptionConfig["customVocabulary"] = Array(customVocabulary.prefix(1_000))
+            transcriptionConfig["customVocabulary"] = Array(
+                customVocabulary.prefix(GeminiPlugin.dictionaryTermsMaxCount)
+            )
         }
 
         let body: [String: Any] = [
@@ -1241,6 +1307,10 @@ struct GeminiLiveTranscriptCollector: Sendable {
         Self.combined(committed: committedText, interim: interimText)
     }
 
+    var hasUncommittedInterimText: Bool {
+        !interimText.isEmpty
+    }
+
     mutating func apply(interimText newInterim: String?, finalText newFinal: String?) -> String? {
         if let final = Self.normalized(newFinal), !final.isEmpty {
             if committedText.isEmpty || final.hasPrefix(committedText) {
@@ -1291,6 +1361,7 @@ private struct GeminiLiveResponse: Decodable, Sendable {
     struct ServerContent: Decodable, Sendable {
         let interimInputTranscription: Transcription?
         let inputTranscription: Transcription?
+        let turnComplete: Bool?
     }
 
     struct Transcription: Decodable, Sendable {
@@ -1535,8 +1606,20 @@ private struct GeminiSettingsView: View {
                 Divider()
 
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Transcription Model", bundle: bundle)
-                        .font(.headline)
+                    HStack {
+                        Text("Transcription Model", bundle: bundle)
+                            .font(.headline)
+
+                        Spacer()
+
+                        Button {
+                            refreshModels()
+                        } label: {
+                            Label(String(localized: "Refresh", bundle: bundle), systemImage: "arrow.clockwise")
+                        }
+                        .buttonStyle(.bordered)
+                        .controlSize(.small)
+                    }
 
                     Picker("Transcription Model", selection: $selectedTranscriptionModel) {
                         ForEach(plugin.transcriptionModels, id: \.id) { model in
