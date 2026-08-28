@@ -111,10 +111,12 @@ final class StreamingHandler: @unchecked Sendable {
 
         let providerId = engineOverrideId ?? selectedProviderId
         guard let providerId,
-              PluginManager.shared.transcriptionEngine(for: providerId) != nil else {
+              let provider = PluginManager.shared.transcriptionEngine(for: providerId) else {
             logger.info("Live transcript preview skipped: provider unavailable")
             return
         }
+        let replacesLiveSessionPreview =
+            (provider as? LiveTranscriptionProgressModeProviding)?.liveTranscriptionProgressMode == .completeSnapshot
 
         resetStreamingState()
         sharedState.withLock { state in
@@ -141,7 +143,7 @@ final class StreamingHandler: @unchecked Sendable {
                         text,
                         audioGate: self.currentLivePreviewAudioGateSnapshot(),
                         persist: true,
-                        replacesPreviousPreview: self.liveSessionProgressReplacesPreviousPreview()
+                        replacesPreviousPreview: replacesLiveSessionPreview
                     )
                     return true
                 }
@@ -382,15 +384,6 @@ final class StreamingHandler: @unchecked Sendable {
 
     private func currentLivePreviewAudioGateSnapshot() -> LivePreviewAudioGateSnapshot {
         sharedState.withLock { $0.livePreviewAudioGate.snapshot }
-    }
-
-    private func liveSessionProgressReplacesPreviousPreview() -> Bool {
-        sharedState.withLock { state in
-            guard let session = state.liveSessionHandle?.session as? LiveTranscriptionProgressModeProviding else {
-                return false
-            }
-            return session.liveTranscriptionProgressMode == .completeSnapshot
-        }
     }
 
     @discardableResult

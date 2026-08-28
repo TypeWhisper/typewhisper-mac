@@ -295,7 +295,7 @@ final class StreamingHandlerTests: XCTestCase {
         }
     }
 
-    private final class MockLivePlugin: NSObject, LiveTranscriptionCapablePlugin, @unchecked Sendable {
+    private final class MockLivePlugin: NSObject, LiveTranscriptionCapablePlugin, LiveTranscriptionProgressModeProviding, @unchecked Sendable {
         static var pluginId: String { "com.typewhisper.mock.live" }
         static var pluginName: String { "Mock Live" }
 
@@ -307,16 +307,17 @@ final class StreamingHandlerTests: XCTestCase {
         var supportsTranslation: Bool { false }
         var supportsStreaming: Bool { true }
         var supportedLanguages: [String] { ["en"] }
-        let session: MockLiveSession
+        let session = MockLiveSession()
+        let liveTranscriptionProgressMode: LiveTranscriptionProgressMode
         private(set) var lastPrompt: String?
 
         override init() {
-            session = MockLiveSession(progressMode: .rollingWindow)
+            liveTranscriptionProgressMode = .rollingWindow
             super.init()
         }
 
         init(progressMode: LiveTranscriptionProgressMode) {
-            session = MockLiveSession(progressMode: progressMode)
+            liveTranscriptionProgressMode = progressMode
             super.init()
         }
 
@@ -411,15 +412,10 @@ final class StreamingHandlerTests: XCTestCase {
         }
     }
 
-    private actor MockLiveSession: LiveTranscriptionSession, LiveTranscriptionProgressModeProviding {
-        nonisolated let liveTranscriptionProgressMode: LiveTranscriptionProgressMode
+    private actor MockLiveSession: LiveTranscriptionSession {
         private var appendedChunkSizes: [Int] = []
         private var onProgress: (@Sendable (String) -> Bool)?
         private var progressUpdates: [String] = []
-
-        init(progressMode: LiveTranscriptionProgressMode = .rollingWindow) {
-            liveTranscriptionProgressMode = progressMode
-        }
 
         func setOnProgress(_ onProgress: @escaping @Sendable (String) -> Bool) {
             self.onProgress = onProgress

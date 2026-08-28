@@ -592,7 +592,7 @@ actor SonioxTranscriptCollector {
 
 // MARK: - Live STT Session
 
-final class SonioxLiveTranscriptionSession: LiveTranscriptionSession, LiveTranscriptionProgressModeProviding, @unchecked Sendable {
+final class SonioxLiveTranscriptionSession: LiveTranscriptionSession, @unchecked Sendable {
     private struct State {
         var finished = false
         var cancelled = false
@@ -606,7 +606,6 @@ final class SonioxLiveTranscriptionSession: LiveTranscriptionSession, LiveTransc
     private let collector: SonioxTranscriptCollector
     private let language: String?
     private let state = OSAllocatedUnfairLock(initialState: State())
-    let liveTranscriptionProgressMode: LiveTranscriptionProgressMode = .completeSnapshot
 
     private init(
         webSocketTask: URLSessionWebSocketTask,
@@ -821,6 +820,7 @@ final class SonioxLiveTranscriptionSession: LiveTranscriptionSession, LiveTransc
 final class SonioxPlugin: NSObject,
     SourceProgressLanguageHintTranscriptionEnginePlugin,
     LiveLanguageHintTranscriptionCapablePlugin,
+    LiveTranscriptionProgressModeProviding,
     DictionaryTermsCapabilityProviding,
     DictionaryTermsBudgetProviding,
     TTSProviderPlugin,
@@ -915,6 +915,7 @@ final class SonioxPlugin: NSObject,
 
     var providerId: String { "soniox" }
     var providerDisplayName: String { "Soniox" }
+    var liveTranscriptionProgressMode: LiveTranscriptionProgressMode { .completeSnapshot }
 
     var isConfigured: Bool {
         guard let key = normalizedAPIKey else { return false }

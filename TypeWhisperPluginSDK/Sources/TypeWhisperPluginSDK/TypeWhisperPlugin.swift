@@ -742,8 +742,8 @@ public enum LiveTranscriptionProgressMode: Sendable, Equatable {
     case completeSnapshot
 }
 
-/// Optional session capability for declaring how progress callbacks should be interpreted.
-public protocol LiveTranscriptionProgressModeProviding: LiveTranscriptionSession {
+/// Optional provider capability for declaring how live progress callbacks should be interpreted.
+public protocol LiveTranscriptionProgressModeProviding: Sendable {
     var liveTranscriptionProgressMode: LiveTranscriptionProgressMode { get }
 }
 
