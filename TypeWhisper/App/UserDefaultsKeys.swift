@@ -68,6 +68,8 @@ enum UserDefaultsKeys {
     // MARK: - Home / Setup
     static let setupWizardCompleted = "setupWizardCompleted"
     static let setupWizardCurrentStep = "setupWizardCurrentStep"
+    /// Dev-tool launch mode that defers startup reads of privacy-protected app data.
+    static let devPrivacyQuietMode = "devPrivacyQuietMode"
 
     // MARK: - Dictionary
     static let activatedTermPacks = "activatedTermPacks" // Legacy - kept for migration cleanup

@@ -134,6 +134,44 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertTrue(viewModel.recordings.isEmpty)
     }
 
+    func testPrivacyQuietModeDefersInitialRecordingsLoadUntilRequested() throws {
+        let defaults = try makeDefaults()
+        defaults.set(true, forKey: UserDefaultsKeys.devPrivacyQuietMode)
+        let probe = BlockingRecordingsLoader()
+        defer { probe.release.signal() }
+
+        let viewModel = makeViewModel(
+            defaults: defaults,
+            recordingsLoader: probe.load
+        )
+
+        XCTAssertEqual(probe.started.wait(timeout: .now() + 0.1), .timedOut)
+
+        viewModel.loadRecordingsIfNeeded()
+
+        XCTAssertEqual(probe.started.wait(timeout: .now() + 1), .success)
+        XCTAssertFalse(probe.ranOnMainThread)
+    }
+
+    func testPrivacyQuietModeDefersDirectRecordingsRefreshUntilRequested() throws {
+        let defaults = try makeDefaults()
+        defaults.set(true, forKey: UserDefaultsKeys.devPrivacyQuietMode)
+        let probe = BlockingRecordingsLoader()
+        defer { probe.release.signal() }
+
+        let viewModel = makeViewModel(
+            defaults: defaults,
+            recordingsLoader: probe.load
+        )
+
+        viewModel.loadRecordings()
+        XCTAssertEqual(probe.started.wait(timeout: .now() + 0.1), .timedOut)
+
+        viewModel.loadRecordingsIfNeeded()
+        XCTAssertEqual(probe.started.wait(timeout: .now() + 1), .success)
+        XCTAssertFalse(probe.ranOnMainThread)
+    }
+
     func testRecorderLoadIgnoresOlderResultThatFinishesLast() async throws {
         let directory = makeTemporaryDirectory()
         let olderURL = directory.appendingPathComponent("Older.wav")
