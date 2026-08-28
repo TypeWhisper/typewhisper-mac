@@ -35,10 +35,14 @@ struct WidgetData: Codable {
     func save() {
         guard let url = WidgetData.sharedFileURL,
               let data = try? JSONEncoder().encode(self) else { return }
-        // Ensure the group container directory exists
-        let dir = url.deletingLastPathComponent()
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        try? data.write(to: url)
+        // App Group container access (containerURL/open) can stall on a broken
+        // code signature or slow disk, so keep this off the caller's thread —
+        // it must never block the main thread that triggers widget refreshes.
+        DispatchQueue.global(qos: .utility).async {
+            let dir = url.deletingLastPathComponent()
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            try? data.write(to: url)
+        }
     }
 }
 
