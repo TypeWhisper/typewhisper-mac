@@ -10409,28 +10409,33 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
-    func testGeminiPluginCompatibleModelDecodingNormalizesIdsAndFiltersToChatModels() throws {
+    func testGeminiPluginNativeModelCatalogDecodingSeparatesChatAndTranscriptionModels() throws {
         let response = Data(
             """
             {
-              "object": "list",
-              "data": [
-                { "id": "models/gemini-2.5-pro", "object": "model", "display_name": "Gemini 2.5 Pro" },
-                { "id": "models/gemini-3-flash-preview", "object": "model", "display_name": "Gemini 3 Flash Preview" },
-                { "id": "models/gemini-2.5-flash-image", "object": "model", "display_name": "Nano Banana" },
-                { "id": "models/gemini-embedding-2-preview", "object": "model", "display_name": "Gemini Embedding 2 Preview" },
-                { "id": "models/gemini-2.5-flash-native-audio-latest", "object": "model", "display_name": "Gemini 2.5 Flash Native Audio Latest" },
-                { "id": "models/gemma-4-31b-it", "object": "model", "display_name": "Gemma 4 31B IT" }
+              "models": [
+                { "name": "models/gemini-2.5-pro", "displayName": "Gemini 2.5 Pro", "supportedGenerationMethods": ["generateContent"] },
+                { "name": "models/gemini-3-flash-preview", "displayName": "Gemini 3 Flash Preview", "supportedGenerationMethods": ["generateContent"] },
+                { "name": "models/gemini-3.5-transcribe", "displayName": "Gemini 3.5 Transcribe" },
+                { "name": "models/gemini-3.5-transcribe-live", "displayName": "Gemini 3.5 Transcribe Live" },
+                { "name": "models/gemini-2.5-flash-image", "displayName": "Nano Banana", "supportedGenerationMethods": ["generateContent"] },
+                { "name": "models/gemini-embedding-2-preview", "displayName": "Gemini Embedding 2 Preview", "supportedGenerationMethods": ["embedContent"] },
+                { "name": "models/gemini-2.5-flash-native-audio-latest", "displayName": "Gemini 2.5 Flash Native Audio Latest", "supportedGenerationMethods": ["generateContent"] },
+                { "name": "models/gemma-4-31b-it", "displayName": "Gemma 4 31B IT", "supportedGenerationMethods": ["generateContent"] }
               ]
             }
             """.utf8
         )
 
-        let models = try GeminiPlugin.decodeCompatibleLLMModels(from: response)
+        let catalog = try GeminiPlugin.decodeModelCatalog(from: response)
 
-        XCTAssertEqual(models.map(\.id), ["gemini-2.5-pro", "gemini-3-flash-preview"])
-        XCTAssertEqual(models.first?.displayName, "Gemini 2.5 Pro")
-        XCTAssertEqual(models.last?.displayName, "Gemini 3 Flash Preview")
+        XCTAssertEqual(catalog.llmModels.map(\.id), ["gemini-2.5-pro", "gemini-3-flash-preview"])
+        XCTAssertEqual(catalog.llmModels.first?.displayName, "Gemini 2.5 Pro")
+        XCTAssertEqual(catalog.transcriptionModels.map(\.id), ["gemini-3.5-transcribe"])
+        XCTAssertEqual(
+            catalog.transcriptionModels.first?.liveModelId,
+            "gemini-3.5-transcribe-live"
+        )
     }
 
     @MainActor

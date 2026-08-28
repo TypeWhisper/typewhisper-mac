@@ -328,6 +328,7 @@ final class AudioRecorderViewModel: ObservableObject {
     private var transientTranscriptionFailures: [String: RecordingTranscriptionFailure] = [:]
     private var recordingsLoadTask: Task<Void, Never>?
     private var recordingsLoadGeneration = 0
+    private var hasRequestedInitialRecordingsLoad = false
     private var isInitialized = false
 
     init(
@@ -419,7 +420,9 @@ final class AudioRecorderViewModel: ObservableObject {
         recorderService.trackMode = trackMode
 
         setupBindings()
-        loadRecordings()
+        if !defaults.bool(forKey: UserDefaultsKeys.devPrivacyQuietMode) {
+            loadRecordingsIfNeeded()
+        }
 
         streamingHandler.onPartialTextUpdate = { [weak self] text in
             guard let self else { return }
@@ -1034,7 +1037,13 @@ final class AudioRecorderViewModel: ObservableObject {
         NSPasteboard.general.setString(text, forType: .string)
     }
 
+    func loadRecordingsIfNeeded() {
+        guard !hasRequestedInitialRecordingsLoad else { return }
+        loadRecordings()
+    }
+
     func loadRecordings() {
+        hasRequestedInitialRecordingsLoad = true
         let dir = recorderService.recordingsDirectory
         let transientFailures = transientTranscriptionFailures
         let loader = recordingsLoader
