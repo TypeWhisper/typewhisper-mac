@@ -14356,6 +14356,26 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
     }
 
     @MainActor
+    func testPasteLastTranscriptionHotkeyInvokesDedicatedCallbackOnKeyDown() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeyForTesting(controlCommandVHotkey(), for: .pasteLastTranscription)
+
+        var callbackCount = 0
+        var startCount = 0
+        service.onPasteLastTranscription = { callbackCount += 1 }
+        service.onDictationStart = { _ in startCount += 1 }
+
+        let keyDown = try makeKeyboardEvent(keyCode: 0x09, keyDown: true, flags: [.maskCommand, .maskControl])
+
+        XCTAssertTrue(service.processEventForTesting(keyDown, source: .monitor))
+        XCTAssertEqual(callbackCount, 1)
+        XCTAssertEqual(startCount, 0)
+        XCTAssertNil(service.currentMode)
+    }
+
+    @MainActor
     func testRecorderToggleHotkeyInvokesDedicatedCallbackOnKeyDown() throws {
         let service = HotkeyService()
         service.suspendMonitoring()
@@ -15150,6 +15170,15 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         UnifiedHotkey(
             keyCode: 0x08,
             modifierFlags: NSEvent.ModifierFlags([.command, .shift]).rawValue,
+            isFn: false
+        )
+    }
+
+    @MainActor
+    private func controlCommandVHotkey() -> UnifiedHotkey {
+        UnifiedHotkey(
+            keyCode: 0x09,
+            modifierFlags: NSEvent.ModifierFlags([.command, .control]).rawValue,
             isFn: false
         )
     }

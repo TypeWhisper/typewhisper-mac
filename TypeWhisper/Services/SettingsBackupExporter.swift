@@ -40,6 +40,7 @@ enum SettingsBackupExporter {
         UserDefaultsKeys.promptPaletteHotkeys,
         UserDefaultsKeys.recentTranscriptionsHotkeys,
         UserDefaultsKeys.copyLastTranscriptionHotkeys,
+        UserDefaultsKeys.pasteLastTranscriptionHotkeys,
         UserDefaultsKeys.recorderToggleHotkeys,
     ]
 

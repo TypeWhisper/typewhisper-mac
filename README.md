@@ -142,6 +142,7 @@ The localized macOS screenshot workflow is documented in [docs/screenshot-automa
 
 - **System-wide** - Push-to-talk, toggle, or hybrid mode via global hotkey, auto-pastes into any app
 - **Modifier-key hotkeys** - Use a single modifier key (Command, Shift, Option, Control) as your hotkey
+- **Last-transcription actions** - Copy or paste your latest transcription with configurable global hotkeys
 - **Indicator styles** - Choose Notch, Overlay, or Minimal, with optional live transcript preview where supported
 - **Sound feedback** - Audio cues for recording start, transcription success, and errors
 - **Microphone selection** - Choose a specific input device with live preview and improved recovery after route changes

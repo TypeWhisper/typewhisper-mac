@@ -30,6 +30,7 @@ enum UserDefaultsKeys {
     static let promptPaletteHotkey = "promptPaletteHotkey"
     static let recentTranscriptionsHotkey = "recentTranscriptionsHotkey"
     static let copyLastTranscriptionHotkey = "copyLastTranscriptionHotkey"
+    static let pasteLastTranscriptionHotkey = "pasteLastTranscriptionHotkey"
     static let recorderToggleHotkey = "recorderToggleHotkey"
 
     // MARK: - Hotkeys (JSON-encoded [UnifiedHotkey] per slot)
@@ -39,6 +40,7 @@ enum UserDefaultsKeys {
     static let promptPaletteHotkeys = "promptPaletteHotkeys"
     static let recentTranscriptionsHotkeys = "recentTranscriptionsHotkeys"
     static let copyLastTranscriptionHotkeys = "copyLastTranscriptionHotkeys"
+    static let pasteLastTranscriptionHotkeys = "pasteLastTranscriptionHotkeys"
     static let recorderToggleHotkeys = "recorderToggleHotkeys"
 
     // MARK: - Model / Engine

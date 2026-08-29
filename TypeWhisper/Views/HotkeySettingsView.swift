@@ -80,6 +80,12 @@ struct HotkeySettingsView: View {
                     title: String(localized: "Copy last transcription shortcut"),
                     subtitle: String(localized: "Copy your latest transcription to the clipboard.")
                 )
+
+                MultiHotkeySlotRecorder(
+                    slot: .pasteLastTranscription,
+                    title: String(localized: "Paste last transcription shortcut"),
+                    subtitle: String(localized: "Insert your latest transcription into the focused app.")
+                )
                 }
             }
             .formStyle(.grouped)
