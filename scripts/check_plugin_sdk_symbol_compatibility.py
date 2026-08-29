@@ -31,9 +31,11 @@ SDK_MODULE_MANGLING = "20TypeWhisperPluginSDK"
 MINIMUM_SUPPORTED_HOST_VERSION = (1, 6, 0)
 MINIMUM_SUPPORTED_HOST_VERSION_STRING = "1.6.0"
 SEMANTIC_VERSION_PATTERN = re.compile(
-    r"(?P<major>[0-9]+)\.(?P<minor>[0-9]+)\.(?P<patch>[0-9]+)"
-    r"(?:-(?P<prerelease>[0-9A-Za-z.-]+))?"
-    r"(?:\+(?P<build>[0-9A-Za-z.-]+))?"
+    r"(?P<major>0|[1-9][0-9]*)\."
+    r"(?P<minor>0|[1-9][0-9]*)\."
+    r"(?P<patch>0|[1-9][0-9]*)"
+    r"(?:-(?P<prerelease>[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?"
+    r"(?:\+(?P<build>[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*))?"
 )
 
 
@@ -46,10 +48,18 @@ def validate_min_host_version(value: object) -> str:
     if match is None:
         raise ValueError(f"minHostVersion {value!r} must be a semantic version")
 
+    prerelease = match.group("prerelease")
+    if prerelease is not None:
+        for identifier in prerelease.split("."):
+            if identifier.isdigit() and len(identifier) > 1 and identifier[0] == "0":
+                raise ValueError(
+                    f"minHostVersion {value!r} must be a semantic version"
+                )
+
     version = tuple(int(match.group(part)) for part in ("major", "minor", "patch"))
     is_prerelease_of_floor = (
         version == MINIMUM_SUPPORTED_HOST_VERSION
-        and match.group("prerelease") is not None
+        and prerelease is not None
     )
     if version < MINIMUM_SUPPORTED_HOST_VERSION or is_prerelease_of_floor:
         raise ValueError(

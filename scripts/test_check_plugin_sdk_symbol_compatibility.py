@@ -121,7 +121,16 @@ class MinimumHostVersionTests(unittest.TestCase):
                     validate_min_host_version(version)
 
     def test_rejects_missing_or_malformed_versions(self) -> None:
-        for version in (None, "1.6", "v1.6.0", "1.6.0.0"):
+        for version in (
+            None,
+            "1.6",
+            "v1.6.0",
+            "1.6.0.0",
+            "01.6.0",
+            "1.6.1-alpha..1",
+            "1.6.1-alpha.",
+            "1.6.1-01",
+        ):
             with self.subTest(version=version):
                 with self.assertRaisesRegex(ValueError, "must be a semantic version"):
                     validate_min_host_version(version)
