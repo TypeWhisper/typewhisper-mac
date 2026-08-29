@@ -28,6 +28,18 @@ final class RecentTranscriptionPaletteHandler {
         paletteController.hide()
     }
 
+    func insertLatest(currentState: DictationViewModel.State) {
+        guard currentState == .idle else { return }
+        guard let entry = recentTranscriptionStore.latestEntry(historyRecords: historyService.records) else {
+            showNoRecentTranscriptionsFeedback()
+            return
+        }
+
+        Task { @MainActor [weak self] in
+            await self?.insert(entry)
+        }
+    }
+
     func triggerSelection(currentState: DictationViewModel.State) {
         if paletteController.isVisible {
             paletteController.hide()
@@ -38,13 +50,7 @@ final class RecentTranscriptionPaletteHandler {
 
         let entries = recentTranscriptionStore.mergedEntries(historyRecords: historyService.recentRecords)
         guard !entries.isEmpty else {
-            onShowNotchFeedback?(
-                String(localized: "No recent transcriptions"),
-                "clock.arrow.circlepath",
-                2.5,
-                false,
-                nil
-            )
+            showNoRecentTranscriptionsFeedback()
             return
         }
 
@@ -86,6 +92,16 @@ final class RecentTranscriptionPaletteHandler {
         } catch {
             onShowNotchFeedback?(error.localizedDescription, "xmark.circle.fill", 2.5, true, "recentTranscriptions")
         }
+    }
+
+    private func showNoRecentTranscriptionsFeedback() {
+        onShowNotchFeedback?(
+            String(localized: "No recent transcriptions"),
+            "clock.arrow.circlepath",
+            2.5,
+            false,
+            nil
+        )
     }
 
     private func subtitle(for entry: RecentTranscriptionStore.Entry) -> String {

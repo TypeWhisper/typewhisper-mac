@@ -144,6 +144,53 @@ final class RecentTranscriptionPaletteHandlerTests: XCTestCase {
         XCTAssertEqual(pasteboard.string(forType: .string), "Insert me")
     }
 
+    func testInsertLatestPastesNewestTranscriptionWithoutOpeningPalette() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let pasteboard = NSPasteboard.withUniqueName()
+        let textInsertionService = TextInsertionService()
+        textInsertionService.accessibilityGrantedOverride = true
+        textInsertionService.pasteboardProvider = { pasteboard }
+
+        var pasteCount = 0
+        var returnCount = 0
+        textInsertionService.pasteSimulatorOverride = { pasteCount += 1 }
+        textInsertionService.returnSimulatorOverride = { returnCount += 1 }
+
+        let store = RecentTranscriptionStore()
+        let controller = SelectionPaletteControllerSpy()
+        let handler = RecentTranscriptionPaletteHandler(
+            textInsertionService: textInsertionService,
+            historyService: HistoryService(appSupportDirectory: appSupportDirectory),
+            recentTranscriptionStore: store,
+            paletteController: controller
+        )
+
+        store.recordTranscription(
+            id: UUID(),
+            finalText: "Older transcription",
+            timestamp: Date().addingTimeInterval(-60),
+            appName: "Notes",
+            appBundleIdentifier: "com.apple.Notes"
+        )
+        store.recordTranscription(
+            id: UUID(),
+            finalText: "Newest transcription",
+            timestamp: Date(),
+            appName: "Messages",
+            appBundleIdentifier: "com.apple.MobileSMS"
+        )
+
+        handler.insertLatest(currentState: .idle)
+        try await Task.sleep(for: .milliseconds(50))
+
+        XCTAssertFalse(controller.isVisible)
+        XCTAssertEqual(pasteCount, 1)
+        XCTAssertEqual(returnCount, 0)
+        XCTAssertEqual(pasteboard.string(forType: .string), "Newest transcription")
+    }
+
     func testWorkflowPaletteIncludesManualWorkflows() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
