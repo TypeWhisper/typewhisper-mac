@@ -2,7 +2,7 @@
     "id": "com.typewhisper.livetranscript",
     "name": "Live Transcript",
     "version": "1.0.3",
-    "minHostVersion": "1.1.0",
+    "minHostVersion": "1.6.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
     "author": "TypeWhisper",
