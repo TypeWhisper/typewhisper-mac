@@ -5,7 +5,7 @@ import XCTest
 @testable import SupertonicPlugin
 
 final class SupertonicPluginTests: XCTestCase {
-    func testManifestDeclaresLocalTTSPluginForHost14AndArm64() throws {
+    func testManifestDeclaresLocalTTSPluginForHost16AndArm64() throws {
         let manifestURL = URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
@@ -21,7 +21,7 @@ final class SupertonicPluginTests: XCTestCase {
         XCTAssertEqual(manifest.category, "tts")
         XCTAssertEqual(manifest.hosting, .local)
         XCTAssertEqual(manifest.requiresAPIKey, false)
-        XCTAssertEqual(manifest.minHostVersion, "1.4.0")
+        XCTAssertEqual(manifest.minHostVersion, "1.6.0")
         XCTAssertEqual(manifest.supportedArchitectures, ["arm64"])
     }
 
