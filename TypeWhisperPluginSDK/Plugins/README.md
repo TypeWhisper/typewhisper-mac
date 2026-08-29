@@ -55,7 +55,7 @@ Plugins can subscribe to events without modifying the transcription pipeline:
     "id": "com.yourname.plugin-id",
     "name": "My Plugin",
     "version": "1.0.0",
-    "minHostVersion": "1.0.0",
+    "minHostVersion": "1.6.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
     "supportedArchitectures": ["arm64"],

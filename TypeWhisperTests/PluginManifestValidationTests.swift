@@ -17,6 +17,7 @@ final class PluginManifestValidationTests: XCTestCase {
         XCTAssertFalse(manifestURLs.isEmpty)
 
         let versionPattern = try NSRegularExpression(pattern: #"^\d+\.\d+(\.\d+)?$"#)
+        let hostVersionPattern = try NSRegularExpression(pattern: #"^\d+\.\d+\.\d+$"#)
 
         for manifestURL in manifestURLs {
             let data = try Data(contentsOf: manifestURL)
@@ -25,7 +26,18 @@ final class PluginManifestValidationTests: XCTestCase {
             XCTAssertFalse(manifest.id.isEmpty, manifestURL.lastPathComponent)
             XCTAssertFalse(manifest.name.isEmpty, manifestURL.lastPathComponent)
             XCTAssertFalse(manifest.principalClass.isEmpty, manifestURL.lastPathComponent)
-            XCTAssertNotNil(manifest.minHostVersion, manifestURL.lastPathComponent)
+            let minHostVersion = try XCTUnwrap(manifest.minHostVersion, manifestURL.lastPathComponent)
+            let minHostRange = NSRange(location: 0, length: minHostVersion.utf16.count)
+            XCTAssertEqual(
+                hostVersionPattern.firstMatch(in: minHostVersion, range: minHostRange)?.range,
+                minHostRange,
+                "\(manifestURL.lastPathComponent) must declare a stable three-component host version"
+            )
+            XCTAssertNotEqual(
+                PluginRegistryService.compareVersions(minHostVersion, "1.6.0"),
+                .orderedAscending,
+                "\(manifestURL.lastPathComponent) must require TypeWhisper 1.6.0 or newer"
+            )
             XCTAssertEqual(
                 manifest.sdkCompatibilityVersion,
                 PluginSDKCompatibility.currentVersion,
@@ -2240,7 +2252,7 @@ final class PluginArchitectureCompatibilityTests: XCTestCase {
                 source: .official,
                 name: "Marketplace Replacement",
                 version: "1.3.1",
-                minHostVersion: "1.3.0",
+                minHostVersion: "1.6.0",
                 sdkCompatibilityVersion: PluginSDKCompatibility.currentVersion,
                 minOSVersion: nil,
                 supportedArchitectures: nil,
@@ -2280,7 +2292,7 @@ final class PluginArchitectureCompatibilityTests: XCTestCase {
             source: .official,
             name: "ARM64 Only",
             version: "1.0.0",
-            minHostVersion: "1.0.0",
+            minHostVersion: "1.6.0",
             sdkCompatibilityVersion: PluginSDKCompatibility.currentVersion,
             minOSVersion: "14.0",
             supportedArchitectures: ["arm64"],
@@ -2598,7 +2610,7 @@ final class PluginRegistryDestinationTests: XCTestCase {
             source: .official,
             name: "Qwen3 ASR",
             version: "1.1.1",
-            minHostVersion: "1.4.0",
+            minHostVersion: "1.6.0",
             sdkCompatibilityVersion: PluginSDKCompatibility.currentVersion,
             minOSVersion: "14.0",
             supportedArchitectures: ["arm64"],
