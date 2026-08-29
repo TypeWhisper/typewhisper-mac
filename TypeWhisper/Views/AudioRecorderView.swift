@@ -319,6 +319,9 @@ struct AudioRecorderView: View {
             .padding(.bottom, SettingsLayoutMetrics.pagePadding)
         }
         .frame(minWidth: 500, minHeight: 400)
+        .onAppear {
+            viewModel.loadRecordingsIfNeeded()
+        }
     }
 
     private var isLiveTranscriptPluginActive: Bool {

@@ -5968,6 +5968,165 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testDictationWithoutReadableFocusedTextRecordsUnsupportedCorrectionLearningAttempt() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let licenseSuiteName = "TypeWhisperIntegrationTests.License.\(UUID().uuidString)"
+        let learningEnabledKey = UserDefaultsKeys.targetAppCorrectionLearningEnabled
+        let preserveClipboardKey = UserDefaultsKeys.preserveClipboard
+        let saveAudioKey = UserDefaultsKeys.saveAudioWithHistory
+        let originalLearningEnabled = UserDefaults.standard.object(forKey: learningEnabledKey)
+        let originalPreserveClipboard = UserDefaults.standard.object(forKey: preserveClipboardKey)
+        let originalSaveAudio = UserDefaults.standard.object(forKey: saveAudioKey)
+        guard let licenseDefaults = UserDefaults(suiteName: licenseSuiteName) else {
+            return XCTFail("Could not create isolated license defaults")
+        }
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            licenseDefaults.removePersistentDomain(forName: licenseSuiteName)
+            Self.restoreUserDefault(originalLearningEnabled, forKey: learningEnabledKey)
+            Self.restoreUserDefault(originalPreserveClipboard, forKey: preserveClipboardKey)
+            Self.restoreUserDefault(originalSaveAudio, forKey: saveAudioKey)
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        UserDefaults.standard.set(true, forKey: learningEnabledKey)
+        UserDefaults.standard.set(false, forKey: preserveClipboardKey)
+        UserDefaults.standard.set(false, forKey: saveAudioKey)
+        licenseDefaults.set(LicenseStatus.active.rawValue, forKey: UserDefaultsKeys.licenseStatus)
+        let licenseService = LicenseService(
+            defaults: licenseDefaults,
+            keychainServiceName: "TypeWhisperIntegrationTests.License.\(UUID().uuidString)"
+        )
+
+        dictationContext = Self.makeDictationContext(
+            appSupportDirectory: appSupportDirectory,
+            licenseService: licenseService
+        )
+        let context = try XCTUnwrap(dictationContext)
+        context.dictationViewModel.preserveClipboard = false
+        let pasteboard = NSPasteboard.withUniqueName()
+        context.textInsertionService.pasteboardProvider = { pasteboard }
+        context.textInsertionService.captureActiveAppOverride = {
+            ("Electron Target", "com.example.electron", nil)
+        }
+        context.textInsertionService.accessibilityGrantedOverride = true
+        context.textInsertionService.selectedTextOverride = { nil }
+        context.textInsertionService.focusedTextElementOverride = { nil }
+        context.textInsertionService.pasteSimulatorOverride = {}
+        var accessibilityObservationBundleIdentifiers: [String?] = []
+        var accessibilityObservationEndCount = 0
+        context.textInsertionService.chromiumAccessibilityObservationOverride = { bundleIdentifier in
+            accessibilityObservationBundleIdentifiers.append(bundleIdentifier)
+            return TargetAppAccessibilityObservationLease {
+                accessibilityObservationEndCount += 1
+            }
+        }
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { _ in
+            Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
+        }
+
+        let sessionID = context.dictationViewModel.apiStartRecording()
+        await context.dictationViewModel.testingWaitForRecordingStart()
+        _ = context.dictationViewModel.apiStopRecording()
+
+        for _ in 0..<80 {
+            if context.dictationViewModel.apiDictationSession(id: sessionID)?.status == .completed,
+               context.targetAppCorrectionLearningService.latestAttempt != nil,
+               accessibilityObservationEndCount == 1 {
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+
+        XCTAssertEqual(
+            context.targetAppCorrectionLearningService.latestAttempt?.outcome,
+            .unsupportedTextObservation
+        )
+        XCTAssertEqual(context.targetAppCorrectionLearningService.latestAttempt?.learnedCorrectionCount, 0)
+        XCTAssertEqual(context.dictionaryService.correctionsCount, 0)
+        XCTAssertEqual(accessibilityObservationBundleIdentifiers, ["com.example.electron"])
+        XCTAssertEqual(accessibilityObservationEndCount, 1)
+    }
+
+    @MainActor
+    func testContributionOnlyDictationBeginsChromiumAccessibilityObservation() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let learningEnabledKey = UserDefaultsKeys.targetAppCorrectionLearningEnabled
+        let improveCaptureKey = UserDefaultsKeys.improveTypeWhisperCaptureEnabled
+        let preserveClipboardKey = UserDefaultsKeys.preserveClipboard
+        let saveAudioKey = UserDefaultsKeys.saveAudioWithHistory
+        let originalLearningEnabled = UserDefaults.standard.object(forKey: learningEnabledKey)
+        let originalImproveCapture = UserDefaults.standard.object(forKey: improveCaptureKey)
+        let originalPreserveClipboard = UserDefaults.standard.object(forKey: preserveClipboardKey)
+        let originalSaveAudio = UserDefaults.standard.object(forKey: saveAudioKey)
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            Self.restoreUserDefault(originalLearningEnabled, forKey: learningEnabledKey)
+            Self.restoreUserDefault(originalImproveCapture, forKey: improveCaptureKey)
+            Self.restoreUserDefault(originalPreserveClipboard, forKey: preserveClipboardKey)
+            Self.restoreUserDefault(originalSaveAudio, forKey: saveAudioKey)
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        UserDefaults.standard.set(false, forKey: learningEnabledKey)
+        UserDefaults.standard.set(true, forKey: improveCaptureKey)
+        UserDefaults.standard.set(false, forKey: preserveClipboardKey)
+        UserDefaults.standard.set(false, forKey: saveAudioKey)
+
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        let context = try XCTUnwrap(dictationContext)
+        context.dictationViewModel.preserveClipboard = false
+        let pasteboard = NSPasteboard.withUniqueName()
+        context.textInsertionService.pasteboardProvider = { pasteboard }
+        context.textInsertionService.captureActiveAppOverride = {
+            ("Electron Target", "com.example.electron", nil)
+        }
+        context.textInsertionService.accessibilityGrantedOverride = true
+        context.textInsertionService.selectedTextOverride = { nil }
+        context.textInsertionService.focusedTextElementOverride = { nil }
+        context.textInsertionService.pasteSimulatorOverride = {}
+        var accessibilityObservationBundleIdentifiers: [String?] = []
+        var accessibilityObservationEndCount = 0
+        context.textInsertionService.chromiumAccessibilityObservationOverride = { bundleIdentifier in
+            accessibilityObservationBundleIdentifiers.append(bundleIdentifier)
+            return TargetAppAccessibilityObservationLease {
+                accessibilityObservationEndCount += 1
+            }
+        }
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { _ in
+            Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
+        }
+
+        let sessionID = context.dictationViewModel.apiStartRecording()
+        await context.dictationViewModel.testingWaitForRecordingStart()
+        _ = context.dictationViewModel.apiStopRecording()
+
+        for _ in 0..<80 {
+            if context.dictationViewModel.apiDictationSession(id: sessionID)?.status == .completed,
+               context.targetAppCorrectionLearningService.latestAttempt != nil,
+               accessibilityObservationEndCount == 1 {
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+
+        XCTAssertEqual(
+            context.targetAppCorrectionLearningService.latestAttempt?.outcome,
+            .unsupportedTextObservation
+        )
+        XCTAssertEqual(accessibilityObservationBundleIdentifiers, ["com.example.electron"])
+        XCTAssertEqual(accessibilityObservationEndCount, 1)
+    }
+
+    @MainActor
     func testDictationDirectInsertionUsesContextWhenAppAwareFormattingIsEnabled() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         let historyEnabledKey = UserDefaultsKeys.historyEnabled
@@ -7894,6 +8053,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let recentTranscriptionStore: RecentTranscriptionStore
         let profileService: ProfileService
         let workflowService: WorkflowService
+        let dictionaryService: DictionaryService
+        let targetAppCorrectionLearningService: TargetAppCorrectionLearningService
         let ttsProvider: MockTTSProviderPlugin
         private let retainedObjects: [AnyObject]
 
@@ -7909,6 +8070,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             recentTranscriptionStore: RecentTranscriptionStore,
             profileService: ProfileService,
             workflowService: WorkflowService,
+            dictionaryService: DictionaryService,
+            targetAppCorrectionLearningService: TargetAppCorrectionLearningService,
             ttsProvider: MockTTSProviderPlugin,
             retainedObjects: [AnyObject]
         ) {
@@ -7923,6 +8086,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             self.recentTranscriptionStore = recentTranscriptionStore
             self.profileService = profileService
             self.workflowService = workflowService
+            self.dictionaryService = dictionaryService
+            self.targetAppCorrectionLearningService = targetAppCorrectionLearningService
             self.ttsProvider = ttsProvider
             self.retainedObjects = retainedObjects
         }
@@ -7939,7 +8104,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         audioDeviceSelectionEngineValidator: AudioInputSelectionEngineValidating = AVAudioInputSelectionEngineValidator(),
         audioDeviceDefaultInputController: AudioInputDeviceDefaultControlling = CoreAudioInputDeviceDefaultController(),
         audioRecordingBluetoothInputRouteStabilizer: BluetoothInputRouteStabilizing = CoreAudioBluetoothInputRouteStabilizer(),
-        audioRecordingRecoveryAudioStore: DictationRecoveryAudioStore = DictationRecoveryAudioStore()
+        audioRecordingRecoveryAudioStore: DictationRecoveryAudioStore = DictationRecoveryAudioStore(),
+        licenseService: LicenseService? = nil
     ) -> DictationContext {
         EventBus.shared = EventBus()
         PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
@@ -7993,6 +8159,13 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let workflowService = WorkflowService(appSupportDirectory: appSupportDirectory)
         let audioDuckingService = audioDuckingService ?? AudioDuckingService()
         let dictionaryService = DictionaryService(appSupportDirectory: appSupportDirectory)
+        let targetAppCorrectionLearningService = TargetAppCorrectionLearningService(
+            textInsertionService: textInsertionService,
+            textDiffService: TextDiffService(),
+            dictionaryService: dictionaryService,
+            defaults: UserDefaults(suiteName: "TypeWhisperIntegrationTests.CorrectionLearning.\(UUID().uuidString)")!,
+            persistLatestAttempt: false
+        )
         let snippetService = SnippetService(appSupportDirectory: appSupportDirectory)
         let soundService = soundService ?? SoundService()
         let audioDeviceService = AudioDeviceService(
@@ -8045,6 +8218,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             translationService: nil,
             audioDuckingService: audioDuckingService,
             dictionaryService: dictionaryService,
+            licenseService: licenseService,
+            targetAppCorrectionLearningService: targetAppCorrectionLearningService,
             snippetService: snippetService,
             soundService: soundService,
             audioDeviceService: audioDeviceService,
@@ -8075,6 +8250,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             recentTranscriptionStore: recentTranscriptionStore,
             profileService: profileService,
             workflowService: workflowService,
+            dictionaryService: dictionaryService,
+            targetAppCorrectionLearningService: targetAppCorrectionLearningService,
             ttsProvider: ttsProvider,
             retainedObjects: [
                 EventBus.shared,
@@ -8088,6 +8265,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
                 profileService,
                 audioDuckingService,
                 dictionaryService,
+                targetAppCorrectionLearningService,
                 snippetService,
                 soundService,
                 audioDeviceService,
@@ -10231,28 +10409,33 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
-    func testGeminiPluginCompatibleModelDecodingNormalizesIdsAndFiltersToChatModels() throws {
+    func testGeminiPluginNativeModelCatalogDecodingSeparatesChatAndTranscriptionModels() throws {
         let response = Data(
             """
             {
-              "object": "list",
-              "data": [
-                { "id": "models/gemini-2.5-pro", "object": "model", "display_name": "Gemini 2.5 Pro" },
-                { "id": "models/gemini-3-flash-preview", "object": "model", "display_name": "Gemini 3 Flash Preview" },
-                { "id": "models/gemini-2.5-flash-image", "object": "model", "display_name": "Nano Banana" },
-                { "id": "models/gemini-embedding-2-preview", "object": "model", "display_name": "Gemini Embedding 2 Preview" },
-                { "id": "models/gemini-2.5-flash-native-audio-latest", "object": "model", "display_name": "Gemini 2.5 Flash Native Audio Latest" },
-                { "id": "models/gemma-4-31b-it", "object": "model", "display_name": "Gemma 4 31B IT" }
+              "models": [
+                { "name": "models/gemini-2.5-pro", "displayName": "Gemini 2.5 Pro", "supportedGenerationMethods": ["generateContent"] },
+                { "name": "models/gemini-3-flash-preview", "displayName": "Gemini 3 Flash Preview", "supportedGenerationMethods": ["generateContent"] },
+                { "name": "models/gemini-3.5-transcribe", "displayName": "Gemini 3.5 Transcribe" },
+                { "name": "models/gemini-3.5-transcribe-live", "displayName": "Gemini 3.5 Transcribe Live" },
+                { "name": "models/gemini-2.5-flash-image", "displayName": "Nano Banana", "supportedGenerationMethods": ["generateContent"] },
+                { "name": "models/gemini-embedding-2-preview", "displayName": "Gemini Embedding 2 Preview", "supportedGenerationMethods": ["embedContent"] },
+                { "name": "models/gemini-2.5-flash-native-audio-latest", "displayName": "Gemini 2.5 Flash Native Audio Latest", "supportedGenerationMethods": ["generateContent"] },
+                { "name": "models/gemma-4-31b-it", "displayName": "Gemma 4 31B IT", "supportedGenerationMethods": ["generateContent"] }
               ]
             }
             """.utf8
         )
 
-        let models = try GeminiPlugin.decodeCompatibleLLMModels(from: response)
+        let catalog = try GeminiPlugin.decodeModelCatalog(from: response)
 
-        XCTAssertEqual(models.map(\.id), ["gemini-2.5-pro", "gemini-3-flash-preview"])
-        XCTAssertEqual(models.first?.displayName, "Gemini 2.5 Pro")
-        XCTAssertEqual(models.last?.displayName, "Gemini 3 Flash Preview")
+        XCTAssertEqual(catalog.llmModels.map(\.id), ["gemini-2.5-pro", "gemini-3-flash-preview"])
+        XCTAssertEqual(catalog.llmModels.first?.displayName, "Gemini 2.5 Pro")
+        XCTAssertEqual(catalog.transcriptionModels.map(\.id), ["gemini-3.5-transcribe"])
+        XCTAssertEqual(
+            catalog.transcriptionModels.first?.liveModelId,
+            "gemini-3.5-transcribe-live"
+        )
     }
 
     @MainActor

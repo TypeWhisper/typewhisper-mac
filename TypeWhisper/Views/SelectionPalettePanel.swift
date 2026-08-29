@@ -398,6 +398,9 @@ final class SelectionPaletteController: SelectionPaletteControlling {
         )
 
         let hosting = NSHostingView(rootView: contentView)
+        // The panel owns its fixed content size. Prevent SwiftUI from feeding
+        // intrinsic and min/max sizes back into the window constraint cycle.
+        hosting.sizingOptions = []
         hosting.translatesAutoresizingMaskIntoConstraints = true
         hostingView = hosting
 

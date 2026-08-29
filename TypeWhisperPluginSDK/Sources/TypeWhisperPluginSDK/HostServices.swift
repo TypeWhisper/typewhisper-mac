@@ -32,6 +32,20 @@ public protocol HostServices: Sendable {
     // Notify host that plugin capabilities changed (e.g. model loaded/unloaded)
     func notifyCapabilitiesChanged()
 
+    // Present this plugin's host-managed settings window, when available.
+    func openPluginSettings()
+
+    // Open a settings-sidebar page contributed by this plugin.
+    func openSettingsSidebarItem(_ itemId: String)
+
+    // Add media produced by one of this plugin's importers to TypeWhisper's
+    // transcription queue. Returns false when the plugin/importer is inactive
+    // or the media is rejected.
+    func enqueueImportedMediaForTranscription(
+        _ media: PluginImportedMedia,
+        fromMediaImporterId mediaImporterId: String
+    ) async -> Bool
+
     // Streaming display: call with true when the plugin provides its own streaming text UI,
     // so the built-in indicator suppresses its streaming text display.
     func setStreamingDisplayActive(_ active: Bool)
@@ -47,6 +61,15 @@ public extension HostServices {
     }
 
     var availableWorkflows: [PluginWorkflowInfo] { [] }
+
+    func openPluginSettings() {}
+
+    func openSettingsSidebarItem(_ itemId: String) {}
+
+    func enqueueImportedMediaForTranscription(
+        _ media: PluginImportedMedia,
+        fromMediaImporterId mediaImporterId: String
+    ) async -> Bool { false }
 
     @available(*, deprecated, renamed: "availableRuleNames")
     var availableProfileNames: [String] { availableRuleNames }

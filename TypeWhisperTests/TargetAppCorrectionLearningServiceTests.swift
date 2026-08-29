@@ -4,6 +4,165 @@ import XCTest
 
 @MainActor
 final class TargetAppCorrectionLearningServiceTests: XCTestCase {
+    func testElectronAccessibilityObservationRestoresStateItEnabled() throws {
+        let target = electronTarget()
+        var setValues: [Bool] = []
+        let controller = ChromiumAccessibilityObservationController(
+            resolveApplication: { _ in target },
+            isElectronApplication: { _ in true },
+            readManualAccessibility: { _ in (.success, false) },
+            setManualAccessibility: { _, enabled in
+                setValues.append(enabled)
+                return .success
+            },
+            validateApplication: { _ in true }
+        )
+
+        let lease = try XCTUnwrap(
+            controller.beginObservation(bundleIdentifier: target.bundleIdentifier)
+        )
+        XCTAssertEqual(setValues, [true])
+
+        lease.end()
+        lease.end()
+
+        XCTAssertEqual(setValues, [true, false])
+    }
+
+    func testElectronAccessibilityObservationDoesNotOwnAlreadyEnabledState() {
+        let target = electronTarget()
+        var setValues: [Bool] = []
+        let controller = ChromiumAccessibilityObservationController(
+            resolveApplication: { _ in target },
+            isElectronApplication: { _ in true },
+            readManualAccessibility: { _ in (.success, true) },
+            setManualAccessibility: { _, enabled in
+                setValues.append(enabled)
+                return .success
+            }
+        )
+
+        XCTAssertNil(controller.beginObservation(bundleIdentifier: target.bundleIdentifier))
+        XCTAssertTrue(setValues.isEmpty)
+    }
+
+    func testElectronAccessibilityObservationFallsBackWhenAttributeIsUnsupported() {
+        let target = electronTarget()
+        var setValues: [Bool] = []
+        let controller = ChromiumAccessibilityObservationController(
+            resolveApplication: { _ in target },
+            isElectronApplication: { _ in true },
+            readManualAccessibility: { _ in (.attributeUnsupported, nil) },
+            setManualAccessibility: { _, enabled in
+                setValues.append(enabled)
+                return .success
+            }
+        )
+
+        XCTAssertNil(controller.beginObservation(bundleIdentifier: target.bundleIdentifier))
+        XCTAssertTrue(setValues.isEmpty)
+    }
+
+    func testChromiumBrowserAccessibilityObservationEnablesManualAccessibility() throws {
+        let target = ChromiumAccessibilityObservationController.RunningApplicationTarget(
+            processIdentifier: 43,
+            bundleIdentifier: SupportedMeetingBrowser.chrome,
+            bundleURL: URL(fileURLWithPath: "/Applications/Google Chrome.app")
+        )
+        var setValues: [Bool] = []
+        let controller = ChromiumAccessibilityObservationController(
+            resolveApplication: { _ in target },
+            isElectronApplication: { _ in false },
+            readManualAccessibility: { _ in (.success, false) },
+            setManualAccessibility: { _, enabled in
+                setValues.append(enabled)
+                return .success
+            },
+            validateApplication: { _ in true }
+        )
+
+        let lease = try XCTUnwrap(
+            controller.beginObservation(bundleIdentifier: target.bundleIdentifier)
+        )
+        lease.end()
+
+        XCTAssertEqual(setValues, [true, false])
+    }
+
+    func testNativeApplicationDoesNotRequestManualAccessibility() {
+        let target = ChromiumAccessibilityObservationController.RunningApplicationTarget(
+            processIdentifier: 44,
+            bundleIdentifier: "com.apple.Notes",
+            bundleURL: URL(fileURLWithPath: "/System/Applications/Notes.app")
+        )
+        var readCount = 0
+        let controller = ChromiumAccessibilityObservationController(
+            resolveApplication: { _ in target },
+            isElectronApplication: { _ in false },
+            readManualAccessibility: { _ in
+                readCount += 1
+                return (.success, false)
+            },
+            setManualAccessibility: { _, _ in .success }
+        )
+
+        XCTAssertNil(controller.beginObservation(bundleIdentifier: target.bundleIdentifier))
+        XCTAssertEqual(readCount, 0)
+    }
+
+    func testElectronAccessibilityObservationDoesNotRestoreReplacedProcess() throws {
+        let target = electronTarget()
+        var setValues: [Bool] = []
+        var isSameApplication = true
+        let controller = ChromiumAccessibilityObservationController(
+            resolveApplication: { _ in target },
+            isElectronApplication: { _ in true },
+            readManualAccessibility: { _ in (.success, false) },
+            setManualAccessibility: { _, enabled in
+                setValues.append(enabled)
+                return .success
+            },
+            validateApplication: { _ in isSameApplication }
+        )
+
+        let lease = try XCTUnwrap(
+            controller.beginObservation(bundleIdentifier: target.bundleIdentifier)
+        )
+        isSameApplication = false
+        lease.end()
+
+        XCTAssertEqual(setValues, [true])
+    }
+
+    func testMissingBaselineCompletesUnsupportedAttemptWithoutLearning() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let dictionaryService = DictionaryService(appSupportDirectory: appSupportDirectory)
+        let service = TargetAppCorrectionLearningService(
+            textInsertionService: TextInsertionService(),
+            textDiffService: TextDiffService(),
+            dictionaryService: dictionaryService,
+            persistLatestAttempt: false
+        )
+
+        let result = await service.trackInsertion(insertedText: "Korrektur", baseline: nil)
+
+        XCTAssertEqual(result.snapshot.outcome, .unsupportedTextObservation)
+        XCTAssertEqual(result.snapshot.learnedCorrectionCount, 0)
+        XCTAssertEqual(service.latestAttempt, result.snapshot)
+        XCTAssertTrue(result.learnedCorrections.isEmpty)
+        XCTAssertEqual(dictionaryService.correctionsCount, 0)
+    }
+
+    private func electronTarget() -> ChromiumAccessibilityObservationController.RunningApplicationTarget {
+        ChromiumAccessibilityObservationController.RunningApplicationTarget(
+            processIdentifier: 42,
+            bundleIdentifier: "com.example.electron",
+            bundleURL: URL(fileURLWithPath: "/Applications/Electron Target.app")
+        )
+    }
+
     func testLearnsSingleConfidentReplacementAfterCommitSignal() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }

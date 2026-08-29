@@ -1,6 +1,22 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "No Integration Commands" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Integrationsbefehle"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有集成命令"
+          }
+        }
+      }
+    },
     "" : {
       "localizations" : {
         "de" : {
@@ -40318,6 +40334,8 @@
     "Save Changes?" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Änderungen speichern?"}},"ja":{"stringUnit":{"state":"translated","value":"変更を保存しますか？"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"保存更改？"}}}},
     "Save or discard your changes before leaving this entry." : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Speichere oder verwirf deine Änderungen, bevor du diesen Eintrag verlässt."}},"ja":{"stringUnit":{"state":"translated","value":"この項目を離れる前に変更を保存または破棄してください。"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"离开此条目前，请保存或放弃更改。"}}}},
     "Smart Mailboxes" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Intelligente Postfächer"}},"ja":{"stringUnit":{"state":"translated","value":"スマートメールボックス"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"智能邮箱"}}}},
+    "Enable the integration to open this page." : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Aktiviere die Integration, um diese Seite zu öffnen."}},"ja":{"stringUnit":{"state":"translated","value":"このページを開くにはインテグレーションを有効にしてください。"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"启用集成后即可打开此页面。"}}}},
+    "Integration Unavailable" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Integration nicht verfügbar"}},"ja":{"stringUnit":{"state":"translated","value":"インテグレーションを利用できません"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"集成不可用"}}}},
     "calendarMeeting.settings.howItWorks" : {
       "localizations" : {
         "de" : {

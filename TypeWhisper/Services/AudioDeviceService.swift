@@ -363,7 +363,8 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
             selectedDeviceUID: selectedDeviceUID,
             defaultInputDeviceID: defaultInputDeviceID,
             listedDevicesByID: listedDevicesByID,
-            listedDevicesByUID: listedDevicesByUID
+            listedDevicesByUID: listedDevicesByUID,
+            hasMicrophonePermission: hasMicrophonePermission
         )
         let selectedInputDeviceID: UInt32?
         if let selectedDeviceID {
@@ -463,7 +464,11 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
 
     func isInputDevicePriorityItemAvailable(_ item: AudioInputDevicePriorityItem) -> Bool {
         guard let device = inputDevices.first(where: { $0.uid == item.uid }) else { return false }
-        if transportType(for: device.deviceID) == kAudioDeviceTransportTypeBuiltIn, clamshellStateProvider.isLidClosed() {
+        if Self.isInternalMicrophoneUnavailableInClamshell(
+            deviceUID: device.uid,
+            transportType: transportType(for: device.deviceID),
+            lidClosed: clamshellStateProvider.isLidClosed()
+        ) {
             return false
         }
         return true
@@ -534,10 +539,14 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
             return .systemDefault
         }
         let defaultInputTransport = transportType(for: defaultInputDeviceID)
+        let defaultInputDeviceUID = inputDevices.first(where: { $0.deviceID == defaultInputDeviceID })?.uid
+            ?? Self.deviceUID(for: defaultInputDeviceID)
 
-        if lidClosed,
-           let defaultInputTransport,
-           Self.isBuiltInTransportType(defaultInputTransport) {
+        if Self.isInternalMicrophoneUnavailableInClamshell(
+            deviceUID: defaultInputDeviceUID,
+            transportType: defaultInputTransport,
+            lidClosed: lidClosed
+        ) {
             for device in inputDevices {
                 guard let fallbackSelection = resolvedInputSelection(for: device, lidClosed: true),
                       fallbackSelection.deviceID != defaultInputDeviceID else {
@@ -575,9 +584,11 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         // physically disconnected by Apple Silicon / T2 hardware security,
         // but CoreAudio still reports it as available. Skip it so failover
         // proceeds to the next candidate. See #888 and #983.
-        if lidClosed,
-           let transport,
-           Self.isBuiltInTransportType(transport) {
+        if Self.isInternalMicrophoneUnavailableInClamshell(
+            deviceUID: device.uid,
+            transportType: transport,
+            lidClosed: lidClosed
+        ) {
             logger.info("Skipping built-in microphone \(device.name, privacy: .private) because lid is closed (clamshell mode)")
             return nil
         }
@@ -1178,7 +1189,11 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
     static func isInputDeviceAvailable(_ deviceID: AudioDeviceID) -> Bool {
         guard inputChannelCount(for: deviceID) > 0 else { return false }
 
-        if transportType(for: deviceID) == kAudioDeviceTransportTypeBuiltIn, IOKitClamshellStateProvider().isLidClosed() {
+        if isInternalMicrophoneUnavailableInClamshell(
+            deviceUID: deviceUID(for: deviceID),
+            transportType: transportType(for: deviceID),
+            lidClosed: IOKitClamshellStateProvider().isLidClosed()
+        ) {
             return false
         }
 
@@ -1338,7 +1353,8 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         selectedDeviceUID: String?,
         defaultInputDeviceID: AudioDeviceID?,
         listedDevicesByID: [AudioDeviceID: AudioInputDevice],
-        listedDevicesByUID: [String: AudioInputDevice]
+        listedDevicesByUID: [String: AudioInputDevice],
+        hasMicrophonePermission: Bool
     ) -> [AudioInputDiagnosticsReport.Device] {
         var deviceIDs = Set(inputCapableAudioDeviceIDs())
         deviceIDs.formUnion(listedDevicesByID.keys)
@@ -1350,7 +1366,8 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
                 selectedDeviceUID: selectedDeviceUID,
                 defaultInputDeviceID: defaultInputDeviceID,
                 listedDevicesByID: listedDevicesByID,
-                listedDevicesByUID: listedDevicesByUID
+                listedDevicesByUID: listedDevicesByUID,
+                hasMicrophonePermission: hasMicrophonePermission
             )
         }
     }
@@ -1361,7 +1378,8 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         selectedDeviceUID: String?,
         defaultInputDeviceID: AudioDeviceID?,
         listedDevicesByID: [AudioDeviceID: AudioInputDevice],
-        listedDevicesByUID: [String: AudioInputDevice]
+        listedDevicesByUID: [String: AudioInputDevice],
+        hasMicrophonePermission: Bool
     ) -> AudioInputDiagnosticsReport.Device {
         let coreAudioUID = deviceUID(for: deviceID)
         var listedDevice = listedDevicesByID[deviceID]
@@ -1377,7 +1395,9 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         let isAggregateOrVirtual = isAggregate || isVirtual
         let isSelectedByID = selectedDeviceID == deviceID
         let isSelectedByUID = selectedDeviceID == nil && listedDevice?.uid == selectedDeviceUID
-        let formatDiagnostic = inputOnlyCaptureFormatDiagnostic(for: deviceID)
+        let formatDiagnostic = hasMicrophonePermission
+            ? inputOnlyCaptureFormatDiagnostic(for: deviceID)
+            : (format: nil, error: "microphonePermissionNotGranted")
         let snapshot = AudioInputDeviceSnapshot(
             deviceID: deviceID,
             name: deviceName(for: deviceID) ?? listedDevice?.name,
@@ -1492,6 +1512,16 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
 
     static func isBuiltInTransportType(_ transportType: UInt32) -> Bool {
         transportType == kAudioDeviceTransportTypeBuiltIn
+    }
+
+    private static func isInternalMicrophoneUnavailableInClamshell(
+        deviceUID: String?,
+        transportType: UInt32?,
+        lidClosed: Bool
+    ) -> Bool {
+        lidClosed
+            && transportType == kAudioDeviceTransportTypeBuiltIn
+            && deviceUID == "BuiltInMicrophoneDevice"
     }
 
     fileprivate static func transportType(for deviceID: AudioDeviceID) -> UInt32? {

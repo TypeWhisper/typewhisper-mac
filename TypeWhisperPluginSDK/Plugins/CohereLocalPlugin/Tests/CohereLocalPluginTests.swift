@@ -133,6 +133,40 @@ final class CohereLocalPluginTests: XCTestCase {
         )
     }
 
+    func testStableHostCompatibilityAvoidsPost16NetworkGuardSDKSymbol() throws {
+        let pluginDirectory = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let sourceURLs = try FileManager.default.contentsOfDirectory(
+            at: pluginDirectory,
+            includingPropertiesForKeys: nil
+        ).filter { $0.pathExtension == "swift" }
+
+        for sourceURL in sourceURLs {
+            let source = try String(contentsOf: sourceURL, encoding: .utf8)
+            XCTAssertFalse(
+                source.contains("PluginHTTPClient.ensureNetworkAccessIsAllowed"),
+                "\(sourceURL.lastPathComponent) must remain loadable by the declared TypeWhisper 1.6.0 host"
+            )
+        }
+    }
+
+    func testLocalNetworkPolicyAllowsNormalRuntime() {
+        XCTAssertNoThrow(
+            try CohereLocalNetworkAccessPolicy.ensureAccessIsAllowed(arguments: ["TypeWhisper"])
+        )
+    }
+
+    func testLocalNetworkPolicyBlocksScreenshotAutomation() {
+        XCTAssertThrowsError(
+            try CohereLocalNetworkAccessPolicy.ensureAccessIsAllowed(
+                arguments: ["TypeWhisper", "--store-screenshots"]
+            )
+        ) { error in
+            XCTAssertEqual((error as? URLError)?.code, .notConnectedToInternet)
+        }
+    }
+
     func testSelectingAnotherModelStopsServerThatIsStillStarting() async throws {
         let host = try PluginTestHostServices(shouldRestoreLoadedModelsPassively: false)
         let plugin = CohereLocalPlugin()

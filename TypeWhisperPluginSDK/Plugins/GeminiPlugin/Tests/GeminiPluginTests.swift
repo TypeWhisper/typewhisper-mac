@@ -6,6 +6,8 @@ import TypeWhisperPluginSDK
 
 final class GeminiPluginTests: XCTestCase {
     private static let cachedLLMModelsKey = "fetchedLLMModels.v2"
+    private static let cachedTranscriptionModelsKey = "fetchedTranscriptionModels.v1"
+    private static let modelCatalogRefreshDateKey = "modelCatalogRefreshDate.v1"
     private static let selectedLLMModelKey = "selectedLLMModel"
 
     override func tearDown() {
@@ -19,6 +21,28 @@ final class GeminiPluginTests: XCTestCase {
             GeminiFetchedModel(id: "gemini-2.5-flash", displayName: "Gemini 2.5 Flash"),
             GeminiFetchedModel(id: "gemini-flash-latest", displayName: "Gemini Flash Latest"),
         ])
+    }
+
+    private static func cachedTranscriptionModelsData() throws -> Data {
+        try JSONEncoder().encode([
+            GeminiFetchedTranscriptionModel(
+                id: "gemini-3.5-transcribe",
+                displayName: "Gemini 3.5 Transcribe",
+                liveModelId: "gemini-3.5-transcribe-live"
+            ),
+        ])
+    }
+
+    private static func configuredDefaults(selectedModel: String? = nil) throws -> [String: Any] {
+        var defaults: [String: Any] = [
+            Self.cachedLLMModelsKey: try Self.cachedModelsData(),
+            Self.cachedTranscriptionModelsKey: try Self.cachedTranscriptionModelsData(),
+            Self.modelCatalogRefreshDateKey: Date(),
+        ]
+        if let selectedModel {
+            defaults["selectedModel"] = selectedModel
+        }
+        return defaults
     }
 
     func testPreferredModelIdReflectsSelectedLLMModel() throws {
@@ -115,36 +139,54 @@ final class GeminiPluginTests: XCTestCase {
         XCTAssertEqual(plugin.providerId, "gemini")
         XCTAssertEqual(plugin.providerDisplayName, "Gemini")
         XCTAssertFalse(plugin.supportsTranslation)
-        XCTAssertFalse(plugin.supportsStreaming)
+        XCTAssertTrue(plugin.supportsStreaming)
         XCTAssertEqual(plugin.dictionaryTermsSupport, .supported)
-        XCTAssertEqual(plugin.selectedModelId, "gemini-flash-lite-latest")
-        XCTAssertEqual(
-            plugin.transcriptionModels.map(\.id),
-            [
-                "gemini-flash-lite-latest",
-                "gemini-flash-latest",
-                "gemini-3.1-flash-lite",
-                "gemini-3.5-flash",
-                "gemini-2.5-flash-lite",
-                "gemini-2.5-flash",
-            ]
-        )
-        XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, "gemini-flash-lite-latest")
+        XCTAssertEqual(plugin.dictionaryTermsBudget.maxTerms, 1_000)
+        XCTAssertEqual(plugin.selectedModelId, "gemini-3.5-transcribe")
+        XCTAssertEqual(plugin.transcriptionModels.map(\.id), ["gemini-3.5-transcribe"])
+        XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, "gemini-3.5-transcribe")
     }
 
-    func testSelectedTranscriptionModelPersistsAcrossActivation() throws {
+    func testUnsupportedFlashSelectionFallsBackAndPersistsDefault() throws {
         let host = try PluginTestHostServices()
         let plugin = GeminiPlugin()
         plugin.activate(host: host)
 
         plugin.selectModel("gemini-2.5-flash")
-        plugin.deactivate()
 
-        let reloaded = GeminiPlugin()
-        reloaded.activate(host: host)
+        XCTAssertEqual(plugin.selectedModelId, "gemini-3.5-transcribe")
+        XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, "gemini-3.5-transcribe")
+    }
 
-        XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, "gemini-2.5-flash")
-        XCTAssertEqual(reloaded.selectedModelId, "gemini-2.5-flash")
+    func testUnsupportedFlashSelectionCannotDisableDedicatedStreaming() throws {
+        let host = try PluginTestHostServices()
+        let plugin = GeminiPlugin()
+        plugin.activate(host: host)
+        let notificationsBeforeSelection = host.capabilitiesChangedCount
+
+        XCTAssertTrue(plugin.supportsStreaming)
+        plugin.selectModel("gemini-flash-lite-latest")
+        XCTAssertEqual(plugin.selectedModelId, "gemini-3.5-transcribe")
+        XCTAssertTrue(plugin.supportsStreaming)
+        XCTAssertEqual(host.capabilitiesChangedCount, notificationsBeforeSelection + 1)
+    }
+
+    func testKnownTranscriptionModelKeepsLivePairWhenCatalogOmitsLiveEntry() throws {
+        let cachedTranscriptionModels = try JSONEncoder().encode([
+            GeminiFetchedTranscriptionModel(
+                id: "gemini-3.5-transcribe",
+                displayName: "Gemini 3.5 Transcribe"
+            ),
+        ])
+        let host = try PluginTestHostServices(defaults: [
+            Self.cachedTranscriptionModelsKey: cachedTranscriptionModels,
+        ])
+        let plugin = GeminiPlugin()
+
+        plugin.activate(host: host)
+
+        XCTAssertEqual(plugin.selectedModelId, "gemini-3.5-transcribe")
+        XCTAssertTrue(plugin.supportsStreaming)
     }
 
     func testInvalidStoredTranscriptionModelFallsBackAndPersistsDefault() throws {
@@ -153,102 +195,424 @@ final class GeminiPluginTests: XCTestCase {
 
         plugin.activate(host: host)
 
-        XCTAssertEqual(plugin.selectedModelId, "gemini-flash-lite-latest")
-        XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, "gemini-flash-lite-latest")
+        XCTAssertEqual(plugin.selectedModelId, "gemini-3.5-transcribe")
+        XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, "gemini-3.5-transcribe")
     }
 
-    func testTranscriptionRequestUsesGenerateContentJSONAudioPromptAndLanguage() throws {
-        let request = try GeminiPlugin.makeTranscriptionRequest(
-            uploadFile: Self.m4aUpload(),
+    func testCachedFlashModelsAreRemovedAndStoredSelectionMigrates() throws {
+        let cachedModels = try JSONEncoder().encode([
+            GeminiFetchedTranscriptionModel(
+                id: "gemini-3.5-transcribe",
+                displayName: "Gemini 3.5 Transcribe",
+                liveModelId: "gemini-3.5-transcribe-live"
+            ),
+            GeminiFetchedTranscriptionModel(
+                id: "gemini-2.5-flash",
+                displayName: "Gemini 2.5 Flash"
+            ),
+        ])
+        let host = try PluginTestHostServices(defaults: [
+            Self.cachedTranscriptionModelsKey: cachedModels,
+            "selectedModel": "gemini-2.5-flash",
+            Self.modelCatalogRefreshDateKey: Date(),
+        ])
+        let plugin = GeminiPlugin()
+
+        plugin.activate(host: host)
+
+        XCTAssertEqual(plugin.transcriptionModels.map(\.id), ["gemini-3.5-transcribe"])
+        XCTAssertEqual(plugin.selectedModelId, "gemini-3.5-transcribe")
+        XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, "gemini-3.5-transcribe")
+        let cleanedCache = try XCTUnwrap(
+            host.userDefault(forKey: Self.cachedTranscriptionModelsKey) as? Data
+        )
+        XCTAssertEqual(
+            try JSONDecoder().decode([GeminiFetchedTranscriptionModel].self, from: cleanedCache)
+                .map(\.id),
+            ["gemini-3.5-transcribe"]
+        )
+    }
+
+    func testNativeModelCatalogSeparatesChatAndTranscriptionModels() throws {
+        let response = Data(
+            """
+            {
+              "models": [
+                {
+                  "name": "models/gemini-2.5-pro",
+                  "displayName": "Gemini 2.5 Pro",
+                  "supportedGenerationMethods": ["generateContent"]
+                },
+                {
+                  "name": "models/gemini-3.5-transcribe",
+                  "displayName": "Gemini 3.5 Transcribe"
+                },
+                {
+                  "name": "models/gemini-3.5-transcribe-live",
+                  "displayName": "Gemini 3.5 Transcribe Live"
+                },
+                {
+                  "name": "models/gemini-2.5-flash-image",
+                  "displayName": "Gemini Image",
+                  "supportedGenerationMethods": ["generateContent"]
+                }
+              ]
+            }
+            """.utf8
+        )
+
+        let catalog = try GeminiPlugin.decodeModelCatalog(from: response)
+
+        XCTAssertEqual(catalog.llmModels.map(\.id), ["gemini-2.5-pro"])
+        XCTAssertEqual(catalog.transcriptionModels.map(\.id), ["gemini-3.5-transcribe"])
+        XCTAssertEqual(
+            catalog.transcriptionModels.first?.liveModelId,
+            "gemini-3.5-transcribe-live"
+        )
+    }
+
+    func testModelCatalogFetchFollowsPagination() async throws {
+        let host = try PluginTestHostServices(
+            defaults: try Self.configuredDefaults(),
+            secrets: ["api-key": "gemini-key"]
+        )
+        let plugin = GeminiPlugin()
+        plugin.activate(host: host)
+        defer { plugin.deactivate() }
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(
+                        """
+                        {
+                          "models": [{
+                            "name": "models/gemini-2.5-pro",
+                            "displayName": "Gemini 2.5 Pro",
+                            "supportedGenerationMethods": ["generateContent"]
+                          }],
+                          "nextPageToken": "page-two"
+                        }
+                        """.utf8
+                    ),
+                    Self.httpResponse(url: "https://generativelanguage.googleapis.com/v1beta/models", statusCode: 200)
+                ),
+                .success(
+                    Data(
+                        """
+                        {
+                          "models": [
+                            { "name": "models/gemini-3.5-transcribe", "displayName": "Gemini 3.5 Transcribe" },
+                            { "name": "models/gemini-3.5-transcribe-live", "displayName": "Gemini 3.5 Transcribe Live" }
+                          ]
+                        }
+                        """.utf8
+                    ),
+                    Self.httpResponse(url: "https://generativelanguage.googleapis.com/v1beta/models", statusCode: 200)
+                ),
+            ])
+        }
+
+        let catalog = await plugin.fetchModelCatalog()
+
+        XCTAssertEqual(catalog.llmModels.map(\.id), ["gemini-2.5-pro"])
+        XCTAssertEqual(catalog.transcriptionModels.map(\.id), ["gemini-3.5-transcribe"])
+        let requests = try XCTUnwrap(store.sessions.first).requestedRequests
+        XCTAssertEqual(requests.count, 2)
+        XCTAssertEqual(
+            URLComponents(url: try XCTUnwrap(requests[0].url), resolvingAgainstBaseURL: false)?
+                .queryItems?.first(where: { $0.name == "pageSize" })?.value,
+            "1000"
+        )
+        XCTAssertEqual(
+            URLComponents(url: try XCTUnwrap(requests[1].url), resolvingAgainstBaseURL: false)?
+                .queryItems?.first(where: { $0.name == "pageToken" })?.value,
+            "page-two"
+        )
+    }
+
+    func testModelCatalogFetchRejectsRepeatedPaginationToken() async throws {
+        let host = try PluginTestHostServices(
+            defaults: try Self.configuredDefaults(),
+            secrets: ["api-key": "gemini-key"]
+        )
+        let plugin = GeminiPlugin()
+        plugin.activate(host: host)
+        defer { plugin.deactivate() }
+
+        let page = Data(
+            """
+            {
+              "models": [{
+                "name": "models/gemini-2.5-pro",
+                "displayName": "Gemini 2.5 Pro",
+                "supportedGenerationMethods": ["generateContent"]
+              }],
+              "nextPageToken": "repeated-page"
+            }
+            """.utf8
+        )
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    page,
+                    Self.httpResponse(
+                        url: "https://generativelanguage.googleapis.com/v1beta/models",
+                        statusCode: 200
+                    )
+                ),
+                .success(
+                    page,
+                    Self.httpResponse(
+                        url: "https://generativelanguage.googleapis.com/v1beta/models",
+                        statusCode: 200
+                    )
+                ),
+            ])
+        }
+
+        let catalog = await plugin.fetchModelCatalog()
+
+        XCTAssertTrue(catalog.isEmpty)
+        XCTAssertEqual(try XCTUnwrap(store.sessions.first).requestedRequests.count, 2)
+    }
+
+    func testActivationAutomaticallyRefreshesAndCachesModelCatalog() async throws {
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(
+                        """
+                        {
+                          "models": [
+                            {
+                              "name": "models/gemini-2.5-pro",
+                              "displayName": "Gemini 2.5 Pro",
+                              "supportedGenerationMethods": ["generateContent"]
+                            },
+                            { "name": "models/gemini-3.5-transcribe", "displayName": "Gemini 3.5 Transcribe" },
+                            { "name": "models/gemini-3.5-transcribe-live", "displayName": "Gemini 3.5 Transcribe Live" }
+                          ]
+                        }
+                        """.utf8
+                    ),
+                    Self.httpResponse(url: "https://generativelanguage.googleapis.com/v1beta/models", statusCode: 200)
+                ),
+            ])
+        }
+
+        let host = try PluginTestHostServices(secrets: ["api-key": "gemini-key"])
+        let plugin = GeminiPlugin()
+        plugin.activate(host: host)
+        defer { plugin.deactivate() }
+
+        for _ in 0..<40 where host.userDefault(forKey: Self.modelCatalogRefreshDateKey) == nil {
+            try await Task.sleep(for: .milliseconds(25))
+        }
+
+        let llmData = try XCTUnwrap(host.userDefault(forKey: Self.cachedLLMModelsKey) as? Data)
+        let transcriptionData = try XCTUnwrap(
+            host.userDefault(forKey: Self.cachedTranscriptionModelsKey) as? Data
+        )
+        XCTAssertEqual(
+            try JSONDecoder().decode([GeminiFetchedModel].self, from: llmData).map(\.id),
+            ["gemini-2.5-pro"]
+        )
+        XCTAssertEqual(
+            try JSONDecoder().decode([GeminiFetchedTranscriptionModel].self, from: transcriptionData)
+                .map(\.id),
+            ["gemini-3.5-transcribe"]
+        )
+        XCTAssertEqual(store.sessions.first?.requestedRequests.first?.url?.path, "/v1beta/models")
+    }
+
+    func testDedicatedTranscriptionRequestsUseFilesAndInteractionsAPIs() throws {
+        let upload = Self.m4aUpload()
+        let startRequest = try GeminiPlugin.makeFileUploadStartRequest(
+            uploadFile: upload,
+            apiKey: "gemini-key"
+        )
+
+        XCTAssertEqual(startRequest.url?.path, "/upload/v1beta/files")
+        XCTAssertEqual(startRequest.value(forHTTPHeaderField: "x-goog-api-key"), "gemini-key")
+        XCTAssertEqual(startRequest.value(forHTTPHeaderField: "X-Goog-Upload-Protocol"), "resumable")
+        XCTAssertEqual(startRequest.value(forHTTPHeaderField: "X-Goog-Upload-Command"), "start")
+        XCTAssertEqual(
+            (try Self.jsonBody(from: startRequest)["file"] as? [String: String])?["display_name"],
+            "audio.m4a"
+        )
+
+        let uploadRequest = GeminiPlugin.makeFileUploadRequest(
+            uploadFile: upload,
+            uploadURL: URL(string: "https://upload.example.test/session")!
+        )
+        XCTAssertEqual(uploadRequest.httpBody, upload.data)
+        XCTAssertEqual(uploadRequest.value(forHTTPHeaderField: "X-Goog-Upload-Command"), "upload, finalize")
+
+        let interactionRequest = try GeminiPlugin.makeDedicatedTranscriptionRequest(
+            uploadedFile: GeminiUploadedFile(
+                name: "files/audio-123",
+                uri: "https://generativelanguage.googleapis.com/v1beta/files/audio-123",
+                mimeType: "audio/mp4"
+            ),
             apiKey: "gemini-key",
-            modelId: "gemini-flash-lite-latest",
+            modelId: "gemini-3.5-transcribe",
             language: " de ",
-            prompt: "Qwen3, MLX, proxy_read_timeout",
-            timeout: 60
+            prompt: "TypeWhisper, Gemini",
+            timeout: 900
         )
 
-        XCTAssertEqual(request.httpMethod, "POST")
-        XCTAssertEqual(
-            request.url?.absoluteString,
-            "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent"
+        XCTAssertEqual(interactionRequest.url?.path, "/v1beta/interactions")
+        XCTAssertEqual(interactionRequest.timeoutInterval, 900)
+        let body = try Self.jsonBody(from: interactionRequest)
+        XCTAssertEqual(body["model"] as? String, "gemini-3.5-transcribe")
+        let input = try XCTUnwrap(body["input"] as? [[String: Any]])
+        XCTAssertEqual(input.first?["type"] as? String, "audio")
+        XCTAssertEqual(input.first?["mime_type"] as? String, "audio/mp4")
+        let generationConfig = try XCTUnwrap(body["generation_config"] as? [String: Any])
+        let transcriptionConfig = try XCTUnwrap(
+            generationConfig["transcription_config"] as? [String: Any]
         )
-        XCTAssertEqual(request.value(forHTTPHeaderField: "x-goog-api-key"), "gemini-key")
-        XCTAssertEqual(request.value(forHTTPHeaderField: "Content-Type"), "application/json")
-        XCTAssertEqual(request.timeoutInterval, 60)
-
-        let body = try Self.jsonBody(from: request)
-        let contents = try XCTUnwrap(body["contents"] as? [[String: Any]])
-        XCTAssertEqual(contents.first?["role"] as? String, "user")
-
-        let parts = try XCTUnwrap(contents.first?["parts"] as? [[String: Any]])
-        let promptText = try XCTUnwrap(parts.first?["text"] as? String)
-        XCTAssertTrue(promptText.contains("technical dictation"))
-        XCTAssertTrue(promptText.contains("User dictionary terms: Qwen3, MLX, proxy_read_timeout"))
-        XCTAssertTrue(promptText.contains("Language hint: de"))
-
-        let inlineData = try XCTUnwrap(parts.last?["inlineData"] as? [String: Any])
-        XCTAssertEqual(inlineData["mimeType"] as? String, "audio/mp4")
-        XCTAssertEqual(inlineData["data"] as? String, Data("m4a".utf8).base64EncodedString())
-
-        let generationConfig = try XCTUnwrap(body["generationConfig"] as? [String: Any])
-        XCTAssertEqual(generationConfig["temperature"] as? Double, 0.2)
-        XCTAssertEqual(generationConfig["maxOutputTokens"] as? Int, 2048)
-        XCTAssertEqual(generationConfig["responseMimeType"] as? String, "text/plain")
-        XCTAssertNil(generationConfig["thinkingConfig"])
+        XCTAssertEqual(transcriptionConfig["mode"] as? String, "smart")
+        XCTAssertEqual(transcriptionConfig["language_codes"] as? [String], ["de-DE"])
+        XCTAssertEqual(transcriptionConfig["custom_vocabulary"] as? [String], ["TypeWhisper", "Gemini"])
     }
 
-    func testPinnedGeminiThreeTranscriptionRequestUsesMinimalThinkingLevel() throws {
-        let request = try GeminiPlugin.makeTranscriptionRequest(
-            uploadFile: Self.m4aUpload(),
-            apiKey: "gemini-key",
-            modelId: "gemini-3.1-flash-lite",
-            language: nil,
-            prompt: nil,
-            timeout: 60
+    func testTranscriptionLanguageCodesUseGeminiBCP47Locales() {
+        let codes = GeminiPlugin.resolvedLanguageCodes(
+            from: PluginLanguageSelection(
+                requestedLanguage: " de ",
+                languageHints: ["en_GB", "no", "de-DE", "auto"]
+            )
         )
 
-        let body = try Self.jsonBody(from: request)
-        let generationConfig = try XCTUnwrap(body["generationConfig"] as? [String: Any])
+        XCTAssertEqual(codes, ["de-DE", "en-GB", "nb-NO"])
+        XCTAssertNil(GeminiPlugin.resolvedTranscriptionLanguageCode("auto"))
         XCTAssertEqual(
-            (generationConfig["thinkingConfig"] as? [String: Any])?["thinkingLevel"] as? String,
-            "MINIMAL"
+            GeminiPlugin.resolvedTranscriptionLanguageCode("zh"),
+            "cmn-Hans-CN"
         )
     }
 
-    func testPinnedGeminiTwoPointFiveTranscriptionRequestUsesZeroThinkingBudget() throws {
-        let request = try GeminiPlugin.makeTranscriptionRequest(
-            uploadFile: Self.m4aUpload(),
-            apiKey: "gemini-key",
-            modelId: "gemini-2.5-flash",
-            language: nil,
-            prompt: nil,
-            timeout: 60
-        )
-
-        let body = try Self.jsonBody(from: request)
-        let generationConfig = try XCTUnwrap(body["generationConfig"] as? [String: Any])
-        XCTAssertEqual(
-            (generationConfig["thinkingConfig"] as? [String: Any])?["thinkingBudget"] as? Int,
-            0
-        )
+    func testDedicatedTranscriptionResponseParsesOutputText() throws {
+        let data = Data(#"{"status":"completed","output_text":" hello from transcribe \n"}"#.utf8)
+        XCTAssertEqual(try GeminiPlugin.parseDedicatedTranscriptionResponse(data), "hello from transcribe")
     }
 
-    func testTranscriptionRequestOmitsEmptyLanguageAndDictionaryTerms() throws {
-        let request = try GeminiPlugin.makeTranscriptionRequest(
-            uploadFile: Self.m4aUpload(),
-            apiKey: "gemini-key",
-            modelId: "gemini-flash-lite-latest",
-            language: " ",
-            prompt: " ",
-            timeout: 60
+    func testDedicatedTranscribeUploadsRunsInteractionAndDeletesFile() async throws {
+        let host = try PluginTestHostServices(
+            defaults: try Self.configuredDefaults(selectedModel: "gemini-3.5-transcribe"),
+            secrets: ["api-key": "gemini-key"]
+        )
+        let plugin = GeminiPlugin()
+        plugin.activate(host: host)
+        defer { plugin.deactivate() }
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            switch store.sessions.count {
+            case 0:
+                return store.makeSession(outcomes: [
+                    .success(
+                        Data(),
+                        Self.httpResponse(
+                            url: "https://generativelanguage.googleapis.com/upload/v1beta/files",
+                            statusCode: 200,
+                            headers: ["x-goog-upload-url": "https://upload.example.test/session-123"]
+                        )
+                    ),
+                    .success(
+                        Data(#"{}"#.utf8),
+                        Self.httpResponse(
+                            url: "https://generativelanguage.googleapis.com/v1beta/files/audio-123",
+                            statusCode: 200
+                        )
+                    ),
+                ])
+            case 1:
+                return store.makeSession(outcomes: [
+                    .success(
+                        Data(
+                            #"{"file":{"name":"files/audio-123","uri":"https://generativelanguage.googleapis.com/v1beta/files/audio-123","mimeType":"audio/mp4"}}"#.utf8
+                        ),
+                        Self.httpResponse(url: "https://upload.example.test/session-123", statusCode: 200)
+                    ),
+                ])
+            default:
+                return store.makeSession(outcomes: [
+                    .success(
+                        Data(#"{"output_text":"dedicated transcript"}"#.utf8),
+                        Self.httpResponse(
+                            url: "https://generativelanguage.googleapis.com/v1beta/interactions",
+                            statusCode: 200
+                        )
+                    ),
+                ])
+            }
+        }
+
+        let result = try await plugin.transcribe(
+            audio: Self.audio(),
+            language: "en-US",
+            translate: false,
+            prompt: "TypeWhisper"
         )
 
-        let body = try Self.jsonBody(from: request)
-        let contents = try XCTUnwrap(body["contents"] as? [[String: Any]])
-        let parts = try XCTUnwrap(contents.first?["parts"] as? [[String: Any]])
-        let promptText = try XCTUnwrap(parts.first?["text"] as? String)
-        XCTAssertFalse(promptText.contains("User dictionary terms:"))
-        XCTAssertFalse(promptText.contains("Language hint:"))
+        XCTAssertEqual(result.text, "dedicated transcript")
+        XCTAssertEqual(result.detectedLanguage, "en-US")
+        XCTAssertEqual(store.sessions.count, 3)
+        XCTAssertEqual(
+            store.sessions[0].requestedRequests.map { $0.url?.path },
+            ["/upload/v1beta/files", "/v1beta/files/audio-123"]
+        )
+        XCTAssertEqual(store.sessions[1].requestedRequests.first?.url?.host, "upload.example.test")
+        XCTAssertEqual(store.sessions[2].requestedRequests.first?.url?.path, "/v1beta/interactions")
+    }
+
+    func testLiveSetupAudioEncodingAndTranscriptReconciliation() throws {
+        let setupMessage = try GeminiLiveTranscriptionSession.makeSetupMessage(
+            modelId: "gemini-3.5-transcribe-live",
+            languageCodes: ["de-DE", "en-US"],
+            customVocabulary: ["TypeWhisper", "Gemini"]
+        )
+        let setupBody = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(setupMessage.utf8)) as? [String: Any]
+        )
+        let setup = try XCTUnwrap(setupBody["setup"] as? [String: Any])
+        XCTAssertEqual(setup["model"] as? String, "models/gemini-3.5-transcribe-live")
+        let transcriptionConfig = try XCTUnwrap(
+            setup["inputAudioTranscription"] as? [String: Any]
+        )
+        XCTAssertEqual(transcriptionConfig["mode"] as? String, "SMART")
+        XCTAssertEqual(transcriptionConfig["languageCodes"] as? [String], ["de-DE", "en-US"])
+        XCTAssertEqual(
+            transcriptionConfig["customVocabulary"] as? [String],
+            ["TypeWhisper", "Gemini"]
+        )
+
+        let pcm = GeminiLiveTranscriptionSession.pcm16Data(from: [-1, 0, 1][...])
+        XCTAssertEqual(pcm.count, 6)
+        let audioMessage = try GeminiLiveTranscriptionSession.makeRealtimeAudioMessage(pcm)
+        let audioBody = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: Data(audioMessage.utf8)) as? [String: Any]
+        )
+        let realtimeInput = try XCTUnwrap(audioBody["realtimeInput"] as? [String: Any])
+        let audio = try XCTUnwrap(realtimeInput["audio"] as? [String: Any])
+        XCTAssertEqual(audio["mimeType"] as? String, "audio/pcm;rate=16000")
+        XCTAssertEqual(audio["data"] as? String, pcm.base64EncodedString())
+
+        var collector = GeminiLiveTranscriptCollector()
+        XCTAssertFalse(collector.hasUncommittedInterimText)
+        XCTAssertEqual(collector.apply(interimText: "Hello", finalText: nil), "Hello")
+        XCTAssertTrue(collector.hasUncommittedInterimText)
+        XCTAssertEqual(collector.apply(interimText: nil, finalText: "Hello"), "Hello")
+        XCTAssertFalse(collector.hasUncommittedInterimText)
+        XCTAssertEqual(collector.apply(interimText: "world", finalText: nil), "Hello world")
+        XCTAssertEqual(collector.apply(interimText: nil, finalText: "world"), "Hello world")
+        XCTAssertEqual(collector.resultText, "Hello world")
     }
 
     func testTranscribeFailsWithoutAPIKey() async throws {
@@ -273,7 +637,7 @@ final class GeminiPluginTests: XCTestCase {
 
     func testTranscribeRejectsTranslateRequests() async throws {
         let host = try PluginTestHostServices(
-            defaults: [Self.cachedLLMModelsKey: try Self.cachedModelsData()],
+            defaults: try Self.configuredDefaults(),
             secrets: ["api-key": "gemini-key"]
         )
         let plugin = GeminiPlugin()
@@ -295,128 +659,10 @@ final class GeminiPluginTests: XCTestCase {
         }
     }
 
-    func testTranscribeSendsGenerateContentRequestAndParsesText() async throws {
-        let host = try PluginTestHostServices(
-            defaults: [
-                Self.cachedLLMModelsKey: try Self.cachedModelsData(),
-                "selectedModel": "gemini-flash-lite-latest",
-            ],
-            secrets: ["api-key": "gemini-key"]
-        )
-        let plugin = GeminiPlugin()
-        plugin.activate(host: host)
-
-        let store = PluginHTTPClientSessionStore()
-        PluginHTTPClientTestHarness.configure { _ in
-            store.makeSession(outcomes: [
-                .success(
-                    Data(
-                        """
-                        {
-                          "candidates": [
-                            {
-                              "content": {
-                                "parts": [
-                                  { "text": " hello from gemini \\n" }
-                                ]
-                              }
-                            }
-                          ]
-                        }
-                        """.utf8
-                    ),
-                    Self.httpResponse(url: "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent", statusCode: 200)
-                ),
-            ])
-        }
-
-        let result = try await plugin.transcribe(
-            audio: Self.audio(),
-            language: "en",
-            translate: false,
-            prompt: "TypeWhisper, Qwen3"
-        )
-
-        XCTAssertEqual(result.text, "hello from gemini")
-        XCTAssertEqual(result.detectedLanguage, "en")
-
-        let request = try XCTUnwrap(store.sessions.first?.requestedRequests.first)
-        XCTAssertEqual(request.url?.path, "/v1beta/models/gemini-flash-lite-latest:generateContent")
-        XCTAssertEqual(request.value(forHTTPHeaderField: "x-goog-api-key"), "gemini-key")
-
-        let body = try Self.jsonBody(from: request)
-        let contents = try XCTUnwrap(body["contents"] as? [[String: Any]])
-        let parts = try XCTUnwrap(contents.first?["parts"] as? [[String: Any]])
-        let promptText = try XCTUnwrap(parts.first?["text"] as? String)
-        XCTAssertTrue(promptText.contains("TypeWhisper, Qwen3"))
-        let inlineData = try XCTUnwrap(parts.last?["inlineData"] as? [String: Any])
-        XCTAssertEqual(inlineData["mimeType"] as? String, "audio/mp4")
-    }
-
-    func testTranscribeRetriesWithWavWhenM4AIsRejected() async throws {
-        let host = try PluginTestHostServices(
-            defaults: [
-                Self.cachedLLMModelsKey: try Self.cachedModelsData(),
-                "selectedModel": "gemini-flash-lite-latest",
-            ],
-            secrets: ["api-key": "gemini-key"]
-        )
-        let plugin = GeminiPlugin()
-        plugin.activate(host: host)
-
-        let store = PluginHTTPClientSessionStore()
-        PluginHTTPClientTestHarness.configure { _ in
-            store.makeSession(outcomes: [
-                .success(
-                    Data(#"{"error":{"message":"unsupported audio format"}}"#.utf8),
-                    Self.httpResponse(url: "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent", statusCode: 415)
-                ),
-                .success(
-                    Data(
-                        """
-                        {
-                          "candidates": [
-                            {
-                              "content": {
-                                "parts": [
-                                  { "text": " fallback transcript " }
-                                ]
-                              }
-                            }
-                          ]
-                        }
-                        """.utf8
-                    ),
-                    Self.httpResponse(url: "https://generativelanguage.googleapis.com/v1beta/models/gemini-flash-lite-latest:generateContent", statusCode: 200)
-                ),
-            ])
-        }
-
-        let result = try await plugin.transcribe(
-            audio: Self.audio(),
-            language: "de",
-            translate: false,
-            prompt: "TypeWhisper"
-        )
-
-        XCTAssertEqual(result.text, "fallback transcript")
-        let requests = store.sessions[0].requestedRequests
-        XCTAssertEqual(requests.count, 2)
-        let firstBody = try Self.jsonBody(from: requests[0])
-        let firstParts = try XCTUnwrap((firstBody["contents"] as? [[String: Any]])?.first?["parts"] as? [[String: Any]])
-        XCTAssertEqual((firstParts.last?["inlineData"] as? [String: Any])?["mimeType"] as? String, "audio/mp4")
-        let retryBody = try Self.jsonBody(from: requests[1])
-        let retryParts = try XCTUnwrap((retryBody["contents"] as? [[String: Any]])?.first?["parts"] as? [[String: Any]])
-        XCTAssertEqual((retryParts.last?["inlineData"] as? [String: Any])?["mimeType"] as? String, "audio/wav")
-        let retryPrompt = try XCTUnwrap(retryParts.first?["text"] as? String)
-        XCTAssertTrue(retryPrompt.contains("TypeWhisper"))
-        XCTAssertTrue(retryPrompt.contains("Language hint: de"))
-    }
-
     func testTranscriptionHTTPErrorMapping() {
         XCTAssertThrowsError(try GeminiPlugin.validateTranscriptionResponse(
             data: Data(#"{"error":{"message":"bad key"}}"#.utf8),
-            response: Self.httpResponse(url: "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent", statusCode: 401)
+            response: Self.httpResponse(url: "https://generativelanguage.googleapis.com/v1beta/interactions", statusCode: 401)
         )) { error in
             guard let pluginError = error as? PluginTranscriptionError,
                   case .invalidApiKey = pluginError else {
@@ -426,7 +672,7 @@ final class GeminiPluginTests: XCTestCase {
 
         XCTAssertThrowsError(try GeminiPlugin.validateTranscriptionResponse(
             data: Data(#"{"error":{"message":"too large"}}"#.utf8),
-            response: Self.httpResponse(url: "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent", statusCode: 413)
+            response: Self.httpResponse(url: "https://generativelanguage.googleapis.com/v1beta/interactions", statusCode: 413)
         )) { error in
             guard let pluginError = error as? PluginTranscriptionError,
                   case .fileTooLarge = pluginError else {
@@ -436,7 +682,7 @@ final class GeminiPluginTests: XCTestCase {
 
         XCTAssertThrowsError(try GeminiPlugin.validateTranscriptionResponse(
             data: Data(#"{"error":{"message":"slow down"}}"#.utf8),
-            response: Self.httpResponse(url: "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent", statusCode: 429)
+            response: Self.httpResponse(url: "https://generativelanguage.googleapis.com/v1beta/interactions", statusCode: 429)
         )) { error in
             guard let pluginError = error as? PluginTranscriptionError,
                   case .rateLimited = pluginError else {
@@ -446,7 +692,7 @@ final class GeminiPluginTests: XCTestCase {
 
         XCTAssertThrowsError(try GeminiPlugin.validateTranscriptionResponse(
             data: Data(#"{"error":{"message":"server failed"}}"#.utf8),
-            response: Self.httpResponse(url: "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent", statusCode: 500)
+            response: Self.httpResponse(url: "https://generativelanguage.googleapis.com/v1beta/interactions", statusCode: 500)
         )) { error in
             guard let pluginError = error as? PluginTranscriptionError,
                   case .apiError(let message) = pluginError else {
@@ -475,12 +721,16 @@ final class GeminiPluginTests: XCTestCase {
         return try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
     }
 
-    private static func httpResponse(url: String, statusCode: Int) -> HTTPURLResponse {
+    private static func httpResponse(
+        url: String,
+        statusCode: Int,
+        headers: [String: String]? = nil
+    ) -> HTTPURLResponse {
         HTTPURLResponse(
             url: URL(string: url)!,
             statusCode: statusCode,
             httpVersion: nil,
-            headerFields: nil
+            headerFields: headers
         )!
     }
 }

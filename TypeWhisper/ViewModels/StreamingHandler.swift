@@ -111,10 +111,12 @@ final class StreamingHandler: @unchecked Sendable {
 
         let providerId = engineOverrideId ?? selectedProviderId
         guard let providerId,
-              PluginManager.shared.transcriptionEngine(for: providerId) != nil else {
+              let provider = PluginManager.shared.transcriptionEngine(for: providerId) else {
             logger.info("Live transcript preview skipped: provider unavailable")
             return
         }
+        let replacesLiveSessionPreview =
+            (provider as? LiveTranscriptionProgressModeProviding)?.liveTranscriptionProgressMode == .completeSnapshot
 
         resetStreamingState()
         sharedState.withLock { state in
@@ -140,7 +142,8 @@ final class StreamingHandler: @unchecked Sendable {
                     _ = self.processPreviewUpdate(
                         text,
                         audioGate: self.currentLivePreviewAudioGateSnapshot(),
-                        persist: true
+                        persist: true,
+                        replacesPreviousPreview: replacesLiveSessionPreview
                     )
                     return true
                 }
@@ -387,13 +390,16 @@ final class StreamingHandler: @unchecked Sendable {
     private func processPreviewUpdate(
         _ text: String,
         audioGate: LivePreviewAudioGateSnapshot?,
-        persist: Bool
+        persist: Bool,
+        replacesPreviousPreview: Bool = false
     ) -> Bool {
         let preview = text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !preview.isEmpty else { return false }
 
         let confirmed = progressText.withLock { $0 }
-        let stable = Self.stabilizeText(confirmed: confirmed, new: preview)
+        let stable = replacesPreviousPreview
+            ? preview
+            : Self.stabilizeText(confirmed: confirmed, new: preview)
         if Self.shouldSuppressLivePreviewUpdate(confirmed: confirmed, stable: stable, audioGate: audioGate) {
             logger.debug("Live transcript preview update suppressed during sustained silence")
             return false

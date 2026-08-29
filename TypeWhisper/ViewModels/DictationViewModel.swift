@@ -338,6 +338,7 @@ final class DictationViewModel: ObservableObject {
     private var recordingStartTask: Task<Void, Never>?
     private var stopFinalizationTask: Task<Void, Never>?
     private var targetAppCorrectionLearningTask: Task<Void, Never>?
+    private var targetAppAccessibilityObservationLease: TargetAppAccessibilityObservationLease?
     private var pendingLearnedCorrections: [LearnedDictionaryCorrection] = []
     private var errorResetTask: Task<Void, Never>?
     private var insertingResetTask: Task<Void, Never>?
@@ -971,6 +972,7 @@ final class DictationViewModel: ObservableObject {
         }
         clearRecordingStartCueState()
         clearDeferredRecordingContext()
+        endTargetAppAccessibilityObservation()
         cancelLiveFieldTranscriptSession()
         restoreRecordingSideEffects()
         streamingHandler.stop()
@@ -1195,6 +1197,7 @@ final class DictationViewModel: ObservableObject {
             lastStreamingParams = nil
             transcriptionTask?.cancel()
             transcriptionTask = nil
+            endTargetAppAccessibilityObservation()
             audioRecordingService.discardActiveRecoveryRecording()
             showNotchFeedback(message: cancelledMessage, icon: "xmark.circle", duration: 1.5)
         default:
@@ -1421,6 +1424,9 @@ final class DictationViewModel: ObservableObject {
         } else {
             clearActiveRuleState()
         }
+        beginTargetAppAccessibilityObservationIfNeeded(
+            bundleIdentifier: activeApp.bundleId
+        )
         applyEffectiveMicrophoneBoostToAudioService()
         if selectedInputUsesBluetooth {
             // The asynchronous Bluetooth start only returns after the current
@@ -1634,9 +1640,13 @@ final class DictationViewModel: ObservableObject {
     }
 
     private func finalizeStopDictation() async {
+        var didStartTranscriptionTask = false
         defer {
             if Task.isCancelled {
                 isStopInFlight = false
+            }
+            if !didStartTranscriptionTask {
+                endTargetAppAccessibilityObservation()
             }
             stopFinalizationTask = nil
         }
@@ -1783,7 +1793,16 @@ final class DictationViewModel: ObservableObject {
 
         guard !Task.isCancelled else { return }
         let usedLiveSessionResult = liveSessionResult != nil
+        let accessibilityObservationLease = targetAppAccessibilityObservationLease
         transcriptionTask = Task {
+            var didTransferAccessibilityObservationLease = false
+            defer {
+                if !didTransferAccessibilityObservationLease {
+                    finishTargetAppAccessibilityObservation(
+                        accessibilityObservationLease
+                    )
+                }
+            }
             do {
                 // Wait for browser URL resolution so URL-based profile overrides apply
                 await urlResolutionTask?.value
@@ -2037,10 +2056,11 @@ final class DictationViewModel: ObservableObject {
                             modelId: transcription.modelId
                         )
                         : nil
-                    startTargetAppCorrectionLearningIfNeeded(
+                    didTransferAccessibilityObservationLease = startTargetAppCorrectionLearningIfNeeded(
                         insertedText: insertedTextForCorrectionTracking,
                         baseline: targetAppCorrectionBaseline,
-                        contributionContext: contributionContext
+                        contributionContext: contributionContext,
+                        accessibilityObservationLease: accessibilityObservationLease
                     )
                 }
 
@@ -2148,6 +2168,7 @@ final class DictationViewModel: ObservableObject {
             }
             self.transcriptionTask = nil
         }
+        didStartTranscriptionTask = true
         stopFinalizationTask = nil
     }
 
@@ -2869,19 +2890,32 @@ final class DictationViewModel: ObservableObject {
     private func startTargetAppCorrectionLearningIfNeeded(
         insertedText: String,
         baseline: TextInsertionService.FocusedTextObservation?,
-        contributionContext: CorrectionContributionContext?
-    ) {
+        contributionContext: CorrectionContributionContext?,
+        accessibilityObservationLease: TargetAppAccessibilityObservationLease?
+    ) -> Bool {
         targetAppCorrectionLearningTask?.cancel()
         targetAppCorrectionLearningTask = nil
 
         let shouldLearn = shouldTrackTargetAppCorrectionLearning
-        guard (shouldLearn || contributionContext != nil),
-              let baseline else {
-            return
+        guard shouldLearn || contributionContext != nil else {
+            return false
         }
 
         targetAppCorrectionLearningTask = Task {
-            @MainActor [weak self, baseline, insertedText, contributionContext, shouldLearn] in
+            @MainActor [
+                weak self,
+                baseline,
+                insertedText,
+                contributionContext,
+                shouldLearn,
+                accessibilityObservationLease
+            ] in
+            defer {
+                accessibilityObservationLease?.end()
+                self?.clearTargetAppAccessibilityObservation(
+                    ifMatching: accessibilityObservationLease
+                )
+            }
             guard let self else { return }
             let result = await self.targetAppCorrectionLearningService.trackInsertion(
                 insertedText: insertedText,
@@ -2909,6 +2943,7 @@ final class DictationViewModel: ObservableObject {
             guard shouldLearn, !result.learnedCorrections.isEmpty else { return }
             self.showLearnedCorrectionsFeedback(result.learnedCorrections)
         }
+        return true
     }
 
     private var improveTypeWhisperCaptureEnabled: Bool {
@@ -2918,6 +2953,42 @@ final class DictationViewModel: ObservableObject {
     private func cancelTargetAppCorrectionLearning() {
         targetAppCorrectionLearningTask?.cancel()
         targetAppCorrectionLearningTask = nil
+        endTargetAppAccessibilityObservation()
+    }
+
+    private func beginTargetAppAccessibilityObservationIfNeeded(
+        bundleIdentifier: String?
+    ) {
+        endTargetAppAccessibilityObservation()
+        guard shouldTrackTargetAppCorrectionLearning
+                || improveTypeWhisperCaptureEnabled else {
+            return
+        }
+        targetAppAccessibilityObservationLease = textInsertionService
+            .beginChromiumAccessibilityObservation(bundleIdentifier: bundleIdentifier)
+    }
+
+    private func endTargetAppAccessibilityObservation() {
+        let lease = targetAppAccessibilityObservationLease
+        targetAppAccessibilityObservationLease = nil
+        lease?.end()
+    }
+
+    private func finishTargetAppAccessibilityObservation(
+        _ lease: TargetAppAccessibilityObservationLease?
+    ) {
+        lease?.end()
+        clearTargetAppAccessibilityObservation(ifMatching: lease)
+    }
+
+    private func clearTargetAppAccessibilityObservation(
+        ifMatching lease: TargetAppAccessibilityObservationLease?
+    ) {
+        guard let lease,
+              targetAppAccessibilityObservationLease === lease else {
+            return
+        }
+        targetAppAccessibilityObservationLease = nil
     }
 
     private func clearPendingUndoActionFeedback() {

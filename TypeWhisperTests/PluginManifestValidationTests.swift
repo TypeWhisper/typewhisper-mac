@@ -1,4 +1,5 @@
 import Combine
+import SwiftUI
 import XCTest
 import TypeWhisperPluginSDK
 @testable import TypeWhisper
@@ -88,19 +89,32 @@ final class PluginManifestValidationTests: XCTestCase {
     }
 
     func testSourceFootageProgressPluginsDeclareCapability() throws {
-        let manifestPaths = [
-            "TypeWhisperPluginSDK/Plugins/WhisperKitPlugin/manifest.json",
-            "TypeWhisperPluginSDK/Plugins/ParakeetPlugin/manifest.json",
-            "TypeWhisperPluginSDK/Plugins/SonioxPlugin/manifest.json",
+        let manifestExpectations = [
+            ("TypeWhisperPluginSDK/Plugins/WhisperKitPlugin/manifest.json", "1.6.0"),
+            ("TypeWhisperPluginSDK/Plugins/ParakeetPlugin/manifest.json", "1.5.0"),
+            ("TypeWhisperPluginSDK/Plugins/SonioxPlugin/manifest.json", "1.7.0"),
         ]
 
-        for relativePath in manifestPaths {
+        for (relativePath, expectedMinHostVersion) in manifestExpectations {
             let manifestURL = TestSupport.repoRoot.appendingPathComponent(relativePath)
             let data = try Data(contentsOf: manifestURL)
             let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
             XCTAssertTrue(manifest.supportsCapability(.sourceFootageProgress), relativePath)
-            XCTAssertEqual(manifest.minHostVersion, "1.5.0", relativePath)
+            XCTAssertEqual(manifest.minHostVersion, expectedMinHostVersion, relativePath)
         }
+    }
+
+    func testWhisperKitPlugin12RequiresCompatibleHost16() throws {
+        let manifestURL = TestSupport.repoRoot.appendingPathComponent(
+            "TypeWhisperPluginSDK/Plugins/WhisperKitPlugin/manifest.json"
+        )
+        let data = try Data(contentsOf: manifestURL)
+        let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
+
+        XCTAssertEqual(manifest.version, "1.2.0")
+        XCTAssertEqual(manifest.minHostVersion, "1.6.0")
+        XCTAssertEqual(manifest.sdkCompatibilityVersion, PluginSDKCompatibility.currentVersion)
+        XCTAssertEqual(manifest.supportedArchitectures, ["arm64"])
     }
 
     func testMLXStoragePluginReleasesRequireHost16() throws {
@@ -120,16 +134,43 @@ final class PluginManifestValidationTests: XCTestCase {
         }
     }
 
-    func testOpenAIPluginManifestDeclaresCloudHostingWithoutAPIKeyRequirement() throws {
+    func testCohereLocalPlugin10RequiresCompatibleHost16() throws {
+        let manifestURL = TestSupport.repoRoot.appendingPathComponent(
+            "TypeWhisperPluginSDK/Plugins/CohereLocalPlugin/manifest.json"
+        )
+        let data = try Data(contentsOf: manifestURL)
+        let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
+
+        XCTAssertEqual(manifest.version, "1.0.0")
+        XCTAssertEqual(manifest.minHostVersion, "1.6.0")
+        XCTAssertEqual(manifest.sdkCompatibilityVersion, PluginSDKCompatibility.currentVersion)
+        XCTAssertEqual(manifest.supportedArchitectures, ["arm64"])
+    }
+
+    func testOpenAIPlugin133RequiresCompatibleHost16AndDeclaresCloudHosting() throws {
         let manifestURL = TestSupport.repoRoot.appendingPathComponent("TypeWhisperPluginSDK/Plugins/OpenAIPlugin/manifest.json")
         let data = try Data(contentsOf: manifestURL)
         let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
 
-        XCTAssertEqual(manifest.minHostVersion, "1.5.0")
+        XCTAssertEqual(manifest.version, "1.3.3")
+        XCTAssertEqual(manifest.minHostVersion, "1.6.0")
+        XCTAssertEqual(manifest.sdkCompatibilityVersion, PluginSDKCompatibility.currentVersion)
         XCTAssertEqual(manifest.hosting, .cloud)
         XCTAssertEqual(manifest.requiresAPIKey, false)
         XCTAssertEqual(manifest.resolvedHosting, .cloud)
         XCTAssertEqual(manifest.resolvedCategoryIdentifiers, ["transcription", "llm", "tts"])
+    }
+
+    func testSonioxPlugin127RequiresCompatibleHost17() throws {
+        let manifestURL = TestSupport.repoRoot.appendingPathComponent(
+            "TypeWhisperPluginSDK/Plugins/SonioxPlugin/manifest.json"
+        )
+        let data = try Data(contentsOf: manifestURL)
+        let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
+
+        XCTAssertEqual(manifest.version, "1.2.7")
+        XCTAssertEqual(manifest.minHostVersion, "1.7.0")
+        XCTAssertEqual(manifest.sdkCompatibilityVersion, PluginSDKCompatibility.currentVersion)
     }
 
     func testGroqPluginReleaseRequiresHost15() throws {
@@ -139,6 +180,17 @@ final class PluginManifestValidationTests: XCTestCase {
 
         XCTAssertEqual(manifest.version, "1.0.24")
         XCTAssertEqual(manifest.minHostVersion, "1.5.0")
+        XCTAssertEqual(manifest.sdkCompatibilityVersion, PluginSDKCompatibility.currentVersion)
+    }
+
+    func testWebLinkUserInterfacePluginRequiresHost17() throws {
+        let manifestURL = TestSupport.repoRoot.appendingPathComponent(
+            "TypeWhisperPluginSDK/Plugins/WebLinkPlugin/manifest.json"
+        )
+        let data = try Data(contentsOf: manifestURL)
+        let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
+
+        XCTAssertEqual(manifest.minHostVersion, "1.7.0")
         XCTAssertEqual(manifest.sdkCompatibilityVersion, PluginSDKCompatibility.currentVersion)
     }
 
@@ -171,6 +223,104 @@ final class PluginManifestValidationTests: XCTestCase {
         XCTAssertEqual(manager.readinessRevision, initialRevision + 1)
         wait(for: [notification], timeout: 1)
         withExtendedLifetime(cancellable) {}
+    }
+}
+
+@MainActor
+final class PluginUserInterfaceContributionTests: XCTestCase {
+    private final class MockPlugin: NSObject, TypeWhisperPlugin, PluginUserInterfaceProviding, @unchecked Sendable {
+        static let pluginId = "com.typewhisper.tests.user-interface"
+        static let pluginName = "User Interface Test"
+
+        private(set) var performedCommandIds: [String] = []
+
+        required override init() {}
+
+        func activate(host: HostServices) {}
+        func deactivate() {}
+
+        var appMenuCommands: [PluginCommandDescriptor] {
+            [PluginCommandDescriptor(id: "open", title: "Open Player", systemImageName: "play.circle")]
+        }
+
+        var primaryMenuBarCommands: [PluginCommandDescriptor] {
+            [PluginCommandDescriptor(id: "pause", title: "Pause Player")]
+        }
+
+        var settingsSidebarItems: [PluginSettingsSidebarItemDescriptor] {
+            [PluginSettingsSidebarItemDescriptor(id: "player", title: "Player", systemImageName: "play.rectangle")]
+        }
+
+        func settingsSidebarView(for itemId: String) -> AnyView? {
+            itemId == "player" ? AnyView(Text("Player")) : nil
+        }
+
+        func performPluginCommand(_ commandId: String) {
+            performedCommandIds.append(commandId)
+        }
+    }
+
+    func testManagerExposesUserInterfaceContributionsFromEnabledPluginsOnly() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginUserInterface")
+        defer { TestSupport.remove(appSupportDirectory) }
+        let manager = PluginManager(appSupportDirectory: appSupportDirectory)
+        let enabledPlugin = MockPlugin()
+        let disabledPlugin = MockPlugin()
+        manager.loadedPlugins = [
+            loadedPlugin(enabledPlugin, id: "com.typewhisper.tests.ui.enabled", enabled: true, source: appSupportDirectory),
+            loadedPlugin(disabledPlugin, id: "com.typewhisper.tests.ui.disabled", enabled: false, source: appSupportDirectory),
+        ]
+
+        XCTAssertEqual(manager.userInterfaceContributions.count, 1)
+        let contribution = try XCTUnwrap(manager.userInterfaceContributions.first)
+
+        XCTAssertEqual(contribution.pluginId, "com.typewhisper.tests.ui.enabled")
+        XCTAssertEqual(contribution.pluginName, "User Interface Test")
+        XCTAssertEqual(contribution.appMenuCommands.map(\.id), ["open"])
+        XCTAssertEqual(contribution.primaryMenuBarCommands.map(\.id), ["pause"])
+        XCTAssertEqual(contribution.settingsSidebarItems.map(\.id), ["player"])
+        XCTAssertNotNil(manager.settingsSidebarView(
+            pluginId: "com.typewhisper.tests.ui.enabled",
+            itemId: "player"
+        ))
+        XCTAssertNil(manager.settingsSidebarView(
+            pluginId: "com.typewhisper.tests.ui.disabled",
+            itemId: "player"
+        ))
+    }
+
+    func testManagerRoutesCommandsOnlyToEnabledContributingPlugin() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginUserInterfaceActions")
+        defer { TestSupport.remove(appSupportDirectory) }
+        let manager = PluginManager(appSupportDirectory: appSupportDirectory)
+        let plugin = MockPlugin()
+        manager.loadedPlugins = [
+            loadedPlugin(plugin, id: "com.typewhisper.tests.ui.actions", enabled: true, source: appSupportDirectory)
+        ]
+
+        XCTAssertTrue(manager.performPluginCommand(pluginId: "com.typewhisper.tests.ui.actions", commandId: "open"))
+        XCTAssertEqual(plugin.performedCommandIds, ["open"])
+        XCTAssertFalse(manager.performPluginCommand(pluginId: "missing", commandId: "open"))
+    }
+
+    private func loadedPlugin(
+        _ plugin: MockPlugin,
+        id: String,
+        enabled: Bool,
+        source: URL
+    ) -> LoadedPlugin {
+        LoadedPlugin(
+            manifest: PluginManifest(
+                id: id,
+                name: MockPlugin.pluginName,
+                version: "1.0.0",
+                principalClass: "MockPlugin"
+            ),
+            instance: plugin,
+            bundle: Bundle.main,
+            sourceURL: source,
+            isEnabled: enabled
+        )
     }
 }
 

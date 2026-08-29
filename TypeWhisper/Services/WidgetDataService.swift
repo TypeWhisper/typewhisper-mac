@@ -21,8 +21,13 @@ final class WidgetDataService {
 
     private func updateWidgetData(records: [TranscriptionRecord], now: Date) {
         let data = buildWidgetData(records: records, now: now)
-        data.save()
-        WidgetCenter.shared.reloadAllTimelines()
+        // Reload only once the file is on disk, otherwise the widget can reload
+        // against the previous payload now that the write is asynchronous.
+        data.save {
+            Task { @MainActor in
+                WidgetCenter.shared.reloadAllTimelines()
+            }
+        }
     }
 
     func buildWidgetData(records: [TranscriptionRecord], now: Date = Date()) -> WidgetData {

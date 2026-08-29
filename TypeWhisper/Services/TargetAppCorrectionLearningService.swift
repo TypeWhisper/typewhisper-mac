@@ -274,12 +274,19 @@ final class TargetAppCorrectionLearningService: ObservableObject {
 
     func trackInsertion(
         insertedText: String,
-        baseline: TextInsertionService.FocusedTextObservation
+        baseline: TextInsertionService.FocusedTextObservation?
     ) async -> TargetAppCorrectionLearningResult {
         let attemptID = UUID()
         activeAttemptID = attemptID
         let insertedText = insertedText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !insertedText.isEmpty else {
+            return completeAttempt(
+                id: attemptID,
+                outcome: .unsupportedTextObservation,
+                commitSignal: nil
+            )
+        }
+        guard let baseline else {
             return completeAttempt(
                 id: attemptID,
                 outcome: .unsupportedTextObservation,
@@ -407,7 +414,7 @@ final class TargetAppCorrectionLearningService: ObservableObject {
 
     func trackInsertionResult(
         insertedText: String,
-        baseline: TextInsertionService.FocusedTextObservation
+        baseline: TextInsertionService.FocusedTextObservation?
     ) async -> TargetAppCorrectionLearningResult {
         await trackInsertion(insertedText: insertedText, baseline: baseline)
     }

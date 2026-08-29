@@ -150,6 +150,38 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, @
         }
     }
 
+    func openPluginSettings() {
+        DispatchQueue.main.async { [pluginId] in
+            guard let plugin = PluginManager.shared?.loadedPlugins.first(where: {
+                $0.id == pluginId && $0.isEnabled && $0.isRuntimeLoaded
+            }) else { return }
+            PluginSettingsWindowManager.shared.present(plugin)
+        }
+    }
+
+    func openSettingsSidebarItem(_ itemId: String) {
+        DispatchQueue.main.async { [pluginId] in
+            SettingsNavigationCoordinator.shared.navigate(
+                to: .plugin(pluginId: pluginId, itemId: itemId)
+            )
+            ManagedAppWindowOpener.shared.open(id: "settings")
+        }
+    }
+
+    func enqueueImportedMediaForTranscription(
+        _ media: PluginImportedMedia,
+        fromMediaImporterId mediaImporterId: String
+    ) async -> Bool {
+        await MainActor.run { [pluginId] in
+            guard let importer = PluginManager.shared?.mediaImportPlugins.first(where: {
+                type(of: $0).pluginId == pluginId && $0.mediaImportId == mediaImporterId
+            }) else {
+                return false
+            }
+            return FileTranscriptionViewModel.shared.enqueueImportedMedia(media, from: importer)
+        }
+    }
+
     // MARK: - Streaming Display
 
     func setStreamingDisplayActive(_ active: Bool) {

@@ -46,6 +46,9 @@ public final class PluginTestHostServices: HostServices, HostModelLifecyclePolic
         var defaults: [String: AnySendable]
         var secrets: [String: String]
         var capabilitiesChangedCount = 0
+        var openedSettingsSidebarItemIds: [String] = []
+        var enqueuedImportedMedia: [PluginImportedMedia] = []
+        var enqueuedMediaImporterIds: [String] = []
         var streamingDisplayActiveValues: [Bool] = []
     }
 
@@ -132,6 +135,23 @@ public final class PluginTestHostServices: HostServices, HostModelLifecyclePolic
         }
     }
 
+    public func openSettingsSidebarItem(_ itemId: String) {
+        lock.withLock {
+            state.openedSettingsSidebarItemIds.append(itemId)
+        }
+    }
+
+    public func enqueueImportedMediaForTranscription(
+        _ media: PluginImportedMedia,
+        fromMediaImporterId mediaImporterId: String
+    ) async -> Bool {
+        lock.withLock {
+            state.enqueuedImportedMedia.append(media)
+            state.enqueuedMediaImporterIds.append(mediaImporterId)
+        }
+        return true
+    }
+
     public func setStreamingDisplayActive(_ active: Bool) {
         lock.withLock {
             state.streamingDisplayActiveValues.append(active)
@@ -140,6 +160,18 @@ public final class PluginTestHostServices: HostServices, HostModelLifecyclePolic
 
     public var capabilitiesChangedCount: Int {
         lock.withLock { state.capabilitiesChangedCount }
+    }
+
+    public var openedSettingsSidebarItemIds: [String] {
+        lock.withLock { state.openedSettingsSidebarItemIds }
+    }
+
+    public var enqueuedImportedMedia: [PluginImportedMedia] {
+        lock.withLock { state.enqueuedImportedMedia }
+    }
+
+    public var enqueuedMediaImporterIds: [String] {
+        lock.withLock { state.enqueuedMediaImporterIds }
     }
 
     public var streamingDisplayActiveValues: [Bool] {

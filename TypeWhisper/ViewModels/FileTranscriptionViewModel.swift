@@ -41,6 +41,9 @@ final class FileTranscriptionViewModel: ObservableObject {
     struct FileItem: Identifiable {
         let id = UUID()
         let url: URL
+        let displayName: String?
+        let importedMedia: PluginImportedMedia?
+        let mediaImporter: (any MediaImportPlugin)?
         var state: FileItemState = .pending
         var result: TranscriptionResult?
         var errorMessage: String?
@@ -51,7 +54,19 @@ final class FileTranscriptionViewModel: ObservableObject {
         var startedAt: Date?
         var finishedAt: Date?
 
-        var fileName: String { url.lastPathComponent }
+        init(
+            url: URL,
+            displayName: String? = nil,
+            importedMedia: PluginImportedMedia? = nil,
+            mediaImporter: (any MediaImportPlugin)? = nil
+        ) {
+            self.url = url
+            self.displayName = displayName
+            self.importedMedia = importedMedia
+            self.mediaImporter = mediaImporter
+        }
+
+        var fileName: String { displayName ?? url.lastPathComponent }
     }
 
     enum FileItemState: Equatable {
@@ -264,8 +279,28 @@ final class FileTranscriptionViewModel: ObservableObject {
         files.append(contentsOf: newFiles)
     }
 
+    @discardableResult
+    func enqueueImportedMedia(
+        _ importedMedia: PluginImportedMedia,
+        from importer: any MediaImportPlugin
+    ) -> Bool {
+        guard (try? Self.validateImportedMedia(importedMedia)) != nil,
+              !files.contains(where: { $0.url == importedMedia.localFileURL }) else {
+            return false
+        }
+
+        files.append(FileItem(
+            url: importedMedia.localFileURL,
+            displayName: importedMedia.displayName,
+            importedMedia: importedMedia,
+            mediaImporter: importer
+        ))
+        return true
+    }
+
     func removeFile(_ item: FileItem) {
         files.removeAll { $0.id == item.id }
+        removeImportedMedia(for: item)
         if files.isEmpty {
             batchState = .idle
         }
@@ -503,7 +538,11 @@ final class FileTranscriptionViewModel: ObservableObject {
 
     func reset() {
         cancelTranscription()
+        let importedItems = files.filter { $0.importedMedia != nil }
         files = []
+        for item in importedItems {
+            removeImportedMedia(for: item)
+        }
         batchState = .idle
         currentIndex = 0
         activeBatchTask = nil
@@ -524,6 +563,29 @@ final class FileTranscriptionViewModel: ObservableObject {
 
         guard let engine = resolvedEngine else { return false }
         return modelManager.canPrepareForTranscription(engine)
+    }
+
+    private func removeImportedMedia(for item: FileItem) {
+        guard let importedMedia = item.importedMedia,
+              let mediaImporter = item.mediaImporter else { return }
+        Task {
+            await mediaImporter.removeImportedMedia(importedMedia)
+        }
+    }
+
+    private static func validateImportedMedia(_ media: PluginImportedMedia) throws {
+        var isDirectory: ObjCBool = false
+        guard media.localFileURL.isFileURL,
+              FileManager.default.fileExists(
+                atPath: media.localFileURL.path,
+                isDirectory: &isDirectory
+              ),
+              !isDirectory.boolValue,
+              AudioFileService.supportedExtensions.contains(
+                media.localFileURL.pathExtension.lowercased()
+              ) else {
+            throw CocoaError(.fileReadUnsupportedScheme)
+        }
     }
 
     private func reconcileSelectionWithAvailablePlugins() {

@@ -2,6 +2,41 @@ import XCTest
 @testable import TypeWhisper
 
 final class AppFormatterServiceTests: XCTestCase {
+    func testPremiumAccountKeychainServiceSeparatesRuntimeEnvironments() {
+        XCTAssertEqual(
+            AppConstants.resolvePremiumAccountKeychainService(
+                isScreenshotAutomation: false,
+                isRunningTests: false,
+                isDevelopment: false
+            ),
+            "com.typewhisper.mac.premium-account"
+        )
+        XCTAssertEqual(
+            AppConstants.resolvePremiumAccountKeychainService(
+                isScreenshotAutomation: false,
+                isRunningTests: false,
+                isDevelopment: true
+            ),
+            "com.typewhisper.mac.dev.premium-account"
+        )
+        XCTAssertEqual(
+            AppConstants.resolvePremiumAccountKeychainService(
+                isScreenshotAutomation: false,
+                isRunningTests: true,
+                isDevelopment: true
+            ),
+            "com.typewhisper.mac.tests.premium-account"
+        )
+        XCTAssertEqual(
+            AppConstants.resolvePremiumAccountKeychainService(
+                isScreenshotAutomation: true,
+                isRunningTests: true,
+                isDevelopment: true
+            ),
+            "com.typewhisper.mac.screenshots.premium-account"
+        )
+    }
+
     func testBundledReleaseChannelUsesInfoDictionaryValue() {
         let channel = AppConstants.bundledReleaseChannel(
             infoDictionary: ["TypeWhisperReleaseChannel": AppConstants.ReleaseChannel.releaseCandidate.rawValue]

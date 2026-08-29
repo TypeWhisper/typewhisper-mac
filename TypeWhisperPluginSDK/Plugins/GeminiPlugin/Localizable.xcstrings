@@ -89,6 +89,28 @@
         }
       }
     },
+    "Transcription Model": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkriptionsmodell"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文字起こしモデル"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "转录模型"
+          }
+        }
+      }
+    },
     "Remove": {
       "localizations": {
         "de": {
@@ -195,6 +217,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "正在使用默认模型。点击刷新以获取所有可用模型。"
+          }
+        }
+      }
+    },
+    "Using built-in transcription models until the Gemini catalog is available.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bis der Gemini-Katalog verfügbar ist, werden die integrierten Transkriptionsmodelle verwendet."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gemini カタログが利用可能になるまで、内蔵の文字起こしモデルを使用します。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 Gemini 目录可用之前，将使用内置转录模型。"
           }
         }
       }

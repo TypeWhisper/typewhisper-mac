@@ -145,6 +145,29 @@ enum AppConstants {
         #endif
     }()
 
+    static let premiumAccountKeychainService = resolvePremiumAccountKeychainService(
+        isScreenshotAutomation: isScreenshotAutomation,
+        isRunningTests: isRunningTests,
+        isDevelopment: isDevelopment
+    )
+
+    static func resolvePremiumAccountKeychainService(
+        isScreenshotAutomation: Bool,
+        isRunningTests: Bool,
+        isDevelopment: Bool
+    ) -> String {
+        if isScreenshotAutomation {
+            return "com.typewhisper.mac.screenshots.premium-account"
+        }
+        if isRunningTests {
+            return "com.typewhisper.mac.tests.premium-account"
+        }
+        if isDevelopment {
+            return "com.typewhisper.mac.dev.premium-account"
+        }
+        return "com.typewhisper.mac.premium-account"
+    }
+
     static let loggerSubsystem: String = Bundle.main.bundleIdentifier ?? "com.typewhisper.mac"
 
     static var appSupportDirectory: URL {

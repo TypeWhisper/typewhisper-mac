@@ -1,0 +1,17 @@
+{
+  "id": "com.typewhisper.web-link",
+  "name": "Web Link Transcription",
+  "version": "1.0.0",
+  "minHostVersion": "1.7.0",
+  "sdkCompatibilityVersion": "v1",
+  "minOSVersion": "14.0",
+  "author": "TypeWhisper",
+  "description": "Downloads audio from supported web links with yt-dlp and ffmpeg for transcription in TypeWhisper.",
+  "descriptions": {
+    "de": "Lädt Audio aus unterstützten Weblinks mit yt-dlp und ffmpeg zur Transkription in TypeWhisper herunter."
+  },
+  "principalClass": "WebLinkPlugin",
+  "requiresAPIKey": false,
+  "iconSystemName": "link.badge.plus",
+  "category": "utility"
+}

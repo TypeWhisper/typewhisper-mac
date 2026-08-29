@@ -24,6 +24,9 @@ struct WidgetData: Codable {
             .appendingPathComponent(fileName)
     }
 
+    // Serial so overlapping saves are written in submission order.
+    private static let saveQueue = DispatchQueue(label: "com.typewhisper.widgetdata.save", qos: .utility)
+
     static func load() -> WidgetData {
         guard let url = sharedFileURL,
               let data = try? Data(contentsOf: url) else {
@@ -32,13 +35,28 @@ struct WidgetData: Codable {
         return (try? JSONDecoder().decode(WidgetData.self, from: data)) ?? .empty
     }
 
-    func save() {
-        guard let url = WidgetData.sharedFileURL,
-              let data = try? JSONEncoder().encode(self) else { return }
-        // Ensure the group container directory exists
-        let dir = url.deletingLastPathComponent()
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
-        try? data.write(to: url)
+    /// Persists the widget payload to the App Group container off the caller's thread.
+    /// - Parameter onWritten: Called on the write queue after the file has been written.
+    ///   It is not called when encoding, resolving the container, or writing fails.
+    func save(onWritten: (@Sendable () -> Void)? = nil) {
+        guard let data = try? JSONEncoder().encode(self) else { return }
+        // App Group container access (containerURL and the write itself) can stall on a
+        // broken code signature or slow disk, so resolve the URL and write here rather
+        // than on the caller's thread — it must never block the main thread that
+        // triggers widget refreshes.
+        WidgetData.saveQueue.async {
+            guard let url = WidgetData.sharedFileURL else { return }
+            let dir = url.deletingLastPathComponent()
+            try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+            do {
+                // Atomic: the widget extension reads this file from another process,
+                // so it must never observe a partially written payload.
+                try data.write(to: url, options: .atomic)
+            } catch {
+                return
+            }
+            onWritten?()
+        }
     }
 }
 

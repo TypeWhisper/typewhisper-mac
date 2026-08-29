@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import TypeWhisperPluginSDK
 
 /// Lightweight state tracker for MenuBarView that only re-publishes
 /// on menu-relevant changes, avoiding high-frequency audioLevel updates.
@@ -257,9 +258,67 @@ enum MenuBarMenuSection: String, CaseIterable, Hashable {
     }
 }
 
+private struct PluginCommandButton: View {
+    let pluginId: String
+    let command: PluginCommandDescriptor
+    @ObservedObject var pluginManager: PluginManager
+
+    var body: some View {
+        Button {
+            pluginManager.performPluginCommand(pluginId: pluginId, commandId: command.id)
+        } label: {
+            if let systemImageName = command.systemImageName {
+                Label {
+                    Text(verbatim: command.title)
+                } icon: {
+                    Image(systemName: systemImageName)
+                }
+            } else {
+                Text(verbatim: command.title)
+            }
+        }
+        .disabled(!command.isEnabled)
+    }
+}
+
+struct PluginAppCommands: Commands {
+    @ObservedObject var pluginManager: PluginManager
+
+    var body: some Commands {
+        CommandMenu(String(localized: "Integrations")) {
+            let contributions = pluginManager.userInterfaceContributions.filter {
+                !$0.appMenuCommands.isEmpty
+            }
+            if contributions.isEmpty {
+                Button(String(localized: "No Integration Commands")) {}
+                    .disabled(true)
+            } else {
+                ForEach(contributions, id: \.pluginId) { contribution in
+                    Menu {
+                        ForEach(contribution.appMenuCommands) { command in
+                            PluginCommandButton(
+                                pluginId: contribution.pluginId,
+                                command: command,
+                                pluginManager: pluginManager
+                            )
+                        }
+                    } label: {
+                        Text(verbatim: contribution.pluginName)
+                    }
+                }
+            }
+        }
+    }
+}
+
 struct MenuBarView: View {
     @Environment(\.openWindow) private var openWindow
     @StateObject private var status = MenuBarState()
+    @ObservedObject private var pluginManager: PluginManager
+
+    init(pluginManager: PluginManager = PluginManager.shared) {
+        self._pluginManager = ObservedObject(wrappedValue: pluginManager)
+    }
 
     var body: some View {
         Group {
@@ -279,6 +338,28 @@ struct MenuBarView: View {
                 Section(String(localized: section.titleResource)) {
                     ForEach(section.items(hasRecoverableRecording: status.hasRecoverableRecording), id: \.self) { item in
                         menuItem(for: item)
+                    }
+                }
+            }
+
+            let pluginContributions = pluginManager.userInterfaceContributions.filter {
+                !$0.primaryMenuBarCommands.isEmpty
+            }
+            if !pluginContributions.isEmpty {
+                Divider()
+                Section(String(localized: "Integrations")) {
+                    ForEach(pluginContributions, id: \.pluginId) { contribution in
+                        Menu {
+                            ForEach(contribution.primaryMenuBarCommands) { command in
+                                PluginCommandButton(
+                                    pluginId: contribution.pluginId,
+                                    command: command,
+                                    pluginManager: pluginManager
+                                )
+                            }
+                        } label: {
+                            Text(verbatim: contribution.pluginName)
+                        }
                     }
                 }
             }

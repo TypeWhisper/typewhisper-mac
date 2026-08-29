@@ -10,6 +10,40 @@ final class OpenAIPluginTests: XCTestCase {
         super.tearDown()
     }
 
+    func testStableHostCompatibilityAvoidsPost16NetworkGuardSDKSymbol() throws {
+        let pluginDirectory = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let sourceURLs = try FileManager.default.contentsOfDirectory(
+            at: pluginDirectory,
+            includingPropertiesForKeys: nil
+        ).filter { $0.pathExtension == "swift" }
+
+        for sourceURL in sourceURLs {
+            let source = try String(contentsOf: sourceURL, encoding: .utf8)
+            XCTAssertFalse(
+                source.contains("PluginHTTPClient.ensureNetworkAccessIsAllowed"),
+                "\(sourceURL.lastPathComponent) must remain loadable by the declared TypeWhisper 1.6.0 host"
+            )
+        }
+    }
+
+    func testLocalNetworkPolicyAllowsNormalRuntime() {
+        XCTAssertNoThrow(
+            try OpenAINetworkAccessPolicy.ensureAccessIsAllowed(arguments: ["TypeWhisper"])
+        )
+    }
+
+    func testLocalNetworkPolicyBlocksScreenshotAutomation() {
+        XCTAssertThrowsError(
+            try OpenAINetworkAccessPolicy.ensureAccessIsAllowed(
+                arguments: ["TypeWhisper", "--store-screenshots"]
+            )
+        ) { error in
+            XCTAssertEqual((error as? URLError)?.code, .notConnectedToInternet)
+        }
+    }
+
     func testOpenAIPluginAdvertisesLiveSTTAndTTSProtocols() {
         let plugin: Any = OpenAIPlugin()
 
@@ -582,6 +616,86 @@ final class OpenAIPluginTests: XCTestCase {
         XCTAssertFalse(OpenAIPlugin.usesResponsesAPI(for: "gpt-4o"))
     }
 
+    func testOpenAIReasoningEffortsMatchModelCapabilities() {
+        XCTAssertEqual(
+            OpenAIPlugin.supportedReasoningEfforts(for: "gpt-5.6-sol"),
+            [.none, .low, .medium, .high, .xhigh, .max]
+        )
+        XCTAssertEqual(
+            OpenAIPlugin.supportedReasoningEfforts(for: "gpt-5.5"),
+            [.none, .low, .medium, .high, .xhigh]
+        )
+        XCTAssertEqual(
+            OpenAIPlugin.supportedReasoningEfforts(for: "gpt-5.4-pro-2026-03-05"),
+            [.medium, .high, .xhigh]
+        )
+        XCTAssertEqual(
+            OpenAIPlugin.supportedReasoningEfforts(for: "gpt-5.3-codex"),
+            [.low, .medium, .high, .xhigh]
+        )
+        XCTAssertEqual(
+            OpenAIPlugin.supportedReasoningEfforts(for: "gpt-5.1"),
+            [.none, .low, .medium, .high]
+        )
+        XCTAssertEqual(
+            OpenAIPlugin.supportedReasoningEfforts(for: "gpt-5"),
+            [.minimal, .low, .medium, .high]
+        )
+        XCTAssertEqual(
+            OpenAIPlugin.supportedReasoningEfforts(for: "o4-mini"),
+            [.low, .medium, .high]
+        )
+        XCTAssertEqual(OpenAIPlugin.supportedReasoningEfforts(for: "gpt-5-chat-latest"), [])
+        XCTAssertEqual(OpenAIPlugin.supportedReasoningEfforts(for: "gpt-4.1"), [])
+    }
+
+    func testOpenAIReasoningEffortFallsBackToModelDefault() {
+        XCTAssertEqual(OpenAIPlugin.effectiveReasoningEffort(.max, for: "gpt-5.6-luna"), .max)
+        XCTAssertEqual(OpenAIPlugin.effectiveReasoningEffort(.max, for: "gpt-5.5"), .medium)
+        XCTAssertEqual(
+            OpenAIPlugin.effectiveReasoningEffort(.max, for: "gpt-5.4"),
+            OpenAIReasoningEffort.none
+        )
+        XCTAssertEqual(OpenAIPlugin.effectiveReasoningEffort(.none, for: "gpt-5.4-pro"), .medium)
+        XCTAssertEqual(OpenAIPlugin.effectiveReasoningEffort(.low, for: "gpt-5-pro"), .high)
+        XCTAssertNil(OpenAIPlugin.effectiveReasoningEffort(.medium, for: "gpt-4.1"))
+    }
+
+    func testOpenAIProcessNormalizesPersistedReasoningEffortForSelectedModel() async throws {
+        let host = try PluginTestHostServices(
+            defaults: [
+                "selectedLLMModel": "gpt-5.5",
+                "reasoningEffort": "max",
+            ],
+            secrets: ["api-key": "sk-live"]
+        )
+        let plugin = OpenAIPlugin()
+        plugin.activate(host: host)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(
+                        #"{"output":[{"type":"message","content":[{"type":"output_text","text":"Done"}]}]}"#.utf8
+                    ),
+                    Self.httpResponse(url: "https://api.openai.com/v1/responses", statusCode: 200)
+                ),
+            ])
+        }
+
+        let result = try await plugin.process(systemPrompt: "Fix grammar", userText: "hello", model: nil)
+
+        XCTAssertEqual(result, "Done")
+        let request = try XCTUnwrap(store.sessions.first?.requestedRequests.first)
+        let requestData = try XCTUnwrap(request.httpBody)
+        let requestBody = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: requestData) as? [String: Any]
+        )
+        XCTAssertEqual(requestBody["model"] as? String, "gpt-5.5")
+        XCTAssertEqual((requestBody["reasoning"] as? [String: Any])?["effort"] as? String, "medium")
+    }
+
     func testOpenAIRealtimeRequestUsesRealtimeWhisperEndpointAndAuth() throws {
         let request = try OpenAIRealtimeTranscriptionSession.makeRequest(apiKey: "sk-test")
 
@@ -858,6 +972,30 @@ final class OpenAIPluginTests: XCTestCase {
         XCTAssertEqual(input.first?["role"] as? String, "user")
     }
 
+    func testOpenAIResponsesRequestPreservesCustomTemperatureForGPT51AtNone() async throws {
+        try await assertOpenAIResponsesRequestTemperature(
+            model: "gpt-5.1",
+            reasoningEffort: "none",
+            expectedTemperature: 0.7
+        )
+    }
+
+    func testOpenAIResponsesRequestPreservesCustomTemperatureForGPT52AtNone() async throws {
+        try await assertOpenAIResponsesRequestTemperature(
+            model: "gpt-5.2",
+            reasoningEffort: "none",
+            expectedTemperature: 0.7
+        )
+    }
+
+    func testOpenAIResponsesRequestOmitsCustomTemperatureForGPT52AboveNone() async throws {
+        try await assertOpenAIResponsesRequestTemperature(
+            model: "gpt-5.2",
+            reasoningEffort: "medium",
+            expectedTemperature: nil
+        )
+    }
+
     func testOpenAIResponsesParserExtractsOutputText() throws {
         let data = Data(
             """
@@ -1126,6 +1264,51 @@ final class OpenAIPluginTests: XCTestCase {
             httpVersion: nil,
             headerFields: nil
         )!
+    }
+
+    private func assertOpenAIResponsesRequestTemperature(
+        model: String,
+        reasoningEffort: String,
+        expectedTemperature: Double?
+    ) async throws {
+        let host = try PluginTestHostServices(
+            defaults: ["reasoningEffort": reasoningEffort],
+            secrets: ["api-key": "sk-live"]
+        )
+        let plugin = OpenAIPlugin()
+        plugin.activate(host: host)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(
+                        #"{"output":[{"type":"message","content":[{"type":"output_text","text":"Done"}]}]}"#.utf8
+                    ),
+                    Self.httpResponse(url: "https://api.openai.com/v1/responses", statusCode: 200)
+                ),
+            ])
+        }
+
+        let result = try await plugin.process(
+            systemPrompt: "Fix grammar",
+            userText: "hello",
+            model: model,
+            temperatureDirective: .custom(0.7)
+        )
+
+        XCTAssertEqual(result, "Done")
+        let request = try XCTUnwrap(store.sessions.first?.requestedRequests.first)
+        let requestData = try XCTUnwrap(request.httpBody)
+        let requestBody = try XCTUnwrap(
+            JSONSerialization.jsonObject(with: requestData) as? [String: Any]
+        )
+        XCTAssertEqual(requestBody["model"] as? String, model)
+        XCTAssertEqual(
+            (requestBody["reasoning"] as? [String: Any])?["effort"] as? String,
+            reasoningEffort
+        )
+        XCTAssertEqual(requestBody["temperature"] as? Double, expectedTemperature)
     }
 }
 

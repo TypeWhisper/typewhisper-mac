@@ -116,6 +116,16 @@ let package = Package(
             ]
         ),
         .target(
+            name: "WebLinkPlugin",
+            dependencies: ["TypeWhisperPluginSDK"],
+            path: "Plugins/WebLinkPlugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("Localizable.xcstrings"),
+                .process("manifest.json"),
+            ]
+        ),
+        .target(
             name: "Qwen3Plugin",
             dependencies: [
                 "TypeWhisperPluginSDK",
@@ -450,6 +460,15 @@ let package = Package(
                 "AuthenticatedCLIPlugin",
             ],
             path: "Plugins/AuthenticatedCLIPlugin/Tests"
+        ),
+        .testTarget(
+            name: "WebLinkPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "WebLinkPlugin",
+            ],
+            path: "Plugins/WebLinkPlugin/Tests"
         ),
         .testTarget(
             name: "Qwen3PluginTests",

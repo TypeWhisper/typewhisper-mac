@@ -353,7 +353,7 @@ actor SonioxTranscriptCollector {
         let usedInterimPreview: Bool
     }
 
-    private var finals: [String] = []
+    private var finalTranscript: String = ""
     private var interim: String = ""
     private var lastInterimPreview: String = ""
     private var lastInterimLanguage: String?
@@ -361,9 +361,8 @@ actor SonioxTranscriptCollector {
     private var _error: String?
 
     func addFinal(_ text: String, language: String? = nil) {
-        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmed.isEmpty {
-            finals.append(trimmed)
+        if !text.isEmpty {
+            finalTranscript.append(text)
         }
         interim = ""
         if let language, !language.isEmpty {
@@ -372,7 +371,7 @@ actor SonioxTranscriptCollector {
     }
 
     func setInterim(_ text: String, language: String? = nil) {
-        interim = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        interim = text
         let preview = currentText()
         if !preview.isEmpty {
             lastInterimPreview = preview
@@ -416,8 +415,12 @@ actor SonioxTranscriptCollector {
 
         for token in tokens {
             guard let tokenText = token["text"] as? String,
-                  !tokenText.isEmpty,
-                  !isSonioxTranscriptSentinel(tokenText) else {
+                  !tokenText.isEmpty else {
+                continue
+            }
+
+            if isSonioxTranscriptSentinel(tokenText) {
+                interim = ""
                 continue
             }
 
@@ -455,15 +458,15 @@ actor SonioxTranscriptCollector {
     }
 
     func currentText() -> String {
-        var parts = finals
+        var text = finalTranscript
         if !interim.isEmpty {
-            parts.append(interim)
+            text.append(interim)
         }
-        return parts.joined(separator: " ")
+        return text
     }
 
     func finalResult() -> String {
-        finals.joined(separator: " ")
+        finalTranscript
     }
 
     func detectedLanguage(fallback: String?) -> String? {
@@ -765,7 +768,7 @@ final class SonioxLiveTranscriptionSession: LiveTranscriptionSession, @unchecked
         webSocketTask.cancel(with: .goingAway, reason: nil)
     }
 
-    /// Waits for the receive loop to observe the server's `finished` response.
+    /// Waits for the receive loop to observe the server's terminal `finished` response.
     /// Returns `false` on timeout. The task group cannot exit while the receive
     /// loop is still blocked in `receive()` — awaiting `receiveTask.value` does
     /// not react to cancellation — so on timeout the socket is torn down first
@@ -817,6 +820,7 @@ final class SonioxLiveTranscriptionSession: LiveTranscriptionSession, @unchecked
 final class SonioxPlugin: NSObject,
     SourceProgressLanguageHintTranscriptionEnginePlugin,
     LiveLanguageHintTranscriptionCapablePlugin,
+    LiveTranscriptionProgressModeProviding,
     DictionaryTermsCapabilityProviding,
     DictionaryTermsBudgetProviding,
     TTSProviderPlugin,
@@ -911,6 +915,7 @@ final class SonioxPlugin: NSObject,
 
     var providerId: String { "soniox" }
     var providerDisplayName: String { "Soniox" }
+    var liveTranscriptionProgressMode: LiveTranscriptionProgressMode { .completeSnapshot }
 
     var isConfigured: Bool {
         guard let key = normalizedAPIKey else { return false }
