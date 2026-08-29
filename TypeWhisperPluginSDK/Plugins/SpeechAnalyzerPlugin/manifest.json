@@ -2,7 +2,7 @@
     "id": "com.typewhisper.speechanalyzer",
     "name": "Apple Speech",
     "version": "1.0.15",
-    "minHostVersion": "0.12.0",
+    "minHostVersion": "1.6.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "26.0",
     "author": "TypeWhisper",
