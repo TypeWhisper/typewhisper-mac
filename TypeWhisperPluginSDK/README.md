@@ -554,7 +554,7 @@ Registry entry format:
 }
 ```
 
-`source` is registry metadata for the TypeWhisper Integrations UI. Omit it for official marketplace entries; TypeWhisper treats missing values as `official`. Use `"source": "community"` for community-maintained plugins submitted to the `1.4+` community feed. This field is not required in the plugin bundle manifest.
+`source` is registry metadata for the TypeWhisper Integrations UI. Omit it for official marketplace entries; TypeWhisper treats missing values as `official`. Use `"source": "community"` for community-maintained plugins submitted to the supported `plugins-community-v1.json` feed for TypeWhisper 1.6 and newer. This field is not required in the plugin bundle manifest.
 
 Release metadata belongs only inside `releases[]`. Community entries may omit
 `releases[]` or keep it empty while source review is in progress. Once a
