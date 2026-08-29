@@ -19283,7 +19283,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "最後の文字起こしを貼り付け"
+            "value" : "最新の文字起こしを貼り付け"
           }
         },
         "zh-Hans" : {
@@ -19305,7 +19305,7 @@
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "最後の文字起こしを貼り付けるショートカット"
+            "value" : "最新の文字起こしを貼り付けるショートカット"
           }
         },
         "zh-Hans" : {
