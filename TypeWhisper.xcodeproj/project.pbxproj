@@ -2521,9 +2521,18 @@
 				9A584149706C7567496E0210 /* XAIPlugin.swift */,
 				9A584149706C7567496E0211 /* manifest.json */,
 				9A584149706C7567496E0212 /* Localizable.xcstrings */,
+				9A584149706C7567496E0102 /* Tests */,
 			);
 			name = XAIPlugin;
 			path = TypeWhisperPluginSDK/Plugins/XAIPlugin;
+			sourceTree = "<group>";
+		};
+		9A584149706C7567496E0102 /* Tests */ = {
+			isa = PBXGroup;
+			children = (
+				9A584149706C7567496E0101 /* XAIPluginTests.swift */,
+			);
+			path = Tests;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000043 /* CoherePlugin */ = {
@@ -2707,7 +2716,6 @@
 				BE6B6611B899F649B097A726 /* SnippetServiceTests.swift */,
 				D4A100000000000000000004 /* RecorderTranscriptionBufferTests.swift */,
 				91B4D7E2C5A809F1632E4B7F /* StreamingHandlerTests.swift */,
-				9A584149706C7567496E0101 /* XAIPluginTests.swift */,
 				B26D2C342D877030A62CE027 /* Support */,
 				05313C25F9E79BCFC02899F2 /* TextDiffServiceTests.swift */,
 			);
