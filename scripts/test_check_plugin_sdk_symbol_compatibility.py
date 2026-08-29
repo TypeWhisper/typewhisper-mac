@@ -13,6 +13,7 @@ from check_plugin_sdk_symbol_compatibility import (
     parse_exported_symbols,
     parse_undefined_symbols,
     sdk_symbols,
+    validate_min_host_version,
 )
 
 
@@ -105,6 +106,25 @@ class MissingSDKSymbolsTests(unittest.TestCase):
             missing_sdk_symbols({second, first}, set()),
             [first, second],
         )
+
+
+class MinimumHostVersionTests(unittest.TestCase):
+    def test_accepts_stable_16_and_newer_versions(self) -> None:
+        for version in ("1.6.0", "1.6.0+build.1", "1.7.0-daily.20260828", "2.0.0"):
+            with self.subTest(version=version):
+                self.assertEqual(validate_min_host_version(version), version)
+
+    def test_rejects_legacy_host_versions(self) -> None:
+        for version in ("0.9.0", "0.14.0", "1.5.99", "1.6.0-rc2"):
+            with self.subTest(version=version):
+                with self.assertRaisesRegex(ValueError, "must be 1.6.0 or newer"):
+                    validate_min_host_version(version)
+
+    def test_rejects_missing_or_malformed_versions(self) -> None:
+        for version in (None, "1.6", "v1.6.0", "1.6.0.0"):
+            with self.subTest(version=version):
+                with self.assertRaisesRegex(ValueError, "must be a semantic version"):
+                    validate_min_host_version(version)
 
 
 if __name__ == "__main__":

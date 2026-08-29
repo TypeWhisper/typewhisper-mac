@@ -43,8 +43,8 @@ These surfaces remain part of `1.x`, but they are positioned as advanced or auto
 - Treat stable `1.6.0` as the release baseline and `release/1.5` as a legacy
   backport branch only.
 - Preserve the `1.x` stability contracts for the HTTP API, CLI, plugin SDK, widgets, and watch folders.
-- Avoid raising plugin `minHostVersion` values to `1.6.0` unless a plugin genuinely requires new host APIs.
-- A plugin's `minHostVersion` must name a host release whose bundled `TypeWhisperPluginSDK` exports every SDK symbol the plugin links against. Plugins build from `main`, so adopting a newly added SDK API requires raising `minHostVersion` to the first host release that ships it — otherwise the host fails to `dlopen` the bundle and the plugin's enable toggle silently reverts. `plugin-release.yml` enforces this via `scripts/check_plugin_sdk_symbol_compatibility.py`.
+- Newly published plugins require TypeWhisper `1.6.0` or newer. Existing marketplace history remains available, but source manifests and future releases must not declare an older host floor.
+- A plugin's `minHostVersion` must name a published host release whose bundled `TypeWhisperPluginSDK` exports every SDK symbol the plugin links against. Plugins build from `main`, so adopting a newly added SDK API requires raising `minHostVersion` to the first host release that ships it — otherwise the host fails to `dlopen` the bundle and the plugin's enable toggle silently reverts. `plugin-release.yml` enforces both the `1.6.0` floor and the ABI check via `scripts/check_plugin_sdk_symbol_compatibility.py`.
 - Keep release-channel behavior stable: RC and daily builds are prereleases, while Homebrew and stable website messaging update only at the final stable tag.
 - Keep tagged app releases on the no-iCloud distribution path until the production container and Developer ID provisioning profile are approved and validated. Tag pushes matching `v*` therefore build without automatic private iCloud sync; scheduled builds continue to use `MACOS_SCHEDULED_WITHOUT_ICLOUD`, and manual dispatches continue to use the explicit `without_icloud` input.
 

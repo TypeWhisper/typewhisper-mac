@@ -145,10 +145,12 @@ jobs:
           else
             DEPLOY_TARGET="14.0"
           fi
-          echo "TARGET=$TARGET" >> $GITHUB_ENV
-          echo "DEPLOY_TARGET=$DEPLOY_TARGET" >> $GITHUB_ENV
-          echo "XCODE_VERSION=$XCODE_VERSION" >> $GITHUB_ENV
-          echo "EMBED_SWIFT_LIBS=$EMBED_SWIFT_LIBS" >> $GITHUB_ENV
+          {
+            echo "TARGET=$TARGET"
+            echo "DEPLOY_TARGET=$DEPLOY_TARGET"
+            echo "XCODE_VERSION=$XCODE_VERSION"
+            echo "EMBED_SWIFT_LIBS=$EMBED_SWIFT_LIBS"
+          } >> "$GITHUB_ENV"
           echo "Target: $TARGET (macOS $DEPLOY_TARGET, Xcode $XCODE_VERSION, embed=$EMBED_SWIFT_LIBS)"
 
       - name: Checkout
@@ -185,6 +187,8 @@ jobs:
           import os
           import re
 
+          from scripts.check_plugin_sdk_symbol_compatibility import validate_min_host_version
+
           manifest_path = os.environ["MANIFEST"]
           expected_version = os.environ["PLUGIN_VERSION"]
 
@@ -197,14 +201,10 @@ jobs:
                   f"manifest version {actual_version!r} does not match release version {expected_version!r}"
               )
 
-          min_host_version = manifest.get("minHostVersion")
-          if not isinstance(min_host_version, str) or not re.fullmatch(
-              r"[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?",
-              min_host_version,
-          ):
-              raise SystemExit(
-                  f"manifest minHostVersion {min_host_version!r} must be a semantic version"
-              )
+          try:
+              validate_min_host_version(manifest.get("minHostVersion"))
+          except ValueError as error:
+              raise SystemExit(f"manifest {error}") from error
 
           sdk_compatibility_version = manifest.get("sdkCompatibilityVersion")
           if not isinstance(sdk_compatibility_version, str) or not re.fullmatch(
@@ -221,11 +221,14 @@ jobs:
 
       - name: Build Plugin
         run: |
-          EXTRA_SETTINGS=""
+          EXTRA_SETTINGS=()
           if [ "$EMBED_SWIFT_LIBS" = "YES" ]; then
             # Embed Swift compat libs (libswiftCompatibilitySpan.dylib) in plugin bundle
             # and add @loader_path/../Frameworks to rpath so they are found on macOS 15
-            EXTRA_SETTINGS="ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES=YES LD_RUNPATH_SEARCH_PATHS=@loader_path/../Frameworks"
+            EXTRA_SETTINGS+=(
+              "ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES=YES"
+              "LD_RUNPATH_SEARCH_PATHS=@loader_path/../Frameworks"
+            )
           fi
           xcodebuild -project TypeWhisper.xcodeproj \
             -target "$TARGET" \
@@ -237,7 +240,7 @@ jobs:
             DEVELOPMENT_TEAM=2D8ALY3LCL \
             MACOSX_DEPLOYMENT_TARGET="$DEPLOY_TARGET" \
             MARKETING_VERSION="$PLUGIN_VERSION" \
-            $EXTRA_SETTINGS
+            "${EXTRA_SETTINGS[@]}"
 
       - name: Verify plugin loads on minHostVersion
         run: |
@@ -284,8 +287,10 @@ jobs:
           security default-keychain -s "$KEYCHAIN_PATH"
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
-          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> $GITHUB_ENV
-          echo "KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD" >> $GITHUB_ENV
+          {
+            echo "KEYCHAIN_PATH=$KEYCHAIN_PATH"
+            echo "KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD"
+          } >> "$GITHUB_ENV"
 
       - name: Sign Plugin
         env:

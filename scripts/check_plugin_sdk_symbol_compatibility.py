@@ -19,6 +19,7 @@ binary against the symbols exported by the SDK inside the released host named by
 from __future__ import annotations
 
 import argparse
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -27,6 +28,35 @@ from pathlib import Path
 # Swift mangles module names length-prefixed, so every symbol originating in the
 # Plugin SDK module contains this substring (e.g. `_$s20TypeWhisperPluginSDK...`).
 SDK_MODULE_MANGLING = "20TypeWhisperPluginSDK"
+MINIMUM_SUPPORTED_HOST_VERSION = (1, 6, 0)
+MINIMUM_SUPPORTED_HOST_VERSION_STRING = "1.6.0"
+SEMANTIC_VERSION_PATTERN = re.compile(
+    r"(?P<major>[0-9]+)\.(?P<minor>[0-9]+)\.(?P<patch>[0-9]+)"
+    r"(?:-(?P<prerelease>[0-9A-Za-z.-]+))?"
+    r"(?:\+(?P<build>[0-9A-Za-z.-]+))?"
+)
+
+
+def validate_min_host_version(value: object) -> str:
+    """Return a supported minHostVersion or raise a descriptive ValueError."""
+    if not isinstance(value, str):
+        raise ValueError(f"minHostVersion {value!r} must be a semantic version")
+
+    match = SEMANTIC_VERSION_PATTERN.fullmatch(value)
+    if match is None:
+        raise ValueError(f"minHostVersion {value!r} must be a semantic version")
+
+    version = tuple(int(match.group(part)) for part in ("major", "minor", "patch"))
+    is_prerelease_of_floor = (
+        version == MINIMUM_SUPPORTED_HOST_VERSION
+        and match.group("prerelease") is not None
+    )
+    if version < MINIMUM_SUPPORTED_HOST_VERSION or is_prerelease_of_floor:
+        raise ValueError(
+            f"minHostVersion {value!r} must be {MINIMUM_SUPPORTED_HOST_VERSION_STRING} or newer"
+        )
+
+    return value
 
 
 def parse_undefined_symbols(nm_output: str) -> set[str]:
@@ -77,14 +107,17 @@ def _run(command: list[str]) -> str:
 
 
 def architectures(binary: Path) -> list[str]:
+    """Return the Mach-O architectures present in a binary."""
     return _run(["lipo", "-archs", str(binary)]).split()
 
 
 def undefined_symbols(binary: Path, arch: str) -> set[str]:
+    """Return undefined symbols for one architecture of a plugin binary."""
     return parse_undefined_symbols(_run(["nm", "-arch", arch, "-u", str(binary)]))
 
 
 def exported_symbols(binary: Path, arch: str) -> set[str]:
+    """Return globally exported symbols for one host SDK architecture."""
     return parse_exported_symbols(_run(["nm", "-arch", arch, "-gU", str(binary)]))
 
 
@@ -110,6 +143,7 @@ def demangle(symbols: list[str]) -> dict[str, str]:
 
 
 def check(plugin_binary: Path, host_sdk: Path, min_host_version: str) -> int:
+    """Compare SDK imports and exports for every shared architecture."""
     plugin_archs = architectures(plugin_binary)
     host_archs = set(architectures(host_sdk))
     shared_archs = [arch for arch in plugin_archs if arch in host_archs]
@@ -156,6 +190,7 @@ def check(plugin_binary: Path, host_sdk: Path, min_host_version: str) -> int:
 
 
 def main(argv: list[str] | None = None) -> int:
+    """Parse CLI arguments and run the compatibility check."""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
         "--plugin-binary",

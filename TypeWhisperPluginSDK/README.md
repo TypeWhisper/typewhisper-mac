@@ -21,7 +21,7 @@ Create `Contents/Resources/manifest.json` in your bundle:
   "id": "com.yourname.myplugin",
   "name": "My Plugin",
   "version": "1.0.0",
-  "minHostVersion": "1.0.0",
+  "minHostVersion": "1.6.0",
   "sdkCompatibilityVersion": "v1",
   "minOSVersion": "14.0",
   "author": "Your Name",
@@ -31,7 +31,7 @@ Create `Contents/Resources/manifest.json` in your bundle:
 
 - `id` - Unique reverse-domain identifier
 - `principalClass` - Must match `@objc(ClassName)` on your plugin class
-- `minHostVersion` - Minimum TypeWhisper version required
+- `minHostVersion` - Minimum TypeWhisper version required; new marketplace releases require `1.6.0` or newer
 - `sdkCompatibilityVersion` - Must match `PluginSDKCompatibility.currentVersion` for marketplace/external plugins
 - `minOSVersion` - Minimum macOS version required (plugin is skipped on older systems)
 
@@ -500,7 +500,7 @@ let wavData = PluginWavEncoder.encode(samples, sampleRate: 16000)
 | `id` | Yes | Unique reverse-domain ID (e.g. `com.yourname.myplugin`) |
 | `name` | Yes | Display name |
 | `version` | Yes | Semver string (e.g. `1.0.0`) |
-| `minHostVersion` | No | Minimum TypeWhisper version (e.g. `1.0.0`) |
+| `minHostVersion` | No | Minimum TypeWhisper version. New marketplace releases require `1.6.0` or newer. |
 | `sdkCompatibilityVersion` | No | Exact plugin SDK compatibility line. Marketplace/external plugins must match `PluginSDKCompatibility.currentVersion`. |
 | `minOSVersion` | No | Minimum macOS version (e.g. `14.0`, `26.0`). Plugin is skipped on older systems. |
 | `author` | No | Author name |
@@ -572,4 +572,4 @@ Do not duplicate release fields as top-level registry fields. `category` and
 
 - macOS 14.0+
 - Swift 6.0
-- TypeWhisper 1.0+
+- TypeWhisper 1.6+

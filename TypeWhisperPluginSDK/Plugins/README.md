@@ -55,7 +55,7 @@ Plugins can subscribe to events without modifying the transcription pipeline:
     "id": "com.yourname.plugin-id",
     "name": "My Plugin",
     "version": "1.0.0",
-    "minHostVersion": "1.0.0",
+    "minHostVersion": "1.6.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
     "supportedArchitectures": ["arm64"],
@@ -65,6 +65,9 @@ Plugins can subscribe to events without modifying the transcription pipeline:
 ```
 
 `category` may be one of `transcription`, `tts`, `llm`, `post-processor`, `action`, `memory`, or `utility`.
+
+New plugin releases must declare TypeWhisper `1.6.0` or newer. Keep a higher
+floor when the plugin uses host or Plugin SDK APIs introduced after 1.6.
 
 ### Host Services
 
