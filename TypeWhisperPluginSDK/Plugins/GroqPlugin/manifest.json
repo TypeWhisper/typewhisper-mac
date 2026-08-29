@@ -2,7 +2,7 @@
     "id": "com.typewhisper.groq",
     "name": "Groq",
     "version": "1.0.24",
-    "minHostVersion": "1.5.0",
+    "minHostVersion": "1.6.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
     "author": "TypeWhisper",
