@@ -2110,6 +2110,7 @@
 			isa = PBXGroup;
 			children = (
 				4D980A5CFE1A4217A10C2103 /* WhisperKitPluginCompatibilityTests.swift */,
+				4D980A5CFE1A4217A10C2102 /* WhisperKitPluginLifecycleTests.swift */,
 			);
 			path = Tests;
 			sourceTree = "<group>";
@@ -2707,7 +2708,6 @@
 				D4A100000000000000000004 /* RecorderTranscriptionBufferTests.swift */,
 				91B4D7E2C5A809F1632E4B7F /* StreamingHandlerTests.swift */,
 				9A584149706C7567496E0101 /* XAIPluginTests.swift */,
-				4D980A5CFE1A4217A10C2102 /* WhisperKitPluginLifecycleTests.swift */,
 				B26D2C342D877030A62CE027 /* Support */,
 				05313C25F9E79BCFC02899F2 /* TextDiffServiceTests.swift */,
 			);
