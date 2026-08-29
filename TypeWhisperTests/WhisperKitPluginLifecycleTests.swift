@@ -74,6 +74,34 @@ final class WhisperKitPluginLifecycleTests: XCTestCase {
     }
     #endif
 
+    func testStable16HostCompatibilityAvoidsPost16NetworkGuardSDKSymbol() throws {
+        let sourceURL = TestSupport.repoRoot.appendingPathComponent(
+            "TypeWhisperPluginSDK/Plugins/WhisperKitPlugin/WhisperKitPlugin.swift"
+        )
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+        XCTAssertFalse(
+            source.contains("PluginHTTPClient.ensureNetworkAccessIsAllowed"),
+            "WhisperKit must remain loadable by the declared TypeWhisper 1.6.0 host"
+        )
+    }
+
+    func testLocalNetworkPolicyAllowsNormalRuntime() {
+        XCTAssertNoThrow(
+            try WhisperKitNetworkAccessPolicy.ensureAccessIsAllowed(arguments: ["TypeWhisper"])
+        )
+    }
+
+    func testLocalNetworkPolicyBlocksScreenshotAutomation() {
+        XCTAssertThrowsError(
+            try WhisperKitNetworkAccessPolicy.ensureAccessIsAllowed(
+                arguments: ["TypeWhisper", "--store-screenshots"]
+            )
+        ) { error in
+            XCTAssertEqual((error as? URLError)?.code, .notConnectedToInternet)
+        }
+    }
+
     func testAvailableModelsIncludeDistilLargeV3Turbo() {
         let model = WhisperKitPlugin.availableModels.first {
             $0.id == "distil-whisper_distil-large-v3_turbo"

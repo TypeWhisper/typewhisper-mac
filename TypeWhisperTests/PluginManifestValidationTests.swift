@@ -90,7 +90,7 @@ final class PluginManifestValidationTests: XCTestCase {
 
     func testSourceFootageProgressPluginsDeclareCapability() throws {
         let manifestExpectations = [
-            ("TypeWhisperPluginSDK/Plugins/WhisperKitPlugin/manifest.json", "1.5.0"),
+            ("TypeWhisperPluginSDK/Plugins/WhisperKitPlugin/manifest.json", "1.6.0"),
             ("TypeWhisperPluginSDK/Plugins/ParakeetPlugin/manifest.json", "1.5.0"),
             ("TypeWhisperPluginSDK/Plugins/SonioxPlugin/manifest.json", "1.7.0"),
         ]
@@ -102,6 +102,19 @@ final class PluginManifestValidationTests: XCTestCase {
             XCTAssertTrue(manifest.supportsCapability(.sourceFootageProgress), relativePath)
             XCTAssertEqual(manifest.minHostVersion, expectedMinHostVersion, relativePath)
         }
+    }
+
+    func testWhisperKitPlugin12RequiresCompatibleHost16() throws {
+        let manifestURL = TestSupport.repoRoot.appendingPathComponent(
+            "TypeWhisperPluginSDK/Plugins/WhisperKitPlugin/manifest.json"
+        )
+        let data = try Data(contentsOf: manifestURL)
+        let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
+
+        XCTAssertEqual(manifest.version, "1.2.0")
+        XCTAssertEqual(manifest.minHostVersion, "1.6.0")
+        XCTAssertEqual(manifest.sdkCompatibilityVersion, PluginSDKCompatibility.currentVersion)
+        XCTAssertEqual(manifest.supportedArchitectures, ["arm64"])
     }
 
     func testMLXStoragePluginReleasesRequireHost16() throws {
