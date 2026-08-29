@@ -145,10 +145,12 @@ jobs:
           else
             DEPLOY_TARGET="14.0"
           fi
-          echo "TARGET=$TARGET" >> $GITHUB_ENV
-          echo "DEPLOY_TARGET=$DEPLOY_TARGET" >> $GITHUB_ENV
-          echo "XCODE_VERSION=$XCODE_VERSION" >> $GITHUB_ENV
-          echo "EMBED_SWIFT_LIBS=$EMBED_SWIFT_LIBS" >> $GITHUB_ENV
+          {
+            echo "TARGET=$TARGET"
+            echo "DEPLOY_TARGET=$DEPLOY_TARGET"
+            echo "XCODE_VERSION=$XCODE_VERSION"
+            echo "EMBED_SWIFT_LIBS=$EMBED_SWIFT_LIBS"
+          } >> "$GITHUB_ENV"
           echo "Target: $TARGET (macOS $DEPLOY_TARGET, Xcode $XCODE_VERSION, embed=$EMBED_SWIFT_LIBS)"
 
       - name: Checkout
@@ -199,11 +201,17 @@ jobs:
 
           min_host_version = manifest.get("minHostVersion")
           if not isinstance(min_host_version, str) or not re.fullmatch(
-              r"[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]+)?",
+              r"[0-9]+\.[0-9]+\.[0-9]+",
               min_host_version,
           ):
               raise SystemExit(
-                  f"manifest minHostVersion {min_host_version!r} must be a semantic version"
+                  f"manifest minHostVersion {min_host_version!r} must be a release version like 1.6.0"
+              )
+          minimum_host_version = (1, 6, 0)
+          host_version = tuple(int(part) for part in min_host_version.split("."))
+          if host_version < minimum_host_version:
+              raise SystemExit(
+                  f"manifest minHostVersion {min_host_version!r} must be 1.6.0 or newer"
               )
 
           sdk_compatibility_version = manifest.get("sdkCompatibilityVersion")
@@ -221,11 +229,14 @@ jobs:
 
       - name: Build Plugin
         run: |
-          EXTRA_SETTINGS=""
+          EXTRA_SETTINGS=()
           if [ "$EMBED_SWIFT_LIBS" = "YES" ]; then
             # Embed Swift compat libs (libswiftCompatibilitySpan.dylib) in plugin bundle
             # and add @loader_path/../Frameworks to rpath so they are found on macOS 15
-            EXTRA_SETTINGS="ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES=YES LD_RUNPATH_SEARCH_PATHS=@loader_path/../Frameworks"
+            EXTRA_SETTINGS+=(
+              "ALWAYS_EMBED_SWIFT_STANDARD_LIBRARIES=YES"
+              "LD_RUNPATH_SEARCH_PATHS=@loader_path/../Frameworks"
+            )
           fi
           xcodebuild -project TypeWhisper.xcodeproj \
             -target "$TARGET" \
@@ -237,7 +248,7 @@ jobs:
             DEVELOPMENT_TEAM=2D8ALY3LCL \
             MACOSX_DEPLOYMENT_TARGET="$DEPLOY_TARGET" \
             MARKETING_VERSION="$PLUGIN_VERSION" \
-            $EXTRA_SETTINGS
+            "${EXTRA_SETTINGS[@]}"
 
       - name: Import Signing Certificate
         env:
@@ -257,8 +268,10 @@ jobs:
           security default-keychain -s "$KEYCHAIN_PATH"
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
-          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> $GITHUB_ENV
-          echo "KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD" >> $GITHUB_ENV
+          {
+            echo "KEYCHAIN_PATH=$KEYCHAIN_PATH"
+            echo "KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD"
+          } >> "$GITHUB_ENV"
 
       - name: Sign Plugin
         env:
@@ -516,7 +529,7 @@ jobs:
           def build_release():
               release = {
                   "version": version,
-                  "minHostVersion": manifest.get("minHostVersion", "0.9.0"),
+                  "minHostVersion": manifest["minHostVersion"],
                   "sdkCompatibilityVersion": manifest.get("sdkCompatibilityVersion"),
                   "size": size,
                   "downloadURL": download_url,

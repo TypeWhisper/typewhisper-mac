@@ -1172,82 +1172,6 @@ final class PluginRegistryServiceTests: XCTestCase {
         XCTAssertTrue(plugins.isEmpty)
     }
 
-    func testRegistryFeedUsesV1ForPre14Builds() {
-        XCTAssertEqual(
-            PluginRegistryService.registryFeed(
-                appVersion: "1.2.2",
-                releaseChannel: .stable
-            ),
-            .v1
-        )
-        XCTAssertEqual(
-            PluginRegistryService.registryFeed(
-                appVersion: "1.2.2",
-                releaseChannel: .releaseCandidate
-            ),
-            .v1
-        )
-        XCTAssertEqual(
-            PluginRegistryService.registryFeed(
-                appVersion: "1.2.2",
-                releaseChannel: .daily
-            ),
-            .v1
-        )
-        XCTAssertEqual(
-            PluginRegistryService.registryFeed(
-                appVersion: "1.3.0",
-                releaseChannel: .releaseCandidate
-            ),
-            .v1
-        )
-        XCTAssertEqual(
-            PluginRegistryService.registryFeed(
-                appVersion: "1.3.0",
-                releaseChannel: .daily
-            ),
-            .v1
-        )
-        XCTAssertEqual(
-            PluginRegistryService.registryFeed(
-                appVersion: "1.3.0",
-                releaseChannel: .stable
-            ),
-            .v1
-        )
-        XCTAssertEqual(
-            PluginRegistryService.registryFeed(
-                appVersion: "1.3.1",
-                releaseChannel: .stable
-            ),
-            .v1
-        )
-    }
-
-    func testRegistryFeedUsesCommunityFeedFor14PreviewAndStableBuilds() {
-        XCTAssertEqual(
-            PluginRegistryService.registryFeed(
-                appVersion: "1.4.0-rc1",
-                releaseChannel: .releaseCandidate
-            ),
-            .communityV1
-        )
-        XCTAssertEqual(
-            PluginRegistryService.registryFeed(
-                appVersion: "1.4.0",
-                releaseChannel: .daily
-            ),
-            .communityV1
-        )
-        XCTAssertEqual(
-            PluginRegistryService.registryFeed(
-                appVersion: "1.4.0",
-                releaseChannel: .stable
-            ),
-            .communityV1
-        )
-    }
-
     func testRegistryPluginSourceDefaultsToOfficialAndDecodesCommunity() throws {
         let data = Data(
             """
@@ -1409,7 +1333,7 @@ final class PluginRegistryServiceTests: XCTestCase {
             cacheDuration: 0,
             userDefaults: defaults,
             infoDictionary: [
-                "CFBundleShortVersionString": "1.3.0",
+                "CFBundleShortVersionString": "1.6.0",
                 "TypeWhisperReleaseChannel": AppConstants.ReleaseChannel.releaseCandidate.rawValue,
             ],
             fetchData: { request in
@@ -1426,11 +1350,11 @@ final class PluginRegistryServiceTests: XCTestCase {
 
         await service.fetchRegistry(force: true)
 
-        XCTAssertEqual(requestedURL?.absoluteString, "https://example.com/plugins-v1.json")
+        XCTAssertEqual(requestedURL?.absoluteString, "https://example.com/plugins-community-v1.json")
         XCTAssertEqual(service.fetchState, .loaded)
         XCTAssertEqual(service.registry.map(\.id), ["com.typewhisper.cached"])
 
-        let cachedData = try Data(contentsOf: cacheDirectory.appendingPathComponent("plugins-v1.json"))
+        let cachedData = try Data(contentsOf: cacheDirectory.appendingPathComponent("plugins-community-v1.json"))
         let cachedResponse = try JSONDecoder().decode(PluginRegistryResponse.self, from: cachedData)
         XCTAssertEqual(cachedResponse.plugins.map(\.id), ["com.typewhisper.cached"])
     }
@@ -1470,7 +1394,7 @@ final class PluginRegistryServiceTests: XCTestCase {
             }
             """.utf8
         )
-        try payload.write(to: cacheDirectory.appendingPathComponent("plugins-v1.json"))
+        try payload.write(to: cacheDirectory.appendingPathComponent("plugins-community-v1.json"))
 
         let service = PluginRegistryService(
             registryBaseURL: URL(string: "https://example.com")!,
@@ -1478,7 +1402,7 @@ final class PluginRegistryServiceTests: XCTestCase {
             cacheDuration: 0,
             userDefaults: defaults,
             infoDictionary: [
-                "CFBundleShortVersionString": "1.3.0",
+                "CFBundleShortVersionString": "1.6.0",
                 "TypeWhisperReleaseChannel": AppConstants.ReleaseChannel.daily.rawValue,
             ],
             fetchData: { _ in

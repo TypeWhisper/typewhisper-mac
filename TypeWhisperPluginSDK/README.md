@@ -21,7 +21,7 @@ Create `Contents/Resources/manifest.json` in your bundle:
   "id": "com.yourname.myplugin",
   "name": "My Plugin",
   "version": "1.0.0",
-  "minHostVersion": "1.0.0",
+  "minHostVersion": "1.6.0",
   "sdkCompatibilityVersion": "v1",
   "minOSVersion": "14.0",
   "author": "Your Name",
@@ -31,7 +31,7 @@ Create `Contents/Resources/manifest.json` in your bundle:
 
 - `id` - Unique reverse-domain identifier
 - `principalClass` - Must match `@objc(ClassName)` on your plugin class
-- `minHostVersion` - Minimum TypeWhisper version required
+- `minHostVersion` - Minimum TypeWhisper version required; new releases must use `1.6.0` or newer
 - `sdkCompatibilityVersion` - Must match `PluginSDKCompatibility.currentVersion` for marketplace/external plugins
 - `minOSVersion` - Minimum macOS version required (plugin is skipped on older systems)
 
@@ -500,7 +500,7 @@ let wavData = PluginWavEncoder.encode(samples, sampleRate: 16000)
 | `id` | Yes | Unique reverse-domain ID (e.g. `com.yourname.myplugin`) |
 | `name` | Yes | Display name |
 | `version` | Yes | Semver string (e.g. `1.0.0`) |
-| `minHostVersion` | No | Minimum TypeWhisper version (e.g. `1.0.0`) |
+| `minHostVersion` | Yes | Minimum TypeWhisper version; new releases must use `1.6.0` or newer |
 | `sdkCompatibilityVersion` | No | Exact plugin SDK compatibility line. Marketplace/external plugins must match `PluginSDKCompatibility.currentVersion`. |
 | `minOSVersion` | No | Minimum macOS version (e.g. `14.0`, `26.0`). Plugin is skipped on older systems. |
 | `author` | No | Author name |
@@ -531,11 +531,9 @@ Community marketplace artifacts must be built and hosted by TypeWhisper.
 Contributor-hosted ZIPs, personal GitHub Release assets, and other external
 artifact URLs are not supported in the community registry.
 
-Registry feeds:
-
-- `plugins.json` - legacy plugins without `sdkCompatibilityVersion`
-- `plugins-v1.json` - current official `v1` SDK marketplace feed used by `1.3.x`
-- `plugins-community-v1.json` - `1.4+` community-capable `v1` SDK feed
+The supported marketplace feed is `plugins-community-v1.json`. The older
+`plugins.json` and `plugins-v1.json` feeds remain published only for historical
+host releases.
 
 Registry entry format:
 
@@ -556,7 +554,7 @@ Registry entry format:
 }
 ```
 
-`source` is registry metadata for the TypeWhisper Integrations UI. Omit it for official marketplace entries; TypeWhisper treats missing values as `official`. Use `"source": "community"` for community-maintained plugins submitted to the `1.4+` community feed. This field is not required in the plugin bundle manifest.
+`source` is registry metadata for the TypeWhisper Integrations UI. Omit it for official marketplace entries; TypeWhisper treats missing values as `official`. Use `"source": "community"` for community-maintained plugins submitted to the supported `plugins-community-v1.json` feed for TypeWhisper 1.6 and newer. This field is not required in the plugin bundle manifest.
 
 Release metadata belongs only inside `releases[]`. Community entries may omit
 `releases[]` or keep it empty while source review is in progress. Once a

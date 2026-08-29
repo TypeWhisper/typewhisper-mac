@@ -469,7 +469,6 @@ final class PluginRegistryService: ObservableObject {
     nonisolated(unsafe) static var shared: PluginRegistryService!
 
     enum RegistryFeed: String, Equatable {
-        case v1 = "plugins-v1.json"
         case communityV1 = "plugins-community-v1.json"
 
         var pathComponent: String { rawValue }
@@ -567,17 +566,6 @@ final class PluginRegistryService: ObservableObject {
         return .orderedSame
     }
 
-    nonisolated static func registryFeed(
-        appVersion: String,
-        releaseChannel: AppConstants.ReleaseChannel
-    ) -> RegistryFeed {
-        _ = releaseChannel
-        if compareVersions(appVersion, "1.4.0") != .orderedAscending {
-            return .communityV1
-        }
-        return .v1
-    }
-
     nonisolated static func isTrustedRegistryDownloadURL(
         _ downloadURL: String,
         source: PluginDistributionSource
@@ -638,10 +626,7 @@ final class PluginRegistryService: ObservableObject {
         }
 
         fetchState = .loading
-        let feed = Self.registryFeed(
-            appVersion: resolvedAppVersion,
-            releaseChannel: resolvedReleaseChannel
-        )
+        let feed = RegistryFeed.communityV1
         let registryURL = registryBaseURL.appendingPathComponent(feed.pathComponent)
 
         do {
@@ -1200,10 +1185,6 @@ final class PluginRegistryService: ObservableObject {
 
     private var resolvedAppVersion: String {
         infoDictionary?["CFBundleShortVersionString"] as? String ?? "0.0"
-    }
-
-    private var resolvedReleaseChannel: AppConstants.ReleaseChannel {
-        AppConstants.bundledReleaseChannel(infoDictionary: infoDictionary)
     }
 
     private func cacheURL(for feed: RegistryFeed) -> URL {
