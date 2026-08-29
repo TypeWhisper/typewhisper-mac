@@ -3,6 +3,17 @@ import SwiftUI
 import WhisperKit
 import TypeWhisperPluginSDK
 
+// Keep this policy plugin-local because the SDK network guard was added after TypeWhisper 1.6.0.
+enum WhisperKitNetworkAccessPolicy {
+    static func ensureAccessIsAllowed(
+        arguments: [String] = ProcessInfo.processInfo.arguments
+    ) throws {
+        guard !arguments.contains("--store-screenshots") else {
+            throw URLError(.notConnectedToInternet)
+        }
+    }
+}
+
 // MARK: - Plugin Entry Point
 
 @objc(WhisperKitPlugin)
@@ -554,7 +565,7 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
                 downloadProgress = 0.05
 
                 var lastProgress = 0.0
-                try PluginHTTPClient.ensureNetworkAccessIsAllowed()
+                try WhisperKitNetworkAccessPolicy.ensureAccessIsAllowed()
                 modelFolder = try await WhisperKit.download(
                     variant: modelDef.id,
                     downloadBase: downloadBase,
@@ -902,7 +913,7 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
         relativePath: String,
         destination: URL
     ) async throws {
-        try PluginHTTPClient.ensureNetworkAccessIsAllowed()
+        try WhisperKitNetworkAccessPolicy.ensureAccessIsAllowed()
         var url = URL(string: Self.modelEndpoint)!
         for component in Self.modelRepo.split(separator: "/") {
             url.append(path: String(component))
