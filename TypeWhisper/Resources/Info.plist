@@ -41,6 +41,32 @@
 	<string>public.app-category.productivity</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>TypeWhisper Local needs microphone access for speech-to-text transcription.</string>
+	<key>NSServices</key>
+	<array>
+		<dict>
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
+				<string>Transcribe with TypeWhisper</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>transcribeFiles</string>
+			<key>NSPortName</key>
+			<string>TypeWhisper</string>
+			<key>NSRequiredContext</key>
+			<dict>
+				<key>NSApplicationIdentifier</key>
+				<string>com.apple.finder</string>
+			</dict>
+			<key>NSSendFileTypes</key>
+			<array>
+				<string>public.audio</string>
+				<string>public.movie</string>
+			</array>
+			<key>NSServiceDescription</key>
+			<string>Queue selected audio and video files for transcription in TypeWhisper.</string>
+		</dict>
+	</array>
 	<key>NSAppleEventsUsageDescription</key>
 	<string>TypeWhisper detects the current browser URL to apply language profiles automatically.</string>
 	<key>NSCalendarsFullAccessUsageDescription</key>

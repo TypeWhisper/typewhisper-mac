@@ -358,6 +358,10 @@
 		AA00000000000000000196 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000186 /* Assets.xcassets */; };
 		AA00000000000000000197 /* WidgetDataService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000180 /* WidgetDataService.swift */; };
 		AA00000000000000000198 /* TypeWhisperWidgetExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = BB00000000000000000188 /* TypeWhisperWidgetExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		E1A000000000000000000001 /* ActionRequestHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = E1A000000000000000000020 /* ActionRequestHandler.swift */; };
+		E1A000000000000000000002 /* TypeWhisperTranscribeAction.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = E1A000000000000000000023 /* TypeWhisperTranscribeAction.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		E1A000000000000000000003 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E1A000000000000000000024 /* Assets.xcassets */; };
+		E1A000000000000000000004 /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = E1A000000000000000000025 /* InfoPlist.xcstrings */; };
 		5E7A00000000000000000001 /* SpeechAnalyzerPlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = BB00000000000000000159 /* SpeechAnalyzerPlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		AA00000000000000000199 /* VoxtralPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000191 /* VoxtralPlugin.swift */; };
 		AA00000000000000000200 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000192 /* manifest.json */; };
@@ -579,6 +583,13 @@
 			remoteGlobalIDString = DD00000000000000000014;
 			remoteInfo = TypeWhisperWidgetExtension;
 		};
+		E1A000000000000000000010 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = E1A000000000000000000050;
+			remoteInfo = TypeWhisperTranscribeAction;
+		};
 		5E7A00000000000000000003 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = EE00000000000000000001 /* Project object */;
@@ -629,6 +640,7 @@
 			dstSubfolderSpec = 13;
 			files = (
 				AA00000000000000000198 /* TypeWhisperWidgetExtension.appex in Embed App Extensions */,
+				E1A000000000000000000002 /* TypeWhisperTranscribeAction.appex in Embed App Extensions */,
 			);
 			name = "Embed App Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -917,6 +929,12 @@
 		BB00000000000000000187 /* TypeWhisperWidgetExtension.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TypeWhisperWidgetExtension.entitlements; sourceTree = "<group>"; };
 		BB00000000000000000188 /* TypeWhisperWidgetExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = TypeWhisperWidgetExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB00000000000000000189 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		E1A000000000000000000020 /* ActionRequestHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ActionRequestHandler.swift; sourceTree = "<group>"; };
+		E1A000000000000000000021 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		E1A000000000000000000022 /* TypeWhisperTranscribeAction.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = TypeWhisperTranscribeAction.entitlements; sourceTree = "<group>"; };
+		E1A000000000000000000023 /* TypeWhisperTranscribeAction.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = TypeWhisperTranscribeAction.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		E1A000000000000000000024 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		E1A000000000000000000025 /* InfoPlist.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = InfoPlist.xcstrings; sourceTree = "<group>"; };
 		BB00000000000000000190 /* VoxtralPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = VoxtralPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB00000000000000000191 /* VoxtralPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoxtralPlugin.swift; sourceTree = "<group>"; };
 		BB00000000000000000192 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
@@ -1592,6 +1610,13 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		E1A000000000000000000040 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -1674,6 +1699,7 @@
 				CC00000000000000000044 /* Gemma4Plugin */,
 				CC00000000000000000045 /* SpeechmaticsPlugin */,
 				CC00000000000000000025 /* TypeWhisperWidgetExtension */,
+				E1A000000000000000000030 /* TypeWhisperTranscribeAction */,
 				CC00000000000000000026 /* TypeWhisperWidgetShared */,
 				CC00000000000000000090 /* Products */,
 				573FF8BBD9BCC48AA1BBD1CD /* Frameworks */,
@@ -2177,6 +2203,18 @@
 			path = TypeWhisperWidgetExtension;
 			sourceTree = "<group>";
 		};
+		E1A000000000000000000030 /* TypeWhisperTranscribeAction */ = {
+			isa = PBXGroup;
+			children = (
+				E1A000000000000000000020 /* ActionRequestHandler.swift */,
+				E1A000000000000000000024 /* Assets.xcassets */,
+				E1A000000000000000000025 /* InfoPlist.xcstrings */,
+				E1A000000000000000000022 /* TypeWhisperTranscribeAction.entitlements */,
+				E1A000000000000000000021 /* Info.plist */,
+			);
+			path = TypeWhisperTranscribeAction;
+			sourceTree = "<group>";
+		};
 		CC00000000000000000026 /* TypeWhisperWidgetShared */ = {
 			isa = PBXGroup;
 			children = (
@@ -2633,6 +2671,7 @@
 				BB00000000000000000294 /* SpeechmaticsPlugin.bundle */,
 				RESS00000000000000004 /* Reson8Plugin.bundle */,
 				BB00000000000000000188 /* TypeWhisperWidgetExtension.appex */,
+				E1A000000000000000000023 /* TypeWhisperTranscribeAction.appex */,
 				5CA4DB761B06383B5B8CF082 /* GoogleCloudSTTPlugin.bundle */,
 				E6F8E5940EF4832A7B8D735D /* TypeWhisperTests.xctest */,
 			);
@@ -2772,6 +2811,7 @@
 			dependencies = (
 				GG00000000000000000001 /* PBXTargetDependency */,
 				GG00000000000000000009 /* PBXTargetDependency */,
+				E1A000000000000000000060 /* PBXTargetDependency */,
 				5E7A00000000000000000004 /* PBXTargetDependency */,
 				1C1000000000000000000045 /* PBXTargetDependency */,
 			);
@@ -3099,6 +3139,23 @@
 			name = TypeWhisperWidgetExtension;
 			productName = TypeWhisperWidgetExtension;
 			productReference = BB00000000000000000188 /* TypeWhisperWidgetExtension.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
+		E1A000000000000000000050 /* TypeWhisperTranscribeAction */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E1A000000000000000000080 /* Build configuration list for PBXNativeTarget "TypeWhisperTranscribeAction" */;
+			buildPhases = (
+				E1A000000000000000000042 /* Sources */,
+				E1A000000000000000000040 /* Frameworks */,
+				E1A000000000000000000041 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = TypeWhisperTranscribeAction;
+			productName = TypeWhisperTranscribeAction;
+			productReference = E1A000000000000000000023 /* TypeWhisperTranscribeAction.appex */;
 			productType = "com.apple.product-type.app-extension";
 		};
 		DD00000000000000000015 /* VoxtralPlugin */ = {
@@ -3808,6 +3865,9 @@
 					DD00000000000000000002 = {
 						CreatedOnToolsVersion = 16.0;
 					};
+					E1A000000000000000000050 = {
+						CreatedOnToolsVersion = 26.0;
+					};
 					D10000000000000000000001 = {
 						CreatedOnToolsVersion = 16.0;
 					};
@@ -3894,6 +3954,7 @@
 				DD00000000000000000034 /* SpeechmaticsPlugin */,
 				RESN00000000000000001 /* Reson8Plugin */,
 				DD00000000000000000014 /* TypeWhisperWidgetExtension */,
+				E1A000000000000000000050 /* TypeWhisperTranscribeAction */,
 				40F22D3F350BA09ADEFBD2CB /* TypeWhisperTests */,
 				F3E17BDD5CED7E75F4153E95 /* GoogleCloudSTTPlugin */,
 			);
@@ -4353,6 +4414,15 @@
 			files = (
 				AA00000000000000000307 /* manifest.json in Resources */,
 				AA00000000000000000308 /* Localizable.xcstrings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		E1A000000000000000000041 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E1A000000000000000000003 /* Assets.xcassets in Resources */,
+				E1A000000000000000000004 /* InfoPlist.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -5087,6 +5157,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		E1A000000000000000000042 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E1A000000000000000000001 /* ActionRequestHandler.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
@@ -5110,6 +5188,11 @@
 			isa = PBXTargetDependency;
 			target = DD00000000000000000014 /* TypeWhisperWidgetExtension */;
 			targetProxy = HH00000000000000000009 /* PBXContainerItemProxy */;
+		};
+		E1A000000000000000000060 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = E1A000000000000000000050 /* TypeWhisperTranscribeAction */;
+			targetProxy = E1A000000000000000000010 /* PBXContainerItemProxy */;
 		};
 		5E7A00000000000000000004 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -6077,6 +6160,60 @@
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
 				WRAPPER_EXTENSION = bundle;
+			};
+			name = Release;
+		};
+		E1A000000000000000000070 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = TypeWhisperTranscribeAction/TypeWhisperTranscribeAction.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = "$(MARKETING_VERSION)";
+				DEAD_CODE_STRIPPING = YES;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = TypeWhisperTranscribeAction/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MARKETING_VERSION = 1.7.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.mac.dev.transcribe-action;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_STRICT_CONCURRENCY = targeted;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		E1A000000000000000000071 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				APPLICATION_EXTENSION_API_ONLY = YES;
+				CODE_SIGN_ENTITLEMENTS = TypeWhisperTranscribeAction/TypeWhisperTranscribeAction.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = "$(MARKETING_VERSION)";
+				DEAD_CODE_STRIPPING = YES;
+				ENABLE_APP_SANDBOX = YES;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = TypeWhisperTranscribeAction/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+					"@executable_path/../../../../Frameworks",
+				);
+				MARKETING_VERSION = 1.7.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.mac.transcribe-action;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SWIFT_STRICT_CONCURRENCY = targeted;
+				SWIFT_VERSION = 6.0;
 			};
 			name = Release;
 		};
@@ -7947,6 +8084,15 @@
 			buildConfigurations = (
 				XX00000000000000000057 /* Debug */,
 				XX00000000000000000058 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		E1A000000000000000000080 /* Build configuration list for PBXNativeTarget "TypeWhisperTranscribeAction" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				E1A000000000000000000070 /* Debug */,
+				E1A000000000000000000071 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

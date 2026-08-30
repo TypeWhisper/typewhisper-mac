@@ -268,15 +268,28 @@ final class FileTranscriptionViewModel: ObservableObject {
     }
 
     func addFiles(_ urls: [URL]) {
-        let validExtensions = AudioFileService.supportedExtensions
-        let existingURLs = Set(files.map(\.url))
+        let existingURLs = Set(files.map { $0.url.standardizedFileURL })
 
-        let newFiles = urls
-            .filter { validExtensions.contains($0.pathExtension.lowercased()) }
+        let newFiles = Self.supportedFileURLs(urls)
             .filter { !existingURLs.contains($0) }
             .map { FileItem(url: $0) }
 
         files.append(contentsOf: newFiles)
+    }
+
+    static func supportedFileURLs(_ urls: [URL]) -> [URL] {
+        var seenURLs = Set<URL>()
+
+        return urls.compactMap { url in
+            guard url.isFileURL,
+                  AudioFileService.supportedExtensions.contains(url.pathExtension.lowercased()) else {
+                return nil
+            }
+
+            let standardizedURL = url.standardizedFileURL
+            guard seenURLs.insert(standardizedURL).inserted else { return nil }
+            return standardizedURL
+        }
     }
 
     @discardableResult

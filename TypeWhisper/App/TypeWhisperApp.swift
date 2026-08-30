@@ -226,6 +226,57 @@ enum MenuBarIconState {
     }
 }
 
+@MainActor
+final class FinderTranscriptionService: NSObject {
+    typealias EnqueueFiles = @MainActor ([URL]) -> Void
+    typealias PresentFileTranscription = @MainActor () -> Void
+
+    private let enqueueFiles: EnqueueFiles
+    private let presentFileTranscription: PresentFileTranscription
+
+    init(
+        enqueueFiles: @escaping EnqueueFiles = { FileTranscriptionViewModel.shared.addFiles($0) },
+        presentFileTranscription: @escaping PresentFileTranscription = {
+            SettingsNavigationCoordinator.shared.navigate(to: .fileTranscription)
+            ManagedAppWindowOpener.shared.open(id: "settings")
+        }
+    ) {
+        self.enqueueFiles = enqueueFiles
+        self.presentFileTranscription = presentFileTranscription
+    }
+
+    static func fileURLs(from pasteboard: NSPasteboard) -> [URL] {
+        let objects = pasteboard.readObjects(
+            forClasses: [NSURL.self],
+            options: [.urlReadingFileURLsOnly: true]
+        ) as? [NSURL]
+        return FileTranscriptionViewModel.supportedFileURLs(objects?.map { $0 as URL } ?? [])
+    }
+
+    @discardableResult
+    func handle(_ pasteboard: NSPasteboard) -> String? {
+        let urls = Self.fileURLs(from: pasteboard)
+        guard !urls.isEmpty else {
+            return "No supported audio or video files were selected."
+        }
+
+        enqueueFiles(urls)
+        presentFileTranscription()
+        return nil
+    }
+
+    @objc(transcribeFiles:userData:error:)
+    func transcribeFiles(
+        _ pasteboard: NSPasteboard,
+        userData _: String?,
+        error errorPointer: AutoreleasingUnsafeMutablePointer<NSString?>?
+    ) {
+        if let errorMessage = handle(pasteboard) {
+            errorPointer?.pointee = errorMessage as NSString
+        }
+    }
+}
+
 private struct MenuBarExtraLabel: View {
     @Environment(\.openWindow) private var openWindow
     @ObservedObject private var dictation = DictationViewModel.shared
@@ -641,6 +692,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
     private var workspaceWakeObserver: NSObjectProtocol?
     private var hasInteractiveForegroundContent = false
     private var pluginScreenshotCaptureController: PluginSettingsScreenshotCaptureController?
+    private let finderTranscriptionService = FinderTranscriptionService()
     private lazy var updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: self, userDriverDelegate: nil)
 
     var updateChecker: UpdateChecker {
@@ -698,6 +750,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
 
         ServiceContainer.shared.calendarMeetingAutomationController
             .installNotificationRouterIfNeeded()
+
+        NSApp.servicesProvider = finderTranscriptionService
+        NSUpdateDynamicServices()
 
         UpdateChecker.shared = updateChecker
         applyActivationPolicy()
