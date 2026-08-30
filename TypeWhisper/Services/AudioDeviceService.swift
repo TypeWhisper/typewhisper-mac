@@ -630,7 +630,9 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         }
 
         switch transport {
-        case kAudioDeviceTransportTypeVirtual, kAudioDeviceTransportTypeAggregate:
+        case kAudioDeviceTransportTypeVirtual,
+             kAudioDeviceTransportTypeAggregate,
+             kAudioDeviceTransportTypeAutoAggregate:
             return .virtualOrAggregate
         case kAudioDeviceTransportTypeUnknown:
             // CoreAudio's sentinel for a driver that never declared a transport,
@@ -1468,7 +1470,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         let transport = transportType(for: deviceID)
         let transportName = transport.map { value in transportTypeName(value) }
         let transportFourCC = transport.map { value in transportTypeFourCC(value) }
-        let isAggregate = transport == kAudioDeviceTransportTypeAggregate
+        let isAggregate = Self.isAggregateTransport(transport)
         let isVirtual = transport == kAudioDeviceTransportTypeVirtual
         let isAggregateOrVirtual = isAggregate || isVirtual
         let isSelectedByID = selectedDeviceID == deviceID
@@ -1683,12 +1685,25 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         return transportType
     }
 
+    /// Whether a transport denotes an aggregate device, of either flavour.
+    ///
+    /// CoreAudio has two: `kAudioDeviceTransportTypeAggregate` for one the user
+    /// built, and `kAudioDeviceTransportTypeAutoAggregate` for one the system
+    /// assembled on its own. Both wrap other devices rather than being hardware
+    /// in their own right, so ranking and diagnostics treat them alike.
+    private static func isAggregateTransport(_ transportType: UInt32?) -> Bool {
+        transportType == kAudioDeviceTransportTypeAggregate
+            || transportType == kAudioDeviceTransportTypeAutoAggregate
+    }
+
     private static func transportTypeName(_ transportType: UInt32) -> String {
         switch transportType {
         case kAudioDeviceTransportTypeBuiltIn:
             return "builtIn"
         case kAudioDeviceTransportTypeAggregate:
             return "aggregate"
+        case kAudioDeviceTransportTypeAutoAggregate:
+            return "autoAggregate"
         case kAudioDeviceTransportTypeVirtual:
             return "virtual"
         case kAudioDeviceTransportTypePCI:
@@ -3546,7 +3561,7 @@ extension AudioDeviceService {
 
             let transportName = snapshot.transportType.map { value in transportTypeName(value) }
             let transportFourCC = snapshot.transportType.map { value in transportTypeFourCC(value) }
-            let isAggregate = snapshot.transportType == kAudioDeviceTransportTypeAggregate
+            let isAggregate = Self.isAggregateTransport(snapshot.transportType)
             let isVirtual = snapshot.transportType == kAudioDeviceTransportTypeVirtual
             let exclusionReason = listedDevice == nil
                 ? inputDeviceExclusionReason(for: snapshot)?.rawValue ?? "notListed"

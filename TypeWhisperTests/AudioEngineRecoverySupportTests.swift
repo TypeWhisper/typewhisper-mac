@@ -1609,6 +1609,58 @@ final class AudioDeviceServiceCompatibilityTests: XCTestCase {
         XCTAssertEqual(makeService(includeUSB: false).resolvedRecordingInputSelection().deviceUID, "unknown-input")
     }
 
+    /// An automatically created aggregate wraps other devices rather than being
+    /// hardware itself, exactly like a user-built one, so it ranks with the
+    /// aggregates and not as physical.
+    func testClamshellFallbackRanksAutoAggregateWithAggregates() {
+        let internalMicID = AudioDeviceID(805)
+        let autoAggregateID = AudioDeviceID(806)
+        let usbDeviceID = AudioDeviceID(807)
+
+        func makeService(includeUSB: Bool) -> AudioDeviceService {
+            var devices = [
+                AudioInputDevice(deviceID: autoAggregateID, name: "Aggregate Device", uid: "auto-aggregate-input"),
+                AudioInputDevice(deviceID: internalMicID, name: "MacBook Pro Microphone", uid: "BuiltInMicrophoneDevice")
+            ]
+            if includeUSB {
+                devices.append(AudioInputDevice(deviceID: usbDeviceID, name: "USB Microphone", uid: "usb-input"))
+            }
+            let service = AudioDeviceService(
+                initialInputDevices: devices,
+                monitorDeviceChanges: false,
+                probeCompatibilities: false,
+                transportResolver: FakeAudioDeviceTransportResolver(
+                    transports: [
+                        autoAggregateID: kAudioDeviceTransportTypeAutoAggregate,
+                        internalMicID: kAudioDeviceTransportTypeBuiltIn,
+                        usbDeviceID: kAudioDeviceTransportTypeUSB
+                    ]
+                ),
+                clamshellStateProvider: FakeClamshellStateProvider(lidClosed: true),
+                defaultInputDeviceController: FakeAudioInputDeviceDefaultController(
+                    defaultInputDeviceID: internalMicID
+                )
+            )
+            service.audioDeviceIDResolverOverride = { uid in
+                switch uid {
+                case "auto-aggregate-input": return autoAggregateID
+                case "BuiltInMicrophoneDevice": return internalMicID
+                case "usb-input": return usbDeviceID
+                default: return nil
+                }
+            }
+            service.clearInputDevicePriorityList()
+            return service
+        }
+
+        // The auto-aggregate is enumerated first, but a real microphone wins.
+        XCTAssertEqual(makeService(includeUSB: true).resolvedRecordingInputSelection().deviceUID, "usb-input")
+
+        // Demotion is a preference, not an exclusion: with nothing better left,
+        // the auto-aggregate is still selected.
+        XCTAssertEqual(makeService(includeUSB: false).resolvedRecordingInputSelection().deviceUID, "auto-aggregate-input")
+    }
+
     /// Reaches the clamshell fallback with a NON-empty priority list: the sole
     /// priority entry is the internal mic, which the candidate loop rejects, so
     /// resolution must continue into the fallback and pick a device that was
