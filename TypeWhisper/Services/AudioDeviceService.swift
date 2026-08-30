@@ -137,6 +137,15 @@ struct AudioInputDiagnosticsReport: Encodable, Equatable, Sendable {
         let transportType: UInt32?
         let transportTypeName: String?
         let transportTypeFourCC: String?
+        /// Index among the input-capable devices, in CoreAudio's original
+        /// enumeration order. That is the order clamshell fallback walks; the
+        /// list below is sorted by device ID, which hides it.
+        let enumerationPosition: Int?
+        /// Currently selected input data source(s) as FourCC strings, e.g.
+        /// `imic` for the internal capsule or `emic` for the 3.5mm jack.
+        let inputDataSourceFourCCs: [String]?
+        /// Whether routing classifies this device as the internal microphone.
+        let isInternalMicrophone: Bool
         let isDefaultInput: Bool
         let isSelected: Bool
         let isAggregate: Bool
@@ -158,6 +167,7 @@ struct AudioInputDiagnosticsReport: Encodable, Equatable, Sendable {
     let previewRawLevel: Float
     let previewError: String?
     let defaultInputDeviceID: UInt32?
+    let lidClosed: Bool
     let lastInputOnlyCaptureFailure: AudioInputCaptureFailureDiagnostics?
     let devices: [Device]
 }
@@ -392,6 +402,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
             previewRawLevel: previewRawLevel,
             previewError: previewErrorValue,
             defaultInputDeviceID: defaultInputDeviceIDValue,
+            lidClosed: clamshellStateProvider.isLidClosed(),
             lastInputOnlyCaptureFailure: lastInputOnlyCaptureFailure,
             devices: devices
         )
@@ -547,7 +558,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
             transportType: defaultInputTransport,
             lidClosed: lidClosed
         ) {
-            for device in inputDevices {
+            for device in clamshellFallbackOrderedDevices() {
                 guard let fallbackSelection = resolvedInputSelection(for: device, lidClosed: true),
                       fallbackSelection.deviceID != defaultInputDeviceID else {
                     continue
@@ -571,6 +582,66 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
             deviceName: inputDevices.first(where: { $0.deviceID == defaultInputDeviceID })?.name,
             usesBluetoothTransport: usesBluetoothTransport
         )
+    }
+
+    /// Preference order for clamshell fallback candidates.
+    ///
+    /// CoreAudio enumerates devices in an arbitrary order that frequently starts
+    /// with a virtual loopback driver (screen sharing, light sync, meeting apps).
+    /// Those capture no microphone audio, so taking the first entry can hand
+    /// recording to a loopback device while a real microphone sits further down
+    /// the list. See #1163.
+    private enum ClamshellFallbackRank: CaseIterable {
+        /// A device on a transport we can positively identify as real hardware.
+        case physical
+        /// The transport could not be resolved, or CoreAudio reported it as
+        /// unknown. Such a device may well be a real microphone, so it outranks
+        /// a known virtual one, but not a device we can positively identify as
+        /// physical. A device whose ID does not resolve also lands here, though
+        /// selection then rejects it in turn.
+        case unresolvedTransport
+        /// Virtual or aggregate. Used only when nothing better is available.
+        case virtualOrAggregate
+    }
+
+    /// Devices to try when the system-default input is the internal microphone
+    /// and the lid is closed, ordered by `ClamshellFallbackRank`.
+    ///
+    /// Ordering is done by bucketing rather than sorting so that CoreAudio's
+    /// original enumeration order is preserved within each rank.
+    private func clamshellFallbackOrderedDevices() -> [AudioInputDevice] {
+        let ranked = inputDevices.map { (device: $0, rank: clamshellFallbackRank(for: $0)) }
+
+        return ClamshellFallbackRank.allCases.flatMap { rank in
+            ranked.filter { $0.rank == rank }.map(\.device)
+        }
+    }
+
+    private func clamshellFallbackRank(for device: AudioInputDevice) -> ClamshellFallbackRank {
+        // Classify through the same resolver `resolvedInputSelection` uses, so a
+        // device is ranked on the identity it would actually be selected with. A
+        // stored `deviceID` goes stale when hardware is unplugged and
+        // reconnected; resolving by UID first avoids ranking a virtual driver as
+        // physical off a reused ID. Note the resolver still falls back to the
+        // stored ID when the UID no longer resolves, matching selection.
+        guard let deviceID = resolvedAudioDeviceID(for: device),
+              let transport = transportType(for: deviceID) else {
+            return .unresolvedTransport
+        }
+
+        switch transport {
+        case kAudioDeviceTransportTypeVirtual,
+             kAudioDeviceTransportTypeAggregate,
+             kAudioDeviceTransportTypeAutoAggregate:
+            return .virtualOrAggregate
+        case kAudioDeviceTransportTypeUnknown:
+            // CoreAudio's sentinel for a driver that never declared a transport,
+            // so it says nothing about whether the device is real hardware. It
+            // ranks with the other unresolved cases rather than as physical.
+            return .unresolvedTransport
+        default:
+            return .physical
+        }
     }
 
     private func resolvedInputSelection(
@@ -1356,8 +1427,15 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         listedDevicesByUID: [String: AudioInputDevice],
         hasMicrophonePermission: Bool
     ) -> [AudioInputDiagnosticsReport.Device] {
-        var deviceIDs = Set(inputCapableAudioDeviceIDs())
+        // Enumerated once and reused for both the device set and the positions,
+        // so the two cannot disagree and the HAL is only walked once.
+        let enumeratedDeviceIDs = inputCapableAudioDeviceIDs()
+        var deviceIDs = Set(enumeratedDeviceIDs)
         deviceIDs.formUnion(listedDevicesByID.keys)
+
+        // Captured before sorting: the report lists devices by ID, but clamshell
+        // fallback walks CoreAudio's original order.
+        let enumerationPositions = enumerationPositions(of: enumeratedDeviceIDs)
 
         return deviceIDs.sorted().map { deviceID in
             inputDeviceDiagnostics(
@@ -1367,7 +1445,8 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
                 defaultInputDeviceID: defaultInputDeviceID,
                 listedDevicesByID: listedDevicesByID,
                 listedDevicesByUID: listedDevicesByUID,
-                hasMicrophonePermission: hasMicrophonePermission
+                hasMicrophonePermission: hasMicrophonePermission,
+                enumerationPosition: enumerationPositions[deviceID]
             )
         }
     }
@@ -1379,7 +1458,8 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         defaultInputDeviceID: AudioDeviceID?,
         listedDevicesByID: [AudioDeviceID: AudioInputDevice],
         listedDevicesByUID: [String: AudioInputDevice],
-        hasMicrophonePermission: Bool
+        hasMicrophonePermission: Bool,
+        enumerationPosition: Int?
     ) -> AudioInputDiagnosticsReport.Device {
         let coreAudioUID = deviceUID(for: deviceID)
         var listedDevice = listedDevicesByID[deviceID]
@@ -1390,7 +1470,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         let transport = transportType(for: deviceID)
         let transportName = transport.map { value in transportTypeName(value) }
         let transportFourCC = transport.map { value in transportTypeFourCC(value) }
-        let isAggregate = transport == kAudioDeviceTransportTypeAggregate
+        let isAggregate = Self.isAggregateTransport(transport)
         let isVirtual = transport == kAudioDeviceTransportTypeVirtual
         let isAggregateOrVirtual = isAggregate || isVirtual
         let isSelectedByID = selectedDeviceID == deviceID
@@ -1410,6 +1490,8 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         let exclusionReason = listedDevice == nil
             ? inputDeviceExclusionReason(for: snapshot)?.rawValue ?? "notListed"
             : nil
+        let dataSources = inputDataSources(for: deviceID)
+        let dataSourceFourCCs = dataSources.isEmpty ? nil : dataSources.map(fourCCString)
 
         return AudioInputDiagnosticsReport.Device(
             deviceID: UInt32(deviceID),
@@ -1421,6 +1503,12 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
             transportType: transport,
             transportTypeName: transportName,
             transportTypeFourCC: transportFourCC,
+            enumerationPosition: enumerationPosition,
+            inputDataSourceFourCCs: dataSourceFourCCs,
+            isInternalMicrophone: isInternalMicrophone(
+                deviceUID: snapshot.uid,
+                transportType: transport
+            ),
             isDefaultInput: defaultInputDeviceID == deviceID,
             isSelected: isSelectedByID || isSelectedByUID,
             isAggregate: isAggregate,
@@ -1514,14 +1602,74 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         transportType == kAudioDeviceTransportTypeBuiltIn
     }
 
+    /// Stable UID Apple assigns to the internal microphone. This is the routing
+    /// identity: the device the hardware physically mutes when the lid closes.
+    static let internalMicrophoneDeviceUID = "BuiltInMicrophoneDevice"
+
+    /// Whether a device is the internal microphone, independent of lid state.
+    ///
+    /// Separated from the clamshell check so diagnostics can report the routing
+    /// classification for every device without conflating it with lid state.
+    static func isInternalMicrophone(deviceUID: String?, transportType: UInt32?) -> Bool {
+        transportType == kAudioDeviceTransportTypeBuiltIn
+            && deviceUID == internalMicrophoneDeviceUID
+    }
+
     private static func isInternalMicrophoneUnavailableInClamshell(
         deviceUID: String?,
         transportType: UInt32?,
         lidClosed: Bool
     ) -> Bool {
-        lidClosed
-            && transportType == kAudioDeviceTransportTypeBuiltIn
-            && deviceUID == "BuiltInMicrophoneDevice"
+        lidClosed && isInternalMicrophone(deviceUID: deviceUID, transportType: transportType)
+    }
+
+    /// Currently selected input data source(s), as raw CoreAudio FourCC values.
+    ///
+    /// Collected for diagnostics only. On Apple laptops the internal capsule
+    /// reports `'imic'` and the 3.5mm jack reports `'emic'`, both on a `builtIn`
+    /// transport, which is what makes transport alone insufficient to tell them
+    /// apart (#1163). Routing identity remains UID-based; these values are
+    /// gathered so the two can be compared across real hardware first.
+    ///
+    /// CoreAudio types this property as an array, since a device can have more
+    /// than one source selected at once, so the full array is read rather than a
+    /// single value.
+    private static func inputDataSources(for deviceID: AudioDeviceID) -> [UInt32] {
+        var address = AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyDataSource,
+            mScope: kAudioDevicePropertyScopeInput,
+            mElement: kAudioObjectPropertyElementMain
+        )
+
+        let stride = UInt32(MemoryLayout<UInt32>.size)
+        var size: UInt32 = 0
+        guard AudioObjectGetPropertyDataSize(deviceID, &address, 0, nil, &size) == noErr,
+              size >= stride,
+              size % stride == 0 else {
+            return []
+        }
+
+        var values = [UInt32](repeating: 0, count: Int(size / stride))
+        guard AudioObjectGetPropertyData(deviceID, &address, 0, nil, &size, &values) == noErr else {
+            return []
+        }
+        // CoreAudio writes the number of bytes it actually produced back into
+        // `size`, which can be smaller than the buffer we sized from the query.
+        return Array(values.prefix(Int(size / stride)))
+    }
+
+    /// Index of each device among the input-capable devices, in CoreAudio's
+    /// original `kAudioHardwarePropertyDevices` enumeration order.
+    ///
+    /// The diagnostics device list is sorted by device ID, which hides the order
+    /// that actually decides clamshell fallback selection. Recording the original
+    /// index keeps that information in the report.
+    private static func enumerationPositions(of deviceIDs: [AudioDeviceID]) -> [AudioDeviceID: Int] {
+        var positions: [AudioDeviceID: Int] = [:]
+        for (index, deviceID) in deviceIDs.enumerated() {
+            positions[deviceID] = index
+        }
+        return positions
     }
 
     fileprivate static func transportType(for deviceID: AudioDeviceID) -> UInt32? {
@@ -1537,12 +1685,25 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         return transportType
     }
 
+    /// Whether a transport denotes an aggregate device, of either flavour.
+    ///
+    /// CoreAudio has two: `kAudioDeviceTransportTypeAggregate` for one the user
+    /// built, and `kAudioDeviceTransportTypeAutoAggregate` for one the system
+    /// assembled on its own. Both wrap other devices rather than being hardware
+    /// in their own right, so ranking and diagnostics treat them alike.
+    private static func isAggregateTransport(_ transportType: UInt32?) -> Bool {
+        transportType == kAudioDeviceTransportTypeAggregate
+            || transportType == kAudioDeviceTransportTypeAutoAggregate
+    }
+
     private static func transportTypeName(_ transportType: UInt32) -> String {
         switch transportType {
         case kAudioDeviceTransportTypeBuiltIn:
             return "builtIn"
         case kAudioDeviceTransportTypeAggregate:
             return "aggregate"
+        case kAudioDeviceTransportTypeAutoAggregate:
+            return "autoAggregate"
         case kAudioDeviceTransportTypeVirtual:
             return "virtual"
         case kAudioDeviceTransportTypePCI:
@@ -1569,16 +1730,20 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
     }
 
     private static func transportTypeFourCC(_ transportType: UInt32) -> String {
+        fourCCString(transportType)
+    }
+
+    static func fourCCString(_ value: UInt32) -> String {
         let bytes = [
-            UInt8((transportType >> 24) & 0xFF),
-            UInt8((transportType >> 16) & 0xFF),
-            UInt8((transportType >> 8) & 0xFF),
-            UInt8(transportType & 0xFF),
+            UInt8((value >> 24) & 0xFF),
+            UInt8((value >> 16) & 0xFF),
+            UInt8((value >> 8) & 0xFF),
+            UInt8(value & 0xFF),
         ]
         if bytes.allSatisfy({ $0 >= 0x20 && $0 < 0x7F }) {
             return String(bytes.map { Character(UnicodeScalar($0)) })
         }
-        return "\(transportType)"
+        return "\(value)"
     }
 
     private static func diagnosticsErrorDescription(_ error: Error) -> String {
@@ -3396,7 +3561,7 @@ extension AudioDeviceService {
 
             let transportName = snapshot.transportType.map { value in transportTypeName(value) }
             let transportFourCC = snapshot.transportType.map { value in transportTypeFourCC(value) }
-            let isAggregate = snapshot.transportType == kAudioDeviceTransportTypeAggregate
+            let isAggregate = Self.isAggregateTransport(snapshot.transportType)
             let isVirtual = snapshot.transportType == kAudioDeviceTransportTypeVirtual
             let exclusionReason = listedDevice == nil
                 ? inputDeviceExclusionReason(for: snapshot)?.rawValue ?? "notListed"
@@ -3412,6 +3577,12 @@ extension AudioDeviceService {
                 transportType: snapshot.transportType,
                 transportTypeName: transportName,
                 transportTypeFourCC: transportFourCC,
+                enumerationPosition: nil,
+                inputDataSourceFourCCs: nil,
+                isInternalMicrophone: isInternalMicrophone(
+                    deviceUID: snapshot.uid,
+                    transportType: snapshot.transportType
+                ),
                 isDefaultInput: false,
                 isSelected: false,
                 isAggregate: isAggregate,
