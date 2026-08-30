@@ -3884,6 +3884,7 @@
 				en,
 				de,
 				ja,
+				"zh-Hans",
 				Base,
 			);
 			mainGroup = CC00000000000000000001;

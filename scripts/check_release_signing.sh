@@ -91,6 +91,11 @@ contains_hardened_runtime_flag() {
   grep -Eq 'flags=0x[0-9a-fA-F]+\(.*runtime.*\)'
 }
 
+asset_catalog_contains_name() {
+  local expected_name="$1"
+  grep -E "\"Name\"[[:space:]]*:[[:space:]]*\"${expected_name}\"" >/dev/null
+}
+
 self_test() {
   (
     wildcard_plist="$(mktemp "${TMPDIR:-/tmp}/typewhisper-wildcard-test.XXXXXX")"
@@ -145,6 +150,14 @@ self_test() {
   fi
   if printf '%s\n' 'CodeDirectory flags=0x0(none)' | contains_hardened_runtime_flag; then
     echo "self-test failed: missing hardened runtime was accepted" >&2
+    return 1
+  fi
+  if ! printf '%s\n' '{"Name":"FinderActionIcon"}' | asset_catalog_contains_name FinderActionIcon; then
+    echo "self-test failed: compiled asset name was not detected" >&2
+    return 1
+  fi
+  if printf '%s\n' '{"Name":"OtherIcon"}' | asset_catalog_contains_name FinderActionIcon; then
+    echo "self-test failed: missing compiled asset name was accepted" >&2
     return 1
   fi
   echo "release signing self-test passed"
@@ -399,6 +412,7 @@ action_info_plist="$action_path/Contents/Info.plist"
 action_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$action_info_plist")"
 action_extension_point="$(/usr/libexec/PlistBuddy -c 'Print :NSExtension:NSExtensionPointIdentifier' "$action_info_plist")"
 action_finder_icon="$(/usr/libexec/PlistBuddy -c 'Print :NSExtension:NSExtensionAttributes:NSExtensionServiceFinderPreviewIconName' "$action_info_plist")"
+action_assets="$action_path/Contents/Resources/Assets.car"
 action_sandbox="$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.app-sandbox' "$action_entitlements")"
 action_read_only="$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.files.user-selected.read-only' "$action_entitlements")"
 [[ "$action_id" == "$action_bundle_id" ]] || {
@@ -409,7 +423,9 @@ action_read_only="$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.files.
   echo "error: Finder transcription action extension point is '$action_extension_point'" >&2
   exit 1
 }
-if [[ "$action_finder_icon" != "FinderActionIcon" || ! -f "$action_path/Contents/Resources/Assets.car" ]]; then
+if [[ "$action_finder_icon" != "FinderActionIcon" || ! -f "$action_assets" ]] ||
+  ! xcrun assetutil --info "$action_assets" 2>/dev/null |
+    asset_catalog_contains_name "$action_finder_icon"; then
   echo "error: Finder transcription action icon is missing or incorrectly configured" >&2
   exit 1
 fi
