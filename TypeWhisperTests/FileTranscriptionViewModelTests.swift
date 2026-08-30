@@ -1,10 +1,57 @@
 import Foundation
+import AppKit
 import TypeWhisperPluginSDK
 import XCTest
 @testable import TypeWhisper
 
 @MainActor
 final class FileTranscriptionViewModelTests: XCTestCase {
+    func testFinderTranscriptionServiceFiltersAndRoutesSupportedFiles() {
+        let audioURL = makeTemporaryFile(named: "meeting.MP3")
+        let videoURL = makeTemporaryFile(named: "recording.mov")
+        let unsupportedURL = makeTemporaryFile(named: "notes.txt")
+        let pasteboard = NSPasteboard.withUniqueName()
+        pasteboard.clearContents()
+        pasteboard.writeObjects([
+            audioURL as NSURL,
+            unsupportedURL as NSURL,
+            videoURL as NSURL,
+            audioURL as NSURL,
+        ])
+
+        var enqueuedURLs: [URL] = []
+        var presentationCount = 0
+        let service = FinderTranscriptionService(
+            enqueueFiles: { enqueuedURLs = $0 },
+            presentFileTranscription: { presentationCount += 1 }
+        )
+
+        let error = service.handle(pasteboard)
+
+        XCTAssertNil(error)
+        XCTAssertEqual(enqueuedURLs, [audioURL, videoURL].map { $0.standardizedFileURL })
+        XCTAssertEqual(presentationCount, 1)
+    }
+
+    func testFinderTranscriptionServiceRejectsSelectionWithoutSupportedMedia() {
+        let pasteboard = NSPasteboard.withUniqueName()
+        pasteboard.clearContents()
+        pasteboard.writeObjects([makeTemporaryFile(named: "notes.txt") as NSURL])
+
+        var didEnqueue = false
+        var didPresent = false
+        let service = FinderTranscriptionService(
+            enqueueFiles: { _ in didEnqueue = true },
+            presentFileTranscription: { didPresent = true }
+        )
+
+        let error = service.handle(pasteboard)
+
+        XCTAssertEqual(error, "No supported audio or video files were selected.")
+        XCTAssertFalse(didEnqueue)
+        XCTAssertFalse(didPresent)
+    }
+
     func testImportedPluginMediaCanBeAddedToTranscriptionQueue() throws {
         let previousPluginManager = PluginManager.shared
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()

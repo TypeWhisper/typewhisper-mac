@@ -5,6 +5,7 @@ team_id="2D8ALY3LCL"
 bundle_id="com.typewhisper.mac"
 helper_bundle_id="com.typewhisper.typewhisper-mac"
 widget_bundle_id="com.typewhisper.mac.widgets"
+action_bundle_id="com.typewhisper.mac.transcribe-action"
 app_group="$team_id.com.typewhisper.mac"
 icloud_container="iCloud.com.typewhisper.sync"
 require_notarization=false
@@ -90,6 +91,11 @@ contains_hardened_runtime_flag() {
   grep -Eq 'flags=0x[0-9a-fA-F]+\(.*runtime.*\)'
 }
 
+asset_catalog_contains_name() {
+  local expected_name="$1"
+  grep -E "\"Name\"[[:space:]]*:[[:space:]]*\"${expected_name}\"" >/dev/null
+}
+
 self_test() {
   (
     wildcard_plist="$(mktemp "${TMPDIR:-/tmp}/typewhisper-wildcard-test.XXXXXX")"
@@ -146,6 +152,14 @@ self_test() {
     echo "self-test failed: missing hardened runtime was accepted" >&2
     return 1
   fi
+  if ! printf '%s\n' '{"Name":"FinderActionIcon"}' | asset_catalog_contains_name FinderActionIcon; then
+    echo "self-test failed: compiled asset name was not detected" >&2
+    return 1
+  fi
+  if printf '%s\n' '{"Name":"OtherIcon"}' | asset_catalog_contains_name FinderActionIcon; then
+    echo "self-test failed: missing compiled asset name was accepted" >&2
+    return 1
+  fi
   echo "release signing self-test passed"
 }
 
@@ -179,12 +193,17 @@ if [[ -z "$app_path" || ! -d "$app_path" ]]; then
 fi
 
 widget_path="$app_path/Contents/PlugIns/TypeWhisperWidgetExtension.appex"
+action_path="$app_path/Contents/PlugIns/TypeWhisperTranscribeAction.appex"
 helper_path="$app_path/Contents/XPCServices/TypeWhisperICloudBridge.xpc"
 main_profile_path="$app_path/Contents/embedded.provisionprofile"
 helper_profile_path="$helper_path/Contents/embedded.provisionprofile"
 info_plist="$app_path/Contents/Info.plist"
 if [[ ! -d "$widget_path" ]]; then
   echo "error: widget extension is missing" >&2
+  exit 1
+fi
+if [[ ! -d "$action_path" ]]; then
+  echo "error: Finder transcription action is missing" >&2
   exit 1
 fi
 if [[ ! -d "$helper_path" ]]; then
@@ -201,9 +220,11 @@ trap cleanup EXIT
 decoded_profile="$temporary_dir/profile.plist"
 main_entitlements="$temporary_dir/main-entitlements.plist"
 widget_entitlements="$temporary_dir/widget-entitlements.plist"
+action_entitlements="$temporary_dir/action-entitlements.plist"
 helper_entitlements="$temporary_dir/helper-entitlements.plist"
 codesign -d --entitlements :- "$app_path" > "$main_entitlements" 2>/dev/null
 codesign -d --entitlements :- "$widget_path" > "$widget_entitlements" 2>/dev/null
+codesign -d --entitlements :- "$action_path" > "$action_entitlements" 2>/dev/null
 codesign -d --entitlements :- "$helper_path" > "$helper_entitlements" 2>/dev/null
 
 actual_bundle_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$info_plist")"
@@ -387,7 +408,50 @@ if plutil -convert xml1 -o - "$widget_entitlements" | widget_has_forbidden_entit
   exit 1
 fi
 
-plists_to_check=("$info_plist" "$main_entitlements" "$widget_entitlements" "$helper_entitlements")
+action_info_plist="$action_path/Contents/Info.plist"
+action_id="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$action_info_plist")"
+action_extension_point="$(/usr/libexec/PlistBuddy -c 'Print :NSExtension:NSExtensionPointIdentifier' "$action_info_plist")"
+action_finder_icon="$(/usr/libexec/PlistBuddy -c 'Print :NSExtension:NSExtensionAttributes:NSExtensionServiceFinderPreviewIconName' "$action_info_plist")"
+action_assets="$action_path/Contents/Resources/Assets.car"
+action_sandbox="$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.app-sandbox' "$action_entitlements")"
+action_read_only="$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.files.user-selected.read-only' "$action_entitlements")"
+[[ "$action_id" == "$action_bundle_id" ]] || {
+  echo "error: Finder transcription action bundle identifier is '$action_id'" >&2
+  exit 1
+}
+[[ "$action_extension_point" == "com.apple.services" ]] || {
+  echo "error: Finder transcription action extension point is '$action_extension_point'" >&2
+  exit 1
+}
+if [[ "$action_finder_icon" != "FinderActionIcon" || ! -f "$action_assets" ]] ||
+  ! xcrun assetutil --info "$action_assets" 2>/dev/null |
+    asset_catalog_contains_name "$action_finder_icon"; then
+  echo "error: Finder transcription action icon is missing or incorrectly configured" >&2
+  exit 1
+fi
+for locale in de ja zh-Hans; do
+  localized_action_info="$action_path/Contents/Resources/$locale.lproj/InfoPlist.strings"
+  if [[ ! -f "$localized_action_info" ]] ||
+    ! /usr/libexec/PlistBuddy \
+      -c 'Print :NSExtensionServiceFinderPreviewLabel' \
+      "$localized_action_info" >/dev/null 2>&1; then
+    echo "error: Finder transcription action localization is missing for '$locale'" >&2
+    exit 1
+  fi
+done
+if [[ "$action_sandbox" != "true" || "$action_read_only" != "true" ]] ||
+  ! plist_boolean_is_true \
+    "$action_info_plist" \
+    "NSExtension:NSExtensionAttributes:NSExtensionServiceAllowsFinderPreviewItem"; then
+  echo "error: Finder transcription action sandbox, file access, or Finder visibility is incorrect" >&2
+  exit 1
+fi
+if plutil -convert xml1 -o - "$action_entitlements" | widget_has_forbidden_entitlement; then
+  echo "error: Finder transcription action contains main-app-only entitlements" >&2
+  exit 1
+fi
+
+plists_to_check=("$info_plist" "$main_entitlements" "$widget_entitlements" "$action_info_plist" "$action_entitlements" "$helper_entitlements")
 if [[ -f "$decoded_profile" ]]; then
   plists_to_check+=("$decoded_profile")
 fi
@@ -401,6 +465,7 @@ done
 codesign --verify --deep --strict --verbose=2 "$app_path"
 signature_details="$(codesign -dvvv "$app_path" 2>&1)"
 widget_signature_details="$(codesign -dvvv "$widget_path" 2>&1)"
+action_signature_details="$(codesign -dvvv "$action_path" 2>&1)"
 helper_signature_details="$(codesign -dvvv "$helper_path" 2>&1)"
 main_designated_requirement="$(codesign -dr - "$app_path" 2>&1)"
 grep -Fq "Authority=Developer ID Application:" <<< "$signature_details" || {
@@ -433,6 +498,10 @@ contains_hardened_runtime_flag <<< "$signature_details" || {
 }
 contains_hardened_runtime_flag <<< "$widget_signature_details" || {
   echo "error: widget does not have the hardened runtime enabled" >&2
+  exit 1
+}
+contains_hardened_runtime_flag <<< "$action_signature_details" || {
+  echo "error: Finder transcription action does not have the hardened runtime enabled" >&2
   exit 1
 }
 contains_hardened_runtime_flag <<< "$helper_signature_details" || {
