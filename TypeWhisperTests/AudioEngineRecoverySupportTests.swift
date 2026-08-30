@@ -1548,6 +1548,67 @@ final class AudioDeviceServiceCompatibilityTests: XCTestCase {
         XCTAssertEqual(makeService(includeUSB: false).resolvedRecordingInputSelection().deviceUID, "unknown-input")
     }
 
+    /// A device that resolves to `kAudioDeviceTransportTypeUnknown` says nothing
+    /// about being real hardware, so it must rank as unresolved rather than
+    /// physical: it loses to a positively identified microphone enumerated after
+    /// it, and still beats a known virtual driver.
+    func testClamshellFallbackRanksUnknownTransportAsUnresolved() {
+        let internalMicID = AudioDeviceID(795)
+        let unknownDeviceID = AudioDeviceID(796)
+        let virtualDeviceID = AudioDeviceID(797)
+        let usbDeviceID = AudioDeviceID(798)
+
+        func makeService(includeUSB: Bool) -> AudioDeviceService {
+            var devices = [
+                AudioInputDevice(deviceID: virtualDeviceID, name: "Hue Sync Audio", uid: "virtual-input"),
+                AudioInputDevice(deviceID: unknownDeviceID, name: "Mystery Input", uid: "unknown-input"),
+                AudioInputDevice(deviceID: internalMicID, name: "MacBook Pro Microphone", uid: "BuiltInMicrophoneDevice")
+            ]
+            if includeUSB {
+                devices.append(AudioInputDevice(deviceID: usbDeviceID, name: "USB Microphone", uid: "usb-input"))
+            }
+            let service = AudioDeviceService(
+                initialInputDevices: devices,
+                monitorDeviceChanges: false,
+                probeCompatibilities: false,
+                transportResolver: FakeAudioDeviceTransportResolver(
+                    // Unlike the sibling test above, "unknown-input" resolves: it
+                    // reports CoreAudio's unknown-transport sentinel rather than
+                    // failing the lookup.
+                    transports: [
+                        virtualDeviceID: kAudioDeviceTransportTypeVirtual,
+                        unknownDeviceID: kAudioDeviceTransportTypeUnknown,
+                        internalMicID: kAudioDeviceTransportTypeBuiltIn,
+                        usbDeviceID: kAudioDeviceTransportTypeUSB
+                    ]
+                ),
+                clamshellStateProvider: FakeClamshellStateProvider(lidClosed: true),
+                defaultInputDeviceController: FakeAudioInputDeviceDefaultController(
+                    defaultInputDeviceID: internalMicID
+                )
+            )
+            service.audioDeviceIDResolverOverride = { uid in
+                switch uid {
+                case "virtual-input": return virtualDeviceID
+                case "unknown-input": return unknownDeviceID
+                case "BuiltInMicrophoneDevice": return internalMicID
+                case "usb-input": return usbDeviceID
+                default: return nil
+                }
+            }
+            service.clearInputDevicePriorityList()
+            return service
+        }
+
+        // The USB microphone is enumerated last, so it only wins if the
+        // unknown-transport device ahead of it is not ranked physical.
+        XCTAssertEqual(makeService(includeUSB: true).resolvedRecordingInputSelection().deviceUID, "usb-input")
+
+        // With no positively identified microphone, the unknown-transport device
+        // still outranks the virtual driver enumerated before it.
+        XCTAssertEqual(makeService(includeUSB: false).resolvedRecordingInputSelection().deviceUID, "unknown-input")
+    }
+
     /// Reaches the clamshell fallback with a NON-empty priority list: the sole
     /// priority entry is the internal mic, which the candidate loop rejects, so
     /// resolution must continue into the fallback and pick a device that was

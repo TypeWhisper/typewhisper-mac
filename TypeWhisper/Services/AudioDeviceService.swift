@@ -137,9 +137,9 @@ struct AudioInputDiagnosticsReport: Encodable, Equatable, Sendable {
         let transportType: UInt32?
         let transportTypeName: String?
         let transportTypeFourCC: String?
-        /// Index in CoreAudio's original device enumeration. The list below is
-        /// sorted by device ID, which hides the order that decides clamshell
-        /// fallback selection.
+        /// Index among the input-capable devices, in CoreAudio's original
+        /// enumeration order. That is the order clamshell fallback walks; the
+        /// list below is sorted by device ID, which hides it.
         let enumerationPosition: Int?
         /// Currently selected input data source(s) as FourCC strings, e.g.
         /// `imic` for the internal capsule or `emic` for the 3.5mm jack.
@@ -594,10 +594,11 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
     private enum ClamshellFallbackRank: CaseIterable {
         /// A device on a transport we can positively identify as real hardware.
         case physical
-        /// The transport could not be resolved. Such a device may well be a real
-        /// microphone, so it outranks a known virtual one, but not a device we
-        /// can positively identify as physical. A device whose ID does not
-        /// resolve also lands here, though selection then rejects it in turn.
+        /// The transport could not be resolved, or CoreAudio reported it as
+        /// unknown. Such a device may well be a real microphone, so it outranks
+        /// a known virtual one, but not a device we can positively identify as
+        /// physical. A device whose ID does not resolve also lands here, though
+        /// selection then rejects it in turn.
         case unresolvedTransport
         /// Virtual or aggregate. Used only when nothing better is available.
         case virtualOrAggregate
@@ -631,6 +632,11 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         switch transport {
         case kAudioDeviceTransportTypeVirtual, kAudioDeviceTransportTypeAggregate:
             return .virtualOrAggregate
+        case kAudioDeviceTransportTypeUnknown:
+            // CoreAudio's sentinel for a driver that never declared a transport,
+            // so it says nothing about whether the device is real hardware. It
+            // ranks with the other unresolved cases rather than as physical.
+            return .unresolvedTransport
         default:
             return .physical
         }
