@@ -150,6 +150,8 @@ enum UserDefaultsKeys {
     static let dictationRecoveryModel = "dictationRecoveryModel"
     static let dictationRecoveryLanguage = "dictationRecoveryLanguage"
     static let dictationRecoveryAutomaticFallbackEnabled = "dictationRecoveryAutomaticFallbackEnabled"
+    static let dictationRecoveryHedgeEnabled = "dictationRecoveryHedgeEnabled"
+    static let dictationRecoveryHedgeThresholdSeconds = "dictationRecoveryHedgeThresholdSeconds"
     static let dictationRecoveryRetentionDays = "dictationRecoveryRetentionDays"
 
     // MARK: - Watch Folder

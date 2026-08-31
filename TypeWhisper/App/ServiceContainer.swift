@@ -216,6 +216,9 @@ final class ServiceContainer: ObservableObject {
                     excluding: primaryEngineId,
                     task: task
                 )
+            },
+            recoveryHedgeThresholdProvider: { [recoveryViewModel] in
+                recoveryViewModel.automaticHedgeThreshold
             }
         )
         audioRecorderViewModel = AudioRecorderViewModel(
