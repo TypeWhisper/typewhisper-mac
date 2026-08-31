@@ -310,6 +310,7 @@ final class StreamingHandlerTests: XCTestCase {
         let session = MockLiveSession()
         let liveTranscriptionProgressMode: LiveTranscriptionProgressMode
         private(set) var lastPrompt: String?
+        private(set) var liveSessionCreateCount = 0
 
         override init() {
             liveTranscriptionProgressMode = .rollingWindow
@@ -347,6 +348,7 @@ final class StreamingHandlerTests: XCTestCase {
             prompt: String?,
             onProgress: @Sendable @escaping (String) -> Bool
         ) async throws -> any LiveTranscriptionSession {
+            liveSessionCreateCount += 1
             lastPrompt = prompt
             await session.setOnProgress(onProgress)
             return session
@@ -416,6 +418,12 @@ final class StreamingHandlerTests: XCTestCase {
         private var appendedChunkSizes: [Int] = []
         private var onProgress: (@Sendable (String) -> Bool)?
         private var progressUpdates: [String] = []
+        private var shouldBlockNextAppend = false
+        private var appendIsBlocked = false
+        private var appendWasReleased = false
+        private var appendReleaseContinuation: CheckedContinuation<Void, Never>?
+        private var cancelCallCount = 0
+        private var cancelObservedDuringAppend = false
 
         func setOnProgress(_ onProgress: @escaping @Sendable (String) -> Bool) {
             self.onProgress = onProgress
@@ -433,8 +441,40 @@ final class StreamingHandlerTests: XCTestCase {
             finishError = error
         }
 
+        func prepareToBlockNextAppend() {
+            shouldBlockNextAppend = true
+            appendWasReleased = false
+        }
+
+        func releaseBlockedAppend() {
+            appendWasReleased = true
+            appendReleaseContinuation?.resume()
+            appendReleaseContinuation = nil
+        }
+
+        func isAppendBlocked() -> Bool {
+            appendIsBlocked
+        }
+
+        func cancellationSnapshot() -> (callCount: Int, observedDuringAppend: Bool) {
+            (cancelCallCount, cancelObservedDuringAppend)
+        }
+
         func appendAudio(samples: [Float]) async throws {
             appendedChunkSizes.append(samples.count)
+
+            if shouldBlockNextAppend {
+                shouldBlockNextAppend = false
+                appendIsBlocked = true
+
+                if !appendWasReleased {
+                    await withCheckedContinuation { continuation in
+                        appendReleaseContinuation = continuation
+                    }
+                }
+                appendIsBlocked = false
+            }
+
             let progressText: String
             if progressUpdates.isEmpty {
                 progressText = "chunk-\(samples.count)"
@@ -451,7 +491,12 @@ final class StreamingHandlerTests: XCTestCase {
             return finalResult
         }
 
-        func cancel() async {}
+        func cancel() async {
+            cancelCallCount += 1
+            if appendIsBlocked {
+                cancelObservedDuringAppend = true
+            }
+        }
 
         func recordedChunks() -> [Int] {
             appendedChunkSizes
@@ -1215,6 +1260,100 @@ final class StreamingHandlerTests: XCTestCase {
         XCTAssertEqual(finalSnapshot.callCount, 2)
         XCTAssertEqual(finalSnapshot.maxConcurrentTranscriptions, 1)
         XCTAssertEqual(finalSnapshot.prompts, ["Preview Terms", "Final Terms"])
+    }
+
+    func testStopWaitsForInFlightLiveAppendBeforeCancellingAndRestarting() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let plugin = MockLivePlugin()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.live",
+                    name: "Mock Live",
+                    version: "1.0.0",
+                    principalClass: "MockLivePlugin",
+                    requiresAPIKey: false
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider(plugin.providerId)
+        let nextOffset = OSAllocatedUnfairLock(initialState: 0)
+        let handler = StreamingHandler(
+            modelManager: modelManager,
+            bufferProvider: { [] },
+            recentBufferProvider: { _ in [] },
+            bufferDeltaProvider: { _ in
+                nextOffset.withLock { offset in
+                    offset += 1600
+                    return (Array(repeating: 0.25, count: 1600), offset)
+                }
+            },
+            bufferedDurationProvider: { 0.1 }
+        )
+
+        await plugin.session.prepareToBlockNextAppend()
+        handler.start(
+            streamPrompt: "First session",
+            engineOverrideId: plugin.providerId,
+            selectedProviderId: plugin.providerId,
+            languageSelection: .exact("en"),
+            task: .transcribe,
+            cloudModelOverride: nil,
+            allowLiveTranscription: true,
+            stateCheck: { true }
+        )
+
+        for _ in 0..<50 {
+            if await plugin.session.isAppendBlocked() { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        let appendIsBlocked = await plugin.session.isAppendBlocked()
+        XCTAssertTrue(appendIsBlocked)
+        XCTAssertEqual(plugin.liveSessionCreateCount, 1)
+
+        handler.stop()
+        handler.start(
+            streamPrompt: "Second session",
+            engineOverrideId: plugin.providerId,
+            selectedProviderId: plugin.providerId,
+            languageSelection: .exact("en"),
+            task: .transcribe,
+            cloudModelOverride: nil,
+            allowLiveTranscription: true,
+            stateCheck: { true }
+        )
+
+        try await Task.sleep(for: .milliseconds(100))
+        var cancellation = await plugin.session.cancellationSnapshot()
+        XCTAssertEqual(cancellation.callCount, 0)
+        XCTAssertFalse(cancellation.observedDuringAppend)
+        XCTAssertEqual(plugin.liveSessionCreateCount, 1)
+
+        await plugin.session.releaseBlockedAppend()
+        for _ in 0..<50 {
+            cancellation = await plugin.session.cancellationSnapshot()
+            if cancellation.callCount == 1, plugin.liveSessionCreateCount == 2 { break }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+
+        cancellation = await plugin.session.cancellationSnapshot()
+        XCTAssertEqual(cancellation.callCount, 1)
+        XCTAssertFalse(cancellation.observedDuringAppend)
+        XCTAssertEqual(plugin.liveSessionCreateCount, 2)
+
+        let finalStopTask = handler.stop()
+        await finalStopTask?.value
+        let finalCancellation = await plugin.session.cancellationSnapshot()
+        XCTAssertFalse(finalCancellation.observedDuringAppend)
     }
 
     func testLiveSessionConsumesOnlyIncrementalAudioDeltas() async throws {
