@@ -264,7 +264,7 @@ enum MenuBarActionDispatcher {
         _ action: @escaping @MainActor @Sendable () -> Void
     ) {
         RunLoop.main.perform(inModes: [.default]) {
-            MainActor.assumeIsolated {
+            Task { @MainActor in
                 action()
             }
         }
