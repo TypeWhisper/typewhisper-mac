@@ -63,6 +63,8 @@ final class StreamingHandler: @unchecked Sendable {
     }
 
     private var streamingTask: Task<Void, Never>?
+    @MainActor private var pendingStreamingStopTask: Task<Void, Never>?
+    @MainActor private var streamingStopGeneration: UInt64 = 0
     private let progressText = OSAllocatedUnfairLock(initialState: "")
     private let sharedState = OSAllocatedUnfairLock(initialState: SharedState())
 
@@ -102,7 +104,7 @@ final class StreamingHandler: @unchecked Sendable {
         allowLiveTranscription: Bool,
         stateCheck: @escaping @MainActor @Sendable () -> Bool
     ) {
-        stop()
+        let pendingStopTask = stop()
 
         guard allowLiveTranscription else {
             logger.info("Live transcript preview skipped: disabled")
@@ -128,6 +130,8 @@ final class StreamingHandler: @unchecked Sendable {
         onStreamingStateChange?(true)
 
         streamingTask = Task { [weak self] in
+            await pendingStopTask?.value
+            guard !Task.isCancelled else { return }
             guard let self else { return }
 
             if let handle = try? await self.modelManager.createLiveTranscriptionSession(
@@ -245,23 +249,43 @@ final class StreamingHandler: @unchecked Sendable {
     }
 
     @MainActor
-    func stop() {
-        streamingTask?.cancel()
+    @discardableResult
+    func stop() -> Task<Void, Never>? {
+        let previewTask = streamingTask
         streamingTask = nil
+        previewTask?.cancel()
 
-        let handle = sharedState.withLock { state in
+        let claimedHandle = sharedState.withLock { state in
             let handle = state.liveSessionHandle
             state.liveSessionHandle = nil
             return handle
         }
-        if let handle {
+        let previousStopTask = pendingStreamingStopTask
+        let stopTask: Task<Void, Never>?
+
+        if previewTask != nil || claimedHandle != nil {
+            streamingStopGeneration &+= 1
+            let generation = streamingStopGeneration
             let modelManager = self.modelManager
-            Task {
-                await modelManager.cancelLiveTranscriptionSession(handle)
+            stopTask = Task { @MainActor [weak self] in
+                await previousStopTask?.value
+                await previewTask?.value
+
+                let handle = claimedHandle ?? self?.claimLiveSessionHandleForFinish()
+                if let handle {
+                    await modelManager.cancelLiveTranscriptionSession(handle)
+                }
+
+                guard let self, self.streamingStopGeneration == generation else { return }
+                self.pendingStreamingStopTask = nil
             }
+            pendingStreamingStopTask = stopTask
+        } else {
+            stopTask = previousStopTask
         }
 
         clearStreamingState(notifyStreamingStopped: true)
+        return stopTask
     }
 
     private func claimLiveSessionHandleForFinish() -> ModelManagerService.LiveTranscriptionSessionHandle? {
