@@ -972,6 +972,22 @@ final class ManagedAppWindowRestorationTests: XCTestCase {
 }
 
 final class MenuBarGroupingTests: XCTestCase {
+    @MainActor
+    func testMenuBarActionDispatcherDefersUntilTheCurrentActionReturns() async {
+        let probe = MenuBarActionInvocationProbe()
+
+        await withCheckedContinuation { continuation in
+            MenuBarActionDispatcher.performAfterMenuDismissal {
+                probe.invocationCount += 1
+                continuation.resume()
+            }
+
+            XCTAssertEqual(probe.invocationCount, 0)
+        }
+
+        XCTAssertEqual(probe.invocationCount, 1)
+    }
+
     func testMenuBarSectionsUseExpectedOrderAndLocalizedKeys() {
         XCTAssertEqual(
             MenuBarMenuSection.allCases.map(\.titleLocalizationKey),
@@ -993,6 +1009,11 @@ final class MenuBarGroupingTests: XCTestCase {
             [.toggleDictationHotkeysPause, .transcribeFile, .lastTranscription]
         )
     }
+}
+
+@MainActor
+private final class MenuBarActionInvocationProbe {
+    var invocationCount = 0
 }
 
 final class MenuBarIconStateTests: XCTestCase {

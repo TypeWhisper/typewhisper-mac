@@ -258,6 +258,19 @@ enum MenuBarMenuSection: String, CaseIterable, Hashable {
     }
 }
 
+@MainActor
+enum MenuBarActionDispatcher {
+    static func performAfterMenuDismissal(
+        _ action: @escaping @MainActor @Sendable () -> Void
+    ) {
+        RunLoop.main.perform(inModes: [.default]) {
+            Task { @MainActor in
+                action()
+            }
+        }
+    }
+}
+
 private struct PluginCommandButton: View {
     let pluginId: String
     let command: PluginCommandDescriptor
@@ -481,7 +494,11 @@ struct MenuBarView: View {
     @ViewBuilder
     private var recentTranscriptionsButton: some View {
         Button {
-            DictationViewModel.shared.triggerRecentTranscriptionsPalette()
+            // MenuBarExtra uses NSMenu tracking. Defer creating the key NSPanel
+            // until the menu action has returned and the native menu can close.
+            MenuBarActionDispatcher.performAfterMenuDismissal {
+                DictationViewModel.shared.triggerRecentTranscriptionsPalette()
+            }
         } label: {
             Label(String(localized: "Recent Transcriptions"), systemImage: "clock.arrow.circlepath")
         }
