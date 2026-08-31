@@ -47,6 +47,10 @@ class NotchIndicatorPanel: NSPanel {
     private var dismissTask: Task<Void, Never>?
     private var isActionFeedbackInteractive = false
     private var isMeetingCountdownPresented = false
+    /// True while a deferred dismissal is in flight: content already blanked,
+    /// `orderOut` pending. Callers that only want to refresh an already-visible
+    /// panel (not change visibility policy) must not resurrect it in this window.
+    private var isDismissing = false
 
     private var isFeedbackInteractive: Bool {
         isActionFeedbackInteractive || isMeetingCountdownPresented
@@ -219,6 +223,7 @@ class NotchIndicatorPanel: NSPanel {
     func show() {
         showTask?.cancel()
         dismissTask?.cancel()
+        isDismissing = false
 
         let wasVisible = isVisible
         placePanel()
@@ -271,7 +276,13 @@ class NotchIndicatorPanel: NSPanel {
             in: screenFrame
         )
 
-        setFrame(panelFrame, display: true)
+        // display: false — a synchronous display pass here re-enters the display
+        // cycle on the NSHostingView content and can raise
+        // NSInternalInconsistencyException from _postWindowNeedsUpdateConstraints
+        // (via NSHostingView.invalidateSafeAreaCornerInsets) when placement is
+        // triggered from a display-cycle observer such as the screen-parameters
+        // notification. The next regular display cycle picks up the new frame.
+        setFrame(panelFrame, display: false)
         ignoresMouseEvents = !isFeedbackInteractive
         FloatingPanelSpacePolicy.orderIndicatorFront(
             self,
@@ -299,7 +310,11 @@ class NotchIndicatorPanel: NSPanel {
         }
         guard isActionFeedbackInteractive != isInteractive else { return }
         isActionFeedbackInteractive = isInteractive
-        if isVisible {
+        // This callback only wants to resize/re-arm an already-visible panel.
+        // While a dismissal is in flight the window is still ordered in but its
+        // content is blanked; calling show() here cancelled the pending orderOut
+        // and left an empty panel stuck over the notch.
+        if isVisible, !isDismissing {
             show()
         }
     }
@@ -323,20 +338,27 @@ class NotchIndicatorPanel: NSPanel {
 
         guard isVisible else {
             notchGeometry.isPresented = false
+            isDismissing = false
             orderOut(nil)
             return
         }
 
+        isDismissing = true
         withAnimation(.easeInOut(duration: 0.18)) {
             notchGeometry.isPresented = false
         }
 
         dismissTask = Task { @MainActor [weak self] in
             try? await Task.sleep(for: Self.presentationAnimationDuration)
-            guard !Task.isCancelled else { return }
-            guard let self, !self.notchGeometry.isPresented else { return }
-            self.orderOut(nil)
+            guard !Task.isCancelled, let self else { return }
             self.dismissTask = nil
+            guard !self.notchGeometry.isPresented else {
+                // A show() re-presented the panel during the animation window;
+                // it also cleared isDismissing. Leave the window up.
+                return
+            }
+            self.orderOut(nil)
+            self.isDismissing = false
         }
     }
 }
