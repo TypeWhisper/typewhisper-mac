@@ -46,6 +46,16 @@ let package = Package(
             ]
         ),
         .target(
+            name: "OrcaRouterPlugin",
+            dependencies: ["TypeWhisperPluginSDK"],
+            path: "Plugins/OrcaRouterPlugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("Localizable.xcstrings"),
+                .process("manifest.json"),
+            ]
+        ),
+        .target(
             name: "OpenRouterPlugin",
             dependencies: ["TypeWhisperPluginSDK"],
             path: "Plugins/OpenRouterPlugin",
@@ -397,6 +407,15 @@ let package = Package(
                 "OpenAIPlugin",
             ],
             path: "Plugins/OpenAIPlugin/Tests"
+        ),
+        .testTarget(
+            name: "OrcaRouterPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "OrcaRouterPlugin",
+            ],
+            path: "Plugins/OrcaRouterPlugin/Tests"
         ),
         .testTarget(
             name: "OpenRouterPluginTests",
