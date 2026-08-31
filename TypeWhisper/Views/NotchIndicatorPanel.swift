@@ -301,7 +301,16 @@ class NotchIndicatorPanel: NSPanel {
         if displayModeProvider() == .activeScreen {
             cachedScreen = nil
         }
-        placePanel()
+        // Hop to the next runloop turn: this refresh is driven by
+        // display-cycle-adjacent triggers (screen-parameter changes, the global
+        // mouse monitor), and re-placing the hosting-view-backed window
+        // synchronously from inside the display cycle raises
+        // NSInternalInconsistencyException from _postWindowNeedsUpdateConstraints
+        // (via NSHostingView.invalidateSafeAreaCornerInsets).
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.isVisible, self.notchGeometry.isPresented else { return }
+            self.placePanel()
+        }
     }
 
     func updateFeedbackInteraction(isInteractive: Bool) {
