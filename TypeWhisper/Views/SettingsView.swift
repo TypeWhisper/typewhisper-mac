@@ -305,6 +305,19 @@ private struct SettingsModernShell: View {
 // sidebars — it owns both resize and collapse natively, so neither is fighting
 // a SwiftUI layout pass, and VoiceOver/keyboard resize support comes for free.
 @available(macOS 15, *)
+@MainActor
+enum SettingsHostingControllerFactory {
+    static func make<Content: View>(rootView: Content) -> NSHostingController<Content> {
+        let hostingController = NSHostingController(rootView: rootView)
+        // NSSplitViewController owns the sidebar and detail sizes. Prevent
+        // SwiftUI from feeding content-size constraints back into AppKit while
+        // either hosted hierarchy is already updating its layout.
+        hostingController.sizingOptions = []
+        return hostingController
+    }
+}
+
+@available(macOS 15, *)
 private struct SettingsSplitView: NSViewControllerRepresentable {
     @Binding var selectedTab: SettingsTab
     @Binding var sidebarSearchText: String
@@ -316,7 +329,7 @@ private struct SettingsSplitView: NSViewControllerRepresentable {
         let splitViewController = NSSplitViewController()
         splitViewController.splitView.dividerStyle = .thin
 
-        let sidebarHostingController = NSHostingController(
+        let sidebarHostingController = SettingsHostingControllerFactory.make(
             rootView: SettingsSidebarContent(
                 selectedTab: $selectedTab,
                 sidebarSearchText: $sidebarSearchText,
@@ -329,7 +342,7 @@ private struct SettingsSplitView: NSViewControllerRepresentable {
         sidebarItem.canCollapse = true
         sidebarItem.isCollapsed = !isSidebarVisible
 
-        let detailHostingController = NSHostingController(
+        let detailHostingController = SettingsHostingControllerFactory.make(
             rootView: AnyView(
                 detail(selectedTab)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)

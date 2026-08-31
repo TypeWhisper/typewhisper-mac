@@ -166,6 +166,18 @@ final class PremiumSettingsWindowManagerTests: XCTestCase {
     }
 }
 
+@available(macOS 15, *)
+@MainActor
+final class SettingsHostingControllerTests: XCTestCase {
+    func testSettingsSplitHostsDoNotPropagateSwiftUISizingIntoAppKitConstraints() {
+        let hostingController = SettingsHostingControllerFactory.make(
+            rootView: Text("Settings detail")
+        )
+
+        XCTAssertEqual(hostingController.sizingOptions, [])
+    }
+}
+
 @MainActor
 private final class TrackingWindow: NSWindow {
     private(set) var frontCount = 0
