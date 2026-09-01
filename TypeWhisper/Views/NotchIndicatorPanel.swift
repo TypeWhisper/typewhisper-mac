@@ -115,20 +115,31 @@ class NotchIndicatorPanel: NSPanel {
 
         let hostingView = FirstMouseHostingView(rootView: content(notchGeometry))
         hostingView.sizingOptions = []
-        // This panel sits over the hardware notch, the one place on a notched
-        // display that carries safe-area *corner* insets. With safe-area regions
-        // enabled, NSHostingView registers for AppKit's
-        // `_effectiveSafeAreaCornerInsets` / `_effectiveCornerRadii` KVO and
-        // reacts to every frame change with invalidateSafeAreaCornerInsets ->
-        // setNeedsUpdateConstraints; when that frame change lands inside the
-        // window's own layout pass (NSHostingView.windowDidLayout ->
-        // updateAnimatedWindowSize), AppKit raises
-        // NSInternalInconsistencyException from _postWindowNeedsUpdateConstraints
-        // and the app aborts. The notch content lays itself out from
-        // NotchGeometry and never consumes the safe area, so opting out of
-        // safe-area regions removes that observer without changing the layout.
+        // The notch content lays itself out from NotchGeometry and never consumes
+        // the safe area; opting out also drops NSHostingView's safe-area-corner
+        // KVO observer, which this panel (the only window over the notch) would
+        // otherwise service on every frame change.
         hostingView.safeAreaRegions = []
-        contentView = hostingView
+
+        // The hosting view is never resized: it stays at the non-interactive
+        // panel size inside a plain container and only the window changes size.
+        // NSHostingView keeps a WindowSizeBridge that, whenever the root view's
+        // size changes inside an animated SwiftUI transaction, animates the
+        // window frame to follow it from windowDidLayout (observed live: the
+        // bridge asked to resize this panel back to 500x500 while it sat at the
+        // toast size). A window resize issued from inside the layout pass
+        // re-enters constraint updates and AppKit raises
+        // NSInternalInconsistencyException from _postWindowNeedsUpdateConstraints,
+        // which the display-cycle observer rethrows and the process aborts
+        // (#1229). With the hosting view's size constant the root size never
+        // animates, so the bridge has nothing to animate. The flexible margins
+        // keep the fixed-size hosting view centered and top-anchored as the
+        // window shrinks to the toast size, so the notch cap stays put.
+        let container = NSView(frame: NSRect(origin: .zero, size: initialSize))
+        hostingView.frame = container.bounds
+        hostingView.autoresizingMask = [.minXMargin, .maxXMargin, .minYMargin]
+        container.addSubview(hostingView)
+        contentView = container
     }
 
     override var canBecomeKey: Bool { false }
