@@ -1624,6 +1624,41 @@ final class NotchIndicatorPanelLifecycleTests: XCTestCase {
         XCTAssertTrue(panel.isVisible)
     }
 
+    func testFeedbackInteractionChangeDoesNotCancelInFlightDismissal() async throws {
+        let panel = try makePanel()
+        defer { panel.orderOut(nil) }
+
+        panel.show()
+        await Task.yield()
+        panel.updateFeedbackInteraction(isInteractive: true)
+        XCTAssertTrue(panel.isVisible)
+
+        // Dictation ends while an action-feedback toast is up: the state sink
+        // dismisses, then the feedback sink flips interaction back off inside
+        // the dismissal animation window. That second callback must not
+        // resurrect the panel — previously it cancelled the pending orderOut
+        // and left a blank window stuck over the notch.
+        panel.dismiss()
+        panel.updateFeedbackInteraction(isInteractive: false)
+        try await Task.sleep(for: .milliseconds(300))
+
+        XCTAssertFalse(panel.isVisible)
+    }
+
+    func testShowAfterFeedbackInteractionChangeDuringDismissalStillPresents() async throws {
+        let panel = try makePanel()
+        defer { panel.orderOut(nil) }
+
+        panel.show()
+        await Task.yield()
+        panel.dismiss()
+        panel.updateFeedbackInteraction(isInteractive: true)
+        panel.show()
+        try await Task.sleep(for: .milliseconds(300))
+
+        XCTAssertTrue(panel.isVisible)
+    }
+
     private func makePanel() throws -> NotchIndicatorPanel {
         guard let screen = NSScreen.screens.first else {
             throw XCTSkip("Notch indicator panel tests require an available screen")
