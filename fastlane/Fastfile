@@ -69,6 +69,7 @@ PLUGIN_SCREENSHOTS = [
   { slug: "linear", target: "LinearPlugin", id: "com.typewhisper.linear" },
   { slug: "live-transcript", target: "LiveTranscriptPlugin", id: "com.typewhisper.livetranscript" },
   { slug: "mcp-client", target: "MCPClientPlugin", id: "com.typewhisper.mcp-client" },
+  { slug: "meta", target: "MetaPlugin", id: "com.typewhisper.meta" },
   { slug: "mistral", target: "MistralAIPlugin", id: "com.minerale.mistralai" },
   { slug: "obsidian", target: "ObsidianPlugin", id: "com.typewhisper.obsidian" },
   { slug: "openai", target: "OpenAIPlugin", id: "com.typewhisper.openai", size: [560, 627] },

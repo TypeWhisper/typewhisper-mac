@@ -1652,6 +1652,14 @@ final class DictationViewModel: ObservableObject {
         matchedWorkflow?.output.autoEnterMode ?? .never
     }
 
+    private var requiresVisiblePostProcessingPhase: Bool {
+        effectiveTranslationTarget != nil
+            || matchedWorkflow?.isManuallyRunnable == true
+            || effectiveOutputFormat != nil
+            || effectiveActionPluginId != nil
+            || !PluginManager.shared.postProcessors.isEmpty
+    }
+
     private func stopDictation() {
         guard state == .recording, !isStopInFlight else { return }
         clearCancelWarning()
@@ -1662,8 +1670,12 @@ final class DictationViewModel: ObservableObject {
             return
         }
         isStopInFlight = true
+        let canKeepFinalLiveInsertionQuiet = streamingHandler.hasActiveLiveTranscriptionSession
+            && !requiresVisiblePostProcessingPhase
         state = .processing
-        processingPhase = String(localized: "Processing...")
+        processingPhase = canKeepFinalLiveInsertionQuiet
+            ? nil
+            : String(localized: "Processing...")
         markActiveDictationSessionProcessingIfNeeded()
         stopFinalizationTask = Task { [weak self] in
             guard let self else { return }
@@ -1819,9 +1831,13 @@ final class DictationViewModel: ObservableObject {
             durationSeconds: audioDuration
         )))
 
-        processingPhase = liveSessionResult == nil
-            ? String(localized: "Transcribing...")
-            : String(localized: "Processing...")
+        processingPhase = if liveSessionResult == nil {
+            String(localized: "Transcribing...")
+        } else if requiresVisiblePostProcessingPhase {
+            String(localized: "Processing...")
+        } else {
+            nil
+        }
 
         guard !Task.isCancelled else { return }
         let usedLiveSessionResult = liveSessionResult != nil
@@ -1933,7 +1949,9 @@ final class DictationViewModel: ObservableObject {
                 } else {
                     nil
                 }
-                self.processingPhase = String(localized: "Processing...")
+                self.processingPhase = self.requiresVisiblePostProcessingPhase
+                    ? String(localized: "Processing...")
+                    : nil
                 await metadataCaptureTask?.value
                 let ppContext = PostProcessingContext(
                     appName: activeApp.name,
