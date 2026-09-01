@@ -249,6 +249,11 @@ final class StreamingHandler: @unchecked Sendable {
     }
 
     @MainActor
+    var hasActiveLiveTranscriptionSession: Bool {
+        sharedState.withLock { $0.liveSessionHandle != nil }
+    }
+
+    @MainActor
     @discardableResult
     func stop() -> Task<Void, Never>? {
         let previewTask = streamingTask

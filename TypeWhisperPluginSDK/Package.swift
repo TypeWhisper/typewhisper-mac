@@ -46,6 +46,17 @@ let package = Package(
             ]
         ),
         .target(
+            name: "MetaPlugin",
+            dependencies: ["TypeWhisperPluginSDK"],
+            path: "Plugins/MetaPlugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("Localizable.xcstrings"),
+                .process("manifest.json"),
+                .process("meta.svg"),
+            ]
+        ),
+        .target(
             name: "OpenRouterPlugin",
             dependencies: ["TypeWhisperPluginSDK"],
             path: "Plugins/OpenRouterPlugin",
@@ -397,6 +408,15 @@ let package = Package(
                 "OpenAIPlugin",
             ],
             path: "Plugins/OpenAIPlugin/Tests"
+        ),
+        .testTarget(
+            name: "MetaPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "MetaPlugin",
+            ],
+            path: "Plugins/MetaPlugin/Tests"
         ),
         .testTarget(
             name: "OpenRouterPluginTests",
