@@ -3065,6 +3065,29 @@
           "downloadCount": 3
         }
       ]
+    },
+    {
+      "id": "com.typewhisper.web-link",
+      "name": "Web Link Transcription",
+      "author": "TypeWhisper",
+      "description": "Downloads audio from supported web links with yt-dlp and ffmpeg for transcription in TypeWhisper.",
+      "category": "utility",
+      "downloadCount": 0,
+      "descriptions": {
+        "de": "L\u00e4dt Audio aus unterst\u00fctzten Weblinks mit yt-dlp und ffmpeg zur Transkription in TypeWhisper herunter."
+      },
+      "iconSystemName": "link.badge.plus",
+      "requiresAPIKey": false,
+      "releases": [
+        {
+          "version": "1.0.0",
+          "minHostVersion": "1.7.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 303030,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-web-link-v1.0.0/WebLinkPlugin.zip",
+          "minOSVersion": "14.0"
+        }
+      ]
     }
   ]
 }
