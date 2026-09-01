@@ -4294,6 +4294,77 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testLiveFieldSessionCancelRemovesOwnedPartialAfterFocusMoves() async throws {
+        let service = TextInsertionService()
+        let targetElement = AXUIElementCreateApplication(4242)
+        let otherElement = AXUIElementCreateApplication(4343)
+        var activeBundleIdentifier = "com.apple.Notes"
+        var focusedElement = targetElement
+        var targetValue = "Before  after"
+        var targetRange = NSRange(location: 7, length: 0)
+        let otherValue = "Other field"
+        let otherRange = NSRange(location: 11, length: 0)
+
+        service.accessibilityGrantedOverride = true
+        service.captureActiveAppOverride = { (nil, activeBundleIdentifier, nil) }
+        service.liveFieldElementProcessIdentifierOverride = { element in
+            element == targetElement ? 4242 : 4343
+        }
+        service.liveFieldApplicationValidationOverride = { processIdentifier, bundleIdentifier in
+            processIdentifier == 4242 && bundleIdentifier == "com.apple.Notes"
+        }
+        service.focusedTextElementOverride = { focusedElement }
+        service.liveFieldTargetEligibilityOverride = { _ in true }
+        service.focusedTextStateOverride = { element in
+            element == targetElement
+                ? (value: targetValue, selectedText: nil, selectedRange: targetRange)
+                : (value: otherValue, selectedText: nil, selectedRange: otherRange)
+        }
+        service.setSelectedRangeOverride = { element, range in
+            guard element == targetElement else { return false }
+            targetRange = range
+            return true
+        }
+        service.insertTextAtOverride = { element, text in
+            guard element == targetElement else { return false }
+            targetValue = (targetValue as NSString).replacingCharacters(
+                in: targetRange,
+                with: text
+            )
+            targetRange = NSRange(
+                location: targetRange.location + (text as NSString).length,
+                length: 0
+            )
+            return true
+        }
+
+        let target = try XCTUnwrap(
+            service.captureLiveFieldTarget(expectedBundleIdentifier: "com.apple.Notes")
+        )
+        let session = LiveFieldTranscriptSession(
+            sessionID: UUID(),
+            target: target,
+            textInsertionService: service,
+            updateInterval: .milliseconds(1)
+        )
+
+        session.receivePartial("Partial")
+        try await waitForLiveFieldUpdate("owned partial") {
+            targetValue == "Before Partial after"
+        }
+
+        activeBundleIdentifier = "com.apple.mail"
+        focusedElement = otherElement
+        guard case .applied = session.cancel() else {
+            return XCTFail("Expected the owned partial to be removed")
+        }
+
+        XCTAssertEqual(targetValue, "Before  after")
+        XCTAssertEqual(otherValue, "Other field")
+        XCTAssertEqual(session.state, .cancelled)
+    }
+
+    @MainActor
     func testLiveFieldSessionDoesNotRebindToMatchingFieldInSameApplication() async throws {
         let service = TextInsertionService()
         let targetElement = AXUIElementCreateSystemWide()
@@ -6811,6 +6882,71 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(context.dictationViewModel.actionFeedbackMessage, "Audio start failed")
         XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.status, .failed)
         XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.error, "Audio start failed")
+    }
+
+    @MainActor
+    func testApiStartRecordingFailureEndsPinnedTargetAccessibilityObservation() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let liveFieldKey = UserDefaultsKeys.liveFieldTranscriptEnabled
+        let originalLiveFieldSetting = UserDefaults.standard.object(forKey: liveFieldKey)
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            Self.restoreUserDefault(originalLiveFieldSetting, forKey: liveFieldKey)
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        UserDefaults.standard.set(true, forKey: liveFieldKey)
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        let context = try XCTUnwrap(dictationContext)
+        let targetElement = AXUIElementCreateApplication(4242)
+        var observationBeginCount = 0
+        var observationEndCount = 0
+
+        context.textInsertionService.captureActiveAppOverride = {
+            ("Electron Target", "com.example.electron", nil)
+        }
+        context.textInsertionService.accessibilityGrantedOverride = true
+        context.textInsertionService.focusedTextElementOverride = { targetElement }
+        context.textInsertionService.liveFieldElectronApplicationOverride = { _ in true }
+        context.textInsertionService.liveFieldElementProcessIdentifierOverride = { _ in 4242 }
+        context.textInsertionService.liveFieldApplicationMetadataOverride = { processIdentifier in
+            guard processIdentifier == 4242 else { return nil }
+            return ("Electron Target", "com.example.electron", nil)
+        }
+        context.textInsertionService.liveFieldApplicationValidationOverride = {
+            processIdentifier,
+            bundleIdentifier in
+            processIdentifier == 4242 && bundleIdentifier == "com.example.electron"
+        }
+        context.textInsertionService.focusedTextStateOverride = { _ in
+            (value: "", selectedText: nil, selectedRange: NSRange(location: 0, length: 0))
+        }
+        context.textInsertionService.chromiumAccessibilityObservationOverride = { _ in
+            observationBeginCount += 1
+            return TargetAppAccessibilityObservationLease {
+                observationEndCount += 1
+            }
+        }
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {
+            throw NSError(
+                domain: "TypeWhisperTests",
+                code: 1,
+                userInfo: [NSLocalizedDescriptionKey: "Audio start failed"]
+            )
+        }
+
+        let sessionID = context.dictationViewModel.apiStartRecording()
+        await context.dictationViewModel.testingWaitForRecordingStart()
+
+        XCTAssertEqual(
+            context.dictationViewModel.apiDictationSession(id: sessionID)?.status,
+            .failed
+        )
+        XCTAssertEqual(observationBeginCount, 1)
+        XCTAssertEqual(observationEndCount, 1)
     }
 
     @MainActor

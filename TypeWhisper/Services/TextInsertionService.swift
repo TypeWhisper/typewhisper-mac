@@ -689,7 +689,8 @@ final class TextInsertionService {
 
     func replaceLiveFieldText(
         _ text: String,
-        in target: inout LiveFieldTarget
+        in target: inout LiveFieldTarget,
+        knownTargetIsFocused: Bool? = nil
     ) -> LiveFieldMutationResult {
         guard let currentState = verifiedLiveFieldState(for: &target) else {
             return .detached
@@ -699,7 +700,7 @@ final class TextInsertionService {
             return .applied(observation(from: currentState))
         }
 
-        let targetWasFocused = liveFieldTargetIsFocused(target)
+        let targetWasFocused = knownTargetIsFocused ?? liveFieldTargetIsFocused(target)
 
         let expectedValue = (target.expectedValue as NSString).replacingCharacters(
             in: target.ownedRange,
@@ -1983,12 +1984,17 @@ final class LiveFieldTranscriptSession {
         updateTask = nil
         guard state == .active, let pendingText else { return }
         self.pendingText = nil
-        guard targetIsCurrentlyFocused else {
+        let targetIsFocused = targetIsCurrentlyFocused
+        guard targetIsFocused else {
             logger.debug("Pausing live-field partial updates while the pinned target is not focused")
             return
         }
 
-        switch textInsertionService.replaceLiveFieldText(pendingText, in: &target) {
+        switch textInsertionService.replaceLiveFieldText(
+            pendingText,
+            in: &target,
+            knownTargetIsFocused: targetIsFocused
+        ) {
         case .applied:
             if self.pendingText != nil {
                 schedulePendingUpdateIfNeeded()

@@ -1491,6 +1491,7 @@ final class DictationViewModel: ObservableObject {
     ) {
         clearRecordingStartCueState()
         clearDeferredRecordingContext()
+        endTargetAppAccessibilityObservation()
         restoreRecordingSideEffects()
         let errorMessage: String
         if let recordingError = error as? AudioRecordingService.AudioRecordingError,
@@ -2032,7 +2033,7 @@ final class DictationViewModel: ObservableObject {
                             .focusPinnedInsertionTarget(pinnedInsertionTarget)
                         if !shouldUseNormalInsertion {
                             showLiveFieldRecoveryFeedback()
-                            self.liveFieldTranscriptSession = nil
+                            cancelLiveFieldTranscriptSession()
                         }
                     }
 
