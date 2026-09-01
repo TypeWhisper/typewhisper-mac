@@ -22,6 +22,11 @@ on:
         options:
           - official
           - community
+      allow_prerelease_host:
+        description: Allow SDK validation against the latest matching daily host release
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -38,11 +43,13 @@ jobs:
           INPUT_PLUGIN_NAME: ${{ inputs.plugin_name }}
           INPUT_PLUGIN_VERSION: ${{ inputs.plugin_version }}
           INPUT_DISTRIBUTION_SOURCE: ${{ inputs.distribution_source }}
+          INPUT_ALLOW_PRERELEASE_HOST: ${{ inputs.allow_prerelease_host }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             PLUGIN_NAME="$INPUT_PLUGIN_NAME"
             PLUGIN_VERSION="$INPUT_PLUGIN_VERSION"
             DISTRIBUTION_SOURCE="$INPUT_DISTRIBUTION_SOURCE"
+            ALLOW_PRERELEASE_HOST="${INPUT_ALLOW_PRERELEASE_HOST:-false}"
             TAG="plugin-${PLUGIN_NAME}-v${PLUGIN_VERSION}"
           else
             TAG="${GITHUB_REF_NAME}"
@@ -55,6 +62,7 @@ jobs:
               exit 1
             fi
             DISTRIBUTION_SOURCE="official"
+            ALLOW_PRERELEASE_HOST="false"
           fi
           if [[ ! "$PLUGIN_NAME" =~ ^[A-Za-z0-9_-]+$ ]]; then
             echo "Invalid plugin name: $PLUGIN_NAME"
@@ -68,13 +76,18 @@ jobs:
             official|community) ;;
             *) echo "Unknown distribution source: $DISTRIBUTION_SOURCE" && exit 1 ;;
           esac
+          case "$ALLOW_PRERELEASE_HOST" in
+            true|false) ;;
+            *) echo "Invalid allow_prerelease_host value: $ALLOW_PRERELEASE_HOST" && exit 1 ;;
+          esac
           {
             echo "TAG=$TAG"
             echo "PLUGIN_NAME=$PLUGIN_NAME"
             echo "PLUGIN_VERSION=$PLUGIN_VERSION"
             echo "DISTRIBUTION_SOURCE=$DISTRIBUTION_SOURCE"
+            echo "ALLOW_PRERELEASE_HOST=$ALLOW_PRERELEASE_HOST"
           } >> "$GITHUB_ENV"
-          echo "Plugin: $PLUGIN_NAME, Version: $PLUGIN_VERSION, Source: $DISTRIBUTION_SOURCE, Tag: $TAG"
+          echo "Plugin: $PLUGIN_NAME, Version: $PLUGIN_VERSION, Source: $DISTRIBUTION_SOURCE, Tag: $TAG, Allow prerelease host: $ALLOW_PRERELEASE_HOST"
 
       - name: Resolve target name
         run: |
@@ -258,22 +271,47 @@ jobs:
           MANIFEST="TypeWhisperPluginSDK/Plugins/${TARGET}/manifest.json"
           MIN_HOST_VERSION=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["minHostVersion"])' "$MANIFEST")
           HOST_TAG="v${MIN_HOST_VERSION}"
-          HOST_ASSET_NAME="TypeWhisper-v${MIN_HOST_VERSION}.zip"
           WORKDIR="$RUNNER_TEMP/min-host-sdk-${TARGET}"
           mkdir -p "$WORKDIR/app"
 
           if ! HOST_RELEASE_JSON=$(gh release view "$HOST_TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --json tagName,isDraft,isPrerelease,assets); then
-            echo "::error::No published TypeWhisper release found for minHostVersion ${MIN_HOST_VERSION} (${HOST_TAG})"
+            if [ "$ALLOW_PRERELEASE_HOST" != "true" ]; then
+              echo "::error::No published TypeWhisper release found for minHostVersion ${MIN_HOST_VERSION} (${HOST_TAG})"
+              exit 1
+            fi
+
+            HOST_TAG=$(gh release list \
+              --repo "$GITHUB_REPOSITORY" \
+              --limit 100 \
+              --json tagName,isDraft,isPrerelease,publishedAt \
+              --jq "[.[] | select(.isDraft == false and .isPrerelease == true and (.tagName | startswith(\"v${MIN_HOST_VERSION}-daily.\")))] | sort_by(.publishedAt) | last | .tagName // empty")
+            if [ -z "$HOST_TAG" ]; then
+              echo "::error::No published daily TypeWhisper release found for minHostVersion ${MIN_HOST_VERSION}"
+              exit 1
+            fi
+
+            HOST_RELEASE_JSON=$(gh release view "$HOST_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --json tagName,isDraft,isPrerelease,assets)
+            echo "Using explicitly allowed daily host release ${HOST_TAG} for SDK compatibility validation"
+          fi
+
+          if ! jq -e --argjson allow_prerelease "$ALLOW_PRERELEASE_HOST" \
+            '.isDraft == false and (.isPrerelease == false or $allow_prerelease)' \
+            <<<"$HOST_RELEASE_JSON" >/dev/null; then
+            echo "::error::Host release ${HOST_TAG} must be published and stable unless allow_prerelease_host is enabled"
             exit 1
           fi
 
-          if ! jq -e '.isDraft == false and .isPrerelease == false' \
-            <<<"$HOST_RELEASE_JSON" >/dev/null; then
-            echo "::error::Host release ${HOST_TAG} must be published and stable (not a draft or prerelease)"
+          RESOLVED_TAG=$(jq -r '.tagName' <<<"$HOST_RELEASE_JSON")
+          if [ "$RESOLVED_TAG" != "v${MIN_HOST_VERSION}" ] && \
+             [[ ! "$RESOLVED_TAG" =~ ^v${MIN_HOST_VERSION//./\\.}-daily\..+$ ]]; then
+            echo "::error::Resolved host tag ${RESOLVED_TAG} does not match minHostVersion ${MIN_HOST_VERSION}"
             exit 1
           fi
+          HOST_ASSET_NAME="TypeWhisper-${RESOLVED_TAG}.zip"
 
           if ! jq -e --arg asset "$HOST_ASSET_NAME" \
             '[.assets[] | select(.name == $asset)] | length == 1' \
@@ -282,7 +320,6 @@ jobs:
             exit 1
           fi
 
-          RESOLVED_TAG=$(jq -r '.tagName' <<<"$HOST_RELEASE_JSON")
           gh release download "$RESOLVED_TAG" \
             --repo "$GITHUB_REPOSITORY" \
             --pattern "$HOST_ASSET_NAME" \
