@@ -4859,6 +4859,24 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testLiveFieldTargetRejectsSecureTextElement() {
+        let service = TextInsertionService()
+        let element = AXUIElementCreateSystemWide()
+        service.accessibilityGrantedOverride = true
+        service.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
+        service.focusedTextElementOverride = { element }
+        service.liveFieldTargetEligibilityOverride = { _ in true }
+        service.secureTextElementOverride = { $0 == element }
+        service.focusedTextStateOverride = { _ in
+            (value: "Secret", selectedText: nil, selectedRange: NSRange(location: 6, length: 0))
+        }
+
+        XCTAssertNil(
+            service.captureLiveFieldTarget(expectedBundleIdentifier: "com.apple.Notes")
+        )
+    }
+
+    @MainActor
     func testLiveFieldTargetRejectsNonEmptySelection() {
         let service = TextInsertionService()
         let element = AXUIElementCreateSystemWide()

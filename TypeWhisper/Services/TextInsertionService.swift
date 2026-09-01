@@ -667,6 +667,10 @@ final class TextInsertionService {
         applicationBundleIdentifier: String,
         processIdentifier knownProcessIdentifier: pid_t? = nil
     ) -> LiveFieldTarget? {
+        guard !isSecureTextElement(state.element) else {
+            logger.debug("Live field target rejected: focused element is secure")
+            return nil
+        }
         guard let value = state.value else {
             logger.debug("Live field target rejected: focused element has no readable value")
             return nil
