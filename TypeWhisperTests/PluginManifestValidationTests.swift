@@ -1562,8 +1562,33 @@ final class PluginDictionaryGuardTests: XCTestCase {
         let plugin: Any = DeepgramPlugin()
 
         XCTAssertTrue(plugin is any LiveTranscriptionCapablePlugin)
-        let progressProvider = plugin as? any LiveTranscriptionProgressModeProviding
-        XCTAssertEqual(progressProvider?.liveTranscriptionProgressMode, .completeSnapshot)
+        XCTAssertFalse(plugin is any LiveTranscriptionProgressModeProviding)
+    }
+
+    func testDeepgramRemainsLoadableByDeclaredTypeWhisper16Host() throws {
+        let sourceURL = TestSupport.repoRoot.appendingPathComponent(
+            "TypeWhisperPluginSDK/Plugins/DeepgramPlugin/DeepgramPlugin.swift"
+        )
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+        XCTAssertFalse(source.contains("PluginHTTPClient.ensureNetworkAccessIsAllowed"))
+        XCTAssertFalse(source.contains("LiveTranscriptionProgressModeProviding"))
+    }
+
+    func testDeepgramLocalNetworkPolicyAllowsNormalRuntime() {
+        XCTAssertNoThrow(
+            try DeepgramNetworkAccessPolicy.ensureAccessIsAllowed(arguments: ["TypeWhisper"])
+        )
+    }
+
+    func testDeepgramLocalNetworkPolicyBlocksScreenshotAutomation() {
+        XCTAssertThrowsError(
+            try DeepgramNetworkAccessPolicy.ensureAccessIsAllowed(
+                arguments: ["TypeWhisper", "--store-screenshots"]
+            )
+        ) { error in
+            XCTAssertEqual((error as? URLError)?.code, .notConnectedToInternet)
+        }
     }
 
     func testDeepgramDictionaryQueryItemsLimitDictionaryTermsTo100AndPreserveOrder() {
