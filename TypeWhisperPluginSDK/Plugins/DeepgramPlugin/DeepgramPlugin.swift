@@ -40,6 +40,7 @@ private final class RawWebSocket: @unchecked Sendable {
 
     private let streamTask: URLSessionStreamTask
     private let hostName: String
+    private let hostHeader: String
     private let usesTLS: Bool
     private let path: String
     private let extraHeaders: [(String, String)]
@@ -47,8 +48,16 @@ private final class RawWebSocket: @unchecked Sendable {
 
     private let buffer = OSAllocatedUnfairLock(initialState: Data())
 
-    init(host: String, port: Int, usesTLS: Bool, path: String, headers: [(String, String)]) {
+    init(
+        host: String,
+        hostHeader: String,
+        port: Int,
+        usesTLS: Bool,
+        path: String,
+        headers: [(String, String)]
+    ) {
         self.hostName = host
+        self.hostHeader = hostHeader
         self.usesTLS = usesTLS
         self.path = path
         self.extraHeaders = headers
@@ -75,7 +84,7 @@ private final class RawWebSocket: @unchecked Sendable {
         let wsKey = Data(keyBytes).base64EncodedString()
 
         var request = "GET \(path) HTTP/1.1\r\n"
-        request += "Host: \(hostName)\r\n"
+        request += "Host: \(hostHeader)\r\n"
         request += "Upgrade: websocket\r\n"
         request += "Connection: Upgrade\r\n"
         request += "Sec-WebSocket-Key: \(wsKey)\r\n"
@@ -269,11 +278,85 @@ private final class RawWebSocket: @unchecked Sendable {
     }
 }
 
+// MARK: - Serialized Live Audio Output
+
+actor DeepgramLiveOutboundOperationQueue {
+    typealias AudioSender = @Sendable (Data) async throws -> Void
+    typealias CloseStreamSender = @Sendable () async throws -> Void
+    typealias Canceller = @Sendable () -> Void
+
+    private let sendAudio: AudioSender
+    private let sendCloseStream: CloseStreamSender
+    private let cancelSocket: Canceller
+    private var tailTask: Task<Void, Error>?
+    private var isFinishing = false
+    private var isCancelled = false
+
+    init(
+        sendAudio: @escaping AudioSender,
+        sendCloseStream: @escaping CloseStreamSender,
+        cancel: @escaping Canceller
+    ) {
+        self.sendAudio = sendAudio
+        self.sendCloseStream = sendCloseStream
+        self.cancelSocket = cancel
+    }
+
+    func appendAudio(samples: [Float]) async throws {
+        guard !isFinishing, !isCancelled else { return }
+
+        let data = DeepgramPlugin.floatToPCM16(samples)
+        guard !data.isEmpty else { return }
+
+        let sendAudio = self.sendAudio
+        let task = enqueue {
+            try await sendAudio(data)
+        }
+        try await task.value
+    }
+
+    func finishIfNeeded() async throws -> Bool {
+        guard !isFinishing else { return false }
+        isFinishing = true
+        guard !isCancelled else { return false }
+
+        let sendCloseStream = self.sendCloseStream
+        let task = enqueue {
+            try await sendCloseStream()
+        }
+        try await task.value
+        return true
+    }
+
+    func cancel() {
+        guard !isCancelled else { return }
+        isCancelled = true
+        tailTask?.cancel()
+        cancelSocket()
+    }
+
+    private func enqueue(
+        _ operation: @escaping @Sendable () async throws -> Void
+    ) -> Task<Void, Error> {
+        let previousTask = tailTask
+        let task = Task {
+            if let previousTask {
+                try await previousTask.value
+            }
+            try Task.checkCancellation()
+            try await operation()
+        }
+        tailTask = task
+        return task
+    }
+}
+
 // MARK: - Transcript Collector
 
 private actor TranscriptCollector {
     private var finals: [String] = []
     private var interim: String = ""
+    private var _error: String?
 
     func addFinal(_ text: String) {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -287,6 +370,12 @@ private actor TranscriptCollector {
         interim = text.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
+    func setError(_ message: String) {
+        _error = message
+    }
+
+    var error: String? { _error }
+
     func currentText() -> String {
         var parts = finals
         if !interim.isEmpty {
@@ -298,12 +387,203 @@ private actor TranscriptCollector {
     func finalResult() -> String {
         finals.joined(separator: " ")
     }
+
+    func finalTranscriptionResult(fallbackLanguage: String?) -> PluginTranscriptionResult {
+        let finalText = finalResult()
+        return PluginTranscriptionResult(
+            text: finalText.isEmpty ? currentText() : finalText,
+            detectedLanguage: fallbackLanguage
+        )
+    }
+}
+
+// MARK: - Live STT Session
+
+private final class DeepgramLiveTranscriptionSession: LiveTranscriptionSession, @unchecked Sendable {
+    private static let finishTimeoutNanoseconds: UInt64 = 2_000_000_000
+    private static let logger = Logger(subsystem: "com.typewhisper.deepgram", category: "LiveSession")
+
+    private let outbound: DeepgramLiveOutboundOperationQueue
+    private let receiveTask: Task<Void, Never>
+    private let receiveCompletion: AsyncStream<Void>
+    private let collector: TranscriptCollector
+    private let language: String?
+
+    private init(
+        outbound: DeepgramLiveOutboundOperationQueue,
+        receiveTask: Task<Void, Never>,
+        receiveCompletion: AsyncStream<Void>,
+        collector: TranscriptCollector,
+        language: String?
+    ) {
+        self.outbound = outbound
+        self.receiveTask = receiveTask
+        self.receiveCompletion = receiveCompletion
+        self.collector = collector
+        self.language = language
+    }
+
+    static func connect(
+        webSocket: RawWebSocket,
+        language: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> DeepgramLiveTranscriptionSession {
+        try await webSocket.connect()
+
+        let collector = TranscriptCollector()
+        let (receiveCompletion, receiveCompletionContinuation) = AsyncStream<Void>.makeStream()
+        let receiveTask = Task { [webSocket, collector, onProgress, receiveCompletionContinuation] in
+            defer { receiveCompletionContinuation.finish() }
+            do {
+                while !Task.isCancelled {
+                    let frame = try await webSocket.receiveFrame()
+                    if frame.opcode == .close { break }
+                    guard frame.opcode == .text,
+                          let json = try? JSONSerialization.jsonObject(with: frame.payload) as? [String: Any] else {
+                        continue
+                    }
+
+                    if let type = json["type"] as? String {
+                        if type == "Error" {
+                            await collector.setError(DeepgramPlugin.webSocketErrorMessage(from: json))
+                            break
+                        }
+                        if type != "Results" { continue }
+                    }
+
+                    let transcript = DeepgramPlugin.extractWSTranscript(from: json)
+                    if DeepgramPlugin.isFinalResult(json) {
+                        await collector.addFinal(transcript)
+                    } else {
+                        await collector.setInterim(transcript)
+                    }
+
+                    let currentText = await collector.currentText()
+                    if !currentText.isEmpty {
+                        _ = onProgress(currentText)
+                    }
+                }
+            } catch RawWebSocket.WSError.closed {
+                return
+            } catch is CancellationError {
+                return
+            } catch {
+                if Task.isCancelled { return }
+                await collector.setError(error.localizedDescription)
+            }
+        }
+
+        return DeepgramLiveTranscriptionSession(
+            outbound: DeepgramLiveOutboundOperationQueue(
+                sendAudio: { [webSocket] data in
+                    try await webSocket.sendBinary(data)
+                },
+                sendCloseStream: { [webSocket] in
+                    try await webSocket.sendText(#"{"type":"CloseStream"}"#)
+                },
+                cancel: { [webSocket] in
+                    webSocket.cancel()
+                }
+            ),
+            receiveTask: receiveTask,
+            receiveCompletion: receiveCompletion,
+            collector: collector,
+            language: language
+        )
+    }
+
+    func appendAudio(samples: [Float]) async throws {
+        if let error = await collector.error {
+            throw PluginTranscriptionError.apiError(error)
+        }
+
+        do {
+            try await outbound.appendAudio(samples: samples)
+        } catch {
+            let normalizedError = Self.normalizedError(error)
+            await collector.setError(normalizedError.localizedDescription)
+            throw normalizedError
+        }
+    }
+
+    func finish() async throws -> PluginTranscriptionResult {
+        let shouldWaitForResults: Bool
+        do {
+            shouldWaitForResults = try await outbound.finishIfNeeded()
+        } catch {
+            let normalizedError = Self.normalizedError(error)
+            await collector.setError(normalizedError.localizedDescription)
+            receiveTask.cancel()
+            await outbound.cancel()
+
+            let result = await collector.finalTranscriptionResult(fallbackLanguage: language)
+            if !result.text.isEmpty {
+                return result
+            }
+            throw normalizedError
+        }
+
+        if shouldWaitForResults {
+            let finishedCleanly = await waitForReceiveTask()
+            if !finishedCleanly {
+                Self.logger.warning("Live finish: Deepgram did not close within timeout; returning collected transcript")
+            }
+        }
+
+        receiveTask.cancel()
+        await outbound.cancel()
+
+        let result = await collector.finalTranscriptionResult(fallbackLanguage: language)
+        if result.text.isEmpty, let error = await collector.error {
+            throw PluginTranscriptionError.apiError(error)
+        }
+        return result
+    }
+
+    func cancel() async {
+        receiveTask.cancel()
+        await outbound.cancel()
+    }
+
+    private func waitForReceiveTask() async -> Bool {
+        await withTaskGroup(of: Bool.self) { group in
+            group.addTask { [receiveCompletion] in
+                var iterator = receiveCompletion.makeAsyncIterator()
+                _ = await iterator.next()
+                return true
+            }
+            group.addTask {
+                try? await Task.sleep(nanoseconds: Self.finishTimeoutNanoseconds)
+                return false
+            }
+
+            let finishedCleanly = await group.next() ?? false
+            if !finishedCleanly {
+                receiveTask.cancel()
+                await outbound.cancel()
+            }
+            group.cancelAll()
+            return finishedCleanly
+        }
+    }
+
+    private static func normalizedError(_ error: Error) -> PluginTranscriptionError {
+        if let pluginError = error as? PluginTranscriptionError {
+            return pluginError
+        }
+        return .networkError(error.localizedDescription)
+    }
 }
 
 // MARK: - Plugin Entry Point
 
 @objc(DeepgramPlugin)
-final class DeepgramPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, DictionaryTermsBudgetProviding, @unchecked Sendable {
+final class DeepgramPlugin: NSObject,
+    LiveTranscriptionCapablePlugin,
+    LiveTranscriptionProgressModeProviding,
+    DictionaryTermsCapabilityProviding,
+    DictionaryTermsBudgetProviding,
+    @unchecked Sendable {
     static let pluginId = "com.typewhisper.deepgram"
     static let pluginName = "Deepgram"
     private static let logger = Logger(subsystem: "com.typewhisper.deepgram", category: "Plugin")
@@ -360,6 +640,7 @@ final class DeepgramPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
 
     var supportsTranslation: Bool { false }
     var supportsStreaming: Bool { true }
+    var liveTranscriptionProgressMode: LiveTranscriptionProgressMode { .completeSnapshot }
     var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
     var dictionaryTermsBudget: DictionaryTermsBudget { DictionaryTermsBudget(maxTerms: Self.maxDictionaryTerms) }
 
@@ -410,7 +691,7 @@ final class DeepgramPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
         language: String?,
         prompt: String?
     ) throws -> URL {
-        guard var components = URLComponents(string: "\(baseURL)/v1/listen"),
+        guard var components = URLComponents(string: baseURL),
               let scheme = components.scheme?.lowercased(),
               scheme == "http" || scheme == "https",
               let host = components.host,
@@ -418,14 +699,63 @@ final class DeepgramPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
             throw PluginTranscriptionError.apiError("Invalid base URL: \(baseURL)")
         }
 
-        var queryItems = [
+        let basePath = components.percentEncodedPath
+        components.percentEncodedPath = basePath.hasSuffix("/")
+            ? "\(basePath)v1/listen"
+            : "\(basePath)/v1/listen"
+
+        var queryItems = components.queryItems ?? []
+        queryItems.append(contentsOf: [
             URLQueryItem(name: "model", value: modelId),
             URLQueryItem(name: "smart_format", value: "true"),
             URLQueryItem(name: "punctuate", value: "true"),
-        ]
+        ])
         if let language, !language.isEmpty {
             queryItems.append(URLQueryItem(name: "language", value: language))
         }
+        queryItems.append(contentsOf: dictionaryQueryItems(prompt: prompt, modelId: modelId))
+        components.queryItems = queryItems
+
+        guard let requestURL = components.url else {
+            throw PluginTranscriptionError.apiError("Invalid base URL: \(baseURL)")
+        }
+        return requestURL
+    }
+
+    static func streamingRequestURL(
+        baseURL: String,
+        modelId: String,
+        language: String?,
+        prompt: String?
+    ) throws -> URL {
+        guard var components = URLComponents(string: baseURL),
+              let scheme = components.scheme?.lowercased(),
+              scheme == "http" || scheme == "https",
+              let host = components.host,
+              !host.isEmpty else {
+            throw PluginTranscriptionError.apiError("Invalid base URL: \(baseURL)")
+        }
+
+        let basePath = components.percentEncodedPath
+        components.percentEncodedPath = basePath.hasSuffix("/")
+            ? "\(basePath)v1/listen"
+            : "\(basePath)/v1/listen"
+
+        var queryItems = components.queryItems ?? []
+        queryItems.append(contentsOf: [
+            URLQueryItem(name: "model", value: modelId),
+            URLQueryItem(name: "encoding", value: "linear16"),
+            URLQueryItem(name: "sample_rate", value: "16000"),
+            URLQueryItem(name: "channels", value: "1"),
+            URLQueryItem(name: "smart_format", value: "true"),
+            URLQueryItem(name: "punctuate", value: "true"),
+            URLQueryItem(name: "interim_results", value: "true"),
+            URLQueryItem(name: "endpointing", value: "300"),
+        ])
+        queryItems.append(URLQueryItem(
+            name: "language",
+            value: language.flatMap { $0.isEmpty ? nil : $0 } ?? "multi"
+        ))
         queryItems.append(contentsOf: dictionaryQueryItems(prompt: prompt, modelId: modelId))
         components.queryItems = queryItems
 
@@ -488,6 +818,32 @@ final class DeepgramPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
         }
     }
 
+    func createLiveTranscriptionSession(
+        language: String?,
+        translate: Bool,
+        prompt: String?,
+        onProgress: @Sendable @escaping (String) -> Bool
+    ) async throws -> any LiveTranscriptionSession {
+        guard let apiKey = _apiKey, !apiKey.isEmpty else {
+            throw PluginTranscriptionError.notConfigured
+        }
+        guard let modelId = _selectedModelId else {
+            throw PluginTranscriptionError.noModelSelected
+        }
+
+        let webSocket = try makeStreamingWebSocket(
+            language: language,
+            modelId: modelId,
+            prompt: prompt,
+            apiKey: apiKey
+        )
+        return try await DeepgramLiveTranscriptionSession.connect(
+            webSocket: webSocket,
+            language: language,
+            onProgress: onProgress
+        )
+    }
+
     // MARK: - REST Implementation
 
     private func transcribeREST(
@@ -544,46 +900,11 @@ final class DeepgramPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
         apiKey: String,
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> PluginTranscriptionResult {
-        // Build query string for path
-        var queryItems = [
-            URLQueryItem(name: "model", value: modelId),
-            URLQueryItem(name: "encoding", value: "linear16"),
-            URLQueryItem(name: "sample_rate", value: "16000"),
-            URLQueryItem(name: "channels", value: "1"),
-            URLQueryItem(name: "smart_format", value: "true"),
-            URLQueryItem(name: "punctuate", value: "true"),
-            URLQueryItem(name: "interim_results", value: "true"),
-            URLQueryItem(name: "endpointing", value: "300"),
-        ]
-        if let lang = language, !lang.isEmpty {
-            queryItems.append(URLQueryItem(name: "language", value: lang))
-        } else {
-            queryItems.append(URLQueryItem(name: "detect_language", value: "true"))
-        }
-        queryItems.append(contentsOf: Self.dictionaryQueryItems(prompt: prompt, modelId: modelId))
-
-        let baseURL = effectiveBaseURL
-        guard let urlComponents = URLComponents(string: baseURL),
-              let host = urlComponents.host else {
-            throw PluginTranscriptionError.apiError("Invalid base URL")
-        }
-        let usesTLS = baseURL.hasPrefix("https://")
-        let port = urlComponents.port ?? (usesTLS ? 443 : 80)
-
-        // Build the path+query for the HTTP upgrade request
-        var pathComponents = URLComponents()
-        pathComponents.path = "/v1/listen"
-        pathComponents.queryItems = queryItems
-        guard let pathWithQuery = pathComponents.string else {
-            throw PluginTranscriptionError.apiError("Invalid query parameters")
-        }
-
-        let ws = RawWebSocket(
-            host: host,
-            port: port,
-            usesTLS: usesTLS,
-            path: pathWithQuery,
-            headers: [(effectiveAuthHeader, authHeaderValue(apiKey: apiKey))]
+        let ws = try makeStreamingWebSocket(
+            language: language,
+            modelId: modelId,
+            prompt: prompt,
+            apiKey: apiKey
         )
 
         try await ws.connect()
@@ -652,6 +973,50 @@ final class DeepgramPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
         return PluginTranscriptionResult(text: finalText, detectedLanguage: language)
     }
 
+    private func makeStreamingWebSocket(
+        language: String?,
+        modelId: String,
+        prompt: String?,
+        apiKey: String
+    ) throws -> RawWebSocket {
+        let requestURL = try Self.streamingRequestURL(
+            baseURL: effectiveBaseURL,
+            modelId: modelId,
+            language: language,
+            prompt: prompt
+        )
+        guard let urlComponents = URLComponents(url: requestURL, resolvingAgainstBaseURL: false),
+              let scheme = urlComponents.scheme?.lowercased(),
+              let host = urlComponents.host,
+              !host.isEmpty else {
+            throw PluginTranscriptionError.apiError("Invalid streaming URL")
+        }
+        let usesTLS = scheme == "https"
+        let port = urlComponents.port ?? (usesTLS ? 443 : 80)
+        let hostHeader = Self.webSocketHostHeader(host: host, port: port, usesTLS: usesTLS)
+
+        // Build the path+query for the HTTP upgrade request
+        var pathWithQuery = urlComponents.percentEncodedPath
+        if let query = urlComponents.percentEncodedQuery, !query.isEmpty {
+            pathWithQuery += "?\(query)"
+        }
+
+        return RawWebSocket(
+            host: host,
+            hostHeader: hostHeader,
+            port: port,
+            usesTLS: usesTLS,
+            path: pathWithQuery,
+            headers: [(effectiveAuthHeader, authHeaderValue(apiKey: apiKey))]
+        )
+    }
+
+    internal static func webSocketHostHeader(host: String, port: Int, usesTLS: Bool) -> String {
+        let formattedHost = host.contains(":") && !host.hasPrefix("[") ? "[\(host)]" : host
+        let defaultPort = usesTLS ? 443 : 80
+        return port == defaultPort ? formattedHost : "\(formattedHost):\(port)"
+    }
+
     internal static func dictionaryQueryItems(prompt: String?, modelId: String) -> [URLQueryItem] {
         let terms = PluginDictionaryTerms.terms(fromPrompt: prompt)
         guard !terms.isEmpty else { return [] }
@@ -697,6 +1062,13 @@ final class DeepgramPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTerms
     fileprivate static func isFinalResult(_ json: [String: Any]?) -> Bool {
         guard let json else { return false }
         return json["is_final"] as? Bool ?? false
+    }
+
+    fileprivate static func webSocketErrorMessage(from json: [String: Any]) -> String {
+        (json["description"] as? String)
+            ?? (json["message"] as? String)
+            ?? (json["error"] as? String)
+            ?? "Unknown Deepgram streaming error"
     }
 
     // MARK: - Audio Conversion
@@ -871,37 +1243,59 @@ private struct DeepgramSettingsView: View {
             Divider()
 
             // Advanced Section
-            DisclosureGroup(String(localized: "Advanced", bundle: bundle), isExpanded: $showAdvanced) {
-                VStack(alignment: .leading, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Custom Base URL", bundle: bundle)
-                            .font(.subheadline)
-
-                        TextField("https://api.deepgram.com", text: $customBaseURL)
-                            .textFieldStyle(.roundedBorder)
-                            .font(.system(.body, design: .monospaced))
-                            .onChange(of: customBaseURL) {
-                                plugin.setCustomBaseURL(customBaseURL)
-                            }
+            VStack(alignment: .leading, spacing: 0) {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.16)) {
+                        showAdvanced.toggle()
                     }
+                } label: {
+                    HStack(spacing: 10) {
+                        Text("Advanced", bundle: bundle)
 
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Custom Auth Header", bundle: bundle)
-                            .font(.subheadline)
+                        Spacer()
 
-                        TextField("Authorization", text: $customAuthHeader)
-                            .textFieldStyle(.roundedBorder)
-                            .font(.system(.body, design: .monospaced))
-                            .onChange(of: customAuthHeader) {
-                                plugin.setCustomAuthHeader(customAuthHeader)
-                            }
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .rotationEffect(.degrees(showAdvanced ? 90 : 0))
                     }
-
-                    Text("For Cloudflare AI Gateway or custom proxies", bundle: bundle)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    .padding(.vertical, 4)
+                    .contentShape(Rectangle())
                 }
-                .padding(.top, 8)
+                .buttonStyle(.plain)
+
+                if showAdvanced {
+                    VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Custom Base URL", bundle: bundle)
+                                .font(.subheadline)
+
+                            TextField("https://api.deepgram.com", text: $customBaseURL)
+                                .textFieldStyle(.roundedBorder)
+                                .font(.system(.body, design: .monospaced))
+                                .onChange(of: customBaseURL) {
+                                    plugin.setCustomBaseURL(customBaseURL)
+                                }
+                        }
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Custom Auth Header", bundle: bundle)
+                                .font(.subheadline)
+
+                            TextField("Authorization", text: $customAuthHeader)
+                                .textFieldStyle(.roundedBorder)
+                                .font(.system(.body, design: .monospaced))
+                                .onChange(of: customAuthHeader) {
+                                    plugin.setCustomAuthHeader(customAuthHeader)
+                                }
+                        }
+
+                        Text("For Cloudflare AI Gateway or custom proxies", bundle: bundle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.top, 8)
+                }
             }
 
             Text("API keys are stored securely in the Keychain", bundle: bundle)

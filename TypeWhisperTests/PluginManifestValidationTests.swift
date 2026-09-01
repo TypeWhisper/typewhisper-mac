@@ -1558,6 +1558,14 @@ final class PluginDictionaryGuardTests: XCTestCase {
         XCTAssertTrue(DeepgramPlugin().supportedLanguages.contains("multi"))
     }
 
+    func testDeepgramAdvertisesLiveDictationTranscription() {
+        let plugin: Any = DeepgramPlugin()
+
+        XCTAssertTrue(plugin is any LiveTranscriptionCapablePlugin)
+        let progressProvider = plugin as? any LiveTranscriptionProgressModeProviding
+        XCTAssertEqual(progressProvider?.liveTranscriptionProgressMode, .completeSnapshot)
+    }
+
     func testDeepgramDictionaryQueryItemsLimitDictionaryTermsTo100AndPreserveOrder() {
         let prompt = PluginDictionaryTerms.prompt(from: makeLongTerms(count: 150, length: 10), maxLength: 10_000)
         let queryItems = DeepgramPlugin.dictionaryQueryItems(prompt: prompt, modelId: "nova-2")
@@ -1628,6 +1636,104 @@ final class PluginDictionaryGuardTests: XCTestCase {
             queryItems.filter { $0.name == "keyterm" }.compactMap(\.value),
             ["TypeWhisper", "Deepgram"]
         )
+    }
+
+    func testDeepgramStreamingRequestURLUsesMultilingualFallbackAndPreservesProxyURL() throws {
+        let prompt = PluginDictionaryTerms.prompt(from: ["TypeWhisper", "Deepgram"], maxLength: 10_000)
+        let url = try DeepgramPlugin.streamingRequestURL(
+            baseURL: "http://localhost:8080/deepgram?gateway=true",
+            modelId: "nova-3",
+            language: nil,
+            prompt: prompt
+        )
+        let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
+        let queryItems = components.queryItems ?? []
+        let firstValue = { (name: String) in
+            queryItems.first(where: { $0.name == name })?.value
+        }
+
+        XCTAssertEqual(components.scheme, "http")
+        XCTAssertEqual(components.host, "localhost")
+        XCTAssertEqual(components.port, 8080)
+        XCTAssertEqual(components.path, "/deepgram/v1/listen")
+        XCTAssertEqual(firstValue("gateway"), "true")
+        XCTAssertEqual(firstValue("model"), "nova-3")
+        XCTAssertEqual(firstValue("language"), "multi")
+        XCTAssertNil(firstValue("detect_language"))
+        XCTAssertEqual(
+            queryItems.filter { $0.name == "keyterm" }.compactMap(\.value),
+            ["TypeWhisper", "Deepgram"]
+        )
+    }
+
+    func testDeepgramWebSocketHostHeaderIncludesOnlyNonDefaultPorts() {
+        XCTAssertEqual(
+            DeepgramPlugin.webSocketHostHeader(host: "api.deepgram.com", port: 443, usesTLS: true),
+            "api.deepgram.com"
+        )
+        XCTAssertEqual(
+            DeepgramPlugin.webSocketHostHeader(host: "proxy.example", port: 8443, usesTLS: true),
+            "proxy.example:8443"
+        )
+        XCTAssertEqual(
+            DeepgramPlugin.webSocketHostHeader(host: "::1", port: 8080, usesTLS: false),
+            "[::1]:8080"
+        )
+    }
+
+    func testDeepgramLiveOutboundSerializesAudioBeforeFinalization() async throws {
+        let audioStarted = DeepgramOutboundTestGate()
+        let allowAudioToFinish = DeepgramOutboundTestGate()
+        let events = DeepgramOutboundTestEvents()
+        let outbound = DeepgramLiveOutboundOperationQueue(
+            sendAudio: { _ in
+                await events.append("audio-start")
+                await audioStarted.open()
+                await allowAudioToFinish.wait()
+                await events.append("audio-end")
+            },
+            sendCloseStream: {
+                await events.append("close-stream")
+            },
+            cancel: {}
+        )
+
+        let appendTask = Task {
+            try await outbound.appendAudio(samples: [0.25, -0.25])
+        }
+        await audioStarted.wait()
+        let finishTask = Task {
+            try await outbound.finishIfNeeded()
+        }
+
+        try await Task.sleep(for: .milliseconds(25))
+        let eventsWhileAudioIsPending = await events.snapshot()
+        XCTAssertEqual(eventsWhileAudioIsPending, ["audio-start"])
+
+        await allowAudioToFinish.open()
+        try await appendTask.value
+        let didFinish = try await finishTask.value
+        XCTAssertTrue(didFinish)
+        let finalEvents = await events.snapshot()
+        XCTAssertEqual(finalEvents, ["audio-start", "audio-end", "close-stream"])
+    }
+
+    func testDeepgramStreamingRequestURLRejectsUnsupportedSchemes() {
+        for baseURL in ["not a URL", "file:///tmp/deepgram", "ftp://example.com"] {
+            XCTAssertThrowsError(
+                try DeepgramPlugin.streamingRequestURL(
+                    baseURL: baseURL,
+                    modelId: "nova-3",
+                    language: nil,
+                    prompt: nil
+                ),
+                baseURL
+            ) { error in
+                guard case PluginTranscriptionError.apiError = error else {
+                    return XCTFail("Expected apiError for \(baseURL), got \(error)")
+                }
+            }
+        }
     }
 
     @available(macOS 26, *)
@@ -2780,5 +2886,39 @@ final class OpenAIPluginTokenParameterTests: XCTestCase {
 
     func testLegacyChatCompletionsKeepTemperature() {
         XCTAssertEqual(OpenAIPlugin.chatCompletionTemperature(for: "gpt-4o", reasoningEffort: nil), 0.3)
+    }
+}
+
+private actor DeepgramOutboundTestGate {
+    private var isOpen = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async {
+        guard !isOpen else { return }
+        await withCheckedContinuation { continuation in
+            waiters.append(continuation)
+        }
+    }
+
+    func open() {
+        guard !isOpen else { return }
+        isOpen = true
+        let pendingWaiters = waiters
+        waiters.removeAll()
+        for waiter in pendingWaiters {
+            waiter.resume()
+        }
+    }
+}
+
+private actor DeepgramOutboundTestEvents {
+    private var events: [String] = []
+
+    func append(_ event: String) {
+        events.append(event)
+    }
+
+    func snapshot() -> [String] {
+        events
     }
 }
