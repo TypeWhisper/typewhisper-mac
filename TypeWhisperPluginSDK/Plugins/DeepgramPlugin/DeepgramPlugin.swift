@@ -4,6 +4,17 @@ import SwiftUI
 import os
 import TypeWhisperPluginSDK
 
+// Keep this policy plugin-local because the SDK network guard was added after TypeWhisper 1.6.0.
+enum DeepgramNetworkAccessPolicy {
+    static func ensureAccessIsAllowed(
+        arguments: [String] = ProcessInfo.processInfo.arguments
+    ) throws {
+        guard !arguments.contains("--store-screenshots") else {
+            throw URLError(.notConnectedToInternet)
+        }
+    }
+}
+
 // MARK: - Raw WebSocket Client (RFC 6455)
 // Apple's URLSessionWebSocketTask and NWConnection+NWProtocolWebSocket negotiate HTTP/2
 // via TLS ALPN, which is incompatible with Deepgram's server (advertises h2 but doesn't
@@ -68,7 +79,7 @@ private final class RawWebSocket: @unchecked Sendable {
     // MARK: - Connect + Upgrade
 
     func connect() async throws {
-        try PluginHTTPClient.ensureNetworkAccessIsAllowed()
+        try DeepgramNetworkAccessPolicy.ensureAccessIsAllowed()
         if usesTLS {
             streamTask.startSecureConnection()
         }
@@ -580,7 +591,6 @@ private final class DeepgramLiveTranscriptionSession: LiveTranscriptionSession, 
 @objc(DeepgramPlugin)
 final class DeepgramPlugin: NSObject,
     LiveTranscriptionCapablePlugin,
-    LiveTranscriptionProgressModeProviding,
     DictionaryTermsCapabilityProviding,
     DictionaryTermsBudgetProviding,
     @unchecked Sendable {
@@ -640,7 +650,6 @@ final class DeepgramPlugin: NSObject,
 
     var supportsTranslation: Bool { false }
     var supportsStreaming: Bool { true }
-    var liveTranscriptionProgressMode: LiveTranscriptionProgressMode { .completeSnapshot }
     var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
     var dictionaryTermsBudget: DictionaryTermsBudget { DictionaryTermsBudget(maxTerms: Self.maxDictionaryTerms) }
 
