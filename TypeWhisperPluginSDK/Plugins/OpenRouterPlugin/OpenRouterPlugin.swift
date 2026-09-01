@@ -408,12 +408,14 @@ final class OpenRouterPlugin: NSObject,
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let choices = json["choices"] as? [[String: Any]],
               let first = choices.first,
-              let message = first["message"] as? [String: Any],
-              let content = message["content"] as? String else {
+              let message = first["message"] as? [String: Any] else {
             throw PluginChatError.apiError("Failed to parse response")
         }
 
-        return content.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Reasoning models on OpenRouter (gpt-5.x, gpt-oss) return `content: null`
+        // or an array of typed parts; the shared helper treats those as valid.
+        return PluginOpenAIChatHelper.chatMessageContent(from: message)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     // MARK: - Settings View

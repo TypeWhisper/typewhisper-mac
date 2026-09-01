@@ -585,8 +585,11 @@ class PromptProcessingService: ObservableObject {
         // intended output instead of failing the pipeline onto the raw text.
         // A single empty attempt keeps the protective failure semantics, since one
         // provider glitching to empty would otherwise silently discard content.
-        if emptyResultCount >= 2, emptyResultCount == failures.count {
-            logger.info("All \(emptyResultCount, privacy: .public) LLM attempts returned an empty result; treating empty output as intentional")
+        // Providers that failed with infrastructure errors (rate limit, network,
+        // parse) cast no vote either way, so two independent empty opinions are
+        // consensus even when a third provider never got to answer.
+        if emptyResultCount >= 2 {
+            logger.info("\(emptyResultCount, privacy: .public) of \(failures.count, privacy: .public) LLM attempts independently returned an empty result; treating empty output as intentional")
             return ""
         }
 

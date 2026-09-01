@@ -1282,7 +1282,7 @@ public struct PluginOpenAIChatHelper: Sendable {
     /// is a valid empty response, not a malformed one. Some providers also
     /// return `content` as an array of typed parts. Reasoning text is never
     /// promoted to content.
-    static func chatMessageContent(from message: [String: Any]) -> String {
+    public static func chatMessageContent(from message: [String: Any]) -> String {
         if let text = message["content"] as? String {
             return text
         }
