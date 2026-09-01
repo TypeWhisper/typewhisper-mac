@@ -115,6 +115,19 @@ class NotchIndicatorPanel: NSPanel {
 
         let hostingView = FirstMouseHostingView(rootView: content(notchGeometry))
         hostingView.sizingOptions = []
+        // This panel sits over the hardware notch, the one place on a notched
+        // display that carries safe-area *corner* insets. With safe-area regions
+        // enabled, NSHostingView registers for AppKit's
+        // `_effectiveSafeAreaCornerInsets` / `_effectiveCornerRadii` KVO and
+        // reacts to every frame change with invalidateSafeAreaCornerInsets ->
+        // setNeedsUpdateConstraints; when that frame change lands inside the
+        // window's own layout pass (NSHostingView.windowDidLayout ->
+        // updateAnimatedWindowSize), AppKit raises
+        // NSInternalInconsistencyException from _postWindowNeedsUpdateConstraints
+        // and the app aborts. The notch content lays itself out from
+        // NotchGeometry and never consumes the safe area, so opting out of
+        // safe-area regions removes that observer without changing the layout.
+        hostingView.safeAreaRegions = []
         contentView = hostingView
     }
 
