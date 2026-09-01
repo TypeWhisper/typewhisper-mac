@@ -11832,6 +11832,7 @@ extension TypeWhisperIntegrationTests {
     @MainActor
     private func makeHedgedDictationViewModel(
         hedgeThreshold: TimeInterval?,
+        transcriptionDeadline: TimeInterval? = nil,
         primaryRunner: @escaping DictationViewModel.PrimaryTranscriptionRunner,
         fallbackRunner: @escaping DictationViewModel.RecoveryFallbackRunner
     ) throws -> (viewModel: DictationViewModel, cleanup: () -> Void) {
@@ -11897,10 +11898,81 @@ extension TypeWhisperIntegrationTests {
             },
             recoveryFallbackRunner: fallbackRunner,
             recoveryHedgeThresholdProvider: { hedgeThreshold },
-            primaryTranscriptionRunner: primaryRunner
+            primaryTranscriptionRunner: primaryRunner,
+            transcriptionDeadlineProvider: transcriptionDeadline.map { deadline -> DictationViewModel.TranscriptionDeadlineProvider in
+                { _ in deadline }
+            }
         )
         viewModel.soundFeedbackEnabled = false
         return (viewModel, { TestSupport.remove(appSupportDirectory) })
+    }
+
+    @MainActor
+    func testTranscriptionDeadlineAbandonsHungPrimaryAndFallback() async throws {
+        var primaryCancelled = false
+        var fallbackCancelled = false
+        let harness = try makeHedgedDictationViewModel(
+            hedgeThreshold: 0.1,
+            transcriptionDeadline: 0.5,
+            primaryRunner: { _, _, _, _, _, _, _, _ in
+                do {
+                    try await Task.sleep(nanoseconds: 30_000_000_000)
+                } catch {
+                    primaryCancelled = true
+                    throw error
+                }
+                return Self.hedgeTranscriptionResult(text: "primary", engine: "primary")
+            },
+            fallbackRunner: { _, _, _, _, _, _, _ in
+                do {
+                    try await Task.sleep(nanoseconds: 30_000_000_000)
+                } catch {
+                    fallbackCancelled = true
+                    throw error
+                }
+                return Self.hedgeTranscriptionResult(text: "fallback", engine: "test-fallback")
+            }
+        )
+        defer { harness.cleanup() }
+
+        let start = ContinuousClock.now
+        do {
+            _ = try await harness.viewModel.transcribeFinalAudioForTesting()
+            XCTFail("A transcription that never completes must hit the deadline")
+        } catch let error as DictationViewModel.TranscriptionDeadlineExceeded {
+            XCTAssertEqual(error.seconds, 0.5)
+        }
+        XCTAssertLessThan(ContinuousClock.now - start, .seconds(5))
+
+        try await Task.sleep(nanoseconds: 200_000_000)
+        XCTAssertTrue(primaryCancelled, "the hung primary request must be cancelled once the deadline passes")
+        XCTAssertTrue(fallbackCancelled, "the hung fallback request must be cancelled once the deadline passes")
+    }
+
+    @MainActor
+    func testTranscriptionDeadlineDoesNotInterfereWithFastPrimary() async throws {
+        let harness = try makeHedgedDictationViewModel(
+            hedgeThreshold: 1.0,
+            transcriptionDeadline: 5.0,
+            primaryRunner: { _, _, _, _, _, _, _, _ in
+                Self.hedgeTranscriptionResult(text: "primary", engine: "primary")
+            },
+            fallbackRunner: { _, _, _, _, _, _, _ in
+                XCTFail("fallback must not run when the primary answers immediately")
+                return Self.hedgeTranscriptionResult(text: "fallback", engine: "test-fallback")
+            }
+        )
+        defer { harness.cleanup() }
+
+        let output = try await harness.viewModel.transcribeFinalAudioForTesting()
+        XCTAssertEqual(output.text, "primary")
+        XCTAssertFalse(output.usedRecoveryFallback)
+    }
+
+    func testDefaultTranscriptionDeadlineScalesWithRecordingLength() {
+        XCTAssertEqual(DictationViewModel.defaultTranscriptionDeadline(forAudioDuration: 0), 60)
+        XCTAssertEqual(DictationViewModel.defaultTranscriptionDeadline(forAudioDuration: 90), 150)
+        XCTAssertEqual(DictationViewModel.defaultTranscriptionDeadline(forAudioDuration: -5), 60)
     }
 
     @MainActor
