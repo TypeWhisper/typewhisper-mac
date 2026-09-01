@@ -328,6 +328,7 @@ private final class DeepgramLiveTranscriptionSession: LiveTranscriptionSession, 
 
     private let webSocket: RawWebSocket
     private let receiveTask: Task<Void, Never>
+    private let receiveCompletion: AsyncStream<Void>
     private let collector: TranscriptCollector
     private let language: String?
     private let state = OSAllocatedUnfairLock(initialState: State())
@@ -335,11 +336,13 @@ private final class DeepgramLiveTranscriptionSession: LiveTranscriptionSession, 
     private init(
         webSocket: RawWebSocket,
         receiveTask: Task<Void, Never>,
+        receiveCompletion: AsyncStream<Void>,
         collector: TranscriptCollector,
         language: String?
     ) {
         self.webSocket = webSocket
         self.receiveTask = receiveTask
+        self.receiveCompletion = receiveCompletion
         self.collector = collector
         self.language = language
     }
@@ -352,7 +355,9 @@ private final class DeepgramLiveTranscriptionSession: LiveTranscriptionSession, 
         try await webSocket.connect()
 
         let collector = TranscriptCollector()
-        let receiveTask = Task { [webSocket, collector, onProgress] in
+        let (receiveCompletion, receiveCompletionContinuation) = AsyncStream<Void>.makeStream()
+        let receiveTask = Task { [webSocket, collector, onProgress, receiveCompletionContinuation] in
+            defer { receiveCompletionContinuation.finish() }
             do {
                 while !Task.isCancelled {
                     let frame = try await webSocket.receiveFrame()
@@ -395,6 +400,7 @@ private final class DeepgramLiveTranscriptionSession: LiveTranscriptionSession, 
         return DeepgramLiveTranscriptionSession(
             webSocket: webSocket,
             receiveTask: receiveTask,
+            receiveCompletion: receiveCompletion,
             collector: collector,
             language: language
         )
@@ -445,10 +451,11 @@ private final class DeepgramLiveTranscriptionSession: LiveTranscriptionSession, 
         receiveTask.cancel()
         webSocket.cancel()
 
-        if let error = await collector.error {
+        let result = await collector.finalTranscriptionResult(fallbackLanguage: language)
+        if result.text.isEmpty, let error = await collector.error {
             throw PluginTranscriptionError.apiError(error)
         }
-        return await collector.finalTranscriptionResult(fallbackLanguage: language)
+        return result
     }
 
     func cancel() async {
@@ -465,8 +472,9 @@ private final class DeepgramLiveTranscriptionSession: LiveTranscriptionSession, 
 
     private func waitForReceiveTask() async -> Bool {
         await withTaskGroup(of: Bool.self) { group in
-            group.addTask { [receiveTask] in
-                await receiveTask.value
+            group.addTask { [receiveCompletion] in
+                var iterator = receiveCompletion.makeAsyncIterator()
+                _ = await iterator.next()
                 return true
             }
             group.addTask {
@@ -624,6 +632,43 @@ final class DeepgramPlugin: NSObject,
         if let language, !language.isEmpty {
             queryItems.append(URLQueryItem(name: "language", value: language))
         }
+        queryItems.append(contentsOf: dictionaryQueryItems(prompt: prompt, modelId: modelId))
+        components.queryItems = queryItems
+
+        guard let requestURL = components.url else {
+            throw PluginTranscriptionError.apiError("Invalid base URL: \(baseURL)")
+        }
+        return requestURL
+    }
+
+    static func streamingRequestURL(
+        baseURL: String,
+        modelId: String,
+        language: String?,
+        prompt: String?
+    ) throws -> URL {
+        guard var components = URLComponents(string: "\(baseURL)/v1/listen"),
+              let scheme = components.scheme?.lowercased(),
+              scheme == "http" || scheme == "https",
+              let host = components.host,
+              !host.isEmpty else {
+            throw PluginTranscriptionError.apiError("Invalid base URL: \(baseURL)")
+        }
+
+        var queryItems = [
+            URLQueryItem(name: "model", value: modelId),
+            URLQueryItem(name: "encoding", value: "linear16"),
+            URLQueryItem(name: "sample_rate", value: "16000"),
+            URLQueryItem(name: "channels", value: "1"),
+            URLQueryItem(name: "smart_format", value: "true"),
+            URLQueryItem(name: "punctuate", value: "true"),
+            URLQueryItem(name: "interim_results", value: "true"),
+            URLQueryItem(name: "endpointing", value: "300"),
+        ]
+        queryItems.append(URLQueryItem(
+            name: "language",
+            value: language.flatMap { $0.isEmpty ? nil : $0 } ?? "multi"
+        ))
         queryItems.append(contentsOf: dictionaryQueryItems(prompt: prompt, modelId: modelId))
         components.queryItems = queryItems
 
@@ -847,38 +892,25 @@ final class DeepgramPlugin: NSObject,
         prompt: String?,
         apiKey: String
     ) throws -> RawWebSocket {
-        // Build query string for path
-        var queryItems = [
-            URLQueryItem(name: "model", value: modelId),
-            URLQueryItem(name: "encoding", value: "linear16"),
-            URLQueryItem(name: "sample_rate", value: "16000"),
-            URLQueryItem(name: "channels", value: "1"),
-            URLQueryItem(name: "smart_format", value: "true"),
-            URLQueryItem(name: "punctuate", value: "true"),
-            URLQueryItem(name: "interim_results", value: "true"),
-            URLQueryItem(name: "endpointing", value: "300"),
-        ]
-        if let lang = language, !lang.isEmpty {
-            queryItems.append(URLQueryItem(name: "language", value: lang))
-        } else {
-            queryItems.append(URLQueryItem(name: "detect_language", value: "true"))
+        let requestURL = try Self.streamingRequestURL(
+            baseURL: effectiveBaseURL,
+            modelId: modelId,
+            language: language,
+            prompt: prompt
+        )
+        guard let urlComponents = URLComponents(url: requestURL, resolvingAgainstBaseURL: false),
+              let scheme = urlComponents.scheme?.lowercased(),
+              let host = urlComponents.host,
+              !host.isEmpty else {
+            throw PluginTranscriptionError.apiError("Invalid streaming URL")
         }
-        queryItems.append(contentsOf: Self.dictionaryQueryItems(prompt: prompt, modelId: modelId))
-
-        let baseURL = effectiveBaseURL
-        guard let urlComponents = URLComponents(string: baseURL),
-              let host = urlComponents.host else {
-            throw PluginTranscriptionError.apiError("Invalid base URL")
-        }
-        let usesTLS = baseURL.hasPrefix("https://")
+        let usesTLS = scheme == "https"
         let port = urlComponents.port ?? (usesTLS ? 443 : 80)
 
         // Build the path+query for the HTTP upgrade request
-        var pathComponents = URLComponents()
-        pathComponents.path = "/v1/listen"
-        pathComponents.queryItems = queryItems
-        guard let pathWithQuery = pathComponents.string else {
-            throw PluginTranscriptionError.apiError("Invalid query parameters")
+        var pathWithQuery = urlComponents.percentEncodedPath
+        if let query = urlComponents.percentEncodedQuery, !query.isEmpty {
+            pathWithQuery += "?\(query)"
         }
 
         return RawWebSocket(
