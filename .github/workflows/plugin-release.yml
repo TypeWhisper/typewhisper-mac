@@ -270,48 +270,21 @@ jobs:
         run: |
           MANIFEST="TypeWhisperPluginSDK/Plugins/${TARGET}/manifest.json"
           MIN_HOST_VERSION=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["minHostVersion"])' "$MANIFEST")
-          HOST_TAG="v${MIN_HOST_VERSION}"
           WORKDIR="$RUNNER_TEMP/min-host-sdk-${TARGET}"
           mkdir -p "$WORKDIR/app"
 
-          if ! HOST_RELEASE_JSON=$(gh release view "$HOST_TAG" \
-            --repo "$GITHUB_REPOSITORY" \
-            --json tagName,isDraft,isPrerelease,assets); then
-            if [ "$ALLOW_PRERELEASE_HOST" != "true" ]; then
-              echo "::error::No published TypeWhisper release found for minHostVersion ${MIN_HOST_VERSION} (${HOST_TAG})"
-              exit 1
-            fi
-
-            HOST_TAG=$(gh release list \
-              --repo "$GITHUB_REPOSITORY" \
-              --limit 100 \
-              --json tagName,isDraft,isPrerelease,publishedAt \
-              --jq "[.[] | select(.isDraft == false and .isPrerelease == true and (.tagName | startswith(\"v${MIN_HOST_VERSION}-daily.\")))] | sort_by(.publishedAt) | last | .tagName // empty")
-            if [ -z "$HOST_TAG" ]; then
-              echo "::error::No published daily TypeWhisper release found for minHostVersion ${MIN_HOST_VERSION}"
-              exit 1
-            fi
-
-            HOST_RELEASE_JSON=$(gh release view "$HOST_TAG" \
-              --repo "$GITHUB_REPOSITORY" \
-              --json tagName,isDraft,isPrerelease,assets)
-            echo "Using explicitly allowed daily host release ${HOST_TAG} for SDK compatibility validation"
+          RESOLVE_ARGS=(
+            --repository "$GITHUB_REPOSITORY"
+            --min-host-version "$MIN_HOST_VERSION"
+          )
+          if [ "$ALLOW_PRERELEASE_HOST" = "true" ]; then
+            RESOLVE_ARGS+=(--allow-prerelease-host)
           fi
-
-          if ! jq -e --argjson allow_prerelease "$ALLOW_PRERELEASE_HOST" \
-            '.isDraft == false and (.isPrerelease == false or $allow_prerelease)' \
-            <<<"$HOST_RELEASE_JSON" >/dev/null; then
-            echo "::error::Host release ${HOST_TAG} must be published and stable unless allow_prerelease_host is enabled"
-            exit 1
-          fi
+          HOST_RELEASE_JSON=$(python3 scripts/resolve_plugin_host_release.py "${RESOLVE_ARGS[@]}")
 
           RESOLVED_TAG=$(jq -r '.tagName' <<<"$HOST_RELEASE_JSON")
-          if [ "$RESOLVED_TAG" != "v${MIN_HOST_VERSION}" ] && \
-             [[ ! "$RESOLVED_TAG" =~ ^v${MIN_HOST_VERSION//./\\.}-daily\..+$ ]]; then
-            echo "::error::Resolved host tag ${RESOLVED_TAG} does not match minHostVersion ${MIN_HOST_VERSION}"
-            exit 1
-          fi
           HOST_ASSET_NAME="TypeWhisper-${RESOLVED_TAG}.zip"
+          echo "Using host release ${RESOLVED_TAG} for SDK compatibility validation"
 
           if ! jq -e --arg asset "$HOST_ASSET_NAME" \
             '[.assets[] | select(.name == $asset)] | length == 1' \
