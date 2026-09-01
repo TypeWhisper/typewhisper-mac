@@ -138,6 +138,8 @@ final class MetaPluginTests: XCTestCase {
         let request = try XCTUnwrap(store.sessions.first?.requestedRequests.first)
         XCTAssertEqual(request.url?.path, "/v1/asr/transcribe")
         XCTAssertEqual(request.value(forHTTPHeaderField: "Accept"), "application/json")
+        // The multipart body contains binary WAV data; lossy decoding is intentional for header assertions.
+        // swiftlint:disable:next optional_data_string_conversion
         let body = String(decoding: try XCTUnwrap(request.httpBody), as: UTF8.self)
         XCTAssertTrue(body.contains("name=\"request\""))
         XCTAssertTrue(body.contains("Content-Type: application/json"))
@@ -201,6 +203,8 @@ final class MetaPluginTests: XCTestCase {
         )
 
         let request = try XCTUnwrap(store.sessions.first?.requestedRequests.first)
+        // The multipart body contains binary WAV data; lossy decoding is intentional for header assertions.
+        // swiftlint:disable:next optional_data_string_conversion
         let body = String(decoding: try XCTUnwrap(request.httpBody), as: UTF8.self)
         XCTAssertTrue(body.contains(#""mode":"DIARIZATION""#))
     }
