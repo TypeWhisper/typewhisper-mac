@@ -1558,6 +1558,14 @@ final class PluginDictionaryGuardTests: XCTestCase {
         XCTAssertTrue(DeepgramPlugin().supportedLanguages.contains("multi"))
     }
 
+    func testDeepgramAdvertisesLiveDictationTranscription() {
+        let plugin: Any = DeepgramPlugin()
+
+        XCTAssertTrue(plugin is any LiveTranscriptionCapablePlugin)
+        let progressProvider = plugin as? any LiveTranscriptionProgressModeProviding
+        XCTAssertEqual(progressProvider?.liveTranscriptionProgressMode, .completeSnapshot)
+    }
+
     func testDeepgramDictionaryQueryItemsLimitDictionaryTermsTo100AndPreserveOrder() {
         let prompt = PluginDictionaryTerms.prompt(from: makeLongTerms(count: 150, length: 10), maxLength: 10_000)
         let queryItems = DeepgramPlugin.dictionaryQueryItems(prompt: prompt, modelId: "nova-2")
