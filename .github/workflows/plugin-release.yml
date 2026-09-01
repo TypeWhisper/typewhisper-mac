@@ -250,6 +250,73 @@ jobs:
             MARKETING_VERSION="$PLUGIN_VERSION" \
             "${EXTRA_SETTINGS[@]}"
 
+      - name: Verify plugin SDK compatibility with minHostVersion
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          MANIFEST="TypeWhisperPluginSDK/Plugins/${TARGET}/manifest.json"
+          MIN_HOST_VERSION=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["minHostVersion"])' "$MANIFEST")
+          HOST_TAG="v${MIN_HOST_VERSION}"
+          HOST_ASSET_NAME="TypeWhisper-v${MIN_HOST_VERSION}.zip"
+          WORKDIR="$RUNNER_TEMP/min-host-sdk-${TARGET}"
+          mkdir -p "$WORKDIR/app"
+
+          if ! HOST_RELEASE_JSON=$(gh release view "$HOST_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --json tagName,assets); then
+            echo "::error::No published TypeWhisper release found for minHostVersion ${MIN_HOST_VERSION} (${HOST_TAG})"
+            exit 1
+          fi
+
+          if ! jq -e --arg asset "$HOST_ASSET_NAME" \
+            '[.assets[] | select(.name == $asset)] | length == 1' \
+            <<<"$HOST_RELEASE_JSON" >/dev/null; then
+            echo "::error::Release ${HOST_TAG} must contain exactly one ${HOST_ASSET_NAME} asset"
+            exit 1
+          fi
+
+          RESOLVED_TAG=$(jq -r '.tagName' <<<"$HOST_RELEASE_JSON")
+          gh release download "$RESOLVED_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "$HOST_ASSET_NAME" \
+            --dir "$WORKDIR"
+
+          HOST_ZIP="$WORKDIR/$HOST_ASSET_NAME"
+          EXPECTED_DIGEST=$(jq -r --arg asset "$HOST_ASSET_NAME" \
+            '.assets[] | select(.name == $asset) | .digest // ""' \
+            <<<"$HOST_RELEASE_JSON")
+          if [[ "$EXPECTED_DIGEST" == sha256:* ]]; then
+            ACTUAL_DIGEST="sha256:$(shasum -a 256 "$HOST_ZIP" | awk '{print $1}')"
+            if [ "$ACTUAL_DIGEST" != "$EXPECTED_DIGEST" ]; then
+              echo "::error::Host asset digest mismatch: expected ${EXPECTED_DIGEST}, got ${ACTUAL_DIGEST}"
+              exit 1
+            fi
+          fi
+
+          ditto -x -k "$HOST_ZIP" "$WORKDIR/app"
+          HOST_SDK=$(find "$WORKDIR/app" \
+            -path '*TypeWhisperPluginSDK.framework/Versions/A/TypeWhisperPluginSDK' \
+            -type f -print -quit)
+          BUILD_SDK=$(find build \
+            -path '*TypeWhisperPluginSDK.framework/Versions/A/TypeWhisperPluginSDK' \
+            -type f -print -quit)
+          PLUGIN_BINARY="build/Release/${TARGET}.bundle/Contents/MacOS/${TARGET}"
+
+          if [ -z "$HOST_SDK" ]; then
+            echo "::error::TypeWhisperPluginSDK.framework not found in host release ${RESOLVED_TAG}"
+            exit 1
+          fi
+          if [ -z "$BUILD_SDK" ]; then
+            echo "::error::TypeWhisperPluginSDK.framework used for the plugin build was not found"
+            exit 1
+          fi
+
+          python3 scripts/check_plugin_sdk_symbol_compatibility.py \
+            --plugin-binary "$PLUGIN_BINARY" \
+            --build-sdk "$BUILD_SDK" \
+            --host-sdk "$HOST_SDK" \
+            --min-host-version "$MIN_HOST_VERSION"
+
       - name: Import Signing Certificate
         env:
           MACOS_SIGNING_P12: ${{ secrets.MACOS_SIGNING_P12 }}

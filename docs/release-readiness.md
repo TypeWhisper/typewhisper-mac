@@ -84,6 +84,8 @@ are met:
 - The app release build passes.
 - There are no first-party build warnings.
 - Plugin manifests validate successfully.
+- Every plugin release build imports only symbols exported by the
+  `TypeWhisperPluginSDK.framework` shipped in its declared `minHostVersion`.
 - README, security guidance, support matrix, and plugin documentation are up to date.
 - The applicable release-candidate or daily line ran on real machines for
   multiple days without P0/P1 blockers before the stable tag.

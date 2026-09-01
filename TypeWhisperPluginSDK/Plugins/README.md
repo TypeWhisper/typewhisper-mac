@@ -66,6 +66,11 @@ Plugins can subscribe to events without modifying the transcription pipeline:
 
 `category` may be one of `transcription`, `tts`, `llm`, `post-processor`, `action`, `memory`, or `utility`.
 
+`minHostVersion` must name a published stable TypeWhisper release. The official
+plugin release workflow builds the bundle and compares every shipped architecture's
+SDK imports with the `TypeWhisperPluginSDK.framework` embedded in that host release.
+The release fails before signing and publication when a required SDK symbol is absent.
+
 ### Host Services
 
 Each plugin receives a `HostServices` object providing:

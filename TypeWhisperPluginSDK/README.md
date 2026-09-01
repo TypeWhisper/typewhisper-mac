@@ -31,7 +31,7 @@ Create `Contents/Resources/manifest.json` in your bundle:
 
 - `id` - Unique reverse-domain identifier
 - `principalClass` - Must match `@objc(ClassName)` on your plugin class
-- `minHostVersion` - Minimum TypeWhisper version required; new releases must use `1.6.0` or newer
+- `minHostVersion` - Minimum published stable TypeWhisper version required; new releases must use `1.6.0` or newer. Official releases verify the built plugin's SDK imports against the framework shipped by this exact host release.
 - `sdkCompatibilityVersion` - Must match `PluginSDKCompatibility.currentVersion` for marketplace/external plugins
 - `minOSVersion` - Minimum macOS version required (plugin is skipped on older systems)
 
