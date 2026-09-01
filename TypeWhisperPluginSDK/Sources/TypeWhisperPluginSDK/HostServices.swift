@@ -1269,12 +1269,30 @@ public struct PluginOpenAIChatHelper: Sendable {
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let choices = json["choices"] as? [[String: Any]],
               let first = choices.first,
-              let message = first["message"] as? [String: Any],
-              let content = message["content"] as? String else {
+              let message = first["message"] as? [String: Any] else {
             throw PluginChatError.apiError("Failed to parse response")
         }
 
-        return content.trimmingCharacters(in: .whitespacesAndNewlines)
+        return Self.chatMessageContent(from: message).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Extracts assistant text from an OpenAI-compatible chat `message`.
+    /// Reasoning-capable models (e.g. gpt-oss on Cerebras, some OpenRouter
+    /// models) return `content: null` when the visible answer is empty - that
+    /// is a valid empty response, not a malformed one. Some providers also
+    /// return `content` as an array of typed parts. Reasoning text is never
+    /// promoted to content.
+    static func chatMessageContent(from message: [String: Any]) -> String {
+        if let text = message["content"] as? String {
+            return text
+        }
+        if let parts = message["content"] as? [[String: Any]] {
+            return parts.compactMap { part in
+                (part["text"] as? String) ?? ((part["type"] as? String) == "text" ? part["content"] as? String : nil)
+            }.joined()
+        }
+        // null or absent content: an intentionally empty visible answer
+        return ""
     }
 
     public func process(

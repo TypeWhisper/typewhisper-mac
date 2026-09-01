@@ -8980,6 +8980,33 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testMixedFailuresWithLoneEmptyOpinionConfirmedByRetry() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let isolatedDefaults = Self.makeEmptyLLMFallbackDefaults()
+        defer { isolatedDefaults.defaults.removePersistentDomain(forName: isolatedDefaults.suiteName) }
+
+        // One provider answers "empty", the rest fail with infrastructure errors
+        // that carry no opinion about the content. The lone empty opinion is
+        // confirmed by re-running its provider; empty twice is intent.
+        let emptyProvider = MockLLMProviderPlugin()
+        emptyProvider.configuredProviderId = "empty-opinion"
+        emptyProvider.queuedProcessOutcomes = [.response(""), .response("")]
+        let broken = MockLLMProviderPlugin()
+        broken.configuredProviderId = "broken-parse"
+        broken.queuedProcessOutcomes = [.apiFailure("Failed to parse response")]
+
+        Self.installLLMFallbackTestProviders([emptyProvider, broken], appSupportDirectory: appSupportDirectory)
+        let service = PromptProcessingService(userDefaults: isolatedDefaults.defaults)
+        service.addLLMFallback(providerId: emptyProvider.providerId)
+        service.addLLMFallback(providerId: broken.providerId)
+
+        let result = try await service.process(prompt: "Strip artifacts", text: "Thank you for watching!")
+        XCTAssertEqual(result, "")
+        XCTAssertEqual(emptyProvider.processCallCount, 2)
+    }
+
+    @MainActor
     func testExplicitWorkflowProviderAcceptsEmptyOutputConfirmedByRetry() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
