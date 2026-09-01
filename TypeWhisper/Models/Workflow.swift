@@ -700,7 +700,7 @@ extension Workflow {
     }
 
     var isManuallyRunnable: Bool {
-        usesAppleTranslate || systemPrompt() != nil || output.targetActionPluginId != nil
+        usesInlineCommands || usesAppleTranslate || systemPrompt() != nil || output.targetActionPluginId != nil
     }
 
     func systemPrompt(

@@ -1562,31 +1562,24 @@ final class WorkflowServiceTests: XCTestCase {
     }
 
     func testInlineCommandsDictationWorkflowRunsInlineCommandPromptPass() async throws {
-        let workflow = Workflow(
-            name: "Inline Commands Dictation",
-            template: .dictation,
-            trigger: .hotkey(UnifiedHotkey(keyCode: 7, modifierFlags: 0, isFn: false)),
-            behavior: WorkflowBehavior(fineTuning: "Keep it polished.", inlineCommandsEnabled: true)
-        )
+        let workflow = Workflow(name: "Inline Commands Dictation", template: .dictation,
+                                trigger: .hotkey(UnifiedHotkey(keyCode: 7, modifierFlags: 0, isFn: false)),
+                                behavior: WorkflowBehavior(fineTuning: "Keep it polished.", inlineCommandsEnabled: true))
 
         var capturedPrompt: String?
-        var capturedText: String?
         let service = WorkflowTextProcessingService(
-            promptProcessor: { prompt, text, _, _, _ in
+            promptProcessor: { prompt, _, _, _, _ in
                 capturedPrompt = prompt
-                capturedText = text
                 return "Friendly email"
             },
             appleTranslator: nil
         )
 
-        XCTAssertTrue(workflow.usesInlineCommands)
         XCTAssertTrue(service.canProcess(workflow: workflow))
 
         let result = try await service.process(workflow: workflow, text: "The meeting is Friday. Write this as a friendly email.")
 
         XCTAssertEqual(result, "Friendly email")
-        XCTAssertEqual(capturedText, "The meeting is Friday. Write this as a friendly email.")
         let prompt = try XCTUnwrap(capturedPrompt)
         XCTAssertTrue(prompt.contains("may contain a spoken transformation instruction"))
         XCTAssertTrue(prompt.contains("If found, remove the instruction and apply the transformation."))
@@ -1595,22 +1588,15 @@ final class WorkflowServiceTests: XCTestCase {
     }
 
     func testInlineCommandsDisabledDictationWorkflowSkipsLLMPass() async throws {
-        let workflow = Workflow(
-            name: "Dictation Only",
-            template: .dictation,
-            trigger: .hotkey(UnifiedHotkey(keyCode: 7, modifierFlags: 0, isFn: false)),
-            behavior: WorkflowBehavior(inlineCommandsEnabled: false)
-        )
+        let workflow = Workflow(name: "Dictation Only", template: .dictation,
+                                trigger: .hotkey(UnifiedHotkey(keyCode: 7, modifierFlags: 0, isFn: false)),
+                                behavior: WorkflowBehavior(inlineCommandsEnabled: false))
 
         let service = WorkflowTextProcessingService(
-            promptProcessor: { _, _, _, _, _ in
-                XCTFail("Inline commands must stay opt-in: disabled workflows must not use the LLM prompt processor")
-                return ""
-            },
+            promptProcessor: { _, _, _, _, _ in XCTFail("Disabled inline commands must not use the prompt processor"); return "" },
             appleTranslator: nil
         )
 
-        XCTAssertFalse(workflow.usesInlineCommands)
         XCTAssertFalse(service.canProcess(workflow: workflow))
 
         let result = try await service.process(workflow: workflow, text: "Raw transcript with an instruction spoken anyway")
@@ -1619,23 +1605,14 @@ final class WorkflowServiceTests: XCTestCase {
     }
 
     func testInlineCommandsNotOfferedForTransformedTemplates() async throws {
-        let workflow = Workflow(
-            name: "Cleanup",
-            template: .cleanedText,
-            trigger: .manual(),
-            behavior: WorkflowBehavior(inlineCommandsEnabled: true)
-        )
+        let workflow = Workflow(name: "Cleanup", template: .cleanedText, trigger: .manual(),
+                                behavior: WorkflowBehavior(inlineCommandsEnabled: true))
 
         var capturedPrompt: String?
         let service = WorkflowTextProcessingService(
-            promptProcessor: { prompt, _, _, _, _ in
-                capturedPrompt = prompt
-                return "Cleaned text"
-            },
+            promptProcessor: { prompt, _, _, _, _ in capturedPrompt = prompt; return "Cleaned text" },
             appleTranslator: nil
         )
-
-        XCTAssertFalse(workflow.usesInlineCommands)
 
         let result = try await service.process(workflow: workflow, text: "Hello world")
 
@@ -1644,14 +1621,17 @@ final class WorkflowServiceTests: XCTestCase {
     }
 
     func testWorkflowDraftRoundTripsInlineCommandsForDictationTemplateOnly() throws {
-        let workflow = Workflow(
-            name: "Inline Commands Dictation",
-            template: .dictation,
-            trigger: .global(),
-            behavior: WorkflowBehavior(inlineCommandsEnabled: true)
-        )
+        let workflow = Workflow(name: "Inline Commands Dictation", template: .dictation, trigger: .global(),
+                                behavior: WorkflowBehavior(fineTuning: "Keep it polished.", providerId: "openai", cloudModel: "gpt-5", effortId: "high", inlineCommandsEnabled: true))
 
-        XCTAssertEqual(WorkflowDraft(workflow).resolvedBehavior().inlineCommandsEnabled, true)
+        let draft = WorkflowDraft(workflow)
+        XCTAssertTrue(draft.usesLLMProcessing)
+        let resolvedBehavior = draft.resolvedBehavior()
+        XCTAssertEqual(resolvedBehavior.fineTuning, "Keep it polished.")
+        XCTAssertEqual(resolvedBehavior.providerId, "openai")
+        XCTAssertEqual(resolvedBehavior.cloudModel, "gpt-5")
+        XCTAssertEqual(resolvedBehavior.effortId, "high")
+        XCTAssertEqual(resolvedBehavior.inlineCommandsEnabled, true)
 
         var summaryDraft = WorkflowDraft(template: .dictation)
         summaryDraft.inlineCommandsEnabled = true

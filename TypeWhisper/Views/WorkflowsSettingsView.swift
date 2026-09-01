@@ -2830,7 +2830,7 @@ struct WorkflowDraft {
     }
 
     var usesLLMProcessing: Bool {
-        !usesAppleTranslate && template != .dictation
+        !usesAppleTranslate && (template != .dictation || inlineCommandsEnabled == true)
     }
 
     var reviewText: String {

@@ -191,6 +191,46 @@ final class RecentTranscriptionPaletteHandlerTests: XCTestCase {
         XCTAssertEqual(controller.lastEntryDescriptions, ["workflow:Manual Summary", "recent:Recovered field text"])
         XCTAssertEqual(controller.lastSourceText, "Selected text")
     }
+
+    func testWorkflowPaletteIncludesInlineCommandDictationWorkflow() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let textInsertionService = TextInsertionService()
+        textInsertionService.accessibilityGrantedOverride = true
+        textInsertionService.captureActiveAppOverride = { ("Notes", nil, nil) }
+        textInsertionService.textSelectionOverride = {
+            TextInsertionService.TextSelection(
+                text: "The meeting is Friday.",
+                element: AXUIElementCreateSystemWide()
+            )
+        }
+
+        let workflowService = WorkflowService(appSupportDirectory: appSupportDirectory)
+        _ = workflowService.addWorkflow(
+            name: "Inline Commands",
+            template: .dictation,
+            trigger: .manual(),
+            behavior: WorkflowBehavior(inlineCommandsEnabled: true)
+        )
+
+        let controller = PromptPaletteControllerSpy()
+        let handler = PromptPaletteHandler(
+            textInsertionService: textInsertionService,
+            workflowService: workflowService,
+            historyService: HistoryService(appSupportDirectory: appSupportDirectory),
+            recentTranscriptionStore: RecentTranscriptionStore(),
+            promptProcessingService: PromptProcessingService(),
+            soundService: SoundService(),
+            accessibilityAnnouncementService: AccessibilityAnnouncementService(),
+            promptPaletteController: controller
+        )
+
+        handler.triggerSelection(currentState: .idle, soundFeedbackEnabled: false)
+
+        XCTAssertTrue(controller.isVisible)
+        XCTAssertEqual(controller.lastEntryDescriptions, ["workflow:Inline Commands"])
+    }
 }
 
 @MainActor
@@ -247,6 +287,58 @@ final class PromptPaletteHandlerTests: XCTestCase {
 
         XCTAssertFalse(controller.isVisible)
         XCTAssertEqual(insertedText, "Processed: Selected source")
+    }
+
+    func testDirectInlineCommandDictationWorkflowProcessesAccessibilitySelection() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let textInsertionService = TextInsertionService()
+        textInsertionService.accessibilityGrantedOverride = true
+        textInsertionService.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
+        textInsertionService.textSelectionOverride = {
+            TextInsertionService.TextSelection(
+                text: "The meeting is Friday. Write this as a friendly email.",
+                element: AXUIElementCreateSystemWide()
+            )
+        }
+
+        var insertedText: String?
+        textInsertionService.insertTextAtOverride = { _, text in
+            insertedText = text
+            return true
+        }
+
+        let workflow = Workflow(
+            name: "Inline Commands Dictation",
+            template: .dictation,
+            trigger: .manual(),
+            behavior: WorkflowBehavior(inlineCommandsEnabled: true)
+        )
+        let handler = PromptPaletteHandler(
+            textInsertionService: textInsertionService,
+            workflowService: WorkflowService(appSupportDirectory: appSupportDirectory),
+            historyService: HistoryService(appSupportDirectory: appSupportDirectory),
+            recentTranscriptionStore: RecentTranscriptionStore(),
+            promptProcessingService: PromptProcessingService(),
+            workflowTextProcessingService: WorkflowTextProcessingService(
+                promptProcessor: { _, _, _, _, _ in "Friendly email" },
+                appleTranslator: nil
+            ),
+            soundService: SoundService(),
+            accessibilityAnnouncementService: AccessibilityAnnouncementService(),
+            promptPaletteController: PromptPaletteControllerSpy()
+        )
+
+        handler.processWorkflowDirectly(
+            workflow: workflow,
+            currentState: .idle,
+            soundFeedbackEnabled: false
+        )
+
+        try await Task.sleep(for: .milliseconds(100))
+
+        XCTAssertEqual(insertedText, "Friendly email")
     }
 
     func testDirectWorkflowHotkeyAutoRichTextUsesResolvedPasteboardPayload() async throws {
