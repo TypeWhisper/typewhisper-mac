@@ -30,7 +30,7 @@ final class ChromiumAccessibilityObservationController {
         let bundleURL: URL
     }
 
-    typealias ResolveApplication = (String) -> RunningApplicationTarget?
+    typealias ResolveApplication = (String, pid_t?) -> RunningApplicationTarget?
     typealias IsElectronApplication = (URL) -> Bool
     typealias ReadManualAccessibility = (pid_t) -> (error: AXError, enabled: Bool?)
     typealias SetManualAccessibility = (pid_t, Bool) -> AXError
@@ -61,9 +61,12 @@ final class ChromiumAccessibilityObservationController {
         self.validateApplication = validateApplication ?? Self.isSameRunningApplication
     }
 
-    func beginObservation(bundleIdentifier: String?) -> TargetAppAccessibilityObservationLease? {
+    func beginObservation(
+        bundleIdentifier: String?,
+        processIdentifier: pid_t? = nil
+    ) -> TargetAppAccessibilityObservationLease? {
         guard let bundleIdentifier,
-              let target = resolveApplication(bundleIdentifier),
+              let target = resolveApplication(bundleIdentifier, processIdentifier),
               Self.chromiumBrowserBundleIdentifiers.contains(target.bundleIdentifier)
                 || isElectronApplicationAtURL(target.bundleURL) else {
             return nil
@@ -83,22 +86,32 @@ final class ChromiumAccessibilityObservationController {
     }
 
     func isElectronApplication(bundleIdentifier: String) -> Bool {
-        guard let target = resolveApplication(bundleIdentifier) else { return false }
+        guard let target = resolveApplication(bundleIdentifier, nil) else { return false }
         return isElectronApplicationAtURL(target.bundleURL)
     }
 
     private static func resolveRunningApplication(
-        bundleIdentifier: String
+        bundleIdentifier: String,
+        processIdentifier: pid_t?
     ) -> RunningApplicationTarget? {
-        let runningApplication = NSRunningApplication
-            .runningApplications(withBundleIdentifier: bundleIdentifier)
-            .first
-        let frontmostApplication = NSWorkspace.shared.frontmostApplication
-        let application = runningApplication
-            ?? (frontmostApplication?.bundleIdentifier == bundleIdentifier
-                ? frontmostApplication
-                : nil)
+        let application: NSRunningApplication?
+        if let processIdentifier {
+            let exactApplication = NSRunningApplication(processIdentifier: processIdentifier)
+            application = exactApplication?.bundleIdentifier == bundleIdentifier
+                ? exactApplication
+                : nil
+        } else {
+            let runningApplication = NSRunningApplication
+                .runningApplications(withBundleIdentifier: bundleIdentifier)
+                .first
+            let frontmostApplication = NSWorkspace.shared.frontmostApplication
+            application = runningApplication
+                ?? (frontmostApplication?.bundleIdentifier == bundleIdentifier
+                    ? frontmostApplication
+                    : nil)
+        }
         guard let application,
+              !application.isTerminated,
               let resolvedBundleIdentifier = application.bundleIdentifier,
               let bundleURL = application.bundleURL else {
             return nil
@@ -197,7 +210,8 @@ final class TextInsertionService {
     var liveFieldApplicationValidationOverride: ((pid_t, String) -> Bool)?
     var activatePinnedTargetApplicationOverride: ((pid_t) -> Bool)?
     var focusPinnedTargetElementOverride: ((AXUIElement) -> Bool)?
-    var chromiumAccessibilityObservationOverride: ((String?) -> TargetAppAccessibilityObservationLease?)?
+    var focusedApplicationProcessIdentifierOverride: (() -> pid_t?)?
+    var chromiumAccessibilityObservationOverride: ((String?, pid_t?) -> TargetAppAccessibilityObservationLease?)?
     var setMessagingTimeoutOverride: ((AXUIElement, Float) -> Void)?
     var setSelectedRangeOverride: ((AXUIElement, NSRange) -> Bool)?
     var textSelectionOverride: (() -> TextSelection?)?
@@ -280,19 +294,28 @@ final class TextInsertionService {
     }
 
     func beginChromiumAccessibilityObservation(
-        bundleIdentifier: String?
+        bundleIdentifier: String?,
+        processIdentifier: pid_t? = nil
     ) -> TargetAppAccessibilityObservationLease? {
         if let chromiumAccessibilityObservationOverride {
-            return chromiumAccessibilityObservationOverride(bundleIdentifier)
+            return chromiumAccessibilityObservationOverride(bundleIdentifier, processIdentifier)
         }
         return chromiumAccessibilityObservationController.beginObservation(
-            bundleIdentifier: bundleIdentifier
+            bundleIdentifier: bundleIdentifier,
+            processIdentifier: processIdentifier
         )
     }
 
     func beginFocusedApplicationAccessibilityObservation() -> TargetAppAccessibilityObservationLease? {
-        let bundleIdentifier = captureActiveApp().bundleId
-        return beginChromiumAccessibilityObservation(bundleIdentifier: bundleIdentifier)
+        let workspaceApplication = NSWorkspace.shared.frontmostApplication
+        let bundleIdentifier = captureActiveAppOverride?().bundleId
+            ?? workspaceApplication?.bundleIdentifier
+        let processIdentifier = focusedApplicationProcessIdentifierOverride?()
+            ?? (captureActiveAppOverride == nil ? workspaceApplication?.processIdentifier : nil)
+        return beginChromiumAccessibilityObservation(
+            bundleIdentifier: bundleIdentifier,
+            processIdentifier: processIdentifier
+        )
     }
 
     func resolveBrowserURL(bundleId: String) async -> String? {

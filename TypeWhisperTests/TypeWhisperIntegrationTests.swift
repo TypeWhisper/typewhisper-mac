@@ -4680,7 +4680,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             bundleIdentifier in
             processIdentifier == 5252 && bundleIdentifier == "com.microsoft.VSCode"
         }
-        context.textInsertionService.chromiumAccessibilityObservationOverride = { _ in
+        context.textInsertionService.chromiumAccessibilityObservationOverride = { _, _ in
             observationBeginCount += 1
             return TargetAppAccessibilityObservationLease {}
         }
@@ -6596,7 +6596,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         context.textInsertionService.pasteSimulatorOverride = {}
         var accessibilityObservationBundleIdentifiers: [String?] = []
         var accessibilityObservationEndCount = 0
-        context.textInsertionService.chromiumAccessibilityObservationOverride = { bundleIdentifier in
+        context.textInsertionService.chromiumAccessibilityObservationOverride = { bundleIdentifier, _ in
             accessibilityObservationBundleIdentifiers.append(bundleIdentifier)
             return TargetAppAccessibilityObservationLease {
                 accessibilityObservationEndCount += 1
@@ -6676,7 +6676,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         context.textInsertionService.pasteSimulatorOverride = {}
         var accessibilityObservationBundleIdentifiers: [String?] = []
         var accessibilityObservationEndCount = 0
-        context.textInsertionService.chromiumAccessibilityObservationOverride = { bundleIdentifier in
+        context.textInsertionService.chromiumAccessibilityObservationOverride = { bundleIdentifier, _ in
             accessibilityObservationBundleIdentifiers.append(bundleIdentifier)
             return TargetAppAccessibilityObservationLease {
                 accessibilityObservationEndCount += 1
@@ -6902,10 +6902,13 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let targetElement = AXUIElementCreateApplication(4242)
         var observationBeginCount = 0
         var observationEndCount = 0
+        var observedBundleIdentifiers: [String?] = []
+        var observedProcessIdentifiers: [pid_t?] = []
 
         context.textInsertionService.captureActiveAppOverride = {
             ("Electron Target", "com.example.electron", nil)
         }
+        context.textInsertionService.focusedApplicationProcessIdentifierOverride = { 4242 }
         context.textInsertionService.accessibilityGrantedOverride = true
         context.textInsertionService.focusedTextElementOverride = { targetElement }
         context.textInsertionService.liveFieldElectronApplicationOverride = { _ in true }
@@ -6922,8 +6925,12 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         context.textInsertionService.focusedTextStateOverride = { _ in
             (value: "", selectedText: nil, selectedRange: NSRange(location: 0, length: 0))
         }
-        context.textInsertionService.chromiumAccessibilityObservationOverride = { _ in
+        context.textInsertionService.chromiumAccessibilityObservationOverride = {
+            bundleIdentifier,
+            processIdentifier in
             observationBeginCount += 1
+            observedBundleIdentifiers.append(bundleIdentifier)
+            observedProcessIdentifiers.append(processIdentifier)
             return TargetAppAccessibilityObservationLease {
                 observationEndCount += 1
             }
@@ -6947,6 +6954,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         )
         XCTAssertEqual(observationBeginCount, 1)
         XCTAssertEqual(observationEndCount, 1)
+        XCTAssertEqual(observedBundleIdentifiers, ["com.example.electron"])
+        XCTAssertEqual(observedProcessIdentifiers, [4242])
     }
 
     @MainActor

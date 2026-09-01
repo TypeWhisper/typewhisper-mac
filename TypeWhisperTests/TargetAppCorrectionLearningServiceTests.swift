@@ -8,7 +8,7 @@ final class TargetAppCorrectionLearningServiceTests: XCTestCase {
         let target = electronTarget()
         var setValues: [Bool] = []
         let controller = ChromiumAccessibilityObservationController(
-            resolveApplication: { _ in target },
+            resolveApplication: { _, _ in target },
             isElectronApplication: { _ in true },
             readManualAccessibility: { _ in (.success, false) },
             setManualAccessibility: { _, enabled in
@@ -33,7 +33,7 @@ final class TargetAppCorrectionLearningServiceTests: XCTestCase {
         let target = electronTarget()
         var setValues: [Bool] = []
         let controller = ChromiumAccessibilityObservationController(
-            resolveApplication: { _ in target },
+            resolveApplication: { _, _ in target },
             isElectronApplication: { _ in true },
             readManualAccessibility: { _ in (.success, true) },
             setManualAccessibility: { _, enabled in
@@ -46,11 +46,39 @@ final class TargetAppCorrectionLearningServiceTests: XCTestCase {
         XCTAssertTrue(setValues.isEmpty)
     }
 
+    func testElectronAccessibilityObservationUsesRequestedProcessIdentifier() throws {
+        let target = electronTarget()
+        var resolvedBundleIdentifiers: [String] = []
+        var resolvedProcessIdentifiers: [pid_t?] = []
+        let controller = ChromiumAccessibilityObservationController(
+            resolveApplication: { bundleIdentifier, processIdentifier in
+                resolvedBundleIdentifiers.append(bundleIdentifier)
+                resolvedProcessIdentifiers.append(processIdentifier)
+                return processIdentifier == target.processIdentifier ? target : nil
+            },
+            isElectronApplication: { _ in true },
+            readManualAccessibility: { _ in (.success, false) },
+            setManualAccessibility: { _, _ in .success },
+            validateApplication: { _ in true }
+        )
+
+        let lease = try XCTUnwrap(
+            controller.beginObservation(
+                bundleIdentifier: target.bundleIdentifier,
+                processIdentifier: target.processIdentifier
+            )
+        )
+        lease.end()
+
+        XCTAssertEqual(resolvedBundleIdentifiers, [target.bundleIdentifier])
+        XCTAssertEqual(resolvedProcessIdentifiers, [target.processIdentifier])
+    }
+
     func testElectronAccessibilityObservationFallsBackWhenAttributeIsUnsupported() {
         let target = electronTarget()
         var setValues: [Bool] = []
         let controller = ChromiumAccessibilityObservationController(
-            resolveApplication: { _ in target },
+            resolveApplication: { _, _ in target },
             isElectronApplication: { _ in true },
             readManualAccessibility: { _ in (.attributeUnsupported, nil) },
             setManualAccessibility: { _, enabled in
@@ -71,7 +99,7 @@ final class TargetAppCorrectionLearningServiceTests: XCTestCase {
         )
         var setValues: [Bool] = []
         let controller = ChromiumAccessibilityObservationController(
-            resolveApplication: { _ in target },
+            resolveApplication: { _, _ in target },
             isElectronApplication: { _ in false },
             readManualAccessibility: { _ in (.success, false) },
             setManualAccessibility: { _, enabled in
@@ -97,7 +125,7 @@ final class TargetAppCorrectionLearningServiceTests: XCTestCase {
         )
         var readCount = 0
         let controller = ChromiumAccessibilityObservationController(
-            resolveApplication: { _ in target },
+            resolveApplication: { _, _ in target },
             isElectronApplication: { _ in false },
             readManualAccessibility: { _ in
                 readCount += 1
@@ -115,7 +143,7 @@ final class TargetAppCorrectionLearningServiceTests: XCTestCase {
         var setValues: [Bool] = []
         var isSameApplication = true
         let controller = ChromiumAccessibilityObservationController(
-            resolveApplication: { _ in target },
+            resolveApplication: { _, _ in target },
             isElectronApplication: { _ in true },
             readManualAccessibility: { _ in (.success, false) },
             setManualAccessibility: { _, enabled in
