@@ -533,7 +533,6 @@
 		AA00000000000000000313 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000298 /* Localizable.xcstrings */; };
 		AA00000000000000000304 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000044 /* TypeWhisperPluginSDK */; };
 		AA00000000000000000305 /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000045 /* MLXLLM */; };
-		AA00000000000000000313 /* MLXVLM in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000047 /* MLXVLM */; };
 		AA00000000000000000314 /* Transformers in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000048 /* Transformers */; };
 		AA00000000000000000306 /* SpeechmaticsPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000291 /* SpeechmaticsPlugin.swift */; };
 		AA00000000000000000307 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000292 /* manifest.json */; };
@@ -1597,7 +1596,6 @@
 			files = (
 				AA00000000000000000304 /* TypeWhisperPluginSDK in Frameworks */,
 				AA00000000000000000305 /* MLXLLM in Frameworks */,
-				AA00000000000000000313 /* MLXVLM in Frameworks */,
 				AA00000000000000000314 /* Transformers in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -3799,7 +3797,6 @@
 			packageProductDependencies = (
 				PP00000000000000000044 /* TypeWhisperPluginSDK */,
 				PP00000000000000000045 /* MLXLLM */,
-				PP00000000000000000047 /* MLXVLM */,
 				PP00000000000000000048 /* Transformers */,
 			);
 			productName = Gemma4Plugin;

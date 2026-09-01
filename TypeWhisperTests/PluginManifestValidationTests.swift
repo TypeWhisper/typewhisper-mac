@@ -134,7 +134,7 @@ final class PluginManifestValidationTests: XCTestCase {
             ("TypeWhisperPluginSDK/Plugins/Qwen3Plugin/manifest.json", "1.1.8"),
             ("TypeWhisperPluginSDK/Plugins/VoxtralPlugin/manifest.json", "1.0.14"),
             ("TypeWhisperPluginSDK/Plugins/GranitePlugin/manifest.json", "1.0.10"),
-            ("TypeWhisperPluginSDK/Plugins/Gemma4Plugin/manifest.json", "1.1.4"),
+            ("TypeWhisperPluginSDK/Plugins/Gemma4Plugin/manifest.json", "1.1.5"),
         ]
 
         for (relativePath, expectedVersion) in manifestExpectations {
