@@ -40,6 +40,7 @@ private final class RawWebSocket: @unchecked Sendable {
 
     private let streamTask: URLSessionStreamTask
     private let hostName: String
+    private let hostHeader: String
     private let usesTLS: Bool
     private let path: String
     private let extraHeaders: [(String, String)]
@@ -47,8 +48,16 @@ private final class RawWebSocket: @unchecked Sendable {
 
     private let buffer = OSAllocatedUnfairLock(initialState: Data())
 
-    init(host: String, port: Int, usesTLS: Bool, path: String, headers: [(String, String)]) {
+    init(
+        host: String,
+        hostHeader: String,
+        port: Int,
+        usesTLS: Bool,
+        path: String,
+        headers: [(String, String)]
+    ) {
         self.hostName = host
+        self.hostHeader = hostHeader
         self.usesTLS = usesTLS
         self.path = path
         self.extraHeaders = headers
@@ -75,7 +84,7 @@ private final class RawWebSocket: @unchecked Sendable {
         let wsKey = Data(keyBytes).base64EncodedString()
 
         var request = "GET \(path) HTTP/1.1\r\n"
-        request += "Host: \(hostName)\r\n"
+        request += "Host: \(hostHeader)\r\n"
         request += "Upgrade: websocket\r\n"
         request += "Connection: Upgrade\r\n"
         request += "Sec-WebSocket-Key: \(wsKey)\r\n"
@@ -269,6 +278,79 @@ private final class RawWebSocket: @unchecked Sendable {
     }
 }
 
+// MARK: - Serialized Live Audio Output
+
+actor DeepgramLiveOutboundOperationQueue {
+    typealias AudioSender = @Sendable (Data) async throws -> Void
+    typealias CloseStreamSender = @Sendable () async throws -> Void
+    typealias Canceller = @Sendable () -> Void
+
+    private let sendAudio: AudioSender
+    private let sendCloseStream: CloseStreamSender
+    private let cancelSocket: Canceller
+    private var tailTask: Task<Void, Error>?
+    private var isFinishing = false
+    private var isCancelled = false
+
+    init(
+        sendAudio: @escaping AudioSender,
+        sendCloseStream: @escaping CloseStreamSender,
+        cancel: @escaping Canceller
+    ) {
+        self.sendAudio = sendAudio
+        self.sendCloseStream = sendCloseStream
+        self.cancelSocket = cancel
+    }
+
+    func appendAudio(samples: [Float]) async throws {
+        guard !isFinishing, !isCancelled else { return }
+
+        let data = DeepgramPlugin.floatToPCM16(samples)
+        guard !data.isEmpty else { return }
+
+        let sendAudio = self.sendAudio
+        let task = enqueue {
+            try await sendAudio(data)
+        }
+        try await task.value
+    }
+
+    func finishIfNeeded() async throws -> Bool {
+        guard !isFinishing else { return false }
+        isFinishing = true
+        guard !isCancelled else { return false }
+
+        let sendCloseStream = self.sendCloseStream
+        let task = enqueue {
+            try await sendCloseStream()
+        }
+        try await task.value
+        return true
+    }
+
+    func cancel() {
+        guard !isCancelled else { return }
+        isCancelled = true
+        tailTask?.cancel()
+        cancelSocket()
+    }
+
+    private func enqueue(
+        _ operation: @escaping @Sendable () async throws -> Void
+    ) -> Task<Void, Error> {
+        let previousTask = tailTask
+        let task = Task {
+            if let previousTask {
+                try await previousTask.value
+            }
+            try Task.checkCancellation()
+            try await operation()
+        }
+        tailTask = task
+        return task
+    }
+}
+
 // MARK: - Transcript Collector
 
 private actor TranscriptCollector {
@@ -318,29 +400,23 @@ private actor TranscriptCollector {
 // MARK: - Live STT Session
 
 private final class DeepgramLiveTranscriptionSession: LiveTranscriptionSession, @unchecked Sendable {
-    private struct State {
-        var finished = false
-        var cancelled = false
-    }
-
     private static let finishTimeoutNanoseconds: UInt64 = 2_000_000_000
     private static let logger = Logger(subsystem: "com.typewhisper.deepgram", category: "LiveSession")
 
-    private let webSocket: RawWebSocket
+    private let outbound: DeepgramLiveOutboundOperationQueue
     private let receiveTask: Task<Void, Never>
     private let receiveCompletion: AsyncStream<Void>
     private let collector: TranscriptCollector
     private let language: String?
-    private let state = OSAllocatedUnfairLock(initialState: State())
 
     private init(
-        webSocket: RawWebSocket,
+        outbound: DeepgramLiveOutboundOperationQueue,
         receiveTask: Task<Void, Never>,
         receiveCompletion: AsyncStream<Void>,
         collector: TranscriptCollector,
         language: String?
     ) {
-        self.webSocket = webSocket
+        self.outbound = outbound
         self.receiveTask = receiveTask
         self.receiveCompletion = receiveCompletion
         self.collector = collector
@@ -398,7 +474,17 @@ private final class DeepgramLiveTranscriptionSession: LiveTranscriptionSession, 
         }
 
         return DeepgramLiveTranscriptionSession(
-            webSocket: webSocket,
+            outbound: DeepgramLiveOutboundOperationQueue(
+                sendAudio: { [webSocket] data in
+                    try await webSocket.sendBinary(data)
+                },
+                sendCloseStream: { [webSocket] in
+                    try await webSocket.sendText(#"{"type":"CloseStream"}"#)
+                },
+                cancel: { [webSocket] in
+                    webSocket.cancel()
+                }
+            ),
             receiveTask: receiveTask,
             receiveCompletion: receiveCompletion,
             collector: collector,
@@ -407,16 +493,12 @@ private final class DeepgramLiveTranscriptionSession: LiveTranscriptionSession, 
     }
 
     func appendAudio(samples: [Float]) async throws {
-        guard !state.withLock({ $0.finished || $0.cancelled }) else { return }
         if let error = await collector.error {
             throw PluginTranscriptionError.apiError(error)
         }
 
-        let data = DeepgramPlugin.floatToPCM16(samples)
-        guard !data.isEmpty else { return }
-
         do {
-            try await webSocket.sendBinary(data)
+            try await outbound.appendAudio(samples: samples)
         } catch {
             let normalizedError = Self.normalizedError(error)
             await collector.setError(normalizedError.localizedDescription)
@@ -425,23 +507,23 @@ private final class DeepgramLiveTranscriptionSession: LiveTranscriptionSession, 
     }
 
     func finish() async throws -> PluginTranscriptionResult {
-        let shouldFinish = state.withLock { state in
-            guard !state.finished else { return false }
-            state.finished = true
-            return !state.cancelled
+        let shouldWaitForResults: Bool
+        do {
+            shouldWaitForResults = try await outbound.finishIfNeeded()
+        } catch {
+            let normalizedError = Self.normalizedError(error)
+            await collector.setError(normalizedError.localizedDescription)
+            receiveTask.cancel()
+            await outbound.cancel()
+
+            let result = await collector.finalTranscriptionResult(fallbackLanguage: language)
+            if !result.text.isEmpty {
+                return result
+            }
+            throw normalizedError
         }
 
-        if shouldFinish {
-            do {
-                try await webSocket.sendText(#"{"type":"CloseStream"}"#)
-            } catch {
-                let normalizedError = Self.normalizedError(error)
-                await collector.setError(normalizedError.localizedDescription)
-                receiveTask.cancel()
-                webSocket.cancel()
-                throw normalizedError
-            }
-
+        if shouldWaitForResults {
             let finishedCleanly = await waitForReceiveTask()
             if !finishedCleanly {
                 Self.logger.warning("Live finish: Deepgram did not close within timeout; returning collected transcript")
@@ -449,7 +531,7 @@ private final class DeepgramLiveTranscriptionSession: LiveTranscriptionSession, 
         }
 
         receiveTask.cancel()
-        webSocket.cancel()
+        await outbound.cancel()
 
         let result = await collector.finalTranscriptionResult(fallbackLanguage: language)
         if result.text.isEmpty, let error = await collector.error {
@@ -459,15 +541,8 @@ private final class DeepgramLiveTranscriptionSession: LiveTranscriptionSession, 
     }
 
     func cancel() async {
-        let shouldCancel = state.withLock { state in
-            guard !state.cancelled else { return false }
-            state.cancelled = true
-            return true
-        }
-        guard shouldCancel else { return }
-
         receiveTask.cancel()
-        webSocket.cancel()
+        await outbound.cancel()
     }
 
     private func waitForReceiveTask() async -> Bool {
@@ -485,7 +560,7 @@ private final class DeepgramLiveTranscriptionSession: LiveTranscriptionSession, 
             let finishedCleanly = await group.next() ?? false
             if !finishedCleanly {
                 receiveTask.cancel()
-                webSocket.cancel()
+                await outbound.cancel()
             }
             group.cancelAll()
             return finishedCleanly
@@ -616,7 +691,7 @@ final class DeepgramPlugin: NSObject,
         language: String?,
         prompt: String?
     ) throws -> URL {
-        guard var components = URLComponents(string: "\(baseURL)/v1/listen"),
+        guard var components = URLComponents(string: baseURL),
               let scheme = components.scheme?.lowercased(),
               scheme == "http" || scheme == "https",
               let host = components.host,
@@ -624,11 +699,17 @@ final class DeepgramPlugin: NSObject,
             throw PluginTranscriptionError.apiError("Invalid base URL: \(baseURL)")
         }
 
-        var queryItems = [
+        let basePath = components.percentEncodedPath
+        components.percentEncodedPath = basePath.hasSuffix("/")
+            ? "\(basePath)v1/listen"
+            : "\(basePath)/v1/listen"
+
+        var queryItems = components.queryItems ?? []
+        queryItems.append(contentsOf: [
             URLQueryItem(name: "model", value: modelId),
             URLQueryItem(name: "smart_format", value: "true"),
             URLQueryItem(name: "punctuate", value: "true"),
-        ]
+        ])
         if let language, !language.isEmpty {
             queryItems.append(URLQueryItem(name: "language", value: language))
         }
@@ -647,7 +728,7 @@ final class DeepgramPlugin: NSObject,
         language: String?,
         prompt: String?
     ) throws -> URL {
-        guard var components = URLComponents(string: "\(baseURL)/v1/listen"),
+        guard var components = URLComponents(string: baseURL),
               let scheme = components.scheme?.lowercased(),
               scheme == "http" || scheme == "https",
               let host = components.host,
@@ -655,7 +736,13 @@ final class DeepgramPlugin: NSObject,
             throw PluginTranscriptionError.apiError("Invalid base URL: \(baseURL)")
         }
 
-        var queryItems = [
+        let basePath = components.percentEncodedPath
+        components.percentEncodedPath = basePath.hasSuffix("/")
+            ? "\(basePath)v1/listen"
+            : "\(basePath)/v1/listen"
+
+        var queryItems = components.queryItems ?? []
+        queryItems.append(contentsOf: [
             URLQueryItem(name: "model", value: modelId),
             URLQueryItem(name: "encoding", value: "linear16"),
             URLQueryItem(name: "sample_rate", value: "16000"),
@@ -664,7 +751,7 @@ final class DeepgramPlugin: NSObject,
             URLQueryItem(name: "punctuate", value: "true"),
             URLQueryItem(name: "interim_results", value: "true"),
             URLQueryItem(name: "endpointing", value: "300"),
-        ]
+        ])
         queryItems.append(URLQueryItem(
             name: "language",
             value: language.flatMap { $0.isEmpty ? nil : $0 } ?? "multi"
@@ -906,6 +993,7 @@ final class DeepgramPlugin: NSObject,
         }
         let usesTLS = scheme == "https"
         let port = urlComponents.port ?? (usesTLS ? 443 : 80)
+        let hostHeader = Self.webSocketHostHeader(host: host, port: port, usesTLS: usesTLS)
 
         // Build the path+query for the HTTP upgrade request
         var pathWithQuery = urlComponents.percentEncodedPath
@@ -915,11 +1003,18 @@ final class DeepgramPlugin: NSObject,
 
         return RawWebSocket(
             host: host,
+            hostHeader: hostHeader,
             port: port,
             usesTLS: usesTLS,
             path: pathWithQuery,
             headers: [(effectiveAuthHeader, authHeaderValue(apiKey: apiKey))]
         )
+    }
+
+    internal static func webSocketHostHeader(host: String, port: Int, usesTLS: Bool) -> String {
+        let formattedHost = host.contains(":") && !host.hasPrefix("[") ? "[\(host)]" : host
+        let defaultPort = usesTLS ? 443 : 80
+        return port == defaultPort ? formattedHost : "\(formattedHost):\(port)"
     }
 
     internal static func dictionaryQueryItems(prompt: String?, modelId: String) -> [URLQueryItem] {
