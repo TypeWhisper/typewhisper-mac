@@ -205,6 +205,7 @@ final class TextInsertionService {
     var liveFieldTargetEligibilityOverride: ((AXUIElement) -> Bool)?
     var liveFieldApplicationEligibilityOverride: ((String) -> Bool)?
     var liveFieldElectronApplicationOverride: ((String) -> Bool)?
+    var secureTextElementOverride: ((AXUIElement) -> Bool)?
     var liveFieldElementProcessIdentifierOverride: ((AXUIElement) -> pid_t?)?
     var liveFieldApplicationMetadataOverride: ((pid_t) -> (name: String?, bundleId: String?, url: String?)?)?
     var liveFieldApplicationValidationOverride: ((pid_t, String) -> Bool)?
@@ -1578,6 +1579,7 @@ final class TextInsertionService {
               liveFieldProcessIdentifier(for: focusedElement)
                 == target.applicationProcessIdentifier,
               isEligibleLiveFieldTarget(focusedElement),
+              !isSecureTextElement(focusedElement),
               let focusedState = captureFocusedTextState(
                 for: focusedElement,
                 messagingTimeout: Self.liveFieldMessagingTimeout
@@ -1835,6 +1837,10 @@ final class TextInsertionService {
     }
 
     private func isSecureTextElement(_ element: AXUIElement) -> Bool {
+        if let secureTextElementOverride {
+            return secureTextElementOverride(element)
+        }
+
         var subroleValue: AnyObject?
         guard AXUIElementCopyAttributeValue(
             element,

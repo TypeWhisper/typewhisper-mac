@@ -5102,6 +5102,58 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testLiveFieldTargetDoesNotRebindToSecureTextElement() throws {
+        let service = TextInsertionService()
+        let originalElement = AXUIElementCreateSystemWide()
+        let secureElement = AXUIElementCreateApplication(ProcessInfo.processInfo.processIdentifier)
+        var focusedElement = originalElement
+        var value = ""
+        var selectedRange = NSRange(location: 0, length: 0)
+        var insertionElements: [AXUIElement] = []
+
+        service.accessibilityGrantedOverride = true
+        service.captureActiveAppOverride = { ("T3 Code", "com.t3.code", nil) }
+        configureLiveFieldIdentity(service)
+        service.focusedTextElementOverride = { focusedElement }
+        service.liveFieldTargetEligibilityOverride = { _ in true }
+        service.secureTextElementOverride = { $0 == secureElement }
+        service.focusedTextStateOverride = { requestedElement in
+            if focusedElement == secureElement, requestedElement == originalElement {
+                return nil
+            }
+            return (value: value, selectedText: nil, selectedRange: selectedRange)
+        }
+        service.setSelectedRangeOverride = { _, range in
+            selectedRange = range
+            return true
+        }
+        service.insertTextAtOverride = { requestedElement, text in
+            insertionElements.append(requestedElement)
+            value = (value as NSString).replacingCharacters(in: selectedRange, with: text)
+            selectedRange = NSRange(
+                location: selectedRange.location + (text as NSString).length,
+                length: 0
+            )
+            focusedElement = secureElement
+            return true
+        }
+
+        var target = try XCTUnwrap(
+            service.captureLiveFieldTarget(expectedBundleIdentifier: "com.t3.code")
+        )
+        guard case .detached = service.replaceLiveFieldText(
+            "Sensitive transcript",
+            in: &target,
+            knownTargetIsFocused: true
+        ) else {
+            return XCTFail("Expected a secure replacement element to detach the target")
+        }
+
+        XCTAssertEqual(insertionElements.count, 1)
+        XCTAssertTrue(insertionElements.first.map { CFEqual($0, originalElement) } ?? false)
+    }
+
+    @MainActor
     func testGetTextSelectionDerivesSelectedTextFromFocusedValueAndRange() {
         let service = TextInsertionService()
         let element = AXUIElementCreateSystemWide()
