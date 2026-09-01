@@ -4126,6 +4126,17 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    private func configureLiveFieldIdentity(
+        _ service: TextInsertionService,
+        processIdentifier: pid_t = 4242
+    ) {
+        service.liveFieldElementProcessIdentifierOverride = { _ in processIdentifier }
+        service.liveFieldApplicationValidationOverride = { candidatePID, _ in
+            candidatePID == processIdentifier
+        }
+    }
+
+    @MainActor
     func testLiveFieldSessionRevisesOneOwnedRangeAndFinalizesInPlace() async throws {
         let service = TextInsertionService()
         let element = AXUIElementCreateSystemWide()
@@ -4135,6 +4146,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         service.accessibilityGrantedOverride = true
         service.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
+        configureLiveFieldIdentity(service)
         service.focusedTextElementOverride = { element }
         service.liveFieldTargetEligibilityOverride = { _ in true }
         service.focusedTextStateOverride = { _ in
@@ -4186,6 +4198,486 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testLiveFieldSessionPausesPartialUpdatesAfterFocusMovesToAnotherApplication() async throws {
+        let service = TextInsertionService()
+        let targetElement = AXUIElementCreateApplication(4242)
+        let otherElement = AXUIElementCreateApplication(4343)
+        var activeBundleIdentifier = "com.apple.Notes"
+        var focusedElement = targetElement
+        var targetValue = "Before  after"
+        var targetRange = NSRange(location: 7, length: 0)
+        var otherValue = "Other field"
+        var otherRange = NSRange(location: 11, length: 0)
+
+        service.accessibilityGrantedOverride = true
+        service.captureActiveAppOverride = {
+            activeBundleIdentifier == "com.apple.Notes"
+                ? ("Notes", activeBundleIdentifier, nil)
+                : ("Mail", activeBundleIdentifier, nil)
+        }
+        service.liveFieldElementProcessIdentifierOverride = { element in
+            element == targetElement ? 4242 : 4343
+        }
+        service.liveFieldApplicationValidationOverride = { processIdentifier, bundleIdentifier in
+            processIdentifier == 4242 && bundleIdentifier == "com.apple.Notes"
+        }
+        service.focusedTextElementOverride = { focusedElement }
+        service.liveFieldTargetEligibilityOverride = { _ in true }
+        service.focusedTextStateOverride = { element in
+            element == targetElement
+                ? (value: targetValue, selectedText: nil, selectedRange: targetRange)
+                : (value: otherValue, selectedText: nil, selectedRange: otherRange)
+        }
+        service.setSelectedRangeOverride = { element, range in
+            if element == targetElement {
+                targetRange = range
+            } else {
+                otherRange = range
+            }
+            return true
+        }
+        service.insertTextAtOverride = { element, text in
+            if element == targetElement {
+                targetValue = (targetValue as NSString).replacingCharacters(
+                    in: targetRange,
+                    with: text
+                )
+                targetRange = NSRange(
+                    location: targetRange.location + (text as NSString).length,
+                    length: 0
+                )
+            } else {
+                otherValue = (otherValue as NSString).replacingCharacters(
+                    in: otherRange,
+                    with: text
+                )
+                otherRange = NSRange(
+                    location: otherRange.location + (text as NSString).length,
+                    length: 0
+                )
+            }
+            return true
+        }
+
+        let target = try XCTUnwrap(
+            service.captureLiveFieldTarget(expectedBundleIdentifier: "com.apple.Notes")
+        )
+        let session = LiveFieldTranscriptSession(
+            sessionID: UUID(),
+            target: target,
+            textInsertionService: service,
+            updateInterval: .milliseconds(1)
+        )
+
+        activeBundleIdentifier = "com.apple.mail"
+        focusedElement = otherElement
+        session.receivePartial("Pinned")
+        try? await Task.sleep(for: .milliseconds(25))
+
+        XCTAssertEqual(targetValue, "Before  after")
+        XCTAssertEqual(otherValue, "Other field")
+        XCTAssertFalse(session.targetIsCurrentlyFocused)
+        XCTAssertEqual(session.state, .active)
+
+        activeBundleIdentifier = "com.apple.Notes"
+        focusedElement = targetElement
+        session.receivePartial("Pinned")
+        try await waitForLiveFieldUpdate("restored target update") {
+            targetValue == "Before Pinned after"
+        }
+
+        guard case .applied = session.finalize(with: "Final") else {
+            return XCTFail("Expected the restored original field to finalize")
+        }
+        XCTAssertEqual(targetValue, "Before Final after")
+        XCTAssertEqual(otherValue, "Other field")
+    }
+
+    @MainActor
+    func testLiveFieldSessionDoesNotRebindToMatchingFieldInSameApplication() async throws {
+        let service = TextInsertionService()
+        let targetElement = AXUIElementCreateSystemWide()
+        let otherElement = AXUIElementCreateApplication(4242)
+        XCTAssertFalse(CFEqual(targetElement, otherElement))
+        var focusedElement = targetElement
+        var targetValue = ""
+        var targetRange = NSRange(location: 0, length: 0)
+        var otherValue = ""
+        var otherRange = NSRange(location: 0, length: 0)
+
+        service.accessibilityGrantedOverride = true
+        service.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
+        service.liveFieldElementProcessIdentifierOverride = { _ in 4242 }
+        service.liveFieldApplicationValidationOverride = { processIdentifier, bundleIdentifier in
+            processIdentifier == 4242 && bundleIdentifier == "com.apple.Notes"
+        }
+        service.focusedTextElementOverride = { focusedElement }
+        service.liveFieldTargetEligibilityOverride = { _ in true }
+        service.focusedTextStateOverride = { element in
+            element == targetElement
+                ? (value: targetValue, selectedText: nil, selectedRange: targetRange)
+                : (value: otherValue, selectedText: nil, selectedRange: otherRange)
+        }
+        service.setSelectedRangeOverride = { element, range in
+            if element == targetElement {
+                targetRange = range
+            } else {
+                otherRange = range
+            }
+            return true
+        }
+        service.insertTextAtOverride = { element, text in
+            if element == targetElement {
+                targetValue = (targetValue as NSString).replacingCharacters(
+                    in: targetRange,
+                    with: text
+                )
+                targetRange = NSRange(
+                    location: targetRange.location + (text as NSString).length,
+                    length: 0
+                )
+            } else {
+                otherValue = (otherValue as NSString).replacingCharacters(
+                    in: otherRange,
+                    with: text
+                )
+                otherRange = NSRange(
+                    location: otherRange.location + (text as NSString).length,
+                    length: 0
+                )
+            }
+            return true
+        }
+
+        let target = try XCTUnwrap(
+            service.captureLiveFieldTarget(expectedBundleIdentifier: "com.apple.Notes")
+        )
+        let session = LiveFieldTranscriptSession(
+            sessionID: UUID(),
+            target: target,
+            textInsertionService: service,
+            updateInterval: .milliseconds(1)
+        )
+
+        focusedElement = otherElement
+        session.receivePartial("Original only")
+        try? await Task.sleep(for: .milliseconds(25))
+
+        XCTAssertEqual(targetValue, "")
+        XCTAssertEqual(otherValue, "")
+        XCTAssertFalse(session.targetIsCurrentlyFocused)
+    }
+
+    @MainActor
+    func testLiveFieldSessionDisallowsFocusedFallbackAfterTargetLosesFocus() throws {
+        let service = TextInsertionService()
+        let targetElement = AXUIElementCreateApplication(4242)
+        let otherElement = AXUIElementCreateApplication(4343)
+        var activeBundleIdentifier = "com.apple.Notes"
+        var focusedElement = targetElement
+
+        service.accessibilityGrantedOverride = true
+        service.captureActiveAppOverride = { (nil, activeBundleIdentifier, nil) }
+        service.liveFieldElementProcessIdentifierOverride = { element in
+            element == targetElement ? 4242 : 4343
+        }
+        service.liveFieldApplicationValidationOverride = { processIdentifier, bundleIdentifier in
+            processIdentifier == 4242 && bundleIdentifier == "com.apple.Notes"
+        }
+        service.focusedTextElementOverride = { focusedElement }
+        service.liveFieldTargetEligibilityOverride = { _ in true }
+        service.focusedTextStateOverride = { element in
+            element == targetElement
+                ? (value: "", selectedText: nil, selectedRange: NSRange(location: 0, length: 0))
+                : (value: "Other", selectedText: nil, selectedRange: NSRange(location: 5, length: 0))
+        }
+        service.setSelectedRangeOverride = { _, _ in true }
+        service.insertTextAtOverride = { _, _ in false }
+
+        let target = try XCTUnwrap(
+            service.captureLiveFieldTarget(expectedBundleIdentifier: "com.apple.Notes")
+        )
+        let session = LiveFieldTranscriptSession(
+            sessionID: UUID(),
+            target: target,
+            textInsertionService: service
+        )
+
+        activeBundleIdentifier = "com.apple.mail"
+        focusedElement = otherElement
+        guard case .detached(let hadAttemptedMutation, let allowsFocusedFallback) =
+            session.finalize(with: "Final") else {
+            return XCTFail("Expected targeted insertion to detach")
+        }
+        XCTAssertFalse(hadAttemptedMutation)
+        XCTAssertFalse(allowsFocusedFallback)
+    }
+
+    @MainActor
+    func testDictationPinsLiveFieldBeforeDelayedAudioStartChangesFocus() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let liveFieldKey = UserDefaultsKeys.liveFieldTranscriptEnabled
+        let originalLiveFieldSetting = UserDefaults.standard.object(forKey: liveFieldKey)
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            MockTranscriptionPlugin.reset()
+            Self.restoreUserDefault(originalLiveFieldSetting, forKey: liveFieldKey)
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        MockTranscriptionPlugin.setResponseText("Pinned final")
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        let context = try XCTUnwrap(dictationContext)
+        context.dictationViewModel.liveFieldTranscriptEnabled = true
+        context.dictationViewModel.preserveClipboard = false
+
+        let targetElement = AXUIElementCreateApplication(4242)
+        let otherElement = AXUIElementCreateApplication(4343)
+        let pasteboard = NSPasteboard.withUniqueName()
+        var activeBundleIdentifier = "com.apple.Notes"
+        var focusedElement = targetElement
+        var targetValue = ""
+        var targetRange = NSRange(location: 0, length: 0)
+        var otherValue = "Other"
+        var otherRange = NSRange(location: 5, length: 0)
+        var activationCount = 0
+        var focusCount = 0
+
+        context.textInsertionService.pasteboardProvider = { pasteboard }
+        context.textInsertionService.pasteVerificationAttempts = 0
+        context.textInsertionService.captureActiveAppOverride = {
+            activeBundleIdentifier == "com.apple.Notes"
+                ? ("Notes", activeBundleIdentifier, nil)
+                : ("Mail", activeBundleIdentifier, nil)
+        }
+        context.textInsertionService.accessibilityGrantedOverride = true
+        context.textInsertionService.selectedTextOverride = { nil }
+        context.textInsertionService.focusedTextElementOverride = { focusedElement }
+        context.textInsertionService.liveFieldTargetEligibilityOverride = { _ in true }
+        context.textInsertionService.liveFieldElementProcessIdentifierOverride = { element in
+            element == targetElement ? 4242 : 4343
+        }
+        context.textInsertionService.liveFieldApplicationMetadataOverride = { processIdentifier in
+            guard processIdentifier == 4242 else { return nil }
+            return ("Notes", "com.apple.Notes", nil)
+        }
+        context.textInsertionService.liveFieldApplicationValidationOverride = {
+            processIdentifier,
+            bundleIdentifier in
+            processIdentifier == 4242 && bundleIdentifier == "com.apple.Notes"
+        }
+        context.textInsertionService.focusedTextStateOverride = { element in
+            element == targetElement
+                ? (value: targetValue, selectedText: nil, selectedRange: targetRange)
+                : (value: otherValue, selectedText: nil, selectedRange: otherRange)
+        }
+        context.textInsertionService.setSelectedRangeOverride = { element, range in
+            if element == targetElement {
+                targetRange = range
+            } else {
+                otherRange = range
+            }
+            return true
+        }
+        context.textInsertionService.insertTextAtOverride = { element, text in
+            if element == targetElement {
+                return false
+            } else {
+                otherValue = (otherValue as NSString).replacingCharacters(
+                    in: otherRange,
+                    with: text
+                )
+                otherRange = NSRange(
+                    location: otherRange.location + (text as NSString).length,
+                    length: 0
+                )
+            }
+            return true
+        }
+        context.textInsertionService.activatePinnedTargetApplicationOverride = { processIdentifier in
+            guard processIdentifier == 4242 else { return false }
+            activationCount += 1
+            activeBundleIdentifier = "com.apple.Notes"
+            return true
+        }
+        context.textInsertionService.focusPinnedTargetElementOverride = { element in
+            guard element == targetElement else { return false }
+            focusCount += 1
+            focusedElement = targetElement
+            return true
+        }
+        context.textInsertionService.pasteSimulatorOverride = {
+            guard activeBundleIdentifier == "com.apple.Notes",
+                  focusedElement == targetElement,
+                  let text = pasteboard.string(forType: .string) else {
+                return
+            }
+            targetValue = (targetValue as NSString).replacingCharacters(
+                in: targetRange,
+                with: text
+            )
+            targetRange = NSRange(
+                location: targetRange.location + (text as NSString).length,
+                length: 0
+            )
+        }
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {
+            activeBundleIdentifier = "com.apple.mail"
+            focusedElement = otherElement
+        }
+        context.audioRecordingService.stopRecordingOverride = { _ in
+            Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
+        }
+
+        let sessionID = context.dictationViewModel.apiStartRecording()
+        await context.dictationViewModel.testingWaitForRecordingStart()
+        _ = context.dictationViewModel.apiStopRecording()
+
+        for _ in 0..<80 {
+            if context.dictationViewModel.apiDictationSession(id: sessionID)?.status == .completed {
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+        XCTAssertEqual(
+            context.dictationViewModel.apiDictationSession(id: sessionID)?.status,
+            .completed
+        )
+        XCTAssertEqual(targetValue, "Pinned final")
+        XCTAssertEqual(otherValue, "Other")
+        XCTAssertEqual(activationCount, 1)
+        XCTAssertEqual(focusCount, 1)
+        XCTAssertEqual(context.historyService.records.first?.appBundleIdentifier, "com.apple.Notes")
+    }
+
+    @MainActor
+    func testDictationPinsElectronFieldAndPastesAfterFocusChanges() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let liveFieldKey = UserDefaultsKeys.liveFieldTranscriptEnabled
+        let originalLiveFieldSetting = UserDefaults.standard.object(forKey: liveFieldKey)
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            MockTranscriptionPlugin.reset()
+            Self.restoreUserDefault(originalLiveFieldSetting, forKey: liveFieldKey)
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        MockTranscriptionPlugin.setResponseText("Electron final")
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        let context = try XCTUnwrap(dictationContext)
+        context.dictationViewModel.liveFieldTranscriptEnabled = true
+        context.dictationViewModel.preserveClipboard = false
+
+        let targetElement = AXUIElementCreateApplication(5252)
+        let otherElement = AXUIElementCreateApplication(5353)
+        let pasteboard = NSPasteboard.withUniqueName()
+        var activeBundleIdentifier = "com.microsoft.VSCode"
+        var focusedElement = targetElement
+        var targetValue = ""
+        var targetRange = NSRange(location: 0, length: 0)
+        var observationBeginCount = 0
+        var activationCount = 0
+
+        context.textInsertionService.pasteboardProvider = { pasteboard }
+        context.textInsertionService.pasteVerificationAttempts = 0
+        context.textInsertionService.captureActiveAppOverride = {
+            activeBundleIdentifier == "com.microsoft.VSCode"
+                ? ("Visual Studio Code", activeBundleIdentifier, nil)
+                : ("Mail", activeBundleIdentifier, nil)
+        }
+        context.textInsertionService.accessibilityGrantedOverride = true
+        context.textInsertionService.selectedTextOverride = { nil }
+        context.textInsertionService.focusedTextElementOverride = { focusedElement }
+        context.textInsertionService.liveFieldElectronApplicationOverride = { bundleIdentifier in
+            bundleIdentifier == "com.microsoft.VSCode"
+        }
+        context.textInsertionService.liveFieldElementProcessIdentifierOverride = { element in
+            element == targetElement ? 5252 : 5353
+        }
+        context.textInsertionService.liveFieldApplicationMetadataOverride = { processIdentifier in
+            guard processIdentifier == 5252 else { return nil }
+            return ("Visual Studio Code", "com.microsoft.VSCode", nil)
+        }
+        context.textInsertionService.liveFieldApplicationValidationOverride = {
+            processIdentifier,
+            bundleIdentifier in
+            processIdentifier == 5252 && bundleIdentifier == "com.microsoft.VSCode"
+        }
+        context.textInsertionService.chromiumAccessibilityObservationOverride = { _ in
+            observationBeginCount += 1
+            return TargetAppAccessibilityObservationLease {}
+        }
+        context.textInsertionService.focusedTextStateOverride = { element in
+            element == targetElement
+                ? (value: targetValue, selectedText: nil, selectedRange: targetRange)
+                : (value: "Other", selectedText: nil, selectedRange: NSRange(location: 5, length: 0))
+        }
+        context.textInsertionService.activatePinnedTargetApplicationOverride = { processIdentifier in
+            guard processIdentifier == 5252 else { return false }
+            activationCount += 1
+            activeBundleIdentifier = "com.microsoft.VSCode"
+            return true
+        }
+        context.textInsertionService.focusPinnedTargetElementOverride = { element in
+            guard element == targetElement else { return false }
+            focusedElement = targetElement
+            return true
+        }
+        context.textInsertionService.pasteSimulatorOverride = {
+            guard activeBundleIdentifier == "com.microsoft.VSCode",
+                  focusedElement == targetElement,
+                  let text = pasteboard.string(forType: .string) else {
+                return
+            }
+            targetValue = (targetValue as NSString).replacingCharacters(
+                in: targetRange,
+                with: text
+            )
+            targetRange = NSRange(
+                location: targetRange.location + (text as NSString).length,
+                length: 0
+            )
+        }
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {
+            activeBundleIdentifier = "com.apple.mail"
+            focusedElement = otherElement
+        }
+        context.audioRecordingService.stopRecordingOverride = { _ in
+            Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
+        }
+
+        let sessionID = context.dictationViewModel.apiStartRecording()
+        await context.dictationViewModel.testingWaitForRecordingStart()
+        _ = context.dictationViewModel.apiStopRecording()
+
+        for _ in 0..<80 {
+            if context.dictationViewModel.apiDictationSession(id: sessionID)?.status == .completed {
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+        XCTAssertEqual(
+            context.dictationViewModel.apiDictationSession(id: sessionID)?.status,
+            .completed
+        )
+        XCTAssertEqual(targetValue, "Electron final")
+        XCTAssertEqual(activationCount, 1)
+        XCTAssertEqual(observationBeginCount, 1)
+        XCTAssertEqual(
+            context.historyService.records.first?.appBundleIdentifier,
+            "com.microsoft.VSCode"
+        )
+    }
+
+    @MainActor
     func testLiveFieldSessionDetachesAfterUserChangesText() async throws {
         let service = TextInsertionService()
         let element = AXUIElementCreateSystemWide()
@@ -4195,6 +4687,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         service.accessibilityGrantedOverride = true
         service.captureActiveAppOverride = { ("TextEdit", "com.apple.TextEdit", nil) }
+        configureLiveFieldIdentity(service)
         service.focusedTextElementOverride = { element }
         service.liveFieldTargetEligibilityOverride = { _ in true }
         service.focusedTextStateOverride = { _ in
@@ -4238,7 +4731,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(writeCount, 1)
 
         let result = session.finalize(with: "Final")
-        guard case .detached(let hadAttemptedMutation) = result else {
+        guard case .detached(let hadAttemptedMutation, _) = result else {
             return XCTFail("Expected detached finalization")
         }
         XCTAssertTrue(hadAttemptedMutation)
@@ -4255,6 +4748,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         service.accessibilityGrantedOverride = true
         service.captureActiveAppOverride = { ("Mail", "com.apple.mail", nil) }
+        configureLiveFieldIdentity(service)
         service.focusedTextElementOverride = { element }
         service.liveFieldTargetEligibilityOverride = { _ in true }
         service.focusedTextStateOverride = { _ in
@@ -4339,6 +4833,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         service.accessibilityGrantedOverride = true
         service.captureActiveAppOverride = { ("T3 Code", "com.t3.code", nil) }
+        configureLiveFieldIdentity(service)
         service.focusedTextElementOverride = { element }
         service.focusedTextPlaceholderOverride = { _ in value == placeholder ? placeholder : nil }
         service.liveFieldTargetEligibilityOverride = { _ in true }
@@ -4393,6 +4888,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         service.accessibilityGrantedOverride = true
         service.captureActiveAppOverride = { ("T3 Code", "com.t3.code", nil) }
+        configureLiveFieldIdentity(service)
         service.focusedTextElementOverride = { element }
         service.liveFieldTargetEligibilityOverride = { _ in true }
         service.focusedTextStateOverride = { _ in
@@ -4419,7 +4915,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         }
 
         XCTAssertEqual(session.state, .detached)
-        guard case .detached(let hadAttemptedMutation) = session.finalize(with: "Final") else {
+        guard case .detached(let hadAttemptedMutation, _) = session.finalize(with: "Final") else {
             return XCTFail("Expected the failed inline session to detach")
         }
         XCTAssertFalse(hadAttemptedMutation)
@@ -4433,6 +4929,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         service.accessibilityGrantedOverride = true
         service.captureActiveAppOverride = { ("T3 Code", "com.t3.code", nil) }
+        configureLiveFieldIdentity(service)
         service.focusedTextElementOverride = { element }
         service.liveFieldTargetEligibilityOverride = { _ in true }
         service.focusedTextStateOverride = { _ in
@@ -4459,7 +4956,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         }
 
         XCTAssertEqual(session.state, .detached)
-        guard case .detached(let hadAttemptedMutation) = session.finalize(with: "Final") else {
+        guard case .detached(let hadAttemptedMutation, _) = session.finalize(with: "Final") else {
             return XCTFail("Expected ignored AX success to detach")
         }
         XCTAssertFalse(hadAttemptedMutation)
@@ -4478,13 +4975,17 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         service.accessibilityGrantedOverride = true
         service.captureActiveAppOverride = { ("T3 Code", "com.t3.code", nil) }
+        configureLiveFieldIdentity(service)
         service.focusedTextElementOverride = { element }
         service.liveFieldTargetEligibilityOverride = { _ in true }
         service.setMessagingTimeoutOverride = { element, timeout in
             timeoutApplications.append((element, timeout))
         }
-        service.focusedTextStateOverride = { _ in
-            (value: value, selectedText: nil, selectedRange: selectedRange)
+        service.focusedTextStateOverride = { requestedElement in
+            if element == recreatedElement, requestedElement == originalElement {
+                return nil
+            }
+            return (value: value, selectedText: nil, selectedRange: selectedRange)
         }
         service.setSelectedRangeOverride = { _, range in
             selectedRange = range
@@ -5244,12 +5745,16 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     @MainActor
     func testApiStartRecording_startsAudioBeforeContextAndDeferredSelectedTextCapture() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let liveFieldKey = UserDefaultsKeys.liveFieldTranscriptEnabled
+        let originalLiveFieldSetting = UserDefaults.standard.object(forKey: liveFieldKey)
         var dictationContext: DictationContext?
         defer {
             dictationContext = nil
+            Self.restoreUserDefault(originalLiveFieldSetting, forKey: liveFieldKey)
             TestSupport.remove(appSupportDirectory)
         }
 
+        UserDefaults.standard.set(false, forKey: liveFieldKey)
         dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
         let context = try XCTUnwrap(dictationContext)
 
@@ -5972,9 +6477,11 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         let licenseSuiteName = "TypeWhisperIntegrationTests.License.\(UUID().uuidString)"
         let learningEnabledKey = UserDefaultsKeys.targetAppCorrectionLearningEnabled
+        let liveFieldKey = UserDefaultsKeys.liveFieldTranscriptEnabled
         let preserveClipboardKey = UserDefaultsKeys.preserveClipboard
         let saveAudioKey = UserDefaultsKeys.saveAudioWithHistory
         let originalLearningEnabled = UserDefaults.standard.object(forKey: learningEnabledKey)
+        let originalLiveFieldSetting = UserDefaults.standard.object(forKey: liveFieldKey)
         let originalPreserveClipboard = UserDefaults.standard.object(forKey: preserveClipboardKey)
         let originalSaveAudio = UserDefaults.standard.object(forKey: saveAudioKey)
         guard let licenseDefaults = UserDefaults(suiteName: licenseSuiteName) else {
@@ -5985,12 +6492,14 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             dictationContext = nil
             licenseDefaults.removePersistentDomain(forName: licenseSuiteName)
             Self.restoreUserDefault(originalLearningEnabled, forKey: learningEnabledKey)
+            Self.restoreUserDefault(originalLiveFieldSetting, forKey: liveFieldKey)
             Self.restoreUserDefault(originalPreserveClipboard, forKey: preserveClipboardKey)
             Self.restoreUserDefault(originalSaveAudio, forKey: saveAudioKey)
             TestSupport.remove(appSupportDirectory)
         }
 
         UserDefaults.standard.set(true, forKey: learningEnabledKey)
+        UserDefaults.standard.set(false, forKey: liveFieldKey)
         UserDefaults.standard.set(false, forKey: preserveClipboardKey)
         UserDefaults.standard.set(false, forKey: saveAudioKey)
         licenseDefaults.set(LicenseStatus.active.rawValue, forKey: UserDefaultsKeys.licenseStatus)
@@ -6057,10 +6566,12 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         let learningEnabledKey = UserDefaultsKeys.targetAppCorrectionLearningEnabled
         let improveCaptureKey = UserDefaultsKeys.improveTypeWhisperCaptureEnabled
+        let liveFieldKey = UserDefaultsKeys.liveFieldTranscriptEnabled
         let preserveClipboardKey = UserDefaultsKeys.preserveClipboard
         let saveAudioKey = UserDefaultsKeys.saveAudioWithHistory
         let originalLearningEnabled = UserDefaults.standard.object(forKey: learningEnabledKey)
         let originalImproveCapture = UserDefaults.standard.object(forKey: improveCaptureKey)
+        let originalLiveFieldSetting = UserDefaults.standard.object(forKey: liveFieldKey)
         let originalPreserveClipboard = UserDefaults.standard.object(forKey: preserveClipboardKey)
         let originalSaveAudio = UserDefaults.standard.object(forKey: saveAudioKey)
         var dictationContext: DictationContext?
@@ -6068,6 +6579,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             dictationContext = nil
             Self.restoreUserDefault(originalLearningEnabled, forKey: learningEnabledKey)
             Self.restoreUserDefault(originalImproveCapture, forKey: improveCaptureKey)
+            Self.restoreUserDefault(originalLiveFieldSetting, forKey: liveFieldKey)
             Self.restoreUserDefault(originalPreserveClipboard, forKey: preserveClipboardKey)
             Self.restoreUserDefault(originalSaveAudio, forKey: saveAudioKey)
             TestSupport.remove(appSupportDirectory)
@@ -6075,6 +6587,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         UserDefaults.standard.set(false, forKey: learningEnabledKey)
         UserDefaults.standard.set(true, forKey: improveCaptureKey)
+        UserDefaults.standard.set(false, forKey: liveFieldKey)
         UserDefaults.standard.set(false, forKey: preserveClipboardKey)
         UserDefaults.standard.set(false, forKey: saveAudioKey)
 
@@ -6208,6 +6721,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     @MainActor
     func testApiStartRecording_pausesMediaAfterAudioStart() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let liveFieldKey = UserDefaultsKeys.liveFieldTranscriptEnabled
+        let originalLiveFieldSetting = UserDefaults.standard.object(forKey: liveFieldKey)
         var events: [String] = []
         let mediaPlaybackService = MockMediaPlaybackService {
             events.append("pause_media")
@@ -6215,9 +6730,11 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         var dictationContext: DictationContext?
         defer {
             dictationContext = nil
+            Self.restoreUserDefault(originalLiveFieldSetting, forKey: liveFieldKey)
             TestSupport.remove(appSupportDirectory)
         }
 
+        UserDefaults.standard.set(false, forKey: liveFieldKey)
         dictationContext = Self.makeDictationContext(
             appSupportDirectory: appSupportDirectory,
             mediaPlaybackService: mediaPlaybackService
@@ -6244,6 +6761,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     @MainActor
     func testApiStartRecordingFailureSkipsPostAudioStartSideEffects() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let liveFieldKey = UserDefaultsKeys.liveFieldTranscriptEnabled
+        let originalLiveFieldSetting = UserDefaults.standard.object(forKey: liveFieldKey)
         var events: [String] = []
         let mediaPlaybackService = MockMediaPlaybackService {
             events.append("pause_media")
@@ -6255,9 +6774,11 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         var dictationContext: DictationContext?
         defer {
             dictationContext = nil
+            Self.restoreUserDefault(originalLiveFieldSetting, forKey: liveFieldKey)
             TestSupport.remove(appSupportDirectory)
         }
 
+        UserDefaults.standard.set(false, forKey: liveFieldKey)
         dictationContext = Self.makeDictationContext(
             appSupportDirectory: appSupportDirectory,
             mediaPlaybackService: mediaPlaybackService,

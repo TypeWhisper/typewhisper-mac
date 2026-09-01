@@ -27743,24 +27743,24 @@
         }
       }
     },
-    "Supported text fields are updated while you speak. TypeWhisper inserts the final transcript normally when direct updates are unavailable." : {
+    "Supported text fields are updated while you speak. The field focused when recording starts remains the final insertion target, including apps that require paste. If it can no longer be restored safely, the final transcript remains in Recent Transcriptions." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Unterstützte Textfelder werden während des Sprechens aktualisiert. Wenn direkte Aktualisierungen nicht verfügbar sind, fügt TypeWhisper das endgültige Transkript wie gewohnt ein."
+            "value" : "Unterstützte Textfelder werden während des Sprechens aktualisiert. Das beim Aufnahmestart fokussierte Feld bleibt das endgültige Einfügeziel – auch in Apps, die Einfügen benötigen. Wenn es nicht mehr sicher wiederhergestellt werden kann, bleibt das endgültige Transkript unter „Letzte Transkriptionen“ verfügbar."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "対応するテキストフィールドは話している間に更新されます。直接更新できない場合、TypeWhisperは最終的な文字起こしを通常どおり挿入します。"
+            "value" : "対応するテキストフィールドは話している間に更新されます。録音開始時にフォーカスされていたフィールドは、ペーストが必要なアプリでも最終的な挿入先として維持されます。安全に復元できなくなった場合、最終的な文字起こしは「最近の文字起こし」に残ります。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "支持的文本字段会在您说话时更新。无法直接更新时，TypeWhisper 会照常插入最终转录。"
+            "value" : "支持的文本字段会在您说话时更新。录音开始时聚焦的字段会保持为最终插入目标，包括需要粘贴的应用。如果无法再安全恢复该字段，最终转录会保留在“最近的转录”中。"
           }
         }
       }

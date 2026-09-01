@@ -153,41 +153,6 @@ final class ChromiumAccessibilityObservationController {
     }
 }
 
-private final class LiveFieldApplicationActivationObservation: @unchecked Sendable {
-    private let notificationCenter: NotificationCenter
-    private let token: NSObjectProtocol
-
-    init(notificationCenter: NotificationCenter, token: NSObjectProtocol) {
-        self.notificationCenter = notificationCenter
-        self.token = token
-    }
-
-    deinit {
-        notificationCenter.removeObserver(token)
-    }
-}
-
-private func installLiveFieldApplicationActivationObserver(
-    onActivation: @escaping @MainActor (String?) -> Void
-) -> LiveFieldApplicationActivationObservation {
-    let notificationCenter = NSWorkspace.shared.notificationCenter
-    let token = notificationCenter.addObserver(
-        forName: NSWorkspace.didActivateApplicationNotification,
-        object: nil,
-        queue: .main
-    ) { notification in
-        let application = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
-        let bundleIdentifier = application?.bundleIdentifier
-        Task { @MainActor in
-            onActivation(bundleIdentifier)
-        }
-    }
-    return LiveFieldApplicationActivationObservation(
-        notificationCenter: notificationCenter,
-        token: token
-    )
-}
-
 /// Inserts transcribed text into the active application via clipboard + simulated Cmd+V.
 @MainActor
 final class TextInsertionService {
@@ -227,6 +192,11 @@ final class TextInsertionService {
     var liveFieldTargetEligibilityOverride: ((AXUIElement) -> Bool)?
     var liveFieldApplicationEligibilityOverride: ((String) -> Bool)?
     var liveFieldElectronApplicationOverride: ((String) -> Bool)?
+    var liveFieldElementProcessIdentifierOverride: ((AXUIElement) -> pid_t?)?
+    var liveFieldApplicationMetadataOverride: ((pid_t) -> (name: String?, bundleId: String?, url: String?)?)?
+    var liveFieldApplicationValidationOverride: ((pid_t, String) -> Bool)?
+    var activatePinnedTargetApplicationOverride: ((pid_t) -> Bool)?
+    var focusPinnedTargetElementOverride: ((AXUIElement) -> Bool)?
     var chromiumAccessibilityObservationOverride: ((String?) -> TargetAppAccessibilityObservationLease?)?
     var setMessagingTimeoutOverride: ((AXUIElement, Float) -> Void)?
     var setSelectedRangeOverride: ((AXUIElement, NSRange) -> Bool)?
@@ -320,6 +290,11 @@ final class TextInsertionService {
         )
     }
 
+    func beginFocusedApplicationAccessibilityObservation() -> TargetAppAccessibilityObservationLease? {
+        let bundleIdentifier = captureActiveApp().bundleId
+        return beginChromiumAccessibilityObservation(bundleIdentifier: bundleIdentifier)
+    }
+
     func resolveBrowserURL(bundleId: String) async -> String? {
         await browserURLResolver.activeURL(for: bundleId)?.absoluteString
     }
@@ -392,6 +367,7 @@ final class TextInsertionService {
 
     struct LiveFieldTarget: @unchecked Sendable {
         let applicationBundleIdentifier: String
+        let applicationProcessIdentifier: pid_t
         fileprivate var element: AXUIElement
         let originalInsertionContext: InsertionContext
         fileprivate var expectedValue: String
@@ -403,6 +379,20 @@ final class TextInsertionService {
         var hasProvisionalText: Bool {
             !provisionalText.isEmpty
         }
+    }
+
+    struct PinnedInsertionTarget: @unchecked Sendable {
+        let applicationBundleIdentifier: String
+        let applicationProcessIdentifier: pid_t
+        fileprivate let element: AXUIElement
+        fileprivate let window: AXUIElement?
+        let originalInsertionContext: InsertionContext?
+    }
+
+    struct LiveFieldRecordingRequestCapture: @unchecked Sendable {
+        let activeApp: (name: String?, bundleId: String?, url: String?)
+        let pinnedTarget: PinnedInsertionTarget
+        let liveFieldTarget: LiveFieldTarget?
     }
 
     enum LiveFieldMutationResult {
@@ -579,6 +569,80 @@ final class TextInsertionService {
             logger.debug("Live field target rejected: no readable focused text element")
             return nil
         }
+        return makeLiveFieldTarget(
+            from: state,
+            applicationBundleIdentifier: expectedBundleIdentifier
+        )
+    }
+
+    /// Pins the focused AX element without running the slower active-app context
+    /// lookup. The full app and URL context is still captured after audio starts.
+    func captureLiveFieldTargetAtRecordingRequest() -> LiveFieldRecordingRequestCapture? {
+        guard isAccessibilityGranted else {
+            logger.debug("Live field target rejected: Accessibility is not granted")
+            return nil
+        }
+        guard let state = captureFocusedTextState(
+            messagingTimeout: Self.liveFieldMessagingTimeout
+        ) else {
+            logger.debug("Live field target rejected: no readable focused text element")
+            return nil
+        }
+        guard let processIdentifier = liveFieldProcessIdentifier(for: state.element),
+              let activeApp = liveFieldApplicationMetadata(for: processIdentifier),
+              let bundleIdentifier = activeApp.bundleId else {
+            logger.debug("Live field target rejected: focused element has no running application")
+            return nil
+        }
+        guard !isSecureTextElement(state.element) else {
+            logger.debug("Pinned insertion target rejected: focused element is secure")
+            return nil
+        }
+
+        let pinnedTarget = PinnedInsertionTarget(
+            applicationBundleIdentifier: bundleIdentifier,
+            applicationProcessIdentifier: processIdentifier,
+            element: state.element,
+            window: axElementAttribute(kAXWindowAttribute as CFString, from: state.element),
+            originalInsertionContext: pinnedInsertionContext(from: state)
+        )
+        let liveFieldTarget = applicationSupportsVerifiedLiveFieldUpdates(bundleIdentifier)
+            ? makeLiveFieldTarget(
+                from: state,
+                applicationBundleIdentifier: bundleIdentifier,
+                processIdentifier: processIdentifier
+            )
+            : nil
+        logger.info(
+            "Pinned insertion target captured: bundle=\(bundleIdentifier, privacy: .public), liveUpdates=\(liveFieldTarget != nil, privacy: .public)"
+        )
+        return LiveFieldRecordingRequestCapture(
+            activeApp: activeApp,
+            pinnedTarget: pinnedTarget,
+            liveFieldTarget: liveFieldTarget
+        )
+    }
+
+    private func pinnedInsertionContext(from state: FocusedTextState) -> InsertionContext? {
+        guard let value = state.value,
+              let selectedRange = state.selectedRange,
+              selectedRange.length == 0,
+              state.selectedText?.isEmpty != false,
+              Range(selectedRange, in: value) != nil else {
+            return nil
+        }
+        return insertionContext(
+            value: value,
+            selectedText: state.selectedText,
+            selectedRange: selectedRange
+        )
+    }
+
+    private func makeLiveFieldTarget(
+        from state: FocusedTextState,
+        applicationBundleIdentifier: String,
+        processIdentifier knownProcessIdentifier: pid_t? = nil
+    ) -> LiveFieldTarget? {
         guard let value = state.value else {
             logger.debug("Live field target rejected: focused element has no readable value")
             return nil
@@ -600,6 +664,11 @@ final class TextInsertionService {
             logger.debug("Live field target rejected: focused element is not eligible")
             return nil
         }
+        guard let processIdentifier = knownProcessIdentifier
+            ?? liveFieldProcessIdentifier(for: state.element) else {
+            logger.debug("Live field target rejected: focused element has no owning process")
+            return nil
+        }
 
         let insertionContext = insertionContext(
             value: value,
@@ -607,7 +676,8 @@ final class TextInsertionService {
             selectedRange: selectedRange
         )
         return LiveFieldTarget(
-            applicationBundleIdentifier: expectedBundleIdentifier,
+            applicationBundleIdentifier: applicationBundleIdentifier,
+            applicationProcessIdentifier: processIdentifier,
             element: state.element,
             originalInsertionContext: insertionContext,
             expectedValue: value,
@@ -628,6 +698,8 @@ final class TextInsertionService {
         if text == target.provisionalText {
             return .applied(observation(from: currentState))
         }
+
+        let targetWasFocused = liveFieldTargetIsFocused(target)
 
         let expectedValue = (target.expectedValue as NSString).replacingCharacters(
             in: target.ownedRange,
@@ -651,29 +723,44 @@ final class TextInsertionService {
             return .detached
         }
 
+        if targetWasFocused,
+           !liveFieldTarget(
+                target.element,
+                hasValue: expectedValue,
+                caret: expectedCaret
+           ) {
+            rebindLiveFieldTargetIfNeeded(
+                &target,
+                expectedValue: expectedValue,
+                expectedCaret: expectedCaret
+            )
+        }
+
         if var resultingState = captureFocusedTextState(
+            for: target.element,
             messagingTimeout: Self.liveFieldMessagingTimeout
         ),
-           captureActiveApp().bundleId == target.applicationBundleIdentifier,
            resultingState.value == expectedValue,
            resultingState.selectedRange != expectedCaret {
-            _ = setSelectedRange(expectedCaret, on: resultingState.element)
+            _ = setSelectedRange(expectedCaret, on: target.element)
             resultingState = captureFocusedTextState(
+                for: target.element,
                 messagingTimeout: Self.liveFieldMessagingTimeout
             ) ?? resultingState
         }
 
-        guard captureActiveApp().bundleId == target.applicationBundleIdentifier,
+        guard liveFieldApplicationIsValid(for: target),
               let resultingState = captureFocusedTextState(
+                for: target.element,
                 messagingTimeout: Self.liveFieldMessagingTimeout
               ),
               resultingState.value == expectedValue,
               resultingState.selectedRange == expectedCaret,
               resultingState.selectedText?.isEmpty != false,
-              resultingState.element == target.element
-                || isEligibleLiveFieldTarget(resultingState.element) else {
+              resultingState.element == target.element else {
             _ = setSelectedRange(target.expectedCaret, on: target.element)
             if let unchangedState = captureFocusedTextState(
+                for: target.element,
                 messagingTimeout: Self.liveFieldMessagingTimeout
             ),
                unchangedState.element == target.element,
@@ -1240,6 +1327,17 @@ final class TextInsertionService {
         return (value as! AXUIElement)
     }
 
+    private func axElementAttribute(
+        _ attribute: CFString,
+        from element: AXUIElement
+    ) -> AXUIElement? {
+        var value: AnyObject?
+        guard AXUIElementCopyAttributeValue(element, attribute, &value) == .success else {
+            return nil
+        }
+        return axElement(from: value)
+    }
+
     private func selectedTextFromFocusedState(for element: AXUIElement) -> String? {
         if let selectedRangesText = selectedTextFromSelectedTextRangesAttribute(for: element) {
             return selectedRangesText
@@ -1407,8 +1505,11 @@ final class TextInsertionService {
     }
 
     private func verifiedLiveFieldState(for target: inout LiveFieldTarget) -> FocusedTextState? {
-        guard captureActiveApp().bundleId == target.applicationBundleIdentifier,
-              let state = captureFocusedTextState(
+        guard liveFieldApplicationIsValid(for: target) else {
+            return nil
+        }
+        guard let state = captureFocusedTextState(
+                for: target.element,
                 messagingTimeout: Self.liveFieldMessagingTimeout
               ),
               state.value == target.expectedValue,
@@ -1416,22 +1517,220 @@ final class TextInsertionService {
               state.selectedText?.isEmpty != false else {
             return nil
         }
-
-        if state.element != target.element {
-            guard target.hasProvisionalText,
-                  isEligibleLiveFieldTarget(state.element),
-                  (target.expectedValue as NSString).substring(with: target.ownedRange)
-                    == target.provisionalText else {
-                return nil
-            }
-            target.element = state.element
-        }
         return FocusedTextState(
-            element: state.element,
+            element: target.element,
             value: target.expectedValue,
             selectedText: nil,
             selectedRange: target.expectedCaret
         )
+    }
+
+    private func liveFieldTarget(
+        _ element: AXUIElement,
+        hasValue expectedValue: String,
+        caret expectedCaret: NSRange
+    ) -> Bool {
+        guard let state = captureFocusedTextState(
+            for: element,
+            messagingTimeout: Self.liveFieldMessagingTimeout
+        ) else {
+            return false
+        }
+        return state.value == expectedValue
+            && state.selectedRange == expectedCaret
+            && state.selectedText?.isEmpty != false
+    }
+
+    private func rebindLiveFieldTargetIfNeeded(
+        _ target: inout LiveFieldTarget,
+        expectedValue: String,
+        expectedCaret: NSRange
+    ) {
+        guard captureActiveApp().bundleId == target.applicationBundleIdentifier,
+              let focusedElement = getFocusedTextElement(
+                messagingTimeout: Self.liveFieldMessagingTimeout
+              ),
+              focusedElement != target.element,
+              liveFieldProcessIdentifier(for: focusedElement)
+                == target.applicationProcessIdentifier,
+              isEligibleLiveFieldTarget(focusedElement),
+              let focusedState = captureFocusedTextState(
+                for: focusedElement,
+                messagingTimeout: Self.liveFieldMessagingTimeout
+              ),
+              focusedState.value == expectedValue,
+              focusedState.selectedRange == expectedCaret,
+              focusedState.selectedText?.isEmpty != false else {
+            return
+        }
+        target.element = focusedElement
+    }
+
+    func liveFieldTargetIsFocused(_ target: LiveFieldTarget) -> Bool {
+        liveFieldTargetIsFocused(
+            target,
+            knownActiveBundleIdentifier: captureActiveApp().bundleId
+        )
+    }
+
+    func liveFieldTargetIsFocused(
+        _ target: LiveFieldTarget,
+        knownActiveBundleIdentifier: String?
+    ) -> Bool {
+        guard liveFieldApplicationIsValid(for: target),
+              knownActiveBundleIdentifier == target.applicationBundleIdentifier,
+              let focusedElement = getFocusedTextElement(
+                messagingTimeout: Self.liveFieldMessagingTimeout
+              ),
+              focusedElement == target.element else {
+            return false
+        }
+        return true
+    }
+
+    func pinnedInsertionTargetIsFocused(_ target: PinnedInsertionTarget) -> Bool {
+        pinnedInsertionTargetIsFocused(
+            target,
+            knownActiveBundleIdentifier: captureActiveApp().bundleId
+        )
+    }
+
+    func pinnedInsertionTargetIsFocused(
+        _ target: PinnedInsertionTarget,
+        knownActiveBundleIdentifier: String?
+    ) -> Bool {
+        guard liveFieldApplicationIsValid(
+            processIdentifier: target.applicationProcessIdentifier,
+            bundleIdentifier: target.applicationBundleIdentifier
+        ),
+        knownActiveBundleIdentifier == target.applicationBundleIdentifier,
+        let focusedElement = getFocusedTextElement(
+            messagingTimeout: Self.liveFieldMessagingTimeout
+        ) else {
+            return false
+        }
+        return focusedElement == target.element
+    }
+
+    func focusPinnedInsertionTarget(_ target: PinnedInsertionTarget) async -> Bool {
+        if pinnedInsertionTargetIsFocused(target) {
+            return true
+        }
+        guard liveFieldApplicationIsValid(
+            processIdentifier: target.applicationProcessIdentifier,
+            bundleIdentifier: target.applicationBundleIdentifier
+        ),
+        activatePinnedTargetApplication(target.applicationProcessIdentifier) else {
+            logger.info("Pinned insertion target activation failed")
+            return false
+        }
+
+        for attempt in 0..<5 {
+            if let window = target.window {
+                _ = AXUIElementPerformAction(window, kAXRaiseAction as CFString)
+                _ = AXUIElementSetAttributeValue(
+                    window,
+                    kAXMainAttribute as CFString,
+                    kCFBooleanTrue
+                )
+            }
+            _ = focusPinnedTargetElement(target.element)
+
+            if pinnedInsertionTargetIsFocused(target) {
+                logger.info("Pinned insertion target restored on attempt \(attempt + 1, privacy: .public)")
+                return true
+            }
+            try? await Task.sleep(for: .milliseconds(40))
+        }
+
+        logger.info("Pinned insertion target could not be restored safely")
+        return false
+    }
+
+    private func activatePinnedTargetApplication(_ processIdentifier: pid_t) -> Bool {
+        if let activatePinnedTargetApplicationOverride {
+            return activatePinnedTargetApplicationOverride(processIdentifier)
+        }
+        guard let application = NSRunningApplication(processIdentifier: processIdentifier),
+              !application.isTerminated else {
+            return false
+        }
+        if let sourceApplication = NSWorkspace.shared.frontmostApplication,
+           sourceApplication.processIdentifier != processIdentifier,
+           application.activate(from: sourceApplication) {
+            return true
+        }
+        return application.activate()
+    }
+
+    private func focusPinnedTargetElement(_ element: AXUIElement) -> Bool {
+        if let focusPinnedTargetElementOverride {
+            return focusPinnedTargetElementOverride(element)
+        }
+        return AXUIElementSetAttributeValue(
+            element,
+            kAXFocusedAttribute as CFString,
+            kCFBooleanTrue
+        ) == .success
+    }
+
+    private func liveFieldProcessIdentifier(for element: AXUIElement) -> pid_t? {
+        if let liveFieldElementProcessIdentifierOverride {
+            return liveFieldElementProcessIdentifierOverride(element)
+        }
+
+        var processIdentifier: pid_t = 0
+        guard AXUIElementGetPid(element, &processIdentifier) == .success,
+              processIdentifier > 0 else {
+            return nil
+        }
+        return processIdentifier
+    }
+
+    private func liveFieldApplicationMetadata(
+        for processIdentifier: pid_t
+    ) -> (name: String?, bundleId: String?, url: String?)? {
+        if let liveFieldApplicationMetadataOverride {
+            return liveFieldApplicationMetadataOverride(processIdentifier)
+        }
+
+        guard NSWorkspace.shared.frontmostApplication?.processIdentifier == processIdentifier,
+              let application = NSRunningApplication(processIdentifier: processIdentifier),
+              !application.isTerminated else {
+            return nil
+        }
+        return (
+            name: application.localizedName,
+            bundleId: application.bundleIdentifier,
+            url: nil
+        )
+    }
+
+    private func liveFieldApplicationIsValid(for target: LiveFieldTarget) -> Bool {
+        liveFieldApplicationIsValid(
+            processIdentifier: target.applicationProcessIdentifier,
+            bundleIdentifier: target.applicationBundleIdentifier
+        )
+    }
+
+    private func liveFieldApplicationIsValid(
+        processIdentifier: pid_t,
+        bundleIdentifier: String
+    ) -> Bool {
+        if let liveFieldApplicationValidationOverride {
+            return liveFieldApplicationValidationOverride(
+                processIdentifier,
+                bundleIdentifier
+            )
+        }
+
+        guard let application = NSRunningApplication(
+            processIdentifier: processIdentifier
+        ),
+        !application.isTerminated else {
+            return false
+        }
+        return application.bundleIdentifier == bundleIdentifier
     }
 
     private func applyMessagingTimeout(_ timeout: Float?, to element: AXUIElement) {
@@ -1511,6 +1810,18 @@ final class TextInsertionService {
             .contains(role)
     }
 
+    private func isSecureTextElement(_ element: AXUIElement) -> Bool {
+        var subroleValue: AnyObject?
+        guard AXUIElementCopyAttributeValue(
+            element,
+            kAXSubroleAttribute as CFString,
+            &subroleValue
+        ) == .success else {
+            return false
+        }
+        return (subroleValue as? String) == "AXSecureTextField"
+    }
+
     private func setSelectedRange(_ range: NSRange, on element: AXUIElement) -> Bool {
         if let setSelectedRangeOverride {
             return setSelectedRangeOverride(element, range)
@@ -1566,7 +1877,7 @@ final class LiveFieldTranscriptSession {
 
     enum CompletionResult {
         case applied(TextInsertionService.FocusedTextObservation)
-        case detached(hadAttemptedMutation: Bool)
+        case detached(hadAttemptedMutation: Bool, allowsFocusedFallback: Bool)
     }
 
     let sessionID: UUID
@@ -1577,7 +1888,6 @@ final class LiveFieldTranscriptSession {
     private let updateInterval: Duration
     private var pendingText: String?
     private var updateTask: Task<Void, Never>?
-    private var applicationActivationObservation: LiveFieldApplicationActivationObservation?
 
     init(
         sessionID: UUID,
@@ -1589,9 +1899,6 @@ final class LiveFieldTranscriptSession {
         self.target = target
         self.textInsertionService = textInsertionService
         self.updateInterval = updateInterval
-        self.applicationActivationObservation = installLiveFieldApplicationActivationObserver { [weak self] bundleIdentifier in
-            self?.handleApplicationActivation(bundleIdentifier: bundleIdentifier)
-        }
     }
 
     deinit {
@@ -1610,6 +1917,10 @@ final class LiveFieldTranscriptSession {
         target.hasProvisionalText
     }
 
+    var targetIsCurrentlyFocused: Bool {
+        textInsertionService.liveFieldTargetIsFocused(target)
+    }
+
     func receivePartial(_ text: String) {
         guard state == .active,
               !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
@@ -1623,7 +1934,7 @@ final class LiveFieldTranscriptSession {
     func finalize(with text: String) -> CompletionResult {
         cancelPendingUpdate()
         guard state == .active else {
-            return .detached(hadAttemptedMutation: target.hasAttemptedMutation)
+            return detachedCompletionResult()
         }
 
         switch textInsertionService.replaceLiveFieldText(text, in: &target) {
@@ -1632,14 +1943,14 @@ final class LiveFieldTranscriptSession {
             return .applied(observation)
         case .detached:
             state = .detached
-            return .detached(hadAttemptedMutation: target.hasAttemptedMutation)
+            return detachedCompletionResult()
         }
     }
 
     func cancel() -> CompletionResult {
         cancelPendingUpdate()
         guard state == .active else {
-            return .detached(hadAttemptedMutation: target.hasAttemptedMutation)
+            return detachedCompletionResult()
         }
 
         switch textInsertionService.replaceLiveFieldText("", in: &target) {
@@ -1648,7 +1959,7 @@ final class LiveFieldTranscriptSession {
             return .applied(observation)
         case .detached:
             state = .detached
-            return .detached(hadAttemptedMutation: target.hasAttemptedMutation)
+            return detachedCompletionResult()
         }
     }
 
@@ -1672,6 +1983,10 @@ final class LiveFieldTranscriptSession {
         updateTask = nil
         guard state == .active, let pendingText else { return }
         self.pendingText = nil
+        guard targetIsCurrentlyFocused else {
+            logger.debug("Pausing live-field partial updates while the pinned target is not focused")
+            return
+        }
 
         switch textInsertionService.replaceLiveFieldText(pendingText, in: &target) {
         case .applied:
@@ -1690,12 +2005,10 @@ final class LiveFieldTranscriptSession {
         pendingText = nil
     }
 
-    private func handleApplicationActivation(bundleIdentifier: String?) {
-        guard state == .active,
-              bundleIdentifier != target.applicationBundleIdentifier else {
-            return
-        }
-        cancelPendingUpdate()
-        state = .detached
+    private func detachedCompletionResult() -> CompletionResult {
+        .detached(
+            hadAttemptedMutation: target.hasAttemptedMutation,
+            allowsFocusedFallback: textInsertionService.liveFieldTargetIsFocused(target)
+        )
     }
 }
