@@ -1,0 +1,19 @@
+{
+    "id": "com.typewhisper.orcarouter",
+    "name": "OrcaRouter",
+    "version": "1.0.0",
+    "minHostVersion": "1.6.0",
+    "sdkCompatibilityVersion": "v1",
+    "minOSVersion": "14.0",
+    "author": "TypeWhisper",
+    "description": "Access 200+ LLMs from OpenAI, Anthropic, Google and more through the OrcaRouter AI gateway, with adaptive routing, automatic failover and zero-markup inference. Requires API key.",
+    "descriptions": {
+        "de": "Zugriff auf über 200 LLMs von OpenAI, Anthropic, Google und mehr über das OrcaRouter-AI-Gateway mit adaptivem Routing, automatischem Failover und Inferenz ohne Aufschlag. Erfordert API-Key.",
+        "ja": "OrcaRouter AIゲートウェイを通じてOpenAI、Anthropic、Googleなどの200以上のLLMにアクセスできます。適応型ルーティング、自動フェイルオーバー、ゼロマークアップ推論に対応し、APIキーが必要です。"
+    },
+    "category": "llm",
+    "iconSystemName": "arrow.triangle.branch",
+    "principalClass": "OrcaRouterPlugin",
+    "requiresAPIKey": true,
+    "detailsURL": "https://www.orcarouter.ai"
+}
