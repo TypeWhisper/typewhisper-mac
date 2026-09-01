@@ -514,6 +514,36 @@ class PromptProcessingService: ObservableObject {
                     providerId: providerId
                 )
                 guard !result.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                    // An explicit provider (no fallback list) has no second
+                    // opinion available, so verify an empty result by re-running
+                    // the same provider once: empty twice in a row is the
+                    // prompt's intended output (e.g. an artifact-only transcript
+                    // reduced to nothing), a lone empty is treated as a glitch.
+                    if !usesFallbackList {
+                        logger.info("Explicit provider returned an empty result; retrying once to confirm intent")
+                        let retryResult = try await processSingleProvider(
+                            providerId: providerId,
+                            requestedModelId: candidate.modelId,
+                            requestedEffortId: candidate.effortId,
+                            prompt: effectivePrompt,
+                            text: attemptText,
+                            temperatureDirective: temperatureDirective,
+                            onLocalProviderUsed: { provider in
+                                let identity = ObjectIdentifier(provider)
+                                guard localProviderIdentities.insert(identity).inserted else { return }
+                                localProvidersUsed.append(provider)
+                                modelManagerService?.beginAutoUnloadProtectedUse(of: provider)
+                            }
+                        )
+                        try Task.checkCancellation()
+                        let retryText = outputText(retryResult, for: processingKind, providerId: providerId)
+                        if retryText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            logger.info("Explicit provider returned empty twice; treating empty output as intentional")
+                            return ""
+                        }
+                        logger.info("Prompt processing complete after empty-retry in \(ContinuousClock.now - totalStart), result length: \(retryText.count)")
+                        return retryText
+                    }
                     throw LLMFallbackAttemptError.emptyResult
                 }
 
