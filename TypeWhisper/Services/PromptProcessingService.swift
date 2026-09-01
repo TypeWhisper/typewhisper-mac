@@ -480,6 +480,7 @@ class PromptProcessingService: ObservableObject {
         }
 
         var failures: [LLMFallbackAttemptFailure] = []
+        var emptyResultCount = 0
         for (index, candidate) in candidates.enumerated() {
             try Task.checkCancellation()
             let providerId = normalizeProviderId(candidate.providerId)
@@ -529,6 +530,9 @@ class PromptProcessingService: ObservableObject {
                     throw error
                 }
 
+                if case LLMFallbackAttemptError.emptyResult = error {
+                    emptyResultCount += 1
+                }
                 let failure = LLMFallbackAttemptFailure(
                     providerId: providerId,
                     modelId: candidate.modelId,
@@ -538,6 +542,18 @@ class PromptProcessingService: ObservableObject {
                 failures.append(failure)
                 logger.warning("LLM fallback \(index + 1, privacy: .public) failed for \(providerId, privacy: .public): \(failure.reason, privacy: .private(mask: .hash))")
             }
+        }
+
+        // If several providers each ran successfully and independently returned an
+        // empty result, that is consensus, not malfunction: the processing prompt
+        // intentionally reduced the input to nothing (e.g. a silence-hallucination
+        // artifact stripped by the user's instructions). Surface empty as the
+        // intended output instead of failing the pipeline onto the raw text.
+        // A single empty attempt keeps the protective failure semantics, since one
+        // provider glitching to empty would otherwise silently discard content.
+        if emptyResultCount >= 2, emptyResultCount == failures.count {
+            logger.info("All \(emptyResultCount, privacy: .public) LLM attempts returned an empty result; treating empty output as intentional")
+            return ""
         }
 
         throw LLMFallbackExhaustedError(failures: failures)
