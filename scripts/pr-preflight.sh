@@ -38,6 +38,7 @@ done < <(git ls-files 'scripts/*.sh')
 
 log "running Python script tests"
 python3 scripts/test_assemble_community_plugin_registry.py
+python3 scripts/test_check_plugin_sdk_symbol_compatibility.py
 python3 scripts/test_plugin_registry_metadata.py
 python3 scripts/test_verify_appcast_publication.py
 
