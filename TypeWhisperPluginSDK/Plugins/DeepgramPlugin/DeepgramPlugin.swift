@@ -1148,37 +1148,59 @@ private struct DeepgramSettingsView: View {
             Divider()
 
             // Advanced Section
-            DisclosureGroup(String(localized: "Advanced", bundle: bundle), isExpanded: $showAdvanced) {
-                VStack(alignment: .leading, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Custom Base URL", bundle: bundle)
-                            .font(.subheadline)
-
-                        TextField("https://api.deepgram.com", text: $customBaseURL)
-                            .textFieldStyle(.roundedBorder)
-                            .font(.system(.body, design: .monospaced))
-                            .onChange(of: customBaseURL) {
-                                plugin.setCustomBaseURL(customBaseURL)
-                            }
+            VStack(alignment: .leading, spacing: 0) {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.16)) {
+                        showAdvanced.toggle()
                     }
+                } label: {
+                    HStack(spacing: 10) {
+                        Text("Advanced", bundle: bundle)
 
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Custom Auth Header", bundle: bundle)
-                            .font(.subheadline)
+                        Spacer()
 
-                        TextField("Authorization", text: $customAuthHeader)
-                            .textFieldStyle(.roundedBorder)
-                            .font(.system(.body, design: .monospaced))
-                            .onChange(of: customAuthHeader) {
-                                plugin.setCustomAuthHeader(customAuthHeader)
-                            }
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                            .rotationEffect(.degrees(showAdvanced ? 90 : 0))
                     }
-
-                    Text("For Cloudflare AI Gateway or custom proxies", bundle: bundle)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    .padding(.vertical, 4)
+                    .contentShape(Rectangle())
                 }
-                .padding(.top, 8)
+                .buttonStyle(.plain)
+
+                if showAdvanced {
+                    VStack(alignment: .leading, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Custom Base URL", bundle: bundle)
+                                .font(.subheadline)
+
+                            TextField("https://api.deepgram.com", text: $customBaseURL)
+                                .textFieldStyle(.roundedBorder)
+                                .font(.system(.body, design: .monospaced))
+                                .onChange(of: customBaseURL) {
+                                    plugin.setCustomBaseURL(customBaseURL)
+                                }
+                        }
+
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Custom Auth Header", bundle: bundle)
+                                .font(.subheadline)
+
+                            TextField("Authorization", text: $customAuthHeader)
+                                .textFieldStyle(.roundedBorder)
+                                .font(.system(.body, design: .monospaced))
+                                .onChange(of: customAuthHeader) {
+                                    plugin.setCustomAuthHeader(customAuthHeader)
+                                }
+                        }
+
+                        Text("For Cloudflare AI Gateway or custom proxies", bundle: bundle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.top, 8)
+                }
             }
 
             Text("API keys are stored securely in the Keychain", bundle: bundle)
