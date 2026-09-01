@@ -1274,6 +1274,14 @@
       "detailsURL": "https://www.typewhisper.com/addons/deepgram/",
       "releases": [
         {
+          "version": "1.0.15",
+          "minHostVersion": "1.6.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 275165,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-deepgram-v1.0.15/DeepgramPlugin.zip",
+          "minOSVersion": "14.0"
+        },
+        {
           "version": "1.0.14",
           "minHostVersion": "1.6.0",
           "sdkCompatibilityVersion": "v1",
