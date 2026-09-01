@@ -228,7 +228,7 @@ struct AdvancedSettingsView: View {
                 Toggle(isOn: $dictation.liveFieldTranscriptEnabled) {
                     SettingsInfoLabel(
                         title: String(localized: "Show live transcript in the active text field"),
-                        info: String(localized: "Supported text fields are updated while you speak. TypeWhisper inserts the final transcript normally when direct updates are unavailable.")
+                        info: String(localized: "Supported text fields are updated while you speak. The field focused when recording starts remains the final insertion target, including apps that require paste. If it can no longer be restored safely, the final transcript remains in Recent Transcriptions.")
                     )
                 }
 

@@ -366,6 +366,13 @@ final class DictationViewModel: ObservableObject {
     /// text is display-only and must never be promoted to the final transcription.
     private var lastPreviewFollowsDictationEngine = true
     private var liveFieldTranscriptSession: LiveFieldTranscriptSession?
+    private struct PendingLiveFieldCapture {
+        let activeApp: (name: String?, bundleId: String?, url: String?)
+        let pinnedTarget: TextInsertionService.PinnedInsertionTarget
+        let liveFieldTarget: TextInsertionService.LiveFieldTarget?
+    }
+    private var pendingLiveFieldCapture: PendingLiveFieldCapture?
+    private var pinnedInsertionTarget: TextInsertionService.PinnedInsertionTarget?
     private var isStopInFlight = false
     private var activeDictationSessionID: UUID?
     private var pendingHotkeyDictationStart: PendingHotkeyDictationStart?
@@ -962,6 +969,8 @@ final class DictationViewModel: ObservableObject {
         urlResolutionTask?.cancel()
         urlResolutionTask = nil
         lastStreamingParams = nil
+        pendingLiveFieldCapture = nil
+        pinnedInsertionTarget = nil
     }
 
     private func abortActiveRecordingImmediately(sessionMessage: String, preserveRecoveryAudio: Bool = false) {
@@ -1233,6 +1242,8 @@ final class DictationViewModel: ObservableObject {
         clearCancelWarning()
         pendingPushToTalkDiscardMessage = nil
         cancelLiveFieldTranscriptSession()
+        pendingLiveFieldCapture = nil
+        pinnedInsertionTarget = nil
         metadataCaptureTask?.cancel()
         metadataCaptureTask = nil
         urlResolutionTask?.cancel()
@@ -1262,6 +1273,8 @@ final class DictationViewModel: ObservableObject {
             hotkeyService.cancelDictation()
             return
         }
+
+        captureLiveFieldTargetAtRecordingRequestIfEligible()
 
         let resolvedInputSelection = audioDeviceService.resolvedRecordingInputSelection()
         let initialForcedWorkflow = forcedWorkflow(for: forcedWorkflowId)
@@ -1410,9 +1423,23 @@ final class DictationViewModel: ObservableObject {
         startRecordingTimer()
 
         let contextStartTimestamp = CFAbsoluteTimeGetCurrent()
-        // Match rule after the audio engine is live so app/context lookup does
-        // not delay capture of the user's first spoken words.
-        let activeApp = textInsertionService.captureActiveApp()
+        // Match the rule after the audio engine is live. When live-field insertion
+        // is enabled, reuse the target captured at the recording request so a slow
+        // microphone route cannot move the transcript to a newly focused field.
+        let liveFieldCapture = pendingLiveFieldCapture
+        pendingLiveFieldCapture = nil
+        let currentActiveApp = textInsertionService.captureActiveApp()
+        let activeApp: (name: String?, bundleId: String?, url: String?)
+        if let liveFieldCapture,
+           textInsertionService.pinnedInsertionTargetIsFocused(
+            liveFieldCapture.pinnedTarget,
+            knownActiveBundleIdentifier: currentActiveApp.bundleId
+           ) {
+            activeApp = currentActiveApp
+        } else {
+            activeApp = liveFieldCapture?.activeApp ?? currentActiveApp
+        }
+        pinnedInsertionTarget = liveFieldCapture?.pinnedTarget
         capturedActiveApp = activeApp
         capturedSelectedText = nil
         activeAppIcon = nil
@@ -1436,7 +1463,11 @@ final class DictationViewModel: ObservableObject {
         updateRecordingStartCuePayload(activeApp: activeApp)
         let contextMs = (CFAbsoluteTimeGetCurrent() - contextStartTimestamp) * 1000
 
-        beginLiveFieldTranscriptSessionIfEligible(sessionID: sessionID, activeApp: activeApp)
+        beginLiveFieldTranscriptSessionIfEligible(
+            sessionID: sessionID,
+            activeApp: activeApp,
+            preCapturedTarget: liveFieldCapture?.liveFieldTarget
+        )
         startLiveStreaming(
             allowLiveTranscription: indicatorTranscriptPreviewEnabled
                 || liveFieldTranscriptEnabled
@@ -1460,6 +1491,7 @@ final class DictationViewModel: ObservableObject {
     ) {
         clearRecordingStartCueState()
         clearDeferredRecordingContext()
+        endTargetAppAccessibilityObservation()
         restoreRecordingSideEffects()
         let errorMessage: String
         if let recordingError = error as? AudioRecordingService.AudioRecordingError,
@@ -1971,10 +2003,12 @@ final class DictationViewModel: ObservableObject {
                         actionPlugin, pluginId: actionPluginId, text: text,
                         activeApp: activeApp, language: language, originalText: result.text
                     )
+                    pinnedInsertionTarget = nil
                 } else {
                     let contextualInsertionEnabled = DictationInsertionTextFormatter.contextualInsertionEnabled()
                     let insertionContext: TextInsertionService.InsertionContext? = if contextualInsertionEnabled {
                         liveFieldTranscriptSession?.originalInsertionContext
+                            ?? pinnedInsertionTarget?.originalInsertionContext
                             ?? textInsertionService.captureInsertionContext()
                     } else {
                         nil
@@ -1992,6 +2026,19 @@ final class DictationViewModel: ObservableObject {
                     var shouldUseNormalInsertion = true
 
                     if resolvedOutputFormat == nil,
+                       liveFieldTranscriptSession != nil,
+                       let pinnedInsertionTarget,
+                       !textInsertionService.pinnedInsertionTargetIsFocused(pinnedInsertionTarget) {
+                        shouldUseNormalInsertion = await textInsertionService
+                            .focusPinnedInsertionTarget(pinnedInsertionTarget)
+                        if !shouldUseNormalInsertion {
+                            showLiveFieldRecoveryFeedback()
+                            cancelLiveFieldTranscriptSession()
+                        }
+                    }
+
+                    if shouldUseNormalInsertion,
+                       resolvedOutputFormat == nil,
                        let liveFieldTranscriptSession {
                         switch liveFieldTranscriptSession.finalize(with: insertionText) {
                         case .applied(let finalObservation):
@@ -2002,18 +2049,37 @@ final class DictationViewModel: ObservableObject {
                                 : nil
                             insertedTextForCorrectionTracking = insertionText
                             if shouldAutoEnterAfterInsertion {
-                                try? await Task.sleep(for: .milliseconds(50))
-                                textInsertionService.simulateReturn()
+                                if liveFieldTranscriptSession.targetIsCurrentlyFocused {
+                                    try? await Task.sleep(for: .milliseconds(50))
+                                    if liveFieldTranscriptSession.targetIsCurrentlyFocused {
+                                        textInsertionService.simulateReturn()
+                                    }
+                                } else {
+                                    logger.info(
+                                        "Skipping Auto Enter because the pinned live-field target is no longer focused"
+                                    )
+                                }
                             }
-                        case .detached(let hadAttemptedMutation):
+                        case .detached(let hadAttemptedMutation, let allowsFocusedFallback):
                             shouldUseNormalInsertion = !hadAttemptedMutation
-                            if hadAttemptedMutation {
+                                && (allowsFocusedFallback || pinnedInsertionTarget != nil)
+                            if !shouldUseNormalInsertion {
                                 showLiveFieldRecoveryFeedback()
                             }
                         }
                         self.liveFieldTranscriptSession = nil
                     } else if liveFieldTranscriptSession != nil {
                         shouldUseNormalInsertion = prepareLiveFieldSessionForNormalInsertion()
+                    }
+
+                    if shouldUseNormalInsertion,
+                       let pinnedInsertionTarget,
+                       !textInsertionService.pinnedInsertionTargetIsFocused(pinnedInsertionTarget) {
+                        shouldUseNormalInsertion = await textInsertionService
+                            .focusPinnedInsertionTarget(pinnedInsertionTarget)
+                        if !shouldUseNormalInsertion {
+                            showLiveFieldRecoveryFeedback()
+                        }
                     }
 
                     if shouldUseNormalInsertion {
@@ -2037,6 +2103,7 @@ final class DictationViewModel: ObservableObject {
                         insertedTextForCorrectionTracking = insertionText
                         didInsertText = true
                     }
+                    self.pinnedInsertionTarget = nil
 
                     if didInsertText {
                         logger.info("Stop timing: text inserted elapsedMs=\(stopElapsedMs(), privacy: .public)")
@@ -2345,6 +2412,8 @@ final class DictationViewModel: ObservableObject {
         metadataCaptureTask = nil
         lastStreamingParams = nil
         liveFieldTranscriptSession = nil
+        pendingLiveFieldCapture = nil
+        pinnedInsertionTarget = nil
         isStopInFlight = false
         activeDictationSessionID = nil
         pendingPushToTalkDiscardMessage = nil
@@ -2484,19 +2553,39 @@ final class DictationViewModel: ObservableObject {
         )
     }
 
+    private func captureLiveFieldTargetAtRecordingRequestIfEligible() {
+        pendingLiveFieldCapture = nil
+        guard liveFieldTranscriptEnabled else { return }
+
+        targetAppAccessibilityObservationLease = textInsertionService
+            .beginFocusedApplicationAccessibilityObservation()
+        guard let capture = textInsertionService.captureLiveFieldTargetAtRecordingRequest() else {
+            endTargetAppAccessibilityObservation()
+            return
+        }
+        pendingLiveFieldCapture = PendingLiveFieldCapture(
+            activeApp: capture.activeApp,
+            pinnedTarget: capture.pinnedTarget,
+            liveFieldTarget: capture.liveFieldTarget
+        )
+    }
+
     private func beginLiveFieldTranscriptSessionIfEligible(
         sessionID: UUID,
-        activeApp: (name: String?, bundleId: String?, url: String?)
+        activeApp: (name: String?, bundleId: String?, url: String?),
+        preCapturedTarget: TextInsertionService.LiveFieldTarget? = nil
     ) {
         liveFieldTranscriptSession = nil
         guard liveFieldTranscriptEnabled,
               effectiveActionPluginId == nil,
-              resolvedEffectiveOutputFormat(for: activeApp) == nil,
-              let target = textInsertionService.captureLiveFieldTarget(
-                expectedBundleIdentifier: activeApp.bundleId
-              ) else {
+              resolvedEffectiveOutputFormat(for: activeApp) == nil else {
             return
         }
+
+        let target = preCapturedTarget ?? textInsertionService.captureLiveFieldTarget(
+            expectedBundleIdentifier: activeApp.bundleId
+        )
+        guard let target else { return }
 
         liveFieldTranscriptSession = LiveFieldTranscriptSession(
             sessionID: sessionID,
@@ -2518,8 +2607,9 @@ final class DictationViewModel: ObservableObject {
         switch liveFieldTranscriptSession.cancel() {
         case .applied:
             return true
-        case .detached(let hadAttemptedMutation):
-            if hadAttemptedMutation {
+        case .detached(let hadAttemptedMutation, let allowsFocusedFallback):
+            if hadAttemptedMutation
+                || (!allowsFocusedFallback && pinnedInsertionTarget == nil) {
                 showLiveFieldRecoveryFeedback()
                 return false
             }
@@ -2959,9 +3049,12 @@ final class DictationViewModel: ObservableObject {
     private func beginTargetAppAccessibilityObservationIfNeeded(
         bundleIdentifier: String?
     ) {
-        endTargetAppAccessibilityObservation()
+        if targetAppAccessibilityObservationLease != nil {
+            return
+        }
         guard shouldTrackTargetAppCorrectionLearning
-                || improveTypeWhisperCaptureEnabled else {
+                || improveTypeWhisperCaptureEnabled
+                || liveFieldTranscriptEnabled else {
             return
         }
         targetAppAccessibilityObservationLease = textInsertionService
