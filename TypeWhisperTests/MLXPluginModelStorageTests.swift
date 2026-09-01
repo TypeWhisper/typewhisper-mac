@@ -1,10 +1,48 @@
 import Foundation
+import MLXLLM
 import XCTest
 @testable import TypeWhisper
 import TypeWhisperPluginSDK
 
 final class MLXPluginModelStorageTests: XCTestCase {
     private let commit = String(repeating: "b", count: 40)
+
+    func testGemma4LLMRuntimeAcceptsCurrentAndLegacyConfigurationTypes() async throws {
+        for modelType in ["gemma4", "gemma4_text", "gemma4_unified"] {
+            let isRegistered = await LLMTypeRegistry.shared.contains(modelType)
+            XCTAssertTrue(isRegistered, "Missing Gemma 4 LLM model type: \(modelType)")
+        }
+
+        let configurations = [
+            """
+            {
+              "model_type": "gemma4",
+              "vocab_size": 262144,
+              "text_config": { "model_type": "gemma4_text" },
+              "audio_config": { "model_type": "gemma4_audio" },
+              "vision_config": { "model_type": "gemma4_vision" }
+            }
+            """,
+            """
+            {
+              "model_type": "gemma4_unified",
+              "vocab_size": 262144,
+              "text_config": { "model_type": "gemma4_unified_text" },
+              "audio_config": { "model_type": "gemma4_unified_audio" },
+              "vision_config": { "model_type": "gemma4_unified_vision" }
+            }
+            """,
+        ]
+
+        for configuration in configurations {
+            XCTAssertNoThrow(
+                try JSONDecoder().decode(
+                    Gemma4Configuration.self,
+                    from: Data(configuration.utf8)
+                )
+            )
+        }
+    }
 
     func testModelCatalogsRecognizeLegacyAndCanonicalLayouts() throws {
         try assertCatalogRecognizesBothLayouts(
