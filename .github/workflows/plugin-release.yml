@@ -263,8 +263,14 @@ jobs:
 
           if ! HOST_RELEASE_JSON=$(gh release view "$HOST_TAG" \
             --repo "$GITHUB_REPOSITORY" \
-            --json tagName,assets); then
+            --json tagName,isDraft,isPrerelease,assets); then
             echo "::error::No published TypeWhisper release found for minHostVersion ${MIN_HOST_VERSION} (${HOST_TAG})"
+            exit 1
+          fi
+
+          if ! jq -e '.isDraft == false and .isPrerelease == false' \
+            <<<"$HOST_RELEASE_JSON" >/dev/null; then
+            echo "::error::Host release ${HOST_TAG} must be published and stable (not a draft or prerelease)"
             exit 1
           fi
 
