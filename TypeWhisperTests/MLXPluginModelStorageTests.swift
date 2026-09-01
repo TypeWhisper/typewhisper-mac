@@ -7,6 +7,40 @@ import TypeWhisperPluginSDK
 final class MLXPluginModelStorageTests: XCTestCase {
     private let commit = String(repeating: "b", count: 40)
 
+    func testGemma4SourceAvoidsSDKSymbolsUnavailableInHost16() throws {
+        let pluginDirectory = TestSupport.repoRoot.appendingPathComponent(
+            "TypeWhisperPluginSDK/Plugins/Gemma4Plugin"
+        )
+        let sourceURLs = try FileManager.default.contentsOfDirectory(
+            at: pluginDirectory,
+            includingPropertiesForKeys: nil
+        ).filter { $0.pathExtension == "swift" }
+
+        for sourceURL in sourceURLs {
+            let source = try String(contentsOf: sourceURL, encoding: .utf8)
+            XCTAssertFalse(
+                source.contains("PluginHTTPClient.ensureNetworkAccessIsAllowed"),
+                "\(sourceURL.lastPathComponent) must remain loadable by the declared TypeWhisper 1.6.0 host"
+            )
+        }
+    }
+
+    func testGemma4NetworkPolicyAllowsNormalRuntime() {
+        XCTAssertNoThrow(
+            try Gemma4NetworkAccessPolicy.ensureAccessIsAllowed(arguments: ["TypeWhisper"])
+        )
+    }
+
+    func testGemma4NetworkPolicyBlocksScreenshotAutomation() {
+        XCTAssertThrowsError(
+            try Gemma4NetworkAccessPolicy.ensureAccessIsAllowed(
+                arguments: ["TypeWhisper", "--store-screenshots"]
+            )
+        ) { error in
+            XCTAssertEqual((error as? URLError)?.code, .notConnectedToInternet)
+        }
+    }
+
     func testGemma4LLMRuntimeAcceptsCurrentAndLegacyConfigurationTypes() async throws {
         for modelType in ["gemma4", "gemma4_text", "gemma4_unified"] {
             let isRegistered = await LLMTypeRegistry.shared.contains(modelType)
