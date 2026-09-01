@@ -2871,19 +2871,6 @@ final class DictationViewModel: ObservableObject {
         }
     }
 
-    /// Builds the system prompt for inline command detection.
-    nonisolated static func buildInlineCommandSystemPrompt(baseContext: String?) -> String {
-        var prompt = """
-        The user dictated text that may contain a spoken transformation instruction (e.g., "write this as an email", "summarize this", "mach daraus Stichpunkte"). \
-        If found, remove the instruction and apply the transformation. If not found, return the text unchanged. \
-        Return ONLY the final text - no explanations, prefixes, or quotes. The instruction can be in any language and anywhere in the text.
-        """
-        if let baseContext, !baseContext.isEmpty {
-            prompt += "\nAlso apply this style context: \(baseContext)"
-        }
-        return prompt
-    }
-
     /// Executes an action plugin and handles its result (feedback, clipboard URL, events).
     private func executeActionPlugin(
         _ plugin: any ActionPlugin,

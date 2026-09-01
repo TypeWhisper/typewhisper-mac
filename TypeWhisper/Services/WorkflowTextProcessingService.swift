@@ -92,6 +92,28 @@ struct WorkflowTextProcessingService {
         configuredLanguage: String? = nil,
         resolvedOutputFormat: String? = nil
     ) async throws -> String {
+        if workflow.usesInlineCommands {
+            let behavior = workflow.behavior
+            let prompt = Self.inlineCommandSystemPrompt(fineTuning: behavior.fineTuning)
+            if let effortPromptProcessor {
+                return try await effortPromptProcessor(
+                    prompt,
+                    text,
+                    Self.trimmedOrNil(behavior.providerId),
+                    Self.trimmedOrNil(behavior.cloudModel),
+                    behavior.temperatureDirective,
+                    Self.trimmedOrNil(behavior.effortId)
+                )
+            }
+            return try await promptProcessor(
+                prompt,
+                text,
+                Self.trimmedOrNil(behavior.providerId),
+                Self.trimmedOrNil(behavior.cloudModel),
+                behavior.temperatureDirective
+            )
+        }
+
         if workflow.usesAppleTranslate {
             return try await processAppleTranslate(
                 workflow: workflow,
@@ -138,6 +160,10 @@ struct WorkflowTextProcessingService {
         configuredLanguage: String? = nil,
         resolvedOutputFormat: String? = nil
     ) -> Bool {
+        if workflow.usesInlineCommands {
+            return true
+        }
+
         if workflow.usesAppleTranslate {
             return true
         }
@@ -177,6 +203,22 @@ struct WorkflowTextProcessingService {
     private static func trimmedOrNil(_ value: String?) -> String? {
         let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed?.isEmpty == false ? trimmed : nil
+    }
+
+    /// System prompt for inline command detection, carried over from the legacy
+    /// per-profile behavior (#87): a single LLM pass that removes a spoken
+    /// transformation instruction from the dictation and applies it.
+    private static func inlineCommandSystemPrompt(fineTuning: String) -> String {
+        var prompt = """
+        The user dictated text that may contain a spoken transformation instruction (e.g., "write this as an email", "summarize this", "mach daraus Stichpunkte"). \
+        If found, remove the instruction and apply the transformation. If not found, return the text unchanged. \
+        Return ONLY the final text - no explanations, prefixes, or quotes. The instruction can be in any language and anywhere in the text.
+        """
+        let trimmedFineTuning = fineTuning.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedFineTuning.isEmpty {
+            prompt += "\nAlso apply this style context: \(trimmedFineTuning)"
+        }
+        return prompt
     }
 }
 

@@ -293,6 +293,7 @@ struct WorkflowBehavior: Codable, Equatable, Sendable {
     var transcriptionEngineId: String?
     var transcriptionModelId: String?
     var microphoneBoostOverride: Bool?
+    var inlineCommandsEnabled: Bool?
     var temperatureModeRaw: String?
     var temperatureValue: Double?
 
@@ -305,6 +306,7 @@ struct WorkflowBehavior: Codable, Equatable, Sendable {
         transcriptionEngineId: String? = nil,
         transcriptionModelId: String? = nil,
         microphoneBoostOverride: Bool? = nil,
+        inlineCommandsEnabled: Bool? = nil,
         temperatureModeRaw: String? = nil,
         temperatureValue: Double? = nil
     ) {
@@ -316,6 +318,7 @@ struct WorkflowBehavior: Codable, Equatable, Sendable {
         self.transcriptionEngineId = transcriptionEngineId
         self.transcriptionModelId = transcriptionModelId
         self.microphoneBoostOverride = microphoneBoostOverride
+        self.inlineCommandsEnabled = inlineCommandsEnabled
         self.temperatureModeRaw = temperatureModeRaw
         self.temperatureValue = temperatureValue
     }
@@ -668,6 +671,14 @@ extension Workflow {
 
     var usesAppleTranslate: Bool {
         template == .translation && translationProcessor == .appleTranslate
+    }
+
+    /// Inline Commands is a dictation-workflow behavior: a single LLM pass that
+    /// detects and applies a spoken transformation instruction in the dictated
+    /// text. Transformed templates keep their own prompt with the input boundary
+    /// that treats dictated commands as text, so the inline pass never applies.
+    var usesInlineCommands: Bool {
+        template == .dictation && behavior.inlineCommandsEnabled == true
     }
 
     var inputLanguageSelection: LanguageSelection {
