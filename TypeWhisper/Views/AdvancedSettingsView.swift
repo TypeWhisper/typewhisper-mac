@@ -458,6 +458,31 @@ struct AdvancedSettingsView: View {
                         }
                     }
                 }
+
+                Divider()
+
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: "iphone")
+                        .font(.title2)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 24)
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(localizedAppText("iPhone & iPad App", de: "iOS- und iPad-App"))
+                            .font(.headline)
+
+                        HStack {
+                            Button(localizedAppText("Show", de: "Anzeigen")) {
+                                IOSCompanionPromoCoordinator.shared.requestManualPresentation()
+                            }
+
+                            SettingsInfoButton(text: localizedAppText(
+                                "Show the TypeWhisper companion app for iPhone and iPad again.",
+                                de: "Zeigt die TypeWhisper-App für iPhone und iPad erneut an."
+                            ))
+                        }
+                    }
+                }
                 }
             }
             .formStyle(.grouped)
