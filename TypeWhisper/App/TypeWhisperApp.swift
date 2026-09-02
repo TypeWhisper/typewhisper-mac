@@ -385,6 +385,10 @@ struct TypeWhisperApp<WindowConfiguration: ManagedAppWindowSceneConfiguration>: 
         PostUpdatePromptCoordinator.shared
     }
 
+    private var iOSCompanionPromoCoordinator: IOSCompanionPromoCoordinator {
+        IOSCompanionPromoCoordinator.shared
+    }
+
     private var settingsNavigation: SettingsNavigationCoordinator {
         SettingsNavigationCoordinator.shared
     }
@@ -432,6 +436,12 @@ struct TypeWhisperApp<WindowConfiguration: ManagedAppWindowSceneConfiguration>: 
                     switch route {
                     case .welcome:
                         WelcomeSheet()
+                    case .iOSCompanion:
+                        IOSCompanionPromoView(
+                            appStoreURL: AppConstants.IOSCompanion.appStoreURL,
+                            onOpenAppStore: handleOpenIOSAppStore,
+                            onDismiss: handleIOSCompanionDismissal
+                        )
                     case .postUpdateLicensing:
                         PostUpdateLicensePromptView(
                             onPersonalOSS: handlePersonalOSSSelection,
@@ -482,6 +492,7 @@ struct TypeWhisperApp<WindowConfiguration: ManagedAppWindowSceneConfiguration>: 
         let serviceContainer = ServiceContainer.shared
         SettingsNavigationCoordinator.shared = SettingsNavigationCoordinator()
         WorkflowsNavigationCoordinator.shared = WorkflowsNavigationCoordinator()
+        IOSCompanionPromoCoordinator.shared = IOSCompanionPromoCoordinator()
         PostUpdatePromptCoordinator.shared = PostUpdatePromptCoordinator()
 
         #if DEBUG
@@ -513,6 +524,8 @@ struct TypeWhisperApp<WindowConfiguration: ManagedAppWindowSceneConfiguration>: 
         let nextRoute: StartupSheetRoute?
         if LicenseService.shared.needsWelcomeSheet {
             nextRoute = .welcome
+        } else if iOSCompanionPromoCoordinator.shouldPresentPrompt {
+            nextRoute = .iOSCompanion
         } else {
             nextRoute = postUpdatePromptCoordinator.activeSheetRoute
         }
@@ -527,6 +540,18 @@ struct TypeWhisperApp<WindowConfiguration: ManagedAppWindowSceneConfiguration>: 
         let dismissedRoute = lastPresentedStartupSheet
         defer {
             lastPresentedStartupSheet = nil
+        }
+
+        if dismissedRoute == .iOSCompanion {
+            if ignoreNextStartupSheetDismiss {
+                ignoreNextStartupSheetDismiss = false
+            } else {
+                iOSCompanionPromoCoordinator.acknowledgeCurrentCampaign()
+            }
+
+            // Avoid replacing the promo immediately with another startup sheet.
+            // Any remaining prompt can appear the next time Settings is opened.
+            return
         }
 
         if dismissedRoute == .postUpdateLicensing {
@@ -576,6 +601,19 @@ struct TypeWhisperApp<WindowConfiguration: ManagedAppWindowSceneConfiguration>: 
     private func handlePromptDismissalAction() {
         dismissStartupPrompt {
             postUpdatePromptCoordinator.handleNotNowSelection()
+        }
+    }
+
+    private func handleOpenIOSAppStore() {
+        dismissStartupPrompt {
+            iOSCompanionPromoCoordinator.acknowledgeCurrentCampaign()
+            NSWorkspace.shared.open(AppConstants.IOSCompanion.appStoreURL)
+        }
+    }
+
+    private func handleIOSCompanionDismissal() {
+        dismissStartupPrompt {
+            iOSCompanionPromoCoordinator.acknowledgeCurrentCampaign()
         }
     }
 }
@@ -791,18 +829,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
 
         let initialWindowPresentation = InitialWindowPresentationPolicy.presentation(
             setupWizardRequired: HomeViewModel.shared.showSetupWizard,
-            postUpdatePromptPending: PostUpdatePromptCoordinator.shared.shouldPresentPrompt
+            postUpdatePromptPending: PostUpdatePromptCoordinator.shared.shouldPresentPrompt,
+            iOSCompanionPromptPending: IOSCompanionPromoCoordinator.shared.shouldPresentPrompt
         )
 
-        // Auto-open only the standalone setup assistant while first-run setup is incomplete.
-        // Post-update prompts wait until the user opens Settings interactively.
-        if initialWindowPresentation == .setup {
+        switch initialWindowPresentation {
+        case .setup:
             UserDefaults.standard.set(false, forKey: UserDefaultsKeys.setupWizardCompleted)
             HomeViewModel.shared.showSetupWizard = true
             NSApp.setActivationPolicy(.regular)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
                 self.openSetupWindow()
             }
+        case .settings:
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                self.openSettingsWindow()
+            }
+        case .none:
+            break
         }
 
         // Observe appearance preference changes

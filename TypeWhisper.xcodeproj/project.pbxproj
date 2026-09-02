@@ -96,6 +96,8 @@
 		AA00000000000000000353 /* PostUpdatePromptCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000353 /* PostUpdatePromptCoordinator.swift */; };
 		AA00000000000000000354 /* SettingsNavigationCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000354 /* SettingsNavigationCoordinator.swift */; };
 		AA00000000000000000355 /* PostUpdateLicensePromptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000355 /* PostUpdateLicensePromptView.swift */; };
+		1F0550000000000000000001 /* IOSCompanionPromoView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F0550000000000000000011 /* IOSCompanionPromoView.swift */; };
+		1F0550000000000000000002 /* ios-companion-promo.mp4 in Resources */ = {isa = PBXBuildFile; fileRef = 1F0550000000000000000012 /* ios-companion-promo.mp4 */; };
 		6C7D8E9F0A1B2C3D4E5F6072 /* FloatingPanelSpacePolicy.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C7D8E9F0A1B2C3D4E5F6071 /* FloatingPanelSpacePolicy.swift */; };
 		AA00000000000000000356 /* Workflow.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000356 /* Workflow.swift */; };
 		AA00000000000000000357 /* WorkflowService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000357 /* WorkflowService.swift */; };
@@ -758,6 +760,8 @@
 		BB00000000000000000353 /* PostUpdatePromptCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostUpdatePromptCoordinator.swift; sourceTree = "<group>"; };
 		BB00000000000000000354 /* SettingsNavigationCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsNavigationCoordinator.swift; sourceTree = "<group>"; };
 		BB00000000000000000355 /* PostUpdateLicensePromptView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PostUpdateLicensePromptView.swift; sourceTree = "<group>"; };
+		1F0550000000000000000011 /* IOSCompanionPromoView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSCompanionPromoView.swift; sourceTree = "<group>"; };
+		1F0550000000000000000012 /* ios-companion-promo.mp4 */ = {isa = PBXFileReference; lastKnownFileType = file; path = "ios-companion-promo.mp4"; sourceTree = "<group>"; };
 		BB00000000000000000356 /* Workflow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Workflow.swift; sourceTree = "<group>"; };
 		BB00000000000000000357 /* WorkflowService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkflowService.swift; sourceTree = "<group>"; };
 		BB00000000000000000359 /* WorkflowsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkflowsSettingsView.swift; sourceTree = "<group>"; };
@@ -1971,6 +1975,7 @@
 				BB00000000000000000250 /* AboutSettingsView.swift */,
 				BB00000000000000000287 /* LicenseSettingsView.swift */,
 				BB00000000000000000288 /* WelcomeSheet.swift */,
+				1F0550000000000000000011 /* IOSCompanionPromoView.swift */,
 				BB00000000000000000355 /* PostUpdateLicensePromptView.swift */,
 				BB00000000000000000289 /* SupporterBadgeView.swift */,
 			);
@@ -1990,6 +1995,7 @@
 				BB00000000000000000339 /* it.json */,
 				BB00000000000000000341 /* ja.json */,
 				BB00000000000000000072 /* Assets.xcassets */,
+				1F0550000000000000000012 /* ios-companion-promo.mp4 */,
 			);
 			path = Resources;
 			sourceTree = "<group>";
@@ -4041,6 +4047,7 @@
 				AA00000000000000000088 /* transcription_success.wav in Resources */,
 				AA00000000000000000089 /* error.wav in Resources */,
 				AA00000000000000000108 /* PrivacyInfo.xcprivacy in Resources */,
+				1F0550000000000000000002 /* ios-companion-promo.mp4 in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -4807,6 +4814,7 @@
 				AA00000000000000000353 /* PostUpdatePromptCoordinator.swift in Sources */,
 				AA00000000000000000354 /* SettingsNavigationCoordinator.swift in Sources */,
 				AA00000000000000000355 /* PostUpdateLicensePromptView.swift in Sources */,
+				1F0550000000000000000001 /* IOSCompanionPromoView.swift in Sources */,
 				AA00000000000000000303 /* SupporterBadgeView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
