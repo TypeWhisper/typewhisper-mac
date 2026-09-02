@@ -709,12 +709,7 @@ extension Workflow {
         configuredLanguage: String? = nil,
         resolvedOutputFormat: String? = nil
     ) -> String? {
-        let outputFormat = resolvedOutputFormat ?? WorkflowOutputFormatResolver.resolvedFormat(
-            storedFormat: output.format,
-            bundleIdentifier: nil,
-            url: nil
-        )
-        let outputInstruction = workflowOutputInstruction(outputFormat: outputFormat, output: output)
+        let outputInstruction = outputInstruction(resolvedOutputFormat: resolvedOutputFormat)
         let settingsInstruction = workflowSettingsInstruction(for: behavior.settings)
         let fineTuningInstruction = workflowFineTuningInstruction(for: behavior.fineTuning)
         let inputBoundaryInstruction = workflowInputBoundaryInstruction(for: template)
@@ -817,6 +812,15 @@ extension Workflow {
         let trimmed = fineTuning.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "" }
         return "\nFine-tuning:\n\(trimmed)"
+    }
+
+    func outputInstruction(resolvedOutputFormat: String? = nil) -> String {
+        let outputFormat = resolvedOutputFormat ?? WorkflowOutputFormatResolver.resolvedFormat(
+            storedFormat: output.format,
+            bundleIdentifier: nil,
+            url: nil
+        )
+        return workflowOutputInstruction(outputFormat: outputFormat, output: output)
     }
 
     private func workflowOutputInstruction(outputFormat: String?, output: WorkflowOutput) -> String {

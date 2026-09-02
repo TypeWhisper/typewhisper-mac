@@ -1564,7 +1564,8 @@ final class WorkflowServiceTests: XCTestCase {
     func testInlineCommandsDictationWorkflowRunsInlineCommandPromptPass() async throws {
         let workflow = Workflow(name: "Inline Commands Dictation", template: .dictation,
                                 trigger: .hotkey(UnifiedHotkey(keyCode: 7, modifierFlags: 0, isFn: false)),
-                                behavior: WorkflowBehavior(fineTuning: "Keep it polished.", inlineCommandsEnabled: true))
+                                behavior: WorkflowBehavior(fineTuning: "Keep it polished.", inlineCommandsEnabled: true),
+                                output: WorkflowOutput(format: "json"))
 
         var capturedPrompt: String?
         let service = WorkflowTextProcessingService(
@@ -1577,13 +1578,18 @@ final class WorkflowServiceTests: XCTestCase {
 
         XCTAssertTrue(service.canProcess(workflow: workflow))
 
-        let result = try await service.process(workflow: workflow, text: "The meeting is Friday. Write this as a friendly email.")
+        let result = try await service.process(
+            workflow: workflow,
+            text: "The meeting is Friday. Write this as a friendly email.",
+            resolvedOutputFormat: "json"
+        )
 
         XCTAssertEqual(result, "Friendly email")
         let prompt = try XCTUnwrap(capturedPrompt)
         XCTAssertTrue(prompt.contains("may contain a spoken transformation instruction"))
         XCTAssertTrue(prompt.contains("If found, remove the instruction and apply the transformation."))
         XCTAssertTrue(prompt.contains("Also apply this style context: Keep it polished."))
+        XCTAssertTrue(prompt.contains("Return the result as json."))
         XCTAssertFalse(prompt.contains("Input boundary:"))
     }
 

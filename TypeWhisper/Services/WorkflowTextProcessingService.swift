@@ -94,7 +94,10 @@ struct WorkflowTextProcessingService {
     ) async throws -> String {
         if workflow.usesInlineCommands {
             let behavior = workflow.behavior
-            let prompt = Self.inlineCommandSystemPrompt(fineTuning: behavior.fineTuning)
+            let prompt = Self.inlineCommandSystemPrompt(
+                fineTuning: behavior.fineTuning,
+                outputInstruction: workflow.outputInstruction(resolvedOutputFormat: resolvedOutputFormat)
+            )
             if let effortPromptProcessor {
                 return try await effortPromptProcessor(
                     prompt,
@@ -208,7 +211,10 @@ struct WorkflowTextProcessingService {
     /// System prompt for inline command detection, carried over from the legacy
     /// per-profile behavior (#87): a single LLM pass that removes a spoken
     /// transformation instruction from the dictation and applies it.
-    private static func inlineCommandSystemPrompt(fineTuning: String) -> String {
+    private static func inlineCommandSystemPrompt(
+        fineTuning: String,
+        outputInstruction: String
+    ) -> String {
         var prompt = """
         The user dictated text that may contain a spoken transformation instruction (e.g., "write this as an email", "summarize this", "mach daraus Stichpunkte"). \
         If found, remove the instruction and apply the transformation. If not found, return the text unchanged. \
@@ -218,6 +224,7 @@ struct WorkflowTextProcessingService {
         if !trimmedFineTuning.isEmpty {
             prompt += "\nAlso apply this style context: \(trimmedFineTuning)"
         }
+        prompt += outputInstruction
         return prompt
     }
 }
