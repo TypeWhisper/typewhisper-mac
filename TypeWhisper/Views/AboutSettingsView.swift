@@ -113,6 +113,28 @@ struct AboutSettingsView: View {
             }
 
                 Section {
+                HStack {
+                    Spacer()
+                    Button {
+                        IOSCompanionPromoCoordinator.shared.requestManualPresentation()
+                    } label: {
+                        Label(
+                            localizedAppText("iPhone & iPad App", de: "iOS- und iPad-App"),
+                            systemImage: "iphone"
+                        )
+                    }
+                    Spacer()
+                }
+
+                Text(localizedAppText(
+                    "Show the TypeWhisper companion app for iPhone and iPad again.",
+                    de: "Zeige die TypeWhisper-App für iPhone und iPad erneut an."
+                ))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+
+                Section {
                 VStack(spacing: 4) {
                     Text(String(localized: "\u{00A9} 2024-2026 TypeWhisper Contributors"))
                         .font(.caption)
