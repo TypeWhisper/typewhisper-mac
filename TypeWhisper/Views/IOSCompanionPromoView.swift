@@ -166,7 +166,7 @@ private struct QRCodeImageView: View {
                     .foregroundStyle(.black)
             }
         }
-        .padding(10)
+        .padding(18)
         .background(.white, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         .accessibilityLabel(localizedAppText(
             "QR code for TypeWhisper in the App Store",
