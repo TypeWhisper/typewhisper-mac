@@ -459,8 +459,6 @@ struct AdvancedSettingsView: View {
                     }
                 }
 
-                Divider()
-
                 HStack(alignment: .top, spacing: 12) {
                     Image(systemName: "iphone")
                         .font(.title2)
