@@ -30575,18 +30575,18 @@
         }
       }
     },
-    "Transcribe and insert without LLM processing." : {
+    "Transcribe and insert without LLM processing by default. Optional Inline Commands can apply text transformations." : {
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "LLM処理を行わずに文字起こしして挿入します。"
+            "value" : "デフォルトでは LLM 処理を行わずに文字起こしして挿入します。オプションのインラインコマンドでテキスト変換を適用できます。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "转录并直接插入，不经过 LLM 处理。"
+            "value" : "默认情况下直接转录并插入，不经过 LLM 处理。可选的内联命令可应用文本转换。"
           }
         }
       }

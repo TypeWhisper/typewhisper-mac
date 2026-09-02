@@ -24,8 +24,8 @@ enum WorkflowTemplate: String, CaseIterable, Codable, Sendable {
                 template: self,
                 name: localizedAppText("Dictation Only", de: "Nur Diktat"),
                 description: localizedAppText(
-                    "Transcribe and insert without LLM processing.",
-                    de: "Transkribiert und fuegt ohne LLM-Verarbeitung ein."
+                    "Transcribe and insert without LLM processing by default. Optional Inline Commands can apply text transformations.",
+                    de: "Transkribiert und fügt standardmäßig ohne LLM-Verarbeitung ein. Optionale Inline Commands können Texttransformationen anwenden."
                 ),
                 systemImage: "mic"
             )
