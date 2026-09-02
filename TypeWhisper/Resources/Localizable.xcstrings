@@ -13075,6 +13075,38 @@
         }
       }
     },
+    "A spoken instruction like \"write this as a friendly email\" is detected, removed, and applied to the dictation." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "「これを親しみやすいメールにして」のような音声指示を検出し、削除して、ディクテーションに適用します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "检测并移除“将此内容改写成友好的电子邮件”等口述指令，然后将其应用于听写内容。"
+          }
+        }
+      }
+    },
+    "Dictated text is inserted unchanged. Turn on to detect a spoken transformation instruction in the dictation." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ディクテーションのテキストは変更せずに挿入されます。音声による変換指示を検出するにはオンにします。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "听写文本将原样插入。开启后可检测听写中的口述转换指令。"
+          }
+        }
+      }
+    },
     "Input Device" : {
       "localizations" : {
         "de" : {
@@ -30543,18 +30575,18 @@
         }
       }
     },
-    "Transcribe and insert without LLM processing." : {
+    "Transcribe and insert without LLM processing by default. Optional Inline Commands can apply text transformations." : {
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "LLM処理を行わずに文字起こしして挿入します。"
+            "value" : "デフォルトでは LLM 処理を行わずに文字起こしして挿入します。オプションのインラインコマンドでテキスト変換を適用できます。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "转录并直接插入，不经过 LLM 处理。"
+            "value" : "默认情况下直接转录并插入，不经过 LLM 处理。可选的内联命令可应用文本转换。"
           }
         }
       }

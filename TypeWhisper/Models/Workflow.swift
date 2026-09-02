@@ -24,8 +24,8 @@ enum WorkflowTemplate: String, CaseIterable, Codable, Sendable {
                 template: self,
                 name: localizedAppText("Dictation Only", de: "Nur Diktat"),
                 description: localizedAppText(
-                    "Transcribe and insert without LLM processing.",
-                    de: "Transkribiert und fuegt ohne LLM-Verarbeitung ein."
+                    "Transcribe and insert without LLM processing by default. Optional Inline Commands can apply text transformations.",
+                    de: "Transkribiert und fügt standardmäßig ohne LLM-Verarbeitung ein. Optionale Inline Commands können Texttransformationen anwenden."
                 ),
                 systemImage: "mic"
             )
@@ -293,6 +293,7 @@ struct WorkflowBehavior: Codable, Equatable, Sendable {
     var transcriptionEngineId: String?
     var transcriptionModelId: String?
     var microphoneBoostOverride: Bool?
+    var inlineCommandsEnabled: Bool?
     var temperatureModeRaw: String?
     var temperatureValue: Double?
 
@@ -305,6 +306,7 @@ struct WorkflowBehavior: Codable, Equatable, Sendable {
         transcriptionEngineId: String? = nil,
         transcriptionModelId: String? = nil,
         microphoneBoostOverride: Bool? = nil,
+        inlineCommandsEnabled: Bool? = nil,
         temperatureModeRaw: String? = nil,
         temperatureValue: Double? = nil
     ) {
@@ -316,6 +318,7 @@ struct WorkflowBehavior: Codable, Equatable, Sendable {
         self.transcriptionEngineId = transcriptionEngineId
         self.transcriptionModelId = transcriptionModelId
         self.microphoneBoostOverride = microphoneBoostOverride
+        self.inlineCommandsEnabled = inlineCommandsEnabled
         self.temperatureModeRaw = temperatureModeRaw
         self.temperatureValue = temperatureValue
     }
@@ -670,6 +673,14 @@ extension Workflow {
         template == .translation && translationProcessor == .appleTranslate
     }
 
+    /// Inline Commands is a dictation-workflow behavior: a single LLM pass that
+    /// detects and applies a spoken transformation instruction in the dictated
+    /// text. Transformed templates keep their own prompt with the input boundary
+    /// that treats dictated commands as text, so the inline pass never applies.
+    var usesInlineCommands: Bool {
+        template == .dictation && behavior.inlineCommandsEnabled == true
+    }
+
     var inputLanguageSelection: LanguageSelection {
         get {
             LanguageSelection(
@@ -689,7 +700,7 @@ extension Workflow {
     }
 
     var isManuallyRunnable: Bool {
-        usesAppleTranslate || systemPrompt() != nil || output.targetActionPluginId != nil
+        usesInlineCommands || usesAppleTranslate || systemPrompt() != nil || output.targetActionPluginId != nil
     }
 
     func systemPrompt(
@@ -698,12 +709,7 @@ extension Workflow {
         configuredLanguage: String? = nil,
         resolvedOutputFormat: String? = nil
     ) -> String? {
-        let outputFormat = resolvedOutputFormat ?? WorkflowOutputFormatResolver.resolvedFormat(
-            storedFormat: output.format,
-            bundleIdentifier: nil,
-            url: nil
-        )
-        let outputInstruction = workflowOutputInstruction(outputFormat: outputFormat, output: output)
+        let outputInstruction = outputInstruction(resolvedOutputFormat: resolvedOutputFormat)
         let settingsInstruction = workflowSettingsInstruction(for: behavior.settings)
         let fineTuningInstruction = workflowFineTuningInstruction(for: behavior.fineTuning)
         let inputBoundaryInstruction = workflowInputBoundaryInstruction(for: template)
@@ -806,6 +812,15 @@ extension Workflow {
         let trimmed = fineTuning.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return "" }
         return "\nFine-tuning:\n\(trimmed)"
+    }
+
+    func outputInstruction(resolvedOutputFormat: String? = nil) -> String {
+        let outputFormat = resolvedOutputFormat ?? WorkflowOutputFormatResolver.resolvedFormat(
+            storedFormat: output.format,
+            bundleIdentifier: nil,
+            url: nil
+        )
+        return workflowOutputInstruction(outputFormat: outputFormat, output: output)
     }
 
     private func workflowOutputInstruction(outputFormat: String?, output: WorkflowOutput) -> String {
