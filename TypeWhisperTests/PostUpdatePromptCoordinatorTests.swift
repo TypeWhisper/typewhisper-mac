@@ -82,6 +82,26 @@ final class PostUpdatePromptCoordinatorTests: XCTestCase {
         XCTAssertTrue(nextCampaign.shouldPresentPrompt)
     }
 
+    func testIOSCompanionPromoCanBeRequestedManuallyAfterAcknowledgement() throws {
+        let (defaults, suiteName) = try makeIsolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let coordinator = IOSCompanionPromoCoordinator(
+            defaults: defaults,
+            campaignIdentifier: "ios-launch"
+        )
+        coordinator.acknowledgeCurrentCampaign()
+
+        XCTAssertFalse(coordinator.shouldPresentPrompt)
+        XCTAssertFalse(coordinator.consumeManualPresentationRequest())
+
+        coordinator.requestManualPresentation()
+
+        XCTAssertTrue(coordinator.consumeManualPresentationRequest())
+        XCTAssertFalse(coordinator.consumeManualPresentationRequest())
+        XCTAssertFalse(coordinator.shouldPresentPrompt)
+    }
+
     func testPendingPromptRemainsAvailableForInteractiveSettingsPresentation() throws {
         let (defaults, suiteName) = try makeIsolatedDefaults()
         defer { defaults.removePersistentDomain(forName: suiteName) }

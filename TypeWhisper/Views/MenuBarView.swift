@@ -212,6 +212,7 @@ private final class MenuBarState: ObservableObject {
 
 enum MenuBarMenuItem: Hashable {
     case settings
+    case iOSCompanion
     case history
     case errorLog
     case toggleRecorder
@@ -249,7 +250,7 @@ enum MenuBarMenuSection: String, CaseIterable, Hashable {
     func items(hasRecoverableRecording: Bool) -> [MenuBarMenuItem] {
         switch self {
         case .general:
-            [.settings, .history, .errorLog]
+            [.settings, .iOSCompanion, .history, .errorLog]
         case .transcription:
             hasRecoverableRecording
                 ? [.toggleDictationHotkeysPause, .transcribeFile, .recoverLastRecording, .lastTranscription]
@@ -406,6 +407,19 @@ struct MenuBarView: View {
                 Label(String(localized: "Settings..."), systemImage: "gear")
             }
             .keyboardShortcut(",")
+
+        case .iOSCompanion:
+            Button {
+                MenuBarActionDispatcher.performAfterMenuDismissal {
+                    IOSCompanionPromoCoordinator.shared.requestManualPresentation()
+                    ManagedAppWindowOpener.shared.open(id: "settings")
+                }
+            } label: {
+                Label(
+                    localizedAppText("iPhone & iPad App...", de: "iPhone- & iPad-App ..."),
+                    systemImage: "iphone"
+                )
+            }
 
         case .history:
             Button {

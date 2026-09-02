@@ -19,6 +19,7 @@ extension UserDefaults {
 extension Notification.Name {
     static let openManagedAppWindow = Notification.Name("openManagedAppWindow")
     static let resetSetupWizardWindow = Notification.Name("resetSetupWizardWindow")
+    static let iOSCompanionPromoRequested = Notification.Name("iOSCompanionPromoRequested")
 }
 
 enum DockIconBehavior: String, CaseIterable {
@@ -455,6 +456,9 @@ struct TypeWhisperApp<WindowConfiguration: ManagedAppWindowSceneConfiguration>: 
                 .task {
                     refreshStartupSheet()
                 }
+                .onReceive(NotificationCenter.default.publisher(for: .iOSCompanionPromoRequested)) { _ in
+                    refreshStartupSheet()
+                }
         }
     }
 
@@ -524,7 +528,8 @@ struct TypeWhisperApp<WindowConfiguration: ManagedAppWindowSceneConfiguration>: 
         let nextRoute: StartupSheetRoute?
         if LicenseService.shared.needsWelcomeSheet {
             nextRoute = .welcome
-        } else if iOSCompanionPromoCoordinator.shouldPresentPrompt {
+        } else if iOSCompanionPromoCoordinator.consumeManualPresentationRequest()
+                    || iOSCompanionPromoCoordinator.shouldPresentPrompt {
             nextRoute = .iOSCompanion
         } else {
             nextRoute = postUpdatePromptCoordinator.activeSheetRoute

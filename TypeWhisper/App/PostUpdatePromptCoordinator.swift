@@ -41,6 +41,7 @@ final class IOSCompanionPromoCoordinator {
 
     private let defaults: UserDefaults
     private let campaignIdentifier: String
+    private var manualPresentationRequested = false
 
     init(
         defaults: UserDefaults = .standard,
@@ -56,6 +57,17 @@ final class IOSCompanionPromoCoordinator {
 
     func acknowledgeCurrentCampaign() {
         defaults.set(campaignIdentifier, forKey: UserDefaultsKeys.iOSCompanionPromoCampaign)
+    }
+
+    func requestManualPresentation() {
+        manualPresentationRequested = true
+        NotificationCenter.default.post(name: .iOSCompanionPromoRequested, object: nil)
+    }
+
+    func consumeManualPresentationRequest() -> Bool {
+        guard manualPresentationRequested else { return false }
+        manualPresentationRequested = false
+        return true
     }
 }
 
