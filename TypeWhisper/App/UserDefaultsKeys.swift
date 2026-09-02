@@ -180,6 +180,7 @@ enum UserDefaultsKeys {
     static let workUsagePromptDismissed = "workUsagePromptDismissed"
     static let lastSeenReleaseFingerprint = "lastSeenReleaseFingerprint"
     static let lastAcknowledgedPostUpdatePromptRelease = "lastAcknowledgedPostUpdatePromptRelease"
+    static let iOSCompanionPromoCampaign = "iOSCompanionPromoCampaign"
 
     // MARK: - Supporter
     static let supporterTier = "supporterTier"

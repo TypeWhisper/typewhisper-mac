@@ -3,6 +3,7 @@ import os
 
 enum StartupSheetRoute: String, Identifiable {
     case welcome
+    case iOSCompanion
     case postUpdateLicensing
 
     var id: String { rawValue }
@@ -10,23 +11,63 @@ enum StartupSheetRoute: String, Identifiable {
 
 enum InitialWindowPresentation: Equatable {
     case setup
+    case settings
     case none
 }
 
 enum InitialWindowPresentationPolicy {
     static func presentation(
         setupWizardRequired: Bool,
-        postUpdatePromptPending: Bool
+        postUpdatePromptPending: Bool,
+        iOSCompanionPromptPending: Bool = false
     ) -> InitialWindowPresentation {
-        switch (setupWizardRequired, postUpdatePromptPending) {
-        case (true, _):
+        switch (setupWizardRequired, iOSCompanionPromptPending, postUpdatePromptPending) {
+        case (true, _, _):
             return .setup
-        case (false, true):
+        case (false, true, _):
+            return .settings
+        case (false, false, true):
             // Keep background launches windowless; the prompt remains available in Settings.
             return .none
-        case (false, false):
+        case (false, false, false):
             return .none
         }
+    }
+}
+
+@MainActor
+final class IOSCompanionPromoCoordinator {
+    nonisolated(unsafe) static var shared: IOSCompanionPromoCoordinator!
+
+    private let defaults: UserDefaults
+    private let campaignIdentifier: String
+    private var manualPresentationRequested = false
+
+    init(
+        defaults: UserDefaults = .standard,
+        campaignIdentifier: String = AppConstants.IOSCompanion.promoCampaignIdentifier
+    ) {
+        self.defaults = defaults
+        self.campaignIdentifier = campaignIdentifier
+    }
+
+    var shouldPresentPrompt: Bool {
+        defaults.string(forKey: UserDefaultsKeys.iOSCompanionPromoCampaign) != campaignIdentifier
+    }
+
+    func acknowledgeCurrentCampaign() {
+        defaults.set(campaignIdentifier, forKey: UserDefaultsKeys.iOSCompanionPromoCampaign)
+    }
+
+    func requestManualPresentation() {
+        manualPresentationRequested = true
+        NotificationCenter.default.post(name: .iOSCompanionPromoRequested, object: nil)
+    }
+
+    func consumeManualPresentationRequest() -> Bool {
+        guard manualPresentationRequested else { return false }
+        manualPresentationRequested = false
+        return true
     }
 }
 

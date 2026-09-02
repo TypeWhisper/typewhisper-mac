@@ -384,6 +384,11 @@ enum AppConstants {
         }
     }
 
+    enum IOSCompanion {
+        static let appStoreURL = URL(string: "https://apps.apple.com/app/id6759319267")!
+        static let promoCampaignIdentifier = "ios-app-store-launch-2026-09"
+    }
+
     // MARK: - Discord Claim Service
     enum DiscordClaim {
         static let defaultBaseURLString = "http://127.0.0.1:8787"
