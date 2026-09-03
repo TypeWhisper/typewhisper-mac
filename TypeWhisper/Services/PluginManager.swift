@@ -664,10 +664,10 @@ final class PluginManager: ObservableObject {
                 return
             }
 
+            PluginSettingsWindowManager.shared.closeWindow(for: manifest.id)
             if existing.isEnabled {
                 existing.instance.deactivate()
             }
-            existing.bundle.unload()
             loadedPlugins.remove(at: existingIndex)
             logger.info("Replacing plugin \(manifest.id) from \(existing.sourceURL.lastPathComponent) with \(url.lastPathComponent)")
         }
@@ -819,12 +819,12 @@ final class PluginManager: ObservableObject {
         } else {
             // If the deactivated plugin was selected as default engine, fall back to first available
             let disabledProviderIds = transcriptionProviderIds(exposedBy: loadedPlugins[index].instance)
+            PluginSettingsWindowManager.shared.closeWindow(for: pluginId)
             selectFallbackTranscriptionProviderIfNeeded(disabling: disabledProviderIds)
 
             let plugin = loadedPlugins[index]
             if plugin.isRuntimeLoaded {
                 plugin.instance.deactivate()
-                plugin.bundle.unload()
             }
 
             do {
@@ -854,8 +854,15 @@ final class PluginManager: ObservableObject {
     }
 
     func selectFallbackTranscriptionProviderIfNeeded(disabling disabledProviderIds: Set<String>) {
-        guard let fallbackProviderId = fallbackTranscriptionProviderId(disabling: disabledProviderIds) else { return }
-        ServiceContainer.shared.modelManagerService.selectProvider(fallbackProviderId)
+        guard !disabledProviderIds.isEmpty,
+              let selectedProvider = UserDefaults.standard.string(forKey: UserDefaultsKeys.selectedEngine),
+              disabledProviderIds.contains(selectedProvider) else { return }
+
+        if let fallbackProviderId = fallbackTranscriptionProviderId(disabling: disabledProviderIds) {
+            ServiceContainer.shared.modelManagerService.selectProvider(fallbackProviderId)
+        } else {
+            ServiceContainer.shared.modelManagerService.clearProviderSelection()
+        }
     }
 
     func fallbackTranscriptionProviderId(disabling disabledProviderIds: Set<String>) -> String? {
@@ -913,17 +920,22 @@ final class PluginManager: ObservableObject {
 
     // MARK: - Dynamic Plugin Management
 
+    /// Removes a plugin from the active runtime registry without unmapping its executable code.
+    /// SwiftUI and AppKit may retain plugin-defined view metadata beyond the visible window's
+    /// lifetime, so calling `Bundle.unload()` while the app is running is not safe.
     func unloadPlugin(_ pluginId: String) {
         guard let index = loadedPlugins.firstIndex(where: { $0.manifest.id == pluginId }) else { return }
         let plugin = loadedPlugins[index]
+        let disabledProviderIds = transcriptionProviderIds(exposedBy: plugin.instance)
+
+        PluginSettingsWindowManager.shared.closeWindow(for: pluginId)
+        selectFallbackTranscriptionProviderIfNeeded(disabling: disabledProviderIds)
+
         if plugin.isEnabled && plugin.isRuntimeLoaded {
             plugin.instance.deactivate()
         }
-        if plugin.isRuntimeLoaded {
-            plugin.bundle.unload()
-        }
         loadedPlugins.remove(at: index)
-        logger.info("Unloaded plugin: \(pluginId)")
+        logger.info("Removed plugin from runtime registry: \(pluginId)")
     }
 
     func bundleURL(for pluginId: String) -> URL? {

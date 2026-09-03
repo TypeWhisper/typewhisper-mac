@@ -1,5 +1,6 @@
-import XCTest
+import SwiftUI
 import TypeWhisperPluginSDK
+import XCTest
 @testable import TypeWhisper
 
 final class PluginRegistryServiceTests: XCTestCase {
@@ -580,21 +581,24 @@ final class PluginRegistryServiceTests: XCTestCase {
             version: "1.0.0"
         )
         let bundle = try XCTUnwrap(Bundle(url: bundleURL))
-        pluginManager.loadedPlugins = [
-            LoadedPlugin(
-                manifest: PluginManifest(
-                    id: pluginId,
-                    name: "Update Uninstall Plugin",
-                    version: "1.0.0",
-                    sdkCompatibilityVersion: PluginSDKCompatibility.currentVersion,
-                    principalClass: "RuntimeUpdatePlugin"
-                ),
-                instance: MockRuntimeUpdatePlugin(),
-                bundle: bundle,
-                sourceURL: bundleURL,
-                isEnabled: false
+        let loadedPlugin = LoadedPlugin(
+            manifest: PluginManifest(
+                id: pluginId,
+                name: "Update Uninstall Plugin",
+                version: "1.0.0",
+                sdkCompatibilityVersion: PluginSDKCompatibility.currentVersion,
+                principalClass: "RuntimeUpdatePlugin"
             ),
-        ]
+            instance: MockRuntimeUpdatePlugin(),
+            bundle: bundle,
+            sourceURL: bundleURL,
+            isEnabled: false
+        )
+        pluginManager.loadedPlugins = [loadedPlugin]
+
+        PluginSettingsWindowManager.shared.present(loadedPlugin)
+        XCTAssertNotNil(PluginSettingsWindowManager.shared.managedWindow(for: pluginId))
+        defer { PluginSettingsWindowManager.shared.closeWindow(for: pluginId) }
 
         let service = PluginRegistryService(
             registryBaseURL: URL(string: "https://example.com")!,
@@ -618,6 +622,7 @@ final class PluginRegistryServiceTests: XCTestCase {
         XCTAssertTrue(service.availableUpdatePlugins().isEmpty)
         XCTAssertTrue(pluginManager.loadedPlugins.isEmpty)
         XCTAssertFalse(FileManager.default.fileExists(atPath: bundleURL.path))
+        XCTAssertNil(PluginSettingsWindowManager.shared.managedWindow(for: pluginId))
 
         var installerWasCalled = false
         let result = await service.updateAllAvailablePlugins { _ in
@@ -1687,5 +1692,14 @@ final class PluginRegistryServiceTests: XCTestCase {
 
         func activate(host: any HostServices) {}
         func deactivate() {}
+
+        @MainActor
+        var settingsView: AnyView? {
+            AnyView(
+                Picker("Model", selection: .constant("muse-voice-transcribe-1.0")) {
+                    Text("Muse Voice Transcribe").tag("muse-voice-transcribe-1.0")
+                }
+            )
+        }
     }
 }
