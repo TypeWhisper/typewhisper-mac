@@ -119,6 +119,15 @@ struct MicrosoftAIModelCatalogResponse: Decodable, Sendable {
 }
 
 struct MicrosoftAITranscriptionClient: Sendable {
+    private struct ErrorResponseBody: Decodable {
+        struct ErrorDetail: Decodable {
+            let message: String?
+        }
+
+        let message: String?
+        let error: ErrorDetail?
+    }
+
     struct Definition: Encodable, Sendable {
         struct EnhancedMode: Encodable, Sendable {
             struct ModelOptions: Encodable, Sendable {
@@ -273,7 +282,7 @@ struct MicrosoftAITranscriptionClient: Sendable {
         case 429:
             throw PluginTranscriptionError.rateLimited
         default:
-            let summary = PluginHTTPErrorBodyFormatter.summary(from: data, response: httpResponse)
+            let summary = Self.errorSummary(from: data)
             if httpResponse.statusCode == 400,
                summary.localizedCaseInsensitiveContains("enhanced mode with model"),
                let region = MicrosoftAIEndpoint.unsupportedMAIRegion(from: endpoint) {
@@ -293,6 +302,23 @@ struct MicrosoftAITranscriptionClient: Sendable {
                 "Microsoft AI transcription failed (HTTP \(httpResponse.statusCode)): \(summary)"
             )
         }
+    }
+
+    static func errorSummary(from data: Data) -> String {
+        if let response = try? JSONDecoder().decode(ErrorResponseBody.self, from: data),
+           let message = response.error?.message ?? response.message {
+            return normalizedErrorSummary(message)
+        }
+
+        return normalizedErrorSummary(String(decoding: data.prefix(4_096), as: UTF8.self))
+    }
+
+    private static func normalizedErrorSummary(_ value: String) -> String {
+        let summary = value
+            .split(whereSeparator: { $0.isWhitespace })
+            .joined(separator: " ")
+        guard !summary.isEmpty else { return "No response body." }
+        return String(summary.prefix(1_000))
     }
 
     static func parseResponse(_ data: Data) throws -> PluginStructuredTranscriptionResult {

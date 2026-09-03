@@ -375,6 +375,31 @@ final class MicrosoftAIPluginTests: XCTestCase {
         }
     }
 
+    func testErrorSummaryHandlesAzureShapesAndBoundsFallbackText() {
+        XCTAssertEqual(
+            MicrosoftAITranscriptionClient.errorSummary(
+                from: Data(#"{"message":"  Root\nmessage  "}"#.utf8)
+            ),
+            "Root message"
+        )
+        XCTAssertEqual(
+            MicrosoftAITranscriptionClient.errorSummary(
+                from: Data(#"{"error":{"message":"Nested message"}}"#.utf8)
+            ),
+            "Nested message"
+        )
+        XCTAssertEqual(
+            MicrosoftAITranscriptionClient.errorSummary(from: Data()),
+            "No response body."
+        )
+        XCTAssertEqual(
+            MicrosoftAITranscriptionClient.errorSummary(
+                from: Data(String(repeating: "x", count: 5_000).utf8)
+            ).count,
+            1_000
+        )
+    }
+
     func testRequiresConfigurationAndRejectsTranslation() async throws {
         let unconfigured = MicrosoftAIPlugin()
         unconfigured.activate(host: try PluginTestHostServices())
