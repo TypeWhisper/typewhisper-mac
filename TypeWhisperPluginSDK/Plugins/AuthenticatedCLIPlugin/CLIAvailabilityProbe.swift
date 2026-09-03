@@ -129,6 +129,11 @@ struct CLIAvailabilityProbe: Sendable {
                 authenticated = authentication.exitCode == 0 && !output.contains("not logged")
             case .claude:
                 authenticated = authentication.exitCode == 0 && claudeIsLoggedIn(authentication.standardOutput)
+            case .opencode:
+                authenticated = authentication.exitCode == 0
+                    && openCodeZenIsConfigured(
+                        authentication.standardOutput + authentication.standardError
+                    )
             case .antigravity:
                 let output = try combinedOutput(authentication)
                 authenticated = authentication.exitCode == 0
@@ -201,6 +206,16 @@ struct CLIAvailabilityProbe: Sendable {
             return false
         }
         return object["loggedIn"] as? Bool == true
+    }
+
+    private func openCodeZenIsConfigured(_ data: Data) -> Bool {
+        guard let output = String(data: data, encoding: .utf8) else { return false }
+        let withoutANSI = output.replacingOccurrences(
+            of: #"\x1B\[[0-?]*[ -/]*[@-~]"#,
+            with: "",
+            options: .regularExpression
+        )
+        return withoutANSI.localizedCaseInsensitiveContains("OpenCode Zen")
     }
 
     private func status(
