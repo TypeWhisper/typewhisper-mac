@@ -350,11 +350,17 @@ final class MicrosoftAIPluginTests: XCTestCase {
         )
         let plugin = MicrosoftAIPlugin()
         plugin.activate(host: host)
+        let unsupportedMessage = String(repeating: "x", count: 1_100)
+            + " Enhanced mode with model is currently not supported yet."
+        let responseData = try JSONEncoder().encode([
+            "code": "InvalidRequest",
+            "message": unsupportedMessage,
+        ])
 
         PluginHTTPClientTestHarness.configure { _ in
             PluginHTTPClientMockSession(outcomes: [
                 .success(
-                    Data(#"{"code":"InvalidRequest","message":"Enhanced mode with model is currently not supported yet."}"#.utf8),
+                    responseData,
                     Self.httpResponse(statusCode: 400)
                 ),
             ])
