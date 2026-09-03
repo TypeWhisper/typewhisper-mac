@@ -408,7 +408,11 @@ final class CartesiaPlugin: NSObject,
             )
 
             let (data, response) = try await PluginHTTPClient.data(for: request)
-            try Self.validateHTTPResponse(data: data, response: response)
+            try Self.validateHTTPResponse(
+                data: data,
+                response: response,
+                preservesRawResponseForUploadRetry: true
+            )
             return try Self.parseTranscriptionResponse(
                 data,
                 fallbackLanguage: resolvedLanguage
@@ -709,7 +713,11 @@ extension CartesiaPlugin {
         return request
     }
 
-    static func validateHTTPResponse(data: Data, response: URLResponse) throws {
+    static func validateHTTPResponse(
+        data: Data,
+        response: URLResponse,
+        preservesRawResponseForUploadRetry: Bool = false
+    ) throws {
         guard let httpResponse = response as? HTTPURLResponse else {
             throw PluginTranscriptionError.networkError("Invalid response")
         }
@@ -724,7 +732,15 @@ extension CartesiaPlugin {
         case 429:
             throw PluginTranscriptionError.rateLimited
         default:
-            throw PluginTranscriptionError.apiError(errorMessage(from: data, statusCode: httpResponse.statusCode))
+            let error = PluginTranscriptionError.apiError(errorMessage(from: data, response: httpResponse))
+            if preservesRawResponseForUploadRetry {
+                throw PluginAudioUploadHTTPFailure(
+                    statusCode: httpResponse.statusCode,
+                    responseData: data,
+                    underlyingError: error
+                )
+            }
+            throw error
         }
     }
 
@@ -776,20 +792,18 @@ extension CartesiaPlugin {
         }
     }
 
-    private static func errorMessage(from data: Data, statusCode: Int) -> String {
+    private static func errorMessage(from data: Data, response: HTTPURLResponse) -> String {
         if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             if let message = json["message"] as? String {
-                return "HTTP \(statusCode): \(message)"
+                return "HTTP \(response.statusCode): \(message)"
             }
             if let error = json["error"] as? [String: Any],
                let message = error["message"] as? String {
-                return "HTTP \(statusCode): \(message)"
+                return "HTTP \(response.statusCode): \(message)"
             }
         }
-        if let body = String(data: data, encoding: .utf8), !body.isEmpty {
-            return "HTTP \(statusCode): \(body)"
-        }
-        return "HTTP \(statusCode)"
+        let body = PluginHTTPErrorBodyFormatter.summary(from: data, response: response)
+        return "HTTP \(response.statusCode): \(body)"
     }
 
     struct TranscriptionResponse: Decodable {

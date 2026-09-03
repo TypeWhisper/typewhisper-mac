@@ -541,7 +541,7 @@ final class Reson8Plugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendab
         case 429: throw PluginTranscriptionError.rateLimited
         case 500: throw PluginTranscriptionError.apiError("Reson8 server error: \(Self.errorMessage(from: data))")
         default:
-            let body = String(data: data, encoding: .utf8) ?? ""
+            let body = PluginHTTPErrorBodyFormatter.summary(from: data, response: httpResponse)
             throw PluginTranscriptionError.apiError("HTTP \(httpResponse.statusCode): \(body)")
         }
 

@@ -1687,8 +1687,14 @@ final class SonioxPlugin: NSObject,
         case 413: throw PluginTranscriptionError.fileTooLarge
         case 429: throw Self.rateLimitError(from: data)
         default:
-            let body = String(data: data, encoding: .utf8) ?? ""
-            throw PluginTranscriptionError.apiError("Upload failed HTTP \(httpResponse.statusCode): \(body)")
+            let body = PluginHTTPErrorBodyFormatter.summary(from: data, response: httpResponse)
+            throw PluginAudioUploadHTTPFailure(
+                statusCode: httpResponse.statusCode,
+                responseData: data,
+                underlyingError: PluginTranscriptionError.apiError(
+                    "Upload failed HTTP \(httpResponse.statusCode): \(body)"
+                )
+            )
         }
 
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -1725,7 +1731,7 @@ final class SonioxPlugin: NSObject,
         case 401: throw PluginTranscriptionError.invalidApiKey
         case 429: throw Self.rateLimitError(from: data)
         default:
-            let body = String(data: data, encoding: .utf8) ?? ""
+            let body = PluginHTTPErrorBodyFormatter.summary(from: data, response: httpResponse)
             throw PluginTranscriptionError.apiError("Create transcription failed HTTP \(httpResponse.statusCode): \(body)")
         }
 
@@ -1888,7 +1894,7 @@ final class SonioxPlugin: NSObject,
         case 429:
             throw rateLimitError(from: data)
         default:
-            throw PluginTranscriptionError.apiError(errorMessage(from: data, statusCode: httpResponse.statusCode))
+            throw PluginTranscriptionError.apiError(errorMessage(from: data, response: httpResponse))
         }
     }
 
@@ -2244,7 +2250,7 @@ final class SonioxPlugin: NSObject,
         case 429:
             throw Self.rateLimitError(from: data)
         default:
-            let body = String(data: data, encoding: .utf8) ?? ""
+            let body = PluginHTTPErrorBodyFormatter.summary(from: data, response: httpResponse)
             throw PluginTranscriptionError.apiError("Fetch transcript failed HTTP \(httpResponse.statusCode): \(body)")
         }
 
@@ -2340,14 +2346,12 @@ final class SonioxPlugin: NSObject,
         return .apiError(message)
     }
 
-    private static func errorMessage(from data: Data, statusCode: Int) -> String {
+    private static func errorMessage(from data: Data, response: HTTPURLResponse) -> String {
         if let message = providerErrorMessage(from: data) {
             return message
         }
-        if let body = String(data: data, encoding: .utf8), !body.isEmpty {
-            return "HTTP \(statusCode): \(body)"
-        }
-        return "HTTP \(statusCode)"
+        let body = PluginHTTPErrorBodyFormatter.summary(from: data, response: response)
+        return "HTTP \(response.statusCode): \(body)"
     }
 
     // MARK: - Settings View

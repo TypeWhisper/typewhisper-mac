@@ -506,7 +506,11 @@ final class GeminiPlugin: NSObject,
                     for: request,
                     resourceTimeout: Self.dedicatedTranscriptionRequestTimeout
                 )
-                try Self.validateTranscriptionResponse(data: data, response: response)
+                try Self.validateTranscriptionResponse(
+                    data: data,
+                    response: response,
+                    preservesRawResponseForUploadRetry: true
+                )
                 let text = try Self.parseDedicatedTranscriptionResponse(data)
                 await Self.deleteUploadedFile(uploadedFile, apiKey: apiKey)
                 return PluginTranscriptionResult(text: text, detectedLanguage: language)
@@ -523,7 +527,11 @@ final class GeminiPlugin: NSObject,
     ) async throws -> GeminiUploadedFile {
         let startRequest = try makeFileUploadStartRequest(uploadFile: uploadFile, apiKey: apiKey)
         let (startData, startResponse) = try await PluginHTTPClient.data(for: startRequest)
-        try validateTranscriptionResponse(data: startData, response: startResponse)
+        try validateTranscriptionResponse(
+            data: startData,
+            response: startResponse,
+            preservesRawResponseForUploadRetry: true
+        )
 
         guard let httpResponse = startResponse as? HTTPURLResponse,
               let uploadURLValue = httpResponse.value(forHTTPHeaderField: "x-goog-upload-url"),
@@ -539,7 +547,11 @@ final class GeminiPlugin: NSObject,
             for: uploadRequest,
             resourceTimeout: Self.dedicatedTranscriptionRequestTimeout
         )
-        try validateTranscriptionResponse(data: data, response: response)
+        try validateTranscriptionResponse(
+            data: data,
+            response: response,
+            preservesRawResponseForUploadRetry: true
+        )
 
         do {
             let decoded = try JSONDecoder().decode(GeminiFileUploadResponse.self, from: data)
@@ -688,7 +700,11 @@ final class GeminiPlugin: NSObject,
         _ = try? await PluginHTTPClient.data(for: request)
     }
 
-    static func validateTranscriptionResponse(data: Data, response: URLResponse) throws {
+    static func validateTranscriptionResponse(
+        data: Data,
+        response: URLResponse,
+        preservesRawResponseForUploadRetry: Bool = false
+    ) throws {
         guard let httpResponse = response as? HTTPURLResponse else {
             throw PluginTranscriptionError.networkError("Invalid Gemini response.")
         }
@@ -703,18 +719,27 @@ final class GeminiPlugin: NSObject,
         case 429:
             throw PluginTranscriptionError.rateLimited
         default:
-            throw PluginTranscriptionError.apiError("HTTP \(httpResponse.statusCode): \(transcriptionErrorMessage(from: data))")
+            let message = "HTTP \(httpResponse.statusCode): \(transcriptionErrorMessage(from: data, response: httpResponse))"
+            let error = PluginTranscriptionError.apiError(message)
+            if preservesRawResponseForUploadRetry {
+                throw PluginAudioUploadHTTPFailure(
+                    statusCode: httpResponse.statusCode,
+                    responseData: data,
+                    underlyingError: error
+                )
+            }
+            throw error
         }
     }
 
-    private static func transcriptionErrorMessage(from data: Data) -> String {
-        guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let error = json["error"] as? [String: Any],
-              let message = error["message"] as? String,
-              !message.isEmpty else {
-            return "Gemini transcription request failed."
+    private static func transcriptionErrorMessage(from data: Data, response: HTTPURLResponse) -> String {
+        if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+           let error = json["error"] as? [String: Any],
+           let message = error["message"] as? String,
+           !message.isEmpty {
+            return message
         }
-        return message
+        return PluginHTTPErrorBodyFormatter.summary(from: data, response: response)
     }
 
     private static func resolvedTranscriptionModelId(

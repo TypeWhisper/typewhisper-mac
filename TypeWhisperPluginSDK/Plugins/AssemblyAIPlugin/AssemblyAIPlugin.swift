@@ -219,8 +219,14 @@ final class AssemblyAIPlugin: NSObject, StructuredTranscriptionEnginePlugin, Dic
         case 200: break
         case 401: throw PluginTranscriptionError.invalidApiKey
         default:
-            let body = String(data: data, encoding: .utf8) ?? ""
-            throw PluginTranscriptionError.apiError("Upload failed HTTP \(httpResponse.statusCode): \(body)")
+            let body = PluginHTTPErrorBodyFormatter.summary(from: data, response: httpResponse)
+            throw PluginAudioUploadHTTPFailure(
+                statusCode: httpResponse.statusCode,
+                responseData: data,
+                underlyingError: PluginTranscriptionError.apiError(
+                    "Upload failed HTTP \(httpResponse.statusCode): \(body)"
+                )
+            )
         }
 
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -269,7 +275,7 @@ final class AssemblyAIPlugin: NSObject, StructuredTranscriptionEnginePlugin, Dic
         case 401: throw PluginTranscriptionError.invalidApiKey
         case 429: throw PluginTranscriptionError.rateLimited
         default:
-            let body = String(data: data, encoding: .utf8) ?? ""
+            let body = PluginHTTPErrorBodyFormatter.summary(from: data, response: httpResponse)
             throw PluginTranscriptionError.apiError("Submit failed HTTP \(httpResponse.statusCode): \(body)")
         }
 

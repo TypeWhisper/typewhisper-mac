@@ -316,7 +316,7 @@ final class GoogleCloudSTTPlugin: NSObject, TranscriptionEnginePlugin, Dictionar
         }
 
         guard httpResponse.statusCode == 200 else {
-            let message = Self.formattedGoogleErrorMessage(from: data, statusCode: httpResponse.statusCode)
+            let message = Self.formattedGoogleErrorMessage(from: data, response: httpResponse)
                 ?? "HTTP \(httpResponse.statusCode)"
             throw PluginTranscriptionError.apiError(message)
         }
@@ -449,7 +449,7 @@ final class GoogleCloudSTTPlugin: NSObject, TranscriptionEnginePlugin, Dictionar
                 )
             )
         case 403:
-            let message = Self.formattedGoogleErrorMessage(from: data, statusCode: httpResponse.statusCode)
+            let message = Self.formattedGoogleErrorMessage(from: data, response: httpResponse)
                 ?? "Google Cloud denied access. Check IAM permissions and whether Speech-to-Text is enabled."
             throw PluginTranscriptionError.apiError(message)
         case 413:
@@ -457,7 +457,7 @@ final class GoogleCloudSTTPlugin: NSObject, TranscriptionEnginePlugin, Dictionar
         case 429:
             throw PluginTranscriptionError.rateLimited
         default:
-            let message = Self.formattedGoogleErrorMessage(from: data, statusCode: httpResponse.statusCode)
+            let message = Self.formattedGoogleErrorMessage(from: data, response: httpResponse)
                 ?? "HTTP \(httpResponse.statusCode)"
             throw PluginTranscriptionError.apiError(message)
         }
@@ -655,7 +655,10 @@ final class GoogleCloudSTTPlugin: NSObject, TranscriptionEnginePlugin, Dictionar
         return Double(duration.dropLast())
     }
 
-    private static func extractGoogleErrorMessage(from data: Data) -> String? {
+    private static func extractGoogleErrorMessage(
+        from data: Data,
+        response: HTTPURLResponse
+    ) -> String? {
         if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             if let description = json["error_description"] as? String, !description.isEmpty {
                 return description
@@ -670,19 +673,18 @@ final class GoogleCloudSTTPlugin: NSObject, TranscriptionEnginePlugin, Dictionar
             }
         }
 
-        if let body = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
-           !body.isEmpty {
-            return body
-        }
-
-        return nil
+        guard !data.isEmpty else { return nil }
+        return PluginHTTPErrorBodyFormatter.summary(from: data, response: response)
     }
 
-    private static func formattedGoogleErrorMessage(from data: Data, statusCode: Int? = nil) -> String? {
-        guard let rawMessage = extractGoogleErrorMessage(from: data) else {
+    private static func formattedGoogleErrorMessage(
+        from data: Data,
+        response: HTTPURLResponse
+    ) -> String? {
+        guard let rawMessage = extractGoogleErrorMessage(from: data, response: response) else {
             return nil
         }
-        return formatGoogleErrorMessage(rawMessage, statusCode: statusCode)
+        return formatGoogleErrorMessage(rawMessage, statusCode: response.statusCode)
     }
 
     private static func formatGoogleErrorMessage(_ message: String, statusCode: Int? = nil) -> String {

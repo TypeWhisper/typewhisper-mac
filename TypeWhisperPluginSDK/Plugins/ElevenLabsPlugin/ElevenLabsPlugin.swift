@@ -432,8 +432,14 @@ final class ElevenLabsPlugin: NSObject, DictionaryTermHintTranscriptionEnginePlu
             case 429:
                 throw PluginTranscriptionError.rateLimited
             default:
-                let body = String(data: data, encoding: .utf8) ?? ""
-                throw PluginTranscriptionError.apiError("HTTP \(httpResponse.statusCode): \(body)")
+                let body = PluginHTTPErrorBodyFormatter.summary(from: data, response: httpResponse)
+                throw PluginAudioUploadHTTPFailure(
+                    statusCode: httpResponse.statusCode,
+                    responseData: data,
+                    underlyingError: PluginTranscriptionError.apiError(
+                        "HTTP \(httpResponse.statusCode): \(body)"
+                    )
+                )
             }
         }
     }

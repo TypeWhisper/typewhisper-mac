@@ -172,7 +172,7 @@ final class CloudflareASRPlugin: NSObject, TranscriptionEnginePlugin, Dictionary
         case 413:
             throw PluginTranscriptionError.fileTooLarge
         default:
-            let errorMessage = String(data: responseData, encoding: .utf8) ?? "Unknown error"
+            let errorMessage = PluginHTTPErrorBodyFormatter.summary(from: responseData, response: httpResponse)
             throw PluginTranscriptionError.apiError("HTTP \(httpResponse.statusCode): \(errorMessage)")
         }
 

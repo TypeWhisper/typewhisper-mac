@@ -1110,7 +1110,7 @@ final class XAIPlugin: NSObject,
         case 429:
             throw PluginTranscriptionError.rateLimited
         default:
-            let body = String(data: data, encoding: .utf8) ?? ""
+            let body = PluginHTTPErrorBodyFormatter.summary(from: data, response: httpResponse)
             throw PluginTranscriptionError.apiError("HTTP \(httpResponse.statusCode): \(body)")
         }
     }

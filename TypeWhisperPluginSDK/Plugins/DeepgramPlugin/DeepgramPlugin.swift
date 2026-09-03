@@ -888,8 +888,14 @@ final class DeepgramPlugin: NSObject,
             case 401: throw PluginTranscriptionError.invalidApiKey
             case 429: throw PluginTranscriptionError.rateLimited
             default:
-                let body = String(data: data, encoding: .utf8) ?? ""
-                throw PluginTranscriptionError.apiError("HTTP \(httpResponse.statusCode): \(body)")
+                let body = PluginHTTPErrorBodyFormatter.summary(from: data, response: httpResponse)
+                throw PluginAudioUploadHTTPFailure(
+                    statusCode: httpResponse.statusCode,
+                    responseData: data,
+                    underlyingError: PluginTranscriptionError.apiError(
+                        "HTTP \(httpResponse.statusCode): \(body)"
+                    )
+                )
             }
 
             let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]

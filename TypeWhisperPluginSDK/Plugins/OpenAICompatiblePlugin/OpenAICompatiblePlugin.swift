@@ -1594,8 +1594,14 @@ final class OpenAICompatiblePlugin: NSObject,
         case 413:
             throw PluginTranscriptionError.fileTooLarge
         default:
-            let errorMessage = String(data: responseData, encoding: .utf8) ?? "Unknown error"
-            throw PluginTranscriptionError.apiError("HTTP \(httpResponse.statusCode): \(errorMessage)")
+            let errorMessage = PluginHTTPErrorBodyFormatter.summary(from: responseData, response: httpResponse)
+            throw PluginAudioUploadHTTPFailure(
+                statusCode: httpResponse.statusCode,
+                responseData: responseData,
+                underlyingError: PluginTranscriptionError.apiError(
+                    "HTTP \(httpResponse.statusCode): \(errorMessage)"
+                )
+            )
         }
 
         struct Segment: Decodable {
