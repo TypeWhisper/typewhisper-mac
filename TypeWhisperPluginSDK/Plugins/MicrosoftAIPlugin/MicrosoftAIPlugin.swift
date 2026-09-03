@@ -277,11 +277,16 @@ struct MicrosoftAITranscriptionClient: Sendable {
             if httpResponse.statusCode == 400,
                summary.localizedCaseInsensitiveContains("enhanced mode with model"),
                let region = MicrosoftAIEndpoint.unsupportedMAIRegion(from: endpoint) {
+                let template = String(
+                    localized: "MAI Transcribe is not available in the Azure region %@. Use a Speech resource in one of these regions: %@.",
+                    bundle: Bundle(for: MicrosoftAIPlugin.self)
+                )
                 throw PluginTranscriptionError.apiError(
-                    "MAI Transcribe is unavailable in Azure region '\(region)'. "
-                        + "Use a Speech resource in one of these regions: "
-                        + MicrosoftAIEndpoint.supportedMAIRegions.joined(separator: ", ")
-                        + "."
+                    String(
+                        format: template,
+                        region,
+                        MicrosoftAIEndpoint.supportedMAIRegions.joined(separator: ", ")
+                    )
                 )
             }
             throw PluginTranscriptionError.apiError(
