@@ -168,7 +168,7 @@ jobs:
           echo "Target: $TARGET (macOS $DEPLOY_TARGET, Xcode $XCODE_VERSION, embed=$EMBED_SWIFT_LIBS)"
 
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Validate community plugin registry metadata
         run: |
@@ -178,7 +178,7 @@ jobs:
           python3 scripts/assemble_community_plugin_registry.py
 
       - name: Setup Xcode
-        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
           xcode-version: ${{ env.XCODE_VERSION }}
 
