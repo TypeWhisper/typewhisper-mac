@@ -70,6 +70,15 @@ PLUGIN_SCREENSHOTS = [
   { slug: "live-transcript", target: "LiveTranscriptPlugin", id: "com.typewhisper.livetranscript" },
   { slug: "mcp-client", target: "MCPClientPlugin", id: "com.typewhisper.mcp-client" },
   { slug: "meta", target: "MetaPlugin", id: "com.typewhisper.meta" },
+  {
+    slug: "microsoft-ai",
+    target: "MicrosoftAIPlugin",
+    id: "com.typewhisper.microsoft-ai",
+    size: [560, 620],
+    defaults: {
+      "plugin.com.typewhisper.microsoft-ai.endpoint" => "https://eastus.api.cognitive.microsoft.com",
+    },
+  },
   { slug: "mistral", target: "MistralAIPlugin", id: "com.minerale.mistralai" },
   { slug: "obsidian", target: "ObsidianPlugin", id: "com.typewhisper.obsidian" },
   { slug: "openai", target: "OpenAIPlugin", id: "com.typewhisper.openai", size: [560, 627] },
@@ -443,6 +452,9 @@ def plugin_screenshot_launch_arguments(
       "--screenshot-window-width", plugin.fetch(:size).fetch(0).to_s,
       "--screenshot-window-height", plugin.fetch(:size).fetch(1).to_s,
     ])
+  end
+  plugin.fetch(:defaults, {}).each do |key, value|
+    arguments.concat(["-#{key}", value.to_s])
   end
   arguments
 end

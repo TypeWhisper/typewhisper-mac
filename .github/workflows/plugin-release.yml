@@ -100,6 +100,7 @@ jobs:
             groq) TARGET="GroqPlugin" ;;
             openai) TARGET="OpenAIPlugin" ;;
             meta) TARGET="MetaPlugin" ;;
+            microsoft-ai) TARGET="MicrosoftAIPlugin" ;;
             mistral) TARGET="MistralAIPlugin" ;;
             gemini) TARGET="GeminiPlugin" ;;
             whisperkit) TARGET="WhisperKitPlugin" ;;

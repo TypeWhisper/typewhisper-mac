@@ -1472,6 +1472,7 @@ private let typeWhisperAddonSlugsByPluginID: [String: String] = [
     "com.typewhisper.linear": "linear",
     "com.typewhisper.livetranscript": "live-transcript",
     "com.typewhisper.meta": "meta",
+    "com.typewhisper.microsoft-ai": "microsoft-ai",
     "com.typewhisper.obsidian": "obsidian",
     "com.typewhisper.openai-compatible": "openai-compatible",
     "com.typewhisper.openai": "openai",
