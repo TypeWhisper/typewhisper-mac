@@ -30,6 +30,11 @@ enum DictationRecoveryRetentionPolicy: Int, CaseIterable, Sendable {
     }
 }
 
+struct DictationRecoveryPreservationResult: Equatable, Sendable {
+    let latestRecoveryURL: URL?
+    let newlyPreservedURL: URL?
+}
+
 /// Persists the active dictation as a temporary 16 kHz mono PCM WAV so the
 /// audio can be recovered if transcription fails after recording has stopped.
 final class DictationRecoveryAudioStore: @unchecked Sendable {
@@ -147,6 +152,10 @@ final class DictationRecoveryAudioStore: @unchecked Sendable {
 
     @discardableResult
     func preserveActiveRecording() -> URL? {
+        preserveActiveRecordingResult().latestRecoveryURL
+    }
+
+    func preserveActiveRecordingResult() -> DictationRecoveryPreservationResult {
         queue.sync {
             guard retentionPolicy.keepsRecoveryFiles else {
                 closeActiveHandle()
@@ -154,11 +163,17 @@ final class DictationRecoveryAudioStore: @unchecked Sendable {
                 hasActiveRecording = false
                 removeItemIfExists(at: activeFileURL)
                 removeStoredRecoveries()
-                return nil
+                return DictationRecoveryPreservationResult(
+                    latestRecoveryURL: nil,
+                    newlyPreservedURL: nil
+                )
             }
 
             guard hasActiveRecording else {
-                return storedRecoveryURLs().first
+                return DictationRecoveryPreservationResult(
+                    latestRecoveryURL: storedRecoveryURLs().first,
+                    newlyPreservedURL: nil
+                )
             }
 
             closeActiveHandle()
@@ -167,7 +182,10 @@ final class DictationRecoveryAudioStore: @unchecked Sendable {
             guard activeSampleCount > 0 else {
                 activeSampleCount = 0
                 removeItemIfExists(at: activeFileURL)
-                return storedRecoveryURLs().first
+                return DictationRecoveryPreservationResult(
+                    latestRecoveryURL: storedRecoveryURLs().first,
+                    newlyPreservedURL: nil
+                )
             }
 
             finalizeActiveWavHeader(sampleCount: activeSampleCount)
@@ -176,11 +194,18 @@ final class DictationRecoveryAudioStore: @unchecked Sendable {
             do {
                 try fileManager.moveItem(at: activeFileURL, to: recoveryURL)
                 activeSampleCount = 0
-                return canonicalFileURL(recoveryURL)
+                let canonicalRecoveryURL = canonicalFileURL(recoveryURL)
+                return DictationRecoveryPreservationResult(
+                    latestRecoveryURL: canonicalRecoveryURL,
+                    newlyPreservedURL: canonicalRecoveryURL
+                )
             } catch {
                 activeSampleCount = 0
                 removeItemIfExists(at: activeFileURL)
-                return storedRecoveryURLs().first
+                return DictationRecoveryPreservationResult(
+                    latestRecoveryURL: storedRecoveryURLs().first,
+                    newlyPreservedURL: nil
+                )
             }
         }
     }

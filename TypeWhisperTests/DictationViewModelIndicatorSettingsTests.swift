@@ -1070,7 +1070,7 @@ final class IndicatorPresentationStateTests: XCTestCase {
             actionFeedbackMessage: nil,
             actionFeedbackIcon: nil,
             actionFeedbackIsError: false,
-            actionFeedbackUndoTitle: nil,
+            actionFeedbackActionTitle: nil,
             actionFeedbackRemainingFraction: nil,
             actionFeedbackIsPaused: false,
             externalStreamingDisplayCount: 0
@@ -1095,7 +1095,7 @@ final class IndicatorPresentationStateTests: XCTestCase {
             actionFeedbackMessage: "Saved",
             actionFeedbackIcon: "checkmark.circle.fill",
             actionFeedbackIsError: false,
-            actionFeedbackUndoTitle: "Undo",
+            actionFeedbackActionTitle: "Undo",
             actionFeedbackRemainingFraction: remainingFraction,
             actionFeedbackIsPaused: isPaused,
             externalStreamingDisplayCount: 0
