@@ -1873,6 +1873,17 @@ final class TypeWhisperIntegrationTests: XCTestCase {
                 language: "en",
                 engineUsed: "parakeet"
             )
+            for index in 1..<25 {
+                context.historyService.addRecord(
+                    rawText: "History entry \(index)",
+                    finalText: "History entry \(index)",
+                    appName: "Notes",
+                    appBundleIdentifier: "com.apple.Notes",
+                    durationSeconds: 1,
+                    language: "en",
+                    engineUsed: "parakeet"
+                )
+            }
             context.profileService.addProfile(
                 name: "Legacy Docs",
                 urlPatterns: ["docs.github.com"],
@@ -1899,6 +1910,24 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let history = try Self.jsonObject(
             await router.route(HTTPRequest(method: "GET", path: "/v1/history", queryParams: [:], headers: [:], body: Data()))
         )
+        let historyPage = try Self.jsonObject(
+            await router.route(HTTPRequest(
+                method: "GET",
+                path: "/v1/history",
+                queryParams: ["limit": "5", "offset": "20"],
+                headers: [:],
+                body: Data()
+            ))
+        )
+        let historySearch = try Self.jsonObject(
+            await router.route(HTTPRequest(
+                method: "GET",
+                path: "/v1/history",
+                queryParams: ["q": "Sprint planning"],
+                headers: [:],
+                body: Data()
+            ))
+        )
         let rules = try Self.jsonObject(
             await router.route(HTTPRequest(method: "GET", path: "/v1/rules", queryParams: [:], headers: [:], body: Data()))
         )
@@ -1909,7 +1938,13 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(status["status"] as? String, "no_model")
         XCTAssertEqual(status["api_version"] as? String, "1.2")
         XCTAssertEqual(status["supports_workflow_dictation"] as? Bool, true)
-        XCTAssertEqual((history["entries"] as? [[String: Any]])?.count, 1)
+        XCTAssertEqual((history["entries"] as? [[String: Any]])?.count, 25)
+        XCTAssertEqual(history["total"] as? Int, 25)
+        XCTAssertEqual((historyPage["entries"] as? [[String: Any]])?.count, 5)
+        XCTAssertEqual(historyPage["total"] as? Int, 25)
+        XCTAssertEqual(historyPage["offset"] as? Int, 20)
+        XCTAssertEqual((historySearch["entries"] as? [[String: Any]])?.count, 1)
+        XCTAssertEqual(historySearch["total"] as? Int, 1)
         XCTAssertEqual((rules["rules"] as? [[String: Any]])?.first?["name"] as? String, "Docs")
         XCTAssertEqual((rules["rules"] as? [[String: Any]])?.first?["language_mode"] as? String, "multiple")
         XCTAssertEqual((rules["rules"] as? [[String: Any]])?.first?["language_hints"] as? [String], ["de", "en"])
@@ -3955,7 +3990,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(transcription["app_bundle_id"] as? String, "com.apple.Notes")
         XCTAssertEqual(transcription["words_count"] as? Int, 1)
 
-        let recordID = await MainActor.run { apiContext.historyService.records.first?.id.uuidString }
+        let recordID = await MainActor.run { apiContext.historyService.recentRecords.first?.id.uuidString }
         XCTAssertEqual(recordID, startID)
         XCTAssertEqual(workflowPlugin.restoredModelId, "beta")
         XCTAssertEqual(workflowPlugin.transcribedModelId, "beta")
@@ -4622,7 +4657,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(otherValue, "Other")
         XCTAssertEqual(activationCount, 1)
         XCTAssertEqual(focusCount, 1)
-        XCTAssertEqual(context.historyService.records.first?.appBundleIdentifier, "com.apple.Notes")
+        XCTAssertEqual(context.historyService.recentRecords.first?.appBundleIdentifier, "com.apple.Notes")
     }
 
     @MainActor
@@ -4743,7 +4778,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(activationCount, 1)
         XCTAssertEqual(observationBeginCount, 1)
         XCTAssertEqual(
-            context.historyService.records.first?.appBundleIdentifier,
+            context.historyService.recentRecords.first?.appBundleIdentifier,
             "com.microsoft.VSCode"
         )
     }
@@ -6606,9 +6641,9 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(session.status, .completed)
         XCTAssertEqual(pasteboard.string(forType: .string), "transcribed")
         XCTAssertEqual(session.transcription?.text, "transcribed")
-        XCTAssertEqual(context.historyService.records.first?.finalText, "transcribed")
+        XCTAssertEqual(context.historyService.recentRecords.first?.finalText, "transcribed")
         XCTAssertEqual(
-            context.recentTranscriptionStore.latestEntry(historyRecords: context.historyService.records)?.finalText,
+            context.recentTranscriptionStore.latestEntry(historyRecords: context.historyService.recentRecords)?.finalText,
             "transcribed"
         )
     }
@@ -6856,7 +6891,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(session.status, .completed)
         XCTAssertEqual(pasteboard.string(forType: .string), " strong ")
         XCTAssertEqual(session.transcription?.text, "Strong.")
-        XCTAssertEqual(context.historyService.records.first?.finalText, "Strong.")
+        XCTAssertEqual(context.historyService.recentRecords.first?.finalText, "Strong.")
     }
 
     @MainActor

@@ -55,8 +55,8 @@ final class UsageStatisticsServiceTests: XCTestCase {
         )
 
         let service = UsageStatisticsService(appSupportDirectory: directory)
-        service.backfillFromHistoryIfNeeded(historyService.records)
-        service.backfillFromHistoryIfNeeded(historyService.records)
+        service.backfillFromHistoryIfNeeded(historyService.recentRecords)
+        service.backfillFromHistoryIfNeeded(historyService.recentRecords)
 
         var summary = service.summary(from: nil)
         XCTAssertEqual(summary.transcriptionCount, 2)
@@ -64,7 +64,7 @@ final class UsageStatisticsServiceTests: XCTestCase {
         XCTAssertEqual(summary.appCount, 2)
 
         service.clearUsageStatistics()
-        service.backfillFromHistoryIfNeeded(historyService.records)
+        service.backfillFromHistoryIfNeeded(historyService.recentRecords)
 
         summary = service.summary(from: nil)
         XCTAssertEqual(summary.transcriptionCount, 0)
@@ -94,7 +94,7 @@ final class UsageStatisticsServiceTests: XCTestCase {
             engineUsed: "parakeet",
             modelUsed: "parakeet-fast"
         )
-        let recordHour = calendar.component(.hour, from: historyService.records[0].timestamp)
+        let recordHour = calendar.component(.hour, from: historyService.recentRecords[0].timestamp)
 
         do {
             // Simulate a pre-existing installation: totals already backfilled from history
@@ -118,7 +118,7 @@ final class UsageStatisticsServiceTests: XCTestCase {
         }
 
         let service = UsageStatisticsService(appSupportDirectory: directory, calendar: calendar)
-        service.backfillFromHistoryIfNeeded(historyService.records)
+        service.backfillFromHistoryIfNeeded(historyService.recentRecords)
 
         let summary = service.summary(from: today)
         XCTAssertEqual(summary.transcriptionCount, 1, "Totals must not be double-counted by the detail backfill")
@@ -130,7 +130,7 @@ final class UsageStatisticsServiceTests: XCTestCase {
         XCTAssertEqual(snapshot.hourCounts[recordHour], 1)
 
         // Running it again must stay idempotent.
-        service.backfillFromHistoryIfNeeded(historyService.records)
+        service.backfillFromHistoryIfNeeded(historyService.recentRecords)
         let secondSnapshot = try XCTUnwrap(service.dailyWordCounts(days: 1).first)
         XCTAssertEqual(secondSnapshot.appCounts, [UsageStatisticsKeys.appKey(bundleIdentifier: "com.example.editor", appName: "Editor"): 1])
     }
@@ -187,7 +187,7 @@ final class UsageStatisticsServiceTests: XCTestCase {
             historyService: historyService,
             usageStatisticsService: usageStatisticsService
         )
-        let widgetData = widgetDataService.buildWidgetData(records: historyService.records, now: now)
+        let widgetData = widgetDataService.buildWidgetData(records: historyService.recentRecords, now: now)
 
         XCTAssertEqual(widgetData.stats.wordsToday, 120)
         XCTAssertEqual(widgetData.stats.wordsThisWeek, 120)
@@ -284,7 +284,7 @@ final class UsageStatisticsServiceTests: XCTestCase {
         let viewModel = StatisticsViewModel(usageStatisticsService: usageStatisticsService)
         viewModel.refresh()
 
-        XCTAssertTrue(historyService.records.isEmpty)
+        XCTAssertTrue(historyService.recentRecords.isEmpty)
         XCTAssertTrue(viewModel.hasAnyData)
         XCTAssertEqual(viewModel.totalTranscriptions, 1)
         XCTAssertEqual(viewModel.totalDaysActive, 1)

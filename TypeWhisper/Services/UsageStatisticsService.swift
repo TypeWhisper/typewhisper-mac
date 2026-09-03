@@ -196,6 +196,13 @@ final class UsageStatisticsService: ObservableObject, UsageStatisticsRecording {
         }
     }
 
+    /// Defers loading History until a migration actually needs it. Normal launches with
+    /// completed aggregate migrations therefore never materialize the complete history.
+    func backfillFromHistoryIfNeeded(recordsProvider: () -> [TranscriptionRecord]) {
+        if historyBackfillCompleted, detailBackfillCompleted { return }
+        backfillFromHistoryIfNeeded(recordsProvider())
+    }
+
     /// Backfills only the app/model/hour breakdowns from history for installations that already
     /// completed the totals-only backfill before these fields existed. Does not touch totals.
     private func backfillDetailBreakdownsFromHistoryIfNeeded(_ records: [TranscriptionRecord]) {

@@ -33,11 +33,11 @@ final class RecentTranscriptionStoreTests: XCTestCase {
             engineUsed: "mock"
         )
 
-        let newerHistory = try XCTUnwrap(historyService.records.first(where: { $0.id == duplicatedID }))
+        let newerHistory = try XCTUnwrap(historyService.recentRecords.first(where: { $0.id == duplicatedID }))
         newerHistory.timestamp = now.addingTimeInterval(-60)
         historyService.updateRecord(newerHistory, finalText: newerHistory.finalText)
 
-        let olderHistory = try XCTUnwrap(historyService.records.first(where: { $0.id != duplicatedID }))
+        let olderHistory = try XCTUnwrap(historyService.recentRecords.first(where: { $0.id != duplicatedID }))
         olderHistory.timestamp = now.addingTimeInterval(-180)
         historyService.updateRecord(olderHistory, finalText: olderHistory.finalText)
 
@@ -56,7 +56,7 @@ final class RecentTranscriptionStoreTests: XCTestCase {
             appBundleIdentifier: "com.apple.mail"
         )
 
-        let merged = store.mergedEntries(historyRecords: historyService.records)
+        let merged = store.mergedEntries(historyRecords: historyService.recentRecords)
 
         XCTAssertEqual(merged.map(\.finalText), ["Session newest", "History newer", "History oldest"])
         XCTAssertEqual(merged.count, 3)
@@ -101,7 +101,7 @@ final class RecentTranscriptionStoreTests: XCTestCase {
             language: "en",
             engineUsed: "mock"
         )
-        let historyRecord = try XCTUnwrap(historyService.records.first)
+        let historyRecord = try XCTUnwrap(historyService.recentRecords.first)
         historyRecord.timestamp = now.addingTimeInterval(-120)
         historyService.updateRecord(historyRecord, finalText: historyRecord.finalText)
 
@@ -113,8 +113,8 @@ final class RecentTranscriptionStoreTests: XCTestCase {
             appBundleIdentifier: "com.apple.mail"
         )
 
-        let mergedFirst = try XCTUnwrap(store.mergedEntries(historyRecords: historyService.records).first)
-        let latest = try XCTUnwrap(store.latestEntry(historyRecords: historyService.records))
+        let mergedFirst = try XCTUnwrap(store.mergedEntries(historyRecords: historyService.recentRecords).first)
+        let latest = try XCTUnwrap(store.latestEntry(historyRecords: historyService.recentRecords))
 
         XCTAssertEqual(latest, mergedFirst)
     }

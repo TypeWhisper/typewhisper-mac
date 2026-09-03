@@ -427,7 +427,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         )
 
         XCTAssertEqual(result.historyImported, 1)
-        let importedRecord = try XCTUnwrap(destination.historyService.records.first)
+        let importedRecord = try XCTUnwrap(destination.historyService.recentRecords.first)
         XCTAssertEqual(importedRecord.finalText, "Hello, world.")
         XCTAssertEqual(importedRecord.timestamp.timeIntervalSince1970, originalTimestamp.timeIntervalSince1970, accuracy: 0.001)
         XCTAssertNil(importedRecord.audioFileName)
@@ -674,7 +674,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         )
 
         XCTAssertEqual(result.historyImported, 0)
-        XCTAssertTrue(destination.historyService.records.isEmpty)
+        XCTAssertTrue(destination.historyService.recentRecords.isEmpty)
         XCTAssertFalse(destination.usageStatisticsService.hasAnyStatistics)
     }
 
@@ -723,7 +723,7 @@ final class SettingsBackupExporterTests: XCTestCase {
 
         XCTAssertEqual(result.historyImported, 1)
         XCTAssertEqual(result.historySkippedByRetention, 1)
-        XCTAssertEqual(destination.historyService.records.first?.finalText, "recent")
+        XCTAssertEqual(destination.historyService.recentRecords.first?.finalText, "recent")
     }
 
     func testProfileImportAppendsRatherThanReusingSourcePriority() async throws {

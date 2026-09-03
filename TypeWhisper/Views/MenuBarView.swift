@@ -33,7 +33,7 @@ private final class MenuBarState: ObservableObject {
 
         // Set initial values immediately
         self.isModelReady = modelManager.isModelReady
-        let hasRecentTranscriptions = recentTranscriptionStore.latestEntry(historyRecords: historyService.records) != nil
+        let hasRecentTranscriptions = recentTranscriptionStore.latestEntry(historyRecords: historyService.recentRecords) != nil
         self.hasRecentTranscriptions = hasRecentTranscriptions
         self.canCopyLastTranscription = hasRecentTranscriptions
         self.hasLastTranscribedText = dictation.lastTranscribedText != nil
@@ -78,7 +78,7 @@ private final class MenuBarState: ObservableObject {
             }
             .store(in: &cancellables)
 
-        historyService.$records
+        historyService.$recentRecords
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.refreshCopyAvailability()
@@ -185,7 +185,7 @@ private final class MenuBarState: ObservableObject {
     private func refreshCopyAvailability() {
         let historyService = ServiceContainer.shared.historyService
         let recentTranscriptionStore = ServiceContainer.shared.recentTranscriptionStore
-        let hasRecentTranscriptions = recentTranscriptionStore.latestEntry(historyRecords: historyService.records) != nil
+        let hasRecentTranscriptions = recentTranscriptionStore.latestEntry(historyRecords: historyService.recentRecords) != nil
         self.hasRecentTranscriptions = hasRecentTranscriptions
         canCopyLastTranscription = hasRecentTranscriptions
     }

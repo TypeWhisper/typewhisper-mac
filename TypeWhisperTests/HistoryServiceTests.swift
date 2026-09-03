@@ -59,7 +59,7 @@ final class HistoryServiceTests: XCTestCase {
             )),
         ])
 
-        let record = try XCTUnwrap(service.records.first)
+        let record = try XCTUnwrap(service.recentRecords.first)
         XCTAssertEqual(record.source, .appleWatch)
         XCTAssertEqual(record.inboxState, .open)
         XCTAssertEqual(record.inboxCompletionPolicyRaw, "afterAction")
@@ -113,7 +113,7 @@ final class HistoryServiceTests: XCTestCase {
         XCTAssertTrue(preferences.isSuppressed(retentionID))
         XCTAssertNil(preferences.explicitDeletions[retentionID.uuidString.lowercased()])
 
-        service.deleteRecord(try XCTUnwrap(service.records.first { $0.id == explicitID }))
+        service.deleteRecord(try XCTUnwrap(service.recentRecords.first { $0.id == explicitID }))
         XCTAssertNotNil(preferences.explicitDeletions[explicitID.uuidString.lowercased()])
     }
 
@@ -193,7 +193,7 @@ final class HistoryServiceTests: XCTestCase {
             language: "en",
             engineUsed: "test"
         )
-        let record = try XCTUnwrap(historyService.records.first)
+        let record = try XCTUnwrap(historyService.recentRecords.first)
         record.inboxState = .open
         record.inboxCompletionPolicyRaw = UserDataSyncHistoryCompletionPolicy.onOpen.rawValue
 
@@ -234,7 +234,7 @@ final class HistoryServiceTests: XCTestCase {
             engineUsed: "test"
         )
         let inboxRecord = try XCTUnwrap(
-            historyService.records.first { $0.finalText == "Inbox note" }
+            historyService.recentRecords.first { $0.finalText == "Inbox note" }
         )
         inboxRecord.inboxState = .open
 
@@ -358,13 +358,13 @@ final class HistoryServiceTests: XCTestCase {
 
         XCTAssertEqual(viewModel.selectedRecordIDs, [firstID])
         XCTAssertTrue(viewModel.showsUnsavedChangesPrompt)
-        XCTAssertEqual(historyService.records.first { $0.id == firstID }?.finalText, "First")
+        XCTAssertEqual(historyService.recentRecords.first { $0.id == firstID }?.finalText, "First")
 
         viewModel.discardAndContinue()
 
         XCTAssertEqual(viewModel.selectedRecordIDs, [secondID])
         XCTAssertFalse(viewModel.showsUnsavedChangesPrompt)
-        XCTAssertEqual(historyService.records.first { $0.id == firstID }?.finalText, "First")
+        XCTAssertEqual(historyService.recentRecords.first { $0.id == firstID }?.finalText, "First")
     }
 
     @MainActor
@@ -394,12 +394,12 @@ final class HistoryServiceTests: XCTestCase {
             dictionaryService: DictionaryService(appSupportDirectory: appSupportDirectory)
         )
         viewModel.requestRecordSelection([selectedID])
-        let contextRecord = try XCTUnwrap(historyService.records.first { $0.id == contextID })
+        let contextRecord = try XCTUnwrap(historyService.recentRecords.first { $0.id == contextID })
 
         viewModel.deleteRecords([contextRecord])
 
         XCTAssertEqual(viewModel.selectedRecordIDs, [selectedID])
-        XCTAssertEqual(historyService.records.map(\.id), [selectedID])
+        XCTAssertEqual(historyService.recentRecords.map(\.id), [selectedID])
     }
 
     @MainActor
@@ -428,7 +428,7 @@ final class HistoryServiceTests: XCTestCase {
             pipelineSteps: ["Cleanup"]
         )
 
-        let record = try XCTUnwrap(service.records.first)
+        let record = try XCTUnwrap(service.recentRecords.first)
         record.renderedDocument = "Rendered document"
         record.synchronizedStructuredDocument = UserDataSyncHistoryStructuredDocumentV1(
             kind: "note",
@@ -488,25 +488,269 @@ final class HistoryServiceTests: XCTestCase {
             engineUsed: "parakeet"
         )
 
-        XCTAssertEqual(service.records.count, 2)
+        XCTAssertEqual(service.recentRecords.count, 2)
         XCTAssertEqual(service.searchRecords(query: "planning").count, 1)
         XCTAssertEqual(service.uniqueDomains(), ["github.com"])
-        XCTAssertNotNil(service.audioFileURL(for: service.records.first { $0.audioFileName != nil }!))
+        XCTAssertNotNil(service.audioFileURL(for: service.recentRecords.first { $0.audioFileName != nil }!))
 
-        let staleRecord = try XCTUnwrap(service.records.first(where: { $0.finalText == "Older note" }))
+        let staleRecord = try XCTUnwrap(service.recentRecords.first(where: { $0.finalText == "Older note" }))
         staleRecord.timestamp = Calendar.current.date(byAdding: .day, value: -120, to: Date())!
         service.updateRecord(staleRecord, finalText: staleRecord.finalText)
-        usageStatisticsService.backfillFromHistoryIfNeeded(service.records)
+        usageStatisticsService.backfillFromHistoryIfNeeded(service.recentRecords)
 
         service.purgeOldRecords(retentionDays: 30)
 
-        XCTAssertEqual(service.records.count, 1)
+        XCTAssertEqual(service.recentRecords.count, 1)
         XCTAssertEqual(service.totalRecords, 1)
-        XCTAssertEqual(service.totalWords, 3)
+        XCTAssertEqual(service.allRecords().reduce(0) { $0 + $1.wordsCount }, 3)
 
         let allTimeUsage = usageStatisticsService.summary(from: nil)
         XCTAssertEqual(allTimeUsage.transcriptionCount, 2)
         XCTAssertEqual(allTimeUsage.words, 5)
         XCTAssertEqual(allTimeUsage.appCount, 2)
+    }
+
+    @MainActor
+    func testRecentCacheIsBoundedWhilePagesCoverCompleteHistory() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(
+            prefix: "HistoryPagination"
+        )
+        defer { TestSupport.remove(appSupportDirectory) }
+        let service = HistoryService(appSupportDirectory: appSupportDirectory)
+        let baseDate = Date(timeIntervalSince1970: 1_800_000_000)
+        var oldestID: UUID?
+
+        for index in 0..<125 {
+            let id = UUID()
+            if index == 0 { oldestID = id }
+            service.addRecord(
+                id: id,
+                timestamp: baseDate.addingTimeInterval(Double(index)),
+                rawText: "Record \(index)",
+                finalText: "Record \(index)",
+                appName: "Notes",
+                appBundleIdentifier: "com.apple.Notes",
+                durationSeconds: Double(index),
+                language: "en",
+                engineUsed: "test"
+            )
+        }
+
+        XCTAssertEqual(service.recentRecords.count, HistoryService.recentRecordsLimit)
+        XCTAssertEqual(service.recentRecords.first?.finalText, "Record 124")
+        XCTAssertEqual(service.totalRecords, 125)
+
+        let firstPage = service.fetchPage(offset: 0, limit: 100)
+        let secondPage = service.fetchPage(offset: 100, limit: 100)
+        let allIDs = firstPage.records.map(\.id) + secondPage.records.map(\.id)
+
+        XCTAssertEqual(firstPage.totalCount, 125)
+        XCTAssertTrue(firstPage.hasMore)
+        XCTAssertEqual(firstPage.records.count, 100)
+        XCTAssertEqual(secondPage.records.count, 25)
+        XCTAssertFalse(secondPage.hasMore)
+        XCTAssertEqual(Set(allIDs).count, 125)
+        XCTAssertEqual(service.record(withID: try XCTUnwrap(oldestID))?.finalText, "Record 0")
+    }
+
+    @MainActor
+    func testUserDataSyncIncludesRecordsBeyondRecentCache() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(
+            prefix: "HistorySyncComplete"
+        )
+        defer { TestSupport.remove(appSupportDirectory) }
+        let suiteName = "HistorySyncComplete-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let preferences = HistorySyncPreferences(defaults: defaults)
+        preferences.isEnabled = true
+        let service = HistoryService(
+            appSupportDirectory: appSupportDirectory,
+            historySyncPreferences: preferences
+        )
+
+        for index in 0..<25 {
+            service.addRecord(
+                rawText: "Sync \(index)",
+                finalText: "Sync \(index)",
+                appName: nil,
+                appBundleIdentifier: nil,
+                durationSeconds: 1,
+                language: "en",
+                engineUsed: "test"
+            )
+        }
+
+        XCTAssertEqual(service.recentRecords.count, HistoryService.recentRecordsLimit)
+        XCTAssertEqual(service.userDataSyncHistoryRecords().count, 25)
+    }
+
+    @MainActor
+    func testSearchAndRetentionIncludeRecordsOutsideRecentCache() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(
+            prefix: "HistoryCompleteQueries"
+        )
+        defer { TestSupport.remove(appSupportDirectory) }
+        let service = HistoryService(appSupportDirectory: appSupportDirectory)
+        let now = Date()
+        let targetID = UUID()
+
+        service.addRecord(
+            id: targetID,
+            timestamp: Calendar.current.date(byAdding: .day, value: -120, to: now)!,
+            rawText: "Needle outside recent cache",
+            finalText: "Needle outside recent cache",
+            appName: "Safari",
+            appBundleIdentifier: "com.apple.Safari",
+            durationSeconds: 2,
+            language: "en",
+            engineUsed: "test"
+        )
+        for index in 0..<30 {
+            service.addRecord(
+                timestamp: now.addingTimeInterval(Double(index)),
+                rawText: "Recent \(index)",
+                finalText: "Recent \(index)",
+                appName: "Notes",
+                appBundleIdentifier: "com.apple.Notes",
+                durationSeconds: 1,
+                language: "en",
+                engineUsed: "test"
+            )
+        }
+
+        XCTAssertFalse(service.recentRecords.contains { $0.id == targetID })
+        let searchPage = service.fetchPage(
+            query: HistoryQuery(searchText: "needle"),
+            offset: 0,
+            limit: 100
+        )
+        XCTAssertEqual(searchPage.records.map(\.id), [targetID])
+
+        service.purgeOldRecords(retentionDays: 30)
+
+        XCTAssertNil(service.record(withID: targetID))
+        XCTAssertEqual(service.recordCount(), 30)
+    }
+
+    @MainActor
+    func testPagedQueryCombinesAppTimeDeviceAndSourceFilters() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(
+            prefix: "HistoryCombinedQuery"
+        )
+        defer { TestSupport.remove(appSupportDirectory) }
+        let service = HistoryService(appSupportDirectory: appSupportDirectory)
+        let now = Date()
+
+        func addRecord(
+            text: String,
+            timestamp: Date,
+            appBundleIdentifier: String,
+            deviceID: String,
+            source: RecordingSource
+        ) throws -> UUID {
+            let id = UUID()
+            service.addRecord(
+                id: id,
+                timestamp: timestamp,
+                rawText: text,
+                finalText: text,
+                appName: "Test App",
+                appBundleIdentifier: appBundleIdentifier,
+                durationSeconds: 1,
+                language: "en",
+                engineUsed: "test"
+            )
+            let record = try XCTUnwrap(service.record(withID: id))
+            record.originDeviceID = deviceID
+            record.originPlatformRaw = "iOS"
+            record.source = source
+            service.updateRecord(record, finalText: text)
+            return id
+        }
+
+        let targetID = try addRecord(
+            text: "Target",
+            timestamp: now,
+            appBundleIdentifier: "com.apple.Notes",
+            deviceID: "phone-1",
+            source: .keyboard
+        )
+        _ = try addRecord(
+            text: "Wrong source",
+            timestamp: now,
+            appBundleIdentifier: "com.apple.Notes",
+            deviceID: "phone-1",
+            source: .appleWatch
+        )
+        _ = try addRecord(
+            text: "Wrong app",
+            timestamp: now,
+            appBundleIdentifier: "com.apple.TextEdit",
+            deviceID: "phone-1",
+            source: .keyboard
+        )
+        _ = try addRecord(
+            text: "Too old",
+            timestamp: Calendar.current.date(byAdding: .day, value: -120, to: now)!,
+            appBundleIdentifier: "com.apple.Notes",
+            deviceID: "phone-1",
+            source: .keyboard
+        )
+
+        let page = service.fetchPage(
+            query: HistoryQuery(
+                appBundleIdentifier: "com.apple.Notes",
+                cutoffDate: Calendar.current.date(byAdding: .day, value: -30, to: now),
+                originDeviceID: "phone-1",
+                source: .keyboard
+            ),
+            offset: 0,
+            limit: 100
+        )
+
+        XCTAssertEqual(page.records.map(\.id), [targetID])
+        XCTAssertEqual(page.totalCount, 1)
+        XCTAssertFalse(page.hasMore)
+    }
+
+    @MainActor
+    func testHistoryViewModelLoadsAdditionalPagesAndReleasesThemWhenInactive() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(
+            prefix: "HistoryViewPagination"
+        )
+        defer { TestSupport.remove(appSupportDirectory) }
+        let historyService = HistoryService(appSupportDirectory: appSupportDirectory)
+        let baseDate = Date(timeIntervalSince1970: 1_800_000_000)
+        for index in 0..<125 {
+            historyService.addRecord(
+                timestamp: baseDate.addingTimeInterval(Double(index)),
+                rawText: "Paged \(index)",
+                finalText: "Paged \(index)",
+                appName: "Notes",
+                appBundleIdentifier: "com.apple.Notes",
+                durationSeconds: 1,
+                language: "en",
+                engineUsed: "test"
+            )
+        }
+        let viewModel = HistoryViewModel(
+            historyService: historyService,
+            textDiffService: TextDiffService(),
+            dictionaryService: DictionaryService(appSupportDirectory: appSupportDirectory)
+        )
+
+        XCTAssertEqual(viewModel.records.count, HistoryService.recentRecordsLimit)
+        viewModel.activate()
+        XCTAssertEqual(viewModel.records.count, 100)
+        XCTAssertEqual(viewModel.totalMatchingRecordCount, 125)
+        XCTAssertTrue(viewModel.hasMoreRecords)
+
+        viewModel.loadMoreRecords()
+        XCTAssertEqual(viewModel.records.count, 125)
+        XCTAssertFalse(viewModel.hasMoreRecords)
+
+        viewModel.deactivate()
+        XCTAssertEqual(viewModel.records.count, HistoryService.recentRecordsLimit)
     }
 }

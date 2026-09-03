@@ -522,7 +522,7 @@ enum SettingsBackupExporter {
                 )
             }
 
-        let history = historyService.records.map { record in
+        let history = historyService.allRecords().map { record in
             HistoryEntryDTO(
                 timestamp: record.timestamp,
                 rawText: record.rawText,
@@ -770,7 +770,7 @@ enum SettingsBackupExporter {
             ? Calendar.current.date(byAdding: .day, value: -retentionDays, to: Date())
             : nil
 
-        let beforeHistoryCount = historyService.records.count
+        let beforeHistoryCount = historyService.recordCount()
         for (index, entry) in backup.history.enumerated() {
             if let retentionCutoff, entry.timestamp < retentionCutoff {
                 result.historySkippedByRetention += 1
@@ -816,7 +816,7 @@ enum SettingsBackupExporter {
                 await Task.yield()
             }
         }
-        result.historyImported = historyService.records.count - beforeHistoryCount
+        result.historyImported = historyService.recordCount() - beforeHistoryCount
 
         if let updateChannel = backup.updateChannel,
            AppConstants.ReleaseChannel(rawValue: updateChannel) != nil {

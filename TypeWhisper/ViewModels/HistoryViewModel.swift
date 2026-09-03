@@ -167,6 +167,8 @@ private enum PendingHistoryTransition: Equatable {
 
 @MainActor
 final class HistoryViewModel: ObservableObject {
+    private static let pageSize = 100
+
     nonisolated(unsafe) static var _shared: HistoryViewModel?
     static var shared: HistoryViewModel {
         guard let instance = _shared else {
@@ -199,6 +201,10 @@ final class HistoryViewModel: ObservableObject {
     @Published private(set) var deviceSections: [HistoryDeviceSection] = []
     @Published private(set) var visibleRecordCount = 0
     @Published private(set) var visibleWordCount = 0
+    @Published private(set) var totalMatchingRecordCount = 0
+    @Published private(set) var hasMoreRecords = false
+    @Published private(set) var isLoadingMore = false
+    @Published private(set) var queryID = UUID()
     @Published private(set) var pendingDeletionIDs: Set<UUID> = []
 
     let audioPlaybackService = AudioPlaybackService()
@@ -215,6 +221,11 @@ final class HistoryViewModel: ObservableObject {
     private var didInitializeDeviceExpansion = false
     private var closeWindowHandler: (() -> Void)?
     private var cancellables = Set<AnyCancellable>()
+    private var isActive = false
+    private var facetDevices: [HistoryDeviceFacet] = []
+    @Published private(set) var inboxCount = 0
+    @Published private(set) var audioCount = 0
+    @Published private(set) var failedCount = 0
 
     init(
         historyService: HistoryService,
@@ -227,7 +238,12 @@ final class HistoryViewModel: ObservableObject {
         self.dictionaryService = dictionaryService
         self.syncController = syncController
         currentDeviceID = syncController?.historySyncPreferences?.deviceID
-        records = historyService.records
+        records = historyService.recentRecords
+        totalMatchingRecordCount = historyService.totalRecords
+        hasMoreRecords = records.count < totalMatchingRecordCount
+        inboxCount = records.count(where: \.isOpenInInbox)
+        audioCount = records.count(where: Self.hasAudio)
+        failedCount = records.count { $0.processingState == .failed }
         devices = syncController?.devices ?? []
         availableApps = Self.computeAvailableApps(records)
         deviceSections = Self.computeDeviceSections(
@@ -267,13 +283,6 @@ final class HistoryViewModel: ObservableObject {
 
     var showsUnsavedChangesPrompt: Bool { pendingTransition != nil }
 
-    var totalRecords: Int { historyService.totalRecords }
-    var totalWords: Int { historyService.totalWords }
-    var totalDuration: Double { historyService.totalDuration }
-    var inboxCount: Int { records.count(where: \.isOpenInInbox) }
-    var audioCount: Int { records.count(where: Self.hasAudio) }
-    var failedCount: Int { records.count { $0.processingState == .failed } }
-
     var navigationTitle: String {
         switch navigationSelection {
         case .smartMailbox(let scope): scope.displayName
@@ -285,18 +294,9 @@ final class HistoryViewModel: ObservableObject {
     }
 
     var navigationSummary: String {
-        let entries = String.localizedStringWithFormat(
+        String.localizedStringWithFormat(
             String(localized: "%lld entries"),
-            Int64(visibleRecordCount)
-        )
-        let words = String.localizedStringWithFormat(
-            String(localized: "%lld words"),
-            Int64(visibleWordCount)
-        )
-        return String.localizedStringWithFormat(
-            String(localized: "%@, %@"),
-            entries,
-            words
+            Int64(totalMatchingRecordCount)
         )
     }
 
@@ -313,10 +313,42 @@ final class HistoryViewModel: ObservableObject {
     func count(for scope: HistoryCollectionScope) -> Int {
         switch scope {
         case .inbox: inboxCount
-        case .all: records.count
+        case .all: historyService.totalRecords
         case .withAudio: audioCount
         case .failed: failedCount
         }
+    }
+
+    func activate() {
+        guard !isActive else { return }
+        isActive = true
+        reloadCurrentQuery()
+        refreshFacets()
+    }
+
+    func deactivate() {
+        isActive = false
+        records = historyService.recentRecords
+        totalMatchingRecordCount = historyService.totalRecords
+        hasMoreRecords = records.count < totalMatchingRecordCount
+        recomputeVisibleRecords()
+    }
+
+    func loadMoreRecords() {
+        guard isActive, hasMoreRecords, !isLoadingMore else { return }
+        isLoadingMore = true
+        defer { isLoadingMore = false }
+
+        let page = historyService.fetchPage(
+            query: currentQuery,
+            offset: records.count,
+            limit: Self.pageSize
+        )
+        let existingIDs = Set(records.map(\.id))
+        records.append(contentsOf: page.records.filter { !existingIDs.contains($0.id) })
+        totalMatchingRecordCount = page.totalCount
+        hasMoreRecords = page.hasMore
+        recomputeVisibleRecords()
     }
 
     func toggleDeviceExpansion(_ id: String) {
@@ -361,7 +393,7 @@ final class HistoryViewModel: ObservableObject {
     func requestSortOrder(_ order: HistorySortOrder) {
         guard order != selectedSortOrder else { return }
         selectedSortOrder = order
-        recomputeVisibleRecords()
+        reloadCurrentQuery()
     }
 
     func requestClearAllFilters() {
@@ -405,7 +437,7 @@ final class HistoryViewModel: ObservableObject {
         selectedAppFilter = nil
         selectedTimeRange = .all
         searchQuery = ""
-        recomputeVisibleRecords()
+        reloadCurrentQuery()
     }
 
     func selectRecord(_ record: TranscriptionRecord?) {
@@ -585,10 +617,43 @@ final class HistoryViewModel: ObservableObject {
         devices: [CloudFolderSyncDeviceRecord],
         currentDeviceID: String?
     ) -> [HistoryDeviceSection] {
+        struct Key: Hashable {
+            let deviceID: String
+            let platform: String
+            let source: RecordingSource
+        }
+        var counts: [Key: Int] = [:]
+        for record in records {
+            let key = Key(
+                deviceID: deviceIdentity(for: record, currentDeviceID: currentDeviceID),
+                platform: record.originPlatformRaw,
+                source: record.source
+            )
+            counts[key, default: 0] += 1
+        }
+        return computeDeviceSections(
+            facets: counts.map {
+                HistoryDeviceFacet(
+                    deviceID: $0.key.deviceID,
+                    platform: $0.key.platform,
+                    source: $0.key.source,
+                    count: $0.value
+                )
+            },
+            devices: devices,
+            currentDeviceID: currentDeviceID
+        )
+    }
+
+    static func computeDeviceSections(
+        facets: [HistoryDeviceFacet],
+        devices: [CloudFolderSyncDeviceRecord],
+        currentDeviceID: String?
+    ) -> [HistoryDeviceSection] {
         struct Accumulator {
             var metadata: CloudFolderSyncDeviceRecord?
             var platform: String
-            var records: [TranscriptionRecord]
+            var sourceCounts: [RecordingSource: Int]
         }
 
         var grouped: [String: Accumulator] = [:]
@@ -605,29 +670,28 @@ final class HistoryViewModel: ObservableObject {
             grouped[id] = Accumulator(
                 metadata: device,
                 platform: device.platform,
-                records: previous?.records ?? []
+                sourceCounts: previous?.sourceCounts ?? [:]
             )
         }
 
-        for record in records {
-            let id = deviceIdentity(for: record, currentDeviceID: currentDeviceID)
-            var accumulator = grouped[id] ?? Accumulator(
+        for facet in facets {
+            var accumulator = grouped[facet.deviceID] ?? Accumulator(
                 metadata: nil,
-                platform: record.originPlatformRaw,
-                records: []
+                platform: facet.platform,
+                sourceCounts: [:]
             )
-            accumulator.records.append(record)
+            accumulator.sourceCounts[facet.source, default: 0] += facet.count
             if accumulator.platform.isEmpty {
-                accumulator.platform = record.originPlatformRaw
+                accumulator.platform = facet.platform
             }
-            grouped[id] = accumulator
+            grouped[facet.deviceID] = accumulator
         }
 
         if let currentDeviceID, grouped[currentDeviceID] == nil {
             grouped[currentDeviceID] = Accumulator(
                 metadata: nil,
                 platform: "macOS",
-                records: []
+                sourceCounts: [:]
             )
         }
 
@@ -636,9 +700,8 @@ final class HistoryViewModel: ObservableObject {
         ]
         return grouped.map { id, accumulator in
             let isCurrent = id == currentDeviceID
-            let counts = Dictionary(grouping: accumulator.records, by: \.source).mapValues(\.count)
             let sources = sourceOrder.compactMap { source -> HistoryDeviceSourceSection? in
-                guard let count = counts[source], count > 0 else { return nil }
+                guard let count = accumulator.sourceCounts[source], count > 0 else { return nil }
                 return HistoryDeviceSourceSection(
                     source: source,
                     title: sourceTitle(source),
@@ -656,7 +719,7 @@ final class HistoryViewModel: ObservableObject {
                 platform: accumulator.platform,
                 systemImage: deviceSystemImage(platform: accumulator.platform),
                 isCurrent: isCurrent,
-                count: accumulator.records.count,
+                count: accumulator.sourceCounts.values.reduce(0, +),
                 sources: sources
             )
         }
@@ -666,19 +729,91 @@ final class HistoryViewModel: ObservableObject {
         }
     }
 
+    private var currentQuery: HistoryQuery {
+        let sortOrder: HistoryQuery.SortOrder = switch selectedSortOrder {
+        case .newest: .newest
+        case .oldest: .oldest
+        case .duration: .duration
+        case .appName: .appName
+        }
+        var query = HistoryQuery(
+            searchText: searchQuery,
+            appBundleIdentifier: selectedAppFilter,
+            cutoffDate: selectedTimeRange.cutoffDate,
+            collection: .all,
+            sortOrder: sortOrder
+        )
+
+        switch navigationSelection {
+        case .smartMailbox(let scope):
+            query.collection = switch scope {
+            case .inbox: .inbox
+            case .all: .all
+            case .withAudio: .withAudio
+            case .failed: .failed
+            }
+        case .device(let deviceID):
+            query.originDeviceID = deviceID
+            query.includeLegacyCurrentMacRecords = deviceID == currentDeviceID
+        case .deviceSource(let deviceID, let source):
+            query.originDeviceID = deviceID
+            query.includeLegacyCurrentMacRecords = deviceID == currentDeviceID
+            query.source = source
+        }
+        return query
+    }
+
+    private func reloadCurrentQuery() {
+        guard !isDirty else { return }
+        let page = historyService.fetchPage(
+            query: currentQuery,
+            offset: 0,
+            limit: isActive ? Self.pageSize : HistoryService.recentRecordsLimit
+        )
+        records = page.records
+        totalMatchingRecordCount = page.totalCount
+        hasMoreRecords = page.hasMore
+        queryID = UUID()
+        recomputeVisibleRecords()
+    }
+
+    private func refreshFacets() {
+        guard isActive else { return }
+        let facets = historyService.facets(currentDeviceID: currentDeviceID)
+        inboxCount = facets.inboxCount
+        audioCount = facets.audioCount
+        failedCount = facets.failedCount
+        availableApps = facets.apps
+            .sorted {
+                if $0.count != $1.count { return $0.count > $1.count }
+                return $0.name.localizedStandardCompare($1.name) == .orderedAscending
+            }
+            .map { AppEntry(bundleId: $0.bundleID, name: $0.name) }
+        facetDevices = facets.devices
+        recomputeDeviceSections(facets: facetDevices, devices: devices)
+    }
+
     private func setupBindings() {
-        historyService.$records
+        historyService.$recentRecords
             .dropFirst()
-            .sink { [weak self] records in self?.records = records }
+            .sink { [weak self] recentRecords in
+                guard let self else { return }
+                if self.isActive {
+                    self.reloadCurrentQuery()
+                    self.refreshFacets()
+                } else {
+                    self.records = recentRecords
+                    self.totalMatchingRecordCount = self.historyService.totalRecords
+                    self.hasMoreRecords = recentRecords.count < self.totalMatchingRecordCount
+                    self.recomputeVisibleRecords()
+                }
+            }
             .store(in: &cancellables)
 
-        let deferredTriggers: [AnyPublisher<Void, Never>] = [
-            $searchQuery.dropFirst().map { _ in () }.eraseToAnyPublisher(),
-            $records.dropFirst().map { _ in () }.eraseToAnyPublisher(),
-        ]
-        Publishers.MergeMany(deferredTriggers)
+        $searchQuery
+            .dropFirst()
             .debounce(for: .milliseconds(120), scheduler: DispatchQueue.main)
-            .sink { [weak self] in self?.recomputeVisibleRecords() }
+            .sink { [weak self] _ in self?.reloadCurrentQuery() }
             .store(in: &cancellables)
 
         $collapsedGroups
@@ -692,32 +827,21 @@ final class HistoryViewModel: ObservableObject {
             }
             .store(in: &cancellables)
 
-        $records
-            .map(Self.computeAvailableApps)
-            .assign(to: &$availableApps)
-
-        $records
-            .sink { [weak self] records in
-                guard let self else { return }
-                self.recomputeDeviceSections(records: records, devices: self.devices)
-            }
-            .store(in: &cancellables)
-
         syncController?.$devices
             .sink { [weak self] devices in
                 guard let self else { return }
                 self.devices = devices
-                self.recomputeDeviceSections(records: self.records, devices: devices)
+                self.recomputeDeviceSections(facets: self.facetDevices, devices: devices)
             }
             .store(in: &cancellables)
     }
 
     private func recomputeDeviceSections(
-        records: [TranscriptionRecord],
+        facets: [HistoryDeviceFacet],
         devices: [CloudFolderSyncDeviceRecord]
     ) {
         deviceSections = Self.computeDeviceSections(
-            records: records,
+            facets: facets,
             devices: devices,
             currentDeviceID: currentDeviceID
         )
@@ -735,38 +859,17 @@ final class HistoryViewModel: ObservableObject {
     }
 
     private func recomputeVisibleRecords() {
-        var scoped = records
-        switch navigationSelection {
-        case .smartMailbox(let scope):
-            scoped = Self.applyCollectionScope(scope, to: scoped)
-        case .device(let id):
-            scoped = scoped.filter {
-                Self.deviceIdentity(for: $0, currentDeviceID: currentDeviceID) == id
-            }
-        case .deviceSource(let id, let source):
-            scoped = scoped.filter {
-                Self.deviceIdentity(for: $0, currentDeviceID: currentDeviceID) == id
-                    && $0.source == source
-            }
-        }
-        let filtered = Self.applyCommonFilters(
-            to: scoped,
-            query: searchQuery,
-            appFilter: selectedAppFilter,
-            timeRange: selectedTimeRange,
-            sortOrder: selectedSortOrder
-        )
-        let sections = Self.computeSections(filtered)
+        let sections = Self.computeSections(records)
         if !isDirty {
             syncSelection(withVisibleRecordIDs: Self.visibleRecordIDs(
                 sections: sections,
                 collapsedGroups: collapsedGroups
             ))
         }
-        filteredRecords = filtered
+        filteredRecords = records
         groupedSections = sections
-        visibleRecordCount = filtered.count
-        visibleWordCount = filtered.reduce(0) { $0 + $1.wordsCount }
+        visibleRecordCount = records.count
+        visibleWordCount = records.reduce(0) { $0 + $1.wordsCount }
     }
 
     private func prepare(_ transition: PendingHistoryTransition) {
@@ -792,13 +895,13 @@ final class HistoryViewModel: ObservableObject {
             selectedRecordIDs = selection
         case .navigation(let selection):
             navigationSelection = selection
-            recomputeVisibleRecords()
+            reloadCurrentQuery()
         case .appFilter(let bundleID):
             selectedAppFilter = bundleID
-            recomputeVisibleRecords()
+            reloadCurrentQuery()
         case .timeRange(let range):
             selectedTimeRange = range
-            recomputeVisibleRecords()
+            reloadCurrentQuery()
         case .clearFilters:
             clearAllFilters()
         case .deletion(let ids):
