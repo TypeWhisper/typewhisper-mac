@@ -6,6 +6,66 @@ import XCTest
 
 @testable import CohereLocalPlugin
 
+private final class CohereDownloadRequestRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var requests: [URLRequest] = []
+
+    func reset() {
+        lock.withLock { requests = [] }
+    }
+
+    func record(_ request: URLRequest) {
+        lock.withLock { requests.append(request) }
+    }
+
+    var recordedRequests: [URLRequest] {
+        lock.withLock { requests }
+    }
+}
+
+private final class CohereDownloadProgressRecorder: @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [Double] = []
+
+    func record(_ value: Double) {
+        lock.withLock { values.append(value) }
+    }
+
+    var lastValue: Double? {
+        lock.withLock { values.last }
+    }
+}
+
+private final class CohereDownloadURLProtocol: URLProtocol, @unchecked Sendable {
+    static let payload = Data("first-download".utf8)
+    static let requestRecorder = CohereDownloadRequestRecorder()
+
+    override class func canInit(with _: URLRequest) -> Bool { true }
+
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest {
+        request
+    }
+
+    override func startLoading() {
+        Self.requestRecorder.record(request)
+        guard let url = request.url,
+              let response = HTTPURLResponse(
+                  url: url,
+                  statusCode: 200,
+                  httpVersion: "HTTP/1.1",
+                  headerFields: ["Content-Length": String(Self.payload.count)]
+              ) else {
+            client?.urlProtocol(self, didFailWithError: URLError(.badServerResponse))
+            return
+        }
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        client?.urlProtocol(self, didLoad: Self.payload)
+        client?.urlProtocolDidFinishLoading(self)
+    }
+
+    override func stopLoading() {}
+}
+
 final class CohereLocalPluginTests: XCTestCase {
     private actor RequestRecorder {
         private var request: URLRequest?
@@ -165,6 +225,58 @@ final class CohereLocalPluginTests: XCTestCase {
         ) { error in
             XCTAssertEqual((error as? URLError)?.code, .notConnectedToInternet)
         }
+    }
+
+    func testHubFileDownloadSucceedsOnFirstAttemptWithoutSnapshotCache() async throws {
+        CohereDownloadURLProtocol.requestRecorder.reset()
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [CohereDownloadURLProtocol.self]
+        let session = URLSession(configuration: configuration)
+        defer { session.invalidateAndCancel() }
+
+        let temporaryDirectory = FileManager.default.temporaryDirectory.appendingPathComponent(
+            "cohere-first-download-\(UUID().uuidString)",
+            isDirectory: true
+        )
+        try FileManager.default.createDirectory(
+            at: temporaryDirectory,
+            withIntermediateDirectories: true
+        )
+        defer { try? FileManager.default.removeItem(at: temporaryDirectory) }
+        let destination = temporaryDirectory.appendingPathComponent("model.gguf")
+        let progressRecorder = CohereDownloadProgressRecorder()
+
+        try await CohereLocalModelAssets.downloadHubFile(
+            session: session,
+            host: try XCTUnwrap(URL(string: "https://cohere-download.test")),
+            repositoryId: "owner/model",
+            revision: "0123456789012345678901234567890123456789",
+            fileName: "model.gguf",
+            destination: destination,
+            bearerToken: "  hf_first_download  ",
+            progressScale: 0.98
+        ) { progress in
+            progressRecorder.record(progress)
+        }
+
+        XCTAssertEqual(try Data(contentsOf: destination), CohereDownloadURLProtocol.payload)
+        let request = try XCTUnwrap(
+            CohereDownloadURLProtocol.requestRecorder.recordedRequests.first
+        )
+        XCTAssertEqual(
+            request.url?.absoluteString,
+            "https://cohere-download.test/owner/model/resolve/0123456789012345678901234567890123456789/model.gguf"
+        )
+        XCTAssertEqual(request.httpMethod, "GET")
+        XCTAssertEqual(
+            request.value(forHTTPHeaderField: "Authorization"),
+            "Bearer hf_first_download"
+        )
+        XCTAssertEqual(
+            try XCTUnwrap(progressRecorder.lastValue),
+            0.98,
+            accuracy: 0.000_001
+        )
     }
 
     func testSelectingAnotherModelStopsServerThatIsStillStarting() async throws {
