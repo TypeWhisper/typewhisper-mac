@@ -9426,6 +9426,16 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let fallbackProviderId = PluginManager.shared.fallbackTranscriptionProviderId(disabling: disabledProviderIds)
 
         XCTAssertEqual(fallbackProviderId, fallbackEngine.providerId)
+
+        PluginManager.shared.unloadPlugin("com.typewhisper.mock.expanded-role")
+
+        XCTAssertEqual(UserDefaults.standard.string(forKey: selectedEngineKey), fallbackEngine.providerId)
+        XCTAssertEqual(PluginManager.shared.loadedPlugins.map(\.id), ["com.typewhisper.mock.transcription"])
+
+        PluginManager.shared.unloadPlugin("com.typewhisper.mock.transcription")
+
+        XCTAssertNil(UserDefaults.standard.string(forKey: selectedEngineKey))
+        XCTAssertTrue(PluginManager.shared.loadedPlugins.isEmpty)
     }
 
     @MainActor

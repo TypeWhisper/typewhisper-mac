@@ -187,6 +187,18 @@ final class PluginSettingsWindowManager {
         windows[pluginId]
     }
 
+    func closeWindow(for pluginId: String) {
+        guard let window = windows.removeValue(forKey: pluginId) else { return }
+
+        delegates.removeValue(forKey: pluginId)
+        window.delegate = nil
+        window.close()
+
+        // A closed NSWindow with isReleasedWhenClosed=false retains its hosting view.
+        // Tear down the plugin-owned SwiftUI graph before its runtime registration is removed.
+        window.contentView = nil
+    }
+
     func present(_ plugin: LoadedPlugin) {
         guard let settingsView = plugin.instance.settingsView else { return }
         let layout = plugin.instance as? any PluginSettingsWindowLayoutProviding
