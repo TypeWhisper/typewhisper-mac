@@ -203,6 +203,7 @@ final class AuthenticatedCLIPlugin: NSObject,
     }
 
     func supportedModels(for kind: CLIProviderKind) -> [PluginModelInfo] {
+        let bundle = Self.localizationBundle
         return state.withLock { state in
             switch kind {
             case .codex:
@@ -217,7 +218,7 @@ final class AuthenticatedCLIPlugin: NSObject,
                         id: $0.id,
                         displayName: $0.displayName,
                         sizeDescription: $0.isFree
-                            ? String(localized: "Free for a limited time", bundle: .module)
+                            ? String(localized: "Free for a limited time", bundle: bundle)
                             : ""
                     )
                 } ?? []
