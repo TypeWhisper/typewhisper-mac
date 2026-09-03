@@ -620,15 +620,23 @@ final class AuthenticatedCLIPlugin: NSObject,
 
     static func effortDisplayName(_ id: String) -> String {
         switch id.lowercased() {
-        case "minimal": String(localized: "Minimal", bundle: .module)
-        case "low": String(localized: "Low", bundle: .module)
-        case "medium": String(localized: "Medium", bundle: .module)
-        case "high": String(localized: "High", bundle: .module)
-        case "xhigh": String(localized: "XHigh", bundle: .module)
-        case "max": String(localized: "Max", bundle: .module)
-        case "ultracode": String(localized: "Ultracode", bundle: .module)
+        case "minimal": String(localized: "Minimal", bundle: localizationBundle)
+        case "low": String(localized: "Low", bundle: localizationBundle)
+        case "medium": String(localized: "Medium", bundle: localizationBundle)
+        case "high": String(localized: "High", bundle: localizationBundle)
+        case "xhigh": String(localized: "XHigh", bundle: localizationBundle)
+        case "max": String(localized: "Max", bundle: localizationBundle)
+        case "ultracode": String(localized: "Ultracode", bundle: localizationBundle)
         default: id.capitalized
         }
+    }
+
+    private static var localizationBundle: Bundle {
+#if SWIFT_PACKAGE
+        .module
+#else
+        Bundle(for: AuthenticatedCLIPlugin.self)
+#endif
     }
 
     private static var screenshotStatuses: [CLIProviderKind: CLIProviderStatus] {
