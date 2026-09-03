@@ -119,6 +119,15 @@ struct MicrosoftAIModelCatalogResponse: Decodable, Sendable {
 }
 
 struct MicrosoftAITranscriptionClient: Sendable {
+    private struct ErrorResponseBody: Decodable {
+        struct ErrorDetail: Decodable {
+            let message: String?
+        }
+
+        let message: String?
+        let error: ErrorDetail?
+    }
+
     struct Definition: Encodable, Sendable {
         struct EnhancedMode: Encodable, Sendable {
             struct ModelOptions: Encodable, Sendable {
@@ -273,9 +282,9 @@ struct MicrosoftAITranscriptionClient: Sendable {
         case 429:
             throw PluginTranscriptionError.rateLimited
         default:
-            let summary = PluginHTTPErrorBodyFormatter.summary(from: data, response: httpResponse)
+            let errorText = Self.errorText(from: data)
             if httpResponse.statusCode == 400,
-               summary.localizedCaseInsensitiveContains("enhanced mode with model"),
+               errorText.localizedCaseInsensitiveContains("enhanced mode with model"),
                let region = MicrosoftAIEndpoint.unsupportedMAIRegion(from: endpoint) {
                 let template = String(
                     localized: "MAI Transcribe is not available in the Azure region %@. Use a Speech resource in one of these regions: %@.",
@@ -289,10 +298,35 @@ struct MicrosoftAITranscriptionClient: Sendable {
                     )
                 )
             }
+            let summary = Self.boundedErrorSummary(errorText)
             throw PluginTranscriptionError.apiError(
                 "Microsoft AI transcription failed (HTTP \(httpResponse.statusCode)): \(summary)"
             )
         }
+    }
+
+    static func errorSummary(from data: Data) -> String {
+        boundedErrorSummary(errorText(from: data))
+    }
+
+    private static func errorText(from data: Data) -> String {
+        if let response = try? JSONDecoder().decode(ErrorResponseBody.self, from: data),
+           let message = response.error?.message ?? response.message {
+            return normalizedErrorText(message)
+        }
+
+        return normalizedErrorText(String(decoding: data.prefix(4_096), as: UTF8.self))
+    }
+
+    private static func normalizedErrorText(_ value: String) -> String {
+        let text = value
+            .split(whereSeparator: { $0.isWhitespace })
+            .joined(separator: " ")
+        return text.isEmpty ? "No response body." : text
+    }
+
+    private static func boundedErrorSummary(_ value: String) -> String {
+        String(value.prefix(1_000))
     }
 
     static func parseResponse(_ data: Data) throws -> PluginStructuredTranscriptionResult {

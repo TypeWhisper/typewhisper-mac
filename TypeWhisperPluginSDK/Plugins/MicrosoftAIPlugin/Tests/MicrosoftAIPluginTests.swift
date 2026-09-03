@@ -350,11 +350,17 @@ final class MicrosoftAIPluginTests: XCTestCase {
         )
         let plugin = MicrosoftAIPlugin()
         plugin.activate(host: host)
+        let unsupportedMessage = String(repeating: "x", count: 1_100)
+            + " Enhanced mode with model is currently not supported yet."
+        let responseData = try JSONEncoder().encode([
+            "code": "InvalidRequest",
+            "message": unsupportedMessage,
+        ])
 
         PluginHTTPClientTestHarness.configure { _ in
             PluginHTTPClientMockSession(outcomes: [
                 .success(
-                    Data(#"{"code":"InvalidRequest","message":"Enhanced mode with model is currently not supported yet."}"#.utf8),
+                    responseData,
                     Self.httpResponse(statusCode: 400)
                 ),
             ])
@@ -373,6 +379,31 @@ final class MicrosoftAIPluginTests: XCTestCase {
             XCTAssertTrue(message.contains("northeurope"))
             XCTAssertFalse(message.contains("azure-key"))
         }
+    }
+
+    func testErrorSummaryHandlesAzureShapesAndBoundsFallbackText() {
+        XCTAssertEqual(
+            MicrosoftAITranscriptionClient.errorSummary(
+                from: Data(#"{"message":"  Root\nmessage  "}"#.utf8)
+            ),
+            "Root message"
+        )
+        XCTAssertEqual(
+            MicrosoftAITranscriptionClient.errorSummary(
+                from: Data(#"{"error":{"message":"Nested message"}}"#.utf8)
+            ),
+            "Nested message"
+        )
+        XCTAssertEqual(
+            MicrosoftAITranscriptionClient.errorSummary(from: Data()),
+            "No response body."
+        )
+        XCTAssertEqual(
+            MicrosoftAITranscriptionClient.errorSummary(
+                from: Data(String(repeating: "x", count: 5_000).utf8)
+            ).count,
+            1_000
+        )
     }
 
     func testRequiresConfigurationAndRejectsTranslation() async throws {
