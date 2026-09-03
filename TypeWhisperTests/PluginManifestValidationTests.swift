@@ -146,14 +146,14 @@ final class PluginManifestValidationTests: XCTestCase {
         }
     }
 
-    func testCohereLocalPlugin10RequiresCompatibleHost16() throws {
+    func testCohereLocalPlugin101RequiresCompatibleHost16() throws {
         let manifestURL = TestSupport.repoRoot.appendingPathComponent(
             "TypeWhisperPluginSDK/Plugins/CohereLocalPlugin/manifest.json"
         )
         let data = try Data(contentsOf: manifestURL)
         let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
 
-        XCTAssertEqual(manifest.version, "1.0.0")
+        XCTAssertEqual(manifest.version, "1.0.1")
         XCTAssertEqual(manifest.minHostVersion, "1.6.0")
         XCTAssertEqual(manifest.sdkCompatibilityVersion, PluginSDKCompatibility.currentVersion)
         XCTAssertEqual(manifest.supportedArchitectures, ["arm64"])

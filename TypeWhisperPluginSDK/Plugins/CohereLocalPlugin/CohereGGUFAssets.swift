@@ -110,57 +110,55 @@ struct CohereLocalModelAssets: Sendable {
 
         let session = URLSession(configuration: .default)
         defer { session.invalidateAndCancel() }
-        let client = HubClient(
-            session: session,
-            host: HubClient.defaultHost,
-            userAgent: "TypeWhisper-CohereLocal/0.1.0",
-            bearerToken: PluginHuggingFaceTokenHelper.normalizedToken(bearerToken),
-            cache: nil
-        )
-
-        if !isNonEmptyFile(modelFileURL) {
-            guard let repositoryId = Repo.ID(rawValue: Self.modelRepositoryId) else {
-                throw CohereLocalPluginError.invalidRepositoryIdentifier
-            }
-            _ = try await client.downloadSnapshot(
-                of: repositoryId,
-                to: rootDirectory,
-                revision: Self.modelRevision,
-                matching: [model.fileName],
-                maxConcurrentDownloads: 1,
-                progressHandler: { @MainActor progress in
-                    progressHandler(progress.fractionCompleted * 0.98)
-                }
-            )
-        }
-        try verifyOrDiscard(
+        if !isVerifiedFile(
             modelFileURL,
             expectedSize: model.fileSize,
             expectedSHA256: model.sha256
-        )
+        ) {
+            try await Self.downloadHubFile(
+                session: session,
+                repositoryId: Self.modelRepositoryId,
+                revision: Self.modelRevision,
+                fileName: model.fileName,
+                destination: modelFileURL,
+                bearerToken: bearerToken,
+                progressScale: 0.98,
+                progressHandler: progressHandler
+            )
+            try verifyOrDiscard(
+                modelFileURL,
+                expectedSize: model.fileSize,
+                expectedSHA256: model.sha256
+            )
+        }
         progressHandler(0.98)
 
-        if !isNonEmptyFile(vadModelURL) {
-            guard let repositoryId = Repo.ID(rawValue: Self.vadRepositoryId) else {
-                throw CohereLocalPluginError.invalidRepositoryIdentifier
-            }
+        if !isVerifiedFile(
+            vadModelURL,
+            expectedSize: Self.vadSize,
+            expectedSHA256: Self.vadSHA256
+        ) {
             try FileManager.default.createDirectory(
                 at: auxiliaryDirectory,
                 withIntermediateDirectories: true
             )
-            _ = try await client.downloadSnapshot(
-                of: repositoryId,
-                to: auxiliaryDirectory,
+            try await Self.downloadHubFile(
+                session: session,
+                repositoryId: Self.vadRepositoryId,
                 revision: Self.vadRevision,
-                matching: [Self.vadFileName],
-                maxConcurrentDownloads: 1
+                fileName: Self.vadFileName,
+                destination: vadModelURL,
+                bearerToken: bearerToken,
+                progressScale: 0.01,
+                progressOffset: 0.98,
+                progressHandler: progressHandler
+            )
+            try verifyOrDiscard(
+                vadModelURL,
+                expectedSize: Self.vadSize,
+                expectedSHA256: Self.vadSHA256
             )
         }
-        try verifyOrDiscard(
-            vadModelURL,
-            expectedSize: Self.vadSize,
-            expectedSHA256: Self.vadSHA256
-        )
         progressHandler(0.99)
 
         if !isRuntimeInstalled {
@@ -171,6 +169,65 @@ struct CohereLocalModelAssets: Sendable {
         guard isInstalled else {
             throw CohereLocalPluginError.incompleteModelDownload
         }
+    }
+
+    static func downloadHubFile(
+        session: URLSession,
+        host: URL = HubClient.defaultHost,
+        repositoryId: String,
+        revision: String,
+        fileName: String,
+        destination: URL,
+        bearerToken: String? = nil,
+        progressScale: Double = 1,
+        progressOffset: Double = 0,
+        progressHandler: @Sendable @escaping (Double) -> Void
+    ) async throws {
+        // swift-huggingface 0.9.0's snapshot API throws after a successful
+        // destination-only download when caching is disabled. Cohere needs one
+        // file per repository, so the single-file API avoids that false error.
+        guard let repositoryId = Repo.ID(rawValue: repositoryId) else {
+            throw CohereLocalPluginError.invalidRepositoryIdentifier
+        }
+
+        let client = HubClient(
+            session: session,
+            host: host,
+            userAgent: "TypeWhisper-CohereLocal/0.1.0",
+            bearerToken: PluginHuggingFaceTokenHelper.normalizedToken(bearerToken),
+            cache: nil
+        )
+        let progress = Progress(totalUnitCount: 1)
+        let samplingTask = Task {
+            while !Task.isCancelled {
+                let fraction = progress.fractionCompleted
+                let normalizedFraction = fraction.isFinite
+                    ? min(max(fraction, 0), 1)
+                    : 0
+                progressHandler(progressOffset + normalizedFraction * progressScale)
+                do {
+                    try await Task.sleep(for: .milliseconds(100))
+                } catch {
+                    return
+                }
+            }
+        }
+        do {
+            _ = try await client.downloadFile(
+                at: fileName,
+                from: repositoryId,
+                to: destination,
+                revision: revision,
+                progress: progress
+            )
+        } catch {
+            samplingTask.cancel()
+            await samplingTask.value
+            throw error
+        }
+        samplingTask.cancel()
+        await samplingTask.value
+        progressHandler(progressOffset + progressScale)
     }
 
     func deleteModelFiles(allModels: [CohereLocalModelDefinition]) throws {
@@ -304,6 +361,25 @@ struct CohereLocalModelAssets: Sendable {
         } catch {
             try? FileManager.default.removeItem(at: file)
             throw error
+        }
+    }
+
+    private func isVerifiedFile(
+        _ file: URL,
+        expectedSize: Int64,
+        expectedSHA256: String
+    ) -> Bool {
+        guard isNonEmptyFile(file) else { return false }
+        do {
+            try verify(
+                file,
+                expectedSize: expectedSize,
+                expectedSHA256: expectedSHA256
+            )
+            return true
+        } catch {
+            try? FileManager.default.removeItem(at: file)
+            return false
         }
     }
 
