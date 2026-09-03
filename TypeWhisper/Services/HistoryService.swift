@@ -340,21 +340,20 @@ final class HistoryService: ObservableObject {
         }
     }
 
-    func recordCount(query: HistoryQuery = HistoryQuery()) -> Int {
+    func recordCountThrowing(query: HistoryQuery = HistoryQuery()) throws -> Int {
         if requiresPostFiltering(query) {
             var count = 0
-            do {
-                try modelContext.enumerate(fetchDescriptor(for: query), batchSize: 500) { record in
-                    if matchesPostFilters(record, query: query) { count += 1 }
-                }
-                return count
-            } catch {
-                logger.error("Failed to count filtered history records: \(error.localizedDescription)")
-                return 0
+            try modelContext.enumerate(fetchDescriptor(for: query), batchSize: 500) { record in
+                if matchesPostFilters(record, query: query) { count += 1 }
             }
+            return count
         }
+        return try modelContext.fetchCount(fetchDescriptor(for: query))
+    }
+
+    func recordCount(query: HistoryQuery = HistoryQuery()) -> Int {
         do {
-            return try modelContext.fetchCount(fetchDescriptor(for: query))
+            return try recordCountThrowing(query: query)
         } catch {
             logger.error("Failed to count history records: \(error.localizedDescription)")
             return 0
@@ -445,11 +444,15 @@ final class HistoryService: ObservableObject {
         )
     }
 
+    func allRecordsThrowing(query: HistoryQuery = HistoryQuery()) throws -> [TranscriptionRecord] {
+        let records = try modelContext.fetch(fetchDescriptor(for: query))
+        guard requiresPostFiltering(query) else { return records }
+        return records.filter { matchesPostFilters($0, query: query) }
+    }
+
     func allRecords(query: HistoryQuery = HistoryQuery()) -> [TranscriptionRecord] {
         do {
-            let records = try modelContext.fetch(fetchDescriptor(for: query))
-            guard requiresPostFiltering(query) else { return records }
-            return records.filter { matchesPostFilters($0, query: query) }
+            return try allRecordsThrowing(query: query)
         } catch {
             logger.error("Failed to fetch complete history: \(error.localizedDescription)")
             return []
@@ -477,12 +480,21 @@ final class HistoryService: ObservableObject {
     }
 
     func uniqueDomains(limit: Int = 50) -> [String] {
+        guard limit > 0 else { return [] }
         var counts: [String: Int] = [:]
-        for record in allRecords() {
-            guard let domain = record.appDomain else { continue }
-            let cleaned = domain.hasPrefix("www.") ? String(domain.dropFirst(4)) : domain
-            guard !cleaned.isEmpty else { continue }
-            counts[cleaned, default: 0] += 1
+        let context = ModelContext(modelContainer)
+        var descriptor = FetchDescriptor<TranscriptionRecord>()
+        descriptor.propertiesToFetch = [\TranscriptionRecord.appURL]
+        do {
+            try context.enumerate(descriptor, batchSize: 500) { record in
+                guard let domain = record.appDomain else { return }
+                let cleaned = domain.hasPrefix("www.") ? String(domain.dropFirst(4)) : domain
+                guard !cleaned.isEmpty else { return }
+                counts[cleaned, default: 0] += 1
+            }
+        } catch {
+            logger.error("Failed to enumerate history domains: \(error.localizedDescription)")
+            return []
         }
         return counts.sorted { $0.value > $1.value }.prefix(limit).map(\.key)
     }
@@ -740,11 +752,13 @@ final class HistoryService: ObservableObject {
         )
         descriptor.fetchLimit = Self.recentRecordsLimit
         do {
-            recentRecords = try modelContext.fetch(descriptor)
+            let refreshedTotalRecords = try recordCountThrowing()
+            let refreshedRecentRecords = try modelContext.fetch(descriptor)
+            totalRecords = refreshedTotalRecords
+            recentRecords = refreshedRecentRecords
         } catch {
-            recentRecords = []
+            logger.error("Failed to refresh recent history: \(error.localizedDescription)")
         }
-        totalRecords = recordCount()
     }
 
     private func migrateWordsCountIfNeeded() {

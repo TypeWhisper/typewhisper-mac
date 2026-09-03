@@ -198,9 +198,13 @@ final class UsageStatisticsService: ObservableObject, UsageStatisticsRecording {
 
     /// Defers loading History until a migration actually needs it. Normal launches with
     /// completed aggregate migrations therefore never materialize the complete history.
-    func backfillFromHistoryIfNeeded(recordsProvider: () -> [TranscriptionRecord]) {
+    func backfillFromHistoryIfNeeded(recordsProvider: () throws -> [TranscriptionRecord]) {
         if historyBackfillCompleted, detailBackfillCompleted { return }
-        backfillFromHistoryIfNeeded(recordsProvider())
+        do {
+            backfillFromHistoryIfNeeded(try recordsProvider())
+        } catch {
+            usageStatisticsLogger.error("Failed to load history for usage statistics backfill: \(error.localizedDescription)")
+        }
     }
 
     /// Backfills only the app/model/hour breakdowns from history for installations that already

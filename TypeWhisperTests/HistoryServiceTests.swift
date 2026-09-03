@@ -750,6 +750,22 @@ final class HistoryServiceTests: XCTestCase {
         XCTAssertEqual(viewModel.records.count, 125)
         XCTAssertFalse(viewModel.hasMoreRecords)
 
+        let queryID = viewModel.queryID
+        historyService.addRecord(
+            timestamp: baseDate.addingTimeInterval(126),
+            rawText: "New record",
+            finalText: "New record",
+            appName: "Notes",
+            appBundleIdentifier: "com.apple.Notes",
+            durationSeconds: 1,
+            language: "en",
+            engineUsed: "test"
+        )
+        XCTAssertEqual(viewModel.records.count, 125)
+        XCTAssertEqual(viewModel.totalMatchingRecordCount, 126)
+        XCTAssertTrue(viewModel.hasMoreRecords)
+        XCTAssertEqual(viewModel.queryID, queryID)
+
         viewModel.deactivate()
         XCTAssertEqual(viewModel.records.count, HistoryService.recentRecordsLimit)
     }

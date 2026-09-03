@@ -71,6 +71,33 @@ final class UsageStatisticsServiceTests: XCTestCase {
         XCTAssertEqual(summary.words, 0)
     }
 
+    @MainActor
+    func testHistoryBackfillProviderFailureDoesNotMarkMigrationComplete() throws {
+        enum TestError: Error { case historyUnavailable }
+
+        let directory = try TestSupport.makeTemporaryDirectory(prefix: "UsageStatisticsProvider")
+        defer { TestSupport.remove(directory) }
+
+        let historyService = HistoryService(appSupportDirectory: directory)
+        historyService.addRecord(
+            rawText: "Alpha beta gamma",
+            finalText: "Alpha beta gamma",
+            appName: "Editor",
+            appBundleIdentifier: "com.example.editor",
+            durationSeconds: 30,
+            language: "en",
+            engineUsed: "parakeet"
+        )
+        let service = UsageStatisticsService(appSupportDirectory: directory)
+
+        service.backfillFromHistoryIfNeeded(recordsProvider: {
+            throw TestError.historyUnavailable
+        })
+        service.backfillFromHistoryIfNeeded(historyService.recentRecords)
+
+        XCTAssertEqual(service.summary(from: nil).transcriptionCount, 1)
+    }
+
     /// Installations that already completed the totals-only backfill (before app/model/hour
     /// breakdowns existed) must have those breakdowns filled in from history on next launch,
     /// without re-adding to the already-migrated totals.

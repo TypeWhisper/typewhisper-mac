@@ -352,7 +352,7 @@ final class ServiceContainer: ObservableObject {
         hotkeyService.setup()
         dictationViewModel.registerInitialTriggerHotkeys()
         usageStatisticsService.backfillFromHistoryIfNeeded {
-            historyService.allRecords()
+            try historyService.allRecordsThrowing()
         }
         let retentionDays = UserDefaults.standard.integer(forKey: UserDefaultsKeys.historyRetentionDays)
         if retentionDays > 0 { historyService.purgeOldRecords(retentionDays: retentionDays) }

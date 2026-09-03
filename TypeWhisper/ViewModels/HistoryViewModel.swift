@@ -322,7 +322,7 @@ final class HistoryViewModel: ObservableObject {
     func activate() {
         guard !isActive else { return }
         isActive = true
-        reloadCurrentQuery()
+        reloadCurrentQuery(resetListIdentity: false)
         refreshFacets()
     }
 
@@ -763,17 +763,28 @@ final class HistoryViewModel: ObservableObject {
         return query
     }
 
-    private func reloadCurrentQuery() {
+    private func reloadCurrentQuery(
+        preservingLoadedRecords: Bool = false,
+        resetListIdentity: Bool = true
+    ) {
         guard !isDirty else { return }
+        let limit: Int
+        if isActive {
+            limit = preservingLoadedRecords ? max(records.count, Self.pageSize) : Self.pageSize
+        } else {
+            limit = HistoryService.recentRecordsLimit
+        }
         let page = historyService.fetchPage(
             query: currentQuery,
             offset: 0,
-            limit: isActive ? Self.pageSize : HistoryService.recentRecordsLimit
+            limit: limit
         )
         records = page.records
         totalMatchingRecordCount = page.totalCount
         hasMoreRecords = page.hasMore
-        queryID = UUID()
+        if resetListIdentity {
+            queryID = UUID()
+        }
         recomputeVisibleRecords()
     }
 
@@ -799,7 +810,10 @@ final class HistoryViewModel: ObservableObject {
             .sink { [weak self] recentRecords in
                 guard let self else { return }
                 if self.isActive {
-                    self.reloadCurrentQuery()
+                    self.reloadCurrentQuery(
+                        preservingLoadedRecords: true,
+                        resetListIdentity: false
+                    )
                     self.refreshFacets()
                 } else {
                     self.records = recentRecords

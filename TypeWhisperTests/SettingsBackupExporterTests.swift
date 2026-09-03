@@ -79,7 +79,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         fixture.promptActionService.addPreset(PromptAction.presets[0])
         fixture.promptActionService.addAction(name: "Custom", prompt: "Do the thing")
 
-        let backup = SettingsBackupExporter.buildBackup(
+        let backup = try SettingsBackupExporter.buildBackup(
             workflowService: fixture.workflowService,
             dictionaryService: fixture.dictionaryService,
             snippetService: fixture.snippetService,
@@ -103,7 +103,7 @@ final class SettingsBackupExporterTests: XCTestCase {
             makeLoadedPlugin(id: "com.typewhisper.community", name: "Community", version: "2.1.0", isEnabled: false, bundled: false),
         ]
 
-        let backup = SettingsBackupExporter.buildBackup(
+        let backup = try SettingsBackupExporter.buildBackup(
             workflowService: fixture.workflowService,
             dictionaryService: fixture.dictionaryService,
             snippetService: fixture.snippetService,
@@ -134,7 +134,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         source.dictionaryService.addEntry(type: .correction, original: "teh", replacement: "the")
         source.snippetService.addSnippet(trigger: ";sig", replacement: "Best, Alex")
 
-        let backup = SettingsBackupExporter.buildBackup(
+        let backup = try SettingsBackupExporter.buildBackup(
             workflowService: source.workflowService,
             dictionaryService: source.dictionaryService,
             snippetService: source.snippetService,
@@ -183,7 +183,7 @@ final class SettingsBackupExporterTests: XCTestCase {
             promptActionId: action.id.uuidString
         )
 
-        let backup = SettingsBackupExporter.buildBackup(
+        let backup = try SettingsBackupExporter.buildBackup(
             workflowService: source.workflowService,
             dictionaryService: source.dictionaryService,
             snippetService: source.snippetService,
@@ -227,7 +227,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         let hotkey = UnifiedHotkey(keyCode: 8, modifierFlags: 0x100, isFn: false)
         source.userDefaults.set(try JSONEncoder().encode([hotkey]), forKey: UserDefaultsKeys.toggleHotkeys)
 
-        let backup = SettingsBackupExporter.buildBackup(
+        let backup = try SettingsBackupExporter.buildBackup(
             workflowService: source.workflowService,
             dictionaryService: source.dictionaryService,
             snippetService: source.snippetService,
@@ -295,7 +295,7 @@ final class SettingsBackupExporterTests: XCTestCase {
             makeLoadedPlugin(id: "com.typewhisper.gone", name: "Gone Plugin", version: "1.0.0", isEnabled: true, bundled: false),
         ]
 
-        let backup = SettingsBackupExporter.buildBackup(
+        let backup = try SettingsBackupExporter.buildBackup(
             workflowService: source.workflowService,
             dictionaryService: source.dictionaryService,
             snippetService: source.snippetService,
@@ -340,7 +340,7 @@ final class SettingsBackupExporterTests: XCTestCase {
             makeLoadedPlugin(id: "com.typewhisper.already", name: "Already Installed", version: "1.0.0", isEnabled: true, bundled: false),
         ]
 
-        let backup = SettingsBackupExporter.buildBackup(
+        let backup = try SettingsBackupExporter.buildBackup(
             workflowService: source.workflowService,
             dictionaryService: source.dictionaryService,
             snippetService: source.snippetService,
@@ -393,7 +393,7 @@ final class SettingsBackupExporterTests: XCTestCase {
             pipelineSteps: ["dictionary", "formatting"]
         )
 
-        let backup = SettingsBackupExporter.buildBackup(
+        let backup = try SettingsBackupExporter.buildBackup(
             workflowService: source.workflowService,
             dictionaryService: source.dictionaryService,
             snippetService: source.snippetService,
@@ -456,7 +456,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         // Deliberately excluded: engine/model selections must not be exported.
         source.userDefaults.set("com.typewhisper.some-engine", forKey: UserDefaultsKeys.fileTranscriptionEngine)
 
-        let backup = SettingsBackupExporter.buildBackup(
+        let backup = try SettingsBackupExporter.buildBackup(
             workflowService: source.workflowService,
             dictionaryService: source.dictionaryService,
             snippetService: source.snippetService,
@@ -531,7 +531,7 @@ final class SettingsBackupExporterTests: XCTestCase {
             ]
         )
 
-        let backup = SettingsBackupExporter.buildBackup(
+        let backup = try SettingsBackupExporter.buildBackup(
             workflowService: source.workflowService,
             dictionaryService: source.dictionaryService,
             snippetService: source.snippetService,
@@ -554,7 +554,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         source.userDefaults.set(AppConstants.ReleaseChannel.daily.rawValue, forKey: UserDefaultsKeys.updateChannel)
         source.userDefaults.set("de", forKey: UserDefaultsKeys.selectedLanguage)
 
-        let backup = SettingsBackupExporter.buildBackup(
+        let backup = try SettingsBackupExporter.buildBackup(
             workflowService: source.workflowService,
             dictionaryService: source.dictionaryService,
             snippetService: source.snippetService,
@@ -587,7 +587,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         source.snippetService.addSnippet(trigger: ";sig", replacement: "Best, Alex")
         source.userDefaults.set(AppConstants.ReleaseChannel.daily.rawValue, forKey: UserDefaultsKeys.updateChannel)
 
-        let backup = SettingsBackupExporter.buildBackup(
+        let backup = try SettingsBackupExporter.buildBackup(
             workflowService: source.workflowService,
             dictionaryService: source.dictionaryService,
             snippetService: source.snippetService,
@@ -731,7 +731,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         defer { teardown(source) }
         source.profileService.addProfile(name: "Slack", bundleIdentifiers: ["com.tinyspeck.slackmacgap"], priority: 0)
 
-        let backup = SettingsBackupExporter.buildBackup(
+        let backup = try SettingsBackupExporter.buildBackup(
             workflowService: source.workflowService,
             dictionaryService: source.dictionaryService,
             snippetService: source.snippetService,
@@ -786,7 +786,7 @@ final class SettingsBackupExporterTests: XCTestCase {
             promptActionId: action.id.uuidString
         )
 
-        let backup = SettingsBackupExporter.buildBackup(
+        let backup = try SettingsBackupExporter.buildBackup(
             workflowService: source.workflowService,
             dictionaryService: source.dictionaryService,
             snippetService: source.snippetService,

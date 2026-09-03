@@ -200,7 +200,7 @@ struct HistoryView: View {
                                         .tag(record.id)
                                         .contextMenu { recordContextMenu(for: record) }
                                         .onAppear {
-                                            guard record.id == viewModel.records.last?.id else { return }
+                                            guard record.id == lastVisibleRecordID else { return }
                                             viewModel.loadMoreRecords()
                                         }
                                 }
@@ -222,6 +222,12 @@ struct HistoryView: View {
         }
         .navigationTitle(viewModel.navigationTitle)
         .navigationSubtitle(viewModel.navigationSummary)
+    }
+
+    private var lastVisibleRecordID: UUID? {
+        viewModel.groupedSections
+            .last { !viewModel.collapsedGroups.contains($0.group) }?
+            .records.last?.id
     }
 
     @ViewBuilder
