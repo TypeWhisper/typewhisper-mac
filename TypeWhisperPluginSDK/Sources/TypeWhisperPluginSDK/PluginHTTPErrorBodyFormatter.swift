@@ -85,8 +85,7 @@ public enum PluginHTTPErrorBodyFormatter {
         }
 
         let lowercasedHead = trimmedHead.lowercased()
-        return containsTagPrefix("<!doctype html", in: lowercasedHead)
-            || containsTagPrefix("<html", in: lowercasedHead)
+        return hasHTMLDocumentRoot(in: lowercasedHead)
     }
 
     private static func mimeType(from contentType: String?) -> String? {
@@ -97,16 +96,43 @@ public enum PluginHTTPErrorBodyFormatter {
             .lowercased()
     }
 
-    private static func containsTagPrefix(_ prefix: String, in text: String) -> Bool {
-        var searchStart = text.startIndex
-        while searchStart < text.endIndex,
-              let range = text.range(of: prefix, range: searchStart..<text.endIndex) {
-            if isTagBoundary(text[range.upperBound...].first) {
+    private static func hasHTMLDocumentRoot(in lowercasedHead: String) -> Bool {
+        var remainder = lowercasedHead[...]
+
+        while true {
+            remainder = remainder.drop(while: { $0.isWhitespace })
+
+            if hasTagPrefixAtStart("<html", in: remainder)
+                || hasTagPrefixAtStart("<!doctype html", in: remainder) {
                 return true
             }
-            searchStart = range.upperBound
+
+            if remainder.hasPrefix("<!--") {
+                guard let end = remainder.range(of: "-->")?.upperBound else { return false }
+                remainder = remainder[end...]
+                continue
+            }
+
+            if remainder.hasPrefix("<?") {
+                guard let end = remainder.range(of: "?>")?.upperBound else { return false }
+                remainder = remainder[end...]
+                continue
+            }
+
+            if remainder.hasPrefix("<!doctype") {
+                guard let end = remainder.firstIndex(of: ">") else { return false }
+                remainder = remainder[remainder.index(after: end)...]
+                continue
+            }
+
+            return false
         }
-        return false
+    }
+
+    private static func hasTagPrefixAtStart(_ prefix: String, in text: Substring) -> Bool {
+        guard text.hasPrefix(prefix) else { return false }
+        let boundaryIndex = text.index(text.startIndex, offsetBy: prefix.count)
+        return isTagBoundary(text[boundaryIndex...].first)
     }
 
     private static func htmlTitle(in head: String) -> String? {

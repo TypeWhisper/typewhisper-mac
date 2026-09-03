@@ -118,6 +118,35 @@ final class HTTPErrorBodyFormatterTests: XCTestCase {
         XCTAssertFalse(summary.contains("secret"))
     }
 
+    func testRecognizesHTMLAfterDeclarationAndComment() throws {
+        let data = Data(
+            "<?xml version=\"1.0\"?><!-- generated --><html><title>Proxy failure</title></html>".utf8
+        )
+
+        let summary = PluginHTTPErrorBodyFormatter.summary(
+            from: data,
+            response: try response(contentType: "application/octet-stream")
+        )
+
+        XCTAssertTrue(summary.contains("upstream returned an HTML error page"))
+        XCTAssertTrue(summary.hasSuffix(": Proxy failure"))
+    }
+
+    func testNestedHTMLElementInXMLDoesNotClassifyAsHTMLPage() throws {
+        let data = Data(
+            "<?xml version=\"1.0\"?><response><html>embedded value</html></response>".utf8
+        )
+        let httpResponse = try response(contentType: "application/xml")
+
+        XCTAssertNil(
+            PluginHTTPErrorBodyFormatter.htmlPageSummary(from: data, response: httpResponse)
+        )
+        XCTAssertFalse(
+            PluginHTTPErrorBodyFormatter.summary(from: data, response: httpResponse)
+                .contains("HTML error page")
+        )
+    }
+
     func testBoundsExtractedProviderMessage() {
         let message = String(repeating: "x", count: 700)
 
