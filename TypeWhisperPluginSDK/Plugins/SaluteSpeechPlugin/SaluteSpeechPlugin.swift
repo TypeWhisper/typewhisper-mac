@@ -689,6 +689,16 @@ extension SaluteSpeechPlugin {
             throw PluginTranscriptionError.networkError("Invalid response")
         }
 
+        if successStatusCodes.contains(httpResponse.statusCode),
+           let htmlPageSummary = PluginHTTPErrorBodyFormatter.htmlPageSummary(
+               from: data,
+               response: httpResponse
+           ) {
+            throw PluginTranscriptionError.apiError(
+                "Failed to parse Sber SaluteSpeech response: \(htmlPageSummary)"
+            )
+        }
+
         guard !successStatusCodes.contains(httpResponse.statusCode) else { return }
 
         switch httpResponse.statusCode {
@@ -713,7 +723,7 @@ extension SaluteSpeechPlugin {
                 in: object,
                 keys: ["message", "error_description", "error", "detail"]
             ) {
-                return message
+                return PluginHTTPErrorBodyFormatter.summary(from: message)
             }
         }
 

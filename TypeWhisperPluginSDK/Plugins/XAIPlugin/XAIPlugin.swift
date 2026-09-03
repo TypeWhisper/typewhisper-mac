@@ -1102,6 +1102,14 @@ final class XAIPlugin: NSObject,
 
         switch httpResponse.statusCode {
         case 200:
+            if let htmlPageSummary = PluginHTTPErrorBodyFormatter.htmlPageSummary(
+                from: data,
+                response: httpResponse
+            ) {
+                throw PluginTranscriptionError.apiError(
+                    "Invalid xAI STT response: \(htmlPageSummary)"
+                )
+            }
             return try Self.parseSTTResponse(data, fallbackLanguage: language)
         case 401:
             throw PluginTranscriptionError.invalidApiKey

@@ -176,6 +176,15 @@ final class CloudflareASRPlugin: NSObject, TranscriptionEnginePlugin, Dictionary
             throw PluginTranscriptionError.apiError("HTTP \(httpResponse.statusCode): \(errorMessage)")
         }
 
+        if let htmlPageSummary = PluginHTTPErrorBodyFormatter.htmlPageSummary(
+            from: responseData,
+            response: httpResponse
+        ) {
+            throw PluginTranscriptionError.apiError(
+                "Failed to parse Cloudflare response: \(htmlPageSummary)"
+            )
+        }
+
         return try Self.parseTranscriptionResponse(responseData)
     }
 

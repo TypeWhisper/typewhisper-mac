@@ -891,7 +891,7 @@ private struct OpenAIContextAwareFileTranscriptionClient: Sendable {
            let error = json["error"] as? [String: Any],
            let message = error["message"] as? String,
            !message.isEmpty {
-            return "HTTP \(response.statusCode): \(message)"
+            return "HTTP \(response.statusCode): \(PluginHTTPErrorBodyFormatter.summary(from: message))"
         }
         let body = PluginHTTPErrorBodyFormatter.summary(from: data, response: response)
         return "HTTP \(response.statusCode): \(body)"

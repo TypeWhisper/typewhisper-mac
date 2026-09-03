@@ -343,6 +343,14 @@ struct MistralAPIClient {
         }
 
         if httpResponse.statusCode == 200 {
+            if let htmlPageSummary = PluginHTTPErrorBodyFormatter.htmlPageSummary(
+                from: data,
+                response: httpResponse
+            ) {
+                throw MistralAPIError.apiError(
+                    "Failed to parse transcription response: \(htmlPageSummary)"
+                )
+            }
             guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let text = json["text"] as? String else {
                 throw MistralAPIError.apiError("Failed to parse transcription response")
@@ -410,6 +418,14 @@ struct MistralAPIClient {
         }
 
         if httpResponse.statusCode == 200 {
+            if let htmlPageSummary = PluginHTTPErrorBodyFormatter.htmlPageSummary(
+                from: data,
+                response: httpResponse
+            ) {
+                throw MistralAPIError.apiError(
+                    "Failed to parse chat transcription response: \(htmlPageSummary)"
+                )
+            }
             let text = try parseChatResponse(data)
             // Chat completions returns no structured detected-language field, so
             // fall back to the requested language (or English).
@@ -441,7 +457,7 @@ struct MistralAPIClient {
     private func errorMessage(from data: Data, response: HTTPURLResponse) -> String {
         if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
            let message = json["message"] as? String {
-            return message
+            return PluginHTTPErrorBodyFormatter.summary(from: message)
         }
         let body = PluginHTTPErrorBodyFormatter.summary(from: data, response: response)
         return "HTTP \(response.statusCode): \(body)"

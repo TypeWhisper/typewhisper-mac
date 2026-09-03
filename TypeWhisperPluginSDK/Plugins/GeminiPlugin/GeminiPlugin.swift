@@ -711,6 +711,22 @@ final class GeminiPlugin: NSObject,
 
         switch httpResponse.statusCode {
         case 200..<300:
+            if let htmlPageSummary = PluginHTTPErrorBodyFormatter.htmlPageSummary(
+                from: data,
+                response: httpResponse
+            ) {
+                let error = PluginTranscriptionError.apiError(
+                    "Failed to parse Gemini response: \(htmlPageSummary)"
+                )
+                if preservesRawResponseForUploadRetry {
+                    throw PluginAudioUploadHTTPFailure(
+                        statusCode: httpResponse.statusCode,
+                        responseData: data,
+                        underlyingError: error
+                    )
+                }
+                throw error
+            }
             return
         case 401, 403:
             throw PluginTranscriptionError.invalidApiKey
@@ -737,7 +753,7 @@ final class GeminiPlugin: NSObject,
            let error = json["error"] as? [String: Any],
            let message = error["message"] as? String,
            !message.isEmpty {
-            return message
+            return PluginHTTPErrorBodyFormatter.summary(from: message)
         }
         return PluginHTTPErrorBodyFormatter.summary(from: data, response: response)
     }

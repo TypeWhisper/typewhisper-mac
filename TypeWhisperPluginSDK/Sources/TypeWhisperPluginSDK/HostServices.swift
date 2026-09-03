@@ -1119,9 +1119,12 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
         _ data: Data,
         response: HTTPURLResponse
     ) throws -> PluginTranscriptionResult {
-        if PluginHTTPErrorBodyFormatter.isHTMLPage(data: data, response: response) {
+        if let htmlPageSummary = PluginHTTPErrorBodyFormatter.htmlPageSummary(
+            from: data,
+            response: response
+        ) {
             throw PluginTranscriptionError.apiError(
-                "Failed to parse response: \(PluginHTTPErrorBodyFormatter.summary(from: data, response: response))"
+                "Failed to parse response: \(htmlPageSummary)"
             )
         }
 

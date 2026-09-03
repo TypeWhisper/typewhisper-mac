@@ -124,6 +124,15 @@ final class CoherePlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
             throw PluginTranscriptionError.apiError("HTTP \(httpResponse.statusCode): \(errorBody)")
         }
 
+        if let htmlPageSummary = PluginHTTPErrorBodyFormatter.htmlPageSummary(
+            from: responseData,
+            response: httpResponse
+        ) {
+            throw PluginTranscriptionError.apiError(
+                "Failed to parse Cohere response: \(htmlPageSummary)"
+            )
+        }
+
         guard let json = try? JSONSerialization.jsonObject(with: responseData) as? [String: Any],
               let text = json["text"] as? String else {
             throw PluginTranscriptionError.apiError("Failed to parse Cohere response")

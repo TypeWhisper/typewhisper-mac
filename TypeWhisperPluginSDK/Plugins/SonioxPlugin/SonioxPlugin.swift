@@ -2320,14 +2320,14 @@ final class SonioxPlugin: NSObject,
     private static func providerErrorMessage(from data: Data) -> String? {
         if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             if let message = nonEmptyString(json["message"]) {
-                return message
+                return PluginHTTPErrorBodyFormatter.summary(from: message)
             }
             if let message = nonEmptyString(json["error_message"]) {
-                return message
+                return PluginHTTPErrorBodyFormatter.summary(from: message)
             }
             if let error = json["error"] as? [String: Any],
                let message = nonEmptyString(error["message"]) {
-                return message
+                return PluginHTTPErrorBodyFormatter.summary(from: message)
             }
         }
         return nil
@@ -2348,7 +2348,7 @@ final class SonioxPlugin: NSObject,
 
     private static func errorMessage(from data: Data, response: HTTPURLResponse) -> String {
         if let message = providerErrorMessage(from: data) {
-            return message
+            return "HTTP \(response.statusCode): \(message)"
         }
         let body = PluginHTTPErrorBodyFormatter.summary(from: data, response: response)
         return "HTTP \(response.statusCode): \(body)"

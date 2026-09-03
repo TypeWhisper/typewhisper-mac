@@ -298,6 +298,14 @@ extension SmallestAIPlugin {
 
         switch httpResponse.statusCode {
         case 200:
+            if let htmlPageSummary = PluginHTTPErrorBodyFormatter.htmlPageSummary(
+                from: data,
+                response: httpResponse
+            ) {
+                throw PluginTranscriptionError.apiError(
+                    "Failed to parse Smallest Pulse response: \(htmlPageSummary)"
+                )
+            }
             return
         case 401, 403:
             throw PluginTranscriptionError.invalidApiKey

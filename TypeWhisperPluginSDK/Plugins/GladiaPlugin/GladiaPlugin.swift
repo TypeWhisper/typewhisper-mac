@@ -300,6 +300,14 @@ final class GladiaPlugin: NSObject, TranscriptionEnginePlugin, LanguageHintTrans
 
         switch httpResponse.statusCode {
         case 200, 201:
+            if let htmlPageSummary = PluginHTTPErrorBodyFormatter.htmlPageSummary(
+                from: data,
+                response: httpResponse
+            ) {
+                throw PluginTranscriptionError.apiError(
+                    "Invalid upload response: \(htmlPageSummary)"
+                )
+            }
             guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let audioURL = json["audio_url"] as? String,
                   !audioURL.isEmpty else {

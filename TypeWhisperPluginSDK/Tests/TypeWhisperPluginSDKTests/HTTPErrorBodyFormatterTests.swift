@@ -103,6 +103,30 @@ final class HTTPErrorBodyFormatterTests: XCTestCase {
         XCTAssertTrue(summary.hasSuffix(": Überlastet"))
     }
 
+    func testRecognizesBOMPrefixedHTML() throws {
+        let data = Data("\u{FEFF}<html><head><title>Proxy failure</title></head><body>secret</body></html>".utf8)
+
+        let summary = PluginHTTPErrorBodyFormatter.summary(
+            from: data,
+            response: try response(contentType: "text/html")
+        )
+
+        XCTAssertEqual(
+            summary,
+            "upstream returned an HTML error page (\(data.count) bytes): Proxy failure"
+        )
+        XCTAssertFalse(summary.contains("secret"))
+    }
+
+    func testBoundsExtractedProviderMessage() {
+        let message = String(repeating: "x", count: 700)
+
+        let summary = PluginHTTPErrorBodyFormatter.summary(from: message)
+
+        XCTAssertTrue(summary.hasSuffix("(truncated from 700 bytes)"))
+        XCTAssertLessThan(summary.count, 560)
+    }
+
     func testMarkerBeyondSniffWindowDoesNotReclassifyBody() throws {
         let data = Data(("<diagnostic>" + String(repeating: "x", count: 5_000) + "<html><title>Late</title>").utf8)
 

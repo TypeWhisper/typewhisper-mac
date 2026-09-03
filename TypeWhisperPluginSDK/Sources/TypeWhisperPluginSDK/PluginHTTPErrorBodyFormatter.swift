@@ -13,6 +13,15 @@ public enum PluginHTTPErrorBodyFormatter {
         )
     }
 
+    public static func summary(from text: String) -> String {
+        summary(from: Data(text.utf8), contentType: "text/plain")
+    }
+
+    public static func htmlPageSummary(from data: Data, response: HTTPURLResponse) -> String? {
+        guard isHTMLPage(data: data, response: response) else { return nil }
+        return summary(from: data, response: response)
+    }
+
     public static func summary(from data: Data, contentType: String?) -> String {
         guard !data.isEmpty else {
             return "upstream returned an empty error body"
@@ -22,7 +31,7 @@ public enum PluginHTTPErrorBodyFormatter {
             return "upstream returned non-UTF-8 error data (\(data.count) bytes)"
         }
 
-        let trimmedHead = head.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedHead = normalizedHead(head)
         guard let firstCharacter = trimmedHead.first else {
             return "upstream returned an empty error body (\(data.count) bytes)"
         }
@@ -44,7 +53,7 @@ public enum PluginHTTPErrorBodyFormatter {
 
     static func isHTMLPage(data: Data, response: HTTPURLResponse) -> Bool {
         guard let head = decodedHead(from: data) else { return false }
-        let trimmedHead = head.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedHead = normalizedHead(head)
         guard trimmedHead.first == "<" else { return false }
         return isHTMLPage(
             trimmedHead: trimmedHead,
@@ -62,6 +71,12 @@ public enum PluginHTTPErrorBodyFormatter {
             prefix.removeLast()
         }
         return nil
+    }
+
+    private static func normalizedHead(_ head: String) -> String {
+        head.trimmingCharacters(
+            in: .whitespacesAndNewlines.union(CharacterSet(charactersIn: "\u{FEFF}"))
+        )
     }
 
     private static func isHTMLPage(trimmedHead: String, contentType: String?) -> Bool {

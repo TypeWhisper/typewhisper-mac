@@ -321,6 +321,15 @@ final class GoogleCloudSTTPlugin: NSObject, TranscriptionEnginePlugin, Dictionar
             throw PluginTranscriptionError.apiError(message)
         }
 
+        if let htmlPageSummary = PluginHTTPErrorBodyFormatter.htmlPageSummary(
+            from: data,
+            response: httpResponse
+        ) {
+            throw PluginTranscriptionError.apiError(
+                "Failed to parse Google OAuth response: \(htmlPageSummary)"
+            )
+        }
+
         let decoded = try JSONDecoder().decode(GoogleOAuthTokenResponse.self, from: data)
         await tokenCache.store(token: decoded.accessToken, expiresIn: decoded.expiresIn)
         return decoded.accessToken
@@ -440,6 +449,14 @@ final class GoogleCloudSTTPlugin: NSObject, TranscriptionEnginePlugin, Dictionar
 
         switch httpResponse.statusCode {
         case 200:
+            if let htmlPageSummary = PluginHTTPErrorBodyFormatter.htmlPageSummary(
+                from: data,
+                response: httpResponse
+            ) {
+                throw PluginTranscriptionError.apiError(
+                    "Failed to parse Google Cloud response: \(htmlPageSummary)"
+                )
+            }
             return try Self.parseRecognizeResponse(data)
         case 401:
             throw PluginTranscriptionError.apiError(
@@ -661,15 +678,15 @@ final class GoogleCloudSTTPlugin: NSObject, TranscriptionEnginePlugin, Dictionar
     ) -> String? {
         if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             if let description = json["error_description"] as? String, !description.isEmpty {
-                return description
+                return PluginHTTPErrorBodyFormatter.summary(from: description)
             }
             if let error = json["error"] as? [String: Any],
                let message = error["message"] as? String,
                !message.isEmpty {
-                return message
+                return PluginHTTPErrorBodyFormatter.summary(from: message)
             }
             if let error = json["error"] as? String, !error.isEmpty {
-                return error
+                return PluginHTTPErrorBodyFormatter.summary(from: error)
             }
         }
 

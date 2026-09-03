@@ -229,6 +229,15 @@ final class AssemblyAIPlugin: NSObject, StructuredTranscriptionEnginePlugin, Dic
             )
         }
 
+        if let htmlPageSummary = PluginHTTPErrorBodyFormatter.htmlPageSummary(
+            from: data,
+            response: httpResponse
+        ) {
+            throw PluginTranscriptionError.apiError(
+                "Invalid upload response: \(htmlPageSummary)"
+            )
+        }
+
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
               let uploadUrl = json["upload_url"] as? String else {
             throw PluginTranscriptionError.apiError("Invalid upload response")

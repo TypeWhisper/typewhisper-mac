@@ -218,6 +218,14 @@ final class OpenRouterPlugin: NSObject,
 
         switch httpResponse.statusCode {
         case 200:
+            if let htmlPageSummary = PluginHTTPErrorBodyFormatter.htmlPageSummary(
+                from: data,
+                response: httpResponse
+            ) {
+                throw PluginTranscriptionError.apiError(
+                    "Failed to parse transcription response: \(htmlPageSummary)"
+                )
+            }
             return
         case 401:
             throw PluginTranscriptionError.invalidApiKey
@@ -267,10 +275,10 @@ final class OpenRouterPlugin: NSObject,
         if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             if let error = json["error"] as? [String: Any],
                let message = error["message"] as? String {
-                return message
+                return PluginHTTPErrorBodyFormatter.summary(from: message)
             }
             if let message = json["message"] as? String {
-                return message
+                return PluginHTTPErrorBodyFormatter.summary(from: message)
             }
         }
         return PluginHTTPErrorBodyFormatter.summary(from: data, response: response)

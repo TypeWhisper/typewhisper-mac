@@ -724,6 +724,22 @@ extension CartesiaPlugin {
 
         switch httpResponse.statusCode {
         case 200:
+            if let htmlPageSummary = PluginHTTPErrorBodyFormatter.htmlPageSummary(
+                from: data,
+                response: httpResponse
+            ) {
+                let error = PluginTranscriptionError.apiError(
+                    "Failed to parse Cartesia response: \(htmlPageSummary)"
+                )
+                if preservesRawResponseForUploadRetry {
+                    throw PluginAudioUploadHTTPFailure(
+                        statusCode: httpResponse.statusCode,
+                        responseData: data,
+                        underlyingError: error
+                    )
+                }
+                throw error
+            }
             return
         case 401, 403:
             throw PluginTranscriptionError.invalidApiKey
@@ -795,11 +811,11 @@ extension CartesiaPlugin {
     private static func errorMessage(from data: Data, response: HTTPURLResponse) -> String {
         if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             if let message = json["message"] as? String {
-                return "HTTP \(response.statusCode): \(message)"
+                return "HTTP \(response.statusCode): \(PluginHTTPErrorBodyFormatter.summary(from: message))"
             }
             if let error = json["error"] as? [String: Any],
                let message = error["message"] as? String {
-                return "HTTP \(response.statusCode): \(message)"
+                return "HTTP \(response.statusCode): \(PluginHTTPErrorBodyFormatter.summary(from: message))"
             }
         }
         let body = PluginHTTPErrorBodyFormatter.summary(from: data, response: response)

@@ -424,6 +424,14 @@ final class ElevenLabsPlugin: NSObject, DictionaryTermHintTranscriptionEnginePlu
 
             switch httpResponse.statusCode {
             case 200:
+                if let htmlPageSummary = PluginHTTPErrorBodyFormatter.htmlPageSummary(
+                    from: data,
+                    response: httpResponse
+                ) {
+                    throw PluginTranscriptionError.apiError(
+                        "Invalid ElevenLabs response: \(htmlPageSummary)"
+                    )
+                }
                 return try Self.parseRESTResponse(data, fallbackLanguage: language)
             case 401:
                 throw PluginTranscriptionError.invalidApiKey

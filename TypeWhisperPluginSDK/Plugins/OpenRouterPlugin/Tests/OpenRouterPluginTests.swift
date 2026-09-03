@@ -458,6 +458,40 @@ final class OpenRouterPluginTests: XCTestCase {
         }
     }
 
+    func testTranscriptionRejectsHTMLSuccessBody() {
+        let data = Data("<html><head><title>Proxy failure</title></head><body>secret</body></html>".utf8)
+
+        XCTAssertThrowsError(try OpenRouterPlugin.validateTranscriptionResponse(
+            data: data,
+            response: Self.httpResponse(url: "https://openrouter.ai/api/v1/audio/transcriptions", statusCode: 200)
+        )) { error in
+            guard let pluginError = error as? PluginTranscriptionError,
+                  case .apiError(let message) = pluginError else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+            XCTAssertTrue(message.contains("upstream returned an HTML error page"))
+            XCTAssertTrue(message.contains("Proxy failure"))
+            XCTAssertFalse(message.contains("secret"))
+        }
+    }
+
+    func testTranscriptionBoundsExtractedJSONErrorMessage() {
+        let providerMessage = String(repeating: "x", count: 700)
+        let data = Data("{\"error\":{\"message\":\"\(providerMessage)\"}}".utf8)
+
+        XCTAssertThrowsError(try OpenRouterPlugin.validateTranscriptionResponse(
+            data: data,
+            response: Self.httpResponse(url: "https://openrouter.ai/api/v1/audio/transcriptions", statusCode: 500)
+        )) { error in
+            guard let pluginError = error as? PluginTranscriptionError,
+                  case .apiError(let message) = pluginError else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+            XCTAssertTrue(message.hasSuffix("(truncated from 700 bytes)"))
+            XCTAssertLessThan(message.count, 580)
+        }
+    }
+
     private static func audio() -> AudioData {
         let samples = [Float](repeating: 0.1, count: 16_000)
         return AudioData(samples: samples, wavData: PluginWavEncoder.encode(samples), duration: 1)
