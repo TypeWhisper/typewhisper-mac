@@ -3167,18 +3167,26 @@
       "id": "com.typewhisper.authenticated-cli",
       "name": "Authenticated Provider CLIs",
       "author": "TypeWhisper",
-      "description": "Use existing signed-in provider CLIs as LLM providers without separate API keys.",
+      "description": "Use existing signed-in Codex, Claude, OpenCode, and Antigravity CLIs as LLM providers without separate API keys.",
       "category": "llm",
       "downloadCount": 0,
       "descriptions": {
-        "de": "Bereits angemeldete Anbieter-CLIs ohne separate API-Keys als LLM-Anbieter verwenden.",
-        "ja": "\u30b5\u30a4\u30f3\u30a4\u30f3\u6e08\u307f\u306e\u30d7\u30ed\u30d0\u30a4\u30c0\u30fcCLI\u3092\u3001\u5225\u306eAPI\u30ad\u30fc\u306a\u3057\u3067LLM\u30d7\u30ed\u30d0\u30a4\u30c0\u30fc\u3068\u3057\u3066\u4f7f\u7528\u3057\u307e\u3059\u3002"
+        "de": "Bereits angemeldete Codex-, Claude-, OpenCode- und Antigravity-CLIs ohne separate API-Keys als LLM-Anbieter verwenden.",
+        "ja": "\u30b5\u30a4\u30f3\u30a4\u30f3\u6e08\u307f\u306eCodex\u3001Claude\u3001OpenCode\u3001Antigravity CLI\u3092\u3001\u5225\u306eAPI\u30ad\u30fc\u306a\u3057\u3067LLM\u30d7\u30ed\u30d0\u30a4\u30c0\u30fc\u3068\u3057\u3066\u4f7f\u7528\u3057\u307e\u3059\u3002"
       },
       "iconSystemName": "terminal",
       "requiresAPIKey": false,
       "hosting": "cloud",
       "detailsURL": "https://www.typewhisper.com/addons/authenticated-cli/macos/",
       "releases": [
+        {
+          "version": "1.1.0",
+          "minHostVersion": "1.7.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 614072,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-authenticated-cli-v1.1.0/AuthenticatedCLIPlugin.zip",
+          "minOSVersion": "14.0"
+        },
         {
           "version": "1.0.0",
           "minHostVersion": "1.7.0",
