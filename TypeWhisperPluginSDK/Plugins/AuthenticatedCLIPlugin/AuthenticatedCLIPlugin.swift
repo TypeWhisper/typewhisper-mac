@@ -803,7 +803,7 @@ final class AuthenticatedCLIPlugin: NSObject,
     }
 
     static func effortDisplayName(_ id: String) -> String {
-        switch id.lowercased() {
+        return switch id.lowercased() {
         case "minimal": String(localized: "Minimal", bundle: localizationBundle)
         case "low": String(localized: "Low", bundle: localizationBundle)
         case "medium": String(localized: "Medium", bundle: localizationBundle)
