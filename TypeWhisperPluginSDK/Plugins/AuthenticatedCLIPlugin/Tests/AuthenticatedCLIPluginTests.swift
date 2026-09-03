@@ -507,6 +507,32 @@ final class AuthenticatedCLIPluginTests: XCTestCase {
         XCTAssertEqual(catalog.models.first?.supportedVariants, ["high", "low", "minimal"])
     }
 
+    func testOpenCodeModelCatalogRejectsNonNumericPricingMetadata() throws {
+        let malformedCosts = [
+            #"{"input": 0, "output": 0, "cache": {"read": "0"}}"#,
+            #"{"input": 0, "output": 0, "cache": {"read": null}}"#,
+            #"{"input": 0, "output": 0, "cache": {"read": false}}"#,
+            #"{"input": false, "output": 0}"#,
+        ]
+
+        for (index, cost) in malformedCosts.enumerated() {
+            let models = OpenCodeCLIModelCatalogLoader.parseModels("""
+            opencode/malformed-\(index)
+            {
+              "id": "malformed-\(index)",
+              "providerID": "opencode",
+              "name": "Malformed \(index)",
+              "status": "active",
+              "cost": \(cost),
+              "capabilities": {"input": {"text": true}, "output": {"text": true}}
+            }
+            """)
+
+            let model = try XCTUnwrap(models.first)
+            XCTAssertFalse(model.isFree, "Malformed pricing must fail closed: \(cost)")
+        }
+    }
+
     func testClaudeInvocationDisablesToolsSessionsAndBrowserIntegration() {
         let args = CLIInvocation.arguments(
             for: .claude,

@@ -1,3 +1,4 @@
+import CoreFoundation
 import Darwin
 import Foundation
 
@@ -703,6 +704,7 @@ struct OpenCodeCLIModelCatalogLoader: OpenCodeModelCatalogLoading, Sendable {
 
     private static func allNumericValuesAreZero(_ value: Any) -> Bool {
         if let number = value as? NSNumber {
+            guard CFGetTypeID(number) != CFBooleanGetTypeID() else { return false }
             return number.doubleValue == 0
         }
         if let dictionary = value as? [String: Any] {
@@ -711,7 +713,7 @@ struct OpenCodeCLIModelCatalogLoader: OpenCodeModelCatalogLoading, Sendable {
         if let array = value as? [Any] {
             return array.allSatisfy(allNumericValuesAreZero)
         }
-        return true
+        return false
     }
 
     private static func humanizedModelName(_ id: String) -> String {
