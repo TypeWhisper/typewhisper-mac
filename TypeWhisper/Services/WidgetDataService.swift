@@ -12,7 +12,7 @@ final class WidgetDataService {
         self.historyService = historyService
         self.usageStatisticsService = usageStatisticsService
 
-        cancellable = Publishers.CombineLatest(historyService.$records, usageStatisticsService.$days)
+        cancellable = Publishers.CombineLatest(historyService.$recentRecords, usageStatisticsService.$days)
             .debounce(for: .milliseconds(500), scheduler: DispatchQueue.main)
             .sink { [weak self] records, _ in
                 self?.updateWidgetData(records: records, now: Date())

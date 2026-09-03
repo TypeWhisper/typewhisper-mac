@@ -619,16 +619,21 @@ struct AdvancedSettingsView: View {
     /// right away.
     private func beginExport() {
         let container = ServiceContainer.shared
-        let backup = SettingsBackupExporter.buildBackup(
-            workflowService: container.workflowService,
-            dictionaryService: container.dictionaryService,
-            snippetService: container.snippetService,
-            profileService: container.profileService,
-            promptActionService: container.promptActionService,
-            pluginManager: container.pluginManager,
-            historyService: container.historyService
-        )
-        exportBackupDraft = ExportBackupDraft(backup: backup)
+        do {
+            let backup = try SettingsBackupExporter.buildBackup(
+                workflowService: container.workflowService,
+                dictionaryService: container.dictionaryService,
+                snippetService: container.snippetService,
+                profileService: container.profileService,
+                promptActionService: container.promptActionService,
+                pluginManager: container.pluginManager,
+                historyService: container.historyService
+            )
+            exportBackupDraft = ExportBackupDraft(backup: backup)
+        } catch {
+            backupErrorMessage = error.localizedDescription
+            showBackupError = true
+        }
     }
 
     private func performBackupExport(_ backup: SettingsBackupExporter.SettingsBackup, categories: Set<SettingsBackupExporter.Category>) {

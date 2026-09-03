@@ -46,7 +46,7 @@ struct HomeSettingsView: View {
                             Button("Seed Demo Data") {
                                 let historyService = ServiceContainer.shared.historyService
                                 historyService.seedDemoData()
-                                ServiceContainer.shared.usageStatisticsService.replaceWithHistoryRecords(historyService.records)
+                                ServiceContainer.shared.usageStatisticsService.replaceWithHistoryRecords(historyService.allRecords())
                             }
                             .buttonStyle(.plain)
                             .foregroundStyle(.orange)

@@ -85,7 +85,7 @@ final class RecentTranscriptionPaletteHandlerTests: XCTestCase {
             language: "en",
             engineUsed: "mock"
         )
-        let historyRecord = try XCTUnwrap(historyService.records.first)
+        let historyRecord = try XCTUnwrap(historyService.recentRecords.first)
         historyRecord.timestamp = Date().addingTimeInterval(-10)
         historyService.updateRecord(historyRecord, finalText: historyRecord.finalText)
 

@@ -36,7 +36,7 @@ final class RecentTranscriptionPaletteHandler {
 
         guard currentState == .idle else { return }
 
-        let entries = recentTranscriptionStore.mergedEntries(historyRecords: historyService.records)
+        let entries = recentTranscriptionStore.mergedEntries(historyRecords: historyService.recentRecords)
         guard !entries.isEmpty else {
             onShowNotchFeedback?(
                 String(localized: "No recent transcriptions"),

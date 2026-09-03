@@ -61,6 +61,8 @@ struct HistoryView: View {
             viewModel.consumePendingDeletion()
         }
         .frame(minWidth: 900, minHeight: 560)
+        .onAppear { viewModel.activate() }
+        .onDisappear { viewModel.deactivate() }
     }
 
     private var unsavedChangesBinding: Binding<Bool> {
@@ -197,6 +199,10 @@ struct HistoryView: View {
                                     HistoryRecordRow(record: record)
                                         .tag(record.id)
                                         .contextMenu { recordContextMenu(for: record) }
+                                        .onAppear {
+                                            guard record.id == lastVisibleRecordID else { return }
+                                            viewModel.loadMoreRecords()
+                                        }
                                 }
                             }
                         } header: {
@@ -211,11 +217,17 @@ struct HistoryView: View {
                     }
                 }
                 .listStyle(.inset)
-                .id(viewModel.navigationSelection)
+                .id(viewModel.queryID)
             }
         }
         .navigationTitle(viewModel.navigationTitle)
         .navigationSubtitle(viewModel.navigationSummary)
+    }
+
+    private var lastVisibleRecordID: UUID? {
+        viewModel.groupedSections
+            .last { !viewModel.collapsedGroups.contains($0.group) }?
+            .records.last?.id
     }
 
     @ViewBuilder

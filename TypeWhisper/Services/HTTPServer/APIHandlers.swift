@@ -821,23 +821,17 @@ final class APIHandlers: @unchecked Sendable {
     // MARK: - GET /v1/history
 
     private func handleGetHistory(_ request: HTTPRequest) async -> HTTPResponse {
-        let query = request.queryParams["q"]
-        let limit = min(Int(request.queryParams["limit"] ?? "") ?? 50, 200)
+        let searchText = request.queryParams["q"] ?? ""
+        let limit = max(min(Int(request.queryParams["limit"] ?? "") ?? 50, 200), 0)
         let offset = max(Int(request.queryParams["offset"] ?? "") ?? 0, 0)
 
         let historyService = self.historyService
         return await MainActor.run {
-            let allRecords: [TranscriptionRecord]
-            if let query, !query.isEmpty {
-                allRecords = historyService.searchRecords(query: query)
-            } else {
-                allRecords = historyService.records
-            }
-
-            let total = allRecords.count
-            let sliceEnd = min(offset + limit, total)
-            let sliceStart = min(offset, total)
-            let page = Array(allRecords[sliceStart..<sliceEnd])
+            let page = historyService.fetchPage(
+                query: HistoryQuery(searchText: searchText),
+                offset: offset,
+                limit: limit
+            )
 
             struct HistoryEntry: Encodable {
                 let id: String
@@ -861,7 +855,7 @@ final class APIHandlers: @unchecked Sendable {
                 let offset: Int
             }
 
-            let entries = page.map { record in
+            let entries = page.records.map { record in
                 HistoryEntry(
                     id: record.id.uuidString,
                     text: record.finalText,
@@ -878,7 +872,12 @@ final class APIHandlers: @unchecked Sendable {
                 )
             }
 
-            return .json(HistoryResponse(entries: entries, total: total, limit: limit, offset: offset))
+            return .json(HistoryResponse(
+                entries: entries,
+                total: page.totalCount,
+                limit: limit,
+                offset: page.offset
+            ))
         }
     }
 
@@ -892,11 +891,9 @@ final class APIHandlers: @unchecked Sendable {
 
         let historyService = self.historyService
         return await MainActor.run {
-            guard let record = historyService.records.first(where: { $0.id == uuid }) else {
+            guard historyService.deleteRecord(withID: uuid) else {
                 return .error(status: 404, message: "History entry not found")
             }
-
-            historyService.deleteRecord(record)
             return .json(["deleted": true])
         }
     }

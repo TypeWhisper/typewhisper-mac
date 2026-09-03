@@ -844,7 +844,7 @@ final class DictationViewModel: ObservableObject {
         if let session = dictationSessions[id] {
             return session
         }
-        if let record = historyService.records.first(where: { $0.id == id }) {
+        if let record = historyService.record(withID: id) {
             return DictationSessionSnapshot(
                 id: id,
                 status: .completed,
@@ -2949,11 +2949,11 @@ final class DictationViewModel: ObservableObject {
     // MARK: - Workflow Palette
 
     var canCopyLastTranscription: Bool {
-        recentTranscriptionStore.latestEntry(historyRecords: historyService.records) != nil
+        recentTranscriptionStore.latestEntry(historyRecords: historyService.recentRecords) != nil
     }
 
     func copyLastTranscriptionToClipboard() {
-        guard let entry = recentTranscriptionStore.latestEntry(historyRecords: historyService.records) else { return }
+        guard let entry = recentTranscriptionStore.latestEntry(historyRecords: historyService.recentRecords) else { return }
         let text = entry.finalText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { return }
 

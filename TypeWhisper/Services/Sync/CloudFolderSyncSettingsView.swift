@@ -1116,7 +1116,7 @@ final class CloudFolderSyncController: ObservableObject {
               let historyService else {
             return []
         }
-        let pending = historyService.records.compactMap { record -> (UUID, UserDataSyncHistoryAudioV1)? in
+        let pending = historyService.allRecords().compactMap { record -> (UUID, UserDataSyncHistoryAudioV1)? in
             guard historyService.audioFileURL(for: record) == nil,
                   let descriptor = historyService.synchronizedAudioDescriptor(for: record),
                   historySyncPreferences.shouldReceiveSynchronizedAudio(

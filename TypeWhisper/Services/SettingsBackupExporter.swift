@@ -426,7 +426,7 @@ enum SettingsBackupExporter {
         pluginManager: PluginManager,
         historyService: HistoryService,
         userDefaults: UserDefaults = .standard
-    ) -> SettingsBackup {
+    ) throws -> SettingsBackup {
         let workflows = workflowService.workflows.map { workflow in
             WorkflowDTO(
                 name: workflow.name,
@@ -522,7 +522,7 @@ enum SettingsBackupExporter {
                 )
             }
 
-        let history = historyService.records.map { record in
+        let history = try historyService.allRecordsThrowing().map { record in
             HistoryEntryDTO(
                 timestamp: record.timestamp,
                 rawText: record.rawText,
@@ -770,7 +770,6 @@ enum SettingsBackupExporter {
             ? Calendar.current.date(byAdding: .day, value: -retentionDays, to: Date())
             : nil
 
-        let beforeHistoryCount = historyService.records.count
         for (index, entry) in backup.history.enumerated() {
             if let retentionCutoff, entry.timestamp < retentionCutoff {
                 result.historySkippedByRetention += 1
@@ -798,6 +797,7 @@ enum SettingsBackupExporter {
             // counting those anyway would inflate Statistics beyond what's
             // visible in History.
             if inserted {
+                result.historyImported += 1
                 usageStatisticsService.recordTranscription(
                     timestamp: entry.timestamp,
                     wordsCount: entry.finalText.split(separator: " ").count,
@@ -816,8 +816,6 @@ enum SettingsBackupExporter {
                 await Task.yield()
             }
         }
-        result.historyImported = historyService.records.count - beforeHistoryCount
-
         if let updateChannel = backup.updateChannel,
            AppConstants.ReleaseChannel(rawValue: updateChannel) != nil {
             userDefaults.set(updateChannel, forKey: UserDefaultsKeys.updateChannel)
@@ -949,7 +947,7 @@ final class SettingsBackupAutomationService {
     }
 
     func exportData() throws -> Data {
-        let backup = SettingsBackupExporter.buildBackup(
+        let backup = try SettingsBackupExporter.buildBackup(
             workflowService: workflowService,
             dictionaryService: dictionaryService,
             snippetService: snippetService,
