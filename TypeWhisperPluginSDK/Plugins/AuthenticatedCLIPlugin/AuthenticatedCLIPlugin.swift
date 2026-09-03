@@ -17,6 +17,7 @@ final class AuthenticatedCLIPlugin: NSObject,
     private static let maximumInputBytes = 512 * 1024
     private static let selectedExecutableKeyPrefix = "selectedExecutable."
     private static let codexModelCatalogKey = "codexModelCatalog.v1"
+    private static let openCodeModelCatalogKey = "openCodeModelCatalog.v1"
     private static let antigravityModelCatalogKey = "antigravityModelCatalog.v1"
 
     private struct State {
@@ -27,6 +28,8 @@ final class AuthenticatedCLIPlugin: NSObject,
         var selectedPaths: [CLIProviderKind: String] = [:]
         var codexModelCatalog: CodexModelCatalog?
         var codexModelRefreshError: String?
+        var openCodeModelCatalog: OpenCodeModelCatalog?
+        var openCodeModelRefreshError: String?
         var antigravityModelCatalog: AntigravityModelCatalog?
         var antigravityModelRefreshError: String?
         var statuses = Dictionary(
@@ -46,9 +49,16 @@ final class AuthenticatedCLIPlugin: NSObject,
         case failure(String)
     }
 
+    private enum OpenCodeModelRefreshOutcome: Sendable {
+        case notAttempted
+        case success(OpenCodeModelCatalog)
+        case failure(String)
+    }
+
     private let state = OSAllocatedUnfairLock(initialState: State())
     private let runner: any CLIProcessRunning
     private let codexModelCatalogLoader: any CodexModelCatalogLoading
+    private let openCodeModelCatalogLoader: any OpenCodeModelCatalogLoading
     private let antigravityModelCatalogLoader: any AntigravityModelCatalogLoading
     private let baseEnvironment: [String: String]
     private let homeDirectory: URL
@@ -58,6 +68,7 @@ final class AuthenticatedCLIPlugin: NSObject,
         self.init(
             runner: CLIProcessRunner(),
             codexModelCatalogLoader: CodexAppServerModelCatalogLoader(),
+            openCodeModelCatalogLoader: OpenCodeCLIModelCatalogLoader(),
             antigravityModelCatalogLoader: AntigravityCLIModelCatalogLoader(),
             environment: ProcessInfo.processInfo.environment,
             homeDirectory: FileManager.default.homeDirectoryForCurrentUser,
@@ -68,6 +79,7 @@ final class AuthenticatedCLIPlugin: NSObject,
     init(
         runner: any CLIProcessRunning,
         codexModelCatalogLoader: any CodexModelCatalogLoading = CodexAppServerModelCatalogLoader(),
+        openCodeModelCatalogLoader: (any OpenCodeModelCatalogLoading)? = nil,
         antigravityModelCatalogLoader: (any AntigravityModelCatalogLoading)? = nil,
         environment: [String: String],
         homeDirectory: URL,
@@ -75,6 +87,8 @@ final class AuthenticatedCLIPlugin: NSObject,
     ) {
         self.runner = runner
         self.codexModelCatalogLoader = codexModelCatalogLoader
+        self.openCodeModelCatalogLoader = openCodeModelCatalogLoader
+            ?? OpenCodeCLIModelCatalogLoader(runner: runner)
         self.antigravityModelCatalogLoader = antigravityModelCatalogLoader
             ?? AntigravityCLIModelCatalogLoader(runner: runner)
         self.baseEnvironment = environment
@@ -85,14 +99,21 @@ final class AuthenticatedCLIPlugin: NSObject,
 
     func activate(host: HostServices) {
         let cachedCatalog: CodexModelCatalog?
+        let cachedOpenCodeCatalog: OpenCodeModelCatalog?
         let cachedAntigravityCatalog: AntigravityModelCatalog?
         if isScreenshotAutomation {
             cachedCatalog = Self.screenshotCodexModelCatalog
+            cachedOpenCodeCatalog = Self.screenshotOpenCodeModelCatalog
             cachedAntigravityCatalog = nil
         } else {
             cachedCatalog = Self.decodeCachedCatalog(
                 CodexModelCatalog.self,
                 forKey: Self.codexModelCatalogKey,
+                host: host
+            )
+            cachedOpenCodeCatalog = Self.decodeCachedCatalog(
+                OpenCodeModelCatalog.self,
+                forKey: Self.openCodeModelCatalogKey,
                 host: host
             )
             cachedAntigravityCatalog = Self.decodeCachedCatalog(
@@ -121,6 +142,8 @@ final class AuthenticatedCLIPlugin: NSObject,
             }
             state.codexModelCatalog = cachedCatalog
             state.codexModelRefreshError = nil
+            state.openCodeModelCatalog = cachedOpenCodeCatalog
+            state.openCodeModelRefreshError = nil
             state.antigravityModelCatalog = cachedAntigravityCatalog
             state.antigravityModelRefreshError = nil
             state.selectedPaths = selectedPaths
@@ -143,6 +166,7 @@ final class AuthenticatedCLIPlugin: NSObject,
             state.isRefreshing = false
             state.host = nil
             state.codexModelRefreshError = nil
+            state.openCodeModelRefreshError = nil
             state.antigravityModelRefreshError = nil
         }
     }
@@ -179,6 +203,7 @@ final class AuthenticatedCLIPlugin: NSObject,
     }
 
     func supportedModels(for kind: CLIProviderKind) -> [PluginModelInfo] {
+        let bundle = Self.localizationBundle
         return state.withLock { state in
             switch kind {
             case .codex:
@@ -187,6 +212,16 @@ final class AuthenticatedCLIPlugin: NSObject,
                 } ?? []
             case .claude:
                 []
+            case .opencode:
+                state.openCodeModelCatalog?.models.filter(\.isFree).map {
+                    PluginModelInfo(
+                        id: $0.id,
+                        displayName: $0.displayName,
+                        sizeDescription: $0.isFree
+                            ? String(localized: "Free for a limited time", bundle: bundle)
+                            : ""
+                    )
+                } ?? []
             case .antigravity:
                 state.antigravityModelCatalog?.models.map {
                     PluginModelInfo(id: $0.id, displayName: $0.displayName)
@@ -196,8 +231,14 @@ final class AuthenticatedCLIPlugin: NSObject,
     }
 
     func defaultModelID(for kind: CLIProviderKind) -> String? {
-        guard kind == .codex else { return nil }
-        return state.withLock { $0.codexModelCatalog?.defaultModelID }
+        switch kind {
+        case .codex:
+            state.withLock { $0.codexModelCatalog?.defaultModelID }
+        case .opencode:
+            state.withLock { $0.openCodeModelCatalog?.models.first(where: \.isFree)?.id }
+        case .claude, .antigravity:
+            nil
+        }
     }
 
     func supportedEfforts(for kind: CLIProviderKind, model: String?) -> [PluginLLMEffortInfo] {
@@ -223,6 +264,19 @@ final class AuthenticatedCLIPlugin: NSObject,
             return ["low", "medium", "high", "xhigh", "max", "ultracode"].map {
                 PluginLLMEffortInfo(id: $0, displayName: Self.effortDisplayName($0))
             }
+        case .opencode:
+            return state.withLock { state in
+                let resolvedModel = Self.trimmedOrNil(model)
+                    ?? state.openCodeModelCatalog?.models.first(where: \.isFree)?.id
+                guard let resolvedModel,
+                      let catalogModel = state.openCodeModelCatalog?.models.first(where: {
+                          $0.id == resolvedModel && $0.isFree
+                      })
+                else { return [] }
+                return catalogModel.supportedVariants.map {
+                    PluginLLMEffortInfo(id: $0, displayName: Self.effortDisplayName($0))
+                }
+            }
         case .antigravity:
             return ["low", "medium", "high"].map {
                 PluginLLMEffortInfo(id: $0, displayName: Self.effortDisplayName($0))
@@ -246,6 +300,13 @@ final class AuthenticatedCLIPlugin: NSObject,
         refreshError: String?
     ) {
         state.withLock { ($0.codexModelCatalog, $0.codexModelRefreshError) }
+    }
+
+    func openCodeModelCatalogSnapshot() -> (
+        catalog: OpenCodeModelCatalog?,
+        refreshError: String?
+    ) {
+        state.withLock { ($0.openCodeModelCatalog, $0.openCodeModelRefreshError) }
     }
 
     func antigravityModelCatalogSnapshot() -> (
@@ -311,23 +372,36 @@ final class AuthenticatedCLIPlugin: NSObject,
         }
 
         async let codexModelOutcome = loadCodexModelCatalog(using: results[.codex])
+        async let openCodeModelOutcome = loadOpenCodeModelCatalog(using: results[.opencode])
         async let antigravityModelOutcome = loadAntigravityModelCatalog(
             using: results[.antigravity]
         )
-        let catalogOutcomes = await (codexModelOutcome, antigravityModelOutcome)
+        let catalogOutcomes = await (
+            codexModelOutcome,
+            openCodeModelOutcome,
+            antigravityModelOutcome
+        )
 
         let committed = state.withLock {
-            state -> (HostServices?, CodexModelCatalog?, AntigravityModelCatalog?) in
+            state -> (
+                HostServices?,
+                CodexModelCatalog?,
+                OpenCodeModelCatalog?,
+                AntigravityModelCatalog?
+            ) in
             guard state.isActive, state.generation == generation else {
-                return (nil, nil, nil)
+                return (nil, nil, nil, nil)
             }
             for kind in CLIProviderKind.allCases
             where state.selectedPaths[kind] == selectedPaths[kind] {
                 state.statuses[kind] = results[kind]
             }
             let codexSelectionIsCurrent = state.selectedPaths[.codex] == selectedPaths[.codex]
+            let openCodeSelectionIsCurrent = state.selectedPaths[.opencode]
+                == selectedPaths[.opencode]
             let antigravitySelectionIsCurrent = state.selectedPaths[.antigravity]
                 == selectedPaths[.antigravity]
+
             let codexCatalogToPersist: CodexModelCatalog?
             if codexSelectionIsCurrent {
                 switch catalogOutcomes.0 {
@@ -345,9 +419,28 @@ final class AuthenticatedCLIPlugin: NSObject,
             } else {
                 codexCatalogToPersist = nil
             }
+
+            let openCodeCatalogToPersist: OpenCodeModelCatalog?
+            if openCodeSelectionIsCurrent {
+                switch catalogOutcomes.1 {
+                case .notAttempted:
+                    state.openCodeModelRefreshError = nil
+                    openCodeCatalogToPersist = nil
+                case .success(let catalog):
+                    state.openCodeModelCatalog = catalog
+                    state.openCodeModelRefreshError = nil
+                    openCodeCatalogToPersist = catalog
+                case .failure(let message):
+                    state.openCodeModelRefreshError = message
+                    openCodeCatalogToPersist = nil
+                }
+            } else {
+                openCodeCatalogToPersist = nil
+            }
+
             let antigravityCatalogToPersist: AntigravityModelCatalog?
             if antigravitySelectionIsCurrent {
-                switch catalogOutcomes.1 {
+                switch catalogOutcomes.2 {
                 case .notAttempted:
                     state.antigravityModelRefreshError = nil
                     antigravityCatalogToPersist = nil
@@ -363,13 +456,22 @@ final class AuthenticatedCLIPlugin: NSObject,
                 antigravityCatalogToPersist = nil
             }
             state.isRefreshing = false
-            return (state.host, codexCatalogToPersist, antigravityCatalogToPersist)
+            return (
+                state.host,
+                codexCatalogToPersist,
+                openCodeCatalogToPersist,
+                antigravityCatalogToPersist
+            )
         }
         if let catalog = committed.1,
            let data = try? JSONEncoder().encode(catalog) {
             committed.0?.setUserDefault(data, forKey: Self.codexModelCatalogKey)
         }
         if let catalog = committed.2,
+           let data = try? JSONEncoder().encode(catalog) {
+            committed.0?.setUserDefault(data, forKey: Self.openCodeModelCatalogKey)
+        }
+        if let catalog = committed.3,
            let data = try? JSONEncoder().encode(catalog) {
             committed.0?.setUserDefault(data, forKey: Self.antigravityModelCatalogKey)
         }
@@ -384,6 +486,22 @@ final class AuthenticatedCLIPlugin: NSObject,
         effort: String? = nil
     ) async throws -> String {
         let executableURL = try await readyExecutable(for: kind)
+        let effectiveModel: String?
+        if kind == .opencode {
+            guard let openCodeModel = Self.trimmedOrNil(model) ?? defaultModelID(for: .opencode),
+                  openCodeModel.hasPrefix("opencode/"),
+                  openCodeModelCatalogSnapshot().catalog?.models.contains(where: {
+                      $0.id == openCodeModel && $0.isFree
+                  }) == true
+            else {
+                throw CLIPluginError.providerUnavailable(
+                    "No free OpenCode Zen model is available. Refresh the CLI integration and select a free model."
+                )
+            }
+            effectiveModel = openCodeModel
+        } else {
+            effectiveModel = model
+        }
         let envelope = try CLIRequestEnvelope.encode(instruction: instruction, input: input)
         guard envelope.count <= Self.maximumInputBytes else {
             throw CLIPluginError.inputTooLarge
@@ -419,7 +537,7 @@ final class AuthenticatedCLIPlugin: NSObject,
                 for: kind,
                 workingDirectory: workspace,
                 schemaURL: schemaURL,
-                model: model,
+                model: effectiveModel,
                 reasoningEffort: effort
             ),
             environment: CLIEnvironment.sanitized(
@@ -474,15 +592,23 @@ final class AuthenticatedCLIPlugin: NSObject,
         let codexModelOutcome = kind == .codex
             ? await loadCodexModelCatalog(using: status)
             : .notAttempted
+        let openCodeModelOutcome = kind == .opencode
+            ? await loadOpenCodeModelCatalog(using: status)
+            : .notAttempted
         let antigravityModelOutcome = kind == .antigravity
             ? await loadAntigravityModelCatalog(using: status)
             : .notAttempted
         let committed = state.withLock {
-            state -> (HostServices?, CodexModelCatalog?, AntigravityModelCatalog?) in
+            state -> (
+                HostServices?,
+                CodexModelCatalog?,
+                OpenCodeModelCatalog?,
+                AntigravityModelCatalog?
+            ) in
             guard state.isActive,
                   state.generation == snapshot.0,
                   state.selectedPaths[kind] == snapshot.2
-            else { return (nil, nil, nil) }
+            else { return (nil, nil, nil, nil) }
             state.statuses[kind] = status
             let codexCatalogToPersist: CodexModelCatalog?
             switch codexModelOutcome {
@@ -496,6 +622,18 @@ final class AuthenticatedCLIPlugin: NSObject,
                 state.codexModelRefreshError = message
                 codexCatalogToPersist = nil
             }
+            let openCodeCatalogToPersist: OpenCodeModelCatalog?
+            switch openCodeModelOutcome {
+            case .notAttempted:
+                openCodeCatalogToPersist = nil
+            case .success(let catalog):
+                state.openCodeModelCatalog = catalog
+                state.openCodeModelRefreshError = nil
+                openCodeCatalogToPersist = catalog
+            case .failure(let message):
+                state.openCodeModelRefreshError = message
+                openCodeCatalogToPersist = nil
+            }
             let antigravityCatalogToPersist: AntigravityModelCatalog?
             switch antigravityModelOutcome {
             case .notAttempted:
@@ -508,13 +646,22 @@ final class AuthenticatedCLIPlugin: NSObject,
                 state.antigravityModelRefreshError = message
                 antigravityCatalogToPersist = nil
             }
-            return (state.host, codexCatalogToPersist, antigravityCatalogToPersist)
+            return (
+                state.host,
+                codexCatalogToPersist,
+                openCodeCatalogToPersist,
+                antigravityCatalogToPersist
+            )
         }
         if let catalog = committed.1,
            let data = try? JSONEncoder().encode(catalog) {
             committed.0?.setUserDefault(data, forKey: Self.codexModelCatalogKey)
         }
         if let catalog = committed.2,
+           let data = try? JSONEncoder().encode(catalog) {
+            committed.0?.setUserDefault(data, forKey: Self.openCodeModelCatalogKey)
+        }
+        if let catalog = committed.3,
            let data = try? JSONEncoder().encode(catalog) {
             committed.0?.setUserDefault(data, forKey: Self.antigravityModelCatalogKey)
         }
@@ -547,6 +694,43 @@ final class AuthenticatedCLIPlugin: NSObject,
                 environment: CLIEnvironment.sanitized(
                     base: baseEnvironment,
                     kind: .codex,
+                    executableURL: executableURL,
+                    temporaryDirectory: workspace
+                ),
+                workingDirectory: workspace
+            )
+            return .success(catalog)
+        } catch {
+            return .failure(error.localizedDescription)
+        }
+    }
+
+    private func loadOpenCodeModelCatalog(
+        using status: CLIProviderStatus?
+    ) async -> OpenCodeModelRefreshOutcome {
+        guard let status, status.isReady, let executableURL = status.executableURL else {
+            return .notAttempted
+        }
+
+        let workspace = FileManager.default.temporaryDirectory
+            .appendingPathComponent("TypeWhisper-OpenCode-Models-\(UUID().uuidString)", isDirectory: true)
+        do {
+            try FileManager.default.createDirectory(
+                at: workspace,
+                withIntermediateDirectories: false,
+                attributes: [.posixPermissions: 0o700]
+            )
+        } catch {
+            return .failure(error.localizedDescription)
+        }
+        defer { try? FileManager.default.removeItem(at: workspace) }
+
+        do {
+            let catalog = try await openCodeModelCatalogLoader.loadModels(
+                executableURL: executableURL,
+                environment: CLIEnvironment.sanitized(
+                    base: baseEnvironment,
+                    kind: .opencode,
                     executableURL: executableURL,
                     temporaryDirectory: workspace
                 ),
@@ -619,7 +803,7 @@ final class AuthenticatedCLIPlugin: NSObject,
     }
 
     static func effortDisplayName(_ id: String) -> String {
-        switch id.lowercased() {
+        return switch id.lowercased() {
         case "minimal": String(localized: "Minimal", bundle: localizationBundle)
         case "low": String(localized: "Low", bundle: localizationBundle)
         case "medium": String(localized: "Medium", bundle: localizationBundle)
@@ -656,6 +840,14 @@ final class AuthenticatedCLIPlugin: NSObject,
                 executableURL: nil,
                 version: nil,
                 detail: "No claude executable was found.",
+                checkedAt: checkedAt
+            ),
+            .opencode: CLIProviderStatus(
+                kind: .opencode,
+                state: .ready,
+                executableURL: URL(fileURLWithPath: "/Users/demo/.opencode/bin/opencode"),
+                version: "1.18.27",
+                detail: "Installed and authenticated.",
                 checkedAt: checkedAt
             ),
             .antigravity: CLIProviderStatus(
@@ -708,6 +900,32 @@ final class AuthenticatedCLIPlugin: NSObject,
             ],
             defaultModelID: "gpt-5.6-sol",
             fetchedAt: Date(timeIntervalSince1970: 1_787_486_400)
+        )
+    }
+
+    private static var screenshotOpenCodeModelCatalog: OpenCodeModelCatalog {
+        OpenCodeModelCatalog(
+            models: [
+                OpenCodeCLIModel(
+                    id: "opencode/big-pickle",
+                    displayName: "Big Pickle",
+                    isFree: true,
+                    supportedVariants: []
+                ),
+                OpenCodeCLIModel(
+                    id: "opencode/mimo-v2.5-free",
+                    displayName: "MiMo-V2.5 Free",
+                    isFree: true,
+                    supportedVariants: ["low", "medium", "high"]
+                ),
+                OpenCodeCLIModel(
+                    id: "opencode/claude-haiku-4-5",
+                    displayName: "Claude Haiku 4.5",
+                    isFree: false,
+                    supportedVariants: ["high", "max"]
+                ),
+            ],
+            fetchedAt: Date(timeIntervalSince1970: 1_788_361_200)
         )
     }
 }
