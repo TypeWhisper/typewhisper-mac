@@ -778,12 +778,50 @@ final class PluginManager: ObservableObject {
             pluginId: plugin.manifest.id,
             eventBus: EventBus.shared,
             ruleNamesProvider: ruleNamesProvider,
-            workflowProvider: workflowProvider
+            workflowProvider: workflowProvider,
+            backsSelectedTranscriptionEngine: Self.selectionMatcher(
+                forEnginesExposedBy: transcriptionProviderIds(exposedBy: plugin.instance)
+            )
         )
         host.performPluginActivation(suppressPassiveLoadedModelRestore: shouldSuppressPassiveLoadedModelRestore(for: plugin)) {
             plugin.instance.activate(host: host)
         }
         logger.info("Activated plugin: \(plugin.manifest.id)")
+    }
+
+    /// Builds the predicate a host uses to decide whether it backs the selected
+    /// engine. Re-reads `selectedEngine` on EVERY call.
+    ///
+    /// *** WHY A CLOSURE OVER A CAPTURED SET, AND NOT A CAPTURED Bool. ***
+    /// `selectProvider` writes `selectedEngine` at any time and notifies no
+    /// existing host, and at startup `restoreProviderSelection()` runs AFTER
+    /// `scanAndLoadPlugins()`, so a Bool decided during activation can be stale
+    /// before launch finishes. The exposed ids ARE captured, because they are a
+    /// plain value: this manager is `@MainActor` while `HostServicesImpl` is
+    /// `@unchecked Sendable` and plugins read the property from arbitrary
+    /// contexts, so the closure must capture no actor-isolated state.
+    ///
+    /// Two cases deliberately keep the previous behaviour, so the change stays
+    /// narrow: a plugin exposing no transcription engines has no engine-backing
+    /// model to restore, and an unrecorded selection is not evidence that this
+    /// plugin is unselected.
+    static func selectionMatcher(
+        forEnginesExposedBy exposed: Set<String>,
+        defaults: @autoclosure @escaping @Sendable () -> UserDefaults = .standard
+    ) -> @Sendable () -> Bool {
+        { 
+            guard !exposed.isEmpty else { return true }
+            guard let selected = defaults().string(forKey: UserDefaultsKeys.selectedEngine),
+                  !selected.isEmpty
+            else { return true }
+            return exposed.contains(selected)
+        }
+    }
+
+    func backsSelectedTranscriptionEngine(_ plugin: LoadedPlugin) -> Bool {
+        Self.selectionMatcher(
+            forEnginesExposedBy: transcriptionProviderIds(exposedBy: plugin.instance)
+        )()
     }
 
     func shouldSuppressPassiveLoadedModelRestore(for plugin: LoadedPlugin) -> Bool {
