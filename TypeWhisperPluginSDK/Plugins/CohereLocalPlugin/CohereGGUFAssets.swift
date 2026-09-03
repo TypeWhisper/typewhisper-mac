@@ -212,15 +212,21 @@ struct CohereLocalModelAssets: Sendable {
                 }
             }
         }
-        defer { samplingTask.cancel() }
-
-        _ = try await client.downloadFile(
-            at: fileName,
-            from: repositoryId,
-            to: destination,
-            revision: revision,
-            progress: progress
-        )
+        do {
+            _ = try await client.downloadFile(
+                at: fileName,
+                from: repositoryId,
+                to: destination,
+                revision: revision,
+                progress: progress
+            )
+        } catch {
+            samplingTask.cancel()
+            await samplingTask.value
+            throw error
+        }
+        samplingTask.cancel()
+        await samplingTask.value
         progressHandler(progressOffset + progressScale)
     }
 

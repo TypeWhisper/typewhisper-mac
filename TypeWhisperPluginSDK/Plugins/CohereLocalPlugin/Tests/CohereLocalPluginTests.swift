@@ -40,11 +40,13 @@ private final class CohereDownloadURLProtocol: URLProtocol, @unchecked Sendable 
     static let payload = Data("first-download".utf8)
     static let requestRecorder = CohereDownloadRequestRecorder()
 
+    // swiftlint:disable static_over_final_class
     override class func canInit(with _: URLRequest) -> Bool { true }
 
     override class func canonicalRequest(for request: URLRequest) -> URLRequest {
         request
     }
+    // swiftlint:enable static_over_final_class
 
     override func startLoading() {
         Self.requestRecorder.record(request)
