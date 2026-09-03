@@ -217,6 +217,66 @@ final class OpenAITranscriptionHelperTests: XCTestCase {
         )
     }
 
+    func testGenericWavFallbackClassifiesRawHTTPBodyBeyondDisplayLimit() async throws {
+        let longError = Data(
+            #"{"error":""#
+                .appending(String(repeating: "x", count: 700))
+                .appending(" unsupported audio format\"}")
+                .utf8
+        )
+        let audio = AudioData(
+            samples: [Float](repeating: 0.1, count: 16_000),
+            wavData: PluginWavEncoder.encode([Float](repeating: 0.1, count: 16_000)),
+            duration: 1.0
+        )
+
+        let format = try await PluginAudioUploadEncoder.withCompressedM4AUploadWavFallback(
+            from: audio
+        ) { uploadFile in
+            if uploadFile.format != "wav" {
+                let displayedBody = PluginHTTPErrorBodyFormatter.summary(
+                    from: longError,
+                    contentType: "application/json"
+                )
+                throw PluginAudioUploadHTTPFailure(
+                    statusCode: 400,
+                    responseData: longError,
+                    underlyingError: PluginTranscriptionError.apiError("HTTP 400: \(displayedBody)")
+                )
+            }
+            return uploadFile.format
+        }
+
+        XCTAssertEqual(format, "wav")
+    }
+
+    func testGenericWavFallbackUnwrapsNonRetryableHTTPFailure() async throws {
+        let audio = AudioData(
+            samples: [Float](repeating: 0.1, count: 16_000),
+            wavData: PluginWavEncoder.encode([Float](repeating: 0.1, count: 16_000)),
+            duration: 1.0
+        )
+        var attemptedFormats: [String] = []
+
+        do {
+            _ = try await PluginAudioUploadEncoder.withCompressedM4AUploadWavFallback(
+                from: audio
+            ) { uploadFile -> String in
+                attemptedFormats.append(uploadFile.format)
+                throw PluginAudioUploadHTTPFailure(
+                    statusCode: 522,
+                    responseData: Data("<html><title>Origin timeout</title></html>".utf8),
+                    underlyingError: PluginTranscriptionError.apiError("HTTP 522: bounded summary")
+                )
+            }
+            XCTFail("Expected HTTP failure")
+        } catch PluginTranscriptionError.apiError(let message) {
+            XCTAssertEqual(message, "HTTP 522: bounded summary")
+        }
+
+        XCTAssertEqual(attemptedFormats, ["m4a"])
+    }
+
     func testTranscribeCustomTimeoutAppliesToUploadRequest() async throws {
         let store = OpenAITranscriptionMockSessionStore()
         PluginHTTPClient.configureForTesting { _ in
@@ -434,6 +494,125 @@ final class OpenAITranscriptionHelperTests: XCTestCase {
 
         XCTAssertEqual(store.sessions.first?.requestedRequests.count, 1)
     }
+
+    func testTranscribeSummarizesHTMLHTTPErrorBody() async throws {
+        let html = """
+            <!DOCTYPE html>
+            <html><head><title>example.com | 522: Connection timed out</title></head>
+            <body>IP address: 203.0.113.42; trace: secret-trace</body></html>
+            """
+        var data = Data(html.utf8)
+        data.append(Data(repeating: 0x20, count: 7_224 - data.count))
+
+        let store = OpenAITranscriptionMockSessionStore()
+        PluginHTTPClient.configureForTesting { _ in
+            store.makeSession(outcomes: [
+                .response(data, 522, ["Content-Type": "text/html; charset=UTF-8"]),
+            ])
+        }
+
+        let helper = PluginOpenAITranscriptionHelper(baseURL: "https://example.test", responseFormat: "json")
+        let samples = [Float](repeating: 0.1, count: 16_000)
+        let audio = AudioData(
+            samples: samples,
+            wavData: PluginWavEncoder.encode(samples),
+            duration: 1.0
+        )
+
+        do {
+            _ = try await helper.transcribe(
+                audio: audio,
+                apiKey: "test-key",
+                modelName: "whisper-1",
+                language: nil,
+                translate: false,
+                prompt: nil
+            )
+            XCTFail("Expected HTTP error")
+        } catch PluginTranscriptionError.apiError(let message) {
+            XCTAssertEqual(
+                message,
+                "HTTP 522: upstream returned an HTML error page (7224 bytes): example.com | 522: Connection timed out"
+            )
+            XCTAssertFalse(message.contains("203.0.113.42"))
+            XCTAssertFalse(message.contains("secret-trace"))
+        }
+    }
+
+    func testSuccessfulStatusWithHTMLBodyReportsUpstreamPage() async throws {
+        let data = Data("<html><head><title>Proxy failure</title></head></html>".utf8)
+        let store = OpenAITranscriptionMockSessionStore()
+        PluginHTTPClient.configureForTesting { _ in
+            store.makeSession(outcomes: [
+                .response(data, 200, ["Content-Type": "text/html"]),
+            ])
+        }
+
+        let helper = PluginOpenAITranscriptionHelper(baseURL: "https://example.test", responseFormat: "json")
+        let samples = [Float](repeating: 0.1, count: 16_000)
+        let audio = AudioData(
+            samples: samples,
+            wavData: PluginWavEncoder.encode(samples),
+            duration: 1.0
+        )
+
+        do {
+            _ = try await helper.transcribe(
+                audio: audio,
+                apiKey: "test-key",
+                modelName: "whisper-1",
+                language: nil,
+                translate: false,
+                prompt: nil
+            )
+            XCTFail("Expected parse error")
+        } catch PluginTranscriptionError.apiError(let message) {
+            XCTAssertEqual(
+                message,
+                "Failed to parse response: upstream returned an HTML error page (\(data.count) bytes): Proxy failure"
+            )
+        }
+    }
+
+    func testWavFallbackUsesRawBodyBeyondDisplayedErrorLimit() async throws {
+        let longError = Data(
+            #"{"error":""#
+                .appending(String(repeating: "x", count: 700))
+                .appending(" unsupported audio format\"}")
+                .utf8
+        )
+        let store = OpenAITranscriptionMockSessionStore()
+        PluginHTTPClient.configureForTesting { _ in
+            store.makeSession(outcomes: [
+                .success(longError, 400),
+                .success(Data(#"{"text":"fallback ok"}"#.utf8), 200),
+            ])
+        }
+
+        let helper = PluginOpenAITranscriptionHelper(baseURL: "https://example.test", responseFormat: "json")
+        let samples = [Float](repeating: 0.1, count: 16_000)
+        let audio = AudioData(
+            samples: samples,
+            wavData: PluginWavEncoder.encode(samples),
+            duration: 1.0
+        )
+
+        let result = try await helper.transcribeCompressedAudioWithWavFallback(
+            audio: audio,
+            apiKey: "test-key",
+            modelName: "whisper-1",
+            language: nil,
+            translate: false,
+            prompt: nil,
+            requestTimeout: 600
+        )
+
+        XCTAssertEqual(result.text, "fallback ok")
+        let requests = try XCTUnwrap(store.sessions.first?.requestedRequests)
+        XCTAssertEqual(requests.count, 2)
+        XCTAssertTrue(String(decoding: try XCTUnwrap(requests[0].httpBody), as: UTF8.self).contains(#"filename="audio.m4a""#))
+        XCTAssertTrue(String(decoding: try XCTUnwrap(requests[1].httpBody), as: UTF8.self).contains(#"filename="audio.wav""#))
+    }
 }
 
 private final class OpenAITranscriptionMockSessionStore: @unchecked Sendable {
@@ -456,6 +635,7 @@ private final class OpenAITranscriptionMockSessionStore: @unchecked Sendable {
 private final class OpenAITranscriptionMockSession: PluginHTTPClientSession, @unchecked Sendable {
     enum Outcome {
         case success(Data, Int)
+        case response(Data, Int, [String: String])
         case failure(Error)
     }
 
@@ -483,6 +663,14 @@ private final class OpenAITranscriptionMockSession: PluginHTTPClientSession, @un
                 statusCode: statusCode,
                 httpVersion: nil,
                 headerFields: nil
+            )!
+            return (data, response)
+        case .response(let data, let statusCode, let headerFields):
+            let response = HTTPURLResponse(
+                url: request.url!,
+                statusCode: statusCode,
+                httpVersion: nil,
+                headerFields: headerFields
             )!
             return (data, response)
         case .failure(let error):

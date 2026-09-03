@@ -424,6 +424,14 @@ final class ElevenLabsPlugin: NSObject, DictionaryTermHintTranscriptionEnginePlu
 
             switch httpResponse.statusCode {
             case 200:
+                if let htmlPageSummary = PluginHTTPErrorBodyFormatter.htmlPageSummary(
+                    from: data,
+                    response: httpResponse
+                ) {
+                    throw PluginTranscriptionError.apiError(
+                        "Invalid ElevenLabs response: \(htmlPageSummary)"
+                    )
+                }
                 return try Self.parseRESTResponse(data, fallbackLanguage: language)
             case 401:
                 throw PluginTranscriptionError.invalidApiKey
@@ -432,8 +440,14 @@ final class ElevenLabsPlugin: NSObject, DictionaryTermHintTranscriptionEnginePlu
             case 429:
                 throw PluginTranscriptionError.rateLimited
             default:
-                let body = String(data: data, encoding: .utf8) ?? ""
-                throw PluginTranscriptionError.apiError("HTTP \(httpResponse.statusCode): \(body)")
+                let body = PluginHTTPErrorBodyFormatter.summary(from: data, response: httpResponse)
+                throw PluginAudioUploadHTTPFailure(
+                    statusCode: httpResponse.statusCode,
+                    responseData: data,
+                    underlyingError: PluginTranscriptionError.apiError(
+                        "HTTP \(httpResponse.statusCode): \(body)"
+                    )
+                )
             }
         }
     }

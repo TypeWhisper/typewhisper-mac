@@ -531,6 +531,23 @@ final class SaluteSpeechPluginTests: XCTestCase {
         }
     }
 
+    func testSuccessfulHTMLResponseIsRejected() {
+        let data = Data("<html><head><title>Proxy failure</title></head><body>secret</body></html>".utf8)
+
+        XCTAssertThrowsError(try SaluteSpeechPlugin.validateHTTPResponse(
+            data: data,
+            response: Self.httpResponse(url: "https://smartspeech.sber.ru/rest/v1/speech:recognize", statusCode: 200)
+        )) { error in
+            guard let pluginError = error as? PluginTranscriptionError,
+                  case .apiError(let message) = pluginError else {
+                return XCTFail("Unexpected error: \(error)")
+            }
+            XCTAssertTrue(message.contains("upstream returned an HTML error page"))
+            XCTAssertTrue(message.contains("Proxy failure"))
+            XCTAssertFalse(message.contains("secret"))
+        }
+    }
+
     private static func httpResponse(url: String, statusCode: Int) -> HTTPURLResponse {
         HTTPURLResponse(
             url: URL(string: url)!,

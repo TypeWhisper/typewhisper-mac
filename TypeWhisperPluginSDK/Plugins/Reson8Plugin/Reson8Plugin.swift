@@ -534,15 +534,33 @@ final class Reson8Plugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendab
 
         switch httpResponse.statusCode {
         case 200: break
-        case 400: throw PluginTranscriptionError.apiError("Invalid request: \(Self.errorMessage(from: data))")
+        case 400:
+            throw PluginTranscriptionError.apiError(
+                "Invalid request: \(Self.errorMessage(from: data, response: httpResponse))"
+            )
         case 401: throw PluginTranscriptionError.invalidApiKey
-        case 404: throw PluginTranscriptionError.apiError("Custom model not found: \(Self.errorMessage(from: data))")
+        case 404:
+            throw PluginTranscriptionError.apiError(
+                "Custom model not found: \(Self.errorMessage(from: data, response: httpResponse))"
+            )
         case 413: throw PluginTranscriptionError.fileTooLarge
         case 429: throw PluginTranscriptionError.rateLimited
-        case 500: throw PluginTranscriptionError.apiError("Reson8 server error: \(Self.errorMessage(from: data))")
+        case 500:
+            throw PluginTranscriptionError.apiError(
+                "Reson8 server error: \(Self.errorMessage(from: data, response: httpResponse))"
+            )
         default:
-            let body = String(data: data, encoding: .utf8) ?? ""
+            let body = PluginHTTPErrorBodyFormatter.summary(from: data, response: httpResponse)
             throw PluginTranscriptionError.apiError("HTTP \(httpResponse.statusCode): \(body)")
+        }
+
+        if let htmlPageSummary = PluginHTTPErrorBodyFormatter.htmlPageSummary(
+            from: data,
+            response: httpResponse
+        ) {
+            throw PluginTranscriptionError.apiError(
+                "Failed to parse Reson8 response: \(htmlPageSummary)"
+            )
         }
 
         let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
@@ -661,17 +679,30 @@ final class Reson8Plugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendab
 
     // MARK: - JSON Error Body Helper
 
-    fileprivate static func errorMessage(from data: Data) -> String {
+    fileprivate static func errorMessage(
+        from data: Data,
+        response: HTTPURLResponse? = nil
+    ) -> String {
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            if let response {
+                return PluginHTTPErrorBodyFormatter.summary(from: data, response: response)
+            }
             return ""
         }
+        let message: String?
         if let code = json["code"] as? String,
            let message = json["message"] as? String {
-            return "\(code): \(message)"
+            return PluginHTTPErrorBodyFormatter.summary(from: "\(code): \(message)")
         }
-        if let message = json["message"] as? String { return message }
-        if let error = json["error"] as? String { return error }
-        if let detail = json["detail"] as? String { return detail }
+        message = (json["message"] as? String)
+            ?? (json["error"] as? String)
+            ?? (json["detail"] as? String)
+        if let message {
+            return PluginHTTPErrorBodyFormatter.summary(from: message)
+        }
+        if let response {
+            return PluginHTTPErrorBodyFormatter.summary(from: data, response: response)
+        }
         return ""
     }
 

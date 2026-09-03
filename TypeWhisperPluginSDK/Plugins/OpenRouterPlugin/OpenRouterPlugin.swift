@@ -218,6 +218,14 @@ final class OpenRouterPlugin: NSObject,
 
         switch httpResponse.statusCode {
         case 200:
+            if let htmlPageSummary = PluginHTTPErrorBodyFormatter.htmlPageSummary(
+                from: data,
+                response: httpResponse
+            ) {
+                throw PluginTranscriptionError.apiError(
+                    "Failed to parse transcription response: \(htmlPageSummary)"
+                )
+            }
             return
         case 401:
             throw PluginTranscriptionError.invalidApiKey
@@ -226,7 +234,7 @@ final class OpenRouterPlugin: NSObject,
         case 413:
             throw PluginTranscriptionError.fileTooLarge
         default:
-            let errorMessage = Self.apiErrorMessage(from: data)
+            let errorMessage = Self.apiErrorMessage(from: data, response: httpResponse)
             throw PluginTranscriptionError.apiError("HTTP \(httpResponse.statusCode): \(errorMessage)")
         }
     }
@@ -263,17 +271,17 @@ final class OpenRouterPlugin: NSObject,
         }
     }
 
-    private static func apiErrorMessage(from data: Data) -> String {
+    private static func apiErrorMessage(from data: Data, response: HTTPURLResponse) -> String {
         if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             if let error = json["error"] as? [String: Any],
                let message = error["message"] as? String {
-                return message
+                return PluginHTTPErrorBodyFormatter.summary(from: message)
             }
             if let message = json["message"] as? String {
-                return message
+                return PluginHTTPErrorBodyFormatter.summary(from: message)
             }
         }
-        return String(data: data, encoding: .utf8) ?? "Unknown error"
+        return PluginHTTPErrorBodyFormatter.summary(from: data, response: response)
     }
 
     // MARK: - LLMProviderPlugin
@@ -400,7 +408,7 @@ final class OpenRouterPlugin: NSObject,
         case 429:
             throw PluginChatError.rateLimited
         default:
-            throw PluginChatError.apiError(Self.apiErrorMessage(from: data))
+            throw PluginChatError.apiError(Self.apiErrorMessage(from: data, response: httpResponse))
         }
     }
 

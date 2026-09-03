@@ -120,8 +120,17 @@ final class CoherePlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
         case 429:
             throw PluginTranscriptionError.rateLimited
         default:
-            let errorBody = String(data: responseData, encoding: .utf8) ?? "Unknown error"
+            let errorBody = PluginHTTPErrorBodyFormatter.summary(from: responseData, response: httpResponse)
             throw PluginTranscriptionError.apiError("HTTP \(httpResponse.statusCode): \(errorBody)")
+        }
+
+        if let htmlPageSummary = PluginHTTPErrorBodyFormatter.htmlPageSummary(
+            from: responseData,
+            response: httpResponse
+        ) {
+            throw PluginTranscriptionError.apiError(
+                "Failed to parse Cohere response: \(htmlPageSummary)"
+            )
         }
 
         guard let json = try? JSONSerialization.jsonObject(with: responseData) as? [String: Any],

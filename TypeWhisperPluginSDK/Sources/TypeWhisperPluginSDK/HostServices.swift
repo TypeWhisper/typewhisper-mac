@@ -311,6 +311,20 @@ public struct PluginAudioUploadFile: Sendable, Equatable {
     }
 }
 
+/// Preserves the raw HTTP response used to classify an upload retry while
+/// keeping the user-facing error bounded and provider-specific.
+public struct PluginAudioUploadHTTPFailure: Error, @unchecked Sendable {
+    public let statusCode: Int
+    public let responseData: Data
+    public let underlyingError: any Error
+
+    public init(statusCode: Int, responseData: Data, underlyingError: any Error) {
+        self.statusCode = statusCode
+        self.responseData = responseData
+        self.underlyingError = underlyingError
+    }
+}
+
 public enum PluginAudioUploadEncoder {
     public static let sampleRate = 16_000
     public static let minimumUploadDuration: TimeInterval = 1.0
@@ -373,17 +387,40 @@ public enum PluginAudioUploadEncoder {
         do {
             preferredUpload = try compressedM4AUpload(from: uploadAudio)
         } catch {
-            return try await operation(wavUpload(from: uploadAudio))
+            do {
+                return try await operation(wavUpload(from: uploadAudio))
+            } catch {
+                throw underlyingUploadError(error)
+            }
         }
 
         do {
             return try await operation(preferredUpload)
         } catch {
-            guard shouldRetryWithWavUpload(error: error) else {
-                throw error
+            let shouldRetry: Bool
+            if let failure = error as? PluginAudioUploadHTTPFailure {
+                shouldRetry = shouldRetryWithWavUpload(
+                    statusCode: failure.statusCode,
+                    responseData: failure.responseData
+                )
+            } else {
+                shouldRetry = shouldRetryWithWavUpload(error: error)
             }
-            return try await operation(wavUpload(from: uploadAudio))
+
+            guard shouldRetry else {
+                throw underlyingUploadError(error)
+            }
+
+            do {
+                return try await operation(wavUpload(from: uploadAudio))
+            } catch {
+                throw underlyingUploadError(error)
+            }
         }
+    }
+
+    private static func underlyingUploadError(_ error: any Error) -> any Error {
+        (error as? PluginAudioUploadHTTPFailure)?.underlyingError ?? error
     }
 
     public static func shouldRetryWithWavUpload(statusCode: Int, responseData: Data) -> Bool {
@@ -789,35 +826,37 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
         responseFormat: String? = nil,
         apiVersion: String?
     ) async throws -> PluginTranscriptionResult {
+        let uploadAudio = normalizedAudioForUpload(audio)
+        let preferredUpload: PluginAudioUploadFile
         do {
-            return try await transcribeCompressedAudio(
-                audio: audio,
-                apiKey: apiKey,
-                modelName: modelName,
-                language: language,
-                translate: translate,
-                prompt: prompt,
-                requestTimeout: requestTimeout,
-                responseFormat: responseFormat,
-                apiVersion: apiVersion
-            )
+            preferredUpload = try PluginAudioUploadEncoder.compressedM4AUpload(from: uploadAudio)
         } catch {
-            guard PluginAudioUploadEncoder.shouldRetryWithWavUpload(error: error) else {
-                throw error
-            }
-
-            return try await transcribe(
-                audio: audio,
+            return try await performTranscribe(
+                audio: uploadAudio,
                 apiKey: apiKey,
                 modelName: modelName,
                 language: language,
                 translate: translate,
                 prompt: prompt,
-                requestTimeout: requestTimeout,
                 responseFormat: responseFormat,
+                requestTimeout: requestTimeout,
                 apiVersion: apiVersion
             )
         }
+
+        return try await performTranscribe(
+            audio: uploadAudio,
+            apiKey: apiKey,
+            modelName: modelName,
+            language: language,
+            translate: translate,
+            prompt: prompt,
+            responseFormat: responseFormat,
+            requestTimeout: requestTimeout,
+            uploadFile: preferredUpload,
+            apiVersion: apiVersion,
+            allowsWavFallback: true
+        )
     }
 
     public func transcribeWithUploadFallback(
@@ -857,38 +896,19 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
         uploadFile: PluginAudioUploadFile,
         apiVersion: String?
     ) async throws -> PluginTranscriptionResult {
-        do {
-            return try await performTranscribe(
-                audio: audio,
-                apiKey: apiKey,
-                modelName: modelName,
-                language: language,
-                translate: translate,
-                prompt: prompt,
-                responseFormat: responseFormat,
-                requestTimeout: requestTimeout,
-                uploadFile: uploadFile,
-                apiVersion: apiVersion
-            )
-        } catch {
-            guard uploadFile.format != "wav",
-                  PluginAudioUploadEncoder.shouldRetryWithWavUpload(error: error) else {
-                throw error
-            }
-
-            return try await performTranscribe(
-                audio: audio,
-                apiKey: apiKey,
-                modelName: modelName,
-                language: language,
-                translate: translate,
-                prompt: prompt,
-                responseFormat: responseFormat,
-                requestTimeout: requestTimeout,
-                uploadFile: PluginAudioUploadEncoder.wavUpload(from: normalizedAudioForUpload(audio)),
-                apiVersion: apiVersion
-            )
-        }
+        try await performTranscribe(
+            audio: audio,
+            apiKey: apiKey,
+            modelName: modelName,
+            language: language,
+            translate: translate,
+            prompt: prompt,
+            responseFormat: responseFormat,
+            requestTimeout: requestTimeout,
+            uploadFile: uploadFile,
+            apiVersion: apiVersion,
+            allowsWavFallback: true
+        )
     }
 
     public func transcribe(
@@ -952,7 +972,8 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
         responseFormat: String?,
         requestTimeout: TimeInterval,
         uploadFile: PluginAudioUploadFile? = nil,
-        apiVersion: String? = nil
+        apiVersion: String? = nil,
+        allowsWavFallback: Bool = false
     ) async throws -> PluginTranscriptionResult {
         let path = translate ? "/v1/audio/translations" : "/v1/audio/transcriptions"
         guard let url = requestURL(path: path, apiVersion: apiVersion) else {
@@ -1003,6 +1024,26 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
             throw PluginTranscriptionError.networkError("Invalid response")
         }
 
+        if allowsWavFallback,
+           uploadFile.format != "wav",
+           PluginAudioUploadEncoder.shouldRetryWithWavUpload(
+            statusCode: httpResponse.statusCode,
+            responseData: responseData
+           ) {
+            return try await performTranscribe(
+                audio: audio,
+                apiKey: apiKey,
+                modelName: modelName,
+                language: language,
+                translate: translate,
+                prompt: prompt,
+                responseFormat: responseFormat,
+                requestTimeout: requestTimeout,
+                uploadFile: PluginAudioUploadEncoder.wavUpload(from: normalizedAudioForUpload(audio)),
+                apiVersion: apiVersion
+            )
+        }
+
         switch httpResponse.statusCode {
         case 200:
             break
@@ -1013,11 +1054,14 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
         case 413:
             throw PluginTranscriptionError.fileTooLarge
         default:
-            let errorMessage = String(data: responseData, encoding: .utf8) ?? "Unknown error"
+            let errorMessage = PluginHTTPErrorBodyFormatter.summary(
+                from: responseData,
+                response: httpResponse
+            )
             throw PluginTranscriptionError.apiError("HTTP \(httpResponse.statusCode): \(errorMessage)")
         }
 
-        return try parseResponse(responseData)
+        return try parseResponse(responseData, response: httpResponse)
     }
 
     public func validateApiKey(_ apiKey: String) async -> Bool {
@@ -1071,7 +1115,19 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
         let segments: [APISegment]?
     }
 
-    private func parseResponse(_ data: Data) throws -> PluginTranscriptionResult {
+    private func parseResponse(
+        _ data: Data,
+        response: HTTPURLResponse
+    ) throws -> PluginTranscriptionResult {
+        if let htmlPageSummary = PluginHTTPErrorBodyFormatter.htmlPageSummary(
+            from: data,
+            response: response
+        ) {
+            throw PluginTranscriptionError.apiError(
+                "Failed to parse response: \(htmlPageSummary)"
+            )
+        }
+
         do {
             let response = try JSONDecoder().decode(APIResponse.self, from: data)
             let segments = (response.segments ?? []).map {
