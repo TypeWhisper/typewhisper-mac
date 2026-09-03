@@ -200,7 +200,7 @@ struct IndicatorPresentationData {
     let actionFeedbackMessage: String?
     let actionFeedbackIcon: String?
     let actionFeedbackIsError: Bool
-    let actionFeedbackUndoTitle: String?
+    let actionFeedbackActionTitle: String?
     let actionFeedbackRemainingFraction: Double?
     let actionFeedbackIsPaused: Bool
     let externalStreamingDisplayCount: Int
@@ -245,7 +245,7 @@ struct IndicatorPresentationData {
                 actionFeedbackMessage: dictation.actionFeedbackMessage,
                 actionFeedbackIcon: dictation.actionFeedbackIcon,
                 actionFeedbackIsError: dictation.actionFeedbackIsError,
-                actionFeedbackUndoTitle: dictation.actionFeedbackUndoTitle,
+                actionFeedbackActionTitle: dictation.actionFeedbackActionTitle,
                 actionFeedbackRemainingFraction: presentation.state == .inserting
                     && dictation.actionFeedbackMessage != nil
                     ? dictation.actionFeedbackRemainingFraction
@@ -268,7 +268,7 @@ struct IndicatorPresentationData {
                 actionFeedbackMessage: nil,
                 actionFeedbackIcon: nil,
                 actionFeedbackIsError: false,
-                actionFeedbackUndoTitle: nil,
+                actionFeedbackActionTitle: nil,
                 actionFeedbackRemainingFraction: nil,
                 actionFeedbackIsPaused: false,
                 externalStreamingDisplayCount: dictation.externalStreamingDisplayCount

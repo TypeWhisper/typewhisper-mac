@@ -785,6 +785,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         nonisolated(unsafe) private static var _lastPrompt: String?
         nonisolated(unsafe) private static var _lastLanguageSelection = PluginLanguageSelection()
         nonisolated(unsafe) private static var _responseText = "transcribed"
+        nonisolated(unsafe) private static var _failureMessage: String?
         nonisolated(unsafe) private static var _transcribeCallCount = 0
 
         static var lastPrompt: String? {
@@ -804,6 +805,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
                 _lastPrompt = nil
                 _lastLanguageSelection = PluginLanguageSelection()
                 _responseText = "transcribed"
+                _failureMessage = nil
                 _transcribeCallCount = 0
             }
         }
@@ -811,6 +813,12 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         static func setResponseText(_ text: String) {
             promptLock.withLock {
                 _responseText = text
+            }
+        }
+
+        static func setFailureMessage(_ message: String) {
+            promptLock.withLock {
+                _failureMessage = message
             }
         }
 
@@ -831,12 +839,16 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         var supportedLanguages: [String] { languages }
 
         func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
-            Self.promptLock.withLock {
+            let result = Self.promptLock.withLock {
                 Self._lastPrompt = prompt
                 Self._lastLanguageSelection = PluginLanguageSelection(requestedLanguage: language)
                 Self._transcribeCallCount += 1
+                return (text: Self._responseText, failureMessage: Self._failureMessage)
             }
-            return PluginTranscriptionResult(text: Self.promptLock.withLock { Self._responseText }, detectedLanguage: language)
+            if let failureMessage = result.failureMessage {
+                throw PluginTranscriptionError.apiError(failureMessage)
+            }
+            return PluginTranscriptionResult(text: result.text, detectedLanguage: language)
         }
 
         func transcribe(
@@ -845,13 +857,17 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             translate: Bool,
             prompt: String?
         ) async throws -> PluginTranscriptionResult {
-            Self.promptLock.withLock {
+            let result = Self.promptLock.withLock {
                 Self._lastPrompt = prompt
                 Self._lastLanguageSelection = languageSelection
                 Self._transcribeCallCount += 1
+                return (text: Self._responseText, failureMessage: Self._failureMessage)
+            }
+            if let failureMessage = result.failureMessage {
+                throw PluginTranscriptionError.apiError(failureMessage)
             }
             return PluginTranscriptionResult(
-                text: Self.promptLock.withLock { Self._responseText },
+                text: result.text,
                 detectedLanguage: languageSelection.requestedLanguage ?? languageSelection.languageHints.first
             )
         }
@@ -8303,6 +8319,179 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         XCTAssertEqual(context.dictationViewModel.state, .inserting)
         XCTAssertTrue(context.ttsProvider.recordedRequests.isEmpty)
+    }
+
+    @MainActor
+    func testFailedTranscriptionSurfacesNewRecoveryAndOpenAction() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let recoveryStore = DictationRecoveryAudioStore(
+            directory: appSupportDirectory.appendingPathComponent("dictation-recovery", isDirectory: true),
+            retentionPolicy: .never
+        )
+        let previousSettingsNavigationCoordinator = SettingsNavigationCoordinator.shared
+        let navigationCoordinator = SettingsNavigationCoordinator()
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            MockTranscriptionPlugin.reset()
+            SettingsNavigationCoordinator.shared = previousSettingsNavigationCoordinator
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        SettingsNavigationCoordinator.shared = navigationCoordinator
+        MockTranscriptionPlugin.reset()
+        MockTranscriptionPlugin.setFailureMessage("Expected test failure")
+        dictationContext = Self.makeDictationContext(
+            appSupportDirectory: appSupportDirectory,
+            audioRecordingRecoveryAudioStore: recoveryStore
+        )
+        let context = try XCTUnwrap(dictationContext)
+        let samples = Array(repeating: Float(0.25), count: Int(AudioRecordingService.targetSampleRate))
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { _ in samples }
+        context.textInsertionService.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
+        context.textInsertionService.selectedTextOverride = { nil }
+
+        let sessionID = context.dictationViewModel.apiStartRecording()
+        await context.dictationViewModel.testingWaitForRecordingStart()
+        recoveryStore.append(samples)
+        _ = context.dictationViewModel.apiStopRecording()
+
+        for _ in 0..<80 {
+            if context.dictationViewModel.apiDictationSession(id: sessionID)?.status == .failed {
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+
+        let expectedFailure = PluginTranscriptionError.apiError("Expected test failure").localizedDescription
+        let recoveryMessage = try TestSupport.localizedCatalogValueForCurrentLocale(
+            for: "The recording was saved to Dictation Recovery."
+        )
+        let openRecoveryTitle = try TestSupport.localizedCatalogValueForCurrentLocale(for: "Open Recovery")
+        let session = try XCTUnwrap(context.dictationViewModel.apiDictationSession(id: sessionID))
+        XCTAssertEqual(session.status, .failed)
+        XCTAssertEqual(session.error, expectedFailure)
+        XCTAssertEqual(recoveryStore.recoveryURLs.count, 1)
+        XCTAssertEqual(
+            context.dictationViewModel.actionFeedbackMessage,
+            "\(expectedFailure)\n\(recoveryMessage)"
+        )
+        XCTAssertEqual(context.dictationViewModel.actionFeedbackActionTitle, openRecoveryTitle)
+        XCTAssertTrue(context.dictationViewModel.actionFeedbackIsError)
+
+        context.dictationViewModel.performActionFeedbackAction(openRecoverySettingsWindow: false)
+
+        XCTAssertEqual(navigationCoordinator.request?.tab, .dictationRecovery)
+    }
+
+    @MainActor
+    func testEmptyTranscriptionSurfacesNewRecoveryAndOpenAction() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let recoveryStore = DictationRecoveryAudioStore(
+            directory: appSupportDirectory.appendingPathComponent("dictation-recovery", isDirectory: true),
+            retentionPolicy: .never
+        )
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            MockTranscriptionPlugin.reset()
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        MockTranscriptionPlugin.setResponseText("")
+        dictationContext = Self.makeDictationContext(
+            appSupportDirectory: appSupportDirectory,
+            audioRecordingRecoveryAudioStore: recoveryStore
+        )
+        let context = try XCTUnwrap(dictationContext)
+        let samples = Array(repeating: Float(0.25), count: Int(AudioRecordingService.targetSampleRate))
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { _ in samples }
+        context.textInsertionService.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
+        context.textInsertionService.selectedTextOverride = { nil }
+
+        let sessionID = context.dictationViewModel.apiStartRecording()
+        await context.dictationViewModel.testingWaitForRecordingStart()
+        recoveryStore.append(samples)
+        _ = context.dictationViewModel.apiStopRecording()
+
+        for _ in 0..<80 {
+            if context.dictationViewModel.apiDictationSession(id: sessionID)?.status == .failed {
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+
+        let noSpeechMessage = try TestSupport.localizedCatalogValueForCurrentLocale(for: "No speech recognized")
+        let recoveryMessage = try TestSupport.localizedCatalogValueForCurrentLocale(
+            for: "The recording was saved to Dictation Recovery."
+        )
+        let openRecoveryTitle = try TestSupport.localizedCatalogValueForCurrentLocale(for: "Open Recovery")
+        let session = try XCTUnwrap(context.dictationViewModel.apiDictationSession(id: sessionID))
+        XCTAssertEqual(session.status, .failed)
+        XCTAssertEqual(session.error, noSpeechMessage)
+        XCTAssertEqual(recoveryStore.recoveryURLs.count, 1)
+        XCTAssertEqual(
+            context.dictationViewModel.actionFeedbackMessage,
+            "\(noSpeechMessage)\n\(recoveryMessage)"
+        )
+        XCTAssertEqual(context.dictationViewModel.actionFeedbackActionTitle, openRecoveryTitle)
+        XCTAssertFalse(context.dictationViewModel.actionFeedbackIsError)
+    }
+
+    @MainActor
+    func testFailedTranscriptionWithoutNewRecoveryKeepsOriginalFeedback() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let recoveryStore = DictationRecoveryAudioStore(
+            directory: appSupportDirectory.appendingPathComponent("dictation-recovery", isDirectory: true),
+            retentionPolicy: .immediately
+        )
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            MockTranscriptionPlugin.reset()
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        MockTranscriptionPlugin.setFailureMessage("Expected test failure")
+        dictationContext = Self.makeDictationContext(
+            appSupportDirectory: appSupportDirectory,
+            audioRecordingRecoveryAudioStore: recoveryStore
+        )
+        let context = try XCTUnwrap(dictationContext)
+        let samples = Array(repeating: Float(0.25), count: Int(AudioRecordingService.targetSampleRate))
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { _ in samples }
+        context.textInsertionService.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
+        context.textInsertionService.selectedTextOverride = { nil }
+
+        let sessionID = context.dictationViewModel.apiStartRecording()
+        await context.dictationViewModel.testingWaitForRecordingStart()
+        recoveryStore.append(samples)
+        _ = context.dictationViewModel.apiStopRecording()
+
+        for _ in 0..<80 {
+            if context.dictationViewModel.apiDictationSession(id: sessionID)?.status == .failed {
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+
+        let expectedFailure = PluginTranscriptionError.apiError("Expected test failure").localizedDescription
+        XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.status, .failed)
+        XCTAssertTrue(recoveryStore.recoveryURLs.isEmpty)
+        XCTAssertEqual(context.dictationViewModel.actionFeedbackMessage, expectedFailure)
+        XCTAssertNil(context.dictationViewModel.actionFeedbackActionTitle)
+        XCTAssertTrue(context.dictationViewModel.actionFeedbackIsError)
     }
 
     @MainActor

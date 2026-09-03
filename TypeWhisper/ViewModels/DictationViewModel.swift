@@ -174,6 +174,20 @@ final class DictationViewModel: ObservableObject {
         case processing
     }
 
+    private enum ActionFeedbackAction {
+        case undoLearnedCorrections([LearnedDictionaryCorrection])
+        case openDictationRecovery
+
+        var title: String {
+            switch self {
+            case .undoLearnedCorrections:
+                String(localized: "Undo")
+            case .openDictationRecovery:
+                String(localized: "Open Recovery")
+            }
+        }
+    }
+
     private struct PendingHotkeyDictationStart {
         let forcedWorkflowId: UUID?
         let requestUptimeNanoseconds: UInt64
@@ -262,12 +276,13 @@ final class DictationViewModel: ObservableObject {
     @Published var actionFeedbackMessage: String?
     @Published var actionFeedbackIcon: String?
     @Published var actionFeedbackIsError: Bool = false
-    @Published var actionFeedbackUndoTitle: String?
+    @Published private(set) var actionFeedbackActionTitle: String?
     @Published private(set) var actionFeedbackRemainingFraction: Double = 0
     @Published private(set) var actionFeedbackIsPaused = false
     @Published var activeAppIcon: NSImage?
     private var actionDisplayDuration: TimeInterval = 3.5
     private let indicatorFeedbackLifetime = IndicatorFeedbackLifetime()
+    private var actionFeedbackAction: ActionFeedbackAction?
 
     @Published var indicatorStyle: IndicatorStyle {
         didSet { Self.persistIndicatorStyle(indicatorStyle) }
@@ -339,7 +354,6 @@ final class DictationViewModel: ObservableObject {
     private var stopFinalizationTask: Task<Void, Never>?
     private var targetAppCorrectionLearningTask: Task<Void, Never>?
     private var targetAppAccessibilityObservationLease: TargetAppAccessibilityObservationLease?
-    private var pendingLearnedCorrections: [LearnedDictionaryCorrection] = []
     private var errorResetTask: Task<Void, Never>?
     private var insertingResetTask: Task<Void, Never>?
     private var pendingHotkeyStartTask: Task<Void, Never>?
@@ -1235,7 +1249,7 @@ final class DictationViewModel: ObservableObject {
         transcriptionTask?.cancel()
         transcriptionTask = nil
         cancelTargetAppCorrectionLearning()
-        clearPendingUndoActionFeedback()
+        clearActionFeedbackAction()
         insertingResetTask?.cancel()
         insertingResetTask = nil
         indicatorFeedbackLifetime.cancel()
@@ -1905,15 +1919,17 @@ final class DictationViewModel: ObservableObject {
                 guard !text.isEmpty else {
                     handleLiveFieldTranscriptionFailure(stablePreviewText: previewText)
                     logger.info("Transcription returned empty text (duration: \(String(format: "%.2f", result.duration))s, engine: \(result.engineUsed))")
-                    audioRecordingService.preserveActiveRecoveryRecording()
+                    let recoveryPreservation = audioRecordingService
+                        .preserveActiveRecoveryRecordingResult()
                     let errorMessage = String(localized: "No speech recognized")
                     if let sessionID {
                         failDictationSession(id: sessionID, error: errorMessage)
                     }
-                    showNotchFeedback(
+                    showRecoveryAwareFeedback(
                         message: errorMessage,
                         icon: "text.magnifyingglass",
-                        duration: 2.0
+                        duration: 2.0,
+                        recoveryPreservation: recoveryPreservation
                     )
                     soundService.play(.error, enabled: soundFeedbackEnabled)
                     return
@@ -2236,7 +2252,8 @@ final class DictationViewModel: ObservableObject {
             } catch {
                 guard !Task.isCancelled else { return }
                 handleLiveFieldTranscriptionFailure(stablePreviewText: previewText)
-                audioRecordingService.preserveActiveRecoveryRecording()
+                let recoveryPreservation = audioRecordingService
+                    .preserveActiveRecoveryRecordingResult()
                 EventBus.shared.emit(.transcriptionFailed(TranscriptionFailedPayload(
                     error: error.localizedDescription,
                     appName: capturedActiveApp?.name,
@@ -2246,7 +2263,11 @@ final class DictationViewModel: ObservableObject {
                     failDictationSession(id: sessionID, error: error.localizedDescription)
                 }
                 accessibilityAnnouncementService.announceError(error.localizedDescription)
-                showError(error.localizedDescription, category: "transcription")
+                showError(
+                    error.localizedDescription,
+                    category: "transcription",
+                    recoveryPreservation: recoveryPreservation
+                )
                 clearActiveRuleState()
                 capturedActiveApp = nil
                 activeAppIcon = nil
@@ -2448,7 +2469,7 @@ final class DictationViewModel: ObservableObject {
         actionFeedbackMessage = nil
         actionFeedbackIcon = nil
         actionFeedbackIsError = false
-        clearPendingUndoActionFeedback()
+        clearActionFeedbackAction()
         actionDisplayDuration = 3.5
 
         guard pendingHotkeyDictationStart != nil else { return }
@@ -3089,15 +3110,14 @@ final class DictationViewModel: ObservableObject {
         targetAppAccessibilityObservationLease = nil
     }
 
-    private func clearPendingUndoActionFeedback() {
-        actionFeedbackUndoTitle = nil
-        pendingLearnedCorrections = []
+    private func clearActionFeedbackAction() {
+        actionFeedbackActionTitle = nil
+        actionFeedbackAction = nil
     }
 
     private func showLearnedCorrectionsFeedback(_ learned: [LearnedDictionaryCorrection]) {
         guard !learned.isEmpty else { return }
 
-        pendingLearnedCorrections = learned
         let message: String
         if learned.count == 1, let correction = learned.first {
             message = String.localizedStringWithFormat(
@@ -3116,19 +3136,24 @@ final class DictationViewModel: ObservableObject {
             message: message,
             icon: "wand.and.sparkles",
             duration: 12.0,
-            undoTitle: String(localized: "Undo")
+            action: .undoLearnedCorrections(learned)
         )
     }
 
-    func undoActionFeedback() {
-        guard !pendingLearnedCorrections.isEmpty else { return }
-        dictionaryService.undoLearnedCorrections(pendingLearnedCorrections)
-        pendingLearnedCorrections = []
-        showNotchFeedback(
-            message: String(localized: "Correction learning undone"),
-            icon: "arrow.uturn.backward.circle.fill",
-            duration: 2.5
-        )
+    func performActionFeedbackAction(openRecoverySettingsWindow: Bool = true) {
+        guard let actionFeedbackAction else { return }
+
+        switch actionFeedbackAction {
+        case .undoLearnedCorrections(let learnedCorrections):
+            dictionaryService.undoLearnedCorrections(learnedCorrections)
+            showNotchFeedback(
+                message: String(localized: "Correction learning undone"),
+                icon: "arrow.uturn.backward.circle.fill",
+                duration: 2.5
+            )
+        case .openDictationRecovery:
+            recoverLastRecording(openSettingsWindow: openRecoverySettingsWindow)
+        }
     }
 
     private func showNotchFeedback(
@@ -3137,16 +3162,14 @@ final class DictationViewModel: ObservableObject {
         duration: TimeInterval = 2.5,
         isError: Bool = false,
         errorCategory: String = "general",
-        undoTitle: String? = nil
+        action: ActionFeedbackAction? = nil
     ) {
         actionFeedbackMessage = message
         actionFeedbackIcon = icon
         actionFeedbackIsError = isError
-        if undoTitle == nil {
-            clearPendingUndoActionFeedback()
-        } else {
-            actionFeedbackUndoTitle = undoTitle
-        }
+        clearActionFeedbackAction()
+        actionFeedbackAction = action
+        actionFeedbackActionTitle = action?.title
         actionDisplayDuration = duration
         state = .inserting
 
@@ -3195,9 +3218,60 @@ final class DictationViewModel: ObservableObject {
         externalStreamingDisplayCount += active ? 1 : -1
     }
 
-    private func showError(_ message: String, category: String = "general") {
+    private func showRecoveryAwareFeedback(
+        message: String,
+        icon: String,
+        duration: TimeInterval,
+        isError: Bool = false,
+        errorCategory: String = "general",
+        recoveryPreservation: DictationRecoveryPreservationResult
+    ) {
+        guard recoveryPreservation.newlyPreservedURL != nil else {
+            showNotchFeedback(
+                message: message,
+                icon: icon,
+                duration: duration,
+                isError: isError,
+                errorCategory: errorCategory
+            )
+            return
+        }
+
+        let recoveryMessage = String(localized: "The recording was saved to Dictation Recovery.")
+        showNotchFeedback(
+            message: "\(message)\n\(recoveryMessage)",
+            icon: icon,
+            duration: 12.0,
+            isError: isError,
+            errorCategory: errorCategory,
+            action: .openDictationRecovery
+        )
+    }
+
+    private func showError(
+        _ message: String,
+        category: String = "general",
+        recoveryPreservation: DictationRecoveryPreservationResult? = nil
+    ) {
         soundService.play(.error, enabled: soundFeedbackEnabled)
-        showNotchFeedback(message: message, icon: "xmark.circle.fill", duration: 3.0, isError: true, errorCategory: category)
+        if let recoveryPreservation {
+            showRecoveryAwareFeedback(
+                message: message,
+                icon: "xmark.circle.fill",
+                duration: 3.0,
+                isError: true,
+                errorCategory: category,
+                recoveryPreservation: recoveryPreservation
+            )
+        } else {
+            showNotchFeedback(
+                message: message,
+                icon: "xmark.circle.fill",
+                duration: 3.0,
+                isError: true,
+                errorCategory: category
+            )
+        }
     }
 
     private func startRecordingTimer() {

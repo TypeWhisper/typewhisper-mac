@@ -135,7 +135,7 @@ struct MinimalIndicatorView: View {
             }
             .accessibilityElement(
                 children: countdownPresentation != nil
-                    || presentation.actionFeedbackUndoTitle != nil ? .contain : .combine
+                    || presentation.actionFeedbackActionTitle != nil ? .contain : .combine
             )
             .accessibilityLabel(accessibilityLabel)
         }
@@ -195,9 +195,9 @@ struct MinimalIndicatorView: View {
                     text: message,
                     icon: presentation.actionFeedbackIcon ?? (presentation.actionFeedbackIsError ? "xmark.circle.fill" : "checkmark.circle.fill"),
                     iconColor: presentation.actionFeedbackIsError ? .red : .green,
-                    actionTitle: presentation.actionFeedbackUndoTitle,
-                    onAction: presentation.actionFeedbackUndoTitle == nil ? nil : {
-                        viewModel.undoActionFeedback()
+                    actionTitle: presentation.actionFeedbackActionTitle,
+                    onAction: presentation.actionFeedbackActionTitle == nil ? nil : {
+                        viewModel.performActionFeedbackAction()
                     }
                 )
                 .padding(.horizontal, 14)

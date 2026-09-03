@@ -226,7 +226,7 @@ struct NotchIndicatorView: View {
         .animation(.easeInOut(duration: 1.0), value: dotPulse)
         .accessibilityElement(
             children: countdownPresentation != nil
-                || presentation.actionFeedbackUndoTitle != nil ? .contain : .combine
+                || presentation.actionFeedbackActionTitle != nil ? .contain : .combine
         )
         .accessibilityLabel(notchAccessibilityLabel)
     }
@@ -313,9 +313,9 @@ struct NotchIndicatorView: View {
                 isError: presentation.actionFeedbackIsError,
                 iconColor: nil,
                 contentPadding: contentPadding,
-                actionTitle: presentation.actionFeedbackUndoTitle,
-                onAction: presentation.actionFeedbackUndoTitle == nil ? nil : {
-                    viewModel.undoActionFeedback()
+                actionTitle: presentation.actionFeedbackActionTitle,
+                onAction: presentation.actionFeedbackActionTitle == nil ? nil : {
+                    viewModel.performActionFeedbackAction()
                 },
                 remainingFraction: presentation.actionFeedbackRemainingFraction
             )

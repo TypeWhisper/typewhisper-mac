@@ -18676,6 +18676,28 @@
         }
       }
     },
+    "Open Recovery" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wiederherstellung öffnen"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "音声入力の復元を開く"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开听写恢复"
+          }
+        }
+      }
+    },
     "Open Setup Wizard" : {
       "localizations" : {
         "ja" : {
@@ -29203,6 +29225,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "专用同步文件夹已删除。本地数据已保留。"
+          }
+        }
+      }
+    },
+    "The recording was saved to Dictation Recovery." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Aufnahme wurde in der Diktat-Wiederherstellung gespeichert."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "録音は「音声入力の復元」に保存されました。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "录音已保存到“听写恢复”。"
           }
         }
       }
