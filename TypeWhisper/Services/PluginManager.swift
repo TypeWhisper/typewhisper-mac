@@ -805,7 +805,11 @@ final class PluginManager: ObservableObject {
     /// narrow: a plugin exposing no transcription engines has no engine-backing
     /// model to restore, and an unrecorded selection is not evidence that this
     /// plugin is unselected.
-    static func selectionMatcher(
+    /// `nonisolated` deliberately: this manager is `@MainActor`, but the returned
+    /// predicate is read by plugins from arbitrary contexts, so the builder must
+    /// touch no actor-isolated state. The compiler enforces that here, which is why
+    /// the closure captures a plain `Set` rather than the manager or the plugin.
+    nonisolated static func selectionMatcher(
         forEnginesExposedBy exposed: Set<String>,
         defaults: @autoclosure @escaping @Sendable () -> UserDefaults = .standard
     ) -> @Sendable () -> Bool {
