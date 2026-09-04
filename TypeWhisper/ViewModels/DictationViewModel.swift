@@ -131,8 +131,23 @@ final class DictationViewModel: ObservableObject {
         _ dictionaryTermHints: [PluginDictionaryTermHint],
         _ normalizeNumbers: Bool?
     ) async throws -> TranscriptionResult
+    typealias RecoveryHedgeThresholdProvider = @MainActor () -> TimeInterval?
+    /// Upper bound, in seconds, on the whole final-transcription phase (primary,
+    /// hedge, and sequential fallback together) for a recording of the given
+    /// duration. `nil` disables the bound.
+    typealias TranscriptionDeadlineProvider = @MainActor (_ audioDurationSeconds: TimeInterval) -> TimeInterval?
+    typealias PrimaryTranscriptionRunner = @MainActor (
+        _ samples: [Float],
+        _ languageSelection: LanguageSelection,
+        _ task: TranscriptionTask,
+        _ engineOverrideId: String?,
+        _ cloudModelOverride: String?,
+        _ prompt: String?,
+        _ dictionaryTermHints: [PluginDictionaryTermHint],
+        _ normalizeNumbers: Bool?
+    ) async throws -> TranscriptionResult
 
-    private struct FinalTranscriptionOutput {
+    private struct FinalTranscriptionOutput: Sendable {
         let result: TranscriptionResult
         let modelId: String?
         let modelDisplayName: String?
@@ -149,6 +164,25 @@ final class DictationViewModel: ObservableObject {
                 de: "Primäre Transkription fehlgeschlagen: \(primaryDescription). Recovery-Fallback fehlgeschlagen: \(fallbackDescription)"
             )
         }
+    }
+
+    struct TranscriptionDeadlineExceeded: LocalizedError, Equatable {
+        let seconds: TimeInterval
+
+        var errorDescription: String? {
+            let rounded = Int(seconds.rounded())
+            return localizedAppText(
+                "Transcription timed out after \(rounded) seconds. The recording was kept in Dictation Recovery.",
+                de: "Die Transkription hat nach \(rounded) Sekunden das Zeitlimit überschritten. Die Aufnahme wurde in der Diktat-Wiederherstellung behalten."
+            )
+        }
+    }
+
+    /// Default final-transcription bound: a minute of headroom plus the
+    /// recording's own length, so long recordings on slow local engines are not
+    /// cut off while a hung cloud request can never pin the app in "Transcribing".
+    nonisolated static func defaultTranscriptionDeadline(forAudioDuration duration: TimeInterval) -> TimeInterval {
+        60 + max(0, duration)
     }
 
     nonisolated(unsafe) static var _shared: DictationViewModel?
@@ -336,6 +370,9 @@ final class DictationViewModel: ObservableObject {
     private let postProcessingPipeline: PostProcessingPipeline
     private let recoveryFallbackConfigurationProvider: RecoveryFallbackConfigurationProvider
     private let recoveryFallbackRunner: RecoveryFallbackRunner
+    private let recoveryHedgeThresholdProvider: RecoveryHedgeThresholdProvider
+    private let transcriptionDeadlineProvider: TranscriptionDeadlineProvider
+    private let primaryTranscriptionRunner: PrimaryTranscriptionRunner
     private var matchedWorkflow: Workflow?
     private var activeWorkflowMatch: WorkflowMatchResult?
     private var forcedWorkflowId: UUID?
@@ -442,7 +479,10 @@ final class DictationViewModel: ObservableObject {
         mediaPlaybackService: MediaPlaybackService,
         usageStatisticsRecorder: UsageStatisticsRecording? = nil,
         recoveryFallbackConfigurationProvider: RecoveryFallbackConfigurationProvider? = nil,
-        recoveryFallbackRunner: RecoveryFallbackRunner? = nil
+        recoveryFallbackRunner: RecoveryFallbackRunner? = nil,
+        recoveryHedgeThresholdProvider: RecoveryHedgeThresholdProvider? = nil,
+        primaryTranscriptionRunner: PrimaryTranscriptionRunner? = nil,
+        transcriptionDeadlineProvider: TranscriptionDeadlineProvider? = nil
     ) {
         self.audioRecordingService = audioRecordingService
         self.textInsertionService = textInsertionService
@@ -480,6 +520,22 @@ final class DictationViewModel: ObservableObject {
         self.errorLogService = errorLogService
         self.mediaPlaybackService = mediaPlaybackService
         self.recoveryFallbackConfigurationProvider = recoveryFallbackConfigurationProvider ?? { _, _ in nil }
+        self.recoveryHedgeThresholdProvider = recoveryHedgeThresholdProvider ?? { nil }
+        self.transcriptionDeadlineProvider = transcriptionDeadlineProvider ?? { duration in
+            Self.defaultTranscriptionDeadline(forAudioDuration: duration)
+        }
+        self.primaryTranscriptionRunner = primaryTranscriptionRunner ?? { [modelManager] samples, languageSelection, task, engineOverrideId, cloudModelOverride, prompt, dictionaryTermHints, normalizeNumbers in
+            try await modelManager.transcribe(
+                audioSamples: samples,
+                languageSelection: languageSelection,
+                task: task,
+                engineOverrideId: engineOverrideId,
+                cloudModelOverride: cloudModelOverride,
+                prompt: prompt,
+                dictionaryTermHints: dictionaryTermHints,
+                normalizeNumbers: normalizeNumbers
+            )
+        }
         self.recoveryFallbackRunner = recoveryFallbackRunner ?? { [modelManager] samples, languageSelection, task, configuration, prompt, dictionaryTermHints, normalizeNumbers in
             try await modelManager.transcribe(
                 audioSamples: samples,
@@ -2326,16 +2382,88 @@ final class DictationViewModel: ObservableObject {
         dictionaryTermHints: [PluginDictionaryTermHint],
         normalizeNumbers: Bool?
     ) async throws -> FinalTranscriptionOutput {
-        do {
-            let result = try await modelManager.transcribe(
+        let audioDuration = Double(audioSamples.count) / AudioRecordingService.targetSampleRate
+        guard let deadline = transcriptionDeadlineProvider(audioDuration), deadline > 0 else {
+            return try await transcribeFinalAudioWithoutDeadline(
                 audioSamples: audioSamples,
                 languageSelection: languageSelection,
                 task: task,
-                engineOverrideId: primaryEngineId,
-                cloudModelOverride: primaryCloudModelOverride,
+                primaryEngineId: primaryEngineId,
+                primaryCloudModelOverride: primaryCloudModelOverride,
                 prompt: prompt,
                 dictionaryTermHints: dictionaryTermHints,
                 normalizeNumbers: normalizeNumbers
+            )
+        }
+
+        // Race the whole transcription phase against a deadline. Whichever finishes
+        // first wins and the other is cancelled, so a request that neither errors
+        // nor completes (a stalled upload, a server that accepted the audio and
+        // went silent) cannot leave the app stuck in "Transcribing..." with no way
+        // out but Escape.
+        let transcriptionOperation: @MainActor () async throws -> FinalTranscriptionOutput = { [self] in
+            try await self.transcribeFinalAudioWithoutDeadline(
+                audioSamples: audioSamples,
+                languageSelection: languageSelection,
+                task: task,
+                primaryEngineId: primaryEngineId,
+                primaryCloudModelOverride: primaryCloudModelOverride,
+                prompt: prompt,
+                dictionaryTermHints: dictionaryTermHints,
+                normalizeNumbers: normalizeNumbers
+            )
+        }
+        return try await withThrowingTaskGroup(of: FinalTranscriptionOutput.self) { group in
+            group.addTask { try await transcriptionOperation() }
+            group.addTask { [logger] in
+                try await Task.sleep(nanoseconds: UInt64(deadline * 1_000_000_000))
+                logger.error("Final transcription exceeded its deadline of \(deadline, format: .fixed(precision: 1))s; abandoning in-flight requests")
+                throw TranscriptionDeadlineExceeded(seconds: deadline)
+            }
+            defer { group.cancelAll() }
+            guard let output = try await group.next() else {
+                throw TranscriptionDeadlineExceeded(seconds: deadline)
+            }
+            return output
+        }
+    }
+
+    private func transcribeFinalAudioWithoutDeadline(
+        audioSamples: [Float],
+        languageSelection: LanguageSelection,
+        task: TranscriptionTask,
+        primaryEngineId: String?,
+        primaryCloudModelOverride: String?,
+        prompt: String?,
+        dictionaryTermHints: [PluginDictionaryTermHint],
+        normalizeNumbers: Bool?
+    ) async throws -> FinalTranscriptionOutput {
+        let fallbackConfiguration = recoveryFallbackConfigurationProvider(primaryEngineId, task)
+        do {
+            if let configuration = fallbackConfiguration,
+               let hedgeThreshold = recoveryHedgeThresholdProvider() {
+                return try await hedgedTranscription(
+                    audioSamples: audioSamples,
+                    languageSelection: languageSelection,
+                    task: task,
+                    primaryEngineId: primaryEngineId,
+                    primaryCloudModelOverride: primaryCloudModelOverride,
+                    prompt: prompt,
+                    dictionaryTermHints: dictionaryTermHints,
+                    normalizeNumbers: normalizeNumbers,
+                    configuration: configuration,
+                    threshold: hedgeThreshold
+                )
+            }
+            let result = try await primaryTranscriptionRunner(
+                audioSamples,
+                languageSelection,
+                task,
+                primaryEngineId,
+                primaryCloudModelOverride,
+                prompt,
+                dictionaryTermHints,
+                normalizeNumbers
             )
             return finalTranscriptionOutput(
                 result: result,
@@ -2343,10 +2471,13 @@ final class DictationViewModel: ObservableObject {
                 modelId: primaryCloudModelOverride,
                 usedRecoveryFallback: false
             )
+        } catch let failure as AutomaticRecoveryFallbackFailure {
+            // The hedge already ran the fallback; don't retry it below.
+            throw failure
         } catch {
             let primaryError = error
             guard shouldAttemptAutomaticRecoveryFallback(after: primaryError),
-                  let configuration = recoveryFallbackConfigurationProvider(primaryEngineId, task) else {
+                  let configuration = fallbackConfiguration else {
                 throw primaryError
             }
 
@@ -2384,6 +2515,151 @@ final class DictationViewModel: ObservableObject {
                     fallbackDescription: error.localizedDescription
                 )
             }
+        }
+    }
+
+    private enum HedgedTranscriptionEvent {
+        case primary(Result<TranscriptionResult, Error>)
+        case fallback(Result<TranscriptionResult, Error>)
+        case fallbackSkipped
+    }
+
+    private enum HedgedTranscriptionOutcome {
+        case primaryWon(TranscriptionResult)
+        case fallbackWon(TranscriptionResult)
+        case primaryFailedBeforeHedge(Error)
+        case bothFailed(primary: Error, fallback: Error)
+    }
+
+    /// Races the primary engine against the recovery fallback engine: the fallback
+    /// request is dispatched only after `threshold` elapses with the primary still
+    /// running, the first successful transcription wins, and the loser is cancelled.
+    /// A primary failure before the hedge fires is rethrown so the caller's
+    /// sequential error-path fallback applies unchanged.
+    private func hedgedTranscription(
+        audioSamples: [Float],
+        languageSelection: LanguageSelection,
+        task: TranscriptionTask,
+        primaryEngineId: String?,
+        primaryCloudModelOverride: String?,
+        prompt: String?,
+        dictionaryTermHints: [PluginDictionaryTermHint],
+        normalizeNumbers: Bool?,
+        configuration: DictationRecoveryFallbackConfiguration,
+        threshold: TimeInterval
+    ) async throws -> FinalTranscriptionOutput {
+        let fallbackPrompt = dictionaryService.getTermsForPrompt(providerId: configuration.engineId)
+        let fallbackDictionaryTermHints = dictionaryService.getTermHints(providerId: configuration.engineId)
+
+        let primaryOperation: @MainActor () async throws -> TranscriptionResult = { [primaryTranscriptionRunner] in
+            try await primaryTranscriptionRunner(
+                audioSamples,
+                languageSelection,
+                task,
+                primaryEngineId,
+                primaryCloudModelOverride,
+                prompt,
+                dictionaryTermHints,
+                normalizeNumbers
+            )
+        }
+        let fallbackOperation: @MainActor () async throws -> TranscriptionResult = { [recoveryFallbackRunner] in
+            try await recoveryFallbackRunner(
+                audioSamples,
+                languageSelection,
+                task,
+                configuration,
+                fallbackPrompt,
+                fallbackDictionaryTermHints,
+                normalizeNumbers
+            )
+        }
+
+        let fallbackEngineId = configuration.engineId
+        let outcome = await withTaskGroup(of: HedgedTranscriptionEvent.self) { group -> HedgedTranscriptionOutcome in
+            let start = ContinuousClock.now
+            group.addTask {
+                do { return .primary(.success(try await primaryOperation())) } catch { return .primary(.failure(error)) }
+            }
+            group.addTask { [logger] in
+                do {
+                    try await Task.sleep(nanoseconds: UInt64(threshold * 1_000_000_000))
+                } catch {
+                    return .fallbackSkipped
+                }
+                logger.info(
+                    "Primary transcription exceeded hedge threshold (\(threshold, format: .fixed(precision: 1))s); racing recovery fallback engine \(fallbackEngineId, privacy: .public)"
+                )
+                do { return .fallback(.success(try await fallbackOperation())) } catch { return .fallback(.failure(error)) }
+            }
+
+            var primaryError: Error?
+            var fallbackError: Error?
+            while let event = await group.next() {
+                switch event {
+                case .primary(.success(let result)):
+                    group.cancelAll()
+                    return .primaryWon(result)
+                case .fallback(.success(let result)):
+                    group.cancelAll()
+                    return .fallbackWon(result)
+                case .primary(.failure(let error)):
+                    let hedgeDispatched = ContinuousClock.now - start >= .seconds(threshold)
+                    guard hedgeDispatched, shouldAttemptAutomaticRecoveryFallback(after: error) else {
+                        group.cancelAll()
+                        return .primaryFailedBeforeHedge(error)
+                    }
+                    if let fallbackError {
+                        return .bothFailed(primary: error, fallback: fallbackError)
+                    }
+                    primaryError = error
+                case .fallback(.failure(let error)):
+                    if let primaryError {
+                        return .bothFailed(primary: primaryError, fallback: error)
+                    }
+                    fallbackError = error
+                case .fallbackSkipped:
+                    if let primaryError {
+                        return .primaryFailedBeforeHedge(primaryError)
+                    }
+                }
+            }
+            // Both children finished without a winner (primary failed while the
+            // hedge was pending and the fallback then errored or was skipped).
+            if let primaryError {
+                return .primaryFailedBeforeHedge(primaryError)
+            }
+            return .primaryFailedBeforeHedge(CancellationError())
+        }
+
+        switch outcome {
+        case .primaryWon(let result):
+            return finalTranscriptionOutput(
+                result: result,
+                engineId: primaryEngineId,
+                modelId: primaryCloudModelOverride,
+                usedRecoveryFallback: false
+            )
+        case .fallbackWon(let result):
+            logger.info(
+                "Hedged recovery fallback won the race with engine \(configuration.engineId, privacy: .public)"
+            )
+            return finalTranscriptionOutput(
+                result: result,
+                engineId: configuration.engineId,
+                modelId: configuration.modelId,
+                usedRecoveryFallback: true
+            )
+        case .primaryFailedBeforeHedge(let error):
+            throw error
+        case .bothFailed(let primary, let fallback):
+            logger.error(
+                "Hedged transcription failed on both engines; primary: \(primary.localizedDescription, privacy: .public), fallback: \(fallback.localizedDescription, privacy: .public)"
+            )
+            throw AutomaticRecoveryFallbackFailure(
+                primaryDescription: primary.localizedDescription,
+                fallbackDescription: fallback.localizedDescription
+            )
         }
     }
 
@@ -3598,3 +3874,27 @@ func paddedSamplesForFinalTranscription(_ samples: [Float], rawDuration: TimeInt
 
     return paddedSamples
 }
+
+#if DEBUG
+extension DictationViewModel {
+    func transcribeFinalAudioForTesting(
+        audioSamples: [Float] = [],
+        languageSelection: LanguageSelection = LanguageSelection(storedValue: nil, nilBehavior: .auto),
+        task: TranscriptionTask = .transcribe,
+        primaryEngineId: String? = nil,
+        primaryCloudModelOverride: String? = nil
+    ) async throws -> (text: String, usedRecoveryFallback: Bool) {
+        let output = try await transcribeFinalAudio(
+            audioSamples: audioSamples,
+            languageSelection: languageSelection,
+            task: task,
+            primaryEngineId: primaryEngineId,
+            primaryCloudModelOverride: primaryCloudModelOverride,
+            prompt: nil,
+            dictionaryTermHints: [],
+            normalizeNumbers: nil
+        )
+        return (output.result.text, output.usedRecoveryFallback)
+    }
+}
+#endif

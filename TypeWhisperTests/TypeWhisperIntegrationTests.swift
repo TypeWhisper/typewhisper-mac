@@ -12785,6 +12785,237 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 }
 
+// MARK: - Hedged transcription
+
+extension TypeWhisperIntegrationTests {
+    private static func hedgeTranscriptionResult(text: String, engine: String) -> TranscriptionResult {
+        TranscriptionResult(
+            text: text,
+            detectedLanguage: "en",
+            duration: 1,
+            processingTime: 0.1,
+            engineUsed: engine,
+            segments: []
+        )
+    }
+
+    @MainActor
+    private func makeHedgedDictationViewModel(
+        hedgeThreshold: TimeInterval?,
+        transcriptionDeadline: TimeInterval? = nil,
+        primaryRunner: @escaping DictationViewModel.PrimaryTranscriptionRunner,
+        fallbackRunner: @escaping DictationViewModel.RecoveryFallbackRunner
+    ) throws -> (viewModel: DictationViewModel, cleanup: () -> Void) {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+
+        EventBus.shared = EventBus()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+
+        let modelManager = ModelManagerService()
+        let audioRecordingService = AudioRecordingService()
+        let hotkeyService = HotkeyService()
+        let textInsertionService = TextInsertionService()
+        let historyService = HistoryService(appSupportDirectory: appSupportDirectory)
+        let recentTranscriptionStore = RecentTranscriptionStore()
+        let profileService = ProfileService(appSupportDirectory: appSupportDirectory)
+        let workflowService = WorkflowService(appSupportDirectory: appSupportDirectory)
+        let audioDuckingService = AudioDuckingService()
+        let dictionaryService = DictionaryService(appSupportDirectory: appSupportDirectory)
+        let snippetService = SnippetService(appSupportDirectory: appSupportDirectory)
+        let soundService = SoundService()
+        let audioDeviceService = AudioDeviceService()
+        let promptActionService = PromptActionService(appSupportDirectory: appSupportDirectory)
+        let promptProcessingService = PromptProcessingService()
+        let appFormatterService = AppFormatterService()
+        let punctuationProfileStore = DictationPunctuationProfileStore(
+            defaults: UserDefaults(suiteName: UUID().uuidString)!,
+            storageKey: UUID().uuidString
+        )
+        let punctuationRulesLoader = PunctuationRulesLoader()
+        let punctuationStrategyResolver = PunctuationStrategyResolver(profileStore: punctuationProfileStore)
+        let speechFeedbackService = SpeechFeedbackService()
+        let accessibilityAnnouncementService = AccessibilityAnnouncementService()
+        let errorLogService = ErrorLogService(appSupportDirectory: appSupportDirectory)
+        let settingsViewModel = SettingsViewModel(modelManager: modelManager)
+
+        let viewModel = DictationViewModel(
+            audioRecordingService: audioRecordingService,
+            textInsertionService: textInsertionService,
+            hotkeyService: hotkeyService,
+            modelManager: modelManager,
+            settingsViewModel: settingsViewModel,
+            historyService: historyService,
+            recentTranscriptionStore: recentTranscriptionStore,
+            profileService: profileService,
+            workflowService: workflowService,
+            translationService: nil,
+            audioDuckingService: audioDuckingService,
+            dictionaryService: dictionaryService,
+            snippetService: snippetService,
+            soundService: soundService,
+            audioDeviceService: audioDeviceService,
+            promptActionService: promptActionService,
+            promptProcessingService: promptProcessingService,
+            appFormatterService: appFormatterService,
+            punctuationStrategyResolver: punctuationStrategyResolver,
+            speechPunctuationService: SpeechPunctuationService(rulesLoader: punctuationRulesLoader),
+            speechFeedbackService: speechFeedbackService,
+            accessibilityAnnouncementService: accessibilityAnnouncementService,
+            errorLogService: errorLogService,
+            mediaPlaybackService: MediaPlaybackService(startListening: false),
+            recoveryFallbackConfigurationProvider: { _, _ in
+                DictationRecoveryFallbackConfiguration(engineId: "test-fallback", modelId: "test-model")
+            },
+            recoveryFallbackRunner: fallbackRunner,
+            recoveryHedgeThresholdProvider: { hedgeThreshold },
+            primaryTranscriptionRunner: primaryRunner,
+            transcriptionDeadlineProvider: transcriptionDeadline.map { deadline -> DictationViewModel.TranscriptionDeadlineProvider in
+                { _ in deadline }
+            }
+        )
+        viewModel.soundFeedbackEnabled = false
+        return (viewModel, { TestSupport.remove(appSupportDirectory) })
+    }
+
+    @MainActor
+    func testTranscriptionDeadlineAbandonsHungPrimaryAndFallback() async throws {
+        var primaryCancelled = false
+        var fallbackCancelled = false
+        let harness = try makeHedgedDictationViewModel(
+            hedgeThreshold: 0.1,
+            transcriptionDeadline: 0.5,
+            primaryRunner: { _, _, _, _, _, _, _, _ in
+                do {
+                    try await Task.sleep(nanoseconds: 30_000_000_000)
+                } catch {
+                    primaryCancelled = true
+                    throw error
+                }
+                return Self.hedgeTranscriptionResult(text: "primary", engine: "primary")
+            },
+            fallbackRunner: { _, _, _, _, _, _, _ in
+                do {
+                    try await Task.sleep(nanoseconds: 30_000_000_000)
+                } catch {
+                    fallbackCancelled = true
+                    throw error
+                }
+                return Self.hedgeTranscriptionResult(text: "fallback", engine: "test-fallback")
+            }
+        )
+        defer { harness.cleanup() }
+
+        let start = ContinuousClock.now
+        do {
+            _ = try await harness.viewModel.transcribeFinalAudioForTesting()
+            XCTFail("A transcription that never completes must hit the deadline")
+        } catch let error as DictationViewModel.TranscriptionDeadlineExceeded {
+            XCTAssertEqual(error.seconds, 0.5)
+        }
+        XCTAssertLessThan(ContinuousClock.now - start, .seconds(5))
+
+        try await Task.sleep(nanoseconds: 200_000_000)
+        XCTAssertTrue(primaryCancelled, "the hung primary request must be cancelled once the deadline passes")
+        XCTAssertTrue(fallbackCancelled, "the hung fallback request must be cancelled once the deadline passes")
+    }
+
+    @MainActor
+    func testTranscriptionDeadlineDoesNotInterfereWithFastPrimary() async throws {
+        let harness = try makeHedgedDictationViewModel(
+            hedgeThreshold: 1.0,
+            transcriptionDeadline: 5.0,
+            primaryRunner: { _, _, _, _, _, _, _, _ in
+                Self.hedgeTranscriptionResult(text: "primary", engine: "primary")
+            },
+            fallbackRunner: { _, _, _, _, _, _, _ in
+                XCTFail("fallback must not run when the primary answers immediately")
+                return Self.hedgeTranscriptionResult(text: "fallback", engine: "test-fallback")
+            }
+        )
+        defer { harness.cleanup() }
+
+        let output = try await harness.viewModel.transcribeFinalAudioForTesting()
+        XCTAssertEqual(output.text, "primary")
+        XCTAssertFalse(output.usedRecoveryFallback)
+    }
+
+    func testDefaultTranscriptionDeadlineScalesWithRecordingLength() {
+        XCTAssertEqual(DictationViewModel.defaultTranscriptionDeadline(forAudioDuration: 0), 60)
+        XCTAssertEqual(DictationViewModel.defaultTranscriptionDeadline(forAudioDuration: 90), 150)
+        XCTAssertEqual(DictationViewModel.defaultTranscriptionDeadline(forAudioDuration: -5), 60)
+    }
+
+    @MainActor
+    func testHedgeDispatchesFallbackWhenPrimaryIsSlowAndFallbackWins() async throws {
+        var fallbackCalled = false
+        let harness = try makeHedgedDictationViewModel(
+            hedgeThreshold: 0.2,
+            primaryRunner: { _, _, _, _, _, _, _, _ in
+                try await Task.sleep(nanoseconds: 10_000_000_000)
+                return Self.hedgeTranscriptionResult(text: "primary", engine: "primary")
+            },
+            fallbackRunner: { _, _, _, _, _, _, _ in
+                fallbackCalled = true
+                return Self.hedgeTranscriptionResult(text: "fallback", engine: "test-fallback")
+            }
+        )
+        defer { harness.cleanup() }
+
+        let start = ContinuousClock.now
+        let output = try await harness.viewModel.transcribeFinalAudioForTesting()
+
+        XCTAssertTrue(fallbackCalled)
+        XCTAssertTrue(output.usedRecoveryFallback)
+        XCTAssertEqual(output.text, "fallback")
+        XCTAssertLessThan(ContinuousClock.now - start, .seconds(5))
+    }
+
+    @MainActor
+    func testHedgePrimaryWinsBeforeThresholdWithoutDispatchingFallback() async throws {
+        var fallbackCalled = false
+        let harness = try makeHedgedDictationViewModel(
+            hedgeThreshold: 1.5,
+            primaryRunner: { _, _, _, _, _, _, _, _ in
+                Self.hedgeTranscriptionResult(text: "primary", engine: "primary")
+            },
+            fallbackRunner: { _, _, _, _, _, _, _ in
+                fallbackCalled = true
+                return Self.hedgeTranscriptionResult(text: "fallback", engine: "test-fallback")
+            }
+        )
+        defer { harness.cleanup() }
+
+        let output = try await harness.viewModel.transcribeFinalAudioForTesting()
+
+        XCTAssertFalse(output.usedRecoveryFallback)
+        XCTAssertEqual(output.text, "primary")
+        try await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertFalse(fallbackCalled)
+    }
+
+    @MainActor
+    func testHedgePrimaryFailureBeforeThresholdFallsBackWithoutWaiting() async throws {
+        let harness = try makeHedgedDictationViewModel(
+            hedgeThreshold: 8.0,
+            primaryRunner: { _, _, _, _, _, _, _, _ in
+                throw PluginTranscriptionError.rateLimited
+            },
+            fallbackRunner: { _, _, _, _, _, _, _ in
+                Self.hedgeTranscriptionResult(text: "fallback", engine: "test-fallback")
+            }
+        )
+        defer { harness.cleanup() }
+
+        let start = ContinuousClock.now
+        let output = try await harness.viewModel.transcribeFinalAudioForTesting()
+
+        XCTAssertTrue(output.usedRecoveryFallback)
+        XCTAssertEqual(output.text, "fallback")
+        // Must not wait out the 8s hedge threshold before falling back.
+        XCTAssertLessThan(ContinuousClock.now - start, .seconds(4))
+    }
+}
+
 final class AudioRecordingServiceInputAvailabilityTests: XCTestCase {
     func testStartRecording_throwsNoMicrophoneDetectedBeforeStartingOverride() {
         let service = AudioRecordingService()

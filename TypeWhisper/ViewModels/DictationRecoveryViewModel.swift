@@ -76,6 +76,25 @@ final class DictationRecoveryViewModel: ObservableObject {
             defaults.set(automaticFallbackEnabled, forKey: UserDefaultsKeys.dictationRecoveryAutomaticFallbackEnabled)
         }
     }
+    @Published var hedgeEnabled: Bool {
+        didSet {
+            defaults.set(hedgeEnabled, forKey: UserDefaultsKeys.dictationRecoveryHedgeEnabled)
+        }
+    }
+    @Published var hedgeThresholdSeconds: Double {
+        didSet {
+            defaults.set(hedgeThresholdSeconds, forKey: UserDefaultsKeys.dictationRecoveryHedgeThresholdSeconds)
+        }
+    }
+
+    /// Threshold after which a still-running primary transcription should race the
+    /// recovery fallback engine, or nil when hedging is off. The engine/licensing
+    /// gates live in `automaticFallbackConfiguration` — hedging only activates when
+    /// that returns a configuration.
+    var automaticHedgeThreshold: TimeInterval? {
+        guard hedgeEnabled, automaticFallbackEnabled, hedgeThresholdSeconds > 0 else { return nil }
+        return hedgeThresholdSeconds
+    }
     @Published var retentionPolicy: DictationRecoveryRetentionPolicy {
         didSet {
             defaults.set(retentionPolicy.rawValue, forKey: UserDefaultsKeys.dictationRecoveryRetentionDays)
@@ -138,6 +157,9 @@ final class DictationRecoveryViewModel: ObservableObject {
         self.selectedEngine = defaults.string(forKey: UserDefaultsKeys.dictationRecoveryEngine)
         self.selectedModel = defaults.string(forKey: UserDefaultsKeys.dictationRecoveryModel)
         self.automaticFallbackEnabled = defaults.bool(forKey: UserDefaultsKeys.dictationRecoveryAutomaticFallbackEnabled)
+        self.hedgeEnabled = defaults.bool(forKey: UserDefaultsKeys.dictationRecoveryHedgeEnabled)
+        let storedHedgeThreshold = defaults.double(forKey: UserDefaultsKeys.dictationRecoveryHedgeThresholdSeconds)
+        self.hedgeThresholdSeconds = storedHedgeThreshold > 0 ? storedHedgeThreshold : 3.0
         self.retentionPolicy = retentionPolicy
         self.isInitialized = true
 
