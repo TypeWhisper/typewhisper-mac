@@ -801,10 +801,14 @@ final class PluginManager: ObservableObject {
     /// `@unchecked Sendable` and plugins read the property from arbitrary
     /// contexts, so the closure must capture no actor-isolated state.
     ///
-    /// Two cases deliberately keep the previous behaviour, so the change stays
-    /// narrow: a plugin exposing no transcription engines has no engine-backing
-    /// model to restore, and an unrecorded selection is not evidence that this
-    /// plugin is unselected.
+    /// One case deliberately keeps the previous behaviour: a plugin exposing no
+    /// transcription engines has no engine-backing model to restore.
+    ///
+    /// An ABSENT selection now suppresses rather than permits. An earlier revision
+    /// permitted it, reasoning that an unrecorded selection is not evidence a plugin
+    /// is unselected. That is true in isolation and wrong here, because the absent
+    /// case is exactly the startup window in which a restore gets spawned that no
+    /// later selection can cancel.
     /// `nonisolated` deliberately: this manager is `@MainActor`, but the returned
     /// predicate is read by plugins from arbitrary contexts, so the builder must
     /// touch no actor-isolated state. The compiler enforces that here, which is why
@@ -813,11 +817,24 @@ final class PluginManager: ObservableObject {
         forEnginesExposedBy exposed: Set<String>,
         defaults: @autoclosure @escaping @Sendable () -> UserDefaults = .standard
     ) -> @Sendable () -> Bool {
-        { 
+        {
+            // A plugin exposing no transcription engines has no engine-backing model
+            // to restore, so it keeps its previous behaviour entirely.
             guard !exposed.isEmpty else { return true }
+            // NO SELECTION RECORDED => SUPPRESS, not permit.
+            //
+            // Passive restore exists to reload the model for the engine you use. If
+            // no engine is selected there is no such engine, so nothing should be
+            // restored on its behalf.
+            //
+            // This also closes the startup window. `restoreProviderSelection()` runs
+            // AFTER `scanAndLoadPlugins()` and WRITES a selection when the saved one
+            // is missing or no longer usable, and a selection written then cannot
+            // cancel a restore task that activation has already spawned. Permitting
+            // during that window is what let an unselected engine's model load.
             guard let selected = defaults().string(forKey: UserDefaultsKeys.selectedEngine),
                   !selected.isEmpty
-            else { return true }
+            else { return false }
             return exposed.contains(selected)
         }
     }

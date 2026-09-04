@@ -183,14 +183,15 @@ final class PassiveRestoreSelectedEngineTests: XCTestCase {
         XCTAssertFalse(manager.backsSelectedTranscriptionEngine(plugin),
                        "a different selected engine must not back")
 
-        // No selection recorded: conservative, keep the previous behaviour.
+        // No selection recorded: SUPPRESS. Nothing is selected, so no engine's
+        // model should be restored on its behalf.
         _ = selectEngine(nil)
-        XCTAssertTrue(manager.backsSelectedTranscriptionEngine(plugin),
-                      "an absent selection is not evidence that this plugin is unselected")
+        XCTAssertFalse(manager.backsSelectedTranscriptionEngine(plugin),
+                       "an absent selection must suppress, not permit")
 
         _ = selectEngine("")
-        XCTAssertTrue(manager.backsSelectedTranscriptionEngine(plugin),
-                      "an empty selection is treated the same as absent")
+        XCTAssertFalse(manager.backsSelectedTranscriptionEngine(plugin),
+                       "an empty selection is treated the same as absent")
 
         restoreEngine(saved)
     }
@@ -281,12 +282,18 @@ extension PassiveRestoreSelectedEngineTests {
     /// The startup ordering specifically: activation happens BEFORE
     /// restoreProviderSelection(), so a host is built while the selection is absent
     /// and must honour the selection that arrives afterwards.
+    ///
+    /// ⚠️ The FIRST assertion is the one a cross-family reviewer corrected. It used to
+    /// assert `true` here, on the reasoning that an unrecorded selection is not
+    /// evidence a plugin is unselected. But this is precisely the window in which
+    /// activation SPAWNS a restore task, and no later selection can cancel a task
+    /// that already exists, so permitting here defeated the whole fix.
     func testSelectionRestoredAfterActivationIsHonoured() {
         var host: HostServicesImpl?
         withSelection(nil) {
             host = liveHost(exposing: ["qwen3"])
-            XCTAssertTrue(host!.shouldRestoreLoadedModelsPassively,
-                          "no selection recorded yet: conservative, previous behaviour")
+            XCTAssertFalse(host!.shouldRestoreLoadedModelsPassively,
+                           "the unhydrated window must SUPPRESS: a task spawned here is uncancellable")
         }
         withSelection("groq") {
             XCTAssertFalse(host!.shouldRestoreLoadedModelsPassively,
@@ -314,5 +321,58 @@ extension PassiveRestoreSelectedEngineTests {
         withSelection("groq") {
             XCTAssertFalse(host.shouldRestoreLoadedModelsPassively)
         }
+    }
+}
+
+// MARK: - The startup window, asserted on the RESTORE, not the predicate
+//
+// Requested by an automated reviewer on PR #1270, and the request was fair: every
+// other test here asserts what the PREDICATE returns. None asserted that no restore
+// TASK was spawned, which is the thing that actually cannot be undone. A predicate
+// that flips after the task exists fixes nothing.
+
+extension PassiveRestoreSelectedEngineTests {
+
+    /// Activate while the selection is unhydrated, THEN hydrate a different one, and
+    /// assert no restore was spawned at activation time.
+    ///
+    /// This models the real startup order: ServiceContainer runs
+    /// scanAndLoadPlugins() (which activates) and only then
+    /// restoreProviderSelection(), which WRITES a selection when the saved one is
+    /// missing or unusable.
+    func testNoRestoreIsSpawnedWhenActivatingBeforeSelectionIsHydrated() {
+        let host = liveHost(exposing: ["qwen3"])
+        let plugin = RestoreRecordingPlugin(engineId: "qwen3")
+
+        // Activation happens here, with no selection yet recorded.
+        withSelection(nil) {
+            plugin.activate(host: host)
+        }
+        XCTAssertFalse(
+            plugin.didSpawnRestore,
+            "activation during the unhydrated window must not spawn a restore"
+        )
+
+        // restoreProviderSelection() now writes a DIFFERENT engine. The already-made
+        // decision cannot be revisited, which is exactly why it had to be correct.
+        withSelection("groq") {
+            XCTAssertFalse(plugin.didSpawnRestore,
+                           "and nothing may retroactively appear")
+            XCTAssertFalse(host.shouldRestoreLoadedModelsPassively,
+                           "the host now also reports the hydrated selection correctly")
+        }
+    }
+
+    /// The positive half: hydrated to THIS engine before activation, a restore is
+    /// spawned. Without this, the test above cannot be told apart from a stub that
+    /// never restores.
+    func testRestoreIsSpawnedWhenTheSelectionIsAlreadyHydratedToThisEngine() {
+        let host = liveHost(exposing: ["qwen3"])
+        let plugin = RestoreRecordingPlugin(engineId: "qwen3")
+        withSelection("qwen3") {
+            plugin.activate(host: host)
+        }
+        XCTAssertTrue(plugin.didSpawnRestore,
+                      "the selected engine must still restore at launch")
     }
 }
