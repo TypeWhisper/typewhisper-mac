@@ -2,6 +2,31 @@ import XCTest
 @testable import TypeWhisper
 
 final class TextDiffServiceTests: XCTestCase {
+    func testWordDiffPreservesRepeatedWordTieBreaking() {
+        let service = TextDiffService()
+        XCTAssertEqual(service.computeWordDiff(original: "a b", processed: "b a"), [
+            .removed("a"), .unchanged("b"), .added("a"),
+        ])
+        XCTAssertEqual(service.computeWordDiff(original: "a a", processed: "a"), [
+            .removed("a"), .unchanged("a"),
+        ])
+        XCTAssertEqual(service.computeWordDiff(original: "a", processed: "a a"), [
+            .added("a"), .unchanged("a"),
+        ])
+    }
+
+    func testWordDiffHandlesEmptyInputsUnicodeAndAnUnchangedSuffix() {
+        let service = TextDiffService()
+        XCTAssertEqual(service.computeWordDiff(original: "", processed: ""), [])
+        XCTAssertEqual(service.computeWordDiff(original: "", processed: "🌍 世界"), [.added("🌍"), .added("世界")])
+        XCTAssertEqual(service.computeWordDiff(original: "🌍", processed: ""), [.removed("🌍")])
+        XCTAssertEqual(service.computeWordDiff(original: "old\t🌍\n世界", processed: "new 🌍 世界"), [
+            .removed("old"), .added("new"), .unchanged("🌍"), .unchanged("世界"),
+        ])
+        let text = Array(repeating: "word", count: 10_000).joined(separator: " ")
+        XCTAssertEqual(service.computeWordDiff(original: text, processed: text), Array(repeating: .unchanged("word"), count: 10_000))
+    }
+
     func testExtractCorrectionsFindsLocalizedWordReplacement() {
         let service = TextDiffService()
 

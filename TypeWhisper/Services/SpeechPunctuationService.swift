@@ -8,6 +8,11 @@ enum PunctuationApplicationMode {
 @MainActor
 final class SpeechPunctuationService {
     private let rulesLoader: PunctuationRulesLoader
+    private struct CompiledRule {
+        let rule: PunctuationReplacementRule
+        let regex: NSRegularExpression
+    }
+    private var compiledRules: [String: [CompiledRule]] = [:]
 
     init(rulesLoader: PunctuationRulesLoader = PunctuationRulesLoader()) {
         self.rulesLoader = rulesLoader
@@ -19,6 +24,7 @@ final class SpeechPunctuationService {
         mode: PunctuationApplicationMode = .fullFallback
     ) -> String {
         guard !text.isEmpty,
+              let languageCode = PunctuationLanguageNormalizer.normalize(language),
               let ruleSet = rulesLoader.ruleSet(for: language) else {
             return text
         }
@@ -26,11 +32,25 @@ final class SpeechPunctuationService {
         var result = text
         var replacementApplied = false
 
-        for rule in ruleSet.rules.sorted(by: { $0.phrase.count > $1.phrase.count }) {
+        let rules: [CompiledRule]
+        if let cached = compiledRules[languageCode] {
+            rules = cached
+        } else {
+            rules = ruleSet.rules.sorted(by: { $0.phrase.count > $1.phrase.count }).compactMap { rule in
+                guard let regex = try? NSRegularExpression(
+                    pattern: wholePhrasePattern(for: rule.phrase),
+                    options: [.caseInsensitive]
+                ) else { return nil }
+                return CompiledRule(rule: rule, regex: regex)
+            }
+            compiledRules[languageCode] = rules
+        }
+
+        for compiled in rules {
             let updated = replaceWholePhrase(
-                rule.phrase,
-                with: rule.replacement,
-                category: rule.category,
+                compiled.regex,
+                with: compiled.rule.replacement,
+                category: compiled.rule.category,
                 in: result
             )
             if updated != result {
@@ -48,18 +68,11 @@ final class SpeechPunctuationService {
     }
 
     private func replaceWholePhrase(
-        _ phrase: String,
+        _ regex: NSRegularExpression,
         with replacement: String,
         category: PunctuationRuleCategory,
         in text: String
     ) -> String {
-        guard let regex = try? NSRegularExpression(
-            pattern: wholePhrasePattern(for: phrase, category: category),
-            options: [.caseInsensitive]
-        ) else {
-            return text
-        }
-
         let range = NSRange(text.startIndex..., in: text)
         let matches = regex.matches(in: text, options: [], range: range)
         guard !matches.isEmpty else {
@@ -89,7 +102,7 @@ final class SpeechPunctuationService {
         return result.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
-    private func wholePhrasePattern(for phrase: String, category: PunctuationRuleCategory) -> String {
+    private func wholePhrasePattern(for phrase: String) -> String {
         let escapedWords = phrase
             .split(whereSeparator: \.isWhitespace)
             .map { NSRegularExpression.escapedPattern(for: String($0)) }
@@ -106,6 +119,7 @@ final class SpeechPunctuationService {
 
         var result = ""
         var index = text.startIndex
+        var nextNonWhitespaceIndex = text.startIndex
 
         while index < text.endIndex {
             let character = text[index]
@@ -113,7 +127,15 @@ final class SpeechPunctuationService {
             if character.isWhitespace {
                 let nextIndex = text.index(after: index)
                 let nextCharacter = nextIndex < text.endIndex ? text[nextIndex] : nil
-                let followingNonWhitespace = nextNonWhitespaceCharacter(in: text, after: index)
+                // Scan each whitespace run once, even when preserving the existing
+                // per-character spacing rules for punctuation and mixed scripts.
+                if nextNonWhitespaceIndex <= index {
+                    nextNonWhitespaceIndex = index
+                    while nextNonWhitespaceIndex < text.endIndex && text[nextNonWhitespaceIndex].isWhitespace {
+                        nextNonWhitespaceIndex = text.index(after: nextNonWhitespaceIndex)
+                    }
+                }
+                let followingNonWhitespace = nextNonWhitespaceIndex < text.endIndex ? text[nextNonWhitespaceIndex] : nil
 
                 if let previous = result.last,
                    behavior(for: previous, opening: openingTokens, closing: closingTokens, inline: inlineTokens) == .opening {
