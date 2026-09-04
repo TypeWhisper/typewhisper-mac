@@ -37,6 +37,19 @@ private final class APIFakeAudioInputDeviceDefaultController: AudioInputDeviceDe
     }
 }
 
+final class WavEncoderParityTests: XCTestCase {
+    func testAppAndPluginEncodersProduceIdenticalPCMAtSupportedRates() {
+        for rate in [8_000, 16_000, 44_100, 48_000] {
+            for samples: [Float] in [[], [0], [-2, -1, -0.5, 0, 0.5, 1, 2],
+                                    (0..<16_001).map { Float($0 % 201 - 100) / 90 }] {
+                let appData = WavEncoder.encode(samples, sampleRate: rate)
+                XCTAssertEqual(appData, PluginWavEncoder.encode(samples, sampleRate: rate))
+                XCTAssertEqual(appData.count, 44 + samples.count * 2)
+            }
+        }
+    }
+}
+
 final class SecureInputDiagnosticsProviderTests: XCTestCase {
     func testSnapshotPrefersOnConsoleIORegistryOwner() {
         let consoleUsers: NSArray = [

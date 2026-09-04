@@ -287,10 +287,16 @@ public struct PluginWavEncoder {
         data.append(contentsOf: [0x64, 0x61, 0x74, 0x61]) // "data"
         data.append(contentsOf: withUnsafeBytes(of: dataSize.littleEndian) { Array($0) })
 
-        for sample in samples {
-            let clamped = max(-1.0, min(1.0, sample))
-            let int16Value = Int16(clamped * 32767)
-            data.append(contentsOf: withUnsafeBytes(of: int16Value.littleEndian) { Array($0) })
+        // Fill the PCM payload in one allocation instead of appending each sample.
+        data.count = 44 + Int(dataSize)
+        data.withUnsafeMutableBytes { (bytes: UnsafeMutableRawBufferPointer) in
+            for (index, sample) in samples.enumerated() {
+                let clamped = max(-1.0, min(1.0, sample))
+                let value = UInt16(bitPattern: Int16(clamped * 32767))
+                // Explicit bytes avoid alignment assumptions and preserve little endian PCM.
+                bytes[44 + index * 2] = UInt8(truncatingIfNeeded: value)
+                bytes[45 + index * 2] = UInt8(truncatingIfNeeded: value >> 8)
+            }
         }
 
         return data

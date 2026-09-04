@@ -541,9 +541,14 @@ final class PluginManager: ObservableObject {
     }
 
     func sortedPluginBundleURLs(_ urls: [URL], isBundledSource: Bool) -> [URL] {
-        urls.sorted { lhs, rhs in
-            let left = pluginBundleSortMetadata(for: lhs, isBundledSource: isBundledSource)
-            let right = pluginBundleSortMetadata(for: rhs, isBundledSource: isBundledSource)
+        // Read each manifest once per scan. Sorting must not repeatedly perform
+        // file IO and JSON decoding, and later scans must see changed settings.
+        let candidates = urls.map { url in
+            (url: url, metadata: pluginBundleSortMetadata(for: url, isBundledSource: isBundledSource))
+        }
+        return candidates.sorted { lhs, rhs in
+            let left = lhs.metadata
+            let right = rhs.metadata
 
             if left.isEnabled != right.isEnabled {
                 return left.isEnabled && !right.isEnabled
@@ -553,8 +558,8 @@ final class PluginManager: ObservableObject {
                 return left.sortName < right.sortName
             }
 
-            return lhs.path < rhs.path
-        }
+            return lhs.url.path < rhs.url.path
+        }.map(\.url)
     }
 
     private func pluginBundleSortMetadata(for url: URL, isBundledSource: Bool) -> (isEnabled: Bool, sortName: String) {

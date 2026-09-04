@@ -2083,6 +2083,16 @@ final class PluginManagerLoadOrderTests: XCTestCase {
             sorted.map(\.lastPathComponent),
             ["Gemma4Plugin.bundle", "ParakeetPlugin.bundle", "VoxtralPlugin.bundle"]
         )
+
+        // Metadata is a per-sort snapshot, not a persistent cache of enablement.
+        defaults.set(true, forKey: voxtralKey)
+        defaults.set(false, forKey: gemmaKey)
+        defaults.set(false, forKey: parakeetKey)
+        XCTAssertEqual(
+            manager.sortedPluginBundleURLs([enabledGemma, disabledVoxtral, enabledParakeet], isBundledSource: false)
+                .map(\.lastPathComponent),
+            ["VoxtralPlugin.bundle", "Gemma4Plugin.bundle", "ParakeetPlugin.bundle"]
+        )
     }
 
     func testScanAndLoadPluginsRegistersDisabledBundleWithoutLoadingRuntime() throws {
