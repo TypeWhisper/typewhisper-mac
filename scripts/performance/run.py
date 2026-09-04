@@ -25,6 +25,20 @@ CASES = ["wav-app-10s", "wav-app-60s", "wav-sdk-60s", "wav-sdk-600s",
          "plugin-sort-64"]
 
 
+def compare_reports(baseline, report):
+    """Reject incompatible or changed outputs, including under python -O."""
+    harness = "scripts/performance/Benchmark.swift"
+    if baseline.get("source_sha256", {}).get(harness) != report["source_sha256"][harness]:
+        raise SystemExit("Benchmark harness hash changed or is missing; rerun baseline")
+    previous = {row["case"]: row for row in baseline.get("results", [])}
+    for row in report["results"]:
+        name = row["case"]
+        if name not in previous:
+            raise SystemExit(f"Baseline is missing benchmark case: {name}")
+        if row["digest"] != previous[name].get("digest"):
+            raise SystemExit(f"Output digest changed or is missing for benchmark case: {name}")
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--ref", help="Read production sources from this git ref")
@@ -97,10 +111,7 @@ def main():
     args.output.write_text(json.dumps(report, indent=2) + "\n")
     if args.compare:
         baseline = json.loads(args.compare.read_text())
-        assert baseline["source_sha256"]["scripts/performance/Benchmark.swift"] == hashes["scripts/performance/Benchmark.swift"], "Harness changed; rerun baseline"
-        previous = {row["case"]: row for row in baseline["results"]}
-        for row in results:
-            assert row["digest"] == previous[row["case"]]["digest"], f"Output changed: {row['case']}"
+        compare_reports(baseline, report)
         print("All output digests match the baseline.")
 
 
