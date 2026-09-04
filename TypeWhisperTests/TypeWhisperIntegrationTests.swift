@@ -13025,6 +13025,108 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
     }
 
     @MainActor
+    func testLostModifierReleaseDoesNotSwallowNextTogglePressWithDeviceBits() async throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeyForTesting(
+            UnifiedHotkey(keyCode: 0x3D, modifierFlags: 0, isFn: false),
+            for: .toggle
+        )
+
+        var startCount = 0
+        var stopCount = 0
+        service.onDictationStart = { _ in startCount += 1 }
+        service.onDictationStop = { stopCount += 1 }
+
+        let pressFlags = flags(generic: .option, deviceKeyCodes: [0x3D])
+        let firstPress = try makeFlagsChangedEvent(keyCode: 0x3D, modifierFlags: pressFlags)
+        XCTAssertTrue(service.processEventForTesting(firstPress, source: .eventTap))
+        await Task.yield()
+        XCTAssertEqual(startCount, 1)
+        XCTAssertEqual(service.currentMode, .toggle)
+
+        // The release is lost (event tap disabled mid-gesture) — no keyUp event.
+        // The user presses again to stop; the device bit proves this is a real press,
+        // so it must not be classified as a repeat and swallowed.
+        try await Task.sleep(nanoseconds: 150_000_000) // clear the dispatch dedup window
+        let secondPress = try makeFlagsChangedEvent(keyCode: 0x3D, modifierFlags: pressFlags)
+        XCTAssertTrue(service.processEventForTesting(secondPress, source: .eventTap))
+        await Task.yield()
+        XCTAssertEqual(stopCount, 1)
+        XCTAssertNil(service.currentMode)
+    }
+
+    @MainActor
+    func testResyncClearsStaleModifierStateAfterEventTapRecovery() async throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeyForTesting(
+            UnifiedHotkey(keyCode: 0x3D, modifierFlags: 0, isFn: false),
+            for: .toggle
+        )
+        service.modifierFlagsStateProvider = { [] } // key is physically up
+
+        var startCount = 0
+        var stopCount = 0
+        service.onDictationStart = { _ in startCount += 1 }
+        service.onDictationStop = { stopCount += 1 }
+
+        // Press delivered without device-dependent bits (some devices omit them),
+        // then the release is lost — modifierWasDown is left stale.
+        let genericPress = try makeFlagsChangedEvent(keyCode: 0x3D, modifierFlags: [.option])
+        XCTAssertTrue(service.processEventForTesting(genericPress, source: .eventTap))
+        await Task.yield()
+        XCTAssertEqual(startCount, 1)
+
+        // Without the resync, this press classifies as a key repeat and is dropped.
+        service.resyncHotkeyStateAfterEventTapRecoveryForTesting()
+        try await Task.sleep(nanoseconds: 150_000_000)
+        let nextPress = try makeFlagsChangedEvent(keyCode: 0x3D, modifierFlags: [.option])
+        XCTAssertTrue(service.processEventForTesting(nextPress, source: .eventTap))
+        await Task.yield()
+        XCTAssertEqual(stopCount, 1)
+        XCTAssertNil(service.currentMode)
+    }
+
+    @MainActor
+    func testRightOptionReleaseWithLeftOptionHeldStopsPushToTalk() async throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeyForTesting(
+            UnifiedHotkey(keyCode: 0x3D, modifierFlags: 0, isFn: false),
+            for: .pushToTalk
+        )
+
+        var startCount = 0
+        var stopCount = 0
+        service.onDictationStart = { _ in startCount += 1 }
+        service.onDictationStop = { stopCount += 1 }
+
+        let press = try makeFlagsChangedEvent(
+            keyCode: 0x3D,
+            modifierFlags: flags(generic: .option, deviceKeyCodes: [0x3D, 0x3A])
+        )
+        XCTAssertTrue(service.processEventForTesting(press, source: .eventTap))
+        await Task.yield()
+        XCTAssertEqual(startCount, 1)
+
+        // Right Option released while left Option is still held: the generic .option
+        // flag stays set, but the device bit shows this key went up. Previously this
+        // was misread as a repeat and push-to-talk never stopped.
+        let release = try makeFlagsChangedEvent(
+            keyCode: 0x3D,
+            modifierFlags: flags(generic: .option, deviceKeyCodes: [0x3A])
+        )
+        XCTAssertTrue(service.processEventForTesting(release, source: .eventTap))
+        await Task.yield()
+        XCTAssertEqual(stopCount, 1)
+        XCTAssertNil(service.currentMode)
+    }
+
+    @MainActor
     func testSuppressingEventTapMaskOnlyIncludesMouseEventsWhenRequested() {
         let keyboardOnlyMask = HotkeyService.suppressingEventTapMaskForTesting(includeMouse: false)
 
