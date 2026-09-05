@@ -912,6 +912,9 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             teardownPreparedEngine(staleInput.engine)
             bluetoothInputStartupTracker.reset()
             inputActivationGuard.restore(reason: "bluetooth-instant-start-prewarm-stale")
+        } else if claimedInput != nil {
+            // Recording acquired its own activation reference. Release the preparation reference.
+            inputActivationGuard.restore(reason: "bluetooth-instant-start-prewarm-claimed")
         }
         return claimedInput
     }
@@ -1428,13 +1431,13 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
 
     /// Keep the working stream but discard all audio between dictations.
     private func keepBluetoothInputPrepared(_ engine: AVAudioEngine) -> Bool {
+        let preparationGeneration = engineLock.withLock { preparedInputGeneration }
         guard let deviceID = bluetoothInputPreparationDeviceID(),
               engine.isRunning,
               defaultInputController.defaultInputDeviceID() == deviceID,
               let generation = bluetoothInputStartupTracker.currentGenerationIfAvailable else {
             return false
         }
-        let preparationGeneration = engineLock.withLock { preparedInputGeneration }
         let format = engine.inputNode.outputFormat(forBus: 0)
         processingQueue.sync {
             bluetoothInputStartupTracker.disarm(generation: generation)
@@ -1796,7 +1799,12 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         }
 
         let inputNode = engine.inputNode
-        var inputFormat = try settledInputFormat(for: inputNode, preferredDeviceID: inputRoute.engineDeviceID, label: label)
+        var inputFormat = try settledInputFormat(
+            for: inputNode,
+            preferredDeviceID: inputRoute.engineDeviceID,
+            label: label,
+            shouldCancel: shouldCancel
+        )
         if try enableVoiceProcessingIfNeeded(
             on: inputNode,
             inputRoute: inputRoute,
@@ -1806,7 +1814,8 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             inputFormat = try settledInputFormat(
                 for: inputNode,
                 preferredDeviceID: inputRoute.engineDeviceID,
-                label: "\(label)-voice-processing"
+                label: "\(label)-voice-processing",
+                shouldCancel: shouldCancel
             )
         }
         logger.info("\(label, privacy: .public) input format: sampleRate=\(inputFormat.sampleRate), channels=\(inputFormat.channelCount)")
@@ -1822,7 +1831,12 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             throw AudioRecordingError.engineStartFailed("Cannot create target audio format")
         }
 
-        let currentInputFormat = try settledInputFormat(for: inputNode, preferredDeviceID: inputRoute.engineDeviceID, label: "\(label)-tap")
+        let currentInputFormat = try settledInputFormat(
+            for: inputNode,
+            preferredDeviceID: inputRoute.engineDeviceID,
+            label: "\(label)-tap",
+            shouldCancel: shouldCancel
+        )
         try validateTapInstallationPreconditions(expected: inputFormat, current: currentInputFormat)
 
         let tapFormat = Self.tapFormat(for: currentInputFormat)

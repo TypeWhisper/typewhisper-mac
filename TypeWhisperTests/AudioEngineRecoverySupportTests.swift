@@ -418,7 +418,34 @@ final class AudioEngineRecoverySupportTests: XCTestCase {
         XCTAssertEqual(formats.count, 0)
     }
 
+    func testInputFormatStabilizerCancelsBeforeTheNextPoll() throws {
+        let staleFormat = try XCTUnwrap(AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 48_000,
+            channels: 1,
+            interleaved: false
+        ))
+        var now: TimeInterval = 0
+        var cancelled = false
+
+        XCTAssertThrowsError(try AudioInputFormatStabilizer.waitForSettledFormat(
+            label: "test",
+            expectedHardwareFormat: AudioInputHardwareFormat(sampleRate: 16_000, channelCount: 1),
+            now: { now },
+            shouldCancel: { cancelled },
+            readFormat: { staleFormat },
+            sleep: {
+                now += $0
+                cancelled = true
+            }
+        )) { error in
+            XCTAssertTrue(error is CancellationError)
+        }
+        XCTAssertEqual(now, AudioInputFormatStabilizer.defaultPollInterval)
+    }
+
     func testInputFormatStabilizerThrowsRetryableMismatchWhenFormatDoesNotSettle() {
+
         let staleDefaultFormat = AVAudioFormat(
             commonFormat: .pcmFormatFloat32,
             sampleRate: 48_000,
