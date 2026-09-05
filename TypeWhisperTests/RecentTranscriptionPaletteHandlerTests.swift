@@ -191,6 +191,56 @@ final class RecentTranscriptionPaletteHandlerTests: XCTestCase {
         XCTAssertEqual(pasteboard.string(forType: .string), "Newest transcription")
     }
 
+    func testInsertLatestIgnoresRapidRepeatUntilClipboardIsRestored() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let pasteboard = NSPasteboard.withUniqueName()
+        pasteboard.clearContents()
+        pasteboard.setString("Original clipboard", forType: .string)
+
+        let textInsertionService = TextInsertionService()
+        textInsertionService.accessibilityGrantedOverride = true
+        textInsertionService.pasteboardProvider = { pasteboard }
+        textInsertionService.focusedTextElementOverride = { nil }
+        textInsertionService.defaultPasteFallbackRestoreDelay = .milliseconds(80)
+
+        let pasteStarted = expectation(description: "synthetic paste started")
+        var pasteCount = 0
+        textInsertionService.pasteSimulatorOverride = {
+            pasteCount += 1
+            pasteStarted.fulfill()
+        }
+
+        let store = RecentTranscriptionStore()
+        store.recordTranscription(
+            id: UUID(),
+            finalText: "Newest transcription",
+            timestamp: Date(),
+            appName: "Messages",
+            appBundleIdentifier: "com.apple.MobileSMS"
+        )
+
+        let handler = RecentTranscriptionPaletteHandler(
+            textInsertionService: textInsertionService,
+            historyService: HistoryService(appSupportDirectory: appSupportDirectory),
+            recentTranscriptionStore: store,
+            paletteController: SelectionPaletteControllerSpy()
+        )
+        handler.getPreserveClipboard = { true }
+
+        handler.insertLatest(currentState: .idle)
+        handler.insertLatest(currentState: .idle)
+
+        await fulfillment(of: [pasteStarted], timeout: 1.0)
+        XCTAssertEqual(pasteCount, 1)
+        XCTAssertEqual(pasteboard.string(forType: .string), "Newest transcription")
+
+        try await Task.sleep(for: .milliseconds(150))
+        XCTAssertEqual(pasteCount, 1)
+        XCTAssertEqual(pasteboard.string(forType: .string), "Original clipboard")
+    }
+
     func testWorkflowPaletteIncludesManualWorkflows() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }

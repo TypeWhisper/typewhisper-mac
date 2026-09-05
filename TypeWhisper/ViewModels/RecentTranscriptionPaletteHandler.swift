@@ -7,6 +7,7 @@ final class RecentTranscriptionPaletteHandler {
     private let historyService: HistoryService
     private let recentTranscriptionStore: RecentTranscriptionStore
     private let relativeDateFormatter = RelativeDateTimeFormatter()
+    private var isInsertingLatest = false
 
     var onShowNotchFeedback: ((String, String, TimeInterval, Bool, String?) -> Void)?
     var getPreserveClipboard: (() -> Bool)?
@@ -30,13 +31,17 @@ final class RecentTranscriptionPaletteHandler {
 
     func insertLatest(currentState: DictationViewModel.State) {
         guard currentState == .idle else { return }
-        guard let entry = recentTranscriptionStore.latestEntry(historyRecords: historyService.records) else {
+        guard !isInsertingLatest else { return }
+        guard let entry = recentTranscriptionStore.latestEntry(historyRecords: historyService.recentRecords) else {
             showNoRecentTranscriptionsFeedback()
             return
         }
 
+        isInsertingLatest = true
         Task { @MainActor [weak self] in
-            await self?.insert(entry)
+            guard let self else { return }
+            defer { isInsertingLatest = false }
+            await insert(entry)
         }
     }
 
