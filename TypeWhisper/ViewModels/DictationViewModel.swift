@@ -267,6 +267,7 @@ final class DictationViewModel: ObservableObject {
     var promptPaletteHotkeyLabel: String { Self.loadHotkeyLabel(for: .promptPalette) }
     var recentTranscriptionsHotkeyLabel: String { Self.loadHotkeyLabel(for: .recentTranscriptions) }
     var copyLastTranscriptionHotkeyLabel: String { Self.loadHotkeyLabel(for: .copyLastTranscription) }
+    var pasteLastTranscriptionHotkeyLabel: String { Self.loadHotkeyLabel(for: .pasteLastTranscription) }
     var recorderToggleHotkeyLabel: String { Self.loadHotkeyLabel(for: .recorderToggle) }
     @Published var activeRuleName: String?
     @Published var activeRuleReasonLabel: String?
@@ -2961,6 +2962,12 @@ final class DictationViewModel: ObservableObject {
         let pasteboard = pasteboardProvider()
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
+    }
+
+    func pasteLastTranscription() {
+        promptPaletteHandler.hide()
+        recentTranscriptionPaletteHandler.hide()
+        recentTranscriptionPaletteHandler.insertLatest(currentState: state)
     }
 
     func readBackLastTranscription() {

@@ -13151,6 +13151,28 @@
         }
       }
     },
+    "Insert your latest transcription into the focused app." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Füge deine letzte Transkription in die fokussierte App ein."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最新の文字起こしをフォーカス中のアプリに挿入します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将最近一次转录插入当前应用。"
+          }
+        }
+      }
+    },
     "Inserting text" : {
       "localizations" : {
         "de" : {
@@ -19246,6 +19268,50 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Parakeet 已可用于本地听写"
+          }
+        }
+      }
+    },
+    "Paste Last Transcription" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Letzte Transkription einfügen"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最新の文字起こしを貼り付け"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "粘贴上次转录"
+          }
+        }
+      }
+    },
+    "Paste last transcription shortcut" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tastenkürzel zum Einfügen der letzten Transkription"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最新の文字起こしを貼り付けるショートカット"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "粘贴上次转录的快捷键"
           }
         }
       }
