@@ -200,4 +200,37 @@ final class OpenAIChatHelperTests: XCTestCase {
 
         XCTAssertEqual(message, "Something went wrong")
     }
+    func testChatMessageContentReadsPlainString() {
+        XCTAssertEqual(
+            PluginOpenAIChatHelper.chatMessageContent(from: ["content": "hello"]),
+            "hello"
+        )
+    }
+
+    func testChatMessageContentTreatsNullContentAsEmptyAnswer() {
+        // Reasoning-capable models return content: null when the visible answer
+        // is empty - a valid empty response, previously "Failed to parse response".
+        XCTAssertEqual(
+            PluginOpenAIChatHelper.chatMessageContent(from: ["content": NSNull(), "reasoning": "thinking..."]),
+            ""
+        )
+        XCTAssertEqual(
+            PluginOpenAIChatHelper.chatMessageContent(from: ["role": "assistant"]),
+            ""
+        )
+    }
+
+    func testChatMessageContentJoinsTypedContentParts() {
+        let message: [String: Any] = ["content": [
+            ["type": "text", "text": "Hello "],
+            ["type": "text", "text": "world"],
+        ]]
+        XCTAssertEqual(PluginOpenAIChatHelper.chatMessageContent(from: message), "Hello world")
+    }
+
+    func testChatMessageContentDoesNotPromoteReasoningText() {
+        let message: [String: Any] = ["content": NSNull(), "reasoning_content": "chain of thought"]
+        XCTAssertEqual(PluginOpenAIChatHelper.chatMessageContent(from: message), "")
+    }
+
 }

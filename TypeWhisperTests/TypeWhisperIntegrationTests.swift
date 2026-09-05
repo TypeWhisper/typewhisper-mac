@@ -9936,6 +9936,137 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testPromptProcessingAcceptsEmptyOutputWhenMultipleProvidersAgree() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let isolatedDefaults = Self.makeEmptyLLMFallbackDefaults()
+        defer { isolatedDefaults.defaults.removePersistentDomain(forName: isolatedDefaults.suiteName) }
+
+        // The processing prompt may legitimately reduce the input to nothing
+        // (e.g. a silence-hallucination artifact the user's instructions strip).
+        // When independent providers agree on empty, that is the intended
+        // output, not a malfunction to fail over from.
+        let emptyOne = MockLLMProviderPlugin()
+        emptyOne.configuredProviderId = "empty-one"
+        emptyOne.queuedProcessOutcomes = [.response("")]
+        let emptyTwo = MockLLMProviderPlugin()
+        emptyTwo.configuredProviderId = "empty-two"
+        emptyTwo.queuedProcessOutcomes = [.response("  \n")]
+
+        Self.installLLMFallbackTestProviders([emptyOne, emptyTwo], appSupportDirectory: appSupportDirectory)
+        let service = PromptProcessingService(userDefaults: isolatedDefaults.defaults)
+        service.addLLMFallback(providerId: emptyOne.providerId)
+        service.addLLMFallback(providerId: emptyTwo.providerId)
+
+        let result = try await service.process(prompt: "Strip artifacts", text: "Thank you for watching!")
+        XCTAssertEqual(result, "")
+    }
+
+    @MainActor
+    func testMixedFailuresWithLoneEmptyOpinionConfirmedByRetry() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let isolatedDefaults = Self.makeEmptyLLMFallbackDefaults()
+        defer { isolatedDefaults.defaults.removePersistentDomain(forName: isolatedDefaults.suiteName) }
+
+        // One provider answers "empty", the rest fail with infrastructure errors
+        // that carry no opinion about the content. The lone empty opinion is
+        // confirmed by re-running its provider; empty twice is intent.
+        let emptyProvider = MockLLMProviderPlugin()
+        emptyProvider.configuredProviderId = "empty-opinion"
+        emptyProvider.queuedProcessOutcomes = [.response(""), .response("")]
+        let broken = MockLLMProviderPlugin()
+        broken.configuredProviderId = "broken-parse"
+        broken.queuedProcessOutcomes = [.apiFailure("Failed to parse response")]
+
+        Self.installLLMFallbackTestProviders([emptyProvider, broken], appSupportDirectory: appSupportDirectory)
+        let service = PromptProcessingService(userDefaults: isolatedDefaults.defaults)
+        service.addLLMFallback(providerId: emptyProvider.providerId)
+        service.addLLMFallback(providerId: broken.providerId)
+
+        let result = try await service.process(prompt: "Strip artifacts", text: "Thank you for watching!")
+        XCTAssertEqual(result, "")
+        XCTAssertEqual(emptyProvider.processCallCount, 2)
+    }
+
+    @MainActor
+    func testExplicitWorkflowProviderAcceptsEmptyOutputConfirmedByRetry() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let isolatedDefaults = Self.makeEmptyLLMFallbackDefaults()
+        defer { isolatedDefaults.defaults.removePersistentDomain(forName: isolatedDefaults.suiteName) }
+
+        // An explicit workflow provider bypasses the global fallback list, so an
+        // intentional empty result (artifact-only transcript stripped by the
+        // workflow's instructions) is confirmed by re-running the same provider.
+        let explicit = MockLLMProviderPlugin()
+        explicit.configuredProviderId = "explicit-empty"
+        explicit.queuedProcessOutcomes = [.response(""), .response("  \n")]
+
+        Self.installLLMFallbackTestProviders([explicit], appSupportDirectory: appSupportDirectory)
+        let service = PromptProcessingService(userDefaults: isolatedDefaults.defaults)
+
+        let result = try await service.processWorkflow(
+            prompt: "Strip artifacts",
+            text: "Thank you for watching!",
+            behavior: WorkflowBehavior(providerId: explicit.providerId)
+        )
+        XCTAssertEqual(result, "")
+        XCTAssertEqual(explicit.processCallCount, 2)
+    }
+
+    @MainActor
+    func testExplicitWorkflowProviderRecoversWhenRetryReturnsContent() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let isolatedDefaults = Self.makeEmptyLLMFallbackDefaults()
+        defer { isolatedDefaults.defaults.removePersistentDomain(forName: isolatedDefaults.suiteName) }
+
+        // A lone empty from a glitching provider must not discard content when
+        // the confirmation retry produces a real result.
+        let flaky = MockLLMProviderPlugin()
+        flaky.configuredProviderId = "flaky-empty"
+        flaky.queuedProcessOutcomes = [.response(""), .response("recovered text")]
+
+        Self.installLLMFallbackTestProviders([flaky], appSupportDirectory: appSupportDirectory)
+        let service = PromptProcessingService(userDefaults: isolatedDefaults.defaults)
+
+        let result = try await service.processWorkflow(
+            prompt: "Fix grammar",
+            text: "hello world",
+            behavior: WorkflowBehavior(providerId: flaky.providerId)
+        )
+        XCTAssertEqual(result, "recovered text")
+        XCTAssertEqual(flaky.processCallCount, 2)
+    }
+
+    @MainActor
+    func testPromptProcessingStillFailsOnSingleEmptyOutput() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let isolatedDefaults = Self.makeEmptyLLMFallbackDefaults()
+        defer { isolatedDefaults.defaults.removePersistentDomain(forName: isolatedDefaults.suiteName) }
+
+        // One provider glitching to empty must keep the protective failure
+        // semantics — otherwise a model malfunction silently discards content.
+        let emptyOnly = MockLLMProviderPlugin()
+        emptyOnly.configuredProviderId = "empty-only"
+        emptyOnly.queuedProcessOutcomes = [.response("")]
+
+        Self.installLLMFallbackTestProviders([emptyOnly], appSupportDirectory: appSupportDirectory)
+        let service = PromptProcessingService(userDefaults: isolatedDefaults.defaults)
+        service.addLLMFallback(providerId: emptyOnly.providerId)
+
+        do {
+            _ = try await service.process(prompt: "Fix grammar", text: "hello world")
+            XCTFail("A single empty attempt must still fail")
+        } catch let error as LLMFallbackExhaustedError {
+            XCTAssertEqual(error.failures.count, 1)
+            XCTAssertTrue(error.failures[0].reason.contains("empty"))
+        }
+    }
+
+    @MainActor
     func testExplicitWorkflowProviderDoesNotCallGlobalFallbackList() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }

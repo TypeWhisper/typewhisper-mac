@@ -480,6 +480,8 @@ class PromptProcessingService: ObservableObject {
         }
 
         var failures: [LLMFallbackAttemptFailure] = []
+        var emptyResultCount = 0
+        var firstEmptyCandidate: LLMFallbackPriorityItem?
         for (index, candidate) in candidates.enumerated() {
             try Task.checkCancellation()
             let providerId = normalizeProviderId(candidate.providerId)
@@ -513,6 +515,36 @@ class PromptProcessingService: ObservableObject {
                     providerId: providerId
                 )
                 guard !result.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                    // An explicit provider (no fallback list) has no second
+                    // opinion available, so verify an empty result by re-running
+                    // the same provider once: empty twice in a row is the
+                    // prompt's intended output (e.g. an artifact-only transcript
+                    // reduced to nothing), a lone empty is treated as a glitch.
+                    if !usesFallbackList {
+                        logger.info("Explicit provider returned an empty result; retrying once to confirm intent")
+                        let retryResult = try await processSingleProvider(
+                            providerId: providerId,
+                            requestedModelId: candidate.modelId,
+                            requestedEffortId: candidate.effortId,
+                            prompt: effectivePrompt,
+                            text: attemptText,
+                            temperatureDirective: temperatureDirective,
+                            onLocalProviderUsed: { provider in
+                                let identity = ObjectIdentifier(provider)
+                                guard localProviderIdentities.insert(identity).inserted else { return }
+                                localProvidersUsed.append(provider)
+                                modelManagerService?.beginAutoUnloadProtectedUse(of: provider)
+                            }
+                        )
+                        try Task.checkCancellation()
+                        let retryText = outputText(retryResult, for: processingKind, providerId: providerId)
+                        if retryText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            logger.info("Explicit provider returned empty twice; treating empty output as intentional")
+                            return ""
+                        }
+                        logger.info("Prompt processing complete after empty-retry in \(ContinuousClock.now - totalStart), result length: \(retryText.count)")
+                        return retryText
+                    }
                     throw LLMFallbackAttemptError.emptyResult
                 }
 
@@ -529,6 +561,12 @@ class PromptProcessingService: ObservableObject {
                     throw error
                 }
 
+                if case LLMFallbackAttemptError.emptyResult = error {
+                    emptyResultCount += 1
+                    if firstEmptyCandidate == nil {
+                        firstEmptyCandidate = candidate
+                    }
+                }
                 let failure = LLMFallbackAttemptFailure(
                     providerId: providerId,
                     modelId: candidate.modelId,
@@ -537,6 +575,53 @@ class PromptProcessingService: ObservableObject {
                 )
                 failures.append(failure)
                 logger.warning("LLM fallback \(index + 1, privacy: .public) failed for \(providerId, privacy: .public): \(failure.reason, privacy: .private(mask: .hash))")
+            }
+        }
+
+        // If several providers each ran successfully and independently returned an
+        // empty result, that is consensus, not malfunction: the processing prompt
+        // intentionally reduced the input to nothing (e.g. a silence-hallucination
+        // artifact stripped by the user's instructions). Surface empty as the
+        // intended output instead of failing the pipeline onto the raw text.
+        // A single empty attempt keeps the protective failure semantics, since one
+        // provider glitching to empty would otherwise silently discard content.
+        // Providers that failed with infrastructure errors (rate limit, network,
+        // parse) cast no vote either way, so two independent empty opinions are
+        // consensus even when a third provider never got to answer.
+        if emptyResultCount >= 2 {
+            logger.info("\(emptyResultCount, privacy: .public) of \(failures.count, privacy: .public) LLM attempts independently returned an empty result; treating empty output as intentional")
+            return ""
+        }
+
+        // Mixed outcome: at least one provider ran and answered "empty" while the
+        // rest failed with infrastructure errors (rate limit, network, parse) that
+        // carry no opinion about the content. Confirm the lone empty opinion by
+        // re-running its provider once - empty twice is intent, not a glitch.
+        // Requires other failures alongside the empty one: a single provider
+        // glitching to empty on its own keeps the protective failure semantics.
+        if let candidate = firstEmptyCandidate, failures.count > emptyResultCount {
+            logger.info("Confirming lone empty LLM opinion with a retry against \(candidate.providerId, privacy: .public)")
+            if let retryResult = try? await processSingleProvider(
+                providerId: normalizeProviderId(candidate.providerId),
+                requestedModelId: candidate.modelId,
+                requestedEffortId: candidate.effortId,
+                prompt: effectivePrompt,
+                text: inputText(for: processingKind, providerId: normalizeProviderId(candidate.providerId), fallbackText: text),
+                temperatureDirective: temperatureDirective,
+                onLocalProviderUsed: { provider in
+                    let identity = ObjectIdentifier(provider)
+                    guard localProviderIdentities.insert(identity).inserted else { return }
+                    localProvidersUsed.append(provider)
+                    modelManagerService?.beginAutoUnloadProtectedUse(of: provider)
+                }
+            ) {
+                let retryText = outputText(retryResult, for: processingKind, providerId: normalizeProviderId(candidate.providerId))
+                if retryText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    logger.info("Empty output confirmed by retry; treating empty output as intentional")
+                    return ""
+                }
+                logger.info("Retry produced content after an initial empty result")
+                return retryText
             }
         }
 
