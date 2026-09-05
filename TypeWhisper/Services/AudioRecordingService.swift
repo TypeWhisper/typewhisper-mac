@@ -1146,11 +1146,11 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             throw AudioRecordingError.audioRoutingConflict
         }
 
+        let hasRunningPreparedInput = engineLock.withLock {
+            self.preparedBluetoothInput?.deviceID == routeActivationRequest.inputDeviceID
+                && self.preparedBluetoothInput?.engine.isRunning == true
+        }
         do {
-            let hasRunningPreparedInput = engineLock.withLock {
-                self.preparedBluetoothInput?.deviceID == routeActivationRequest.inputDeviceID
-                    && self.preparedBluetoothInput?.engine.isRunning == true
-            }
             if !hasRunningPreparedInput {
                 try waitForBluetoothRouteStabilizationIfNeeded(
                     inputDeviceID: routeActivationRequest.inputDeviceID,
@@ -1243,6 +1243,15 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         installConfigurationObserver(for: engine)
 
         do {
+            if hasRunningPreparedInput, preparedBluetoothInput == nil {
+                try waitForBluetoothRouteStabilizationIfNeeded(
+                    inputDeviceID: routeActivationRequest.inputDeviceID,
+                    usesBluetoothTransport: routeActivationRequest.usesBluetoothTransport,
+                    reason: "recording-cold-fallback",
+                    readinessDeadline: readinessDeadline,
+                    shouldCancel: shouldCancel
+                )
+            }
             if let preparedBluetoothInput {
                 try startPreparedBluetoothEngineWithFallback(
                     preparedBluetoothInput,
@@ -1735,6 +1744,13 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         installConfigurationObserver(for: replacementEngine)
         teardownEngine(engine)
         engineTeardownRetainer.retain(engine, for: Self.engineTeardownRetentionInterval)
+        try waitForBluetoothRouteStabilizationIfNeeded(
+            inputDeviceID: preparedInput.deviceID,
+            usesBluetoothTransport: true,
+            reason: "\(label)-bluetooth-cold-fallback",
+            readinessDeadline: readinessDeadline,
+            shouldCancel: shouldCancel
+        )
         try startEngineWithRecovery(
             replacementEngine,
             label: "\(label)-bluetooth-cold-fallback",
