@@ -684,7 +684,7 @@ struct RecordingSettingsView: View {
     @State private var selectedProvider: String?
     @State private var customSounds: [String] = SoundChoice.installedCustomSounds()
     @State private var draggedInputDevicePriorityItem: AudioInputDevicePriorityItem?
-    @AppStorage(UserDefaultsKeys.airPodsInstantStartEnabled) private var airPodsInstantStartEnabled = false
+    @AppStorage(UserDefaultsKeys.airPodsInstantStartEnabled) private var bluetoothInstantStartEnabled = false
     private let soundService = ServiceContainer.shared.soundService
     private let audioRecordingService = ServiceContainer.shared.audioRecordingService
 
@@ -692,12 +692,9 @@ struct RecordingSettingsView: View {
         dictation.needsMicPermission || dictation.needsAccessibilityPermission
     }
 
-    private var usesAirPodsInput: Bool {
+    private var usesBluetoothInput: Bool {
         let selection = audioDevice.resolvedRecordingInputSelection()
-        return AirPodsRecordingInputPreparationPolicy.isAirPods(
-            deviceName: selection.deviceName,
-            usesBluetoothTransport: selection.usesBluetoothTransport
-        )
+        return selection.usesBluetoothTransport
     }
 
     private func transcriptionAuthNotice(for engines: [TranscriptionEnginePlugin]) -> String? {
@@ -970,16 +967,16 @@ struct RecordingSettingsView: View {
 
                 microphonePriorityEditor
 
-                if usesAirPodsInput {
+                if usesBluetoothInput {
                     Toggle(
-                        String(localized: "Faster AirPods start"),
-                        isOn: $airPodsInstantStartEnabled
+                        String(localized: "Faster Bluetooth start"),
+                        isOn: $bluetoothInstantStartEnabled
                     )
-                    .onChange(of: airPodsInstantStartEnabled) { _, _ in
-                        audioRecordingService.handleAirPodsInstantStartPreferenceChange()
+                    .onChange(of: bluetoothInstantStartEnabled) { _, _ in
+                        audioRecordingService.handleBluetoothInstantStartPreferenceChange()
                     }
 
-                    Text(String(localized: "Keeps the AirPods microphone active between dictations. This shows the orange microphone indicator, uses more battery, and keeps AirPods audio in call-quality mode."))
+                    Text(String(localized: "Keeps the Bluetooth microphone active between dictations. Audio between dictations is discarded. This shows the orange microphone indicator, uses more battery, and keeps headset audio in call-quality mode."))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

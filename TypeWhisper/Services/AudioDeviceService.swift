@@ -3150,13 +3150,16 @@ enum AudioInputFormatStabilizer {
         timeout: TimeInterval = defaultTimeout,
         pollInterval: TimeInterval = defaultPollInterval,
         now: () -> TimeInterval = { CFAbsoluteTimeGetCurrent() },
+        shouldCancel: () -> Bool = { false },
         readFormat: () -> AVAudioFormat,
         sleep: (TimeInterval) -> Void = { Thread.sleep(forTimeInterval: $0) }
     ) throws -> AVAudioFormat {
         let deadline = now() + timeout
+        if shouldCancel() { throw CancellationError() }
         var lastFormat = readFormat()
 
         while true {
+            if shouldCancel() { throw CancellationError() }
             if isSettled(lastFormat, expectedHardwareFormat: expectedHardwareFormat) {
                 return lastFormat
             }
@@ -3164,6 +3167,7 @@ enum AudioInputFormatStabilizer {
             let currentTime = now()
             guard currentTime < deadline else { break }
             sleep(min(pollInterval, max(0, deadline - currentTime)))
+            if shouldCancel() { throw CancellationError() }
             lastFormat = readFormat()
         }
 
@@ -3257,12 +3261,14 @@ final class CoreAudioBluetoothInputRouteStabilizer: BluetoothInputRouteStabilizi
 func settledInputFormat(
     for inputNode: AVAudioInputNode,
     preferredDeviceID: AudioDeviceID?,
-    label: String
+    label: String,
+    shouldCancel: () -> Bool = { false }
 ) throws -> AVAudioFormat {
     let expectedHardwareFormat = AudioInputFormatStabilizer.expectedHardwareFormat(for: preferredDeviceID)
     return try AudioInputFormatStabilizer.waitForSettledFormat(
         label: label,
         expectedHardwareFormat: expectedHardwareFormat,
+        shouldCancel: shouldCancel,
         readFormat: { inputNode.outputFormat(forBus: 0) }
     )
 }
