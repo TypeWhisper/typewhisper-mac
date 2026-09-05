@@ -508,6 +508,7 @@ final class PassiveRestoreReconciliationTests: XCTestCase {
         XCTAssertFalse(manager.loadedPlugins[0].isEnabled)
         XCTAssertFalse(manager.loadedPlugins[0].isRuntimeLoaded)
 
+        defaults.set(savedPolicy, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
         manager.loadedPlugins = savedPlugins
         await drainMainQueue()
         if let savedSelection { modelManager.selectProvider(savedSelection) }
