@@ -680,8 +680,12 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
             whisperKit = nil
             loadedModelId = nil
             clearLoadingModelIfCurrent(modelDef.id, generation: loadGeneration)
-            modelState = .error(error.localizedDescription)
             downloadProgress = 0
+            guard allowDownloads else {
+                modelState = .notLoaded
+                return
+            }
+            modelState = .error(error.localizedDescription)
             host?.setUserDefault(nil, forKey: "loadedModel")
             host?.notifyCapabilitiesChanged()
         }

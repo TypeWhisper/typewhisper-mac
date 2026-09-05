@@ -334,6 +334,12 @@ final class CohereLocalPlugin: NSObject, TranscriptionEnginePlugin, Transcriptio
             if passively {
                 guard host.shouldRestoreLoadedModelsPassively, !isConfigured else { return }
             }
+            if !allowDownloads || passively {
+                guard let model = Self.model(for: restoredModelId ?? selectedModelId),
+                      CohereLocalModelAssets(
+                        pluginDataDirectory: host.pluginDataDirectory, model: model
+                      ).isInstalled else { return }
+            }
             if let restoredModelId {
                 state.withLock { $0.selectedModelId = restoredModelId }
             }

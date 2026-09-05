@@ -481,9 +481,6 @@ final class PassiveRestoreReconciliationTests: XCTestCase {
         let savedPolicy = defaults.object(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
         let savedEnabled = defaults.object(forKey: "plugin.removed.enabled")
         defer {
-            manager.loadedPlugins = savedPlugins
-            if let savedSelection { modelManager.selectProvider(savedSelection) }
-            else { modelManager.clearProviderSelection() }
             defaults.set(savedPersistedSelection, forKey: UserDefaultsKeys.selectedEngine)
             defaults.set(savedPolicy, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
             defaults.set(savedEnabled, forKey: "plugin.removed.enabled")
@@ -510,6 +507,29 @@ final class PassiveRestoreReconciliationTests: XCTestCase {
         XCTAssertEqual(fallback.restores, 1)
         XCTAssertFalse(manager.loadedPlugins[0].isEnabled)
         XCTAssertFalse(manager.loadedPlugins[0].isRuntimeLoaded)
+
+        manager.loadedPlugins = savedPlugins
+        await drainMainQueue()
+        if let savedSelection { modelManager.selectProvider(savedSelection) }
+        else { modelManager.clearProviderSelection() }
+        // The shared container survives this test. Drain its queued observer work
+        // before restoring the previous (possibly nil) global plugin manager.
+        await drainMainQueue()
+    }
+
+    func testAuthenticationBecomingAvailableRetriesReconciliation() async throws {
+        try await withManager(selected: nil) { manager, modelManager in
+            let plugin = ReconciledRestorePlugin(id: "local")
+            plugin.authAvailable = false
+            install(plugin, in: manager)
+            modelManager.selectProvider("local")
+            XCTAssertEqual(plugin.requests, 0)
+
+            plugin.authAvailable = true
+            modelManager.restoreProviderSelection()
+            XCTAssertEqual(plugin.requests, 1)
+            XCTAssertEqual(plugin.restores, 1)
+        }
     }
 
     func testReadinessChangesDoNotRetryFailedRestore() async throws {
@@ -571,11 +591,15 @@ final class PassiveRestoreReconciliationTests: XCTestCase {
     }
 }
 
-private final class ReconciledRestorePlugin: TranscriptionEnginePlugin, PassiveModelRestoreProviding, @unchecked Sendable {
+private final class ReconciledRestorePlugin: TranscriptionEnginePlugin, PassiveModelRestoreProviding, PluginAuthRoleStatusProviding, @unchecked Sendable {
     static let pluginId = "test.reconciled.restore"
     static let pluginName = "Reconciled Restore"
     let providerId: String
     let isConfigured: Bool
+    var authAvailable = true
+    func authStatus(for role: PluginAuthRole) -> PluginAuthRoleStatus {
+        authAvailable ? .available : .unavailable(reason: "Sign in required")
+    }
     private var host: (any HostServices)?
     private(set) var requests = 0
     private(set) var restores = 0

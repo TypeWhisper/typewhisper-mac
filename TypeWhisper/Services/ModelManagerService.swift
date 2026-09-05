@@ -536,8 +536,8 @@ final class ModelManagerService: ObservableObject {
         let identity = ObjectIdentifier(plugin.instance)
         guard passiveRestoreSelection?.providerId != providerId
                 || passiveRestoreSelection?.instance != identity else { return }
-        passiveRestoreSelection = (providerId, identity)
         guard canUseForTranscription(engine) else { return }
+        passiveRestoreSelection = (providerId, identity)
         (plugin.instance as? any PassiveModelRestoreProviding)?.requestPassiveModelRestore()
     }
 

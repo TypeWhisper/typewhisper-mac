@@ -584,6 +584,27 @@ final class WhisperKitPluginLifecycleTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(host.capabilitiesChangedCount, 1)
     }
 
+    func testFailedPassiveRestorePreservesPersistedModelWithoutReportingAnError() async throws {
+        let modelId = "openai_whisper-tiny"
+        let host = try makeHost(defaults: ["loadedModel": modelId],
+                                shouldRestoreLoadedModelsPassively: false)
+        defer { TestSupport.remove(host.pluginDataDirectory) }
+        let directory = try makeUsableWhisperModelDirectory(host: host, modelId: modelId)
+        // The files pass the presence check but contain invalid Core ML data.
+        let plugin = WhisperKitPlugin()
+        plugin.activate(host: host)
+        defer { plugin.deactivate() }
+        host.shouldRestoreLoadedModelsPassively = true
+
+        await plugin.restoreLoadedModel(allowDownloads: false, passively: true)
+
+        XCTAssertEqual(host.userDefault(forKey: "loadedModel") as? String, modelId)
+        XCTAssertEqual(plugin.settingsModelState, .notLoaded)
+        XCTAssertNil(plugin.loadingModelIdForTesting)
+        XCTAssertEqual(host.capabilitiesChangedCount, 0)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: directory.path))
+    }
+
     private func makeUsableWhisperModelDirectory(
         host: MockHostServices,
         modelId: String
