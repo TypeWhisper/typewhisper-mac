@@ -369,7 +369,8 @@ final class ServiceContainer: ObservableObject {
         }
         pluginManager.scanAndLoadPlugins()
 
-        // Re-restore provider selection now that plugins are loaded
+        // Activation hydrates credentials and custom profiles before selection can settle.
+        // Reconciliation also requests passive restore from the final selected engine.
         modelManagerService.restoreProviderSelection()
         audioRecorderViewModel.reconcileSelectionWithAvailablePlugins()
         watchFolderViewModel.reconcileSelectionWithAvailablePlugins()

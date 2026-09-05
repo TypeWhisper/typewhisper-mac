@@ -193,6 +193,7 @@ final class ModelManagerService: ObservableObject {
     private var pluginRestoreBusyWaitAttempts = 5_700
     private var pluginConfiguredPollInterval: Duration = .milliseconds(100)
 
+    private var passiveRestoreSelection: (providerId: String, instance: ObjectIdentifier)?
     private let providerKey = UserDefaultsKeys.selectedEngine
     private let modelKey = UserDefaultsKeys.selectedModelId
 
@@ -277,11 +278,13 @@ final class ModelManagerService: ObservableObject {
     func selectProvider(_ providerId: String) {
         selectedProviderId = providerId
         UserDefaults.standard.set(providerId, forKey: providerKey)
+        reconcilePassiveModelRestore()
     }
 
     func clearProviderSelection() {
         selectedProviderId = nil
         UserDefaults.standard.removeObject(forKey: providerKey)
+        passiveRestoreSelection = nil
     }
 
     func selectModel(_ providerId: String, modelId: String) {
@@ -500,6 +503,7 @@ final class ModelManagerService: ObservableObject {
     /// Re-validate provider selection after plugins have been loaded.
     /// If the selected plugin is missing, fall back to the first available engine.
     func restoreProviderSelection() {
+        defer { reconcilePassiveModelRestore() }
         if let providerId = selectedProviderId,
            let engine = PluginManager.shared.transcriptionEngine(for: providerId),
            canUseForTranscription(engine) {
@@ -513,6 +517,28 @@ final class ModelManagerService: ObservableObject {
         } else {
             clearProviderSelection()
         }
+    }
+
+    /// Activation hydrates auth and profiles before selection can be reconciled.
+    /// Notify the selected runtime afterwards, including in-session fallback and reloads.
+    /// Readiness notifications for the same selection must not retry a failed restore.
+    private func reconcilePassiveModelRestore() {
+        guard let providerId = selectedProviderId,
+              let manager = PluginManager.shared,
+              let engine = manager.transcriptionEngine(for: providerId),
+              let plugin = manager.loadedPlugins.first(where: {
+                  $0.isEnabled && $0.isRuntimeLoaded
+                      && manager.transcriptionProviderIds(exposedBy: $0.instance).contains(providerId)
+              }) else {
+            passiveRestoreSelection = nil
+            return
+        }
+        let identity = ObjectIdentifier(plugin.instance)
+        guard passiveRestoreSelection?.providerId != providerId
+                || passiveRestoreSelection?.instance != identity else { return }
+        passiveRestoreSelection = (providerId, identity)
+        guard canUseForTranscription(engine) else { return }
+        (plugin.instance as? any PassiveModelRestoreProviding)?.requestPassiveModelRestore()
     }
 
     // MARK: - Transcription

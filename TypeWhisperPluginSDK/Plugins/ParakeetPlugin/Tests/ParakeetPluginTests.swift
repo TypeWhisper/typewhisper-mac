@@ -66,6 +66,22 @@ final class ParakeetPluginTests: XCTestCase {
         return directory
     }
 
+    func testPassiveLocalLoaderPreservesCorruptCacheAndDoesNotRepairIt() throws {
+        let directory = try makeTemporaryDirectory()
+        let vocabulary = directory.appendingPathComponent(ParakeetPlugin.vocabularyAssetFileName)
+        try Data(#"{"0":"test"}"#.utf8).write(to: vocabulary)
+        let corruptModel = directory.appendingPathComponent("Encoder.mlmodelc")
+        try FileManager.default.createDirectory(at: corruptModel, withIntermediateDirectories: true)
+        let marker = corruptModel.appendingPathComponent("keep-me")
+        try Data("incomplete model".utf8).write(to: marker)
+
+        for version in ParakeetVersion.allCases {
+            XCTAssertThrowsError(try ParakeetPlugin.loadInstalledModels(version: version, directory: directory))
+            XCTAssertTrue(FileManager.default.fileExists(atPath: marker.path))
+            XCTAssertTrue(FileManager.default.fileExists(atPath: vocabulary.path))
+        }
+    }
+
     func testVocabularyAssetURLsMapToVersionRepositories() {
         XCTAssertEqual(
             ParakeetPlugin.vocabularyAssetURL(for: .v2).absoluteString,
