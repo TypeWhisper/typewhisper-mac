@@ -418,7 +418,8 @@ final class GladiaPlugin: NSObject, TranscriptionEnginePlugin, LanguageHintTrans
         for _ in 0..<300 {
             try await Task.sleep(for: .seconds(1))
 
-            let (data, response) = try await PluginHTTPClient.data(for: request)
+            // The 300-iteration loop is already the retry.
+            let (data, response) = try await PluginHTTPClient.data(for: request, retry: .disabled)
             guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
                 continue
             }

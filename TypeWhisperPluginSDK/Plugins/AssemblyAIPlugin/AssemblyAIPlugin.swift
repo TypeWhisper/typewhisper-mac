@@ -352,7 +352,8 @@ final class AssemblyAIPlugin: NSObject, StructuredTranscriptionEnginePlugin, Dic
         for _ in 0..<300 {
             try await Task.sleep(for: .seconds(1))
 
-            let (data, response) = try await PluginHTTPClient.data(for: request)
+            // Same shape as the other pollers: the loop IS the retry, so it opts out.
+            let (data, response) = try await PluginHTTPClient.data(for: request, retry: .disabled)
 
             guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
                 continue

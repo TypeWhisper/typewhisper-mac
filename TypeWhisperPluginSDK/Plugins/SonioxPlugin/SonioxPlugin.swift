@@ -1571,7 +1571,9 @@ final class SonioxPlugin: NSObject,
         request.timeoutInterval = 10
 
         do {
-            let (_, response) = try await PluginHTTPClient.data(for: request)
+            // Teardown that a finished transcript is awaited behind. Retrying here would
+            // delay a result the user already has.
+            let (_, response) = try await PluginHTTPClient.data(for: request, retry: .disabled)
             guard let httpResponse = response as? HTTPURLResponse else {
                 cleanupLogger.warning("Soniox transcription cleanup received a non-HTTP response")
                 return .failed
