@@ -271,10 +271,12 @@ final class PluginHTTPClientTests: XCTestCase {
         XCTAssertTrue(delays.isEmpty)
     }
 
-    func testTimeoutDoesNotGetTheImmediateRetry() async throws {
-        // The immediate retry exists for a stale pooled connection, which a session
-        // reset fixes. A timeout already waited the full request timeout, so re-sending
-        // with no pause just repeats that wait.
+    func testTimeoutStillGetsTheCompatibilityImmediateRetry() async throws {
+        // This asserted the OPPOSITE until CodeRabbit caught it. Narrowing the
+        // immediate retry to stale-pool codes ALTERED pre-existing behaviour rather
+        // than adding to it, and it meant one timeout aborted the very poll loops that
+        // opt out with `.disabled`. Any transient error still gets one immediate retry
+        // after the session reset, exactly as before the ladder existed.
         let store = MockHTTPSessionStore()
         PluginHTTPClient.configureForTesting { _ in
             if store.sessions.isEmpty {
@@ -283,12 +285,69 @@ final class PluginHTTPClientTests: XCTestCase {
             return store.makeSession(outcomes: [.success(Self.okResponse())])
         }
         let recorder = DelayRecorder()
-        PluginHTTPClient.configureRetryForTesting(sleeper: { await recorder.record($0) }, jitterFraction: { 1.0 })
+        PluginHTTPClient.configureRetryForTesting(sleeper: { await recorder.record($0) })
 
-        _ = try await PluginHTTPClient.data(for: Self.request(path: "/slow"))
+        let (_, response) = try await PluginHTTPClient.data(for: Self.request(path: "/slow"))
 
+        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
         let delays = await recorder.delays
-        XCTAssertEqual(delays, [.milliseconds(500)], "a timeout backs off rather than retrying at once")
+        XCTAssertTrue(delays.isEmpty, "the compatibility retry is immediate, not backed off")
+    }
+
+    func testDisabledPolicyStillGetsTheCompatibilityTransportRetry() async throws {
+        let store = MockHTTPSessionStore()
+        PluginHTTPClient.configureForTesting { _ in
+            if store.sessions.isEmpty {
+                return store.makeSession(outcomes: [.failure(URLError(.timedOut))])
+            }
+            return store.makeSession(outcomes: [.success(Self.okResponse())])
+        }
+        PluginHTTPClient.configureRetryForTesting(sleeper: { _ in })
+
+        let (_, response) = try await PluginHTTPClient.data(
+            for: Self.request(path: "/opted-out-transient"), retry: .disabled
+        )
+
+        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200,
+                       "an opted-out poll loop must survive a transient error as it did before")
+    }
+
+    func testLadderedTransportRetriesAreIdempotentOnly() async throws {
+        // A POST can time out AFTER the origin processed it, so it gets the single
+        // compatibility retry and no ladder.
+        let post = MockHTTPSessionStore()
+        PluginHTTPClient.configureForTesting { _ in
+            post.makeSession(outcomes: [.failure(URLError(.timedOut))])
+        }
+        PluginHTTPClient.configureRetryForTesting(sleeper: { _ in })
+        var postRequest = Self.request(path: "/post-timeout")
+        postRequest.httpMethod = "POST"
+        do {
+            _ = try await PluginHTTPClient.data(for: postRequest)
+            XCTFail("a POST must not ride the transport ladder")
+        } catch {
+            XCTAssertEqual((error as? URLError)?.code, .timedOut)
+        }
+        XCTAssertEqual(post.sessions.flatMap(\.requestedPaths).count, 2,
+                       "initial attempt plus the one compatibility retry")
+
+        PluginHTTPClient.resetTestingHooks()
+        let get = MockHTTPSessionStore()
+        PluginHTTPClient.configureForTesting { _ in
+            get.makeSession(outcomes: [.failure(URLError(.timedOut))])
+        }
+        PluginHTTPClient.configureRetryForTesting(sleeper: { _ in })
+        var getRequest = Self.request(path: "/get-timeout")
+        getRequest.httpMethod = "GET"
+        do {
+            _ = try await PluginHTTPClient.data(for: getRequest)
+            XCTFail("expected exhaustion")
+        } catch {
+            XCTAssertEqual((error as? URLError)?.code, .timedOut)
+        }
+        XCTAssertEqual(get.sessions.flatMap(\.requestedPaths).count,
+                       PluginHTTPClient.retryMaxAttempts,
+                       "a GET is safe to repeat, so it uses the whole ladder")
     }
 
     func testDoesNotRetryServerError500() async throws {

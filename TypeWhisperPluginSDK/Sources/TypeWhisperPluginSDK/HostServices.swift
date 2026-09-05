@@ -315,6 +315,7 @@ public enum PluginHTTPClient {
                 // 429: one retry, only on an explicit Retry-After that fits.
                 if isRetryAfterOnlyStatus(http.statusCode) {
                     guard !usedRetryAfterGrace,
+                          attempt + 1 < retryMaxAttempts,
                           let retryAfter,
                           retryAfter <= deadline - ContinuousClock.now
                     else {
@@ -349,15 +350,22 @@ public enum PluginHTTPClient {
 
                 resetSharedSession(matching: session, reason: "transient network error")
 
-                // Pre-existing behaviour, preserved under both policies: one immediate
-                // retry for the codes a session reset actually fixes.
-                if attempt == 0, isStalePooledConnectionError(error) {
+                // Compatibility, and it applies under BOTH policies: one immediate
+                // retry after the reset, for ANY transient error. This is exactly what
+                // this client did before the ladder existed, and narrowing it would be
+                // an alteration rather than an addition. A poll loop that opts out with
+                // `.disabled` therefore behaves precisely as it did before.
+                if attempt == 0 {
                     attempt += 1
                     logger.warning("\(method) \(url) transient failure after \(elapsed), reset session, retrying immediately: \(error.localizedDescription)")
                     continue
                 }
 
+                // Everything past that first retry is new, and is gated the same way
+                // the status ladder is. A POST can time out AFTER the origin processed
+                // it, so laddering a non-idempotent request risks duplicating the work.
                 guard policy.laddersTransientFailures,
+                      isIdempotentMethod(method),
                       attempt + 1 < retryMaxAttempts,
                       let delay = backoffDelay(forAttempt: attempt, deadline: deadline, retryAfter: nil)
                 else {
@@ -369,19 +377,6 @@ public enum PluginHTTPClient {
                 logger.warning("\(method) \(url) transient failure after \(elapsed), retrying in \(delay) (attempt \(attempt + 1)): \(error.localizedDescription)")
                 try await sleeper(delay)
             }
-        }
-    }
-
-    /// The errors an immediate session reset plausibly fixes. A timeout is not one:
-    /// we already waited the full request timeout, so re-sending with no pause repeats
-    /// that wait. Being offline is not one either.
-    static func isStalePooledConnectionError(_ error: Error) -> Bool {
-        guard let urlError = error as? URLError else { return false }
-        switch urlError.code {
-        case .networkConnectionLost, .cannotConnectToHost:
-            return true
-        default:
-            return false
         }
     }
 
