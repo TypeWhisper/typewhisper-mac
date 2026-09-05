@@ -3167,6 +3167,7 @@ enum AudioInputFormatStabilizer {
             let currentTime = now()
             guard currentTime < deadline else { break }
             sleep(min(pollInterval, max(0, deadline - currentTime)))
+            if shouldCancel() { throw CancellationError() }
             lastFormat = readFormat()
         }
 

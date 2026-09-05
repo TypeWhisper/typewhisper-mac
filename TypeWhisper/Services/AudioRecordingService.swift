@@ -519,11 +519,6 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         prepareRecordingInputIfEligible()
     }
 
-    private func inputSelectionDidChange(reason: String) {
-        invalidatePreparedRecordingInputs(reason: reason)
-        prepareRecordingInputIfEligible()
-    }
-
     private func performRecordingInputPreparationIfEligible() {
         guard !hasPendingRecordingStart else { return }
         if bluetoothInputPreparationDeviceID() != nil {
@@ -2991,7 +2986,21 @@ extension AudioRecordingService {
         engineLock.withLock { audioEngine }
     }
 
+    func testingClaimPreparedBluetoothInput(_ engine: AVAudioEngine, deviceID: AudioDeviceID) -> Bool {
+        let format = AVAudioFormat(standardFormatWithSampleRate: Self.targetSampleRate, channels: 1)!
+        engineLock.withLock {
+            preparedBluetoothInput = PreparedBluetoothInput(
+                engine: engine,
+                deviceID: deviceID,
+                tapFormat: format,
+                inputGeneration: 1
+            )
+        }
+        return claimPreparedBluetoothInputIfEligible() != nil
+    }
+
     func testingHasPreparedUSBInput(deviceID: AudioDeviceID) -> Bool {
+
         engineLock.withLock { preparedUSBInput?.deviceID == deviceID }
     }
 

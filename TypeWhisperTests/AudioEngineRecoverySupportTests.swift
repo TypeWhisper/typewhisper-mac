@@ -2710,7 +2710,43 @@ final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(engineRunningProbeCalls, 2)
     }
 
+    func testPreparedBluetoothClaimTransfersActivationOwnershipAcrossDictations() {
+        let preferenceKey = UserDefaultsKeys.airPodsInstantStartEnabled
+        let originalPreference = UserDefaults.standard.object(forKey: preferenceKey)
+        UserDefaults.standard.set(true, forKey: preferenceKey)
+        defer {
+            if let originalPreference {
+                UserDefaults.standard.set(originalPreference, forKey: preferenceKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: preferenceKey)
+            }
+        }
+        let controller = FakeAudioInputDeviceDefaultController(defaultInputDeviceID: 1)
+        let activation = AudioInputDeviceActivationGuard(controller: controller)
+        let service = AudioRecordingService(inputActivationGuard: activation)
+        service.hasMicrophonePermissionOverride = true
+        service.configureInputSelection(
+            deviceID: 2,
+            hasExplicitDeviceSelection: true,
+            usesBluetoothTransport: true
+        )
+        XCTAssertTrue(activation.activate(deviceID: 2, reason: "preparation"))
+
+        for _ in 0..<3 {
+            XCTAssertTrue(activation.activate(deviceID: 2, reason: "recording-start"))
+            XCTAssertTrue(service.testingClaimPreparedBluetoothInput(RunningAudioEngine(), deviceID: 2))
+            XCTAssertEqual(controller.setCalls, [2])
+            service.testingSetAudioEngine(nil)
+        }
+
+        activation.restore(reason: "preparation-invalidated")
+        XCTAssertEqual(controller.setCalls, [2, 1])
+        XCTAssertTrue(activation.activate(deviceID: 3, reason: "different-input"))
+        activation.restore(reason: "test-finished")
+    }
+
     func testPreparedBluetoothInputWaitsForFreshSilentBuffer() throws {
+
         let clock = FakeReadinessClock()
         let tracker = BluetoothInputStartupTracker(now: { clock.now })
         let oldGeneration = tracker.beginGeneration()
@@ -4363,6 +4399,10 @@ private final class FakeCoreAudioHALInputOperations: CoreAudioHALInputOperating,
         var timestamp = AudioTimeStamp()
         return inputProc(inputProcRefCon, &flags, &timestamp, 1, frameCount, nil)
     }
+}
+
+private final class RunningAudioEngine: AVAudioEngine {
+    override var isRunning: Bool { true }
 }
 
 private final class FakeReadinessClock: @unchecked Sendable {
