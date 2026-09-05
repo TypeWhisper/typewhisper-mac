@@ -376,3 +376,258 @@ extension PassiveRestoreSelectedEngineTests {
                       "the selected engine must still restore at launch")
     }
 }
+
+// MARK: - Reconciliation after activation (#1279)
+
+@MainActor
+final class PassiveRestoreReconciliationTests: XCTestCase {
+    private func withManager(
+        selected: String?,
+        _ test: (PluginManager, ModelManagerService) async throws -> Void
+    ) async throws {
+        let defaults = UserDefaults.standard
+        let savedSelection = defaults.object(forKey: UserDefaultsKeys.selectedEngine)
+        let savedPolicy = defaults.object(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+        let savedManager = PluginManager.shared
+        let savedBus = EventBus.shared
+        let directory = try TestSupport.makeTemporaryDirectory()
+        defer {
+            PluginManager.shared = savedManager
+            EventBus.shared = savedBus
+            defaults.set(savedSelection, forKey: UserDefaultsKeys.selectedEngine)
+            defaults.set(savedPolicy, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            TestSupport.remove(directory)
+        }
+        defaults.set(selected, forKey: UserDefaultsKeys.selectedEngine)
+        defaults.set(0, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+        EventBus.shared = EventBus()
+        let manager = PluginManager(appSupportDirectory: directory)
+        PluginManager.shared = manager
+        let modelManager = ModelManagerService()
+        try await test(manager, modelManager)
+    }
+
+    private func install(_ plugin: ReconciledRestorePlugin, in manager: PluginManager) {
+        let host = HostServicesImpl(
+            pluginId: plugin.providerId,
+            eventBus: EventBus.shared,
+            ruleNamesProvider: { [] },
+            backsSelectedTranscriptionEngine: PluginManager.selectionMatcher(
+                forEnginesExposedBy: [plugin.providerId]
+            )
+        )
+        plugin.activate(host: host)
+        manager.loadedPlugins.append(LoadedPlugin(
+            manifest: PluginManifest(id: plugin.providerId, name: plugin.providerId,
+                                     version: "1.0.0", principalClass: "ReconciledRestorePlugin"),
+            instance: plugin,
+            bundle: Bundle.main,
+            sourceURL: manager.pluginsDirectory.appendingPathComponent(plugin.providerId),
+            isEnabled: true
+        ))
+    }
+
+    func testMissingStartupSelectionRestoresFallbackAfterActivationDeclined() async throws {
+        try await withManager(selected: "missing") { manager, modelManager in
+            let fallback = ReconciledRestorePlugin(id: "local")
+            install(fallback, in: manager)
+            XCTAssertEqual(fallback.restores, 0)
+            modelManager.restoreProviderSelection()
+            XCTAssertEqual(modelManager.selectedProviderId, "local")
+            XCTAssertEqual(fallback.restores, 1)
+            XCTAssertEqual(fallback.selectionAtRestore, "local")
+        }
+    }
+
+    func testAbsentStartupSelectionRestoresChosenLocalEngine() async throws {
+        try await withManager(selected: nil) { manager, modelManager in
+            let fallback = ReconciledRestorePlugin(id: "local")
+            install(fallback, in: manager)
+            XCTAssertEqual(fallback.restores, 0)
+            modelManager.restoreProviderSelection()
+            XCTAssertEqual(fallback.restores, 1)
+        }
+    }
+
+    func testObservedRemovalAndClearedSelectionRestoreFallbackInSession() async throws {
+        try await withManager(selected: "removed") { manager, modelManager in
+            let removed = ReconciledRestorePlugin(id: "removed")
+            let fallback = ReconciledRestorePlugin(id: "local")
+            install(removed, in: manager)
+            install(fallback, in: manager)
+            modelManager.restoreProviderSelection()
+            XCTAssertEqual(fallback.restores, 0)
+            modelManager.observePluginManager()
+            // With no configured alternative, disable/uninstall clears the selection
+            // before publishing the changed plugin list. Exercise that observer route.
+            modelManager.clearProviderSelection()
+            removed.deactivate()
+            manager.loadedPlugins.removeFirst()
+            await drainMainQueue()
+            XCTAssertEqual(modelManager.selectedProviderId, "local")
+            XCTAssertEqual(fallback.restores, 1)
+        }
+    }
+
+    func testDisablingSelectedPluginThroughManagerRestoresLocalFallback() async throws {
+        let container = ServiceContainer.shared
+        let manager = container.pluginManager
+        let modelManager = container.modelManagerService
+        let savedManager = PluginManager.shared
+        let savedPlugins = manager.loadedPlugins
+        let savedSelection = modelManager.selectedProviderId
+        let defaults = UserDefaults.standard
+        let savedPersistedSelection = defaults.object(forKey: UserDefaultsKeys.selectedEngine)
+        let savedPolicy = defaults.object(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+        let savedEnabled = defaults.object(forKey: "plugin.removed.enabled")
+        defer {
+            defaults.set(savedPersistedSelection, forKey: UserDefaultsKeys.selectedEngine)
+            defaults.set(savedPolicy, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            defaults.set(savedEnabled, forKey: "plugin.removed.enabled")
+            PluginManager.shared = savedManager
+        }
+        PluginManager.shared = manager
+        manager.loadedPlugins = []
+        defaults.set(0, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+        modelManager.selectProvider("removed")
+        let removed = ReconciledRestorePlugin(id: "removed")
+        let fallback = ReconciledRestorePlugin(id: "local")
+        install(removed, in: manager)
+        install(fallback, in: manager)
+        // A valid bundle lets disable convert the runtime to an unloaded placeholder.
+        manager.loadedPlugins[0] = LoadedPlugin(
+            manifest: manager.loadedPlugins[0].manifest, instance: removed,
+            bundle: Bundle.main, sourceURL: Bundle.main.bundleURL, isEnabled: true
+        )
+        XCTAssertEqual(fallback.restores, 0)
+        manager.setPluginEnabled("removed", enabled: false)
+        XCTAssertNil(modelManager.selectedProviderId)
+        await drainMainQueue()
+        XCTAssertEqual(modelManager.selectedProviderId, "local")
+        XCTAssertEqual(fallback.restores, 1)
+        XCTAssertFalse(manager.loadedPlugins[0].isEnabled)
+        XCTAssertFalse(manager.loadedPlugins[0].isRuntimeLoaded)
+
+        defaults.set(savedPolicy, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+        manager.loadedPlugins = savedPlugins
+        await drainMainQueue()
+        if let savedSelection { modelManager.selectProvider(savedSelection) }
+        else { modelManager.clearProviderSelection() }
+        // The shared container survives this test. Drain its queued observer work
+        // before restoring the previous (possibly nil) global plugin manager.
+        await drainMainQueue()
+    }
+
+    func testAuthenticationBecomingAvailableRetriesReconciliation() async throws {
+        try await withManager(selected: nil) { manager, modelManager in
+            let plugin = ReconciledRestorePlugin(id: "local")
+            plugin.authAvailable = false
+            install(plugin, in: manager)
+            modelManager.selectProvider("local")
+            XCTAssertEqual(plugin.requests, 0)
+
+            plugin.authAvailable = true
+            modelManager.restoreProviderSelection()
+            XCTAssertEqual(plugin.requests, 1)
+            XCTAssertEqual(plugin.restores, 1)
+        }
+    }
+
+    func testReadinessChangesDoNotRetryFailedRestore() async throws {
+        try await withManager(selected: "missing") { manager, modelManager in
+            let fallback = ReconciledRestorePlugin(id: "local")
+            install(fallback, in: manager)
+            modelManager.observePluginManager()
+            modelManager.restoreProviderSelection()
+            let requests = fallback.requests
+            for _ in 0..<5 {
+                manager.notifyPluginStateChanged()
+            }
+            await drainMainQueue()
+            XCTAssertEqual(fallback.requests, requests)
+            XCTAssertEqual(fallback.restores, 1)
+        }
+    }
+
+    func testSelectionSwitchNotifiesNewEngineAndRuntimeReplacementNotifiesAgain() async throws {
+        try await withManager(selected: "one") { manager, modelManager in
+            let one = ReconciledRestorePlugin(id: "one")
+            let two = ReconciledRestorePlugin(id: "two")
+            install(one, in: manager)
+            install(two, in: manager)
+            modelManager.restoreProviderSelection()
+            modelManager.selectProvider("two")
+            XCTAssertEqual(two.restores, 1)
+            let requests = two.requests
+            modelManager.selectProvider("two")
+            XCTAssertEqual(two.requests, requests)
+            manager.loadedPlugins.removeLast()
+            let replacement = ReconciledRestorePlugin(id: "two")
+            install(replacement, in: manager)
+            let activationRequests = replacement.requests
+            modelManager.restoreProviderSelection()
+            XCTAssertEqual(replacement.requests, activationRequests + 1)
+        }
+    }
+
+    func testConfiguredCloudFallbackWinsAndTimedPolicyDoesNotRestoreLocalModel() async throws {
+        try await withManager(selected: "missing") { manager, modelManager in
+            let local = ReconciledRestorePlugin(id: "local")
+            let cloud = ReconciledRestorePlugin(id: "cloud", configured: true)
+            install(local, in: manager)
+            install(cloud, in: manager)
+            modelManager.restoreProviderSelection()
+            XCTAssertEqual(modelManager.selectedProviderId, "cloud")
+            XCTAssertEqual(local.restores, 0)
+            UserDefaults.standard.set(600, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            modelManager.selectProvider("local")
+            XCTAssertEqual(local.restores, 0)
+        }
+    }
+
+    private func drainMainQueue() async {
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async { continuation.resume() }
+        }
+    }
+}
+
+private final class ReconciledRestorePlugin: TranscriptionEnginePlugin, PassiveModelRestoreProviding, PluginAuthRoleStatusProviding, @unchecked Sendable {
+    static let pluginId = "test.reconciled.restore"
+    static let pluginName = "Reconciled Restore"
+    let providerId: String
+    let isConfigured: Bool
+    var authAvailable = true
+    func authStatus(for role: PluginAuthRole) -> PluginAuthRoleStatus {
+        authAvailable ? .available : .unavailable(reason: "Sign in required")
+    }
+    private var host: (any HostServices)?
+    private(set) var requests = 0
+    private(set) var restores = 0
+    private(set) var selectionAtRestore: String?
+
+    init() { providerId = "local"; isConfigured = false }
+    init(id: String, configured: Bool = false) { providerId = id; isConfigured = configured }
+    func activate(host: any HostServices) {
+        self.host = host
+        if host.shouldRestoreLoadedModelsPassively { requestPassiveModelRestore() }
+    }
+    func deactivate() { host = nil }
+    func requestPassiveModelRestore() {
+        requests += 1
+        guard host?.shouldRestoreLoadedModelsPassively == true, !isConfigured else { return }
+        restores += 1
+        selectionAtRestore = UserDefaults.standard.string(forKey: UserDefaultsKeys.selectedEngine)
+        // Remain unconfigured, like a missing asset or a failed load.
+    }
+    var providerDisplayName: String { providerId }
+    var transcriptionModels: [PluginModelInfo] { [] }
+    var selectedModelId: String? { nil }
+    func selectModel(_ modelId: String) {}
+    var supportsTranslation: Bool { false }
+    var supportsStreaming: Bool { false }
+    var supportedLanguages: [String] { [] }
+    func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+        PluginTranscriptionResult(text: "")
+    }
+}

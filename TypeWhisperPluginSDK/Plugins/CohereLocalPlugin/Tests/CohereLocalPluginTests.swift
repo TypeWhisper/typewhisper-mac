@@ -470,6 +470,25 @@ final class CohereLocalPluginTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: fastAssets.runtimeExecutableURL.path))
     }
 
+    func testPassiveRestoreWithMissingAssetsPreservesSelectionAndState() async throws {
+        let host = try PluginTestHostServices(
+            defaults: ["loadedModel": CohereLocalPlugin.fastModel.id,
+                       "selectedModel": CohereLocalPlugin.compactModel.id],
+            shouldRestoreLoadedModelsPassively: false
+        )
+        let plugin = CohereLocalPlugin()
+        plugin.activate(host: host)
+        defer { plugin.deactivate() }
+        host.shouldRestoreLoadedModelsPassively = true
+
+        await plugin.restoreLoadedModel(passively: true)
+
+        XCTAssertEqual(plugin.modelState, .notLoaded)
+        XCTAssertEqual(plugin.selectedModelId, CohereLocalPlugin.compactModel.id)
+        XCTAssertEqual(host.userDefault(forKey: "loadedModel") as? String, CohereLocalPlugin.fastModel.id)
+        XCTAssertEqual(host.capabilitiesChangedCount, 0)
+    }
+
     func testPassiveRestorePolicyIsDeclaredForExternalPlugin() throws {
         let plugin = CohereLocalPlugin()
         let lifecycleAwarePlugin: any HostModelLifecyclePolicyAwarePlugin = plugin
