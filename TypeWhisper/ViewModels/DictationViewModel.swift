@@ -1157,6 +1157,7 @@ final class DictationViewModel: ObservableObject {
             usesBluetoothTransport: resolvedInputSelection.usesBluetoothTransport,
             deviceName: resolvedInputSelection.deviceName
         )
+        audioRecordingService.prepareRecordingInputIfEligible()
     }
 
     func handleCancelHotkey() {

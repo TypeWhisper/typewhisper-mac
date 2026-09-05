@@ -11139,24 +11139,24 @@
         }
       }
     },
-    "Faster AirPods start" : {
+    "Faster Bluetooth start" : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Schnellerer AirPods-Start"
+            "value" : "Schnellerer Bluetooth-Start"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "AirPodsの起動を高速化"
+            "value" : "Bluetoothの起動を高速化"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "更快启动 AirPods"
+            "value" : "更快启动蓝牙麦克风"
           }
         }
       }
@@ -13896,24 +13896,24 @@
         }
       }
     },
-    "Keeps the AirPods microphone active between dictations. This shows the orange microphone indicator, uses more battery, and keeps AirPods audio in call-quality mode." : {
+    "Keeps the Bluetooth microphone active between dictations. Audio between dictations is discarded. This shows the orange microphone indicator, uses more battery, and keeps headset audio in call-quality mode." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Hält das AirPods-Mikrofon zwischen Diktaten aktiv. Dadurch wird der orangefarbene Mikrofonindikator angezeigt, der Akku stärker beansprucht und die AirPods-Audioqualität im Telefonie-Modus gehalten."
+            "value" : "Hält das Bluetooth-Mikrofon zwischen Diktaten aktiv. Audio zwischen Diktaten wird verworfen. Dadurch wird der orangefarbene Mikrofonindikator angezeigt, der Akku stärker beansprucht und die Headset-Audioqualität im Telefonie-Modus gehalten."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "音声入力の合間もAirPodsのマイクを有効に保ちます。オレンジ色のマイクインジケータが表示され、バッテリー消費が増え、AirPodsの音質は通話品質のままになります。"
+            "value" : "音声入力の合間もBluetoothマイクを有効に保ちます。入力の合間の音声は破棄されます。オレンジ色のマイクインジケータが表示され、バッテリー消費が増え、ヘッドセットの音質は通話品質のままになります。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "在两次听写之间保持 AirPods 麦克风处于启用状态。这会显示橙色麦克风指示器、增加耗电量，并让 AirPods 音频保持通话音质模式。"
+            "value" : "在两次听写之间保持蓝牙麦克风处于启用状态。两次听写之间的音频会被丢弃。这会显示橙色麦克风指示器、增加耗电量，并让耳机音频保持通话音质模式。"
           }
         }
       }

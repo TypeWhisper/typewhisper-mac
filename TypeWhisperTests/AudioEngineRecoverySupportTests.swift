@@ -266,35 +266,31 @@ final class AudioEngineRecoverySupportTests: XCTestCase {
         ))
     }
 
-    func testAirPodsInputPreparationRequiresExplicitOptInAndAirPodsBluetoothRoute() {
-        let airPodsID = AudioDeviceID(5)
+    func testBluetoothInputPreparationRequiresExplicitOptInAndBluetoothRoute() {
+        let deviceID = AudioDeviceID(5)
 
-        XCTAssertTrue(AirPodsRecordingInputPreparationPolicy.isEligible(
+        XCTAssertTrue(BluetoothRecordingInputPreparationPolicy.isEligible(
             hasMicrophonePermission: true,
             isEnabled: true,
-            selectedDeviceID: airPodsID,
-            selectedDeviceName: "AirPods Pro von Marco - Find My",
+            selectedDeviceID: deviceID,
             usesBluetoothTransport: true
         ))
-        XCTAssertFalse(AirPodsRecordingInputPreparationPolicy.isEligible(
+        XCTAssertFalse(BluetoothRecordingInputPreparationPolicy.isEligible(
             hasMicrophonePermission: true,
             isEnabled: false,
-            selectedDeviceID: airPodsID,
-            selectedDeviceName: "AirPods Pro",
+            selectedDeviceID: deviceID,
             usesBluetoothTransport: true
         ))
-        XCTAssertFalse(AirPodsRecordingInputPreparationPolicy.isEligible(
-            hasMicrophonePermission: true,
+        XCTAssertFalse(BluetoothRecordingInputPreparationPolicy.isEligible(
+            hasMicrophonePermission: false,
             isEnabled: true,
-            selectedDeviceID: airPodsID,
-            selectedDeviceName: "Jabra PRO 930",
+            selectedDeviceID: deviceID,
             usesBluetoothTransport: true
         ))
-        XCTAssertFalse(AirPodsRecordingInputPreparationPolicy.isEligible(
+        XCTAssertFalse(BluetoothRecordingInputPreparationPolicy.isEligible(
             hasMicrophonePermission: true,
             isEnabled: true,
-            selectedDeviceID: airPodsID,
-            selectedDeviceName: "AirPods Pro",
+            selectedDeviceID: deviceID,
             usesBluetoothTransport: false
         ))
     }
@@ -2687,6 +2683,35 @@ final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(engineRunningProbeCalls, 2)
     }
 
+    func testPreparedBluetoothInputWaitsForFreshSilentBuffer() throws {
+        let clock = FakeReadinessClock()
+        let tracker = BluetoothInputStartupTracker(now: { clock.now })
+        let oldGeneration = tracker.beginGeneration()
+        _ = tracker.consume(samples: [0.8], inputRMS: 0.8, generation: oldGeneration)
+        tracker.disarm(generation: oldGeneration)
+        let generation = try XCTUnwrap(tracker.armExistingGeneration(oldGeneration))
+        let checker = BluetoothInputReadinessChecker(
+            silentFallback: 0,
+            requiredSignalBufferCount: 1,
+            now: { clock.now },
+            sleep: { delay in
+                clock.now += delay
+                _ = tracker.consume(samples: [0], inputRMS: 0, generation: generation)
+            }
+        )
+
+        try checker.waitForInitialInput(
+            label: "prepared-test",
+            deadline: nil,
+            readinessSnapshot: { tracker.snapshot(for: generation) },
+            isEngineRunning: { true },
+            shouldCancel: { false }
+        )
+
+        XCTAssertEqual(clock.now, 0.01, accuracy: 0.001)
+        XCTAssertEqual(tracker.promoteCurrentGeneration()?.samples, [0])
+    }
+
     func testBluetoothInputReadinessRejectsReadyCandidateAfterRouteChange() {
         let checker = BluetoothInputReadinessChecker()
 
@@ -3145,6 +3170,7 @@ final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
             hasExplicitDeviceSelection: true,
             usesBluetoothTransport: false
         )
+        service.prepareRecordingInputIfEligible()
         await fulfillment(of: [prepared], timeout: 1.0)
         inputCaptureFactory.prepareHook = nil
         let didStorePreparedInput = await waitUntil(timeout: 1.0) {
@@ -3189,6 +3215,7 @@ final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
             hasExplicitDeviceSelection: true,
             usesBluetoothTransport: false
         )
+        service.prepareRecordingInputIfEligible()
         await fulfillment(of: [prepared], timeout: 1.0)
         inputCaptureFactory.prepareHook = nil
         let didStorePreparedInput = await waitUntil(timeout: 1.0) {
