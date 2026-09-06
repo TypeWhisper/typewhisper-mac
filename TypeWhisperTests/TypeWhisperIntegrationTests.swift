@@ -11929,6 +11929,37 @@ extension TypeWhisperIntegrationTests {
     }
 
     @MainActor
+    func testHedgeReturnsWinnerWhileNonCooperativeLoserKeepsRunning() async throws {
+        // The primary ignores cancellation entirely: it waits on a plain
+        // dispatch timer that no Task cancellation can interrupt.
+        var primaryFinished = false
+        let harness = try makeHedgedDictationViewModel(
+            hedgeThreshold: 0.1,
+            primaryRunner: { _, _, _, _, _, _, _, _ in
+                await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                    DispatchQueue.global().asyncAfter(deadline: .now() + 2.5) {
+                        continuation.resume()
+                    }
+                }
+                primaryFinished = true
+                return Self.hedgeTranscriptionResult(text: "primary", engine: "primary")
+            },
+            fallbackRunner: { _, _, _, _, _, _, _ in
+                Self.hedgeTranscriptionResult(text: "fallback", engine: "test-fallback")
+            }
+        )
+        defer { harness.cleanup() }
+
+        let start = ContinuousClock.now
+        let output = try await harness.viewModel.transcribeFinalAudioForTesting()
+
+        XCTAssertEqual(output.text, "fallback")
+        XCTAssertTrue(output.usedRecoveryFallback)
+        XCTAssertLessThan(ContinuousClock.now - start, .seconds(1.5), "the winner must be returned without waiting for the non-cooperative loser")
+        XCTAssertFalse(primaryFinished, "the loser was still running when the winner was returned")
+    }
+
+    @MainActor
     func testHedgePrimaryWinsBeforeThresholdWithoutDispatchingFallback() async throws {
         var fallbackCalled = false
         let harness = try makeHedgedDictationViewModel(

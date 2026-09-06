@@ -173,8 +173,8 @@ struct DictationRecoveryView: View {
                             step: 0.5
                         ) {
                             Text(localizedAppText(
-                                String(format: "%.1f seconds", viewModel.hedgeThresholdSeconds),
-                                de: String(format: "%.1f Sekunden", viewModel.hedgeThresholdSeconds)
+                                "\(hedgeThresholdLabelValue) seconds",
+                                de: "\(hedgeThresholdLabelValue) Sekunden"
                             ))
                         }
                     }
@@ -247,6 +247,10 @@ struct DictationRecoveryView: View {
             }
             .disabled(viewModel.isProcessing)
         }
+    }
+
+    private var hedgeThresholdLabelValue: String {
+        viewModel.hedgeThresholdSeconds.formatted(.number.precision(.fractionLength(1)))
     }
 
     private var recoveryLanguageOptions: [(code: String, name: String)] {

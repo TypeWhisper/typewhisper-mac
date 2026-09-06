@@ -2341,6 +2341,77 @@ final class DictationViewModel: ObservableObject {
         case bothFailed(primary: Error, fallback: Error)
     }
 
+    /// Collects the outcome of a hedged race. Every transition happens on the
+    /// main actor; the first decisive event resumes the continuation and
+    /// cancels both tasks, everything that arrives afterwards is dropped.
+    @MainActor
+    private final class HedgedTranscriptionArbiter {
+        private var continuation: CheckedContinuation<HedgedTranscriptionOutcome, Never>?
+        private var primaryTask: Task<Void, Never>?
+        private var fallbackTask: Task<Void, Never>?
+        private var primaryError: Error?
+        private var fallbackError: Error?
+        private var fallbackDispatched = false
+        private var settled = false
+
+        func begin(_ continuation: CheckedContinuation<HedgedTranscriptionOutcome, Never>) {
+            self.continuation = continuation
+        }
+
+        func register(primary: Task<Void, Never>, fallback: Task<Void, Never>) {
+            primaryTask = primary
+            fallbackTask = fallback
+            if settled {
+                primary.cancel()
+                fallback.cancel()
+            }
+        }
+
+        /// Returns false when the race is already over, so a late timer never
+        /// dispatches a fallback request nobody is waiting for.
+        func markFallbackDispatched() -> Bool {
+            guard !settled else { return false }
+            fallbackDispatched = true
+            return true
+        }
+
+        func primaryFailed(_ error: Error, eligibleForFallback: Bool) {
+            guard !settled else { return }
+            // Before the hedge fires (or for errors the sequential fallback must
+            // not retry) the caller's existing error path applies unchanged.
+            guard fallbackDispatched, eligibleForFallback else {
+                return settle(.primaryFailedBeforeHedge(error))
+            }
+            if let fallbackError {
+                return settle(.bothFailed(primary: error, fallback: fallbackError))
+            }
+            primaryError = error
+        }
+
+        func fallbackFailed(_ error: Error) {
+            guard !settled else { return }
+            if let primaryError {
+                return settle(.bothFailed(primary: primaryError, fallback: error))
+            }
+            fallbackError = error
+        }
+
+        func fallbackSkipped() {
+            guard !settled, let primaryError else { return }
+            settle(.primaryFailedBeforeHedge(primaryError))
+        }
+
+        func settle(_ outcome: HedgedTranscriptionOutcome) {
+            guard !settled else { return }
+            settled = true
+            primaryTask?.cancel()
+            fallbackTask?.cancel()
+            let continuation = self.continuation
+            self.continuation = nil
+            continuation?.resume(returning: outcome)
+        }
+    }
+
     /// Races the primary engine against the recovery fallback engine: the fallback
     /// request is dispatched only after `threshold` elapses with the primary still
     /// running, the first successful transcription wins, and the loser is cancelled.
@@ -2386,60 +2457,52 @@ final class DictationViewModel: ObservableObject {
         }
 
         let fallbackEngineId = configuration.engineId
-        let outcome = await withTaskGroup(of: HedgedTranscriptionEvent.self) { group -> HedgedTranscriptionOutcome in
-            let start = ContinuousClock.now
-            group.addTask {
-                do { return .primary(.success(try await primaryOperation())) } catch { return .primary(.failure(error)) }
-            }
-            group.addTask { [logger] in
-                do {
-                    try await Task.sleep(nanoseconds: UInt64(threshold * 1_000_000_000))
-                } catch {
-                    return .fallbackSkipped
-                }
-                logger.info(
-                    "Primary transcription exceeded hedge threshold (\(threshold, format: .fixed(precision: 1))s); racing recovery fallback engine \(fallbackEngineId, privacy: .public)"
-                )
-                do { return .fallback(.success(try await fallbackOperation())) } catch { return .fallback(.failure(error)) }
-            }
-
-            var primaryError: Error?
-            var fallbackError: Error?
-            while let event = await group.next() {
-                switch event {
-                case .primary(.success(let result)):
-                    group.cancelAll()
-                    return .primaryWon(result)
-                case .fallback(.success(let result)):
-                    group.cancelAll()
-                    return .fallbackWon(result)
-                case .primary(.failure(let error)):
-                    let hedgeDispatched = ContinuousClock.now - start >= .seconds(threshold)
-                    guard hedgeDispatched, shouldAttemptAutomaticRecoveryFallback(after: error) else {
-                        group.cancelAll()
-                        return .primaryFailedBeforeHedge(error)
-                    }
-                    if let fallbackError {
-                        return .bothFailed(primary: error, fallback: fallbackError)
-                    }
-                    primaryError = error
-                case .fallback(.failure(let error)):
-                    if let primaryError {
-                        return .bothFailed(primary: primaryError, fallback: error)
-                    }
-                    fallbackError = error
-                case .fallbackSkipped:
-                    if let primaryError {
-                        return .primaryFailedBeforeHedge(primaryError)
+        // The race is settled by the first decisive event and returns at once.
+        // Both requests run as unstructured tasks so a losing engine that does
+        // not honour cooperative cancellation (the plugin contract does not
+        // guarantee prompt cancellation) cannot delay the winner: it is
+        // cancelled, its eventual result is dropped by the arbiter, and it is
+        // never awaited. A structured task group would wait for it.
+        let arbiter = HedgedTranscriptionArbiter()
+        let outcome = await withTaskCancellationHandler {
+            await withCheckedContinuation { (continuation: CheckedContinuation<HedgedTranscriptionOutcome, Never>) in
+                arbiter.begin(continuation)
+                let primaryTask = Task { @MainActor [weak self] in
+                    do {
+                        let result = try await primaryOperation()
+                        arbiter.settle(.primaryWon(result))
+                    } catch {
+                        guard let self else { return arbiter.settle(.primaryFailedBeforeHedge(error)) }
+                        arbiter.primaryFailed(
+                            error,
+                            eligibleForFallback: self.shouldAttemptAutomaticRecoveryFallback(after: error)
+                        )
                     }
                 }
+                let fallbackTask = Task { @MainActor [logger] in
+                    do {
+                        try await Task.sleep(nanoseconds: UInt64(threshold * 1_000_000_000))
+                    } catch {
+                        arbiter.fallbackSkipped()
+                        return
+                    }
+                    guard arbiter.markFallbackDispatched() else { return }
+                    logger.info(
+                        "Primary transcription exceeded hedge threshold (\(threshold, format: .fixed(precision: 1))s); racing recovery fallback engine \(fallbackEngineId, privacy: .public)"
+                    )
+                    do {
+                        let result = try await fallbackOperation()
+                        arbiter.settle(.fallbackWon(result))
+                    } catch {
+                        arbiter.fallbackFailed(error)
+                    }
+                }
+                arbiter.register(primary: primaryTask, fallback: fallbackTask)
             }
-            // Both children finished without a winner (primary failed while the
-            // hedge was pending and the fallback then errored or was skipped).
-            if let primaryError {
-                return .primaryFailedBeforeHedge(primaryError)
+        } onCancel: {
+            Task { @MainActor in
+                arbiter.settle(.primaryFailedBeforeHedge(CancellationError()))
             }
-            return .primaryFailedBeforeHedge(CancellationError())
         }
 
         switch outcome {

@@ -864,7 +864,16 @@ enum SettingsBackupExporter {
         apply(preferences.dictationRecoveryLanguage, forKey: UserDefaultsKeys.dictationRecoveryLanguage)
         apply(preferences.dictationRecoveryAutomaticFallbackEnabled, forKey: UserDefaultsKeys.dictationRecoveryAutomaticFallbackEnabled)
         apply(preferences.dictationRecoveryHedgeEnabled, forKey: UserDefaultsKeys.dictationRecoveryHedgeEnabled)
-        apply(preferences.dictationRecoveryHedgeThresholdSeconds, forKey: UserDefaultsKeys.dictationRecoveryHedgeThresholdSeconds)
+        // A backup is user-editable JSON: only a finite value inside the range
+        // the UI offers is restored, anything else keeps the current setting.
+        apply(
+            preferences.dictationRecoveryHedgeThresholdSeconds.flatMap { value -> Double? in
+                guard value.isFinite,
+                      DictationRecoveryViewModel.hedgeThresholdRange.contains(value) else { return nil }
+                return value
+            },
+            forKey: UserDefaultsKeys.dictationRecoveryHedgeThresholdSeconds
+        )
         apply(preferences.dictationRecoveryRetentionDays, forKey: UserDefaultsKeys.dictationRecoveryRetentionDays)
         if preferences.dictationRecoveryRetentionDays != nil {
             recoveryRetentionPolicyDidChange?(DictationRecoveryRetentionPolicy.load(from: userDefaults))
