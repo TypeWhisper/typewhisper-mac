@@ -12088,6 +12088,66 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
     }
 
     @MainActor
+    func testLostRightOptionReleaseIsRecoveredWhileLeftOptionStaysHeld() async throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeyForTesting(rightOptionModifierHotkey(), for: .pushToTalk)
+
+        // Physical state after the lost release: left Option is still held, so the
+        // generic .option flag stays set; only the device bit tells the keys apart.
+        var currentFlags = flags(generic: .option, deviceKeyCodes: [0x3D, 0x3A])
+        service.modifierFlagsStateProvider = { currentFlags }
+
+        var startCount = 0
+        var stopCount = 0
+        service.onDictationStart = { _ in startCount += 1 }
+        service.onDictationStop = { stopCount += 1 }
+
+        let rightDown = try makeFlagsChangedEvent(
+            keyCode: 0x3D,
+            modifierFlags: flags(generic: .option, deviceKeyCodes: [0x3D, 0x3A])
+        )
+        XCTAssertTrue(service.processEventForTesting(rightDown, source: .eventTap))
+        await Task.yield()
+        XCTAssertEqual(startCount, 1)
+        XCTAssertEqual(service.currentMode, .pushToTalk)
+
+        // The right key is released while the tap is disabled; left stays down.
+        currentFlags = flags(generic: .option, deviceKeyCodes: [0x3A])
+        service.resyncHotkeyStateAfterEventTapRecoveryForTesting()
+        service.recoverReleasedActiveHotkeyAfterEventTapDisableForTesting()
+
+        XCTAssertEqual(stopCount, 1, "the generic Option flag must not mask the released right key")
+        XCTAssertNil(service.currentMode)
+    }
+
+    @MainActor
+    func testWatchdogStartsWhileUntrustedAndRetriesSetupOnceAccessibilityIsGranted() async throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        var trusted = false
+        service.accessibilityTrustedProvider = { trusted }
+
+        service.resumeMonitoring()
+        XCTAssertTrue(service.isEventTapWatchdogActiveForTesting, "the watchdog must run on the untrusted path so a launch-time race can be retried")
+        let setupsBeforeGrant = service.monitorSetupCountForTesting
+
+        // A tick while still untrusted must not re-run setup.
+        service.runEventTapWatchdogTickForTesting()
+        try await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(service.monitorSetupCountForTesting, setupsBeforeGrant)
+
+        trusted = true
+        service.runEventTapWatchdogTickForTesting()
+        try await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(service.monitorSetupCountForTesting, setupsBeforeGrant + 1, "setup must be re-run once trust flips to true")
+
+        service.suspendMonitoring()
+    }
+
+    @MainActor
     func testResyncClearsStaleModifierStateAfterEventTapRecovery() async throws {
         let service = HotkeyService()
         service.suspendMonitoring()

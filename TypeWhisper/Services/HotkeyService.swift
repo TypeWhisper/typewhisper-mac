@@ -348,7 +348,66 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
 
     private var globalMonitor: Any?
     private var localMonitor: Any?
-    private var eventTap: CFMachPort?
+    /// The CGEventTap is created and torn down on the main thread but revived
+    /// from the watchdog's background queue, so the port reference and its
+    /// enable/invalidate lifecycle are guarded by one lock rather than by
+    /// `@unchecked Sendable` alone.
+    private nonisolated final class EventTapHandle: @unchecked Sendable {
+        private let lock = NSLock()
+        private var port: CFMachPort?
+
+        var current: CFMachPort? {
+            lock.withLock { port }
+        }
+
+        var exists: Bool {
+            lock.withLock { port != nil }
+        }
+
+        func store(_ tap: CFMachPort) {
+            lock.withLock { port = tap }
+        }
+
+        /// Disables and invalidates the tap under the lock so the watchdog can
+        /// never re-enable a port that is being torn down.
+        func invalidateAndClear() {
+            lock.withLock {
+                guard let tap = port else { return }
+                CGEvent.tapEnable(tap: tap, enable: false)
+                // Disabling a tap leaves its Mach port registered with the system, so
+                // each setup/teardown cycle (settings changes, recorder open/close,
+                // wake) would otherwise leak a stale session-level flagsChanged filter
+                // tap. Those linger in the modifier-event path and can break the
+                // system's double-tap-modifier detection (e.g. Apple Dictation).
+                CFMachPortInvalidate(tap)
+                port = nil
+            }
+        }
+
+        /// Re-enables a valid, currently disabled tap. Returns true when it did.
+        /// `CGEvent.tapEnable` is safe to call off the main thread; holding the
+        /// lock across the validity check and the enable call keeps teardown from
+        /// interleaving.
+        func reenableIfDisabled() -> Bool {
+            lock.withLock {
+                guard let tap = port, CFMachPortIsValid(tap), !CGEvent.tapIsEnabled(tap: tap) else { return false }
+                CGEvent.tapEnable(tap: tap, enable: true)
+                return true
+            }
+        }
+
+        func enable() {
+            lock.withLock {
+                guard let tap = port else { return }
+                CGEvent.tapEnable(tap: tap, enable: true)
+            }
+        }
+    }
+
+    private let eventTapHandle = EventTapHandle()
+    private var eventTap: CFMachPort? { eventTapHandle.current }
+    /// Test hooks for the watchdog paths.
+    private(set) var monitorSetupCountForTesting = 0
     private var runLoopSource: CFRunLoopSource?
     /// Watchdog that re-arms the event tap when the system disables it. It runs on a
     /// background queue on purpose: the tap's `tapDisabledByTimeout` callback is only
@@ -416,13 +475,21 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         keyCode: UInt16,
         genericFlag: NSEvent.ModifierFlags
     ) -> Bool? {
-        guard event.modifierFlags.contains(genericFlag) else { return false }
+        specificModifierKeyIsDown(flags: event.modifierFlags, keyCode: keyCode, genericFlag: genericFlag)
+    }
+
+    private nonisolated static func specificModifierKeyIsDown(
+        flags: NSEvent.ModifierFlags,
+        keyCode: UInt16,
+        genericFlag: NSEvent.ModifierFlags
+    ) -> Bool? {
+        guard flags.contains(genericFlag) else { return false }
         guard let deviceBit = deviceModifierBits[keyCode],
               let familyMask = deviceModifierFamilyMasks[genericFlag.rawValue],
-              event.modifierFlags.rawValue & familyMask != 0 else {
+              flags.rawValue & familyMask != 0 else {
             return nil
         }
-        return event.modifierFlags.rawValue & deviceBit != 0
+        return flags.rawValue & deviceBit != 0
     }
 
     func setup() {
@@ -651,6 +718,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     // MARK: - Event Monitor
 
     private func setupMonitor() {
+        monitorSetupCountForTesting += 1
         tearDownMonitor()
         let includeMouse = needsMouseEventMonitoring
         let suppressingMouse = needsSuppressingMouseEventTap
@@ -660,6 +728,10 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         guard accessibilityTrusted else {
             logger.info("Accessibility permission not granted, installing local hotkey monitor only")
             installLocalEventMonitor(includeMouse: includeMouse)
+            // Trust is commonly still false for a moment at launch; the watchdog
+            // re-runs setup once it reports true so the session tap gets created
+            // without waiting for an explicit permission request.
+            startEventTapWatchdog()
             return
         }
 
@@ -750,16 +822,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             CFRunLoopSourceInvalidate(source)
             runLoopSource = nil
         }
-        if let tap = eventTap {
-            CGEvent.tapEnable(tap: tap, enable: false)
-            // Disabling a tap leaves its Mach port registered with the system, so
-            // each setup/teardown cycle (settings changes, recorder open/close,
-            // wake) would otherwise leak a stale session-level flagsChanged filter
-            // tap. Those linger in the modifier-event path and can break the
-            // system's double-tap-modifier detection (e.g. Apple Dictation).
-            CFMachPortInvalidate(tap)
-            eventTap = nil
-        }
+        eventTapHandle.invalidateAndClear()
         recentEventTapDispatches.removeAll()
         capsLockOriginSuppressionUntil = nil
     }
@@ -1131,11 +1194,11 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             return false
         }
 
-        eventTap = tap
+        eventTapHandle.store(tap)
         let source = CFMachPortCreateRunLoopSource(nil, tap, 0)
         runLoopSource = source
         CFRunLoopAddSource(CFRunLoopGetMain(), source, .commonModes)
-        CGEvent.tapEnable(tap: tap, enable: true)
+        eventTapHandle.enable()
         return true
     }
 
@@ -1147,34 +1210,41 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             repeating: Self.eventTapWatchdogInterval
         )
         timer.setEventHandler { [weak self] in
-            guard let self else { return }
-            if let tap = self.eventTap {
-                guard CFMachPortIsValid(tap), !CGEvent.tapIsEnabled(tap: tap) else { return }
-                // CGEvent.tapEnable is safe to call off the main thread; this is
-                // what lets the watchdog revive the tap while the main thread is
-                // stalled so queued events are delivered instead of lost.
-                CGEvent.tapEnable(tap: tap, enable: true)
-                self.logger.warning("Event tap watchdog found the tap disabled and re-enabled it")
-                DispatchQueue.main.async { [weak self] in
-                    self?.resyncHotkeyStateAfterEventTapRecovery()
-                    self?.recoverReleasedActiveHotkeyAfterEventTapDisable()
-                }
-            } else {
-                // The tap could not be created at setup - typically the app
-                // launched before the Accessibility grant settled (fresh install,
-                // permission re-grant, login). Without a retry the app silently
-                // runs on the NSEvent fallback forever: hotkeys work but events
-                // are no longer suppressed and leak to other apps. Re-run setup
-                // once trust is available.
-                DispatchQueue.main.async { [weak self] in
-                    guard let self, self.eventTap == nil, self.accessibilityTrustedProvider() else { return }
-                    self.logger.warning("Event tap missing while Accessibility is trusted; re-running monitor setup")
-                    self.setupMonitor()
-                }
-            }
+            self?.eventTapWatchdogTick()
         }
         timer.resume()
         eventTapWatchdogTimer = timer
+    }
+
+    /// One watchdog pass. Runs on the watchdog queue; only the lock-guarded tap
+    /// handle is touched off-main, everything else hops to the main actor.
+    private nonisolated func eventTapWatchdogTick() {
+        if eventTapHandle.exists {
+            // This is what lets the watchdog revive the tap while the main
+            // thread is stalled so queued events are delivered instead of lost.
+            guard eventTapHandle.reenableIfDisabled() else { return }
+            logger.warning("Event tap watchdog found the tap disabled and re-enabled it")
+            DispatchQueue.main.async { [weak self] in
+                self?.resyncHotkeyStateAfterEventTapRecovery()
+                self?.recoverReleasedActiveHotkeyAfterEventTapDisable()
+            }
+        } else {
+            // The tap could not be created at setup - typically the app
+            // launched before the Accessibility grant settled (fresh install,
+            // permission re-grant, login). Without a retry the app silently
+            // runs on the NSEvent fallback forever: hotkeys work but events
+            // are no longer suppressed and leak to other apps. Re-run setup
+            // once trust is available.
+            DispatchQueue.main.async { [weak self] in
+                self?.retryMonitorSetupIfEventTapMissing()
+            }
+        }
+    }
+
+    private func retryMonitorSetupIfEventTapMissing() {
+        guard !eventTapHandle.exists, accessibilityTrustedProvider() else { return }
+        logger.warning("Event tap missing while Accessibility is trusted; re-running monitor setup")
+        setupMonitor()
     }
 
     private func stopEventTapWatchdog() {
@@ -1201,9 +1271,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     }
 
     private func reenableEventTapAfterSystemDisable() {
-        if let tap = eventTap {
-            CGEvent.tapEnable(tap: tap, enable: true)
-        }
+        eventTapHandle.enable()
         logger.warning("CGEventTap was disabled by system, re-enabling")
         DispatchQueue.main.async { [weak self] in
             self?.resyncHotkeyStateAfterEventTapRecovery()
@@ -1803,7 +1871,12 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             return modifierFlagsStateProvider().contains(.function)
         case .modifierOnly:
             guard let flag = Self.modifierFlagForKeyCode(hotkey.keyCode) else { return false }
-            return modifierFlagsStateProvider().contains(flag)
+            let flags = modifierFlagsStateProvider()
+            // The device-dependent bit tells the left key from the right one;
+            // the generic family flag is only a fallback when the state snapshot
+            // carries no device bits at all.
+            return Self.specificModifierKeyIsDown(flags: flags, keyCode: hotkey.keyCode, genericFlag: flag)
+                ?? flags.contains(flag)
         case .modifierCombo:
             let flags = modifierFlagsStateProvider()
             if !hotkey.modifierKeyCodes.isEmpty {
@@ -1856,6 +1929,15 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     @discardableResult
     func processEventForTesting(_ event: NSEvent, source: HotkeyEventSource) -> Bool {
         handleEvent(event, source: source)
+    }
+
+    var isEventTapWatchdogActiveForTesting: Bool {
+        eventTapWatchdogTimer != nil
+    }
+
+    /// Runs one watchdog pass synchronously from the caller's context.
+    func runEventTapWatchdogTickForTesting() {
+        eventTapWatchdogTick()
     }
 
     func recoverReleasedActiveHotkeyAfterEventTapDisableForTesting() {
