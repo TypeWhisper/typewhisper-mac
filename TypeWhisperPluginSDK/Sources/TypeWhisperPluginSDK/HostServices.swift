@@ -388,23 +388,32 @@ public enum PluginHTTPClient {
     /// `LinearPlugin` runs GraphQL mutations, `OpenAIVectorMemoryPlugin` uploads and
     /// attaches files. Duplicating those is worse than failing.
     ///
-    /// - Always safe: the origin demonstrably did not process the request. 408 was
-    ///   never received; 503 is a refusal to handle it; Cloudflare 521 (origin down),
-    ///   522 (connection timed out), 523 (origin unreachable), 525/526 (TLS failed)
-    ///   all fail before the origin sees a byte. The 2026-09-03 incident was a 522 on
-    ///   a POST, and it stays retried.
-    /// - Idempotent methods only: 502, 504, 520 and 524 do NOT establish that the
-    ///   origin skipped the work. Cloudflare's own documentation of 524 says the
-    ///   connection was established and the origin simply did not answer in time, so
-    ///   it may still complete. Retry these only where a repeat is harmless.
+    /// - Always safe: the request provably never reached a working origin. 408 was
+    ///   never received; Cloudflare 521 (origin down), 522 (connection timed out),
+    ///   523 (origin unreachable) and 525/526 (TLS handshake failed) all fail before
+    ///   the origin sees a byte. The failure that motivated this work was a 522 on a
+    ///   POST, and it stays retried for every method.
+    /// - Idempotent methods only: 502, 503, 504, 520 and 524 do NOT establish that
+    ///   the origin skipped the work. Cloudflare documents 524 as the connection
+    ///   having been established with no timely answer, so the origin may still
+    ///   complete it.
+    ///
+    ///   503 sits here rather than above, which is a change of mind. Its semantics do
+    ///   say the origin declined to handle the request, and on that reasoning it was
+    ///   originally any-method. But two independent reviewers pointed at the same
+    ///   concrete exposure: `AssemblyAIPlugin.submitTranscription` POSTs job creation
+    ///   through the default policy, so a 503 returned after the job was created would
+    ///   resubmit it, and Linear mutations and vector-store uploads have the same
+    ///   shape. A semantic argument does not outweigh a duplicate transcription job,
+    ///   and the outage case this work exists for is a 52x, which is unaffected.
     /// - Never: 500, which can mean the origin accepted the work and then failed
     ///   partway, and 429, which is a deliberate refusal the origin explained. See
     ///   `retryAfterOnlyStatuses` for how 429 is handled instead.
     static func isRetryableStatus(_ status: Int, method: String) -> Bool {
         switch status {
-        case 408, 503, 521, 522, 523, 525, 526:
+        case 408, 521, 522, 523, 525, 526:
             return true
-        case 502, 504, 520, 524:
+        case 502, 503, 504, 520, 524:
             return isIdempotentMethod(method)
         default:
             return false

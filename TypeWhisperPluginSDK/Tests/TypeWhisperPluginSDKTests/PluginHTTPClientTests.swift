@@ -107,7 +107,7 @@ final class PluginHTTPClientTests: XCTestCase {
         let store = MockHTTPSessionStore()
         PluginHTTPClient.configureForTesting { _ in
             store.makeSession(outcomes: [
-                .success(Self.statusResponse(503)),
+                .success(Self.statusResponse(522)),
                 .success(Self.okResponse()),
             ])
         }
@@ -209,7 +209,7 @@ final class PluginHTTPClientTests: XCTestCase {
         let store = MockHTTPSessionStore()
         PluginHTTPClient.configureForTesting { _ in
             store.makeSession(outcomes: [
-                .success(Self.statusResponse(503, retryAfter: "999999999999999999999999")),
+                .success(Self.statusResponse(522, retryAfter: "999999999999999999999999")),
                 .success(Self.okResponse()),
             ])
         }
@@ -256,7 +256,7 @@ final class PluginHTTPClientTests: XCTestCase {
         // Opt-out for pollers, self-retrying callers, and teardown.
         let store = MockHTTPSessionStore()
         PluginHTTPClient.configureForTesting { _ in
-            store.makeSession(outcomes: [.success(Self.statusResponse(503)), .success(Self.okResponse())])
+            store.makeSession(outcomes: [.success(Self.statusResponse(522)), .success(Self.okResponse())])
         }
         let recorder = DelayRecorder()
         PluginHTTPClient.configureRetryForTesting(sleeper: { await recorder.record($0) })
@@ -265,7 +265,7 @@ final class PluginHTTPClientTests: XCTestCase {
             for: Self.request(path: "/opted-out"), retry: .disabled
         )
 
-        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 503)
+        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 522)
         XCTAssertEqual(store.sessions.first?.requestedPaths, ["/opted-out"])
         let delays = await recorder.delays
         XCTAssertTrue(delays.isEmpty)
@@ -350,6 +350,39 @@ final class PluginHTTPClientTests: XCTestCase {
                        "a GET is safe to repeat, so it uses the whole ladder")
     }
 
+    func testDoesNotRetry503OnANonIdempotentRequest() async throws {
+        // Conceded after two independent reviewers pointed at the same exposure:
+        // AssemblyAIPlugin.submitTranscription POSTs job creation through the default
+        // policy, so a 503 returned after the job was created would resubmit it.
+        let store = MockHTTPSessionStore()
+        PluginHTTPClient.configureForTesting { _ in
+            store.makeSession(outcomes: [.success(Self.statusResponse(503)), .success(Self.okResponse())])
+        }
+        PluginHTTPClient.configureRetryForTesting(sleeper: { _ in })
+        var post = Self.request(path: "/503")
+        post.httpMethod = "POST"
+
+        let (_, response) = try await PluginHTTPClient.data(for: post)
+
+        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 503)
+        XCTAssertEqual(store.sessions.first?.requestedPaths, ["/503"])
+    }
+
+    func testRetries503OnAnIdempotentRequest() async throws {
+        let store = MockHTTPSessionStore()
+        PluginHTTPClient.configureForTesting { _ in
+            store.makeSession(outcomes: [.success(Self.statusResponse(503)), .success(Self.okResponse())])
+        }
+        PluginHTTPClient.configureRetryForTesting(sleeper: { _ in })
+        var get = Self.request(path: "/503")
+        get.httpMethod = "GET"
+
+        let (_, response) = try await PluginHTTPClient.data(for: get)
+
+        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 200)
+        XCTAssertEqual(store.sessions.first?.requestedPaths, ["/503", "/503"])
+    }
+
     func testDoesNotRetryServerError500() async throws {
         // Deliberate exclusion: this client is shared by plugins that POST
         // side-effecting requests, and a 500 can mean the origin accepted the work
@@ -374,20 +407,20 @@ final class PluginHTTPClientTests: XCTestCase {
         // still sees the status and body and renders its own error.
         let store = MockHTTPSessionStore()
         PluginHTTPClient.configureForTesting { _ in
-            store.makeSession(outcomes: [.success(Self.statusResponse(503))])
+            store.makeSession(outcomes: [.success(Self.statusResponse(522))])
         }
         PluginHTTPClient.configureRetryForTesting(sleeper: { _ in })
 
         let (_, response) = try await PluginHTTPClient.data(for: Self.request(path: "/always-503"))
 
-        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 503)
+        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 522)
         XCTAssertEqual(store.sessions.first?.requestedPaths.count, PluginHTTPClient.retryMaxAttempts)
     }
 
     func testBackoffScheduleDoublesAcrossTheWholeLadder() async throws {
         let store = MockHTTPSessionStore()
         PluginHTTPClient.configureForTesting { _ in
-            store.makeSession(outcomes: [.success(Self.statusResponse(503))])
+            store.makeSession(outcomes: [.success(Self.statusResponse(522))])
         }
         let recorder = DelayRecorder()
         // jitterFraction 1.0 gives the un-jittered upper bound, which is the readable
@@ -426,7 +459,7 @@ final class PluginHTTPClientTests: XCTestCase {
         let store = MockHTTPSessionStore()
         PluginHTTPClient.configureForTesting { _ in
             store.makeSession(outcomes: [
-                .success(Self.statusResponse(503, retryAfter: "3")),
+                .success(Self.statusResponse(522, retryAfter: "3")),
                 .success(Self.okResponse()),
             ])
         }
@@ -444,14 +477,14 @@ final class PluginHTTPClientTests: XCTestCase {
         // Sleeping past the deadline is worse than giving up: the user is waiting.
         let store = MockHTTPSessionStore()
         PluginHTTPClient.configureForTesting { _ in
-            store.makeSession(outcomes: [.success(Self.statusResponse(503, retryAfter: "600"))])
+            store.makeSession(outcomes: [.success(Self.statusResponse(522, retryAfter: "600"))])
         }
         let recorder = DelayRecorder()
         PluginHTTPClient.configureRetryForTesting(sleeper: { await recorder.record($0) })
 
         let (_, response) = try await PluginHTTPClient.data(for: Self.request(path: "/503-long"))
 
-        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 503)
+        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 522)
         XCTAssertEqual(store.sessions.first?.requestedPaths, ["/503-long"])
         let delays = await recorder.delays
         XCTAssertTrue(delays.isEmpty, "must not sleep at all when Retry-After overshoots")
