@@ -7,7 +7,7 @@ final class RecentTranscriptionPaletteHandler {
     private let historyService: HistoryService
     private let recentTranscriptionStore: RecentTranscriptionStore
     private let relativeDateFormatter = RelativeDateTimeFormatter()
-    private var isInsertingLatest = false
+    private var isInsertionInProgress = false
 
     var onShowNotchFeedback: ((String, String, TimeInterval, Bool, String?) -> Void)?
     var getPreserveClipboard: (() -> Bool)?
@@ -31,18 +31,12 @@ final class RecentTranscriptionPaletteHandler {
 
     func insertLatest(currentState: DictationViewModel.State) {
         guard currentState == .idle else { return }
-        guard !isInsertingLatest else { return }
         guard let entry = recentTranscriptionStore.latestEntry(historyRecords: historyService.recentRecords) else {
             showNoRecentTranscriptionsFeedback()
             return
         }
 
-        isInsertingLatest = true
-        Task { @MainActor [weak self] in
-            guard let self else { return }
-            defer { isInsertingLatest = false }
-            await insert(entry)
-        }
+        startInsertion(entry)
     }
 
     func triggerSelection(currentState: DictationViewModel.State) {
@@ -80,9 +74,18 @@ final class RecentTranscriptionPaletteHandler {
             items: items
         ) { [weak self] item in
             guard let self, let entry = entriesByID[item.id] else { return }
-            Task { @MainActor in
-                await self.insert(entry)
-            }
+            self.startInsertion(entry)
+        }
+    }
+
+    private func startInsertion(_ entry: RecentTranscriptionStore.Entry) {
+        guard !isInsertionInProgress else { return }
+        isInsertionInProgress = true
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { isInsertionInProgress = false }
+            await insert(entry)
         }
     }
 
