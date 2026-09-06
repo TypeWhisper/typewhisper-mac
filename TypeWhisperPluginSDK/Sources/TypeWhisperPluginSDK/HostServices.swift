@@ -1287,8 +1287,12 @@ public struct PluginOpenAIChatHelper: Sendable {
             return text
         }
         if let parts = message["content"] as? [[String: Any]] {
-            return parts.compactMap { part in
-                (part["text"] as? String) ?? ((part["type"] as? String) == "text" ? part["content"] as? String : nil)
+            // Only typed text parts contribute. A `reasoning` (or any other
+            // typed) part may also carry a `text` field and must never be
+            // promoted into the visible answer.
+            return parts.compactMap { part -> String? in
+                guard (part["type"] as? String) == "text" else { return nil }
+                return (part["text"] as? String) ?? (part["content"] as? String)
             }.joined()
         }
         // null or absent content: an intentionally empty visible answer

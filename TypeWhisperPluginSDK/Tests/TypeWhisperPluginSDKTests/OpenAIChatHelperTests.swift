@@ -233,4 +233,15 @@ final class OpenAIChatHelperTests: XCTestCase {
         XCTAssertEqual(PluginOpenAIChatHelper.chatMessageContent(from: message), "")
     }
 
+    func testChatMessageContentIgnoresTypedReasoningPartsEvenWhenTheyCarryText() {
+        let message: [String: Any] = ["content": [
+            ["type": "reasoning", "text": "let me think"],
+            ["type": "text", "text": "Answer"],
+            ["type": "reasoning", "content": "more thinking"],
+            ["type": "text", "content": " two"],
+            ["text": "untyped part is not promoted"],
+        ]]
+        XCTAssertEqual(PluginOpenAIChatHelper.chatMessageContent(from: message), "Answer two")
+    }
+
 }

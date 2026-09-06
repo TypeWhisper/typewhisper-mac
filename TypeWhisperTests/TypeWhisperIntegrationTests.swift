@@ -9007,6 +9007,79 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testTwoEmptyModelsOfTheSameProviderAreNotConsensus() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let isolatedDefaults = Self.makeEmptyLLMFallbackDefaults()
+        defer { isolatedDefaults.defaults.removePersistentDomain(forName: isolatedDefaults.suiteName) }
+
+        // The fallback list may carry several models of one provider. One plugin
+        // deterministically answering empty twice is a single opinion, so real
+        // text must not be discarded on its say-so alone.
+        let provider = MockLLMProviderPlugin()
+        provider.configuredProviderId = "single-plugin"
+        provider.models = [
+            PluginModelInfo(id: "model-a", displayName: "Model A"),
+            PluginModelInfo(id: "model-b", displayName: "Model B"),
+        ]
+        provider.queuedProcessOutcomes = [.response(""), .response("")]
+
+        Self.installLLMFallbackTestProviders([provider], appSupportDirectory: appSupportDirectory)
+        let service = PromptProcessingService(userDefaults: isolatedDefaults.defaults)
+        service.addLLMFallback(providerId: provider.providerId, modelId: "model-a")
+        service.addLLMFallback(providerId: provider.providerId, modelId: "model-b")
+
+        do {
+            _ = try await service.process(prompt: "Fix grammar", text: "hello world")
+            XCTFail("Two empty answers from one provider must not count as consensus")
+        } catch let error as LLMFallbackExhaustedError {
+            XCTAssertEqual(error.failures.count, 2)
+            XCTAssertTrue(error.failures.allSatisfy { $0.reason.contains("empty") })
+        }
+        XCTAssertEqual(provider.processCallCount, 2, "no confirmation retry when every attempt was the same provider")
+    }
+
+    @MainActor
+    func testMixedOutcomeConfirmationRetryPreservesCancellation() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let isolatedDefaults = Self.makeEmptyLLMFallbackDefaults()
+        defer { isolatedDefaults.defaults.removePersistentDomain(forName: isolatedDefaults.suiteName) }
+
+        let emptyProvider = MockLLMProviderPlugin()
+        emptyProvider.configuredProviderId = "empty-opinion"
+        // First call answers empty, the confirmation retry hangs until cancelled.
+        emptyProvider.queuedProcessOutcomes = [.response(""), .waitForCancellation]
+        let broken = MockLLMProviderPlugin()
+        broken.configuredProviderId = "broken-parse"
+        broken.queuedProcessOutcomes = [.apiFailure("Failed to parse response")]
+
+        Self.installLLMFallbackTestProviders([emptyProvider, broken], appSupportDirectory: appSupportDirectory)
+        let service = PromptProcessingService(userDefaults: isolatedDefaults.defaults)
+        service.addLLMFallback(providerId: emptyProvider.providerId)
+        service.addLLMFallback(providerId: broken.providerId)
+
+        let processing = Task { @MainActor in
+            try await service.process(prompt: "Strip artifacts", text: "Thank you for watching!")
+        }
+        let deadline = ContinuousClock.now + .seconds(5)
+        while emptyProvider.processCallCount < 2, ContinuousClock.now < deadline {
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        XCTAssertEqual(emptyProvider.processCallCount, 2, "the confirmation retry must be in flight")
+        processing.cancel()
+
+        do {
+            let text = try await processing.value
+            XCTFail("A cancelled confirmation retry must not produce text for insertion (got \(text.debugDescription))")
+        } catch is CancellationError {
+            // expected
+        } catch let error as LLMFallbackExhaustedError {
+            XCTFail("Cancellation must not be reported as exhausted fallbacks: \(error)")
+        }
+    }
+
+    @MainActor
     func testExplicitWorkflowProviderAcceptsEmptyOutputConfirmedByRetry() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
