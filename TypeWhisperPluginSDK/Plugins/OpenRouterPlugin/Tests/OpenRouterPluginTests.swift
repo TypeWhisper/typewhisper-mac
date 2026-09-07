@@ -456,6 +456,89 @@ final class OpenRouterPluginTests: XCTestCase {
         XCTAssertEqual(retryBody["language"] as? String, "de")
     }
 
+    func testGenericProvider400RetriesOtherModelsWithWav() async throws {
+        let host = try PluginTestHostServices(secrets: ["api-key": "openrouter-key"])
+        let plugin = OpenRouterPlugin()
+        plugin.activate(host: host)
+        plugin.selectModel("example/new-transcription-model")
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"error":{"message":"Provider returned 400","code":400}}"#.utf8),
+                    Self.httpResponse(url: "https://openrouter.ai/api/v1/audio/transcriptions", statusCode: 400)
+                ),
+                .success(
+                    Data(#"{"text":"recovered transcript"}"#.utf8),
+                    Self.httpResponse(url: "https://openrouter.ai/api/v1/audio/transcriptions", statusCode: 200)
+                ),
+            ])
+        }
+
+        let result = try await plugin.transcribe(audio: Self.audio(), language: "de", translate: false, prompt: nil)
+        XCTAssertEqual(result.text, "recovered transcript")
+        let requests = store.sessions.flatMap(\.requestedRequests)
+        XCTAssertEqual(requests.count, 2)
+        for (index, request) in requests.enumerated() {
+            let body = try Self.jsonBody(from: request)
+            XCTAssertEqual(body["model"] as? String, "example/new-transcription-model")
+            XCTAssertEqual(body["language"] as? String, "de")
+            let audio = try XCTUnwrap(body["input_audio"] as? [String: Any])
+            XCTAssertEqual(audio["format"] as? String, index == 0 ? "m4a" : "wav")
+        }
+    }
+
+    func testGenericProvider400DoesNotRetryWavAgain() async throws {
+        for model in ["example/new-transcription-model", "microsoft/mai-transcribe-2"] {
+            PluginHTTPClientTestHarness.reset()
+            let host = try PluginTestHostServices(secrets: ["api-key": "openrouter-key"])
+            let plugin = OpenRouterPlugin()
+            plugin.activate(host: host)
+            plugin.selectModel(model)
+            let store = PluginHTTPClientSessionStore()
+            PluginHTTPClientTestHarness.configure { _ in
+                store.makeSession(outcomes: Array(repeating: .success(
+                    Data(#"{"error":{"message":"Provider returned 400","code":400}}"#.utf8),
+                    Self.httpResponse(url: "https://openrouter.ai/api/v1/audio/transcriptions", statusCode: 400)
+                ), count: 3))
+            }
+            do {
+                _ = try await plugin.transcribe(audio: Self.audio(), language: nil, translate: false, prompt: nil)
+                XCTFail("Expected provider error")
+            } catch {
+                guard case PluginTranscriptionError.apiError(let message) = error else {
+                    return XCTFail("Unexpected error: \(error)")
+                }
+                XCTAssertEqual(message, "HTTP 400: Provider returned 400")
+            }
+            XCTAssertEqual(store.sessions.flatMap(\.requestedRequests).count, model == "microsoft/mai-transcribe-2" ? 1 : 2)
+        }
+    }
+
+    func testExplicitRequestErrorsDoNotTriggerWavRetry() async throws {
+        for (status, message) in [(400, "Model not found"), (401, "Invalid API key"), (403, "Forbidden"), (429, "Rate limited")] {
+            PluginHTTPClientTestHarness.reset()
+            let host = try PluginTestHostServices(secrets: ["api-key": "openrouter-key"])
+            let plugin = OpenRouterPlugin()
+            plugin.activate(host: host)
+            let store = PluginHTTPClientSessionStore()
+            let responseData = try JSONSerialization.data(withJSONObject: ["error": ["message": message]])
+            PluginHTTPClientTestHarness.configure { _ in
+                store.makeSession(outcomes: [.success(
+                    responseData,
+                    Self.httpResponse(url: "https://openrouter.ai/api/v1/audio/transcriptions", statusCode: status)
+                )])
+            }
+            do {
+                _ = try await plugin.transcribe(audio: Self.audio(), language: nil, translate: false, prompt: nil)
+                XCTFail("Expected HTTP \(status)")
+            } catch {
+                XCTAssertTrue(error is PluginTranscriptionError)
+            }
+            XCTAssertEqual(store.sessions.flatMap(\.requestedRequests).count, 1, "HTTP \(status)")
+        }
+    }
+
     func testTranscriptionHTTPErrorMapping() {
         XCTAssertThrowsError(try OpenRouterPlugin.validateTranscriptionResponse(
             data: Data(#"{"error":{"message":"bad key"}}"#.utf8),
