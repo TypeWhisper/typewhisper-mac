@@ -226,6 +226,12 @@
             "state" : "translated",
             "value" : "取消方式"
           }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "キャンセル方法"
+          }
         }
       }
     },
@@ -241,6 +247,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "双次：按两次 Esc 取消。单次：按一次 Esc 取消。这两种方式都会显示 1.5 秒的取消提示。即时：按一次 Esc 取消，不显示提示。适用于录音和处理。"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "2回：Escキーを2回押してキャンセルします。1回：Escキーを1回押します。どちらもキャンセル通知を1.5秒間表示します。即時：Escキーを1回押すと、通知を表示せずにキャンセルします。録音中と処理中の両方に適用されます。"
           }
         }
       }
@@ -264,6 +276,12 @@
             "state" : "translated",
             "value" : "Double"
           }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "2回"
+          }
         }
       }
     },
@@ -286,6 +304,12 @@
             "state" : "translated",
             "value" : "Single"
           }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1回"
+          }
         }
       }
     },
@@ -307,6 +331,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Instant"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "即時"
           }
         }
       }
