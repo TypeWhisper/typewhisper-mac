@@ -161,6 +161,23 @@ final class SecureInputDiagnosticsProviderTests: XCTestCase {
 }
 
 final class TypeWhisperIntegrationTests: XCTestCase {
+    private var originalCancellationBehavior: Any?
+
+    override func setUp() {
+        super.setUp()
+        originalCancellationBehavior = UserDefaults.standard.object(forKey: UserDefaultsKeys.cancellationBehavior)
+        UserDefaults.standard.set(CancellationBehavior.doubleEscape.rawValue, forKey: UserDefaultsKeys.cancellationBehavior)
+    }
+
+    override func tearDown() {
+        if let originalCancellationBehavior {
+            UserDefaults.standard.set(originalCancellationBehavior, forKey: UserDefaultsKeys.cancellationBehavior)
+        } else {
+            UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.cancellationBehavior)
+        }
+        super.tearDown()
+    }
+
     private final class KeychainTokenProbe: @unchecked Sendable {
         private let lock = NSLock()
         private var loadCalls = 0
@@ -6041,7 +6058,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         context.audioRecordingService.startRecordingOverride = {
             startCount += 1
         }
-        context.dictationViewModel.requireSecondEscapeToCancelRecording = false
+        context.dictationViewModel.cancellationBehavior = .singleEscape
         context.dictationViewModel.state = .recording
         context.dictationViewModel.handleCancelHotkey()
         context.dictationViewModel.setActionFeedbackHovered(true)
@@ -6160,6 +6177,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         MockTranscriptionPlugin.reset()
         dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
         let context = try XCTUnwrap(dictationContext)
+        context.dictationViewModel.cancellationBehavior = .instant
         let stopGate = RecorderStartGate()
         var pasteCount = 0
 
@@ -7596,7 +7614,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             )
         )
         let context = try XCTUnwrap(dictationContext)
-        context.dictationViewModel.requireSecondEscapeToCancelRecording = false
+        context.dictationViewModel.cancellationBehavior = .instant
         context.audioRecordingService.hasMicrophonePermissionOverride = true
         context.audioRecordingService.startRecordingOverride = {
             audioStartEntered.fulfill()
@@ -7616,7 +7634,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         XCTAssertEqual(context.dictationViewModel.recordingDuration, 0)
         XCTAssertFalse(context.dictationViewModel.isRecordingInputReady)
-        XCTAssertEqual(context.dictationViewModel.state, .inserting)
+        XCTAssertEqual(context.dictationViewModel.state, .idle)
 
         audioStartGate.signal()
         await context.dictationViewModel.testingWaitForRecordingStart()
@@ -12774,6 +12792,72 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testCancellationModesApplyToRecordingAndProcessing() throws {
+        for behavior in CancellationBehavior.allCases {
+            for state in [DictationViewModel.State.recording, .processing] {
+                let directory = try TestSupport.makeTemporaryDirectory()
+                defer { TestSupport.remove(directory) }
+                let context = Self.makeDictationContext(appSupportDirectory: directory)
+                context.audioRecordingService.stopRecordingOverride = { _ in [] }
+                context.dictationViewModel.cancellationBehavior = behavior
+                context.dictationViewModel.state = state
+
+                context.dictationViewModel.handleCancelHotkey()
+                if behavior == .doubleEscape {
+                    XCTAssertEqual(context.dictationViewModel.state, state)
+                    XCTAssertNotNil(context.dictationViewModel.cancelWarningMessage)
+                    XCTAssertNil(context.dictationViewModel.actionFeedbackMessage)
+                    context.dictationViewModel.handleCancelHotkey()
+                }
+
+                XCTAssertNil(context.dictationViewModel.cancelWarningMessage)
+                if behavior == .instant {
+                    XCTAssertEqual(context.dictationViewModel.state, .idle)
+                    XCTAssertNil(context.dictationViewModel.actionFeedbackMessage)
+                } else {
+                    XCTAssertEqual(context.dictationViewModel.state, .inserting)
+                    XCTAssertEqual(context.dictationViewModel.actionFeedbackMessage, String(localized: "Cancelled"))
+                    XCTAssertEqual(context.dictationViewModel.actionDisplayDuration, 1.5)
+                }
+            }
+        }
+    }
+
+    @MainActor
+    func testInstantCancellationWaitsForOldRecorderBeforeStartingAgain() async throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(directory) }
+        let context = Self.makeDictationContext(appSupportDirectory: directory)
+        let stopGate = RecorderStartGate()
+        let newCaptureStarted = LockedFlag()
+        context.dictationViewModel.cancellationBehavior = .instant
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = { newCaptureStarted.set() }
+        context.audioRecordingService.stopRecordingOverride = { _ in
+            _ = await stopGate.enter()
+            await stopGate.waitForRelease()
+            return []
+        }
+        context.dictationViewModel.state = .recording
+        context.dictationViewModel.handleCancelHotkey()
+        XCTAssertEqual(context.dictationViewModel.state, .idle)
+        XCTAssertNil(context.dictationViewModel.actionFeedbackMessage)
+        await stopGate.waitForFirstEntry()
+
+        let newSession = context.dictationViewModel.apiStartRecording()
+        // Give a mistakenly unguarded recorder start time to reach the override.
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertFalse(newCaptureStarted.value)
+        await stopGate.release()
+        await context.dictationViewModel.apiWaitForRecordingReadiness()
+        XCTAssertTrue(newCaptureStarted.value)
+        XCTAssertEqual(context.dictationViewModel.state, .recording)
+        XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: newSession)?.status, .recording)
+        context.dictationViewModel.handleCancelHotkey()
+    }
+
+    @MainActor
     func testHandleCancelHotkey_firstEscapeDuringRecordingShowsWarningWithoutCancelling() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         var dictationContext: DictationContext?
@@ -12784,9 +12868,9 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
         let context = try XCTUnwrap(dictationContext)
-        let originalPreference = context.dictationViewModel.requireSecondEscapeToCancelRecording
-        defer { context.dictationViewModel.requireSecondEscapeToCancelRecording = originalPreference }
-        context.dictationViewModel.requireSecondEscapeToCancelRecording = true
+        let originalPreference = context.dictationViewModel.cancellationBehavior
+        defer { context.dictationViewModel.cancellationBehavior = originalPreference }
+        context.dictationViewModel.cancellationBehavior = .doubleEscape
         context.dictationViewModel.state = .recording
 
         context.dictationViewModel.handleCancelHotkey()
@@ -12810,9 +12894,9 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
         let context = try XCTUnwrap(dictationContext)
-        let originalPreference = context.dictationViewModel.requireSecondEscapeToCancelRecording
-        defer { context.dictationViewModel.requireSecondEscapeToCancelRecording = originalPreference }
-        context.dictationViewModel.requireSecondEscapeToCancelRecording = true
+        let originalPreference = context.dictationViewModel.cancellationBehavior
+        defer { context.dictationViewModel.cancellationBehavior = originalPreference }
+        context.dictationViewModel.cancellationBehavior = .doubleEscape
         context.dictationViewModel.state = .recording
 
         context.dictationViewModel.handleCancelHotkey()
@@ -12837,9 +12921,9 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
         let context = try XCTUnwrap(dictationContext)
-        let originalPreference = context.dictationViewModel.requireSecondEscapeToCancelRecording
-        defer { context.dictationViewModel.requireSecondEscapeToCancelRecording = originalPreference }
-        context.dictationViewModel.requireSecondEscapeToCancelRecording = false
+        let originalPreference = context.dictationViewModel.cancellationBehavior
+        defer { context.dictationViewModel.cancellationBehavior = originalPreference }
+        context.dictationViewModel.cancellationBehavior = .singleEscape
         context.dictationViewModel.state = .recording
 
         context.dictationViewModel.handleCancelHotkey()
@@ -12877,9 +12961,9 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             mediaPlaybackService: mediaPlaybackService
         )
         let context = try XCTUnwrap(dictationContext)
-        let originalPreference = context.dictationViewModel.requireSecondEscapeToCancelRecording
-        defer { context.dictationViewModel.requireSecondEscapeToCancelRecording = originalPreference }
-        context.dictationViewModel.requireSecondEscapeToCancelRecording = true
+        let originalPreference = context.dictationViewModel.cancellationBehavior
+        defer { context.dictationViewModel.cancellationBehavior = originalPreference }
+        context.dictationViewModel.cancellationBehavior = .doubleEscape
         context.audioRecordingService.stopRecordingOverride = { policy in
             events.append("stop_recording_\(policy.logDescription)")
             stopRecordingCalled.fulfill()
@@ -12909,9 +12993,9 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
         let context = try XCTUnwrap(dictationContext)
-        let originalPreference = context.dictationViewModel.requireSecondEscapeToCancelRecording
-        defer { context.dictationViewModel.requireSecondEscapeToCancelRecording = originalPreference }
-        context.dictationViewModel.requireSecondEscapeToCancelRecording = false
+        let originalPreference = context.dictationViewModel.cancellationBehavior
+        defer { context.dictationViewModel.cancellationBehavior = originalPreference }
+        context.dictationViewModel.cancellationBehavior = .doubleEscape
         context.dictationViewModel.state = .processing
 
         context.dictationViewModel.handleCancelHotkey()
@@ -12990,9 +13074,9 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
         let context = try XCTUnwrap(dictationContext)
-        let originalPreference = context.dictationViewModel.requireSecondEscapeToCancelRecording
-        defer { context.dictationViewModel.requireSecondEscapeToCancelRecording = originalPreference }
-        context.dictationViewModel.requireSecondEscapeToCancelRecording = true
+        let originalPreference = context.dictationViewModel.cancellationBehavior
+        defer { context.dictationViewModel.cancellationBehavior = originalPreference }
+        context.dictationViewModel.cancellationBehavior = .doubleEscape
         context.dictationViewModel.state = .recording
 
         context.dictationViewModel.handleCancelHotkey()

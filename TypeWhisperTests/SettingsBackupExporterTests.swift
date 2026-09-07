@@ -438,6 +438,60 @@ final class SettingsBackupExporterTests: XCTestCase {
         XCTAssertTrue(destination.usageStatisticsService.hasAnyStatistics)
     }
 
+    func testCancellationBehaviorBackupCompatibility() async throws {
+        let source = try makeFixture()
+        defer { teardown(source) }
+        let backup = SettingsBackupExporter.buildBackup(
+            workflowService: source.workflowService,
+            dictionaryService: source.dictionaryService,
+            snippetService: source.snippetService,
+            profileService: source.profileService,
+            promptActionService: source.promptActionService,
+            pluginManager: source.pluginManager,
+            historyService: source.historyService,
+            userDefaults: source.userDefaults
+        )
+        let cases: [(String?, Bool?, CancellationBehavior?)] = [
+            ("doubleEscape", nil, .doubleEscape),
+            ("singleEscape", nil, .singleEscape),
+            ("instant", true, .instant),
+            (nil, true, .doubleEscape),
+            (nil, false, .singleEscape),
+            ("unknown", false, .singleEscape),
+            ("unknown", nil, nil),
+            (nil, nil, nil)
+        ]
+        for (rawValue, legacyValue, expected) in cases {
+            var json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(backup)) as? [String: Any])
+            var preferences: [String: Any] = [:]
+            preferences["cancellationBehavior"] = rawValue
+            preferences["requireSecondEscapeToCancelRecording"] = legacyValue
+            json["preferences"] = preferences
+            let decoded = try JSONDecoder().decode(SettingsBackupExporter.SettingsBackup.self, from: JSONSerialization.data(withJSONObject: json))
+            let destination = try makeFixture()
+            defer { teardown(destination) }
+            destination.userDefaults.set("instant", forKey: UserDefaultsKeys.cancellationBehavior)
+            var applied: CancellationBehavior?
+            let result = await SettingsBackupExporter.importBackup(
+                decoded,
+                workflowService: destination.workflowService,
+                dictionaryService: destination.dictionaryService,
+                snippetService: destination.snippetService,
+                profileService: destination.profileService,
+                promptActionService: destination.promptActionService,
+                pluginManager: destination.pluginManager,
+                pluginRegistryService: destination.pluginRegistryService,
+                historyService: destination.historyService,
+                usageStatisticsService: destination.usageStatisticsService,
+                userDefaults: destination.userDefaults,
+                cancellationBehaviorDidChange: { applied = $0 }
+            )
+            XCTAssertEqual(applied, expected)
+            XCTAssertEqual(DictationViewModel.loadCancellationBehavior(defaults: destination.userDefaults), expected ?? .instant)
+            XCTAssertEqual(result.preferencesApplied, expected == nil ? 0 : 1)
+        }
+    }
+
     func testUpdateChannelAndPreferencesRoundTrip() async throws {
         let source = try makeFixture()
         defer { teardown(source) }
@@ -449,6 +503,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         source.userDefaults.set(0.35, forKey: UserDefaultsKeys.audioDuckingLevel)
         source.userDefaults.set(3, forKey: UserDefaultsKeys.indicatorTranscriptPreviewFontSizeOffset)
         source.userDefaults.set("overlay", forKey: UserDefaultsKeys.indicatorStyle)
+        source.userDefaults.set("instant", forKey: UserDefaultsKeys.cancellationBehavior)
         source.userDefaults.set(false, forKey: UserDefaultsKeys.indicatorVisibleInScreenCaptures)
         source.userDefaults.set(true, forKey: UserDefaultsKeys.liveFieldTranscriptEnabled)
         source.userDefaults.set(true, forKey: UserDefaultsKeys.recorderSystemAudioEnabled)
@@ -474,6 +529,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         XCTAssertEqual(backup.preferences.audioDuckingLevel, 0.35)
         XCTAssertEqual(backup.preferences.indicatorTranscriptPreviewFontSizeOffset, 3)
         XCTAssertEqual(backup.preferences.indicatorStyle, "overlay")
+        XCTAssertEqual(backup.preferences.cancellationBehavior, "instant")
         XCTAssertEqual(backup.preferences.indicatorVisibleInScreenCaptures, false)
         XCTAssertEqual(backup.preferences.liveFieldTranscriptEnabled, true)
         XCTAssertEqual(backup.preferences.recorderSystemAudioEnabled, true)
@@ -483,6 +539,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         defer { teardown(destination) }
         var appliedRecoveryRetentionPolicy: DictationRecoveryRetentionPolicy?
         var appliedLiveFieldTranscriptEnabled: Bool?
+        var appliedCancellationBehavior: CancellationBehavior?
 
         let result = await SettingsBackupExporter.importBackup(
             backup,
@@ -497,6 +554,7 @@ final class SettingsBackupExporterTests: XCTestCase {
             usageStatisticsService: destination.usageStatisticsService,
             userDefaults: destination.userDefaults,
             liveFieldTranscriptEnabledDidChange: { appliedLiveFieldTranscriptEnabled = $0 },
+            cancellationBehaviorDidChange: { appliedCancellationBehavior = $0 },
             recoveryRetentionPolicyDidChange: { appliedRecoveryRetentionPolicy = $0 }
         )
 
@@ -513,6 +571,8 @@ final class SettingsBackupExporterTests: XCTestCase {
         )
         XCTAssertEqual(destination.userDefaults.bool(forKey: UserDefaultsKeys.liveFieldTranscriptEnabled), true)
         XCTAssertEqual(appliedLiveFieldTranscriptEnabled, true)
+        XCTAssertEqual(appliedCancellationBehavior, .instant)
+        XCTAssertEqual(DictationViewModel.loadCancellationBehavior(defaults: destination.userDefaults), .instant)
         XCTAssertEqual(destination.userDefaults.integer(forKey: UserDefaultsKeys.dictationRecoveryRetentionDays), 7)
         XCTAssertEqual(appliedRecoveryRetentionPolicy, .sevenDays)
         XCTAssertNil(destination.userDefaults.string(forKey: UserDefaultsKeys.fileTranscriptionEngine))

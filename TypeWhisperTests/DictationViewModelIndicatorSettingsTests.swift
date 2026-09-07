@@ -142,28 +142,30 @@ final class DictationViewModelIndicatorSettingsTests: XCTestCase {
         XCTAssertTrue(DictationViewModel.loadTranscribeShortQuietClipsAggressively(defaults: defaults))
     }
 
-    func testRecordingCancelConfirmationDefaultsToEnabled() {
-        XCTAssertTrue(DictationViewModel.loadRequireSecondEscapeToCancelRecording(defaults: defaults))
+    func testCancellationBehaviorDefaultsToDoubleEscape() {
+        XCTAssertEqual(DictationViewModel.loadCancellationBehavior(defaults: defaults), .doubleEscape)
     }
 
-    func testRecordingCancelConfirmationPersistsWhenDisabled() {
-        DictationViewModel.persistRequireSecondEscapeToCancelRecording(false, defaults: defaults)
-
-        XCTAssertEqual(
-            defaults.object(forKey: UserDefaultsKeys.requireSecondEscapeToCancelRecording) as? Bool,
-            false
-        )
-        XCTAssertFalse(DictationViewModel.loadRequireSecondEscapeToCancelRecording(defaults: defaults))
+    func testCancellationBehaviorMigratesLegacyPreference() {
+        for enabled in [true, false] {
+            defaults.set(enabled, forKey: UserDefaultsKeys.requireSecondEscapeToCancelRecording)
+            XCTAssertEqual(DictationViewModel.loadCancellationBehavior(defaults: defaults), enabled ? .doubleEscape : .singleEscape)
+        }
     }
 
-    func testRecordingCancelConfirmationPersistsWhenEnabled() {
-        DictationViewModel.persistRequireSecondEscapeToCancelRecording(true, defaults: defaults)
+    func testCancellationBehaviorPersistsAllModesAndOverridesLegacyPreference() {
+        defaults.set(false, forKey: UserDefaultsKeys.requireSecondEscapeToCancelRecording)
+        for behavior in CancellationBehavior.allCases {
+            DictationViewModel.persistCancellationBehavior(behavior, defaults: defaults)
+            XCTAssertEqual(DictationViewModel.loadCancellationBehavior(defaults: defaults), behavior)
+        }
+    }
 
-        XCTAssertEqual(
-            defaults.object(forKey: UserDefaultsKeys.requireSecondEscapeToCancelRecording) as? Bool,
-            true
-        )
-        XCTAssertTrue(DictationViewModel.loadRequireSecondEscapeToCancelRecording(defaults: defaults))
+    func testInvalidCancellationBehaviorFallsBackToLegacyOrDefault() {
+        defaults.set("unknown", forKey: UserDefaultsKeys.cancellationBehavior)
+        XCTAssertEqual(DictationViewModel.loadCancellationBehavior(defaults: defaults), .doubleEscape)
+        defaults.set(false, forKey: UserDefaultsKeys.requireSecondEscapeToCancelRecording)
+        XCTAssertEqual(DictationViewModel.loadCancellationBehavior(defaults: defaults), .singleEscape)
     }
 
     func testMicrophoneBoostDefaultsToDisabled() {

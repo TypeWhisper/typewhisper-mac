@@ -218,10 +218,14 @@ struct AdvancedSettingsView: View {
                     )
                 }
 
-                Toggle(isOn: $dictation.requireSecondEscapeToCancelRecording) {
+                Picker(selection: $dictation.cancellationBehavior) {
+                    ForEach(CancellationBehavior.allCases, id: \.self) { behavior in
+                        Text(behavior.title).tag(behavior)
+                    }
+                } label: {
                     SettingsInfoLabel(
-                        title: String(localized: "Require second Esc press to cancel recording"),
-                        info: String(localized: "When disabled, pressing Esc once immediately discards the active recording.")
+                        title: String(localized: "Cancellation behavior"),
+                        info: String(localized: "Double: press Esc twice to cancel. Single: press Esc once. Both show a cancellation banner for 1.5 seconds. Instant: press Esc once without a banner. Applies to recording and processing.")
                     )
                 }
 
@@ -661,6 +665,9 @@ struct AdvancedSettingsView: View {
             usageStatisticsService: container.usageStatisticsService,
             liveFieldTranscriptEnabledDidChange: { enabled in
                 dictation.liveFieldTranscriptEnabled = enabled
+            },
+            cancellationBehaviorDidChange: { behavior in
+                dictation.cancellationBehavior = behavior
             },
             recoveryRetentionPolicyDidChange: { policy in
                 _ = container.audioRecordingService.updateRecoveryRetentionPolicy(policy)
