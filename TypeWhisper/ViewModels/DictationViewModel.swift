@@ -817,6 +817,10 @@ final class DictationViewModel: ObservableObject {
     }
 
 #if DEBUG
+    func testingWaitForRecordingCleanup() async {
+        await recordingCleanupTask?.value
+    }
+
     func testingWaitForRecordingStart() async {
         let startTask = recordingStartTask
         await startTask?.value
@@ -1748,6 +1752,7 @@ final class DictationViewModel: ObservableObject {
             stopRecordingTimer()
             _ = await audioRecordingService.stopRecording(policy: .immediate)
             audioRecordingService.discardActiveRecoveryRecording()
+            guard !Task.isCancelled else { return }
             if let sessionID {
                 failDictationSession(id: sessionID, error: discardMessage)
             }

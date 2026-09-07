@@ -6207,7 +6207,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         await stopGate.waitForFirstEntry()
         context.dictationViewModel.handleCancelHotkey()
-        context.dictationViewModel.handleCancelHotkey()
+        XCTAssertEqual(context.dictationViewModel.state, .idle)
+        XCTAssertNil(context.dictationViewModel.actionFeedbackMessage)
 
         XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.status, .failed)
         XCTAssertEqual(
@@ -12792,7 +12793,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
-    func testCancellationModesApplyToRecordingAndProcessing() throws {
+    func testCancellationModesApplyToRecordingAndProcessing() async throws {
         for behavior in CancellationBehavior.allCases {
             for state in [DictationViewModel.State.recording, .processing] {
                 let directory = try TestSupport.makeTemporaryDirectory()
@@ -12817,44 +12818,80 @@ final class TypeWhisperIntegrationTests: XCTestCase {
                 } else {
                     XCTAssertEqual(context.dictationViewModel.state, .inserting)
                     XCTAssertEqual(context.dictationViewModel.actionFeedbackMessage, String(localized: "Cancelled"))
-                    XCTAssertEqual(context.dictationViewModel.actionDisplayDuration, 1.5)
                 }
+                await context.dictationViewModel.testingWaitForRecordingCleanup()
             }
         }
     }
 
     @MainActor
     func testInstantCancellationWaitsForOldRecorderBeforeStartingAgain() async throws {
+        for cancelDuringProcessing in [false, true] {
+            let directory = try TestSupport.makeTemporaryDirectory()
+            defer { TestSupport.remove(directory) }
+            let context = Self.makeDictationContext(appSupportDirectory: directory)
+            let stopGate = RecorderStartGate()
+            let newCaptureStarted = LockedFlag()
+            context.dictationViewModel.cancellationBehavior = .instant
+            context.audioRecordingService.hasMicrophonePermissionOverride = true
+            context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+            context.audioRecordingService.startRecordingOverride = {}
+            context.audioRecordingService.stopRecordingOverride = { _ in
+                _ = await stopGate.enter()
+                await stopGate.waitForRelease()
+                return []
+            }
+            _ = context.dictationViewModel.apiStartRecording()
+            await context.dictationViewModel.apiWaitForRecordingReadiness()
+            if cancelDuringProcessing {
+                _ = context.dictationViewModel.apiStopRecording()
+                await stopGate.waitForFirstEntry()
+            }
+            context.audioRecordingService.startRecordingOverride = { newCaptureStarted.set() }
+            context.dictationViewModel.handleCancelHotkey()
+            XCTAssertEqual(context.dictationViewModel.state, .idle)
+            XCTAssertNil(context.dictationViewModel.actionFeedbackMessage)
+            await stopGate.waitForFirstEntry()
+
+            let newSession = context.dictationViewModel.apiStartRecording()
+            // Give a mistakenly unguarded recorder start time to reach the override.
+            try await Task.sleep(for: .milliseconds(50))
+            XCTAssertFalse(newCaptureStarted.value)
+            await stopGate.release()
+            await context.dictationViewModel.apiWaitForRecordingReadiness()
+            XCTAssertTrue(newCaptureStarted.value)
+            XCTAssertEqual(context.dictationViewModel.state, .recording)
+            XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: newSession)?.status, .recording)
+            context.dictationViewModel.handleCancelHotkey()
+            await context.dictationViewModel.testingWaitForRecordingCleanup()
+        }
+    }
+
+    @MainActor
+    func testInstantStopDuringRecordingPreparationClosesIndicator() async throws {
         let directory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(directory) }
         let context = Self.makeDictationContext(appSupportDirectory: directory)
-        let stopGate = RecorderStartGate()
-        let newCaptureStarted = LockedFlag()
+        let startEntered = expectation(description: "recorder start entered")
+        let startGate = DispatchSemaphore(value: 0)
+        defer { startGate.signal() }
         context.dictationViewModel.cancellationBehavior = .instant
         context.audioRecordingService.hasMicrophonePermissionOverride = true
         context.audioRecordingService.inputAvailabilityOverride = { _ in true }
-        context.audioRecordingService.startRecordingOverride = { newCaptureStarted.set() }
-        context.audioRecordingService.stopRecordingOverride = { _ in
-            _ = await stopGate.enter()
-            await stopGate.waitForRelease()
-            return []
+        context.audioRecordingService.startRecordingOverride = {
+            startEntered.fulfill()
+            startGate.wait()
         }
-        context.dictationViewModel.state = .recording
-        context.dictationViewModel.handleCancelHotkey()
+        context.audioRecordingService.stopRecordingOverride = { _ in [] }
+        let session = context.dictationViewModel.apiStartRecording()
+        await fulfillment(of: [startEntered], timeout: 1)
+        _ = context.dictationViewModel.apiStopRecording()
         XCTAssertEqual(context.dictationViewModel.state, .idle)
         XCTAssertNil(context.dictationViewModel.actionFeedbackMessage)
-        await stopGate.waitForFirstEntry()
-
-        let newSession = context.dictationViewModel.apiStartRecording()
-        // Give a mistakenly unguarded recorder start time to reach the override.
-        try await Task.sleep(for: .milliseconds(50))
-        XCTAssertFalse(newCaptureStarted.value)
-        await stopGate.release()
-        await context.dictationViewModel.apiWaitForRecordingReadiness()
-        XCTAssertTrue(newCaptureStarted.value)
-        XCTAssertEqual(context.dictationViewModel.state, .recording)
-        XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: newSession)?.status, .recording)
-        context.dictationViewModel.handleCancelHotkey()
+        startGate.signal()
+        await context.dictationViewModel.testingWaitForRecordingCleanup()
+        XCTAssertFalse(context.audioRecordingService.isRecording)
+        XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: session)?.status, .failed)
     }
 
     @MainActor

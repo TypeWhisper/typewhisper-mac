@@ -441,7 +441,7 @@ final class SettingsBackupExporterTests: XCTestCase {
     func testCancellationBehaviorBackupCompatibility() async throws {
         let source = try makeFixture()
         defer { teardown(source) }
-        let backup = SettingsBackupExporter.buildBackup(
+        let backup = try SettingsBackupExporter.buildBackup(
             workflowService: source.workflowService,
             dictionaryService: source.dictionaryService,
             snippetService: source.snippetService,
