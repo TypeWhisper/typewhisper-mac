@@ -383,6 +383,37 @@ final class OpenRouterPluginTests: XCTestCase {
         XCTAssertEqual(inputAudio["format"] as? String, "m4a")
     }
 
+    func testMAITranscribe2SendsWavOnFirstRequest() async throws {
+        let host = try PluginTestHostServices(secrets: ["api-key": "openrouter-key"])
+        let plugin = OpenRouterPlugin()
+        plugin.activate(host: host)
+        plugin.selectModel("microsoft/mai-transcribe-2")
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"text":"MAI transcript"}"#.utf8),
+                    Self.httpResponse(url: "https://openrouter.ai/api/v1/audio/transcriptions", statusCode: 200)
+                ),
+            ])
+        }
+
+        let audio = Self.audio()
+        let result = try await plugin.transcribe(audio: audio, language: "en", translate: false, prompt: nil)
+
+        XCTAssertEqual(result.text, "MAI transcript")
+        let requests = store.sessions.flatMap(\.requestedRequests)
+        XCTAssertEqual(requests.count, 1)
+        let body = try Self.jsonBody(from: XCTUnwrap(requests.first))
+        XCTAssertEqual(body["model"] as? String, "microsoft/mai-transcribe-2")
+        XCTAssertEqual(body["language"] as? String, "en")
+        let inputAudio = try XCTUnwrap(body["input_audio"] as? [String: Any])
+        XCTAssertEqual(inputAudio["format"] as? String, "wav")
+        let encodedAudio = try XCTUnwrap(inputAudio["data"] as? String)
+        XCTAssertEqual(Data(base64Encoded: encodedAudio), PluginAudioUploadEncoder.wavUpload(from: audio).data)
+    }
+
     func testTranscribeRetriesWithWavWhenM4AIsRejected() async throws {
         let host = try PluginTestHostServices(
             defaults: ["selectedModel": "openai/whisper-1"],

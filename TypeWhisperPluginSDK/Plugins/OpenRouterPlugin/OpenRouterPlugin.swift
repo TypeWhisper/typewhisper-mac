@@ -141,8 +141,15 @@ final class OpenRouterPlugin: NSObject,
             throw PluginTranscriptionError.apiError("OpenRouter speech-to-text does not support translation.")
         }
 
-        let preferredUpload = (try? PluginAudioUploadEncoder.compressedM4AUpload(from: audio))
-            ?? PluginAudioUploadEncoder.wavUpload(from: audio)
+        let preferredUpload: PluginAudioUploadFile
+        if modelId == "microsoft/mai-transcribe-2" {
+            // MAI rejects M4A with a generic provider 400, which cannot trigger
+            // the format-specific WAV retry. Send supported audio immediately.
+            preferredUpload = PluginAudioUploadEncoder.wavUpload(from: audio)
+        } else {
+            preferredUpload = (try? PluginAudioUploadEncoder.compressedM4AUpload(from: audio))
+                ?? PluginAudioUploadEncoder.wavUpload(from: audio)
+        }
         var request = try Self.makeTranscriptionRequest(
             uploadFile: preferredUpload,
             apiKey: apiKey,
