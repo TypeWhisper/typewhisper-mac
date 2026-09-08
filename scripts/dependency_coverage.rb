@@ -66,6 +66,7 @@ module DependencyCoverage
     expected = [["github-actions", "/"], ["swift", "/"], ["swift", "/TypeWhisperPluginSDK"], ["bundler", "/"]]
     raise "Dependabot directory coverage changed: #{coverage.inspect}" unless coverage.sort == expected.sort
     entries.each do |entry|
+      raise "Expected a limit of three open version-update PRs" unless entry["open-pull-requests-limit"] == 3
       raise "Security updates must target the default branch" if entry.key?("target-branch")
       raise "Expected weekly version checks" unless entry.dig("schedule", "interval") == "weekly"
       allow = [{ "dependency-name" => "*", "update-types" => %w[version-update:semver-minor version-update:semver-patch] }]

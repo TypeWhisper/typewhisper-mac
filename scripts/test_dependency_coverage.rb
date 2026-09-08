@@ -1,9 +1,28 @@
 # frozen_string_literal: true
 
 require "minitest/autorun"
+require "minitest/mock"
 require_relative "dependency_coverage"
 
 class DependencyCoverageTest < Minitest::Test
+  def test_check_rejects_missing_disabled_or_increased_pr_limits_for_each_ecosystem
+    original_read = DependencyCoverage.method(:read)
+    original_config = YAML.safe_load(original_read.call(".github/dependabot.yml"))
+    capture_io { DependencyCoverage.check }
+    original_config.fetch("updates").each_index do |index|
+      [nil, 0, 4].each do |limit|
+        config = Marshal.load(Marshal.dump(original_config))
+        entry = config.fetch("updates")[index]
+        limit.nil? ? entry.delete("open-pull-requests-limit") : entry["open-pull-requests-limit"] = limit
+        read = ->(path, sha = nil) { path == ".github/dependabot.yml" ? YAML.dump(config) : original_read.call(path, sha) }
+        DependencyCoverage.stub(:read, read) do
+          error = assert_raises(RuntimeError) { capture_io { DependencyCoverage.check } }
+          assert_equal "Expected a limit of three open version-update PRs", error.message
+        end
+      end
+    end
+  end
+
   def pin(state)
     { "identity" => "example", "kind" => "remoteSourceControl",
       "location" => "https://github.com/Owner/Example.git", "state" => state }
