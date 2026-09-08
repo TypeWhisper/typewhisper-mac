@@ -178,6 +178,17 @@ jobs:
           fi
           python3 scripts/assemble_community_plugin_registry.py
 
+      - name: Validate release manifest
+        run: |
+          MANIFEST="TypeWhisperPluginSDK/Plugins/${TARGET}/manifest.json"
+          if [ ! -f "$MANIFEST" ]; then
+            echo "Missing manifest for ${TARGET}: $MANIFEST"
+            exit 1
+          fi
+          python3 scripts/validate_plugin_release_manifest.py "$MANIFEST" --version "$PLUGIN_VERSION"
+          echo "Validated $MANIFEST for release $PLUGIN_VERSION"
+          cat "$MANIFEST"
+
       - name: Setup Xcode
         uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
@@ -188,59 +199,6 @@ jobs:
           xcodebuild -resolvePackageDependencies \
             -project TypeWhisper.xcodeproj \
             -scheme TypeWhisper
-
-      - name: Validate release manifest
-        run: |
-          MANIFEST="TypeWhisperPluginSDK/Plugins/${TARGET}/manifest.json"
-          if [ ! -f "$MANIFEST" ]; then
-            echo "Missing manifest for ${TARGET}: $MANIFEST"
-            exit 1
-          fi
-          export MANIFEST
-          python3 <<'PYEOF'
-          import json
-          import os
-          import re
-
-          manifest_path = os.environ["MANIFEST"]
-          expected_version = os.environ["PLUGIN_VERSION"]
-
-          with open(manifest_path) as manifest_file:
-              manifest = json.load(manifest_file)
-
-          actual_version = manifest.get("version")
-          if actual_version != expected_version:
-              raise SystemExit(
-                  f"manifest version {actual_version!r} does not match release version {expected_version!r}"
-              )
-
-          min_host_version = manifest.get("minHostVersion")
-          if not isinstance(min_host_version, str) or not re.fullmatch(
-              r"[0-9]+\.[0-9]+\.[0-9]+",
-              min_host_version,
-          ):
-              raise SystemExit(
-                  f"manifest minHostVersion {min_host_version!r} must be a release version like 1.6.0"
-              )
-          minimum_host_version = (1, 6, 0)
-          host_version = tuple(int(part) for part in min_host_version.split("."))
-          if host_version < minimum_host_version:
-              raise SystemExit(
-                  f"manifest minHostVersion {min_host_version!r} must be 1.6.0 or newer"
-              )
-
-          sdk_compatibility_version = manifest.get("sdkCompatibilityVersion")
-          if not isinstance(sdk_compatibility_version, str) or not re.fullmatch(
-              r"v[1-9][0-9]*",
-              sdk_compatibility_version,
-          ):
-              raise SystemExit(
-                  "manifest sdkCompatibilityVersion "
-                  f"{sdk_compatibility_version!r} must use the format vN"
-              )
-          PYEOF
-          echo "Validated $MANIFEST for release $PLUGIN_VERSION"
-          cat "$MANIFEST"
 
       - name: Build Plugin
         run: |
