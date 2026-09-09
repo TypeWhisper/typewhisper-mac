@@ -52,7 +52,7 @@ final class ObsidianPluginTests: XCTestCase {
 
         XCTAssertEqual(manifest.id, "com.typewhisper.obsidian")
         XCTAssertEqual(manifest.version, "1.1.0")
-        XCTAssertEqual(manifest.minHostVersion, "1.6.0")
+        XCTAssertEqual(manifest.minHostVersion, "1.7.0")
         XCTAssertEqual(manifest.sdkCompatibilityVersion, "v1")
     }
 

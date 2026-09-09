@@ -21,7 +21,7 @@ Create `Contents/Resources/manifest.json` in your bundle:
   "id": "com.yourname.myplugin",
   "name": "My Plugin",
   "version": "1.0.0",
-  "minHostVersion": "1.6.0",
+  "minHostVersion": "1.7.0",
   "sdkCompatibilityVersion": "v1",
   "minOSVersion": "14.0",
   "author": "Your Name",
@@ -31,9 +31,26 @@ Create `Contents/Resources/manifest.json` in your bundle:
 
 - `id` - Unique reverse-domain identifier
 - `principalClass` - Must match `@objc(ClassName)` on your plugin class
-- `minHostVersion` - Minimum published stable TypeWhisper version required; new releases must use `1.6.0` or newer. Official releases verify the built plugin's SDK imports against the framework shipped by this exact host release.
+- `minHostVersion` - Minimum published stable TypeWhisper version required; new releases must use `1.7.0` or newer. Official releases verify the built plugin's SDK imports against the framework shipped by this exact host release.
 - `sdkCompatibilityVersion` - Must match `PluginSDKCompatibility.currentVersion` for marketplace/external plugins
 - `minOSVersion` - Minimum macOS version required (plugin is skipped on older systems)
+
+New plugin releases are built from the TypeWhisper 1.7 SDK line and require at
+least TypeWhisper 1.7.0. Keep `sdkCompatibilityVersion` at `v1`; raising the host
+minimum does not change the SDK compatibility line. Validate a release manifest
+before building:
+
+```sh
+python3 scripts/validate_plugin_release_manifest.py path/to/manifest.json --version 1.0.0
+```
+
+The release workflow rejects older minimum hosts before building and verifies
+the resulting binary against the SDK shipped by the declared host release.
+Until stable 1.7.0 is published, manual preview releases require the explicit
+`allow_prerelease_host` option to use a matching 1.7.0 daily host for that check.
+Previously published plugin binaries and registry releases retain their original
+host requirements. Use a new plugin version for a new build; preserve old release
+entries so TypeWhisper 1.6 can keep selecting its newest compatible release.
 
 ### 3. Implement the Plugin
 
@@ -500,7 +517,7 @@ let wavData = PluginWavEncoder.encode(samples, sampleRate: 16000)
 | `id` | Yes | Unique reverse-domain ID (e.g. `com.yourname.myplugin`) |
 | `name` | Yes | Display name |
 | `version` | Yes | Semver string (e.g. `1.0.0`) |
-| `minHostVersion` | Yes | Minimum TypeWhisper version; new releases must use `1.6.0` or newer |
+| `minHostVersion` | Yes | Minimum TypeWhisper version; new releases must use `1.7.0` or newer |
 | `sdkCompatibilityVersion` | No | Exact plugin SDK compatibility line. Marketplace/external plugins must match `PluginSDKCompatibility.currentVersion`. |
 | `minOSVersion` | No | Minimum macOS version (e.g. `14.0`, `26.0`). Plugin is skipped on older systems. |
 | `author` | No | Author name |
