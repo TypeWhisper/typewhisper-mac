@@ -16,6 +16,10 @@ Usage: scripts/build-release-local.sh \
   [--release-tag TAG] \
   [--build-number NUMBER] \
   [--skip-dmg]
+
+A profile is required. Omit --profile when
+MACOS_ICLOUD_HELPER_DEVELOPER_ID_PROVISIONING_PROFILE_PATH is set.
+MACOS_DEVELOPER_ID_PROVISIONING_PROFILE_PATH is also accepted as a legacy fallback.
 USAGE
 }
 
