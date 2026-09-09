@@ -2710,6 +2710,27 @@ final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
         XCTAssertGreaterThanOrEqual(engineRunningProbeCalls, 2)
     }
 
+    func testIneligibleBluetoothClaimPreservesPreparedBuiltInInputAcrossDictations() {
+        let deviceID = AudioDeviceID(733)
+        let service = AudioRecordingService(
+            defaultInputController: FakeAudioInputDeviceDefaultController(defaultInputDeviceID: deviceID),
+            inputTransportResolver: FakeAudioDeviceTransportResolver(
+                transports: [deviceID: kAudioDeviceTransportTypeBuiltIn]
+            )
+        )
+        service.hasMicrophonePermissionOverride = true
+
+        for _ in 0..<3 {
+            let engine = AVAudioEngine()
+            service.testingSetPreparedBuiltInInput(engine, deviceID: deviceID)
+
+            XCTAssertFalse(service.testingClaimPreparedBluetoothInputIfEligible())
+            XCTAssertTrue(service.testingClaimPreparedBuiltInInputIfEligible() === engine)
+            XCTAssertTrue(service.testingCurrentAudioEngine() === engine)
+            service.testingSetAudioEngine(nil)
+        }
+    }
+
     func testPreparedBluetoothClaimTransfersActivationOwnershipAcrossDictations() {
         let preferenceKey = UserDefaultsKeys.airPodsInstantStartEnabled
         let originalPreference = UserDefaults.standard.object(forKey: preferenceKey)
