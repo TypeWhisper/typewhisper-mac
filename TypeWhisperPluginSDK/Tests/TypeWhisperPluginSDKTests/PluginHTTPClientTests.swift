@@ -473,6 +473,49 @@ final class PluginHTTPClientTests: XCTestCase {
         XCTAssertEqual(delays, [.seconds(3)], "Retry-After must win over the ladder")
     }
 
+    func testRetryAfterDecisionClassifiesAboveCeilingAsRefusal() {
+        // Unit-level pin on the classifier itself: a well-formed delta-seconds one second past
+        // the one-day ceiling is a refusal, not an absent header. This is what distinguishes the
+        // fix from the old behaviour at the decision boundary, independent of the retry loop.
+        let response = Self.statusResponse(503, retryAfter: "86401").1 as! HTTPURLResponse
+        XCTAssertEqual(PluginHTTPClient.retryAfterDecision(from: response), .refusal)
+    }
+
+    func testValidRetryAfterAboveCeilingRefusesRatherThanRetryingFast() async throws {
+        // Regression for the clamp bug. A well-formed Retry-After of 86401 (one second past the
+        // one-day ceiling) is a refusal, not a delay. The old code collapsed it into the same nil
+        // as an absent header, so a retryable status fell through to the ordinary ladder and
+        // retried with the same backoff an absent header would produce, when a Retry-After that
+        // large is a refusal that should stop the retries.
+        //
+        // The request MUST be a GET: this test exercises the isRetryableStatus ladder, and a 503
+        // is retryable only for idempotent methods. With the default POST it would return without
+        // retrying regardless of the fix, so the test would pass either way and pin nothing.
+        // With a GET, the pre-fix code retries once at ~0.5s (two requests, one sleep); the fixed
+        // code refuses (one request, no sleep). The 25s deadline is not the limiter here: a single
+        // 0.5s retry fits it, so what stops the retry is the refusal, not the budget.
+        var request = Self.request(path: "/refusal")
+        request.httpMethod = "GET"
+        request.httpBody = nil
+
+        let store = MockHTTPSessionStore()
+        PluginHTTPClient.configureForTesting { _ in
+            store.makeSession(outcomes: [
+                .success(Self.statusResponse(503, retryAfter: "86401")),
+                .success(Self.okResponse()),
+            ])
+        }
+        let recorder = DelayRecorder()
+        PluginHTTPClient.configureRetryForTesting(sleeper: { await recorder.record($0) }, jitterFraction: { 1.0 })
+
+        let (_, response) = try await PluginHTTPClient.data(for: request)
+
+        XCTAssertEqual((response as? HTTPURLResponse)?.statusCode, 503, "must not retry past a refusal")
+        XCTAssertEqual(store.sessions.first?.requestedPaths, ["/refusal"], "exactly one request")
+        let delays = await recorder.delays
+        XCTAssertTrue(delays.isEmpty, "must not sleep, and must not fall through to the ordinary ladder")
+    }
+
     func testStopsWhenRetryAfterExceedsRemainingBudget() async throws {
         // Sleeping past the deadline is worse than giving up: the user is waiting.
         let store = MockHTTPSessionStore()

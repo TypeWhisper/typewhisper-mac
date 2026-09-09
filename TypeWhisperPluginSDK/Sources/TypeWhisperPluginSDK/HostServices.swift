@@ -310,7 +310,23 @@ public enum PluginHTTPClient {
                     return (data, response)
                 }
 
-                let retryAfter = retryAfterDelay(from: http)
+                let decision = retryAfterDecision(from: http)
+
+                // A well-formed Retry-After beyond the honoured ceiling is a refusal, not
+                // a delay: the server is asking us to stay away for longer than we are
+                // ever willing to sleep. Stop, rather than falling through to the ladder
+                // and retrying almost immediately.
+                if case .refusal = decision {
+                    logger.warning("\(method) \(url) -> \(status), Retry-After beyond the honoured ceiling, treating as a refusal and not retrying")
+                    return (data, response)
+                }
+
+                let retryAfter: Duration?
+                if case let .after(delay) = decision {
+                    retryAfter = delay
+                } else {
+                    retryAfter = nil
+                }
 
                 // 429: one retry, only on an explicit Retry-After that fits.
                 if isRetryAfterOnlyStatus(http.statusCode) {
@@ -483,16 +499,33 @@ public enum PluginHTTPClient {
     ///
     /// The HTTP-date form is not honoured. It needs clock-skew handling to be safe and
     /// falls through to the ordinary ladder instead.
-    static func retryAfterDelay(from response: HTTPURLResponse) -> Duration? {
+    /// How to treat a `Retry-After` on a retryable response.
+    enum RetryAfterDecision: Equatable {
+        /// No usable header: absent, empty, non-integer, or negative. Fall through to
+        /// the ordinary backoff ladder.
+        case none
+        /// A usable delay. Honour it, subject to the remaining budget.
+        case after(Duration)
+        /// A well-formed delta-seconds beyond `maxHonouredRetryAfterSeconds`. This is a
+        /// refusal, not a delay, so we do not retry at all.
+        case refusal
+    }
+
+    static func retryAfterDecision(from response: HTTPURLResponse) -> RetryAfterDecision {
         guard let raw = response.value(forHTTPHeaderField: "Retry-After")?
             .trimmingCharacters(in: .whitespaces),
             let seconds = Int(raw),
-            seconds >= 0,
-            seconds <= maxHonouredRetryAfterSeconds
+            seconds >= 0
         else {
-            return nil
+            // Absent, empty, non-integer, or negative. Note an oversized value like
+            // "999999999999999999999999" also lands here: it overflows Int and parses
+            // as nil, so it is treated as an unusable header, not a refusal.
+            return .none
         }
-        return .seconds(seconds)
+        if seconds > maxHonouredRetryAfterSeconds {
+            return .refusal
+        }
+        return .after(.seconds(seconds))
     }
 
     /// A day. Anything longer is not a delay, it is a refusal, and we do not sleep on
