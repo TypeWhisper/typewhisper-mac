@@ -48,7 +48,7 @@ These surfaces remain part of `1.x`, but they are positioned as advanced or auto
   registry entries so 1.6 hosts retain compatible releases. Keep
   `sdkCompatibilityVersion` unchanged unless the SDK compatibility contract changes.
 - Keep release-channel behavior stable: RC and daily builds are prereleases, while Homebrew and stable website messaging update only at the final stable tag.
-- Tagged and manually dispatched app releases include iCloud sync by default, using the dedicated Developer ID provisioning profile for the isolated iCloud helper. Scheduled builds honor `MACOS_SCHEDULED_WITHOUT_ICLOUD`; manual dispatches retain the explicit `without_icloud` fallback.
+- Every app release (Daily, RC, stable, and local Developer ID build) includes iCloud through the isolated bridge. The production Developer ID provisioning profile is required; there is no no-iCloud release switch or scheduled fallback.
 
 ## Stability Contracts for `1.x`
 
@@ -97,7 +97,7 @@ are met:
   appear in the shared Sparkle appcast only on their own channels, and do not
   update Homebrew.
 - The appcast entry for preview builds advertises `minimumSystemVersion` `14.0`.
-- iCloud-enabled builds require the embedded production Developer ID provisioning profile and matching signed iCloud entitlements. Record real-device sync and Sparkle upgrade validation for the candidate in its release checklist. Automatic private iCloud sync remains hidden in explicit no-iCloud fallback builds.
+- Every release must include the bridge with its embedded production Developer ID provisioning profile and matching signed iCloud entitlements. Record real-device sync and Sparkle upgrade validation for the candidate in its release checklist.
 
 ## Manual Release Validation
 
