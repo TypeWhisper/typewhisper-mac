@@ -5,13 +5,13 @@
     <language>en</language>
     <description>Stable, release candidate, and daily updates for TypeWhisper.</description>
     <item>
-      <title>Version 1.7.0-daily.20260908</title>
-      <pubDate>Tue, 08 Sep 2026 09:02:29 +0000</pubDate>
-      <sparkle:version>1196</sparkle:version>
-      <sparkle:shortVersionString>1.7.0-daily.20260908</sparkle:shortVersionString>
+      <title>Version 1.7.0-daily.20260909</title>
+      <pubDate>Wed, 09 Sep 2026 09:11:57 +0000</pubDate>
+      <sparkle:version>1198</sparkle:version>
+      <sparkle:shortVersionString>1.7.0-daily.20260909</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <sparkle:channel>daily</sparkle:channel>
-      <enclosure url="https://github.com/TypeWhisper/typewhisper-mac/releases/download/v1.7.0-daily.20260908/TypeWhisper-v1.7.0-daily.20260908.zip" sparkle:edSignature="tWP6nSWarIkn4pn84vvMtMFjzHKu75FD9eQHRcPbs3h7/krF2CBcO+s86a513J8zfx7kmSRZE/fjVgiFXDZOCA==" length="13261111" type="application/octet-stream" />
+      <enclosure url="https://github.com/TypeWhisper/typewhisper-mac/releases/download/v1.7.0-daily.20260909/TypeWhisper-v1.7.0-daily.20260909.zip" sparkle:edSignature="U8oGwBfvjFekaDj73uHcHzEVOpuyA+sASVRzJy9lz30uLvjiQ0MWhXjxxjGB+s5/KZwhsVHMxD+yxwPpnEKSAw==" length="13261096" type="application/octet-stream" />
     </item>
     <item>
       <title>Version 1.6.0</title>
