@@ -94,6 +94,16 @@ jobs:
           build-mode: manual
           queries: security-and-quality
 
+      # CodeQL tracing can change Metal toolchain visibility on macOS 26.
+      # Check from the traced process environment, after init, before compiling MLX.
+      - name: Verify Metal toolchain after CodeQL initialization
+        run: |
+          if ! xcrun metal -v; then
+            xcodebuild -downloadComponent MetalToolchain
+          fi
+          xcrun --find metal
+          xcrun metal -v
+
       - name: Build Swift for CodeQL
         run: |
           set -o pipefail

@@ -44,7 +44,7 @@ These surfaces remain part of `1.x`, but they are positioned as advanced or auto
   backport branch only.
 - Preserve the `1.x` stability contracts for the HTTP API, CLI, plugin SDK, widgets, and watch folders.
 - New plugin release builds require `minHostVersion: "1.7.0"` or newer and use
-  the 1.7 SDK line. Preserve published plugin binaries and their historical
+  the SDK shipped with 1.7 on the current `v1` compatibility line. Preserve published plugin binaries and their historical
   registry entries so 1.6 hosts retain compatible releases. Keep
   `sdkCompatibilityVersion` unchanged unless the SDK compatibility contract changes.
 - Keep release-channel behavior stable: RC and daily builds are prereleases, while Homebrew and stable website messaging update only at the final stable tag.
