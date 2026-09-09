@@ -27,7 +27,7 @@ final class MCPClientPluginTests: XCTestCase {
 
         XCTAssertEqual(manifest.id, "com.typewhisper.mcp-client")
         XCTAssertEqual(manifest.version, "0.2.1")
-        XCTAssertEqual(manifest.minHostVersion, "1.6.0")
+        XCTAssertEqual(manifest.minHostVersion, "1.7.0")
         XCTAssertEqual(manifest.sdkCompatibilityVersion, "v1")
         XCTAssertEqual(manifest.category, "action")
 
