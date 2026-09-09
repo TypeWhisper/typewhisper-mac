@@ -177,6 +177,28 @@
         }
       }
     },
+    "Pricing unavailable": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Preis nicht verfügbar"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "料金情報なし"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "价格不可用"
+          }
+        }
+      }
+    },
     "Provider Default": {
       "localizations": {
         "de": {

@@ -269,9 +269,39 @@ final class VercelAIGatewayPluginTests: XCTestCase {
         XCTAssertEqual(plugin.supportedModels.first?.id, "openai/gpt-4o-mini")
     }
 
-    func testFreePricingLabel() {
-        let model = VercelAIGatewayFetchedModel(id: "x/y", name: "Y", inputPrice: "0", outputPrice: "0")
-        XCTAssertEqual(model.formattedPricing, "Free")
+    func testPricingLabelsDistinguishFreeFromUnknown() {
+        let free = VercelAIGatewayFetchedModel(id: "x/free", name: "Free", inputPrice: "0", outputPrice: "0")
+        XCTAssertEqual(free.formattedPricing, "Free")
+
+        let paid = VercelAIGatewayFetchedModel(id: "x/paid", name: "Paid", inputPrice: "0.00000015", outputPrice: "0.0000006")
+        XCTAssertEqual(paid.formattedPricing, "$0.15/$0.60 per 1M")
+
+        let unknown = VercelAIGatewayFetchedModel(id: "x/unknown", name: "Unknown")
+        XCTAssertEqual(unknown.formattedPricing, "Pricing unavailable")
+
+        let partial = VercelAIGatewayFetchedModel(id: "x/partial", name: "Partial", inputPrice: "0.000001", outputPrice: nil)
+        XCTAssertEqual(partial.formattedPricing, "Pricing unavailable")
+    }
+
+    func testFallbackModelsNeverClaimToBeFree() throws {
+        let host = try PluginTestHostServices()
+        let plugin = VercelAIGatewayPlugin()
+        plugin.activate(host: host)
+
+        // No catalogue fetched and nothing cached: every picker entry comes
+        // from the static fallback list and must not read as free.
+        for model in VercelAIGatewayPlugin.fallbackLLMModels + VercelAIGatewayPlugin.fallbackTranscriptionModels {
+            XCTAssertNil(model.inputPrice, model.id)
+            XCTAssertNil(model.outputPrice, model.id)
+            XCTAssertEqual(model.formattedPricing, "Pricing unavailable", model.id)
+        }
+    }
+
+    func testCatalogModelWithoutPricingIsUnknownNotFree() throws {
+        let catalog = try VercelAIGatewayPlugin.parseModelCatalog(Data(
+            #"{"data":[{"id":"x/no-price","name":"No Price","type":"language"},{"id":"x/zero","name":"Zero","type":"language","pricing":{"input":"0","output":"0"}}]}"#.utf8
+        ))
+        XCTAssertEqual(catalog.llmModels.map(\.formattedPricing), ["Pricing unavailable", "Free"])
     }
 
     // MARK: - Credits and key validation
@@ -598,7 +628,7 @@ final class VercelAIGatewayPluginTests: XCTestCase {
             for index in 0..<200 {
                 group.addTask {
                     let models = [
-                        VercelAIGatewayFetchedModel(id: "x/model-\(index)", name: "Model \(index)", inputPrice: "0", outputPrice: "0"),
+                        VercelAIGatewayFetchedModel(id: "x/model-\(index)", name: "Model \(index)"),
                     ]
                     plugin.setFetchedLLMModels(models)
                     plugin.selectLLMModel("x/model-\(index)")
@@ -618,6 +648,183 @@ final class VercelAIGatewayPluginTests: XCTestCase {
         XCTAssertEqual(plugin.supportedModels.count, 1)
         XCTAssertTrue(plugin.isAvailable)
         XCTAssertTrue(plugin.selectedLLMModelId?.hasPrefix("x/model-") ?? false)
+    }
+
+    // MARK: - API key save ordering
+
+    /// Lets a test decide when an injected validation completes, and observe
+    /// when a save has reached validation (i.e. has claimed its generation).
+    private final class ValidationGate: @unchecked Sendable {
+        private let lock = NSLock()
+        private var continuations: [String: CheckedContinuation<Bool, Never>] = [:]
+        private var pending: [String: Bool] = [:]
+        private var started: Set<String> = []
+        private var startWaiters: [String: CheckedContinuation<Void, Never>] = [:]
+
+        func wait(_ key: String) async -> Bool {
+            let startWaiter = lock.withLock {
+                started.insert(key)
+                return startWaiters.removeValue(forKey: key)
+            }
+            startWaiter?.resume()
+            return await withCheckedContinuation { continuation in
+                lock.withLock {
+                    if let verdict = pending.removeValue(forKey: key) {
+                        continuation.resume(returning: verdict)
+                    } else {
+                        continuations[key] = continuation
+                    }
+                }
+            }
+        }
+
+        func waitUntilStarted(_ key: String) async {
+            await withCheckedContinuation { continuation in
+                let alreadyStarted = lock.withLock {
+                    if started.contains(key) { return true }
+                    startWaiters[key] = continuation
+                    return false
+                }
+                if alreadyStarted { continuation.resume() }
+            }
+        }
+
+        func release(_ key: String, isValid: Bool) {
+            let continuation = lock.withLock {
+                let waiting = continuations.removeValue(forKey: key)
+                if waiting == nil { pending[key] = isValid }
+                return waiting
+            }
+            continuation?.resume(returning: isValid)
+        }
+    }
+
+    /// `saveApiKey` fetches the catalogue and the balance concurrently, and the
+    /// mock session hands out outcomes in call order, so a single body that
+    /// satisfies both parsers keeps these tests independent of scheduling.
+    private static func catalogAndCreditsOutcomes(balance: String) -> [PluginHTTPClientTestOutcome] {
+        let body = """
+        {"data":[{"id":"x/current","name":"Current","type":"language","pricing":{"input":"0.000001","output":"0.000002"}}],"balance":"\(balance)","total_used":"0"}
+        """
+        return [
+            .success(
+                Data(body.utf8),
+                Self.httpResponse(url: "https://ai-gateway.vercel.sh/v1/models", statusCode: 200)
+            ),
+        ]
+    }
+
+    func testSaveApiKeyDiscardsResultWhenSupersededByNewerSave() async throws {
+        let host = try PluginTestHostServices()
+        let plugin = VercelAIGatewayPlugin()
+        plugin.activate(host: host)
+        let gate = ValidationGate()
+
+        PluginHTTPClientTestHarness.configure { _ in
+            PluginHTTPClientMockSession(outcomes: Self.catalogAndCreditsOutcomes(balance: "42.00"))
+        }
+
+        let saveA = Task { await plugin.saveApiKey("vck_A", validate: { await gate.wait($0) }) }
+        await gate.waitUntilStarted("vck_A")
+        let saveB = Task { await plugin.saveApiKey("vck_B", validate: { await gate.wait($0) }) }
+        await gate.waitUntilStarted("vck_B")
+
+        // B finishes first and wins; A completes afterwards and must be dropped
+        // even though A's key was reported valid.
+        gate.release("vck_B", isValid: true)
+        let resultB = await saveB.value
+        gate.release("vck_A", isValid: true)
+        let resultA = await saveA.value
+
+        XCTAssertNil(resultA)
+        let unwrappedB = try XCTUnwrap(resultB)
+        XCTAssertTrue(unwrappedB.isValid)
+        XCTAssertEqual(unwrappedB.balance, 42)
+        XCTAssertEqual(unwrappedB.catalog.llmModels.map(\.id), ["x/current"])
+        XCTAssertTrue(plugin.isAvailable)
+        XCTAssertEqual(host.loadSecret(key: "api-key"), "vck_B")
+    }
+
+    func testStaleInvalidVerdictDoesNotOverrideNewerValidKey() async throws {
+        let host = try PluginTestHostServices()
+        let plugin = VercelAIGatewayPlugin()
+        plugin.activate(host: host)
+        let gate = ValidationGate()
+
+        PluginHTTPClientTestHarness.configure { _ in
+            PluginHTTPClientMockSession(outcomes: Self.catalogAndCreditsOutcomes(balance: "7.50"))
+        }
+
+        let saveOld = Task { await plugin.saveApiKey("vck_old", validate: { await gate.wait($0) }) }
+        await gate.waitUntilStarted("vck_old")
+        let saveNew = Task { await plugin.saveApiKey("vck_new", validate: { await gate.wait($0) }) }
+        await gate.waitUntilStarted("vck_new")
+
+        gate.release("vck_new", isValid: true)
+        let resultNew = await saveNew.value
+        gate.release("vck_old", isValid: false)
+        let resultOld = await saveOld.value
+
+        XCTAssertNil(resultOld, "A rejected verdict for a replaced key must not be published")
+        XCTAssertEqual(try XCTUnwrap(resultNew).isValid, true)
+        XCTAssertTrue(plugin.isAvailable)
+    }
+
+    func testRemovingKeyDuringValidationDiscardsPendingResult() async throws {
+        let host = try PluginTestHostServices()
+        let plugin = VercelAIGatewayPlugin()
+        plugin.activate(host: host)
+        let gate = ValidationGate()
+
+        PluginHTTPClientTestHarness.configure { _ in
+            PluginHTTPClientMockSession(outcomes: Self.catalogAndCreditsOutcomes(balance: "99.00"))
+        }
+
+        let save = Task { await plugin.saveApiKey("vck_A", validate: { await gate.wait($0) }) }
+        await gate.waitUntilStarted("vck_A")
+        plugin.removeApiKey()
+        gate.release("vck_A", isValid: true)
+        let result = await save.value
+
+        XCTAssertNil(result)
+        XCTAssertFalse(plugin.isAvailable)
+        // The test host keeps an empty string for a deleted secret.
+        XCTAssertEqual(host.loadSecret(key: "api-key") ?? "", "")
+        XCTAssertEqual(plugin.supportedModels.first?.id, "openai/gpt-4o-mini", "Catalogue from the cancelled save must not be published")
+        XCTAssertNil(host.userDefault(forKey: "fetchedModels"))
+    }
+
+    func testSaveApiKeyPublishesCatalogAndBalanceWhenCurrent() async throws {
+        let host = try PluginTestHostServices()
+        let plugin = VercelAIGatewayPlugin()
+        plugin.activate(host: host)
+
+        PluginHTTPClientTestHarness.configure { _ in
+            PluginHTTPClientMockSession(outcomes: Self.catalogAndCreditsOutcomes(balance: "12.00"))
+        }
+
+        let saved = await plugin.saveApiKey("vck_A", validate: { _ in true })
+        let result = try XCTUnwrap(saved)
+
+        XCTAssertTrue(result.isValid)
+        XCTAssertEqual(result.balance, 12)
+        XCTAssertEqual(plugin.supportedModels.map(\.id), ["x/current"])
+        XCTAssertNotNil(host.userDefault(forKey: "fetchedModels"))
+        XCTAssertEqual(host.loadSecret(key: "api-key"), "vck_A")
+    }
+
+    func testSaveApiKeyKeepsRejectedKeyStoredButReportsInvalid() async throws {
+        let host = try PluginTestHostServices()
+        let plugin = VercelAIGatewayPlugin()
+        plugin.activate(host: host)
+
+        let saved = await plugin.saveApiKey("vck_bad", validate: { _ in false })
+        let result = try XCTUnwrap(saved)
+
+        XCTAssertFalse(result.isValid)
+        XCTAssertNil(result.balance)
+        XCTAssertTrue(result.catalog.llmModels.isEmpty)
+        XCTAssertEqual(host.loadSecret(key: "api-key"), "vck_bad")
     }
 
     // MARK: - Helpers

@@ -41,6 +41,10 @@ final class VercelAIGatewayPlugin: NSObject,
         var llmTemperatureValue: Double = 0.3
         var fetchedLLMModels: [VercelAIGatewayFetchedModel] = []
         var fetchedTranscriptionModels: [VercelAIGatewayFetchedModel] = []
+        /// Bumped on every key save or removal. An in-flight validation
+        /// compares its captured value against this before publishing, so
+        /// key A's late completion cannot overwrite key B's status.
+        var apiKeyGeneration = 0
     }
 
     private let lock = NSLock()
@@ -157,11 +161,11 @@ final class VercelAIGatewayPlugin: NSObject,
         return !key.isEmpty
     }
 
-    fileprivate static let fallbackTranscriptionModels: [VercelAIGatewayFetchedModel] = [
-        VercelAIGatewayFetchedModel(id: "openai/whisper-1", name: "Whisper", inputPrice: "0", outputPrice: "0"),
-        VercelAIGatewayFetchedModel(id: "openai/gpt-4o-mini-transcribe", name: "GPT-4o mini Transcribe", inputPrice: "0", outputPrice: "0"),
-        VercelAIGatewayFetchedModel(id: "openai/gpt-4o-transcribe", name: "GPT-4o Transcribe", inputPrice: "0", outputPrice: "0"),
-        VercelAIGatewayFetchedModel(id: "google/gemini-3.5-transcribe", name: "Gemini 3.5 Transcribe", inputPrice: "0", outputPrice: "0"),
+    static let fallbackTranscriptionModels: [VercelAIGatewayFetchedModel] = [
+        VercelAIGatewayFetchedModel(id: "openai/whisper-1", name: "Whisper"),
+        VercelAIGatewayFetchedModel(id: "openai/gpt-4o-mini-transcribe", name: "GPT-4o mini Transcribe"),
+        VercelAIGatewayFetchedModel(id: "openai/gpt-4o-transcribe", name: "GPT-4o Transcribe"),
+        VercelAIGatewayFetchedModel(id: "google/gemini-3.5-transcribe", name: "Gemini 3.5 Transcribe"),
     ]
 
     var transcriptionModels: [PluginModelInfo] {
@@ -357,12 +361,12 @@ final class VercelAIGatewayPlugin: NSObject,
 
     var isAvailable: Bool { isConfigured }
 
-    fileprivate static let fallbackLLMModels: [VercelAIGatewayFetchedModel] = [
-        VercelAIGatewayFetchedModel(id: "openai/gpt-4o-mini", name: "GPT-4o mini", inputPrice: "0", outputPrice: "0"),
-        VercelAIGatewayFetchedModel(id: "openai/gpt-5.4-mini", name: "GPT 5.4 Mini", inputPrice: "0", outputPrice: "0"),
-        VercelAIGatewayFetchedModel(id: "anthropic/claude-haiku-4.5", name: "Claude Haiku 4.5", inputPrice: "0", outputPrice: "0"),
-        VercelAIGatewayFetchedModel(id: "anthropic/claude-sonnet-5", name: "Claude Sonnet 5", inputPrice: "0", outputPrice: "0"),
-        VercelAIGatewayFetchedModel(id: "google/gemini-3.5-flash", name: "Gemini 3.5 Flash", inputPrice: "0", outputPrice: "0"),
+    static let fallbackLLMModels: [VercelAIGatewayFetchedModel] = [
+        VercelAIGatewayFetchedModel(id: "openai/gpt-4o-mini", name: "GPT-4o mini"),
+        VercelAIGatewayFetchedModel(id: "openai/gpt-5.4-mini", name: "GPT 5.4 Mini"),
+        VercelAIGatewayFetchedModel(id: "anthropic/claude-haiku-4.5", name: "Claude Haiku 4.5"),
+        VercelAIGatewayFetchedModel(id: "anthropic/claude-sonnet-5", name: "Claude Sonnet 5"),
+        VercelAIGatewayFetchedModel(id: "google/gemini-3.5-flash", name: "Gemini 3.5 Flash"),
     ]
 
     var supportedModels: [PluginModelInfo] {
@@ -444,7 +448,7 @@ final class VercelAIGatewayPlugin: NSObject,
     // MARK: - API Key Management
 
     func setApiKey(_ key: String) {
-        updateState { $0.apiKey = key }
+        _ = beginApiKeyUpdate(key)
         if let host {
             do {
                 try host.storeSecret(key: Self.StorageKeys.apiKey, value: key)
@@ -456,7 +460,7 @@ final class VercelAIGatewayPlugin: NSObject,
     }
 
     func removeApiKey() {
-        updateState { $0.apiKey = nil }
+        _ = beginApiKeyUpdate(nil)
         if let host {
             do {
                 try host.storeSecret(key: Self.StorageKeys.apiKey, value: "")
@@ -465,6 +469,72 @@ final class VercelAIGatewayPlugin: NSObject,
             }
             host.notifyCapabilitiesChanged()
         }
+    }
+
+    /// Stores the key in memory and returns the generation token that any
+    /// asynchronous follow-up work must present via `isCurrentApiKeyUpdate`.
+    private func beginApiKeyUpdate(_ key: String?) -> Int {
+        lock.withLock {
+            state.apiKey = key
+            state.apiKeyGeneration += 1
+            return state.apiKeyGeneration
+        }
+    }
+
+    func isCurrentApiKeyUpdate(_ generation: Int) -> Bool {
+        readState { $0.apiKeyGeneration == generation }
+    }
+
+    /// Result of `saveApiKey`. `catalog` and `balance` are only populated
+    /// when the key validated.
+    struct ApiKeySaveResult: Sendable {
+        let isValid: Bool
+        let catalog: VercelAIGatewayModelCatalog
+        let balance: Double?
+    }
+
+    /// Persists the key, validates it, and loads the catalogue and balance.
+    /// Returns `nil` when a newer save or a removal superseded this call
+    /// while it was in flight; callers must then discard the outcome.
+    func saveApiKey(_ key: String) async -> ApiKeySaveResult? {
+        await saveApiKey(key, validate: { [self] in await validateApiKey($0) })
+    }
+
+    /// `validate` is injectable so tests can control completion order.
+    func saveApiKey(
+        _ key: String,
+        validate: @Sendable (String) async -> Bool
+    ) async -> ApiKeySaveResult? {
+        let generation = beginApiKeyUpdate(key)
+        if let host {
+            do {
+                try host.storeSecret(key: Self.StorageKeys.apiKey, value: key)
+            } catch {
+                print("[VercelAIGatewayPlugin] Failed to store API key: \(error)")
+            }
+            host.notifyCapabilitiesChanged()
+        }
+
+        let isValid = await validate(key)
+        guard isCurrentApiKeyUpdate(generation) else { return nil }
+        guard isValid else {
+            return ApiKeySaveResult(isValid: false, catalog: .empty, balance: nil)
+        }
+
+        async let catalogTask = fetchModelCatalog()
+        async let creditsTask = fetchCredits()
+        let (catalog, balance) = await (catalogTask, creditsTask)
+        guard isCurrentApiKeyUpdate(generation) else { return nil }
+
+        // Publish the catalogue from here so a superseded save can never
+        // reach `setFetched*` through the view.
+        if !catalog.llmModels.isEmpty {
+            setFetchedLLMModels(catalog.llmModels)
+        }
+        if !catalog.transcriptionModels.isEmpty {
+            setFetchedTranscriptionModels(catalog.transcriptionModels)
+        }
+        return ApiKeySaveResult(isValid: true, catalog: catalog, balance: balance)
     }
 
     /// `/v1/models` is public, so it cannot prove a key works. `/v1/credits`
@@ -532,20 +602,15 @@ final class VercelAIGatewayPlugin: NSObject,
                 VercelAIGatewayFetchedModel(
                     id: model.id,
                     name: model.name ?? model.id,
-                    inputPrice: model.pricing?.input ?? "0",
-                    outputPrice: model.pricing?.output ?? "0"
+                    inputPrice: model.pricing?.input,
+                    outputPrice: model.pricing?.output
                 )
             }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         let transcription = decoded.data
             .filter { $0.type == "transcription" && Self.supportsRecordedAudio($0) }
             .map { model in
-                VercelAIGatewayFetchedModel(
-                    id: model.id,
-                    name: model.name ?? model.id,
-                    inputPrice: "0",
-                    outputPrice: "0"
-                )
+                VercelAIGatewayFetchedModel(id: model.id, name: model.name ?? model.id)
             }
             .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
         return VercelAIGatewayModelCatalog(llmModels: llm, transcriptionModels: transcription)
@@ -623,15 +688,30 @@ struct VercelAIGatewayModelCatalog: Sendable {
 struct VercelAIGatewayFetchedModel: Codable, Sendable, Equatable {
     let id: String
     let name: String
-    /// USD per token, as returned by the gateway catalogue.
-    let inputPrice: String
-    let outputPrice: String
+    /// USD per token as returned by the gateway catalogue. `nil` means the
+    /// price is unknown (static fallback entry, or the catalogue omitted it),
+    /// which must never be rendered as free.
+    let inputPrice: String?
+    let outputPrice: String?
+
+    init(id: String, name: String, inputPrice: String? = nil, outputPrice: String? = nil) {
+        self.id = id
+        self.name = name
+        self.inputPrice = inputPrice
+        self.outputPrice = outputPrice
+    }
 
     var formattedPricing: String {
-        let inputPer1M = (Double(inputPrice) ?? 0) * 1_000_000
-        let outputPer1M = (Double(outputPrice) ?? 0) * 1_000_000
+        let bundle = Bundle(for: VercelAIGatewayPlugin.self)
+        guard let inputPrice, let outputPrice,
+              let inputPerToken = Double(inputPrice),
+              let outputPerToken = Double(outputPrice) else {
+            return String(localized: "Pricing unavailable", bundle: bundle)
+        }
+        let inputPer1M = inputPerToken * 1_000_000
+        let outputPer1M = outputPerToken * 1_000_000
         if inputPer1M == 0 && outputPer1M == 0 {
-            return String(localized: "Free", bundle: Bundle(for: VercelAIGatewayPlugin.self))
+            return String(localized: "Free", bundle: bundle)
         }
         return String(format: "$%.2f/$%.2f per 1M", inputPer1M, outputPer1M)
     }
@@ -726,6 +806,7 @@ private struct VercelAIGatewaySettingsView: View {
                     if plugin.isAvailable {
                         Button(String(localized: "Remove", bundle: bundle)) {
                             apiKeyInput = ""
+                            isValidating = false
                             validationResult = nil
                             creditBalance = nil
                             plugin.removeApiKey()
@@ -918,27 +999,17 @@ private struct VercelAIGatewaySettingsView: View {
         let trimmedKey = apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedKey.isEmpty else { return }
 
-        plugin.setApiKey(trimmedKey)
-
         isValidating = true
         validationResult = nil
         Task {
-            let isValid = await plugin.validateApiKey(trimmedKey)
-            if isValid {
-                async let catalogTask = plugin.fetchModelCatalog()
-                async let creditsTask = plugin.fetchCredits()
-                let (catalog, balance) = await (catalogTask, creditsTask)
-                await MainActor.run {
-                    isValidating = false
-                    validationResult = true
-                    creditBalance = balance
-                    applyCatalog(catalog)
-                }
-            } else {
-                await MainActor.run {
-                    isValidating = false
-                    validationResult = false
-                }
+            // `nil` means a later save or removal superseded this one; that
+            // call owns the UI state now.
+            guard let result = await plugin.saveApiKey(trimmedKey) else { return }
+            await MainActor.run {
+                isValidating = false
+                validationResult = result.isValid
+                creditBalance = result.balance
+                syncSelections(with: result.catalog)
             }
         }
     }
@@ -954,8 +1025,19 @@ private struct VercelAIGatewaySettingsView: View {
 
     private func applyCatalog(_ catalog: VercelAIGatewayModelCatalog) {
         if !catalog.llmModels.isEmpty {
-            fetchedLLMModels = catalog.llmModels
             plugin.setFetchedLLMModels(catalog.llmModels)
+        }
+        if !catalog.transcriptionModels.isEmpty {
+            plugin.setFetchedTranscriptionModels(catalog.transcriptionModels)
+        }
+        syncSelections(with: catalog)
+    }
+
+    /// Mirrors a freshly published catalogue into the pickers and moves a
+    /// selection that the catalogue no longer contains to the first entry.
+    private func syncSelections(with catalog: VercelAIGatewayModelCatalog) {
+        if !catalog.llmModels.isEmpty {
+            fetchedLLMModels = catalog.llmModels
             if !catalog.llmModels.contains(where: { $0.id == selectedLLMModel }),
                let first = catalog.llmModels.first {
                 selectedLLMModel = first.id
@@ -964,7 +1046,6 @@ private struct VercelAIGatewaySettingsView: View {
         }
         if !catalog.transcriptionModels.isEmpty {
             fetchedTranscriptionModels = catalog.transcriptionModels
-            plugin.setFetchedTranscriptionModels(catalog.transcriptionModels)
             if !catalog.transcriptionModels.contains(where: { $0.id == selectedTranscriptionModel }),
                let first = catalog.transcriptionModels.first {
                 selectedTranscriptionModel = first.id
