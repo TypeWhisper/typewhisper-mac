@@ -31,6 +31,36 @@ private class FirstMouseHostingView<Content: View>: NSHostingView<Content> {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
 
+/// Positions a fixed-size hosting view without involving SwiftUI in window sizing.
+private final class NotchHostingContainerView: NSView {
+    private let hostingView: NSView
+
+    init(hostingView: NSView, size: NSSize) {
+        self.hostingView = hostingView
+        super.init(frame: NSRect(origin: .zero, size: size))
+        hostingView.frame = bounds
+        hostingView.autoresizingMask = []
+        addSubview(hostingView)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func resizeSubviews(withOldSize oldSize: NSSize) {
+        // Flexible margins do not reliably center an oversized subview when
+        // both horizontal margins initially have zero width. Move only the
+        // origin: resizing the hosting view reintroduces the layout feedback loop.
+        let origin = NSPoint(
+            x: bounds.midX - hostingView.frame.width / 2,
+            y: bounds.maxY - hostingView.frame.height
+        )
+        if hostingView.frame.origin != origin {
+            hostingView.setFrameOrigin(origin)
+        }
+    }
+}
+
 /// Panel that visually extends the MacBook notch, centered over the hardware notch.
 /// Only shown on displays with a hardware notch - hidden on non-notch displays regardless of settings.
 class NotchIndicatorPanel: NSPanel {
@@ -132,14 +162,9 @@ class NotchIndicatorPanel: NSPanel {
         // NSInternalInconsistencyException from _postWindowNeedsUpdateConstraints,
         // which the display-cycle observer rethrows and the process aborts
         // (#1229). With the hosting view's size constant the root size never
-        // animates, so the bridge has nothing to animate. The flexible margins
-        // keep the fixed-size hosting view centered and top-anchored as the
-        // window shrinks to the toast size, so the notch cap stays put.
-        let container = NSView(frame: NSRect(origin: .zero, size: initialSize))
-        hostingView.frame = container.bounds
-        hostingView.autoresizingMask = [.minXMargin, .maxXMargin, .minYMargin]
-        container.addSubview(hostingView)
-        contentView = container
+        // animates, so the bridge has nothing to animate. The container explicitly
+        // centers and top-anchors the hosting view as the window changes size.
+        contentView = NotchHostingContainerView(hostingView: hostingView, size: initialSize)
     }
 
     override var canBecomeKey: Bool { false }
