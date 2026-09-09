@@ -28,14 +28,42 @@ final class VercelAIGatewayPlugin: NSObject,
     static let transcriptionURL = "\(baseURL)/v4/ai/transcription-model"
     static let apiKeysURL = "https://vercel.com/d?to=%2F%5Bteam%5D%2F%7E%2Fai-gateway%2Fapi-keys"
 
-    fileprivate var host: HostServices?
-    fileprivate var _apiKey: String?
-    fileprivate var _selectedModelId: String?
-    fileprivate var _selectedLLMModelId: String?
-    fileprivate var _llmTemperatureModeRaw: String = PluginLLMTemperatureMode.providerDefault.rawValue
-    fileprivate var _llmTemperatureValue: Double = 0.3
-    fileprivate var _fetchedLLMModels: [VercelAIGatewayFetchedModel] = []
-    fileprivate var _fetchedTranscriptionModels: [VercelAIGatewayFetchedModel] = []
+    /// `transcribe`/`process` are nonisolated async and run off the caller's
+    /// actor, while the settings view mutates configuration on the main actor.
+    /// Every read and write of this state goes through `lock` so a request
+    /// always sees a coherent key/model/temperature snapshot.
+    private struct State {
+        var host: HostServices?
+        var apiKey: String?
+        var selectedModelId: String?
+        var selectedLLMModelId: String?
+        var llmTemperatureModeRaw: String = PluginLLMTemperatureMode.providerDefault.rawValue
+        var llmTemperatureValue: Double = 0.3
+        var fetchedLLMModels: [VercelAIGatewayFetchedModel] = []
+        var fetchedTranscriptionModels: [VercelAIGatewayFetchedModel] = []
+    }
+
+    private let lock = NSLock()
+    private var state = State()
+
+    private func readState<T>(_ body: (State) -> T) -> T {
+        lock.withLock { body(state) }
+    }
+
+    /// Host callbacks (Keychain, defaults, capability notifications) run
+    /// outside the lock; the closure only updates in-memory state.
+    private func updateState(_ body: (inout State) -> Void) {
+        lock.withLock { body(&state) }
+    }
+
+    fileprivate var host: HostServices? { readState { $0.host } }
+    fileprivate var _apiKey: String? { readState { $0.apiKey } }
+    fileprivate var _selectedModelId: String? { readState { $0.selectedModelId } }
+    fileprivate var _selectedLLMModelId: String? { readState { $0.selectedLLMModelId } }
+    fileprivate var _llmTemperatureModeRaw: String { readState { $0.llmTemperatureModeRaw } }
+    fileprivate var _llmTemperatureValue: Double { readState { $0.llmTemperatureValue } }
+    fileprivate var _fetchedLLMModels: [VercelAIGatewayFetchedModel] { readState { $0.fetchedLLMModels } }
+    fileprivate var _fetchedTranscriptionModels: [VercelAIGatewayFetchedModel] { readState { $0.fetchedTranscriptionModels } }
 
     private static let chatRequestTimeout: TimeInterval = 30
     private static let transcriptionRequestTimeout: TimeInterval = 120
@@ -57,32 +85,41 @@ final class VercelAIGatewayPlugin: NSObject,
     }
 
     func activate(host: HostServices) {
-        self.host = host
-        _apiKey = host.loadSecret(key: Self.StorageKeys.apiKey)
+        var loaded = State()
+        loaded.host = host
+        loaded.apiKey = host.loadSecret(key: Self.StorageKeys.apiKey)
         if let data = host.userDefault(forKey: Self.StorageKeys.fetchedModels) as? Data,
            let models = try? JSONDecoder().decode([VercelAIGatewayFetchedModel].self, from: data) {
-            _fetchedLLMModels = models
+            loaded.fetchedLLMModels = models
         }
         if let data = host.userDefault(forKey: Self.StorageKeys.fetchedTranscriptionModels) as? Data,
            let models = try? JSONDecoder().decode([VercelAIGatewayFetchedModel].self, from: data) {
-            _fetchedTranscriptionModels = models
+            loaded.fetchedTranscriptionModels = models
         }
-        _selectedModelId = Self.resolvedStoredModelId(
+        loaded.llmTemperatureModeRaw = host.userDefault(forKey: Self.StorageKeys.llmTemperatureMode) as? String
+            ?? PluginLLMTemperatureMode.providerDefault.rawValue
+        loaded.llmTemperatureValue = host.userDefault(forKey: Self.StorageKeys.llmTemperatureValue) as? Double
+            ?? 0.3
+        updateState { $0 = loaded }
+
+        // Selections validate against the model lists, so resolve them once
+        // the lists above are published.
+        let selectedModelId = Self.resolvedStoredModelId(
             host.userDefault(forKey: Self.StorageKeys.selectedModel) as? String,
             availableModels: transcriptionModels,
             storageKey: Self.StorageKeys.selectedModel,
             host: host
         )
-        _selectedLLMModelId = Self.resolvedStoredModelId(
+        let selectedLLMModelId = Self.resolvedStoredModelId(
             host.userDefault(forKey: Self.StorageKeys.selectedLLMModel) as? String,
             availableModels: supportedModels,
             storageKey: Self.StorageKeys.selectedLLMModel,
             host: host
         )
-        _llmTemperatureModeRaw = host.userDefault(forKey: Self.StorageKeys.llmTemperatureMode) as? String
-            ?? PluginLLMTemperatureMode.providerDefault.rawValue
-        _llmTemperatureValue = host.userDefault(forKey: Self.StorageKeys.llmTemperatureValue) as? Double
-            ?? 0.3
+        updateState {
+            $0.selectedModelId = selectedModelId
+            $0.selectedLLMModelId = selectedLLMModelId
+        }
     }
 
     /// A persisted selection can point at a model the gateway has since retired.
@@ -107,7 +144,7 @@ final class VercelAIGatewayPlugin: NSObject,
     }
 
     func deactivate() {
-        host = nil
+        updateState { $0.host = nil }
     }
 
     // MARK: - TranscriptionEnginePlugin
@@ -139,7 +176,7 @@ final class VercelAIGatewayPlugin: NSObject,
     var selectedModelId: String? { _selectedModelId }
 
     func selectModel(_ modelId: String) {
-        _selectedModelId = modelId
+        updateState { $0.selectedModelId = modelId }
         host?.setUserDefault(modelId, forKey: Self.StorageKeys.selectedModel)
     }
 
@@ -147,10 +184,11 @@ final class VercelAIGatewayPlugin: NSObject,
     var dictionaryTermsSupport: DictionaryTermsSupport { .unsupported }
 
     func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
-        guard let apiKey = _apiKey, !apiKey.isEmpty else {
+        let (storedApiKey, storedModelId) = readState { ($0.apiKey, $0.selectedModelId) }
+        guard let apiKey = storedApiKey, !apiKey.isEmpty else {
             throw PluginTranscriptionError.notConfigured
         }
-        guard let modelId = _selectedModelId?.trimmingCharacters(in: .whitespacesAndNewlines),
+        guard let modelId = storedModelId?.trimmingCharacters(in: .whitespacesAndNewlines),
               !modelId.isEmpty else {
             throw PluginTranscriptionError.noModelSelected
         }
@@ -349,22 +387,33 @@ final class VercelAIGatewayPlugin: NSObject,
         model: String?,
         temperatureDirective: PluginLLMTemperatureDirective
     ) async throws -> String {
-        guard let apiKey = _apiKey, !apiKey.isEmpty else {
+        let snapshot = readState { state in
+            (
+                apiKey: state.apiKey,
+                selectedModelId: state.selectedLLMModelId,
+                fallbackModels: state.fetchedLLMModels.isEmpty ? Self.fallbackLLMModels : state.fetchedLLMModels,
+                temperature: PluginLLMTemperatureDirective(
+                    mode: PluginLLMTemperatureMode(rawValue: state.llmTemperatureModeRaw) ?? .providerDefault,
+                    value: state.llmTemperatureValue
+                )
+            )
+        }
+        guard let apiKey = snapshot.apiKey, !apiKey.isEmpty else {
             throw PluginChatError.notConfigured
         }
-        let modelId = model ?? _selectedLLMModelId ?? supportedModels.first!.id
+        let modelId = model ?? snapshot.selectedModelId ?? snapshot.fallbackModels.first!.id
         return try await chatHelper.process(
             apiKey: apiKey,
             model: modelId,
             systemPrompt: systemPrompt,
             userText: userText,
-            temperature: providerTemperatureDirective.resolvedTemperature(applying: temperatureDirective),
+            temperature: snapshot.temperature.resolvedTemperature(applying: temperatureDirective),
             requestTimeout: Self.chatRequestTimeout
         )
     }
 
     func selectLLMModel(_ modelId: String) {
-        _selectedLLMModelId = modelId
+        updateState { $0.selectedLLMModelId = modelId }
         host?.setUserDefault(modelId, forKey: Self.StorageKeys.selectedLLMModel)
     }
 
@@ -374,18 +423,15 @@ final class VercelAIGatewayPlugin: NSObject,
         PluginLLMTemperatureMode(rawValue: _llmTemperatureModeRaw) ?? .providerDefault
     }
     var llmTemperatureValue: Double { _llmTemperatureValue }
-    fileprivate var providerTemperatureDirective: PluginLLMTemperatureDirective {
-        PluginLLMTemperatureDirective(mode: llmTemperatureMode, value: _llmTemperatureValue)
-    }
 
     func setLLMTemperatureMode(_ mode: PluginLLMTemperatureMode) {
-        _llmTemperatureModeRaw = mode.rawValue
+        updateState { $0.llmTemperatureModeRaw = mode.rawValue }
         host?.setUserDefault(mode.rawValue, forKey: Self.StorageKeys.llmTemperatureMode)
     }
 
     func setLLMTemperatureValue(_ value: Double) {
         let clamped = min(max(value, 0.0), 2.0)
-        _llmTemperatureValue = clamped
+        updateState { $0.llmTemperatureValue = clamped }
         host?.setUserDefault(clamped, forKey: Self.StorageKeys.llmTemperatureValue)
     }
 
@@ -398,7 +444,7 @@ final class VercelAIGatewayPlugin: NSObject,
     // MARK: - API Key Management
 
     func setApiKey(_ key: String) {
-        _apiKey = key
+        updateState { $0.apiKey = key }
         if let host {
             do {
                 try host.storeSecret(key: Self.StorageKeys.apiKey, value: key)
@@ -410,7 +456,7 @@ final class VercelAIGatewayPlugin: NSObject,
     }
 
     func removeApiKey() {
-        _apiKey = nil
+        updateState { $0.apiKey = nil }
         if let host {
             do {
                 try host.storeSecret(key: Self.StorageKeys.apiKey, value: "")
@@ -442,7 +488,7 @@ final class VercelAIGatewayPlugin: NSObject,
     // MARK: - Model Fetching
 
     func setFetchedLLMModels(_ models: [VercelAIGatewayFetchedModel]) {
-        _fetchedLLMModels = models
+        updateState { $0.fetchedLLMModels = models }
         if let data = try? JSONEncoder().encode(models) {
             host?.setUserDefault(data, forKey: Self.StorageKeys.fetchedModels)
         }
@@ -450,7 +496,7 @@ final class VercelAIGatewayPlugin: NSObject,
     }
 
     func setFetchedTranscriptionModels(_ models: [VercelAIGatewayFetchedModel]) {
-        _fetchedTranscriptionModels = models
+        updateState { $0.fetchedTranscriptionModels = models }
         if let data = try? JSONEncoder().encode(models) {
             host?.setUserDefault(data, forKey: Self.StorageKeys.fetchedTranscriptionModels)
         }
@@ -628,6 +674,15 @@ private struct VercelAIGatewaySettingsView: View {
         filtered(models: transcriptionModels, searchText: transcriptionSearchText)
     }
 
+    /// A rejected key stays stored (matching the other cloud plugins, so an
+    /// offline save is not lost), so Save must remain reachable whenever the
+    /// field no longer matches the stored key.
+    private var hasUnsavedApiKeyInput: Bool {
+        let trimmed = apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return !plugin.isAvailable }
+        return trimmed != (plugin._apiKey ?? "")
+    }
+
     private func filtered(models: [VercelAIGatewayFetchedModel], searchText: String) -> [VercelAIGatewayFetchedModel] {
         if searchText.isEmpty { return models }
         let query = searchText.lowercased()
@@ -644,11 +699,11 @@ private struct VercelAIGatewaySettingsView: View {
 
                 HStack(spacing: 8) {
                     if showApiKey {
-                        TextField("API Key", text: $apiKeyInput)
+                        TextField(String(localized: "API Key", bundle: bundle), text: $apiKeyInput)
                             .textFieldStyle(.roundedBorder)
                             .font(.system(.body, design: .monospaced))
                     } else {
-                        SecureField("API Key", text: $apiKeyInput)
+                        SecureField(String(localized: "API Key", bundle: bundle), text: $apiKeyInput)
                             .textFieldStyle(.roundedBorder)
                     }
 
@@ -658,6 +713,15 @@ private struct VercelAIGatewaySettingsView: View {
                         Image(systemName: showApiKey ? "eye.slash" : "eye")
                     }
                     .buttonStyle(.borderless)
+
+                    if hasUnsavedApiKeyInput {
+                        Button(String(localized: "Save", bundle: bundle)) {
+                            saveApiKey()
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                        .disabled(apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
 
                     if plugin.isAvailable {
                         Button(String(localized: "Remove", bundle: bundle)) {
@@ -669,13 +733,6 @@ private struct VercelAIGatewaySettingsView: View {
                         .buttonStyle(.bordered)
                         .controlSize(.small)
                         .foregroundStyle(.red)
-                    } else {
-                        Button(String(localized: "Save", bundle: bundle)) {
-                            saveApiKey()
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.small)
-                        .disabled(apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
                 }
 
@@ -802,7 +859,7 @@ private struct VercelAIGatewaySettingsView: View {
                     Text("Temperature", bundle: bundle)
                         .font(.headline)
 
-                    Picker("Temperature Mode", selection: $llmTemperatureMode) {
+                    Picker(String(localized: "Temperature Mode", bundle: bundle), selection: $llmTemperatureMode) {
                         Text("Provider Default", bundle: bundle).tag(PluginLLMTemperatureMode.providerDefault)
                         Text("Custom", bundle: bundle).tag(PluginLLMTemperatureMode.custom)
                     }

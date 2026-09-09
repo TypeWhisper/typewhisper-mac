@@ -586,6 +586,40 @@ final class VercelAIGatewayPluginTests: XCTestCase {
         XCTAssertThrowsError(try VercelAIGatewayPlugin.parseTranscriptionResponse(Data(#"{"warnings":[]}"#.utf8)))
     }
 
+    func testConcurrentSettingsMutationsDoNotCorruptState() async throws {
+        let host = try PluginTestHostServices(secrets: ["api-key": "vck_test"])
+        let plugin = VercelAIGatewayPlugin()
+        plugin.activate(host: host)
+
+        // Hammer writers and readers from many tasks at once. With unguarded
+        // state this trips the Swift runtime's exclusivity checks or tears the
+        // model arrays; with the lock every read sees a whole value.
+        await withTaskGroup(of: Void.self) { group in
+            for index in 0..<200 {
+                group.addTask {
+                    let models = [
+                        VercelAIGatewayFetchedModel(id: "x/model-\(index)", name: "Model \(index)", inputPrice: "0", outputPrice: "0"),
+                    ]
+                    plugin.setFetchedLLMModels(models)
+                    plugin.selectLLMModel("x/model-\(index)")
+                    plugin.setLLMTemperatureValue(Double(index % 20) / 10)
+                    plugin.setApiKey(index.isMultiple(of: 2) ? "vck_even" : "vck_odd")
+                }
+                group.addTask {
+                    _ = plugin.supportedModels
+                    _ = plugin.selectedLLMModelId
+                    _ = plugin.llmTemperatureValue
+                    _ = plugin.isAvailable
+                    _ = plugin.transcriptionModels
+                }
+            }
+        }
+
+        XCTAssertEqual(plugin.supportedModels.count, 1)
+        XCTAssertTrue(plugin.isAvailable)
+        XCTAssertTrue(plugin.selectedLLMModelId?.hasPrefix("x/model-") ?? false)
+    }
+
     // MARK: - Helpers
 
     private static func audio() -> AudioData {
