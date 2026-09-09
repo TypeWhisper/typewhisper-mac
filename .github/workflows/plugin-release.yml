@@ -253,7 +253,7 @@ jobs:
               "LD_RUNPATH_SEARCH_PATHS=@loader_path/../Frameworks"
             )
           fi
-          xcodebuild -project TypeWhisper.xcodeproj \
+          xcodebuild -skipPackagePluginValidation -project TypeWhisper.xcodeproj \
             -target "$TARGET" \
             -configuration Release \
             SYMROOT="$(pwd)/build" \

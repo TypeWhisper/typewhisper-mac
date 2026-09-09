@@ -212,6 +212,8 @@ echo "Archiving $release_tag (build $build_number, channel $release_channel)"
 
 set -o pipefail
 archive_arguments=(
+  # The pinned MLX dependency includes CudaBuild (a no-op on macOS).
+  -skipPackagePluginValidation
   archive
   -project "$project" \
   -scheme "$scheme" \

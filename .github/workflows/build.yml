@@ -57,7 +57,7 @@ jobs:
       - name: Build App
         run: |
           set -o pipefail
-          xcodebuild -project $PROJECT \
+          xcodebuild -skipPackagePluginValidation -project $PROJECT \
             -scheme $SCHEME \
             -configuration Release \
             -derivedDataPath build \
@@ -135,7 +135,7 @@ jobs:
       - name: Run App Tests
         run: |
           set -o pipefail
-          xcodebuild test -project $PROJECT \
+          xcodebuild test -skipPackagePluginValidation -project $PROJECT \
             -scheme $SCHEME \
             -destination 'platform=macOS,arch=arm64' \
             -parallel-testing-enabled NO \

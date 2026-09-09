@@ -97,7 +97,7 @@ jobs:
       - name: Build Swift for CodeQL
         run: |
           set -o pipefail
-          xcodebuild -project "$PROJECT" \
+          xcodebuild -skipPackagePluginValidation -project "$PROJECT" \
             -scheme "$SCHEME" \
             -configuration Debug \
             -derivedDataPath codeql-build \
