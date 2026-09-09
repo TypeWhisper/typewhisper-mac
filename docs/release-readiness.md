@@ -4,8 +4,8 @@ This document defines the release and maintenance gates for the current `1.x`
 product path, with stable `1.6.0` as its published baseline.
 
 TypeWhisper `1.x` is a stable direct-download release line for macOS. The Mac
-App Store remains out of scope. The `main` branch is the current `1.6`
-development and maintenance line. The `release/1.5` branch is retained only for
+App Store remains out of scope. The `main` branch is the current `1.7`
+development line. The `release/1.5` branch is retained only for
 explicitly approved legacy backports; it is no longer the stable baseline.
 
 ## Audience
@@ -36,14 +36,17 @@ These surfaces remain part of `1.x`, but they are positioned as advanced or auto
 - Widgets
 - Watch Folder
 
-## `1.6` Maintenance Focus
+## `1.7` Development and `1.6` Compatibility
 
-- Keep `main` on the current `1.6` version line; daily builds currently publish
-  as `v1.6.0-daily.*`.
+- Keep `main` on the current `1.7` version line; daily builds publish
+  as `v1.7.0-daily.*`.
 - Treat stable `1.6.0` as the release baseline and `release/1.5` as a legacy
   backport branch only.
 - Preserve the `1.x` stability contracts for the HTTP API, CLI, plugin SDK, widgets, and watch folders.
-- Avoid raising plugin `minHostVersion` values to `1.6.0` unless a plugin genuinely requires new host APIs.
+- New plugin release builds require `minHostVersion: "1.7.0"` or newer and use
+  the 1.7 SDK line. Preserve published plugin binaries and their historical
+  registry entries so 1.6 hosts retain compatible releases. Keep
+  `sdkCompatibilityVersion` unchanged unless the SDK compatibility contract changes.
 - Keep release-channel behavior stable: RC and daily builds are prereleases, while Homebrew and stable website messaging update only at the final stable tag.
 - Keep tagged app releases on the no-iCloud distribution path until the production container and Developer ID provisioning profile are approved and validated. Tag pushes matching `v*` therefore build without automatic private iCloud sync; scheduled builds continue to use `MACOS_SCHEDULED_WITHOUT_ICLOUD`, and manual dispatches continue to use the explicit `without_icloud` input.
 
