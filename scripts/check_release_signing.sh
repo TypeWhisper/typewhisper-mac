@@ -10,11 +10,10 @@ app_group="$team_id.com.typewhisper.mac"
 icloud_container="iCloud.com.typewhisper.sync"
 require_notarization=false
 spawn_test=false
-without_icloud=false
 app_path=""
 
 usage() {
-  echo "Usage: $0 [--without-icloud] [--require-notarization] [--spawn] <TypeWhisper.app> | --self-test" >&2
+  echo "Usage: $0 [--require-notarization] [--spawn] <TypeWhisper.app> | --self-test" >&2
 }
 
 contains_unresolved_variable() {
@@ -172,7 +171,6 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --require-notarization) require_notarization=true; shift ;;
     --spawn) spawn_test=true; shift ;;
-    --without-icloud) without_icloud=true; shift ;;
     -h|--help) usage; exit 0 ;;
     -*) echo "error: unknown option: $1" >&2; usage; exit 2 ;;
     *)
@@ -242,95 +240,80 @@ if plutil -convert xml1 -o - "$main_entitlements" | main_has_icloud_entitlement;
   echo "error: main app contains iCloud entitlements; its existing TCC identity must stay unchanged" >&2
   exit 1
 fi
-if [[ "$without_icloud" == true ]]; then
-  [[ ! -f "$helper_profile_path" ]] || {
-    echo "error: no-iCloud helper unexpectedly contains a provisioning profile" >&2
-    exit 1
-  }
-  [[ "$icloud_enabled" == "NO" ]] || {
-    echo "error: no-iCloud release does not declare iCloud disabled" >&2
-    exit 1
-  }
-  if plutil -convert xml1 -o - "$helper_entitlements" | main_has_icloud_entitlement; then
-    echo "error: no-iCloud helper contains iCloud entitlements" >&2
-    exit 1
-  fi
-else
-  [[ -f "$helper_profile_path" ]] || {
-    echo "error: Developer ID provisioning profile is missing from the iCloud helper" >&2
-    exit 1
-  }
-  security cms -D -i "$helper_profile_path" > "$decoded_profile"
-  profile_team="$(/usr/libexec/PlistBuddy -c 'Print :TeamIdentifier:0' "$decoded_profile")"
-  profile_app_id="$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.application-identifier' "$decoded_profile")"
-  profile_icloud_environment="$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.developer.icloud-container-environment' "$decoded_profile" 2>/dev/null || true)"
-  profile_expiration="$(plutil -extract ExpirationDate raw -o - "$decoded_profile")"
-  profile_all_devices="$(/usr/libexec/PlistBuddy -c 'Print :ProvisionsAllDevices' "$decoded_profile" 2>/dev/null || true)"
+[[ -f "$helper_profile_path" ]] || {
+  echo "error: Developer ID provisioning profile is missing from the iCloud helper" >&2
+  exit 1
+}
+security cms -D -i "$helper_profile_path" > "$decoded_profile"
+profile_team="$(/usr/libexec/PlistBuddy -c 'Print :TeamIdentifier:0' "$decoded_profile")"
+profile_app_id="$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.application-identifier' "$decoded_profile")"
+profile_icloud_environment="$(/usr/libexec/PlistBuddy -c 'Print :Entitlements:com.apple.developer.icloud-container-environment' "$decoded_profile" 2>/dev/null || true)"
+profile_expiration="$(plutil -extract ExpirationDate raw -o - "$decoded_profile")"
+profile_all_devices="$(/usr/libexec/PlistBuddy -c 'Print :ProvisionsAllDevices' "$decoded_profile" 2>/dev/null || true)"
 
-  [[ "$icloud_enabled" == "YES" ]] || {
-    echo "error: iCloud release does not declare iCloud enabled" >&2
-    exit 1
-  }
-  [[ "$profile_team" == "$team_id" ]] || {
-    echo "error: profile team is '$profile_team'" >&2
-    exit 1
-  }
-  [[ "$profile_app_id" == "$team_id.$helper_bundle_id" ]] || {
-    echo "error: profile application identifier is '$profile_app_id'" >&2
-    exit 1
-  }
-  [[ "$profile_all_devices" == "true" ]] || {
-    echo "error: embedded profile is not a Developer ID profile" >&2
-    exit 1
-  }
-  [[ "$profile_icloud_environment" == "Production" ]] || {
-    echo "error: embedded profile iCloud environment is '$profile_icloud_environment'" >&2
-    exit 1
-  }
-  plist_array_contains \
-    "$decoded_profile" \
-    "Entitlements:com.apple.developer.icloud-container-identifiers" \
-    "$icloud_container" || {
-    echo "error: profile is missing iCloud container '$icloud_container'" >&2
-    exit 1
-  }
-  plist_array_contains \
-    "$decoded_profile" \
-    "Entitlements:com.apple.developer.ubiquity-container-identifiers" \
-    "$icloud_container" || {
-    echo "error: profile is missing ubiquity container '$icloud_container'" >&2
-    exit 1
-  }
-  plist_array_contains_or_wildcard \
-    "$decoded_profile" \
-    "Entitlements:com.apple.developer.icloud-services" \
-    "CloudDocuments" || {
-    echo "error: profile does not enable CloudDocuments" >&2
-    exit 1
-  }
-  expiration_epoch="$(date -j -f '%Y-%m-%dT%H:%M:%SZ' "$profile_expiration" '+%s')"
-  (( expiration_epoch > $(date '+%s') )) || {
-    echo "error: profile expired at $profile_expiration" >&2
-    exit 1
-  }
+[[ "$icloud_enabled" == "YES" ]] || {
+  echo "error: iCloud release does not declare iCloud enabled" >&2
+  exit 1
+}
+[[ "$profile_team" == "$team_id" ]] || {
+  echo "error: profile team is '$profile_team'" >&2
+  exit 1
+}
+[[ "$profile_app_id" == "$team_id.$helper_bundle_id" ]] || {
+  echo "error: profile application identifier is '$profile_app_id'" >&2
+  exit 1
+}
+[[ "$profile_all_devices" == "true" ]] || {
+  echo "error: embedded profile is not a Developer ID profile" >&2
+  exit 1
+}
+[[ "$profile_icloud_environment" == "Production" ]] || {
+  echo "error: embedded profile iCloud environment is '$profile_icloud_environment'" >&2
+  exit 1
+}
+plist_array_contains \
+  "$decoded_profile" \
+  "Entitlements:com.apple.developer.icloud-container-identifiers" \
+  "$icloud_container" || {
+  echo "error: profile is missing iCloud container '$icloud_container'" >&2
+  exit 1
+}
+plist_array_contains \
+  "$decoded_profile" \
+  "Entitlements:com.apple.developer.ubiquity-container-identifiers" \
+  "$icloud_container" || {
+  echo "error: profile is missing ubiquity container '$icloud_container'" >&2
+  exit 1
+}
+plist_array_contains_or_wildcard \
+  "$decoded_profile" \
+  "Entitlements:com.apple.developer.icloud-services" \
+  "CloudDocuments" || {
+  echo "error: profile does not enable CloudDocuments" >&2
+  exit 1
+}
+expiration_epoch="$(date -j -f '%Y-%m-%dT%H:%M:%SZ' "$profile_expiration" '+%s')"
+(( expiration_epoch > $(date '+%s') )) || {
+  echo "error: profile expired at $profile_expiration" >&2
+  exit 1
+}
 
-  helper_application_id="$(/usr/libexec/PlistBuddy -c 'Print :com.apple.application-identifier' "$helper_entitlements")"
-  helper_team="$(/usr/libexec/PlistBuddy -c 'Print :com.apple.developer.team-identifier' "$helper_entitlements")"
-  helper_icloud_environment="$(/usr/libexec/PlistBuddy -c 'Print :com.apple.developer.icloud-container-environment' "$helper_entitlements")"
+helper_application_id="$(/usr/libexec/PlistBuddy -c 'Print :com.apple.application-identifier' "$helper_entitlements")"
+helper_team="$(/usr/libexec/PlistBuddy -c 'Print :com.apple.developer.team-identifier' "$helper_entitlements")"
+helper_icloud_environment="$(/usr/libexec/PlistBuddy -c 'Print :com.apple.developer.icloud-container-environment' "$helper_entitlements")"
 
-  [[ "$helper_application_id" == "$team_id.$helper_bundle_id" ]] || {
-    echo "error: signed helper application identifier is '$helper_application_id'" >&2
-    exit 1
-  }
-  [[ "$helper_team" == "$team_id" ]] || {
-    echo "error: signed helper team identifier is '$helper_team'" >&2
-    exit 1
-  }
-  [[ "$helper_icloud_environment" == "Production" ]] || {
-    echo "error: signed helper iCloud environment is '$helper_icloud_environment'" >&2
-    exit 1
-  }
-fi
+[[ "$helper_application_id" == "$team_id.$helper_bundle_id" ]] || {
+  echo "error: signed helper application identifier is '$helper_application_id'" >&2
+  exit 1
+}
+[[ "$helper_team" == "$team_id" ]] || {
+  echo "error: signed helper team identifier is '$helper_team'" >&2
+  exit 1
+}
+[[ "$helper_icloud_environment" == "Production" ]] || {
+  echo "error: signed helper iCloud environment is '$helper_icloud_environment'" >&2
+  exit 1
+}
 
 plist_array_equals_single_value \
   "$main_entitlements" \
@@ -367,22 +350,20 @@ if plutil -convert xml1 -o - "$helper_entitlements" | helper_has_forbidden_entit
   echo "error: iCloud helper contains TCC-sensitive or unrelated entitlements" >&2
   exit 1
 fi
-if [[ "$without_icloud" == false ]]; then
-  if ! plist_array_equals_single_value \
-      "$helper_entitlements" \
-      "com.apple.developer.icloud-container-identifiers" \
-      "$icloud_container" ||
-    ! plist_array_equals_single_value \
-      "$helper_entitlements" \
-      "com.apple.developer.ubiquity-container-identifiers" \
-      "$icloud_container" ||
-    ! plist_array_equals_single_value \
-      "$helper_entitlements" \
-      "com.apple.developer.icloud-services" \
-      "CloudDocuments"; then
-    echo "error: signed helper iCloud containers are incorrect" >&2
-    exit 1
-  fi
+if ! plist_array_equals_single_value \
+    "$helper_entitlements" \
+    "com.apple.developer.icloud-container-identifiers" \
+    "$icloud_container" ||
+  ! plist_array_equals_single_value \
+    "$helper_entitlements" \
+    "com.apple.developer.ubiquity-container-identifiers" \
+    "$icloud_container" ||
+  ! plist_array_equals_single_value \
+    "$helper_entitlements" \
+    "com.apple.developer.icloud-services" \
+    "CloudDocuments"; then
+  echo "error: signed helper iCloud containers are incorrect" >&2
+  exit 1
 fi
 if /usr/libexec/PlistBuddy -c 'Print :com.apple.developer.applesignin' "$main_entitlements" >/dev/null 2>&1; then
   echo "error: native Sign in with Apple entitlement must not be signed into the Developer ID app" >&2
