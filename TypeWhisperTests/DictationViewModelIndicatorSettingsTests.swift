@@ -1595,7 +1595,87 @@ final class IndicatorPanelInteractionTests: XCTestCase {
 }
 
 @MainActor
+private final class NotchLayoutProbeModel: ObservableObject {
+    @Published var feedback = false
+    var rootSizes: [CGSize] = []
+    var safeArea: EdgeInsets?
+}
+
+private struct NotchLayoutProbeView: View {
+    @ObservedObject var model: NotchLayoutProbeModel
+
+    var body: some View {
+        GeometryReader { geometry in
+            Color.black
+                .frame(width: model.feedback ? 340 : 400, height: model.feedback ? 86 : 160)
+                .animation(.easeOut(duration: 0.24), value: model.feedback)
+                .onAppear {
+                    model.rootSizes.append(geometry.size)
+                    model.safeArea = geometry.safeAreaInsets
+                }
+                .onChange(of: geometry.size) { model.rootSizes.append(geometry.size) }
+                .onChange(of: geometry.safeAreaInsets) { model.safeArea = geometry.safeAreaInsets }
+        }
+    }
+}
+
+@MainActor
 final class NotchIndicatorPanelLifecycleTests: XCTestCase {
+    func testFixedHostingViewRemainsCenteredAndTopAlignedWhilePanelResizes() throws {
+        let panel = try makePanel()
+        defer { panel.orderOut(nil) }
+        let container = try XCTUnwrap(panel.contentView)
+        let hostingView = try XCTUnwrap(container.subviews.first)
+        let fixedSize = CGSize(width: 500, height: 500)
+
+        for size in [
+            CGSize(width: 340, height: 86),
+            fixedSize,
+            CGSize(width: 360, height: 90),
+            CGSize(width: 640, height: 120),
+            fixedSize
+        ] {
+            let frame = CGRect(origin: CGPoint(x: 100, y: 200), size: size)
+            panel.setFrame(frame, display: false)
+            panel.layoutIfNeeded()
+
+            XCTAssertEqual(panel.frame, frame)
+            XCTAssertEqual(hostingView.frame.size, fixedSize)
+            XCTAssertEqual(hostingView.bounds.size, fixedSize)
+            XCTAssertEqual(hostingView.frame.midX, container.bounds.midX, accuracy: 0.01)
+            XCTAssertEqual(hostingView.frame.maxY, container.bounds.maxY, accuracy: 0.01)
+        }
+    }
+
+    func testFeedbackTransitionsKeepSwiftUIRootSizeAndIgnoreSystemSafeArea() async throws {
+        let model = NotchLayoutProbeModel()
+        let panel = try makePanel { _ in NotchLayoutProbeView(model: model) }
+        panel.alphaValue = 0
+        defer { panel.orderOut(nil) }
+        panel.show()
+        let container = try XCTUnwrap(panel.contentView)
+
+        for interactive in [false, true, false, true, false] {
+            withAnimation(.easeOut(duration: 0.24)) {
+                model.feedback = interactive
+                panel.updateFeedbackInteraction(isInteractive: interactive)
+            }
+            let expectedFrame = panel.frame
+            for inset in [CGFloat(32), 64, 0] {
+                container.additionalSafeAreaInsets = NSEdgeInsets(top: inset, left: 0, bottom: 0, right: 0)
+                panel.layoutIfNeeded()
+                try await Task.sleep(for: .milliseconds(50))
+
+                XCTAssertFalse(model.rootSizes.isEmpty)
+                XCTAssertTrue(model.rootSizes.allSatisfy { $0 == CGSize(width: 500, height: 500) })
+                XCTAssertEqual(model.safeArea, EdgeInsets())
+                XCTAssertEqual(panel.frame, expectedFrame)
+                XCTAssertFalse(panel.canBecomeKey)
+                XCTAssertFalse(panel.canBecomeMain)
+            }
+        }
+    }
+
     func testPlacementRefreshDoesNotCancelInFlightDismissal() async throws {
         let panel = try makePanel()
         defer { panel.orderOut(nil) }
@@ -1662,6 +1742,12 @@ final class NotchIndicatorPanelLifecycleTests: XCTestCase {
     }
 
     private func makePanel() throws -> NotchIndicatorPanel {
+        try makePanel { _ in EmptyView() }
+    }
+
+    private func makePanel<Content: View>(
+        @ViewBuilder content: (NotchGeometry) -> Content
+    ) throws -> NotchIndicatorPanel {
         guard let screen = NSScreen.screens.first else {
             throw XCTSkip("Notch indicator panel tests require an available screen")
         }
@@ -1678,7 +1764,7 @@ final class NotchIndicatorPanelLifecycleTests: XCTestCase {
         return NotchIndicatorPanel(
             screenResolver: resolver,
             displayModeProvider: { .activeScreen },
-            content: { _ in EmptyView() }
+            content: content
         )
     }
 }

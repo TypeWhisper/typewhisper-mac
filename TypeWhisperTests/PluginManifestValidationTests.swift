@@ -34,9 +34,9 @@ final class PluginManifestValidationTests: XCTestCase {
                 "\(manifestURL.lastPathComponent) must declare a stable three-component host version"
             )
             XCTAssertNotEqual(
-                PluginRegistryService.compareVersions(minHostVersion, "1.6.0"),
+                PluginRegistryService.compareVersions(minHostVersion, "1.7.0"),
                 .orderedAscending,
-                "\(manifestURL.lastPathComponent) must require TypeWhisper 1.6.0 or newer"
+                "\(manifestURL.lastPathComponent) must require TypeWhisper 1.7.0 or newer"
             )
             XCTAssertEqual(
                 manifest.sdkCompatibilityVersion,
@@ -102,8 +102,8 @@ final class PluginManifestValidationTests: XCTestCase {
 
     func testSourceFootageProgressPluginsDeclareCapability() throws {
         let manifestExpectations = [
-            ("TypeWhisperPluginSDK/Plugins/WhisperKitPlugin/manifest.json", "1.6.0"),
-            ("TypeWhisperPluginSDK/Plugins/ParakeetPlugin/manifest.json", "1.6.0"),
+            ("TypeWhisperPluginSDK/Plugins/WhisperKitPlugin/manifest.json", "1.7.0"),
+            ("TypeWhisperPluginSDK/Plugins/ParakeetPlugin/manifest.json", "1.7.0"),
             ("TypeWhisperPluginSDK/Plugins/SonioxPlugin/manifest.json", "1.7.0"),
         ]
 
@@ -116,7 +116,7 @@ final class PluginManifestValidationTests: XCTestCase {
         }
     }
 
-    func testWhisperKitPlugin12RequiresCompatibleHost16() throws {
+    func testWhisperKitPlugin12RequiresCompatibleHost17() throws {
         let manifestURL = TestSupport.repoRoot.appendingPathComponent(
             "TypeWhisperPluginSDK/Plugins/WhisperKitPlugin/manifest.json"
         )
@@ -124,12 +124,12 @@ final class PluginManifestValidationTests: XCTestCase {
         let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
 
         XCTAssertEqual(manifest.version, "1.2.0")
-        XCTAssertEqual(manifest.minHostVersion, "1.6.0")
+        XCTAssertEqual(manifest.minHostVersion, "1.7.0")
         XCTAssertEqual(manifest.sdkCompatibilityVersion, PluginSDKCompatibility.currentVersion)
         XCTAssertEqual(manifest.supportedArchitectures, ["arm64"])
     }
 
-    func testMLXStoragePluginReleasesRequireHost16() throws {
+    func testMLXStoragePluginReleasesRequireHost17() throws {
         let manifestExpectations = [
             ("TypeWhisperPluginSDK/Plugins/Qwen3Plugin/manifest.json", "1.1.8"),
             ("TypeWhisperPluginSDK/Plugins/VoxtralPlugin/manifest.json", "1.0.14"),
@@ -142,11 +142,11 @@ final class PluginManifestValidationTests: XCTestCase {
             let data = try Data(contentsOf: manifestURL)
             let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
             XCTAssertEqual(manifest.version, expectedVersion, relativePath)
-            XCTAssertEqual(manifest.minHostVersion, "1.6.0", relativePath)
+            XCTAssertEqual(manifest.minHostVersion, "1.7.0", relativePath)
         }
     }
 
-    func testCohereLocalPlugin101RequiresCompatibleHost16() throws {
+    func testCohereLocalPlugin101RequiresCompatibleHost17() throws {
         let manifestURL = TestSupport.repoRoot.appendingPathComponent(
             "TypeWhisperPluginSDK/Plugins/CohereLocalPlugin/manifest.json"
         )
@@ -154,18 +154,18 @@ final class PluginManifestValidationTests: XCTestCase {
         let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
 
         XCTAssertEqual(manifest.version, "1.0.1")
-        XCTAssertEqual(manifest.minHostVersion, "1.6.0")
+        XCTAssertEqual(manifest.minHostVersion, "1.7.0")
         XCTAssertEqual(manifest.sdkCompatibilityVersion, PluginSDKCompatibility.currentVersion)
         XCTAssertEqual(manifest.supportedArchitectures, ["arm64"])
     }
 
-    func testOpenAIPlugin133RequiresCompatibleHost16AndDeclaresCloudHosting() throws {
+    func testOpenAIPlugin133RequiresCompatibleHost17AndDeclaresCloudHosting() throws {
         let manifestURL = TestSupport.repoRoot.appendingPathComponent("TypeWhisperPluginSDK/Plugins/OpenAIPlugin/manifest.json")
         let data = try Data(contentsOf: manifestURL)
         let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
 
         XCTAssertEqual(manifest.version, "1.3.3")
-        XCTAssertEqual(manifest.minHostVersion, "1.6.0")
+        XCTAssertEqual(manifest.minHostVersion, "1.7.0")
         XCTAssertEqual(manifest.sdkCompatibilityVersion, PluginSDKCompatibility.currentVersion)
         XCTAssertEqual(manifest.hosting, .cloud)
         XCTAssertEqual(manifest.requiresAPIKey, false)
@@ -211,13 +211,13 @@ final class PluginManifestValidationTests: XCTestCase {
         XCTAssertEqual(manifest.categories, ["transcription", "llm"])
     }
 
-    func testGroqPluginReleaseRequiresHost16() throws {
+    func testGroqPluginReleaseRequiresHost17() throws {
         let manifestURL = TestSupport.repoRoot.appendingPathComponent("TypeWhisperPluginSDK/Plugins/GroqPlugin/manifest.json")
         let data = try Data(contentsOf: manifestURL)
         let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
 
         XCTAssertEqual(manifest.version, "1.0.24")
-        XCTAssertEqual(manifest.minHostVersion, "1.6.0")
+        XCTAssertEqual(manifest.minHostVersion, "1.7.0")
         XCTAssertEqual(manifest.sdkCompatibilityVersion, PluginSDKCompatibility.currentVersion)
     }
 

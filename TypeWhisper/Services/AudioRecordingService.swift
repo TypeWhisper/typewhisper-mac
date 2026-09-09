@@ -884,7 +884,8 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
 
     private func claimPreparedBluetoothInputIfEligible() -> PreparedBluetoothInput? {
         guard let deviceID = bluetoothInputPreparationDeviceID() else {
-            invalidatePreparedRecordingInputs(reason: "bluetooth-recording-route-ineligible")
+            // The built-in input is claimed next when Bluetooth is ineligible.
+            // Preserve its prepared engine; route changes invalidate inputs separately.
             return nil
         }
 
@@ -2986,6 +2987,25 @@ final class BluetoothInputReadinessChecker: AudioInputReadinessChecking {
 
 #if DEBUG
 extension AudioRecordingService {
+    func testingSetPreparedBuiltInInput(_ engine: AVAudioEngine, deviceID: AudioDeviceID) {
+        let format = AVAudioFormat(standardFormatWithSampleRate: Self.targetSampleRate, channels: 1)!
+        engineLock.withLock {
+            preparedBuiltInInput = PreparedBuiltInInput(
+                engine: engine,
+                defaultInputDeviceID: deviceID,
+                tapFormat: format
+            )
+        }
+    }
+
+    func testingClaimPreparedBluetoothInputIfEligible() -> Bool {
+        claimPreparedBluetoothInputIfEligible() != nil
+    }
+
+    func testingClaimPreparedBuiltInInputIfEligible() -> AVAudioEngine? {
+        claimPreparedBuiltInInputIfEligible()?.engine
+    }
+
     @discardableResult
     func testingReplaceAudioEngineForRecoveryIfNeeded(_ engine: AVAudioEngine) -> AVAudioEngine? {
         replaceAudioEngineForRecoveryIfNeeded(engine)
