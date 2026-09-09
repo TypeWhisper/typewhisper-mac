@@ -94,6 +94,7 @@ PLUGIN_SCREENSHOTS = [
   { slug: "soniox", target: "SonioxPlugin", id: "com.typewhisper.soniox" },
   { slug: "speechmatics", target: "SpeechmaticsPlugin", id: "com.typewhisper.speechmatics" },
   { slug: "supertonic", target: "SupertonicPlugin", id: "com.typewhisper.tts.supertonic", size: [560, 536] },
+  { slug: "vercel-ai-gateway", target: "VercelAIGatewayPlugin", id: "com.typewhisper.vercel-ai-gateway" },
   { slug: "voxtral", target: "VoxtralPlugin", id: "com.typewhisper.voxtral" },
   { slug: "webhook", target: "WebhookPlugin", id: "com.typewhisper.webhook" },
   { slug: "whisperkit", target: "WhisperKitPlugin", id: "com.typewhisper.whisperkit", size: [560, 557] },
