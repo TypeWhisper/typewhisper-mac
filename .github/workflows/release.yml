@@ -105,7 +105,7 @@ jobs:
   verify-release-tools:
     needs: [prepare]
     if: needs.prepare.outputs.should_run == 'true'
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -120,7 +120,7 @@ jobs:
   app-tests:
     needs: [prepare]
     if: needs.prepare.outputs.should_run == 'true'
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -130,7 +130,7 @@ jobs:
       - name: Setup Xcode
         uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
-          xcode-version: "26.3"
+          xcode-version: "26.6"
 
       - name: Resolve Swift packages
         run: |
@@ -155,7 +155,7 @@ jobs:
   plugin-sdk-tests:
     needs: [prepare]
     if: needs.prepare.outputs.should_run == 'true'
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -165,7 +165,7 @@ jobs:
       - name: Setup Xcode
         uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
-          xcode-version: "26.3"
+          xcode-version: "26.6"
 
       - name: Run Plugin SDK Tests
         run: swift test --package-path TypeWhisperPluginSDK
@@ -177,7 +177,7 @@ jobs:
       - app-tests
       - plugin-sdk-tests
     if: needs.prepare.outputs.should_run == 'true'
-    runs-on: macos-15
+    runs-on: macos-26
     env:
       RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
       WITHOUT_ICLOUD: ${{ needs.prepare.outputs.without_icloud }}
@@ -190,7 +190,7 @@ jobs:
       - name: Setup Xcode
         uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
-          xcode-version: "26.3"
+          xcode-version: "26.6"
 
       - name: Resolve Swift packages
         run: |
