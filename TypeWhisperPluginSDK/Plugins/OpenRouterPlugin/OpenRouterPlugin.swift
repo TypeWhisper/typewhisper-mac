@@ -141,8 +141,14 @@ final class OpenRouterPlugin: NSObject,
             throw PluginTranscriptionError.apiError("OpenRouter speech-to-text does not support translation.")
         }
 
-        let preferredUpload = (try? PluginAudioUploadEncoder.compressedM4AUpload(from: audio))
-            ?? PluginAudioUploadEncoder.wavUpload(from: audio)
+        let preferredUpload: PluginAudioUploadFile
+        if modelId == "microsoft/mai-transcribe-2" {
+            // MAI is known to reject M4A. Avoid a failed upload before the WAV retry.
+            preferredUpload = PluginAudioUploadEncoder.wavUpload(from: audio)
+        } else {
+            preferredUpload = (try? PluginAudioUploadEncoder.compressedM4AUpload(from: audio))
+                ?? PluginAudioUploadEncoder.wavUpload(from: audio)
+        }
         var request = try Self.makeTranscriptionRequest(
             uploadFile: preferredUpload,
             apiKey: apiKey,
@@ -153,7 +159,7 @@ final class OpenRouterPlugin: NSObject,
         var (data, response) = try await PluginHTTPClient.data(for: request)
         if let httpResponse = response as? HTTPURLResponse,
            preferredUpload.format != "wav",
-           PluginAudioUploadEncoder.shouldRetryWithWavUpload(
+           Self.shouldRetryTranscriptionWithWav(
             statusCode: httpResponse.statusCode,
             responseData: data
            ) {
@@ -168,6 +174,20 @@ final class OpenRouterPlugin: NSObject,
         }
         try Self.validateTranscriptionResponse(data: data, response: response)
         return try Self.parseTranscriptionResponse(data)
+    }
+
+    private static func shouldRetryTranscriptionWithWav(statusCode: Int, responseData: Data) -> Bool {
+        if PluginAudioUploadEncoder.shouldRetryWithWavUpload(statusCode: statusCode, responseData: responseData) {
+            return true
+        }
+
+        // OpenRouter can hide the upstream format rejection behind this generic
+        // error. Try WAV once for any model; explicit request errors stay errors.
+        guard statusCode == 400,
+              let json = try? JSONSerialization.jsonObject(with: responseData) as? [String: Any],
+              let error = json["error"] as? [String: Any],
+              let message = error["message"] as? String else { return false }
+        return message == "Provider returned 400"
     }
 
     static func makeTranscriptionRequest(
@@ -416,12 +436,14 @@ final class OpenRouterPlugin: NSObject,
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let choices = json["choices"] as? [[String: Any]],
               let first = choices.first,
-              let message = first["message"] as? [String: Any],
-              let content = message["content"] as? String else {
+              let message = first["message"] as? [String: Any] else {
             throw PluginChatError.apiError("Failed to parse response")
         }
 
-        return content.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Reasoning models on OpenRouter (gpt-5.x, gpt-oss) return `content: null`
+        // or an array of typed parts; the shared helper treats those as valid.
+        return PluginOpenAIChatHelper.chatMessageContent(from: message)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     // MARK: - Settings View

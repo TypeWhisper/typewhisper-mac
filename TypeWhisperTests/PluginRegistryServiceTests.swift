@@ -191,6 +191,49 @@ final class PluginRegistryServiceTests: XCTestCase {
         XCTAssertEqual(plugins14.first?.downloadURL, "https://example.com/requires-1.4.zip")
     }
 
+    func testNew17PluginReleasePreservesCompatibleUpdateFor16Host() throws {
+        let data = Data(
+            """
+            {
+              "schemaVersion": 2,
+              "plugins": [{
+                "id": "com.typewhisper.example",
+                "name": "Example",
+                "author": "TypeWhisper",
+                "description": "Host-gated plugin updates.",
+                "category": "transcription",
+                "releases": [
+                  {
+                    "version": "2.0.0",
+                    "minHostVersion": "1.7.0",
+                    "sdkCompatibilityVersion": "v1",
+                    "size": 20,
+                    "downloadURL": "https://example.com/requires-1.7.zip"
+                  },
+                  {
+                    "version": "1.9.0",
+                    "minHostVersion": "1.6.0",
+                    "sdkCompatibilityVersion": "v1",
+                    "size": 10,
+                    "downloadURL": "https://example.com/compatible-1.6.zip"
+                  }
+                ]
+              }]
+            }
+            """.utf8
+        )
+        let response = try JSONDecoder().decode(PluginRegistryResponse.self, from: data)
+        let legacy = response.resolvedPlugins(appVersion: "1.6.0", sdkCompatibilityVersion: "v1")
+        let current = response.resolvedPlugins(appVersion: "1.7.0", sdkCompatibilityVersion: "v1")
+
+        XCTAssertEqual(legacy.count, 1)
+        XCTAssertEqual(legacy.first?.version, "1.9.0")
+        XCTAssertEqual(legacy.first?.downloadURL, "https://example.com/compatible-1.6.zip")
+        XCTAssertEqual(current.count, 1)
+        XCTAssertEqual(current.first?.version, "2.0.0")
+        XCTAssertEqual(current.first?.downloadURL, "https://example.com/requires-1.7.zip")
+    }
+
     func testRegistryEntryDecodesMultipleCategoryIdentifiers() throws {
         let data = Data(
             """

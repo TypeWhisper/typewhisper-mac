@@ -179,6 +179,7 @@ enum SettingsBackupExporter {
         var mediaPauseEnabled: Bool? = nil
         var transcribeShortQuietClipsAggressively: Bool? = nil
         var microphoneBoostEnabled: Bool? = nil
+        var cancellationBehavior: String? = nil
         var requireSecondEscapeToCancelRecording: Bool? = nil
         // Dictation Recovery
         var dictationRecoveryLanguage: String? = nil
@@ -227,7 +228,7 @@ enum SettingsBackupExporter {
             if mediaPauseEnabled != nil { count += 1 }
             if transcribeShortQuietClipsAggressively != nil { count += 1 }
             if microphoneBoostEnabled != nil { count += 1 }
-            if requireSecondEscapeToCancelRecording != nil { count += 1 }
+            if cancellationBehavior != nil || requireSecondEscapeToCancelRecording != nil { count += 1 }
             if dictationRecoveryLanguage != nil { count += 1 }
             if dictationRecoveryAutomaticFallbackEnabled != nil { count += 1 }
             if dictationRecoveryRetentionDays != nil { count += 1 }
@@ -573,7 +574,7 @@ enum SettingsBackupExporter {
                 mediaPauseEnabled: userDefaults.object(forKey: UserDefaultsKeys.mediaPauseEnabled) as? Bool,
                 transcribeShortQuietClipsAggressively: userDefaults.object(forKey: UserDefaultsKeys.transcribeShortQuietClipsAggressively) as? Bool,
                 microphoneBoostEnabled: userDefaults.object(forKey: UserDefaultsKeys.microphoneBoostEnabled) as? Bool,
-                requireSecondEscapeToCancelRecording: userDefaults.object(forKey: UserDefaultsKeys.requireSecondEscapeToCancelRecording) as? Bool,
+                cancellationBehavior: DictationViewModel.loadCancellationBehavior(defaults: userDefaults).rawValue,
                 dictationRecoveryLanguage: userDefaults.string(forKey: UserDefaultsKeys.dictationRecoveryLanguage),
                 dictationRecoveryAutomaticFallbackEnabled: userDefaults.object(forKey: UserDefaultsKeys.dictationRecoveryAutomaticFallbackEnabled) as? Bool,
                 dictationRecoveryRetentionDays: userDefaults.object(forKey: UserDefaultsKeys.dictationRecoveryRetentionDays) == nil
@@ -628,6 +629,7 @@ enum SettingsBackupExporter {
         usageStatisticsService: UsageStatisticsService,
         userDefaults: UserDefaults = .standard,
         liveFieldTranscriptEnabledDidChange: ((Bool) -> Void)? = nil,
+        cancellationBehaviorDidChange: ((CancellationBehavior) -> Void)? = nil,
         recoveryRetentionPolicyDidChange: ((DictationRecoveryRetentionPolicy) -> Void)? = nil
     ) async -> ImportResult {
         var result = ImportResult()
@@ -852,7 +854,12 @@ enum SettingsBackupExporter {
         apply(preferences.mediaPauseEnabled, forKey: UserDefaultsKeys.mediaPauseEnabled)
         apply(preferences.transcribeShortQuietClipsAggressively, forKey: UserDefaultsKeys.transcribeShortQuietClipsAggressively)
         apply(preferences.microphoneBoostEnabled, forKey: UserDefaultsKeys.microphoneBoostEnabled)
-        apply(preferences.requireSecondEscapeToCancelRecording, forKey: UserDefaultsKeys.requireSecondEscapeToCancelRecording)
+        let cancellationBehavior = preferences.cancellationBehavior.flatMap(CancellationBehavior.init(rawValue:))
+            ?? preferences.requireSecondEscapeToCancelRecording.map { $0 ? .doubleEscape : .singleEscape }
+        if let cancellationBehavior {
+            apply(cancellationBehavior.rawValue, forKey: UserDefaultsKeys.cancellationBehavior)
+            cancellationBehaviorDidChange?(cancellationBehavior)
+        }
         apply(preferences.dictationRecoveryLanguage, forKey: UserDefaultsKeys.dictationRecoveryLanguage)
         apply(preferences.dictationRecoveryAutomaticFallbackEnabled, forKey: UserDefaultsKeys.dictationRecoveryAutomaticFallbackEnabled)
         apply(preferences.dictationRecoveryRetentionDays, forKey: UserDefaultsKeys.dictationRecoveryRetentionDays)

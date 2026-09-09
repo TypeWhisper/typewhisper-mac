@@ -161,6 +161,23 @@ final class SecureInputDiagnosticsProviderTests: XCTestCase {
 }
 
 final class TypeWhisperIntegrationTests: XCTestCase {
+    private var originalCancellationBehavior: Any?
+
+    override func setUp() {
+        super.setUp()
+        originalCancellationBehavior = UserDefaults.standard.object(forKey: UserDefaultsKeys.cancellationBehavior)
+        UserDefaults.standard.set(CancellationBehavior.doubleEscape.rawValue, forKey: UserDefaultsKeys.cancellationBehavior)
+    }
+
+    override func tearDown() {
+        if let originalCancellationBehavior {
+            UserDefaults.standard.set(originalCancellationBehavior, forKey: UserDefaultsKeys.cancellationBehavior)
+        } else {
+            UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.cancellationBehavior)
+        }
+        super.tearDown()
+    }
+
     private final class KeychainTokenProbe: @unchecked Sendable {
         private let lock = NSLock()
         private var loadCalls = 0
@@ -6041,7 +6058,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         context.audioRecordingService.startRecordingOverride = {
             startCount += 1
         }
-        context.dictationViewModel.requireSecondEscapeToCancelRecording = false
+        context.dictationViewModel.cancellationBehavior = .singleEscape
         context.dictationViewModel.state = .recording
         context.dictationViewModel.handleCancelHotkey()
         context.dictationViewModel.setActionFeedbackHovered(true)
@@ -6160,6 +6177,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         MockTranscriptionPlugin.reset()
         dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
         let context = try XCTUnwrap(dictationContext)
+        context.dictationViewModel.cancellationBehavior = .instant
         let stopGate = RecorderStartGate()
         var pasteCount = 0
 
@@ -6189,7 +6207,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         await stopGate.waitForFirstEntry()
         context.dictationViewModel.handleCancelHotkey()
-        context.dictationViewModel.handleCancelHotkey()
+        XCTAssertEqual(context.dictationViewModel.state, .idle)
+        XCTAssertNil(context.dictationViewModel.actionFeedbackMessage)
 
         XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.status, .failed)
         XCTAssertEqual(
@@ -7596,7 +7615,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             )
         )
         let context = try XCTUnwrap(dictationContext)
-        context.dictationViewModel.requireSecondEscapeToCancelRecording = false
+        context.dictationViewModel.cancellationBehavior = .instant
         context.audioRecordingService.hasMicrophonePermissionOverride = true
         context.audioRecordingService.startRecordingOverride = {
             audioStartEntered.fulfill()
@@ -7616,7 +7635,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         XCTAssertEqual(context.dictationViewModel.recordingDuration, 0)
         XCTAssertFalse(context.dictationViewModel.isRecordingInputReady)
-        XCTAssertEqual(context.dictationViewModel.state, .inserting)
+        XCTAssertEqual(context.dictationViewModel.state, .idle)
 
         audioStartGate.signal()
         await context.dictationViewModel.testingWaitForRecordingStart()
@@ -9932,6 +9951,210 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             XCTAssertEqual(error.failures.count, 2)
             XCTAssertTrue(error.failures[0].reason.contains("429"))
             XCTAssertFalse(error.failures[1].reason.isEmpty)
+        }
+    }
+
+    @MainActor
+    func testPromptProcessingAcceptsEmptyOutputWhenMultipleProvidersAgree() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let isolatedDefaults = Self.makeEmptyLLMFallbackDefaults()
+        defer { isolatedDefaults.defaults.removePersistentDomain(forName: isolatedDefaults.suiteName) }
+
+        // The processing prompt may legitimately reduce the input to nothing
+        // (e.g. a silence-hallucination artifact the user's instructions strip).
+        // When independent providers agree on empty, that is the intended
+        // output, not a malfunction to fail over from.
+        let emptyOne = MockLLMProviderPlugin()
+        emptyOne.configuredProviderId = "empty-one"
+        emptyOne.queuedProcessOutcomes = [.response("")]
+        let emptyTwo = MockLLMProviderPlugin()
+        emptyTwo.configuredProviderId = "empty-two"
+        emptyTwo.queuedProcessOutcomes = [.response("  \n")]
+
+        Self.installLLMFallbackTestProviders([emptyOne, emptyTwo], appSupportDirectory: appSupportDirectory)
+        let service = PromptProcessingService(userDefaults: isolatedDefaults.defaults)
+        service.addLLMFallback(providerId: emptyOne.providerId)
+        service.addLLMFallback(providerId: emptyTwo.providerId)
+
+        let result = try await service.process(prompt: "Strip artifacts", text: "Thank you for watching!")
+        XCTAssertEqual(result, "")
+    }
+
+    @MainActor
+    func testMixedFailuresWithLoneEmptyOpinionConfirmedByRetry() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let isolatedDefaults = Self.makeEmptyLLMFallbackDefaults()
+        defer { isolatedDefaults.defaults.removePersistentDomain(forName: isolatedDefaults.suiteName) }
+
+        // One provider answers "empty", the rest fail with infrastructure errors
+        // that carry no opinion about the content. The lone empty opinion is
+        // confirmed by re-running its provider; empty twice is intent.
+        let emptyProvider = MockLLMProviderPlugin()
+        emptyProvider.configuredProviderId = "empty-opinion"
+        emptyProvider.queuedProcessOutcomes = [.response(""), .response("")]
+        let broken = MockLLMProviderPlugin()
+        broken.configuredProviderId = "broken-parse"
+        broken.queuedProcessOutcomes = [.apiFailure("Failed to parse response")]
+
+        Self.installLLMFallbackTestProviders([emptyProvider, broken], appSupportDirectory: appSupportDirectory)
+        let service = PromptProcessingService(userDefaults: isolatedDefaults.defaults)
+        service.addLLMFallback(providerId: emptyProvider.providerId)
+        service.addLLMFallback(providerId: broken.providerId)
+
+        let result = try await service.process(prompt: "Strip artifacts", text: "Thank you for watching!")
+        XCTAssertEqual(result, "")
+        XCTAssertEqual(emptyProvider.processCallCount, 2)
+    }
+
+    @MainActor
+    func testTwoEmptyModelsOfTheSameProviderAreNotConsensus() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let isolatedDefaults = Self.makeEmptyLLMFallbackDefaults()
+        defer { isolatedDefaults.defaults.removePersistentDomain(forName: isolatedDefaults.suiteName) }
+
+        // The fallback list may carry several models of one provider. One plugin
+        // deterministically answering empty twice is a single opinion, so real
+        // text must not be discarded on its say-so alone.
+        let provider = MockLLMProviderPlugin()
+        provider.configuredProviderId = "single-plugin"
+        provider.models = [
+            PluginModelInfo(id: "model-a", displayName: "Model A"),
+            PluginModelInfo(id: "model-b", displayName: "Model B"),
+        ]
+        provider.queuedProcessOutcomes = [.response(""), .response("")]
+
+        Self.installLLMFallbackTestProviders([provider], appSupportDirectory: appSupportDirectory)
+        let service = PromptProcessingService(userDefaults: isolatedDefaults.defaults)
+        service.addLLMFallback(providerId: provider.providerId, modelId: "model-a")
+        service.addLLMFallback(providerId: provider.providerId, modelId: "model-b")
+
+        do {
+            _ = try await service.process(prompt: "Fix grammar", text: "hello world")
+            XCTFail("Two empty answers from one provider must not count as consensus")
+        } catch let error as LLMFallbackExhaustedError {
+            XCTAssertEqual(error.failures.count, 2)
+            XCTAssertTrue(error.failures.allSatisfy { $0.reason.contains("empty") })
+        }
+        XCTAssertEqual(provider.processCallCount, 2, "no confirmation retry when every attempt was the same provider")
+    }
+
+    @MainActor
+    func testMixedOutcomeConfirmationRetryPreservesCancellation() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let isolatedDefaults = Self.makeEmptyLLMFallbackDefaults()
+        defer { isolatedDefaults.defaults.removePersistentDomain(forName: isolatedDefaults.suiteName) }
+
+        let emptyProvider = MockLLMProviderPlugin()
+        emptyProvider.configuredProviderId = "empty-opinion"
+        // First call answers empty, the confirmation retry hangs until cancelled.
+        emptyProvider.queuedProcessOutcomes = [.response(""), .waitForCancellation]
+        let broken = MockLLMProviderPlugin()
+        broken.configuredProviderId = "broken-parse"
+        broken.queuedProcessOutcomes = [.apiFailure("Failed to parse response")]
+
+        Self.installLLMFallbackTestProviders([emptyProvider, broken], appSupportDirectory: appSupportDirectory)
+        let service = PromptProcessingService(userDefaults: isolatedDefaults.defaults)
+        service.addLLMFallback(providerId: emptyProvider.providerId)
+        service.addLLMFallback(providerId: broken.providerId)
+
+        let processing = Task { @MainActor in
+            try await service.process(prompt: "Strip artifacts", text: "Thank you for watching!")
+        }
+        let deadline = ContinuousClock.now + .seconds(5)
+        while emptyProvider.processCallCount < 2, ContinuousClock.now < deadline {
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        XCTAssertEqual(emptyProvider.processCallCount, 2, "the confirmation retry must be in flight")
+        processing.cancel()
+
+        do {
+            let text = try await processing.value
+            XCTFail("A cancelled confirmation retry must not produce text for insertion (got \(text.debugDescription))")
+        } catch is CancellationError {
+            // expected
+        } catch let error as LLMFallbackExhaustedError {
+            XCTFail("Cancellation must not be reported as exhausted fallbacks: \(error)")
+        }
+    }
+
+    @MainActor
+    func testExplicitWorkflowProviderAcceptsEmptyOutputConfirmedByRetry() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let isolatedDefaults = Self.makeEmptyLLMFallbackDefaults()
+        defer { isolatedDefaults.defaults.removePersistentDomain(forName: isolatedDefaults.suiteName) }
+
+        // An explicit workflow provider bypasses the global fallback list, so an
+        // intentional empty result (artifact-only transcript stripped by the
+        // workflow's instructions) is confirmed by re-running the same provider.
+        let explicit = MockLLMProviderPlugin()
+        explicit.configuredProviderId = "explicit-empty"
+        explicit.queuedProcessOutcomes = [.response(""), .response("  \n")]
+
+        Self.installLLMFallbackTestProviders([explicit], appSupportDirectory: appSupportDirectory)
+        let service = PromptProcessingService(userDefaults: isolatedDefaults.defaults)
+
+        let result = try await service.processWorkflow(
+            prompt: "Strip artifacts",
+            text: "Thank you for watching!",
+            behavior: WorkflowBehavior(providerId: explicit.providerId)
+        )
+        XCTAssertEqual(result, "")
+        XCTAssertEqual(explicit.processCallCount, 2)
+    }
+
+    @MainActor
+    func testExplicitWorkflowProviderRecoversWhenRetryReturnsContent() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let isolatedDefaults = Self.makeEmptyLLMFallbackDefaults()
+        defer { isolatedDefaults.defaults.removePersistentDomain(forName: isolatedDefaults.suiteName) }
+
+        // A lone empty from a glitching provider must not discard content when
+        // the confirmation retry produces a real result.
+        let flaky = MockLLMProviderPlugin()
+        flaky.configuredProviderId = "flaky-empty"
+        flaky.queuedProcessOutcomes = [.response(""), .response("recovered text")]
+
+        Self.installLLMFallbackTestProviders([flaky], appSupportDirectory: appSupportDirectory)
+        let service = PromptProcessingService(userDefaults: isolatedDefaults.defaults)
+
+        let result = try await service.processWorkflow(
+            prompt: "Fix grammar",
+            text: "hello world",
+            behavior: WorkflowBehavior(providerId: flaky.providerId)
+        )
+        XCTAssertEqual(result, "recovered text")
+        XCTAssertEqual(flaky.processCallCount, 2)
+    }
+
+    @MainActor
+    func testPromptProcessingStillFailsOnSingleEmptyOutput() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let isolatedDefaults = Self.makeEmptyLLMFallbackDefaults()
+        defer { isolatedDefaults.defaults.removePersistentDomain(forName: isolatedDefaults.suiteName) }
+
+        // One provider glitching to empty must keep the protective failure
+        // semantics — otherwise a model malfunction silently discards content.
+        let emptyOnly = MockLLMProviderPlugin()
+        emptyOnly.configuredProviderId = "empty-only"
+        emptyOnly.queuedProcessOutcomes = [.response("")]
+
+        Self.installLLMFallbackTestProviders([emptyOnly], appSupportDirectory: appSupportDirectory)
+        let service = PromptProcessingService(userDefaults: isolatedDefaults.defaults)
+        service.addLLMFallback(providerId: emptyOnly.providerId)
+
+        do {
+            _ = try await service.process(prompt: "Fix grammar", text: "hello world")
+            XCTFail("A single empty attempt must still fail")
+        } catch let error as LLMFallbackExhaustedError {
+            XCTAssertEqual(error.failures.count, 1)
+            XCTAssertTrue(error.failures[0].reason.contains("empty"))
         }
     }
 
@@ -12570,6 +12793,108 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testCancellationModesApplyToRecordingAndProcessing() async throws {
+        for behavior in CancellationBehavior.allCases {
+            for state in [DictationViewModel.State.recording, .processing] {
+                let directory = try TestSupport.makeTemporaryDirectory()
+                defer { TestSupport.remove(directory) }
+                let context = Self.makeDictationContext(appSupportDirectory: directory)
+                context.audioRecordingService.stopRecordingOverride = { _ in [] }
+                context.dictationViewModel.cancellationBehavior = behavior
+                context.dictationViewModel.state = state
+
+                context.dictationViewModel.handleCancelHotkey()
+                if behavior == .doubleEscape {
+                    XCTAssertEqual(context.dictationViewModel.state, state)
+                    XCTAssertNotNil(context.dictationViewModel.cancelWarningMessage)
+                    XCTAssertNil(context.dictationViewModel.actionFeedbackMessage)
+                    context.dictationViewModel.handleCancelHotkey()
+                }
+
+                XCTAssertNil(context.dictationViewModel.cancelWarningMessage)
+                if behavior == .instant {
+                    XCTAssertEqual(context.dictationViewModel.state, .idle)
+                    XCTAssertNil(context.dictationViewModel.actionFeedbackMessage)
+                } else {
+                    XCTAssertEqual(context.dictationViewModel.state, .inserting)
+                    XCTAssertEqual(context.dictationViewModel.actionFeedbackMessage, String(localized: "Cancelled"))
+                }
+                await context.dictationViewModel.testingWaitForRecordingCleanup()
+            }
+        }
+    }
+
+    @MainActor
+    func testInstantCancellationWaitsForOldRecorderBeforeStartingAgain() async throws {
+        for cancelDuringProcessing in [false, true] {
+            let directory = try TestSupport.makeTemporaryDirectory()
+            defer { TestSupport.remove(directory) }
+            let context = Self.makeDictationContext(appSupportDirectory: directory)
+            let stopGate = RecorderStartGate()
+            let newCaptureStarted = LockedFlag()
+            context.dictationViewModel.cancellationBehavior = .instant
+            context.audioRecordingService.hasMicrophonePermissionOverride = true
+            context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+            context.audioRecordingService.startRecordingOverride = {}
+            context.audioRecordingService.stopRecordingOverride = { _ in
+                _ = await stopGate.enter()
+                await stopGate.waitForRelease()
+                return []
+            }
+            _ = context.dictationViewModel.apiStartRecording()
+            await context.dictationViewModel.apiWaitForRecordingReadiness()
+            if cancelDuringProcessing {
+                _ = context.dictationViewModel.apiStopRecording()
+                await stopGate.waitForFirstEntry()
+            }
+            context.audioRecordingService.startRecordingOverride = { newCaptureStarted.set() }
+            context.dictationViewModel.handleCancelHotkey()
+            XCTAssertEqual(context.dictationViewModel.state, .idle)
+            XCTAssertNil(context.dictationViewModel.actionFeedbackMessage)
+            await stopGate.waitForFirstEntry()
+
+            let newSession = context.dictationViewModel.apiStartRecording()
+            // Give a mistakenly unguarded recorder start time to reach the override.
+            try await Task.sleep(for: .milliseconds(50))
+            XCTAssertFalse(newCaptureStarted.value)
+            await stopGate.release()
+            await context.dictationViewModel.apiWaitForRecordingReadiness()
+            XCTAssertTrue(newCaptureStarted.value)
+            XCTAssertEqual(context.dictationViewModel.state, .recording)
+            XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: newSession)?.status, .recording)
+            context.dictationViewModel.handleCancelHotkey()
+            await context.dictationViewModel.testingWaitForRecordingCleanup()
+        }
+    }
+
+    @MainActor
+    func testInstantStopDuringRecordingPreparationClosesIndicator() async throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(directory) }
+        let context = Self.makeDictationContext(appSupportDirectory: directory)
+        let startEntered = expectation(description: "recorder start entered")
+        let startGate = DispatchSemaphore(value: 0)
+        defer { startGate.signal() }
+        context.dictationViewModel.cancellationBehavior = .instant
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {
+            startEntered.fulfill()
+            startGate.wait()
+        }
+        context.audioRecordingService.stopRecordingOverride = { _ in [] }
+        let session = context.dictationViewModel.apiStartRecording()
+        await fulfillment(of: [startEntered], timeout: 1)
+        _ = context.dictationViewModel.apiStopRecording()
+        XCTAssertEqual(context.dictationViewModel.state, .idle)
+        XCTAssertNil(context.dictationViewModel.actionFeedbackMessage)
+        startGate.signal()
+        await context.dictationViewModel.testingWaitForRecordingCleanup()
+        XCTAssertFalse(context.audioRecordingService.isRecording)
+        XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: session)?.status, .failed)
+    }
+
+    @MainActor
     func testHandleCancelHotkey_firstEscapeDuringRecordingShowsWarningWithoutCancelling() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         var dictationContext: DictationContext?
@@ -12580,9 +12905,9 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
         let context = try XCTUnwrap(dictationContext)
-        let originalPreference = context.dictationViewModel.requireSecondEscapeToCancelRecording
-        defer { context.dictationViewModel.requireSecondEscapeToCancelRecording = originalPreference }
-        context.dictationViewModel.requireSecondEscapeToCancelRecording = true
+        let originalPreference = context.dictationViewModel.cancellationBehavior
+        defer { context.dictationViewModel.cancellationBehavior = originalPreference }
+        context.dictationViewModel.cancellationBehavior = .doubleEscape
         context.dictationViewModel.state = .recording
 
         context.dictationViewModel.handleCancelHotkey()
@@ -12606,9 +12931,9 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
         let context = try XCTUnwrap(dictationContext)
-        let originalPreference = context.dictationViewModel.requireSecondEscapeToCancelRecording
-        defer { context.dictationViewModel.requireSecondEscapeToCancelRecording = originalPreference }
-        context.dictationViewModel.requireSecondEscapeToCancelRecording = true
+        let originalPreference = context.dictationViewModel.cancellationBehavior
+        defer { context.dictationViewModel.cancellationBehavior = originalPreference }
+        context.dictationViewModel.cancellationBehavior = .doubleEscape
         context.dictationViewModel.state = .recording
 
         context.dictationViewModel.handleCancelHotkey()
@@ -12633,9 +12958,9 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
         let context = try XCTUnwrap(dictationContext)
-        let originalPreference = context.dictationViewModel.requireSecondEscapeToCancelRecording
-        defer { context.dictationViewModel.requireSecondEscapeToCancelRecording = originalPreference }
-        context.dictationViewModel.requireSecondEscapeToCancelRecording = false
+        let originalPreference = context.dictationViewModel.cancellationBehavior
+        defer { context.dictationViewModel.cancellationBehavior = originalPreference }
+        context.dictationViewModel.cancellationBehavior = .singleEscape
         context.dictationViewModel.state = .recording
 
         context.dictationViewModel.handleCancelHotkey()
@@ -12673,9 +12998,9 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             mediaPlaybackService: mediaPlaybackService
         )
         let context = try XCTUnwrap(dictationContext)
-        let originalPreference = context.dictationViewModel.requireSecondEscapeToCancelRecording
-        defer { context.dictationViewModel.requireSecondEscapeToCancelRecording = originalPreference }
-        context.dictationViewModel.requireSecondEscapeToCancelRecording = true
+        let originalPreference = context.dictationViewModel.cancellationBehavior
+        defer { context.dictationViewModel.cancellationBehavior = originalPreference }
+        context.dictationViewModel.cancellationBehavior = .doubleEscape
         context.audioRecordingService.stopRecordingOverride = { policy in
             events.append("stop_recording_\(policy.logDescription)")
             stopRecordingCalled.fulfill()
@@ -12705,9 +13030,9 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
         let context = try XCTUnwrap(dictationContext)
-        let originalPreference = context.dictationViewModel.requireSecondEscapeToCancelRecording
-        defer { context.dictationViewModel.requireSecondEscapeToCancelRecording = originalPreference }
-        context.dictationViewModel.requireSecondEscapeToCancelRecording = false
+        let originalPreference = context.dictationViewModel.cancellationBehavior
+        defer { context.dictationViewModel.cancellationBehavior = originalPreference }
+        context.dictationViewModel.cancellationBehavior = .doubleEscape
         context.dictationViewModel.state = .processing
 
         context.dictationViewModel.handleCancelHotkey()
@@ -12786,9 +13111,9 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
         let context = try XCTUnwrap(dictationContext)
-        let originalPreference = context.dictationViewModel.requireSecondEscapeToCancelRecording
-        defer { context.dictationViewModel.requireSecondEscapeToCancelRecording = originalPreference }
-        context.dictationViewModel.requireSecondEscapeToCancelRecording = true
+        let originalPreference = context.dictationViewModel.cancellationBehavior
+        defer { context.dictationViewModel.cancellationBehavior = originalPreference }
+        context.dictationViewModel.cancellationBehavior = .doubleEscape
         context.dictationViewModel.state = .recording
 
         context.dictationViewModel.handleCancelHotkey()

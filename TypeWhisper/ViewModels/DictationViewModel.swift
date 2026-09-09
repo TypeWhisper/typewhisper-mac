@@ -246,8 +246,8 @@ final class DictationViewModel: ObservableObject {
     @Published var transcribeShortQuietClipsAggressively: Bool {
         didSet { Self.persistTranscribeShortQuietClipsAggressively(transcribeShortQuietClipsAggressively) }
     }
-    @Published var requireSecondEscapeToCancelRecording: Bool {
-        didSet { Self.persistRequireSecondEscapeToCancelRecording(requireSecondEscapeToCancelRecording) }
+    @Published var cancellationBehavior: CancellationBehavior {
+        didSet { Self.persistCancellationBehavior(cancellationBehavior) }
     }
     @Published var microphoneBoostEnabled: Bool {
         didSet {
@@ -351,6 +351,8 @@ final class DictationViewModel: ObservableObject {
     private let settingsHandler: DictationSettingsHandler
     private var transcriptionTask: Task<Void, Never>?
     private var recordingStartTask: Task<Void, Never>?
+    // A new capture must wait until the previous recorder has stopped and discarded its audio.
+    private var recordingCleanupTask: Task<Void, Never>?
     private var stopFinalizationTask: Task<Void, Never>?
     private var targetAppCorrectionLearningTask: Task<Void, Never>?
     private var targetAppAccessibilityObservationLease: TargetAppAccessibilityObservationLease?
@@ -547,7 +549,7 @@ final class DictationViewModel: ObservableObject {
         self.preserveClipboard = UserDefaults.standard.bool(forKey: UserDefaultsKeys.preserveClipboard)
         self.mediaPauseEnabled = UserDefaults.standard.bool(forKey: UserDefaultsKeys.mediaPauseEnabled)
         self.transcribeShortQuietClipsAggressively = Self.loadTranscribeShortQuietClipsAggressively()
-        self.requireSecondEscapeToCancelRecording = Self.loadRequireSecondEscapeToCancelRecording()
+        self.cancellationBehavior = Self.loadCancellationBehavior()
         self.microphoneBoostEnabled = Self.loadMicrophoneBoostEnabled()
         self.spokenFeedbackEnabled = UserDefaults.standard.bool(forKey: UserDefaultsKeys.spokenFeedbackEnabled)
         self.indicatorStyle = Self.loadIndicatorStyle()
@@ -698,12 +700,17 @@ final class DictationViewModel: ObservableObject {
         defaults.set(enabled, forKey: UserDefaultsKeys.transcribeShortQuietClipsAggressively)
     }
 
-    nonisolated static func loadRequireSecondEscapeToCancelRecording(defaults: UserDefaults = .standard) -> Bool {
-        defaults.object(forKey: UserDefaultsKeys.requireSecondEscapeToCancelRecording) as? Bool ?? true
+    nonisolated static func loadCancellationBehavior(defaults: UserDefaults = .standard) -> CancellationBehavior {
+        if let rawValue = defaults.string(forKey: UserDefaultsKeys.cancellationBehavior),
+           let behavior = CancellationBehavior(rawValue: rawValue) {
+            return behavior
+        }
+        let requiresConfirmation = defaults.object(forKey: UserDefaultsKeys.requireSecondEscapeToCancelRecording) as? Bool ?? true
+        return requiresConfirmation ? .doubleEscape : .singleEscape
     }
 
-    nonisolated static func persistRequireSecondEscapeToCancelRecording(_ enabled: Bool, defaults: UserDefaults = .standard) {
-        defaults.set(enabled, forKey: UserDefaultsKeys.requireSecondEscapeToCancelRecording)
+    nonisolated static func persistCancellationBehavior(_ behavior: CancellationBehavior, defaults: UserDefaults = .standard) {
+        defaults.set(behavior.rawValue, forKey: UserDefaultsKeys.cancellationBehavior)
     }
 
     nonisolated static func loadMicrophoneBoostEnabled(defaults: UserDefaults = .standard) -> Bool {
@@ -810,6 +817,10 @@ final class DictationViewModel: ObservableObject {
     }
 
 #if DEBUG
+    func testingWaitForRecordingCleanup() async {
+        await recordingCleanupTask?.value
+    }
+
     func testingWaitForRecordingStart() async {
         let startTask = recordingStartTask
         await startTask?.value
@@ -1000,7 +1011,9 @@ final class DictationViewModel: ObservableObject {
         restoreRecordingSideEffects()
         streamingHandler.stop()
         stopRecordingTimer()
-        Task {
+        let previousCleanup = recordingCleanupTask
+        recordingCleanupTask = Task {
+            await previousCleanup?.value
             await pendingStartTask?.value
             _ = await audioRecordingService.stopRecording(policy: .immediate)
             if preserveRecoveryAudio {
@@ -1166,7 +1179,7 @@ final class DictationViewModel: ObservableObject {
         )
         guard let target = cancelWarningTargetForCurrentState() else { return }
 
-        if target == .recording, !requireSecondEscapeToCancelRecording {
+        if cancellationBehavior != .doubleEscape {
             clearCancelWarning()
             cancelCurrentOperation()
             return
@@ -1211,11 +1224,17 @@ final class DictationViewModel: ObservableObject {
         case .recording:
             guard !isStopInFlight else { return }
             abortActiveRecordingImmediately(sessionMessage: cancelledMessage)
-            showNotchFeedback(message: cancelledMessage, icon: "xmark.circle", duration: 1.5)
+            finishCancellation(message: cancelledMessage)
         case .processing:
             cancelActiveDictationSessionIfNeeded(message: cancelledMessage)
             cancelLiveFieldTranscriptSession()
-            stopFinalizationTask?.cancel()
+            let finalizationTask = stopFinalizationTask
+            finalizationTask?.cancel()
+            let previousCleanup = recordingCleanupTask
+            recordingCleanupTask = Task {
+                await previousCleanup?.value
+                await finalizationTask?.value
+            }
             stopFinalizationTask = nil
             streamingHandler.stop()
             lastStreamingParams = nil
@@ -1223,9 +1242,17 @@ final class DictationViewModel: ObservableObject {
             transcriptionTask = nil
             endTargetAppAccessibilityObservation()
             audioRecordingService.discardActiveRecoveryRecording()
-            showNotchFeedback(message: cancelledMessage, icon: "xmark.circle", duration: 1.5)
+            finishCancellation(message: cancelledMessage)
         default:
             break
+        }
+    }
+
+    private func finishCancellation(message: String) {
+        if cancellationBehavior == .instant {
+            resetDictationState()
+        } else {
+            showNotchFeedback(message: message, icon: "xmark.circle", duration: 1.5)
         }
     }
 
@@ -1313,6 +1340,7 @@ final class DictationViewModel: ObservableObject {
             "Preparing recording input without blocking the main actor: requestToFeedbackMs=\(Self.formatMilliseconds(requestToFeedbackMs), privacy: .public), bluetooth=\(selectedInputUsesBluetooth, privacy: .public)"
         )
         recordingStartTask?.cancel()
+        let previousCleanup = recordingCleanupTask
         recordingStartTask = Task { @MainActor [weak self] in
             guard let self else { return }
             defer {
@@ -1322,6 +1350,9 @@ final class DictationViewModel: ObservableObject {
             }
 
             do {
+                await previousCleanup?.value
+                try Task.checkCancellation()
+                guard self.activeDictationSessionID == sessionID else { return }
                 try await self.audioRecordingService.startRecordingAsync(
                     requestUptimeNanoseconds: requestUptimeNanoseconds
                 )
@@ -1681,7 +1712,7 @@ final class DictationViewModel: ObservableObject {
         if recordingStartTask != nil, !isRecordingInputReady {
             let cancelledMessage = String(localized: "Cancelled")
             abortActiveRecordingImmediately(sessionMessage: cancelledMessage)
-            showNotchFeedback(message: cancelledMessage, icon: "xmark.circle", duration: 1.5)
+            finishCancellation(message: cancelledMessage)
             return
         }
         isStopInFlight = true
@@ -1721,6 +1752,7 @@ final class DictationViewModel: ObservableObject {
             stopRecordingTimer()
             _ = await audioRecordingService.stopRecording(policy: .immediate)
             audioRecordingService.discardActiveRecoveryRecording()
+            guard !Task.isCancelled else { return }
             if let sessionID {
                 failDictationSession(id: sessionID, error: discardMessage)
             }

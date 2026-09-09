@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import signal
 import json
 import pathlib
 import sys
@@ -123,6 +124,9 @@ class MCPHandler(BaseHTTPRequestHandler):
                 "error": {"code": -32601, "message": "Method not found"},
             })
 
+
+if "--ignore-termination" in sys.argv[4:]:
+    signal.signal(signal.SIGTERM, signal.SIG_IGN)
 
 server = ThreadingHTTPServer(("127.0.0.1", 0), MCPHandler)
 port_path.write_text(str(server.server_port), encoding="utf-8")

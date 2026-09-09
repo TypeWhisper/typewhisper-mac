@@ -10,12 +10,11 @@ let package = Package(
         .library(name: "TypeWhisperPluginSDKTesting", targets: ["TypeWhisperPluginSDKTesting"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/FluidInference/FluidAudio.git", exact: "0.15.5"),
+        .package(url: "https://github.com/FluidInference/FluidAudio.git", exact: "0.15.6"),
         .package(url: "https://github.com/Blaizzy/mlx-audio-swift.git", revision: "2685c640d4079641a01ef3489cacb684c34109fd"),
-        .package(url: "https://github.com/huggingface/swift-huggingface.git", exact: "0.9.0"),
-        // swift-transformers 1.3.3 is incompatible with swift-jinja 2.4's ObjectKey API.
-        .package(url: "https://github.com/huggingface/swift-jinja.git", exact: "2.3.6"),
-        .package(url: "https://github.com/ml-explore/mlx-swift.git", exact: "0.31.4"),
+        .package(url: "https://github.com/huggingface/swift-huggingface.git", exact: "0.10.1"),
+        .package(url: "https://github.com/huggingface/swift-jinja.git", exact: "2.5.0"),
+        .package(url: "https://github.com/ml-explore/mlx-swift.git", exact: "0.31.6"),
         .package(url: "https://github.com/microsoft/onnxruntime-swift-package-manager.git", from: "1.24.2"),
         .package(url: "https://github.com/modelcontextprotocol/swift-sdk.git", exact: "0.12.1"),
     ],

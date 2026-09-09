@@ -42,6 +42,11 @@ python3 scripts/test_check_plugin_sdk_symbol_compatibility.py
 python3 scripts/test_plugin_registry_metadata.py
 python3 scripts/test_resolve_plugin_host_release.py
 python3 scripts/test_verify_appcast_publication.py
+python3 scripts/test_icloud_release_policy.py
+
+log "checking plugin release policy"
+python3 scripts/validate_plugin_release_manifest.py TypeWhisperPluginSDK/Plugins/*/manifest.json
+python3 scripts/test_validate_plugin_release_manifest.py
 
 log "checking main-app localization completeness"
 python3 scripts/check_localization_completeness.py
