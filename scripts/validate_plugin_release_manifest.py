@@ -34,9 +34,9 @@ def validate_manifest(manifest: dict, expected_version: str | None = None) -> No
         )
 
     sdk_version = manifest.get("sdkCompatibilityVersion")
-    if not isinstance(sdk_version, str) or not re.fullmatch(r"v[1-9][0-9]*", sdk_version):
+    if sdk_version != "v1":
         raise ValueError(
-            f"manifest sdkCompatibilityVersion {sdk_version!r} must use the format vN"
+            f"manifest sdkCompatibilityVersion {sdk_version!r} must be 'v1'"
         )
 
 

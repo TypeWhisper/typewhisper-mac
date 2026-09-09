@@ -36,10 +36,10 @@ class PluginReleaseManifestTests(unittest.TestCase):
             validate_manifest(self.manifest(), "1.2.4")
 
     def test_sdk_compatibility_line_remains_required(self):
-        for sdk in (None, "1.7.0", "v0", "v1-beta"):
+        for sdk in (None, "1.7.0", "v0", "v1-beta", "v2", "v10"):
             manifest = self.manifest()
             manifest["sdkCompatibilityVersion"] = sdk
-            with self.subTest(sdk=sdk), self.assertRaisesRegex(ValueError, "format vN"):
+            with self.subTest(sdk=sdk), self.assertRaisesRegex(ValueError, "must be 'v1'"):
                 validate_manifest(manifest)
 
     def test_validation_does_not_rewrite_metadata(self):
