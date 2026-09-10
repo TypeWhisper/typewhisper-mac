@@ -1487,6 +1487,7 @@ private let typeWhisperAddonSlugsByPluginID: [String: String] = [
     "com.typewhisper.speechanalyzer": "apple-speech",
     "com.typewhisper.speechmatics": "speechmatics",
     "com.typewhisper.tts.supertonic": "supertonic",
+    "com.typewhisper.vercel-ai-gateway": "vercel-ai-gateway",
     "com.typewhisper.voxtral": "voxtral",
     "com.typewhisper.webhook": "webhook",
     "com.typewhisper.whisperkit": "whisperkit",

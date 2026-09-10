@@ -132,6 +132,7 @@ jobs:
             web-link) TARGET="WebLinkPlugin" ;;
             cerebras) TARGET="CerebrasPlugin" ;;
             openrouter) TARGET="OpenRouterPlugin" ;;
+            vercel-ai-gateway) TARGET="VercelAIGatewayPlugin" ;;
             soniox) TARGET="SonioxPlugin" ;;
             sber-salutespeech) TARGET="SaluteSpeechPlugin" ;;
             reson8) TARGET="Reson8Plugin" ;;

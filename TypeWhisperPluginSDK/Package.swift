@@ -77,6 +77,17 @@ let package = Package(
             ]
         ),
         .target(
+            name: "VercelAIGatewayPlugin",
+            dependencies: ["TypeWhisperPluginSDK"],
+            path: "Plugins/VercelAIGatewayPlugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("Localizable.xcstrings"),
+                .process("manifest.json"),
+                .process("vercel.svg"),
+            ]
+        ),
+        .target(
             name: "GroqPlugin",
             dependencies: ["TypeWhisperPluginSDK"],
             path: "Plugins/GroqPlugin",
@@ -445,6 +456,15 @@ let package = Package(
                 "OpenRouterPlugin",
             ],
             path: "Plugins/OpenRouterPlugin/Tests"
+        ),
+        .testTarget(
+            name: "VercelAIGatewayPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "VercelAIGatewayPlugin",
+            ],
+            path: "Plugins/VercelAIGatewayPlugin/Tests"
         ),
         .testTarget(
             name: "GroqPluginTests",
