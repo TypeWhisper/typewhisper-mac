@@ -3264,6 +3264,37 @@
           "downloadCount": 5
         }
       ]
+    },
+    {
+      "id": "com.typewhisper.vercel-ai-gateway",
+      "name": "Vercel AI Gateway",
+      "author": "TypeWhisper",
+      "description": "Access speech-to-text models and hundreds of LLMs from OpenAI, Anthropic, Google, xAI and more through Vercel AI Gateway with a single API key. Shows model pricing and credit balance.",
+      "category": "transcription",
+      "downloadCount": 0,
+      "descriptions": {
+        "de": "Zugriff auf Spracherkennungsmodelle und Hunderte LLMs von OpenAI, Anthropic, Google, xAI und mehr \u00fcber Vercel AI Gateway mit einem einzigen API-Schl\u00fcssel. Zeigt Modellpreise und Guthaben.",
+        "ja": "Vercel AI Gateway\u7d4c\u7531\u3067\u3001OpenAI\u3001Anthropic\u3001Google\u3001xAI\u306a\u3069\u306e\u97f3\u58f0\u8a8d\u8b58\u30e2\u30c7\u30eb\u3068\u6570\u767e\u306eLLM\u306b1\u3064\u306eAPI\u30ad\u30fc\u3067\u30a2\u30af\u30bb\u30b9\u3067\u304d\u307e\u3059\u3002\u30e2\u30c7\u30eb\u6599\u91d1\u3068\u30af\u30ec\u30b8\u30c3\u30c8\u6b8b\u9ad8\u3092\u8868\u793a\u3057\u307e\u3059\u3002"
+      },
+      "categories": [
+        "transcription",
+        "llm"
+      ],
+      "iconSystemName": "triangle.fill",
+      "requiresAPIKey": true,
+      "hosting": "cloud",
+      "detailsURL": "https://www.typewhisper.com/addons/vercel-ai-gateway/",
+      "homepageURL": "https://vercel.com/ai-gateway",
+      "releases": [
+        {
+          "version": "1.0.0",
+          "minHostVersion": "1.7.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 270641,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-vercel-ai-gateway-v1.0.0/VercelAIGatewayPlugin.zip",
+          "minOSVersion": "14.0"
+        }
+      ]
     }
   ]
 }
