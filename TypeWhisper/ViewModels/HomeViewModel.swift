@@ -34,7 +34,7 @@ final class HomeViewModel: ObservableObject {
     }
 
     private func setupBindings() {
-        historyService.$records
+        historyService.$recentRecords
             .dropFirst()
             .sink { [weak self] _ in self?.scheduleRefresh() }
             .store(in: &cancellables)
@@ -55,9 +55,9 @@ final class HomeViewModel: ObservableObject {
     }
 
     func refresh() {
-        let allRecords = historyService.records
-        hasAnyTranscriptions = usageStatisticsService.hasAnyStatistics || !allRecords.isEmpty
-        recentTranscriptions = Array(allRecords.prefix(3))
+        let recentRecords = historyService.recentRecords
+        hasAnyTranscriptions = usageStatisticsService.hasAnyStatistics || !recentRecords.isEmpty
+        recentTranscriptions = Array(recentRecords.prefix(3))
     }
 
     func completeSetupWizard() {

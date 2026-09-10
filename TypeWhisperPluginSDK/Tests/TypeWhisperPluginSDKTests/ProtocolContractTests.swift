@@ -732,6 +732,21 @@ final class ProtocolContractTests: XCTestCase {
         XCTAssertEqual(String(data: wav.prefix(4), encoding: .utf8), "RIFF")
     }
 
+    func testWavEncoderPreservesSignedPCMClippingAndLittleEndianHeader() {
+        let wav = PluginWavEncoder.encode([-2, -1, -0.5, 0, 0.5, 1, 2])
+        XCTAssertEqual(wav, Data([
+            0x52, 0x49, 0x46, 0x46, 50, 0, 0, 0, 0x57, 0x41, 0x56, 0x45,
+            0x66, 0x6d, 0x74, 0x20, 16, 0, 0, 0, 1, 0, 1, 0,
+            0x80, 0x3e, 0, 0, 0, 0x7d, 0, 0, 2, 0, 16, 0,
+            0x64, 0x61, 0x74, 0x61, 14, 0, 0, 0,
+            1, 0x80, 1, 0x80, 1, 0xc0, 0, 0, 0xff, 0x3f, 0xff, 0x7f, 0xff, 0x7f,
+        ]))
+        XCTAssertEqual(PluginWavEncoder.encode([]).count, 44)
+        let alternateRate = PluginWavEncoder.encode([0], sampleRate: 48_000)
+        XCTAssertEqual(Array(alternateRate[24..<28]), [0x80, 0xbb, 0, 0])
+        XCTAssertEqual(Array(alternateRate[28..<32]), [0, 0x77, 1, 0])
+    }
+
     func testDictionaryTermsCapabilityProtocolIsOptional() {
         let legacyPlugin = MockTranscriptionPlugin()
         let capabilityPlugin = MockDictionaryTermsPlugin()

@@ -9,7 +9,7 @@ import MLXAudioSTT
 // MARK: - Plugin Entry Point
 
 @objc(VoxtralPlugin)
-final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding, DictionaryTermsCapabilityProviding, PluginSettingsActivityReporting, PluginDownloadedModelManaging, @unchecked Sendable {
+final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding, DictionaryTermsCapabilityProviding, PluginSettingsActivityReporting, PluginDownloadedModelManaging, PassiveModelRestoreProviding, @unchecked Sendable {
     static let pluginId = "com.typewhisper.voxtral"
     static let pluginName = "Voxtral"
 
@@ -43,6 +43,16 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
     )
     private static let modelDownloadPatterns = ["*.safetensors", "*.json", "*.txt", "*.wav"]
 
+    private let passiveRestoreController = PluginPassiveModelRestoreController()
+    private let modelLoadGate = PluginLocalInferenceGate()
+
+    func requestPassiveModelRestore() {
+        passiveRestoreController.request { [weak self] in
+            guard let self else { return }
+            await self.restoreLoadedModel(allowDownloads: false, passively: true)
+        }
+    }
+
     required override init() {
         super.init()
     }
@@ -55,11 +65,12 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
         cleanupRedundantModelCopies()
 
         if shouldRestoreLoadedModelsPassively {
-            Task { await restoreLoadedModel(allowDownloads: false) }
+            requestPassiveModelRestore()
         }
     }
 
     func deactivate() {
+        passiveRestoreController.cancel()
         model = nil
         loadedModelId = nil
         modelState = .notLoaded
@@ -203,7 +214,18 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
 
     // MARK: - Model Management
 
-    fileprivate func loadModel(_ modelDef: VoxtralModelDef) async throws {
+    fileprivate func loadModel(_ modelDef: VoxtralModelDef, passively: Bool = false) async throws {
+        try await modelLoadGate.withLock { [self] in
+            guard host != nil else { return }
+            if passively {
+                guard host?.shouldRestoreLoadedModelsPassively == true, !isConfigured else { return }
+            }
+            guard !(isConfigured && loadedModelId == modelDef.id) else { return }
+            try await performModelLoad(modelDef, allowDownloads: !passively)
+        }
+    }
+
+    private func performModelLoad(_ modelDef: VoxtralModelDef, allowDownloads: Bool) async throws {
         modelState = .loading
         do {
             let modelsDir = host?.pluginDataDirectory.appendingPathComponent("models")
@@ -214,6 +236,10 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
             if let existing = usableModelDirectory(for: modelDef, modelsDirectory: modelsDir) {
                 modelDirectory = existing
             } else {
+                guard allowDownloads else {
+                    modelState = .notLoaded
+                    return
+                }
                 removeIncompleteModelIfNeeded(modelDef, modelsDirectory: modelsDir)
                 guard let repoID = Repo.ID(rawValue: modelDef.repoId) else {
                     throw NSError(
@@ -248,6 +274,8 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
 
             let loaded = try VoxtralRealtimeModel.fromDirectory(modelDirectory)
 
+            try Task.checkCancellation()
+            guard host != nil else { return }
             model = loaded
             loadedModelId = modelDef.id
             _selectedModelId = modelDef.id
@@ -255,6 +283,11 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
             host?.setUserDefault(modelDef.id, forKey: "loadedModel")
             modelState = .ready(modelDef.id)
             host?.notifyCapabilitiesChanged()
+        } catch is CancellationError {
+            if host != nil {
+                modelState = loadedModelId.map { .ready($0) } ?? .notLoaded
+            }
+            throw CancellationError()
         } catch {
             modelState = .error("\(error)")
             throw error
@@ -296,13 +329,17 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
         )
     }
 
-    func restoreLoadedModel(allowDownloads: Bool = true) async {
+    func restoreLoadedModel(allowDownloads: Bool = true, passively: Bool = false) async {
+        guard !Task.isCancelled else { return }
+        if passively {
+            guard host?.shouldRestoreLoadedModelsPassively == true, !isConfigured else { return }
+        }
         guard let savedId = host?.userDefault(forKey: "loadedModel") as? String,
               let modelDef = Self.availableModels.first(where: { $0.id == savedId }) else {
             return
         }
         guard allowDownloads || hasDownloadedModel(modelDef) else { return }
-        try? await loadModel(modelDef)
+        try? await loadModel(modelDef, passively: passively)
     }
 
     private func hasDownloadedModel(_ modelDef: VoxtralModelDef) -> Bool {
@@ -605,7 +642,7 @@ private struct VoxtralSettingsView: View {
         .task {
             if case .notLoaded = plugin.modelState, plugin.shouldRestoreLoadedModelsPassively {
                 isPolling = true
-                await plugin.restoreLoadedModel(allowDownloads: false)
+                await plugin.restoreLoadedModel(allowDownloads: false, passively: true)
                 isPolling = false
                 modelState = plugin.modelState
             }

@@ -13,11 +13,6 @@ on:
         description: Optional exact release tag (for example v1.7.0-daily.20260825.1)
         required: false
         type: string
-      without_icloud:
-        description: Build the bridge without iCloud (fallback when its Developer ID profile is unavailable)
-        required: false
-        default: false
-        type: boolean
 
 env:
   SCHEME: TypeWhisper
@@ -33,12 +28,12 @@ jobs:
     outputs:
       tag: ${{ steps.resolve.outputs.tag }}
       should_run: ${{ steps.resolve.outputs.should_run }}
-      without_icloud: ${{ steps.resolve.outputs.without_icloud }}
     steps:
       - name: Checkout
         if: github.event_name != 'push'
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           fetch-depth: 0
 
       - name: Resolve release tag
@@ -47,18 +42,7 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           REF_NAME: ${{ github.ref_name }}
           REQUESTED_TAG: ${{ inputs.release_tag }}
-          REQUESTED_WITHOUT_ICLOUD: ${{ inputs.without_icloud }}
-          SCHEDULED_WITHOUT_ICLOUD: ${{ vars.MACOS_SCHEDULED_WITHOUT_ICLOUD }}
         run: |
-          WITHOUT_ICLOUD="false"
-          # Tagged releases use the dedicated iCloud bridge profile. Scheduled
-          # and manually dispatched builds retain their explicit fallback controls.
-          if [ "$REQUESTED_WITHOUT_ICLOUD" = "true" ] ||
-            { [ "$EVENT_NAME" = "schedule" ] && [ "$SCHEDULED_WITHOUT_ICLOUD" = "true" ]; }; then
-            WITHOUT_ICLOUD="true"
-          fi
-          echo "without_icloud=$WITHOUT_ICLOUD" >> "$GITHUB_OUTPUT"
-
           if [ "$EVENT_NAME" = "push" ]; then
             printf 'tag=%s\n' "$REF_NAME" >> "$GITHUB_OUTPUT"
             echo "should_run=true" >> "$GITHUB_OUTPUT"
@@ -104,10 +88,10 @@ jobs:
   verify-release-tools:
     needs: [prepare]
     if: needs.prepare.outputs.should_run == 'true'
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
@@ -115,19 +99,22 @@ jobs:
         run: |
           bash scripts/check_release_binary_instrumentation.sh --self-test
           bash scripts/check_release_signing.sh --self-test
+          python3 scripts/test_icloud_release_policy.py
 
   app-tests:
     needs: [prepare]
     if: needs.prepare.outputs.should_run == 'true'
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Xcode
-        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
-          xcode-version: "26.3"
+          xcode-version: "26.6"
 
       - name: Resolve Swift packages
         run: |
@@ -138,7 +125,7 @@ jobs:
       - name: Run App Tests
         run: |
           set -o pipefail
-          xcodebuild test -project $PROJECT \
+          xcodebuild test -skipPackagePluginValidation -project $PROJECT \
             -scheme $SCHEME \
             -destination 'platform=macOS,arch=arm64' \
             -parallel-testing-enabled NO \
@@ -152,15 +139,17 @@ jobs:
   plugin-sdk-tests:
     needs: [prepare]
     if: needs.prepare.outputs.should_run == 'true'
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Xcode
-        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
-          xcode-version: "26.3"
+          xcode-version: "26.6"
 
       - name: Run Plugin SDK Tests
         run: swift test --package-path TypeWhisperPluginSDK
@@ -172,20 +161,19 @@ jobs:
       - app-tests
       - plugin-sdk-tests
     if: needs.prepare.outputs.should_run == 'true'
-    runs-on: macos-15
+    runs-on: macos-26
     env:
       RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
-      WITHOUT_ICLOUD: ${{ needs.prepare.outputs.without_icloud }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
 
       - name: Setup Xcode
-        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
-          xcode-version: "26.3"
+          xcode-version: "26.6"
 
       - name: Resolve Swift packages
         run: |
@@ -220,13 +208,12 @@ jobs:
           bash scripts/check_release_signing.sh --self-test
 
       - name: Decode iCloud Bridge Developer ID Provisioning Profile
-        if: needs.prepare.outputs.without_icloud != 'true'
         env:
           MACOS_ICLOUD_HELPER_DEVELOPER_ID_PROVISIONING_PROFILE: ${{ secrets.MACOS_ICLOUD_HELPER_DEVELOPER_ID_PROVISIONING_PROFILE }}
         run: |
           PROFILE_PATH="${RUNNER_TEMP}/TypeWhisperICloudBridge.provisionprofile"
           if [ -z "$MACOS_ICLOUD_HELPER_DEVELOPER_ID_PROVISIONING_PROFILE" ]; then
-            echo "MACOS_ICLOUD_HELPER_DEVELOPER_ID_PROVISIONING_PROFILE is not set; use without_icloud to build the fallback" >&2
+            echo "MACOS_ICLOUD_HELPER_DEVELOPER_ID_PROVISIONING_PROFILE is required for every app release" >&2
             exit 1
           fi
           printf '%s' "$MACOS_ICLOUD_HELPER_DEVELOPER_ID_PROVISIONING_PROFILE" | base64 --decode > "$PROFILE_PATH"
@@ -268,11 +255,7 @@ jobs:
             --build-number "$BUILD_NUMBER"
             --signing-identity "$MACOS_SIGNING_IDENTITY"
           )
-          if [ "$WITHOUT_ICLOUD" = "true" ]; then
-            ARCHIVE_ARGS+=(--without-icloud)
-          else
-            ARCHIVE_ARGS+=(--profile "$MACOS_ICLOUD_HELPER_DEVELOPER_ID_PROVISIONING_PROFILE_PATH")
-          fi
+          ARCHIVE_ARGS+=(--profile "$MACOS_ICLOUD_HELPER_DEVELOPER_ID_PROVISIONING_PROFILE_PATH")
 
           set -o pipefail
           bash scripts/archive_release.sh "${ARCHIVE_ARGS[@]}" | tee build.log
@@ -285,11 +268,7 @@ jobs:
 
       - name: Check Developer ID Signing
         run: |
-          CHECK_ARGS=()
-          if [ "$WITHOUT_ICLOUD" = "true" ]; then
-            CHECK_ARGS+=(--without-icloud)
-          fi
-          bash scripts/check_release_signing.sh "${CHECK_ARGS[@]}" build/export/TypeWhisper.app
+          bash scripts/check_release_signing.sh build/export/TypeWhisper.app
 
       - name: Notarize App
         env:
@@ -314,12 +293,7 @@ jobs:
 
       - name: Verify Notarized App and Spawn
         run: |
-          CHECK_ARGS=()
-          if [ "$WITHOUT_ICLOUD" = "true" ]; then
-            CHECK_ARGS+=(--without-icloud)
-          fi
           bash scripts/check_release_signing.sh \
-            "${CHECK_ARGS[@]}" \
             --require-notarization \
             --spawn \
             build/export/TypeWhisper.app

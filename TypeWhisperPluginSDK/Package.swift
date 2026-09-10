@@ -10,12 +10,11 @@ let package = Package(
         .library(name: "TypeWhisperPluginSDKTesting", targets: ["TypeWhisperPluginSDKTesting"]),
     ],
     dependencies: [
-        .package(url: "https://github.com/FluidInference/FluidAudio.git", exact: "0.15.5"),
+        .package(url: "https://github.com/FluidInference/FluidAudio.git", exact: "0.15.6"),
         .package(url: "https://github.com/Blaizzy/mlx-audio-swift.git", revision: "2685c640d4079641a01ef3489cacb684c34109fd"),
-        .package(url: "https://github.com/huggingface/swift-huggingface.git", exact: "0.9.0"),
-        // swift-transformers 1.3.3 is incompatible with swift-jinja 2.4's ObjectKey API.
-        .package(url: "https://github.com/huggingface/swift-jinja.git", exact: "2.3.6"),
-        .package(url: "https://github.com/ml-explore/mlx-swift.git", exact: "0.31.4"),
+        .package(url: "https://github.com/huggingface/swift-huggingface.git", exact: "0.10.1"),
+        .package(url: "https://github.com/huggingface/swift-jinja.git", exact: "2.5.0"),
+        .package(url: "https://github.com/ml-explore/mlx-swift.git", exact: "0.31.6"),
         .package(url: "https://github.com/microsoft/onnxruntime-swift-package-manager.git", from: "1.24.2"),
         .package(url: "https://github.com/modelcontextprotocol/swift-sdk.git", exact: "0.12.1"),
     ],
@@ -46,6 +45,28 @@ let package = Package(
             ]
         ),
         .target(
+            name: "MetaPlugin",
+            dependencies: ["TypeWhisperPluginSDK"],
+            path: "Plugins/MetaPlugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("Localizable.xcstrings"),
+                .process("manifest.json"),
+                .process("meta.svg"),
+            ]
+        ),
+        .target(
+            name: "MicrosoftAIPlugin",
+            dependencies: ["TypeWhisperPluginSDK"],
+            path: "Plugins/MicrosoftAIPlugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("Localizable.xcstrings"),
+                .process("manifest.json"),
+                .process("azure.svg"),
+            ]
+        ),
+        .target(
             name: "OpenRouterPlugin",
             dependencies: ["TypeWhisperPluginSDK"],
             path: "Plugins/OpenRouterPlugin",
@@ -53,6 +74,17 @@ let package = Package(
             resources: [
                 .process("Localizable.xcstrings"),
                 .process("manifest.json"),
+            ]
+        ),
+        .target(
+            name: "VercelAIGatewayPlugin",
+            dependencies: ["TypeWhisperPluginSDK"],
+            path: "Plugins/VercelAIGatewayPlugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("Localizable.xcstrings"),
+                .process("manifest.json"),
+                .process("vercel.svg"),
             ]
         ),
         .target(
@@ -399,6 +431,24 @@ let package = Package(
             path: "Plugins/OpenAIPlugin/Tests"
         ),
         .testTarget(
+            name: "MetaPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "MetaPlugin",
+            ],
+            path: "Plugins/MetaPlugin/Tests"
+        ),
+        .testTarget(
+            name: "MicrosoftAIPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "MicrosoftAIPlugin",
+            ],
+            path: "Plugins/MicrosoftAIPlugin/Tests"
+        ),
+        .testTarget(
             name: "OpenRouterPluginTests",
             dependencies: [
                 "TypeWhisperPluginSDK",
@@ -406,6 +456,15 @@ let package = Package(
                 "OpenRouterPlugin",
             ],
             path: "Plugins/OpenRouterPlugin/Tests"
+        ),
+        .testTarget(
+            name: "VercelAIGatewayPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "VercelAIGatewayPlugin",
+            ],
+            path: "Plugins/VercelAIGatewayPlugin/Tests"
         ),
         .testTarget(
             name: "GroqPluginTests",

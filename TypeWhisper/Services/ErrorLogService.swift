@@ -670,7 +670,7 @@ final class ErrorLogService: ObservableObject {
             ),
             lastIndicatorFullscreenSuppression: IndicatorFullscreenSuppressionPolicy.lastSuppressionDiagnostics(),
             counts: .init(
-                historyRecords: container.historyService.records.count,
+                historyRecords: container.historyService.recordCount(),
                 profiles: container.profileService.profiles.count,
                 enabledProfiles: container.profileService.profiles.filter(\.isEnabled).count,
                 dictionaryTerms: container.dictionaryService.termsCount,

@@ -3,6 +3,27 @@ import TypeWhisperPluginSDK
 @testable import TypeWhisper
 
 final class SpeechPunctuationServiceTests: XCTestCase {
+    @MainActor
+    func testRepeatedNormalizationKeepsLanguageRulesAndAliasesSeparate() {
+        let service = SpeechPunctuationService(rulesLoader: makeRulesLoader())
+        for _ in 0..<3 {
+            XCTAssertEqual(service.normalize(text: "ciao virgola mondo", language: "it-IT"), "ciao, mondo")
+            XCTAssertEqual(service.normalize(text: "メモ 鍵かっこ開く 重要 鍵かっこ閉じる", language: "ja_JP"), "メモ「重要」")
+            XCTAssertEqual(service.normalize(text: "ciao virgola mondo", language: "it"), "ciao, mondo")
+            XCTAssertEqual(service.normalize(text: "unchanged", language: "unknown"), "unchanged")
+        }
+    }
+
+    @MainActor
+    func testLongWhitespaceRunsPreserveMixedScriptSpacing() {
+        let service = SpeechPunctuationService(rulesLoader: makeRulesLoader())
+        let spaces = String(repeating: " \t\n", count: 1000)
+        XCTAssertEqual(service.normalize(text: "ciao\(spaces)mondo", language: "it"), "ciao mondo")
+        XCTAssertEqual(service.normalize(text: "ciao\(spaces)mondo", language: "it", mode: .selectiveFallback), "ciao\(spaces)mondo")
+        XCTAssertEqual(service.normalize(text: "メモ（\(spaces)重要\(spaces)）", language: "ja"), "メモ（重要）")
+        XCTAssertEqual(service.normalize(text: "確認？\(spaces)next", language: "ja"), "確認？ next")
+    }
+
     private func makeRulesLoader() -> PunctuationRulesLoader {
         PunctuationRulesLoader { languageCode in
             switch languageCode {

@@ -40,6 +40,68 @@ final class PostUpdatePromptCoordinatorTests: XCTestCase {
         )
     }
 
+    func testInitialWindowPolicyOpensSettingsForIOSCompanionPromo() {
+        XCTAssertEqual(
+            InitialWindowPresentationPolicy.presentation(
+                setupWizardRequired: false,
+                postUpdatePromptPending: false,
+                iOSCompanionPromptPending: true
+            ),
+            .settings
+        )
+    }
+
+    func testInitialWindowPolicyKeepsSetupAheadOfIOSCompanionPromo() {
+        XCTAssertEqual(
+            InitialWindowPresentationPolicy.presentation(
+                setupWizardRequired: true,
+                postUpdatePromptPending: false,
+                iOSCompanionPromptPending: true
+            ),
+            .setup
+        )
+    }
+
+    func testIOSCompanionPromoIsAcknowledgedOncePerCampaign() throws {
+        let (defaults, suiteName) = try makeIsolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let coordinator = IOSCompanionPromoCoordinator(
+            defaults: defaults,
+            campaignIdentifier: "ios-launch"
+        )
+
+        XCTAssertTrue(coordinator.shouldPresentPrompt)
+        coordinator.acknowledgeCurrentCampaign()
+        XCTAssertFalse(coordinator.shouldPresentPrompt)
+
+        let nextCampaign = IOSCompanionPromoCoordinator(
+            defaults: defaults,
+            campaignIdentifier: "ios-feature-update"
+        )
+        XCTAssertTrue(nextCampaign.shouldPresentPrompt)
+    }
+
+    func testIOSCompanionPromoCanBeRequestedManuallyAfterAcknowledgement() throws {
+        let (defaults, suiteName) = try makeIsolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let coordinator = IOSCompanionPromoCoordinator(
+            defaults: defaults,
+            campaignIdentifier: "ios-launch"
+        )
+        coordinator.acknowledgeCurrentCampaign()
+
+        XCTAssertFalse(coordinator.shouldPresentPrompt)
+        XCTAssertFalse(coordinator.consumeManualPresentationRequest())
+
+        coordinator.requestManualPresentation()
+
+        XCTAssertTrue(coordinator.consumeManualPresentationRequest())
+        XCTAssertFalse(coordinator.consumeManualPresentationRequest())
+        XCTAssertFalse(coordinator.shouldPresentPrompt)
+    }
+
     func testPendingPromptRemainsAvailableForInteractiveSettingsPresentation() throws {
         let (defaults, suiteName) = try makeIsolatedDefaults()
         defer { defaults.removePersistentDomain(forName: suiteName) }

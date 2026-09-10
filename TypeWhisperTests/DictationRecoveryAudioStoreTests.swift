@@ -62,6 +62,29 @@ final class DictationRecoveryAudioStoreTests: XCTestCase {
         XCTAssertTrue(try fileNames(in: directory).contains(existingRecovery.lastPathComponent))
     }
 
+    func testPreservationResultOnlyMarksANewlyCreatedRecovery() throws {
+        let directory = makeTemporaryDirectory()
+        let store = DictationRecoveryAudioStore(directory: directory)
+
+        store.startNewRecording()
+        store.append([0.1])
+        let firstResult = store.preserveActiveRecordingResult()
+        let existingRecovery = try XCTUnwrap(firstResult.newlyPreservedURL)
+
+        XCTAssertEqual(firstResult.latestRecoveryURL, existingRecovery)
+
+        let noActiveRecordingResult = store.preserveActiveRecordingResult()
+
+        XCTAssertEqual(noActiveRecordingResult.latestRecoveryURL, existingRecovery)
+        XCTAssertNil(noActiveRecordingResult.newlyPreservedURL)
+
+        store.startNewRecording()
+        let emptyRecordingResult = store.preserveActiveRecordingResult()
+
+        XCTAssertEqual(emptyRecordingResult.latestRecoveryURL, existingRecovery)
+        XCTAssertNil(emptyRecordingResult.newlyPreservedURL)
+    }
+
     func testDiscardActiveKeepsStoredRecoveriesAndDiscardRecoveryDeletesSelectedFile() throws {
         let directory = makeTemporaryDirectory()
         let store = DictationRecoveryAudioStore(directory: directory)

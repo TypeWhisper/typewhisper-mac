@@ -141,8 +141,14 @@ final class OpenRouterPlugin: NSObject,
             throw PluginTranscriptionError.apiError("OpenRouter speech-to-text does not support translation.")
         }
 
-        let preferredUpload = (try? PluginAudioUploadEncoder.compressedM4AUpload(from: audio))
-            ?? PluginAudioUploadEncoder.wavUpload(from: audio)
+        let preferredUpload: PluginAudioUploadFile
+        if modelId == "microsoft/mai-transcribe-2" {
+            // MAI is known to reject M4A. Avoid a failed upload before the WAV retry.
+            preferredUpload = PluginAudioUploadEncoder.wavUpload(from: audio)
+        } else {
+            preferredUpload = (try? PluginAudioUploadEncoder.compressedM4AUpload(from: audio))
+                ?? PluginAudioUploadEncoder.wavUpload(from: audio)
+        }
         var request = try Self.makeTranscriptionRequest(
             uploadFile: preferredUpload,
             apiKey: apiKey,
@@ -153,7 +159,7 @@ final class OpenRouterPlugin: NSObject,
         var (data, response) = try await PluginHTTPClient.data(for: request)
         if let httpResponse = response as? HTTPURLResponse,
            preferredUpload.format != "wav",
-           PluginAudioUploadEncoder.shouldRetryWithWavUpload(
+           Self.shouldRetryTranscriptionWithWav(
             statusCode: httpResponse.statusCode,
             responseData: data
            ) {
@@ -168,6 +174,20 @@ final class OpenRouterPlugin: NSObject,
         }
         try Self.validateTranscriptionResponse(data: data, response: response)
         return try Self.parseTranscriptionResponse(data)
+    }
+
+    private static func shouldRetryTranscriptionWithWav(statusCode: Int, responseData: Data) -> Bool {
+        if PluginAudioUploadEncoder.shouldRetryWithWavUpload(statusCode: statusCode, responseData: responseData) {
+            return true
+        }
+
+        // OpenRouter can hide the upstream format rejection behind this generic
+        // error. Try WAV once for any model; explicit request errors stay errors.
+        guard statusCode == 400,
+              let json = try? JSONSerialization.jsonObject(with: responseData) as? [String: Any],
+              let error = json["error"] as? [String: Any],
+              let message = error["message"] as? String else { return false }
+        return message == "Provider returned 400"
     }
 
     static func makeTranscriptionRequest(
@@ -218,6 +238,14 @@ final class OpenRouterPlugin: NSObject,
 
         switch httpResponse.statusCode {
         case 200:
+            if let htmlPageSummary = PluginHTTPErrorBodyFormatter.htmlPageSummary(
+                from: data,
+                response: httpResponse
+            ) {
+                throw PluginTranscriptionError.apiError(
+                    "Failed to parse transcription response: \(htmlPageSummary)"
+                )
+            }
             return
         case 401:
             throw PluginTranscriptionError.invalidApiKey
@@ -226,7 +254,7 @@ final class OpenRouterPlugin: NSObject,
         case 413:
             throw PluginTranscriptionError.fileTooLarge
         default:
-            let errorMessage = Self.apiErrorMessage(from: data)
+            let errorMessage = Self.apiErrorMessage(from: data, response: httpResponse)
             throw PluginTranscriptionError.apiError("HTTP \(httpResponse.statusCode): \(errorMessage)")
         }
     }
@@ -263,17 +291,17 @@ final class OpenRouterPlugin: NSObject,
         }
     }
 
-    private static func apiErrorMessage(from data: Data) -> String {
+    private static func apiErrorMessage(from data: Data, response: HTTPURLResponse) -> String {
         if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             if let error = json["error"] as? [String: Any],
                let message = error["message"] as? String {
-                return message
+                return PluginHTTPErrorBodyFormatter.summary(from: message)
             }
             if let message = json["message"] as? String {
-                return message
+                return PluginHTTPErrorBodyFormatter.summary(from: message)
             }
         }
-        return String(data: data, encoding: .utf8) ?? "Unknown error"
+        return PluginHTTPErrorBodyFormatter.summary(from: data, response: response)
     }
 
     // MARK: - LLMProviderPlugin
@@ -400,7 +428,7 @@ final class OpenRouterPlugin: NSObject,
         case 429:
             throw PluginChatError.rateLimited
         default:
-            throw PluginChatError.apiError(Self.apiErrorMessage(from: data))
+            throw PluginChatError.apiError(Self.apiErrorMessage(from: data, response: httpResponse))
         }
     }
 
@@ -408,12 +436,14 @@ final class OpenRouterPlugin: NSObject,
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let choices = json["choices"] as? [[String: Any]],
               let first = choices.first,
-              let message = first["message"] as? [String: Any],
-              let content = message["content"] as? String else {
+              let message = first["message"] as? [String: Any] else {
             throw PluginChatError.apiError("Failed to parse response")
         }
 
-        return content.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Reasoning models on OpenRouter (gpt-5.x, gpt-oss) return `content: null`
+        // or an array of typed parts; the shared helper treats those as valid.
+        return PluginOpenAIChatHelper.chatMessageContent(from: message)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     // MARK: - Settings View

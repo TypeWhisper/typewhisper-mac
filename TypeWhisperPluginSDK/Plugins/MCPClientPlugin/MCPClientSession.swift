@@ -492,24 +492,29 @@ actor MCPServerSession {
         await client.disconnect()
     }
 
-    private func withTimeout<T: Sendable>(
+    func withTimeout<T: Sendable>(
         _ duration: Duration,
         operationName: String,
         onTimeout: @escaping @Sendable () async -> Void,
         operation: @escaping @Sendable () async throws -> T
     ) async throws -> T {
-        try await withThrowingTaskGroup(of: T.self) { group in
-            group.addTask { try await operation() }
+        try await withThrowingTaskGroup(of: T?.self) { group in
+            group.addTask { .some(try await operation()) }
             group.addTask {
                 try await Task.sleep(for: duration)
-                Task { await onTimeout() }
-                throw MCPClientError.timedOut(operationName)
+                return nil
             }
-            guard let result = try await group.next() else {
+            guard let outcome = try await group.next() else {
                 throw MCPClientError.timedOut(operationName)
             }
             group.cancelAll()
-            return result
+            if let result = outcome {
+                return result
+            }
+            // Select the timeout before cleanup can cancel the operation. Otherwise
+            // that cancellation can win the group race and hide the actual timeout.
+            await onTimeout()
+            throw MCPClientError.timedOut(operationName)
         }
     }
 

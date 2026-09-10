@@ -300,6 +300,14 @@ final class GladiaPlugin: NSObject, TranscriptionEnginePlugin, LanguageHintTrans
 
         switch httpResponse.statusCode {
         case 200, 201:
+            if let htmlPageSummary = PluginHTTPErrorBodyFormatter.htmlPageSummary(
+                from: data,
+                response: httpResponse
+            ) {
+                throw PluginTranscriptionError.apiError(
+                    "Invalid upload response: \(htmlPageSummary)"
+                )
+            }
             guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let audioURL = json["audio_url"] as? String,
                   !audioURL.isEmpty else {
@@ -313,8 +321,14 @@ final class GladiaPlugin: NSObject, TranscriptionEnginePlugin, LanguageHintTrans
         case 429:
             throw PluginTranscriptionError.rateLimited
         default:
-            let body = String(data: data, encoding: .utf8) ?? ""
-            throw PluginTranscriptionError.apiError("Upload failed HTTP \(httpResponse.statusCode): \(body)")
+            let body = PluginHTTPErrorBodyFormatter.summary(from: data, response: httpResponse)
+            throw PluginAudioUploadHTTPFailure(
+                statusCode: httpResponse.statusCode,
+                responseData: data,
+                underlyingError: PluginTranscriptionError.apiError(
+                    "Upload failed HTTP \(httpResponse.statusCode): \(body)"
+                )
+            )
         }
     }
 
@@ -387,7 +401,7 @@ final class GladiaPlugin: NSObject, TranscriptionEnginePlugin, LanguageHintTrans
         case 429:
             throw PluginTranscriptionError.rateLimited
         default:
-            let body = String(data: data, encoding: .utf8) ?? ""
+            let body = PluginHTTPErrorBodyFormatter.summary(from: data, response: httpResponse)
             throw PluginTranscriptionError.apiError("Pre-recorded request failed HTTP \(httpResponse.statusCode): \(body)")
         }
     }
@@ -611,7 +625,7 @@ final class GladiaPlugin: NSObject, TranscriptionEnginePlugin, LanguageHintTrans
         case 429:
             throw PluginTranscriptionError.rateLimited
         default:
-            let body = String(data: data, encoding: .utf8) ?? ""
+            let body = PluginHTTPErrorBodyFormatter.summary(from: data, response: httpResponse)
             throw PluginTranscriptionError.apiError("Live session creation failed HTTP \(httpResponse.statusCode): \(body)")
         }
     }

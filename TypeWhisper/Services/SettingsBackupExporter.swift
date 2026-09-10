@@ -179,6 +179,7 @@ enum SettingsBackupExporter {
         var mediaPauseEnabled: Bool? = nil
         var transcribeShortQuietClipsAggressively: Bool? = nil
         var microphoneBoostEnabled: Bool? = nil
+        var cancellationBehavior: String? = nil
         var requireSecondEscapeToCancelRecording: Bool? = nil
         // Dictation Recovery
         var dictationRecoveryLanguage: String? = nil
@@ -229,7 +230,7 @@ enum SettingsBackupExporter {
             if mediaPauseEnabled != nil { count += 1 }
             if transcribeShortQuietClipsAggressively != nil { count += 1 }
             if microphoneBoostEnabled != nil { count += 1 }
-            if requireSecondEscapeToCancelRecording != nil { count += 1 }
+            if cancellationBehavior != nil || requireSecondEscapeToCancelRecording != nil { count += 1 }
             if dictationRecoveryLanguage != nil { count += 1 }
             if dictationRecoveryAutomaticFallbackEnabled != nil { count += 1 }
             if dictationRecoveryHedgeEnabled != nil { count += 1 }
@@ -430,7 +431,7 @@ enum SettingsBackupExporter {
         pluginManager: PluginManager,
         historyService: HistoryService,
         userDefaults: UserDefaults = .standard
-    ) -> SettingsBackup {
+    ) throws -> SettingsBackup {
         let workflows = workflowService.workflows.map { workflow in
             WorkflowDTO(
                 name: workflow.name,
@@ -526,7 +527,7 @@ enum SettingsBackupExporter {
                 )
             }
 
-        let history = historyService.records.map { record in
+        let history = try historyService.allRecordsThrowing().map { record in
             HistoryEntryDTO(
                 timestamp: record.timestamp,
                 rawText: record.rawText,
@@ -577,7 +578,7 @@ enum SettingsBackupExporter {
                 mediaPauseEnabled: userDefaults.object(forKey: UserDefaultsKeys.mediaPauseEnabled) as? Bool,
                 transcribeShortQuietClipsAggressively: userDefaults.object(forKey: UserDefaultsKeys.transcribeShortQuietClipsAggressively) as? Bool,
                 microphoneBoostEnabled: userDefaults.object(forKey: UserDefaultsKeys.microphoneBoostEnabled) as? Bool,
-                requireSecondEscapeToCancelRecording: userDefaults.object(forKey: UserDefaultsKeys.requireSecondEscapeToCancelRecording) as? Bool,
+                cancellationBehavior: DictationViewModel.loadCancellationBehavior(defaults: userDefaults).rawValue,
                 dictationRecoveryLanguage: userDefaults.string(forKey: UserDefaultsKeys.dictationRecoveryLanguage),
                 dictationRecoveryAutomaticFallbackEnabled: userDefaults.object(forKey: UserDefaultsKeys.dictationRecoveryAutomaticFallbackEnabled) as? Bool,
                 dictationRecoveryHedgeEnabled: userDefaults.object(forKey: UserDefaultsKeys.dictationRecoveryHedgeEnabled) as? Bool,
@@ -634,6 +635,7 @@ enum SettingsBackupExporter {
         usageStatisticsService: UsageStatisticsService,
         userDefaults: UserDefaults = .standard,
         liveFieldTranscriptEnabledDidChange: ((Bool) -> Void)? = nil,
+        cancellationBehaviorDidChange: ((CancellationBehavior) -> Void)? = nil,
         recoveryRetentionPolicyDidChange: ((DictationRecoveryRetentionPolicy) -> Void)? = nil
     ) async -> ImportResult {
         var result = ImportResult()
@@ -776,7 +778,6 @@ enum SettingsBackupExporter {
             ? Calendar.current.date(byAdding: .day, value: -retentionDays, to: Date())
             : nil
 
-        let beforeHistoryCount = historyService.records.count
         for (index, entry) in backup.history.enumerated() {
             if let retentionCutoff, entry.timestamp < retentionCutoff {
                 result.historySkippedByRetention += 1
@@ -804,6 +805,7 @@ enum SettingsBackupExporter {
             // counting those anyway would inflate Statistics beyond what's
             // visible in History.
             if inserted {
+                result.historyImported += 1
                 usageStatisticsService.recordTranscription(
                     timestamp: entry.timestamp,
                     wordsCount: entry.finalText.split(separator: " ").count,
@@ -822,8 +824,6 @@ enum SettingsBackupExporter {
                 await Task.yield()
             }
         }
-        result.historyImported = historyService.records.count - beforeHistoryCount
-
         if let updateChannel = backup.updateChannel,
            AppConstants.ReleaseChannel(rawValue: updateChannel) != nil {
             userDefaults.set(updateChannel, forKey: UserDefaultsKeys.updateChannel)
@@ -860,7 +860,12 @@ enum SettingsBackupExporter {
         apply(preferences.mediaPauseEnabled, forKey: UserDefaultsKeys.mediaPauseEnabled)
         apply(preferences.transcribeShortQuietClipsAggressively, forKey: UserDefaultsKeys.transcribeShortQuietClipsAggressively)
         apply(preferences.microphoneBoostEnabled, forKey: UserDefaultsKeys.microphoneBoostEnabled)
-        apply(preferences.requireSecondEscapeToCancelRecording, forKey: UserDefaultsKeys.requireSecondEscapeToCancelRecording)
+        let cancellationBehavior = preferences.cancellationBehavior.flatMap(CancellationBehavior.init(rawValue:))
+            ?? preferences.requireSecondEscapeToCancelRecording.map { $0 ? .doubleEscape : .singleEscape }
+        if let cancellationBehavior {
+            apply(cancellationBehavior.rawValue, forKey: UserDefaultsKeys.cancellationBehavior)
+            cancellationBehaviorDidChange?(cancellationBehavior)
+        }
         apply(preferences.dictationRecoveryLanguage, forKey: UserDefaultsKeys.dictationRecoveryLanguage)
         apply(preferences.dictationRecoveryAutomaticFallbackEnabled, forKey: UserDefaultsKeys.dictationRecoveryAutomaticFallbackEnabled)
         apply(preferences.dictationRecoveryHedgeEnabled, forKey: UserDefaultsKeys.dictationRecoveryHedgeEnabled)
@@ -966,7 +971,7 @@ final class SettingsBackupAutomationService {
     }
 
     func exportData() throws -> Data {
-        let backup = SettingsBackupExporter.buildBackup(
+        let backup = try SettingsBackupExporter.buildBackup(
             workflowService: workflowService,
             dictionaryService: dictionaryService,
             snippetService: snippetService,

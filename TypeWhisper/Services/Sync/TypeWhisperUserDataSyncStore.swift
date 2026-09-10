@@ -39,7 +39,7 @@ final class TypeWhisperUserDataSyncStore: UserDataSyncStore, @unchecked Sendable
             }
             .store(in: &cancellables)
 
-        historyService?.$records
+        historyService?.$recentRecords
             .dropFirst()
             .sink { [weak self] _ in
                 self?.notifyLocalChange()

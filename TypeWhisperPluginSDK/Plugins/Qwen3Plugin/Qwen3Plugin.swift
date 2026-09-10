@@ -8,7 +8,7 @@ import MLXAudioSTT
 // MARK: - Plugin Entry Point
 
 @objc(Qwen3Plugin)
-final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding, DictionaryTermsCapabilityProviding, PluginSettingsActivityReporting, PluginDownloadedModelManaging, PluginRuntimeMemoryDiagnosticsReporting, @unchecked Sendable {
+final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding, DictionaryTermsCapabilityProviding, PluginSettingsActivityReporting, PluginDownloadedModelManaging, PluginRuntimeMemoryDiagnosticsReporting, PassiveModelRestoreProviding, @unchecked Sendable {
     static let pluginId = "com.typewhisper.qwen3"
     static let pluginName = "Qwen3 ASR"
 
@@ -44,6 +44,16 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
     )
     private static let modelDownloadPatterns = ["*.safetensors", "*.json", "*.txt", "*.wav"]
 
+    private let passiveRestoreController = PluginPassiveModelRestoreController()
+    private let modelLoadGate = PluginLocalInferenceGate()
+
+    func requestPassiveModelRestore() {
+        passiveRestoreController.request { [weak self] in
+            guard let self else { return }
+            await self.restoreLoadedModel(allowDownloads: false, passively: true)
+        }
+    }
+
     required override init() {
         super.init()
     }
@@ -55,11 +65,12 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
         cleanupRedundantModelCopies()
 
         if shouldRestoreLoadedModelsPassively {
-            Task { await restoreLoadedModel(allowDownloads: false) }
+            requestPassiveModelRestore()
         }
     }
 
     func deactivate() {
+        passiveRestoreController.cancel()
         model = nil
         loadedModelId = nil
         modelState = .notLoaded
@@ -237,7 +248,18 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
 
     // MARK: - Model Management
 
-    fileprivate func loadModel(_ modelDef: Qwen3ModelDef) async throws {
+    fileprivate func loadModel(_ modelDef: Qwen3ModelDef, passively: Bool = false) async throws {
+        try await modelLoadGate.withLock { [self] in
+            guard host != nil else { return }
+            if passively {
+                guard host?.shouldRestoreLoadedModelsPassively == true, !isConfigured else { return }
+            }
+            guard !(isConfigured && loadedModelId == modelDef.id) else { return }
+            try await performModelLoad(modelDef, allowDownloads: !passively)
+        }
+    }
+
+    private func performModelLoad(_ modelDef: Qwen3ModelDef, allowDownloads: Bool) async throws {
         modelState = .loading
         do {
             let modelsDir = host?.pluginDataDirectory.appendingPathComponent("models")
@@ -248,6 +270,10 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
             if let existing = usableModelDirectory(for: modelDef, modelsDirectory: modelsDir) {
                 modelDirectory = existing
             } else {
+                guard allowDownloads else {
+                    modelState = .notLoaded
+                    return
+                }
                 removeIncompleteModelIfNeeded(modelDef, modelsDirectory: modelsDir)
                 guard let repoID = Repo.ID(rawValue: modelDef.repoId) else {
                     throw NSError(
@@ -283,6 +309,8 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
             }
             let loaded = try await Qwen3ASRModel.fromModelDirectory(modelDirectory)
 
+            try Task.checkCancellation()
+            guard host != nil else { return }
             model = loaded
             loadedModelId = modelDef.id
             _selectedModelId = modelDef.id
@@ -290,6 +318,11 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
             host?.setUserDefault(modelDef.id, forKey: "loadedModel")
             modelState = .ready(modelDef.id)
             host?.notifyCapabilitiesChanged()
+        } catch is CancellationError {
+            if host != nil {
+                modelState = loadedModelId.map { .ready($0) } ?? .notLoaded
+            }
+            throw CancellationError()
         } catch {
             modelState = .error("\(error)")
             throw error
@@ -330,11 +363,16 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
         )
     }
 
-    func restoreLoadedModel(allowDownloads: Bool = false) async {
-        await restoreLoadedModel(allowDownloads: allowDownloads, preferredModelId: nil)
+    func restoreLoadedModel(allowDownloads: Bool = false, passively: Bool = false) async {
+        guard !Task.isCancelled else { return }
+        if passively {
+            guard host?.shouldRestoreLoadedModelsPassively == true, !isConfigured else { return }
+        }
+        await restoreLoadedModel(allowDownloads: allowDownloads, preferredModelId: nil, passively: passively)
     }
 
-    func restoreLoadedModel(allowDownloads: Bool = false, preferredModelId: String?) async {
+    func restoreLoadedModel(allowDownloads: Bool = false, preferredModelId: String?, passively: Bool = false) async {
+        guard !Task.isCancelled else { return }
         for modelId in restoreCandidateModelIds(
             preferredModelId: preferredModelId,
             allowDownloads: allowDownloads
@@ -343,7 +381,7 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
                 continue
             }
             do {
-                try await loadModel(modelDef)
+                try await loadModel(modelDef, passively: passively)
                 return
             } catch {
                 continue
@@ -1151,7 +1189,7 @@ private struct Qwen3SettingsView: View {
             // Auto-restore previously loaded model
             if case .notLoaded = plugin.modelState, plugin.shouldRestoreLoadedModelsPassively {
                 isPolling = true
-                await plugin.restoreLoadedModel(allowDownloads: false)
+                await plugin.restoreLoadedModel(allowDownloads: false, passively: true)
                 isPolling = false
                 modelState = plugin.modelState
             }

@@ -144,6 +144,57 @@ final class WhisperKitPluginLifecycleTests: XCTestCase {
         #endif
     }
 
+    func testReconciliationRetriesActivationTimeDenialWithoutDownloadingMissingModel() async throws {
+        let host = try makeHost(defaults: ["loadedModel": "openai_whisper-tiny"],
+                                shouldRestoreLoadedModelsPassively: false)
+        defer { TestSupport.remove(host.pluginDataDirectory) }
+        let plugin = WhisperKitPlugin()
+        plugin.activate(host: host)
+        host.shouldRestoreLoadedModelsPassively = true
+        plugin.requestPassiveModelRestore()
+        #if DEBUG
+        await waitForRestoreLoadedModelInvocationCount(plugin, toBecome: 1)
+        #endif
+        XCTAssertFalse(plugin.isConfigured)
+        XCTAssertNil(plugin.loadingModelIdForTesting)
+        XCTAssertEqual(host.capabilitiesChangedCount, 0)
+        XCTAssertEqual(host.userDefault(forKey: "loadedModel") as? String, "openai_whisper-tiny")
+        plugin.deactivate()
+    }
+
+    func testQueuedPassiveRestoreRechecksSelectionBeforeStarting() async throws {
+        let host = try makeHost(defaults: ["loadedModel": "openai_whisper-tiny"],
+                                shouldRestoreLoadedModelsPassively: false)
+        defer { TestSupport.remove(host.pluginDataDirectory) }
+        let plugin = WhisperKitPlugin()
+        plugin.activate(host: host)
+        host.shouldRestoreLoadedModelsPassively = true
+        plugin.requestPassiveModelRestore()
+        host.shouldRestoreLoadedModelsPassively = false
+        // The controller starts on MainActor after this synchronous selection change.
+        try await Task.sleep(for: .milliseconds(50))
+        #if DEBUG
+        XCTAssertEqual(plugin.restoreLoadedModelInvocationCountForTesting, 0)
+        #endif
+        XCTAssertNil(plugin.loadingModelIdForTesting)
+        plugin.deactivate()
+    }
+
+    func testDeactivationCancelsQueuedPassiveRestore() async throws {
+        let host = try makeHost(defaults: ["loadedModel": "openai_whisper-tiny"])
+        defer { TestSupport.remove(host.pluginDataDirectory) }
+        let plugin = WhisperKitPlugin()
+        plugin.activate(host: host)
+        plugin.requestPassiveModelRestore()
+        plugin.deactivate()
+        try await Task.sleep(for: .milliseconds(50))
+        #if DEBUG
+        XCTAssertEqual(plugin.restoreLoadedModelInvocationCountForTesting, 0)
+        #endif
+        XCTAssertFalse(plugin.isConfigured)
+        XCTAssertEqual(host.capabilitiesChangedCount, 0)
+    }
+
     func testRestoreWhileSameModelLoadingDoesNotStartAnotherLoad() async throws {
         let modelId = "openai_whisper-large-v3_turbo"
         let host = try makeHost(
@@ -531,6 +582,27 @@ final class WhisperKitPluginLifecycleTests: XCTestCase {
         XCTAssertNil(host.userDefault(forKey: "selectedModel"))
         XCTAssertNil(host.userDefault(forKey: "loadedModel"))
         XCTAssertGreaterThanOrEqual(host.capabilitiesChangedCount, 1)
+    }
+
+    func testFailedPassiveRestorePreservesPersistedModelWithoutReportingAnError() async throws {
+        let modelId = "openai_whisper-tiny"
+        let host = try makeHost(defaults: ["loadedModel": modelId],
+                                shouldRestoreLoadedModelsPassively: false)
+        defer { TestSupport.remove(host.pluginDataDirectory) }
+        let directory = try makeUsableWhisperModelDirectory(host: host, modelId: modelId)
+        // The files pass the presence check but contain invalid Core ML data.
+        let plugin = WhisperKitPlugin()
+        plugin.activate(host: host)
+        defer { plugin.deactivate() }
+        host.shouldRestoreLoadedModelsPassively = true
+
+        await plugin.restoreLoadedModel(allowDownloads: false, passively: true)
+
+        XCTAssertEqual(host.userDefault(forKey: "loadedModel") as? String, modelId)
+        XCTAssertEqual(plugin.settingsModelState, .notLoaded)
+        XCTAssertNil(plugin.loadingModelIdForTesting)
+        XCTAssertEqual(host.capabilitiesChangedCount, 0)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: directory.path))
     }
 
     private func makeUsableWhisperModelDirectory(

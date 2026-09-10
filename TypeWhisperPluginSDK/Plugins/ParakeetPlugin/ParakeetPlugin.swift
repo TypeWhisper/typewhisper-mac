@@ -1,4 +1,5 @@
 import Foundation
+import CoreML
 import OSLog
 import SwiftUI
 import FluidAudio
@@ -39,7 +40,7 @@ private actor AsyncTranscriptionGate {
 // MARK: - Plugin Entry Point
 
 @objc(ParakeetPlugin)
-final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, TranscriptPreviewFallbackPolicyProviding, PluginSettingsActivityReporting, @unchecked Sendable {
+final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, TranscriptPreviewFallbackPolicyProviding, PluginSettingsActivityReporting, PassiveModelRestoreProviding, @unchecked Sendable {
     static let pluginId = "com.typewhisper.parakeet"
     static let pluginName = "Parakeet"
     static let vocabularyAssetFileName = "parakeet_vocab.json"
@@ -73,6 +74,16 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     var lastConfiguredPrompt: String?
     var lastBoostingTermCount: Int = 0
 
+    private let passiveRestoreController = PluginPassiveModelRestoreController()
+    private let modelLoadGate = PluginLocalInferenceGate()
+
+    func requestPassiveModelRestore() {
+        passiveRestoreController.request { [weak self] in
+            guard let self, self.restoresModelOnActivate else { return }
+            await self.restoreLoadedModel(allowDownloads: false, passively: true)
+        }
+    }
+
     required override init() {
         super.init()
     }
@@ -98,11 +109,12 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
             }
         }
         if restoresModelOnActivate, host.shouldRestoreLoadedModelsPassively {
-            Task { await restoreLoadedModel(allowDownloads: false) }
+            requestPassiveModelRestore()
         }
     }
 
     func deactivate() {
+        passiveRestoreController.cancel()
         clearVocabularyBoostingState(resetModelState: true)
         asrManager = nil
         loadedAsrModels = nil
@@ -598,41 +610,101 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
 
     // MARK: - Model Management
 
-    fileprivate func loadModel() async {
+    fileprivate func loadModel(version: ParakeetVersion? = nil, passively: Bool = false) async {
+        let version = version ?? selectedVersion
+        try? await modelLoadGate.withLock { [self] in
+            guard host != nil else { return }
+            if passively {
+                let vocabularyURL = Self.vocabularyAssetDirectory(for: version)
+                    .appendingPathComponent(Self.vocabularyAssetFileName)
+                guard host?.shouldRestoreLoadedModelsPassively == true, !isConfigured,
+                      isModelDownloaded(version: version),
+                      Self.vocabularyAssetExists(at: vocabularyURL) else { return }
+            }
+            guard !(isConfigured && loadedModelId == version.modelDef.id) else { return }
+            await performModelLoad(version: version, allowDownloads: !passively)
+        }
+    }
+
+    private func performModelLoad(version: ParakeetVersion, allowDownloads: Bool) async {
         modelState = .downloading
         downloadProgress = 0.1
 
         do {
             applyHuggingFaceTokenToEnvironment()
-            try await ensureVocabularyAsset(for: selectedVersion)
-            let models = try await AsrModels.downloadAndLoad(version: selectedVersion.asrModelVersion)
+            if allowDownloads {
+                try await ensureVocabularyAsset(for: version)
+            }
+            let models: AsrModels
+            if allowDownloads {
+                models = try await AsrModels.downloadAndLoad(version: version.asrModelVersion)
+            } else {
+                models = try Self.loadInstalledModels(version: version)
+            }
             downloadProgress = 0.7
 
             let manager = AsrManager(config: .default)
             try await manager.loadModels(models)
             downloadProgress = 1.0
 
+            try Task.checkCancellation()
+            guard host != nil else { return }
+            selectedVersion = version
             asrManager = manager
             loadedAsrModels = models
-            loadedModelId = selectedVersion.modelDef.id
-            _selectedModelId = selectedVersion.modelDef.id
+            loadedModelId = version.modelDef.id
+            _selectedModelId = version.modelDef.id
             modelState = .ready
 
-            host?.setUserDefault(selectedVersion.modelDef.id, forKey: "selectedModel")
-            host?.setUserDefault(selectedVersion.modelDef.id, forKey: "loadedModel")
-            host?.setUserDefault(selectedVersion.rawValue, forKey: "selectedVersion")
+            host?.setUserDefault(version.modelDef.id, forKey: "selectedModel")
+            host?.setUserDefault(version.modelDef.id, forKey: "loadedModel")
+            host?.setUserDefault(version.rawValue, forKey: "selectedVersion")
             host?.notifyCapabilitiesChanged()
 
-            if vocabularyBoostingEnabled {
+            // Optional vocabulary preparation remains on the explicit/first-use path;
+            // FluidAudio's CTC loader may repair its cache by downloading assets.
+            if vocabularyBoostingEnabled, allowDownloads {
                 let cacheDir = CtcModels.defaultCacheDirectory(for: .ctc110m)
                 if CtcModels.modelsExist(at: cacheDir) {
                     await downloadCtcModel()
                 }
             }
+        } catch is CancellationError {
+            if host != nil { modelState = isConfigured ? .ready : .notLoaded }
+            return
         } catch {
             modelState = .error(error.localizedDescription)
             downloadProgress = 0
         }
+    }
+
+    /// FluidAudio's high-level loaders can delete and re-download a corrupt cache,
+    /// even when every file exists. Passive restore must use local Core ML loading.
+    static func loadInstalledModels(version: ParakeetVersion, directory: URL? = nil) throws -> AsrModels {
+        let directory = directory ?? AsrModels.defaultCacheDirectory(for: version.asrModelVersion)
+        let vocabularyURL = directory.appendingPathComponent(ModelNames.ASR.vocabularyFile)
+        let tokens = try JSONDecoder().decode([String: String].self, from: Data(contentsOf: vocabularyURL))
+        var vocabulary: [Int: String] = [:]
+        for (key, token) in tokens {
+            if let id = Int(key) { vocabulary[id] = token }
+        }
+        guard !vocabulary.isEmpty else {
+            throw AsrModelsError.loadingFailed("Installed vocabulary is empty")
+        }
+        let configuration = AsrModels.defaultConfiguration()
+        let preprocessorConfiguration = MLModelConfiguration()
+        preprocessorConfiguration.computeUnits = .cpuOnly
+        preprocessorConfiguration.allowLowPrecisionAccumulationOnGPU = true
+        let jointFile = version == .v3 ? ModelNames.ASR.jointV3File : ModelNames.ASR.jointFile
+        return try AsrModels(
+            encoder: MLModel(contentsOf: directory.appendingPathComponent(ModelNames.ASR.encoderFile), configuration: configuration),
+            preprocessor: MLModel(contentsOf: directory.appendingPathComponent(ModelNames.ASR.preprocessorFile), configuration: preprocessorConfiguration),
+            decoder: MLModel(contentsOf: directory.appendingPathComponent(ModelNames.ASR.decoderFile), configuration: configuration),
+            joint: MLModel(contentsOf: directory.appendingPathComponent(jointFile), configuration: configuration),
+            configuration: configuration,
+            vocabulary: vocabulary,
+            version: version.asrModelVersion
+        )
     }
 
     static func vocabularyAssetURL(for version: ParakeetVersion) -> URL {
@@ -775,20 +847,15 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         host?.notifyCapabilitiesChanged()
     }
 
-    func restoreLoadedModel(allowDownloads: Bool = true) async {
-        guard let savedModelId = host?.userDefault(forKey: "loadedModel") as? String else {
-            return
+    func restoreLoadedModel(allowDownloads: Bool = true, passively: Bool = false) async {
+        guard !Task.isCancelled else { return }
+        if passively {
+            guard host?.shouldRestoreLoadedModelsPassively == true, !isConfigured else { return }
         }
-        if _selectedModelId == nil {
-            _selectedModelId = savedModelId
-            host?.setUserDefault(savedModelId, forKey: "selectedModel")
-        }
-        // Infer version from persisted model ID for backwards compatibility
-        if let version = ParakeetVersion.from(modelId: savedModelId) {
-            selectedVersion = version
-        }
-        guard allowDownloads || isModelDownloaded(version: selectedVersion) else { return }
-        await loadModel()
+        guard let savedModelId = host?.userDefault(forKey: "loadedModel") as? String else { return }
+        let version = ParakeetVersion.from(modelId: savedModelId) ?? selectedVersion
+        guard allowDownloads || isModelDownloaded(version: version) else { return }
+        await loadModel(version: version, passively: passively)
     }
 
     fileprivate func isModelDownloaded(version: ParakeetVersion) -> Bool {

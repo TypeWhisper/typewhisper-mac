@@ -30,6 +30,23 @@ private enum PassiveLoadedModelRestoreContext {
 final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, @unchecked Sendable {
     let pluginId: String
     let pluginDataDirectory: URL
+    /// Whether this plugin backs the engine the user actually has selected,
+    /// evaluated AT CALL TIME rather than captured once.
+    ///
+    /// *** IT MUST BE DYNAMIC. *** `ModelManagerService.selectProvider` writes
+    /// `selectedEngine` at any moment and notifies no existing host, and at startup
+    /// `restoreProviderSelection()` runs AFTER `scanAndLoadPlugins()` -- three lines
+    /// apart in ServiceContainer -- so a value captured during activation can be
+    /// stale before the app has finished launching. Several plugins also consult
+    /// their host again later from their settings views. A snapshot would suppress
+    /// restore for an engine selected afterwards, and permit it for one deselected
+    /// since.
+    ///
+    /// Defaults to `{ true }`, the pre-existing behaviour, so any host built without
+    /// this knowledge behaves exactly as before.
+    private let backsSelectedEngine: @Sendable () -> Bool
+
+    var backsSelectedTranscriptionEngine: Bool { backsSelectedEngine() }
     let eventBus: EventBusProtocol
     private let ruleNamesProvider: @MainActor () -> [String]
     private let workflowProvider: @MainActor () -> [PluginWorkflowInfo]
@@ -38,9 +55,11 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, @
         pluginId: String,
         eventBus: EventBusProtocol,
         ruleNamesProvider: @escaping @MainActor () -> [String],
-        workflowProvider: @escaping @MainActor () -> [PluginWorkflowInfo] = { [] }
+        workflowProvider: @escaping @MainActor () -> [PluginWorkflowInfo] = { [] },
+        backsSelectedTranscriptionEngine: @escaping @Sendable () -> Bool = { true }
     ) {
         self.pluginId = pluginId
+        self.backsSelectedEngine = backsSelectedTranscriptionEngine
         self.eventBus = eventBus
         self.ruleNamesProvider = ruleNamesProvider
         self.workflowProvider = workflowProvider
@@ -100,8 +119,21 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, @
 
     // MARK: - Model Lifecycle Policy
 
+    /// Passive restore is permitted only when the auto-unload policy allows it AND
+    /// this plugin backs the selected engine.
+    ///
+    /// *** THIS IS THE LIVE PATH, AND THAT IS THE WHOLE POINT. *** Each local-model
+    /// plugin spawns its own restore from this property, e.g. Qwen3Plugin.activate:
+    /// `if shouldRestoreLoadedModelsPassively { Task { await restoreLoadedModel() } }`.
+    /// An earlier fix for the same issue instead tightened
+    /// `PluginManager.shouldSuppressPassiveLoadedModelRestore`, which feeds a guard
+    /// whose last term is `!shouldRestoreLoadedModelsPassively` -- so it could only
+    /// fire when the policy was NOT "Never", while the plugins only restore when it
+    /// IS. Mutually exclusive, and therefore inert. Its tests passed because they
+    /// asserted a predicate's return value rather than that a model fails to load.
     var shouldRestoreLoadedModelsPassively: Bool {
         ModelAutoUnloadPolicy.shouldRestoreLoadedModelsPassively()
+            && backsSelectedTranscriptionEngine
     }
 
     func performPluginActivation(

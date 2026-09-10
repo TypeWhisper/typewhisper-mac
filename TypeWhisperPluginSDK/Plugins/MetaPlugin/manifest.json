@@ -1,0 +1,25 @@
+{
+    "id": "com.typewhisper.meta",
+    "name": "Meta",
+    "version": "1.0.0",
+    "minHostVersion": "1.7.0",
+    "sdkCompatibilityVersion": "v1",
+    "minOSVersion": "14.0",
+    "author": "TypeWhisper",
+    "description": "Realtime and file transcription with Muse Voice Transcribe, optional speaker diarization, and prompt processing with Muse Spark. Requires a Meta Model API key.",
+    "descriptions": {
+        "de": "Echtzeit- und Datei-Transkription mit Muse Voice Transcribe, optionaler Sprechererkennung und Prompt-Verarbeitung mit Muse Spark. Erfordert einen Meta-Model-API-Schlüssel.",
+        "ja": "Muse Voice Transcribeによるリアルタイム・ファイル文字起こし、オプションの話者分離、Muse Sparkによるプロンプト処理に対応します。Meta Model APIキーが必要です。"
+    },
+    "category": "transcription",
+    "categories": [
+        "transcription",
+        "llm"
+    ],
+    "hosting": "cloud",
+    "iconSystemName": "waveform.and.sparkles",
+    "iconResourceName": "meta.svg",
+    "principalClass": "MetaPlugin",
+    "requiresAPIKey": true,
+    "detailsURL": "https://www.typewhisper.com/addons/meta/"
+}

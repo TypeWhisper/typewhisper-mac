@@ -33,7 +33,7 @@ private final class MenuBarState: ObservableObject {
 
         // Set initial values immediately
         self.isModelReady = modelManager.isModelReady
-        let hasRecentTranscriptions = recentTranscriptionStore.latestEntry(historyRecords: historyService.records) != nil
+        let hasRecentTranscriptions = recentTranscriptionStore.latestEntry(historyRecords: historyService.recentRecords) != nil
         self.hasRecentTranscriptions = hasRecentTranscriptions
         self.canCopyLastTranscription = hasRecentTranscriptions
         self.hasLastTranscribedText = dictation.lastTranscribedText != nil
@@ -78,7 +78,7 @@ private final class MenuBarState: ObservableObject {
             }
             .store(in: &cancellables)
 
-        historyService.$records
+        historyService.$recentRecords
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.refreshCopyAvailability()
@@ -185,7 +185,7 @@ private final class MenuBarState: ObservableObject {
     private func refreshCopyAvailability() {
         let historyService = ServiceContainer.shared.historyService
         let recentTranscriptionStore = ServiceContainer.shared.recentTranscriptionStore
-        let hasRecentTranscriptions = recentTranscriptionStore.latestEntry(historyRecords: historyService.records) != nil
+        let hasRecentTranscriptions = recentTranscriptionStore.latestEntry(historyRecords: historyService.recentRecords) != nil
         self.hasRecentTranscriptions = hasRecentTranscriptions
         canCopyLastTranscription = hasRecentTranscriptions
     }
@@ -254,6 +254,19 @@ enum MenuBarMenuSection: String, CaseIterable, Hashable {
             hasRecoverableRecording
                 ? [.toggleDictationHotkeysPause, .transcribeFile, .recoverLastRecording, .lastTranscription]
                 : [.toggleDictationHotkeysPause, .transcribeFile, .lastTranscription]
+        }
+    }
+}
+
+@MainActor
+enum MenuBarActionDispatcher {
+    static func performAfterMenuDismissal(
+        _ action: @escaping @MainActor @Sendable () -> Void
+    ) {
+        RunLoop.main.perform(inModes: [.default]) {
+            Task { @MainActor in
+                action()
+            }
         }
     }
 }
@@ -481,7 +494,11 @@ struct MenuBarView: View {
     @ViewBuilder
     private var recentTranscriptionsButton: some View {
         Button {
-            DictationViewModel.shared.triggerRecentTranscriptionsPalette()
+            // MenuBarExtra uses NSMenu tracking. Defer creating the key NSPanel
+            // until the menu action has returned and the native menu can close.
+            MenuBarActionDispatcher.performAfterMenuDismissal {
+                DictationViewModel.shared.triggerRecentTranscriptionsPalette()
+            }
         } label: {
             Label(String(localized: "Recent Transcriptions"), systemImage: "clock.arrow.circlepath")
         }

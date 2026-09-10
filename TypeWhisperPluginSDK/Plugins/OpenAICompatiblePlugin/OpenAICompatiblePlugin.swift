@@ -1415,12 +1415,14 @@ final class OpenAICompatiblePlugin: NSObject,
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let choices = json["choices"] as? [[String: Any]],
               let first = choices.first,
-              let message = first["message"] as? [String: Any],
-              let content = message["content"] as? String else {
+              let message = first["message"] as? [String: Any] else {
             throw PluginChatError.apiError("Failed to parse response")
         }
 
-        return content.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Reasoning models return `content: null` or typed parts for an empty
+        // visible answer; the shared helper treats those as valid, not malformed.
+        return PluginOpenAIChatHelper.chatMessageContent(from: message)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func processResponse(
@@ -1594,8 +1596,14 @@ final class OpenAICompatiblePlugin: NSObject,
         case 413:
             throw PluginTranscriptionError.fileTooLarge
         default:
-            let errorMessage = String(data: responseData, encoding: .utf8) ?? "Unknown error"
-            throw PluginTranscriptionError.apiError("HTTP \(httpResponse.statusCode): \(errorMessage)")
+            let errorMessage = PluginHTTPErrorBodyFormatter.summary(from: responseData, response: httpResponse)
+            throw PluginAudioUploadHTTPFailure(
+                statusCode: httpResponse.statusCode,
+                responseData: responseData,
+                underlyingError: PluginTranscriptionError.apiError(
+                    "HTTP \(httpResponse.statusCode): \(errorMessage)"
+                )
+            )
         }
 
         struct Segment: Decodable {

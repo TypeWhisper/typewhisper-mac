@@ -541,9 +541,14 @@ final class PluginManager: ObservableObject {
     }
 
     func sortedPluginBundleURLs(_ urls: [URL], isBundledSource: Bool) -> [URL] {
-        urls.sorted { lhs, rhs in
-            let left = pluginBundleSortMetadata(for: lhs, isBundledSource: isBundledSource)
-            let right = pluginBundleSortMetadata(for: rhs, isBundledSource: isBundledSource)
+        // Read each manifest once per scan. Sorting must not repeatedly perform
+        // file IO and JSON decoding, and later scans must see changed settings.
+        let candidates = urls.map { url in
+            (url: url, metadata: pluginBundleSortMetadata(for: url, isBundledSource: isBundledSource))
+        }
+        return candidates.sorted { lhs, rhs in
+            let left = lhs.metadata
+            let right = rhs.metadata
 
             if left.isEnabled != right.isEnabled {
                 return left.isEnabled && !right.isEnabled
@@ -553,8 +558,8 @@ final class PluginManager: ObservableObject {
                 return left.sortName < right.sortName
             }
 
-            return lhs.path < rhs.path
-        }
+            return lhs.url.path < rhs.url.path
+        }.map(\.url)
     }
 
     private func pluginBundleSortMetadata(for url: URL, isBundledSource: Bool) -> (isEnabled: Bool, sortName: String) {
@@ -664,10 +669,10 @@ final class PluginManager: ObservableObject {
                 return
             }
 
+            PluginSettingsWindowManager.shared.closeWindow(for: manifest.id)
             if existing.isEnabled {
                 existing.instance.deactivate()
             }
-            existing.bundle.unload()
             loadedPlugins.remove(at: existingIndex)
             logger.info("Replacing plugin \(manifest.id) from \(existing.sourceURL.lastPathComponent) with \(url.lastPathComponent)")
         }
@@ -778,12 +783,71 @@ final class PluginManager: ObservableObject {
             pluginId: plugin.manifest.id,
             eventBus: EventBus.shared,
             ruleNamesProvider: ruleNamesProvider,
-            workflowProvider: workflowProvider
+            workflowProvider: workflowProvider,
+            backsSelectedTranscriptionEngine: Self.selectionMatcher(
+                forEnginesExposedBy: transcriptionProviderIds(exposedBy: plugin.instance)
+            )
         )
         host.performPluginActivation(suppressPassiveLoadedModelRestore: shouldSuppressPassiveLoadedModelRestore(for: plugin)) {
             plugin.instance.activate(host: host)
         }
         logger.info("Activated plugin: \(plugin.manifest.id)")
+    }
+
+    /// Builds the predicate a host uses to decide whether it backs the selected
+    /// engine. Re-reads `selectedEngine` on EVERY call.
+    ///
+    /// *** WHY A CLOSURE OVER A CAPTURED SET, AND NOT A CAPTURED Bool. ***
+    /// `selectProvider` writes `selectedEngine` at any time and notifies no
+    /// existing host, and at startup `restoreProviderSelection()` runs AFTER
+    /// `scanAndLoadPlugins()`, so a Bool decided during activation can be stale
+    /// before launch finishes. The exposed ids ARE captured, because they are a
+    /// plain value: this manager is `@MainActor` while `HostServicesImpl` is
+    /// `@unchecked Sendable` and plugins read the property from arbitrary
+    /// contexts, so the closure must capture no actor-isolated state.
+    ///
+    /// One case deliberately keeps the previous behaviour: a plugin exposing no
+    /// transcription engines has no engine-backing model to restore.
+    ///
+    /// An ABSENT selection now suppresses rather than permits. An earlier revision
+    /// permitted it, reasoning that an unrecorded selection is not evidence a plugin
+    /// is unselected. That is true in isolation and wrong here, because the absent
+    /// case is exactly the startup window in which a restore gets spawned that no
+    /// later selection can cancel.
+    /// `nonisolated` deliberately: this manager is `@MainActor`, but the returned
+    /// predicate is read by plugins from arbitrary contexts, so the builder must
+    /// touch no actor-isolated state. The compiler enforces that here, which is why
+    /// the closure captures a plain `Set` rather than the manager or the plugin.
+    nonisolated static func selectionMatcher(
+        forEnginesExposedBy exposed: Set<String>,
+        defaults: @autoclosure @escaping @Sendable () -> UserDefaults = .standard
+    ) -> @Sendable () -> Bool {
+        {
+            // A plugin exposing no transcription engines has no engine-backing model
+            // to restore, so it keeps its previous behaviour entirely.
+            guard !exposed.isEmpty else { return true }
+            // NO SELECTION RECORDED => SUPPRESS, not permit.
+            //
+            // Passive restore exists to reload the model for the engine you use. If
+            // no engine is selected there is no such engine, so nothing should be
+            // restored on its behalf.
+            //
+            // This also closes the startup window. `restoreProviderSelection()` runs
+            // AFTER `scanAndLoadPlugins()` and WRITES a selection when the saved one
+            // is missing or no longer usable, and a selection written then cannot
+            // cancel a restore task that activation has already spawned. Permitting
+            // during that window is what let an unselected engine's model load.
+            guard let selected = defaults().string(forKey: UserDefaultsKeys.selectedEngine),
+                  !selected.isEmpty
+            else { return false }
+            return exposed.contains(selected)
+        }
+    }
+
+    func backsSelectedTranscriptionEngine(_ plugin: LoadedPlugin) -> Bool {
+        Self.selectionMatcher(
+            forEnginesExposedBy: transcriptionProviderIds(exposedBy: plugin.instance)
+        )()
     }
 
     func shouldSuppressPassiveLoadedModelRestore(for plugin: LoadedPlugin) -> Bool {
@@ -819,12 +883,12 @@ final class PluginManager: ObservableObject {
         } else {
             // If the deactivated plugin was selected as default engine, fall back to first available
             let disabledProviderIds = transcriptionProviderIds(exposedBy: loadedPlugins[index].instance)
+            PluginSettingsWindowManager.shared.closeWindow(for: pluginId)
             selectFallbackTranscriptionProviderIfNeeded(disabling: disabledProviderIds)
 
             let plugin = loadedPlugins[index]
             if plugin.isRuntimeLoaded {
                 plugin.instance.deactivate()
-                plugin.bundle.unload()
             }
 
             do {
@@ -854,8 +918,15 @@ final class PluginManager: ObservableObject {
     }
 
     func selectFallbackTranscriptionProviderIfNeeded(disabling disabledProviderIds: Set<String>) {
-        guard let fallbackProviderId = fallbackTranscriptionProviderId(disabling: disabledProviderIds) else { return }
-        ServiceContainer.shared.modelManagerService.selectProvider(fallbackProviderId)
+        guard !disabledProviderIds.isEmpty,
+              let selectedProvider = UserDefaults.standard.string(forKey: UserDefaultsKeys.selectedEngine),
+              disabledProviderIds.contains(selectedProvider) else { return }
+
+        if let fallbackProviderId = fallbackTranscriptionProviderId(disabling: disabledProviderIds) {
+            ServiceContainer.shared.modelManagerService.selectProvider(fallbackProviderId)
+        } else {
+            ServiceContainer.shared.modelManagerService.clearProviderSelection()
+        }
     }
 
     func fallbackTranscriptionProviderId(disabling disabledProviderIds: Set<String>) -> String? {
@@ -913,17 +984,22 @@ final class PluginManager: ObservableObject {
 
     // MARK: - Dynamic Plugin Management
 
+    /// Removes a plugin from the active runtime registry without unmapping its executable code.
+    /// SwiftUI and AppKit may retain plugin-defined view metadata beyond the visible window's
+    /// lifetime, so calling `Bundle.unload()` while the app is running is not safe.
     func unloadPlugin(_ pluginId: String) {
         guard let index = loadedPlugins.firstIndex(where: { $0.manifest.id == pluginId }) else { return }
         let plugin = loadedPlugins[index]
+        let disabledProviderIds = transcriptionProviderIds(exposedBy: plugin.instance)
+
+        PluginSettingsWindowManager.shared.closeWindow(for: pluginId)
+        selectFallbackTranscriptionProviderIfNeeded(disabling: disabledProviderIds)
+
         if plugin.isEnabled && plugin.isRuntimeLoaded {
             plugin.instance.deactivate()
         }
-        if plugin.isRuntimeLoaded {
-            plugin.bundle.unload()
-        }
         loadedPlugins.remove(at: index)
-        logger.info("Unloaded plugin: \(pluginId)")
+        logger.info("Removed plugin from runtime registry: \(pluginId)")
     }
 
     func bundleURL(for pluginId: String) -> URL? {

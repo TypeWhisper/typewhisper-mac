@@ -944,7 +944,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         XCTAssertEqual(capturedTask, .translate)
         XCTAssertEqual(capturedEngineOverrideId, "parakeet")
         XCTAssertEqual(capturedModelOverrideId, "parakeet-large")
-        let historyRecord = try XCTUnwrap(historyService.records.first)
+        let historyRecord = try XCTUnwrap(historyService.recentRecords.first)
         XCTAssertEqual(historyRecord.rawText, "Recovered dictation")
         XCTAssertEqual(historyRecord.finalText, "Recovered dictation")
         XCTAssertEqual(historyRecord.language, "de")
@@ -988,7 +988,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         viewModel.transcribe()
         try await waitForRecoveryToSave(viewModel, historyService: historyService)
 
-        let historyRecord = try XCTUnwrap(historyService.records.first)
+        let historyRecord = try XCTUnwrap(historyService.recentRecords.first)
         XCTAssertNil(historyService.audioFileURL(for: historyRecord))
         XCTAssertFalse(FileManager.default.fileExists(atPath: recoveryURL.path))
         XCTAssertTrue(viewModel.recoveries.isEmpty)
@@ -1259,7 +1259,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         historyService: HistoryService
     ) async throws {
         for _ in 0..<50 {
-            if viewModel.lastSavedHistoryRecordID != nil, !historyService.records.isEmpty {
+            if viewModel.lastSavedHistoryRecordID != nil, !historyService.recentRecords.isEmpty {
                 return
             }
             try await Task.sleep(for: .milliseconds(20))

@@ -9,7 +9,7 @@ import os
 
 @available(macOS 26, *)
 @objc(SpeechAnalyzerPlugin)
-final class SpeechAnalyzerPlugin: NSObject, LiveTranscriptionCapablePlugin, TranscriptionModelCatalogProviding, DictionaryTermsCapabilityProviding, DictionaryTermsBudgetProviding, PluginSettingsActivityReporting, @unchecked Sendable {
+final class SpeechAnalyzerPlugin: NSObject, LiveTranscriptionCapablePlugin, TranscriptionModelCatalogProviding, DictionaryTermsCapabilityProviding, DictionaryTermsBudgetProviding, PluginSettingsActivityReporting, PassiveModelRestoreProviding, @unchecked Sendable {
     static let pluginId = "com.typewhisper.speechanalyzer"
     static let pluginName = "Apple Speech"
     private static let logger = Logger(subsystem: "com.typewhisper.speechanalyzer", category: "Plugin")
@@ -23,6 +23,16 @@ final class SpeechAnalyzerPlugin: NSObject, LiveTranscriptionCapablePlugin, Tran
     fileprivate var cachedModels: [SpeechModelDef] = []
     private var releaseTask: Task<Void, Never>?
 
+    private let passiveRestoreController = PluginPassiveModelRestoreController()
+    private let modelLoadGate = PluginLocalInferenceGate()
+
+    func requestPassiveModelRestore() {
+        passiveRestoreController.request { [weak self] in
+            guard let self else { return }
+            await self.restoreLoadedModel(allowDownloads: false, passively: true)
+        }
+    }
+
     required override init() {
         super.init()
     }
@@ -33,12 +43,13 @@ final class SpeechAnalyzerPlugin: NSObject, LiveTranscriptionCapablePlugin, Tran
             await populateModels()
             host.notifyCapabilitiesChanged()
             if host.shouldRestoreLoadedModelsPassively {
-                await restoreLoadedModel(allowDownloads: false)
+                requestPassiveModelRestore()
             }
         }
     }
 
     func deactivate() {
+        passiveRestoreController.cancel()
         if let locale = currentLocale {
             releaseTask = Task { await AssetInventory.release(reservedLocale: locale) }
         }
@@ -261,7 +272,18 @@ final class SpeechAnalyzerPlugin: NSObject, LiveTranscriptionCapablePlugin, Tran
         }.sorted { $0.displayName.localizedCaseInsensitiveCompare($1.displayName) == .orderedAscending }
     }
 
-    fileprivate func loadModel(_ modelDef: SpeechModelDef) async {
+    fileprivate func loadModel(_ modelDef: SpeechModelDef, passively: Bool = false) async {
+        try? await modelLoadGate.withLock { [self] in
+            guard host != nil else { return }
+            if passively {
+                guard host?.shouldRestoreLoadedModelsPassively == true, !isConfigured else { return }
+            }
+            guard !(isConfigured && loadedModelId == modelDef.id) else { return }
+            await performModelLoad(modelDef, allowDownloads: !passively)
+        }
+    }
+
+    private func performModelLoad(_ modelDef: SpeechModelDef, allowDownloads: Bool) async {
         modelState = .downloading
         downloadProgress = 0.1
 
@@ -275,6 +297,10 @@ final class SpeechAnalyzerPlugin: NSObject, LiveTranscriptionCapablePlugin, Tran
 
             // Download assets if needed
             if let downloader = try await AssetInventory.assetInstallationRequest(supporting: [transcriber]) {
+                guard allowDownloads else {
+                    modelState = .notLoaded
+                    return
+                }
                 let downloadProgressObj = downloader.progress
                 let progressTask = Task.detached { [downloadProgressObj] in
                     while !downloadProgressObj.isFinished && !Task.isCancelled {
@@ -283,13 +309,17 @@ final class SpeechAnalyzerPlugin: NSObject, LiveTranscriptionCapablePlugin, Tran
                         try? await Task.sleep(for: .milliseconds(250))
                     }
                 }
+                defer { progressTask.cancel() }
                 try await downloader.downloadAndInstall()
-                progressTask.cancel()
             }
 
             downloadProgress = 0.9
             try await AssetInventory.reserve(locale: modelDef.locale)
 
+            guard !Task.isCancelled, host != nil else {
+                await AssetInventory.release(reservedLocale: modelDef.locale)
+                return
+            }
             currentLocale = modelDef.locale
             loadedModelId = modelDef.id
             downloadProgress = 1.0
@@ -298,6 +328,7 @@ final class SpeechAnalyzerPlugin: NSObject, LiveTranscriptionCapablePlugin, Tran
             host?.setUserDefault(modelDef.id, forKey: "loadedModel")
             host?.notifyCapabilitiesChanged()
         } catch {
+            guard !Task.isCancelled, host != nil else { return }
             modelState = .error(error.localizedDescription)
             downloadProgress = 0
         }
@@ -343,7 +374,11 @@ final class SpeechAnalyzerPlugin: NSObject, LiveTranscriptionCapablePlugin, Tran
         host?.notifyCapabilitiesChanged()
     }
 
-    func restoreLoadedModel(allowDownloads: Bool = true) async {
+    func restoreLoadedModel(allowDownloads: Bool = true, passively: Bool = false) async {
+        guard !Task.isCancelled else { return }
+        if passively {
+            guard host?.shouldRestoreLoadedModelsPassively == true, !isConfigured else { return }
+        }
         if cachedModels.isEmpty {
             await populateModels()
             host?.notifyCapabilitiesChanged()
@@ -357,7 +392,7 @@ final class SpeechAnalyzerPlugin: NSObject, LiveTranscriptionCapablePlugin, Tran
             let hasInstalledAssets = await self.hasInstalledAssets(for: modelDef)
             guard hasInstalledAssets else { return }
         }
-        await loadModel(modelDef)
+        await loadModel(modelDef, passively: passively)
     }
 
     func prepareModelForTranscription(languageCode: String?) async {

@@ -25,15 +25,17 @@ permissions:
 
 jobs:
   release-build:
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Xcode
-        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
-          xcode-version: "26.3"
+          xcode-version: "26.6"
 
       - name: Resolve Swift packages
         run: |
@@ -55,7 +57,7 @@ jobs:
       - name: Build App
         run: |
           set -o pipefail
-          xcodebuild -project $PROJECT \
+          xcodebuild -skipPackagePluginValidation -project $PROJECT \
             -scheme $SCHEME \
             -configuration Release \
             -derivedDataPath build \
@@ -97,22 +99,24 @@ jobs:
             "build/${DMG_NAME}"
 
       - name: Upload DMG
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: TypeWhisper-DMG
           path: build/TypeWhisper-*.dmg
           retention-days: 14
 
   app-tests:
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Xcode
-        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
-          xcode-version: "26.3"
+          xcode-version: "26.6"
 
       - name: Resolve Swift packages
         run: |
@@ -131,7 +135,7 @@ jobs:
       - name: Run App Tests
         run: |
           set -o pipefail
-          xcodebuild test -project $PROJECT \
+          xcodebuild test -skipPackagePluginValidation -project $PROJECT \
             -scheme $SCHEME \
             -destination 'platform=macOS,arch=arm64' \
             -parallel-testing-enabled NO \
@@ -143,15 +147,17 @@ jobs:
         run: bash scripts/check_first_party_warnings.sh test.log
 
   plugin-sdk-tests:
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
 
       - name: Setup Xcode
-        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
-          xcode-version: "26.3"
+          xcode-version: "26.6"
 
       - name: Run Plugin SDK Tests
         run: swift test --package-path TypeWhisperPluginSDK

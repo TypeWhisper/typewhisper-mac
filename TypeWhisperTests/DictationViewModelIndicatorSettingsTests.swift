@@ -142,28 +142,30 @@ final class DictationViewModelIndicatorSettingsTests: XCTestCase {
         XCTAssertTrue(DictationViewModel.loadTranscribeShortQuietClipsAggressively(defaults: defaults))
     }
 
-    func testRecordingCancelConfirmationDefaultsToEnabled() {
-        XCTAssertTrue(DictationViewModel.loadRequireSecondEscapeToCancelRecording(defaults: defaults))
+    func testCancellationBehaviorDefaultsToDoubleEscape() {
+        XCTAssertEqual(DictationViewModel.loadCancellationBehavior(defaults: defaults), .doubleEscape)
     }
 
-    func testRecordingCancelConfirmationPersistsWhenDisabled() {
-        DictationViewModel.persistRequireSecondEscapeToCancelRecording(false, defaults: defaults)
-
-        XCTAssertEqual(
-            defaults.object(forKey: UserDefaultsKeys.requireSecondEscapeToCancelRecording) as? Bool,
-            false
-        )
-        XCTAssertFalse(DictationViewModel.loadRequireSecondEscapeToCancelRecording(defaults: defaults))
+    func testCancellationBehaviorMigratesLegacyPreference() {
+        for enabled in [true, false] {
+            defaults.set(enabled, forKey: UserDefaultsKeys.requireSecondEscapeToCancelRecording)
+            XCTAssertEqual(DictationViewModel.loadCancellationBehavior(defaults: defaults), enabled ? .doubleEscape : .singleEscape)
+        }
     }
 
-    func testRecordingCancelConfirmationPersistsWhenEnabled() {
-        DictationViewModel.persistRequireSecondEscapeToCancelRecording(true, defaults: defaults)
+    func testCancellationBehaviorPersistsAllModesAndOverridesLegacyPreference() {
+        defaults.set(false, forKey: UserDefaultsKeys.requireSecondEscapeToCancelRecording)
+        for behavior in CancellationBehavior.allCases {
+            DictationViewModel.persistCancellationBehavior(behavior, defaults: defaults)
+            XCTAssertEqual(DictationViewModel.loadCancellationBehavior(defaults: defaults), behavior)
+        }
+    }
 
-        XCTAssertEqual(
-            defaults.object(forKey: UserDefaultsKeys.requireSecondEscapeToCancelRecording) as? Bool,
-            true
-        )
-        XCTAssertTrue(DictationViewModel.loadRequireSecondEscapeToCancelRecording(defaults: defaults))
+    func testInvalidCancellationBehaviorFallsBackToLegacyOrDefault() {
+        defaults.set("unknown", forKey: UserDefaultsKeys.cancellationBehavior)
+        XCTAssertEqual(DictationViewModel.loadCancellationBehavior(defaults: defaults), .doubleEscape)
+        defaults.set(false, forKey: UserDefaultsKeys.requireSecondEscapeToCancelRecording)
+        XCTAssertEqual(DictationViewModel.loadCancellationBehavior(defaults: defaults), .singleEscape)
     }
 
     func testMicrophoneBoostDefaultsToDisabled() {
@@ -972,6 +974,22 @@ final class ManagedAppWindowRestorationTests: XCTestCase {
 }
 
 final class MenuBarGroupingTests: XCTestCase {
+    @MainActor
+    func testMenuBarActionDispatcherDefersUntilTheCurrentActionReturns() async {
+        let probe = MenuBarActionInvocationProbe()
+
+        await withCheckedContinuation { continuation in
+            MenuBarActionDispatcher.performAfterMenuDismissal {
+                probe.invocationCount += 1
+                continuation.resume()
+            }
+
+            XCTAssertEqual(probe.invocationCount, 0)
+        }
+
+        XCTAssertEqual(probe.invocationCount, 1)
+    }
+
     func testMenuBarSectionsUseExpectedOrderAndLocalizedKeys() {
         XCTAssertEqual(
             MenuBarMenuSection.allCases.map(\.titleLocalizationKey),
@@ -993,6 +1011,11 @@ final class MenuBarGroupingTests: XCTestCase {
             [.toggleDictationHotkeysPause, .transcribeFile, .lastTranscription]
         )
     }
+}
+
+@MainActor
+private final class MenuBarActionInvocationProbe {
+    var invocationCount = 0
 }
 
 final class MenuBarIconStateTests: XCTestCase {
@@ -1049,7 +1072,7 @@ final class IndicatorPresentationStateTests: XCTestCase {
             actionFeedbackMessage: nil,
             actionFeedbackIcon: nil,
             actionFeedbackIsError: false,
-            actionFeedbackUndoTitle: nil,
+            actionFeedbackActionTitle: nil,
             actionFeedbackRemainingFraction: nil,
             actionFeedbackIsPaused: false,
             externalStreamingDisplayCount: 0
@@ -1074,7 +1097,7 @@ final class IndicatorPresentationStateTests: XCTestCase {
             actionFeedbackMessage: "Saved",
             actionFeedbackIcon: "checkmark.circle.fill",
             actionFeedbackIsError: false,
-            actionFeedbackUndoTitle: "Undo",
+            actionFeedbackActionTitle: "Undo",
             actionFeedbackRemainingFraction: remainingFraction,
             actionFeedbackIsPaused: isPaused,
             externalStreamingDisplayCount: 0
@@ -1572,7 +1595,87 @@ final class IndicatorPanelInteractionTests: XCTestCase {
 }
 
 @MainActor
+private final class NotchLayoutProbeModel: ObservableObject {
+    @Published var feedback = false
+    var rootSizes: [CGSize] = []
+    var safeArea: EdgeInsets?
+}
+
+private struct NotchLayoutProbeView: View {
+    @ObservedObject var model: NotchLayoutProbeModel
+
+    var body: some View {
+        GeometryReader { geometry in
+            Color.black
+                .frame(width: model.feedback ? 340 : 400, height: model.feedback ? 86 : 160)
+                .animation(.easeOut(duration: 0.24), value: model.feedback)
+                .onAppear {
+                    model.rootSizes.append(geometry.size)
+                    model.safeArea = geometry.safeAreaInsets
+                }
+                .onChange(of: geometry.size) { model.rootSizes.append(geometry.size) }
+                .onChange(of: geometry.safeAreaInsets) { model.safeArea = geometry.safeAreaInsets }
+        }
+    }
+}
+
+@MainActor
 final class NotchIndicatorPanelLifecycleTests: XCTestCase {
+    func testFixedHostingViewRemainsCenteredAndTopAlignedWhilePanelResizes() throws {
+        let panel = try makePanel()
+        defer { panel.orderOut(nil) }
+        let container = try XCTUnwrap(panel.contentView)
+        let hostingView = try XCTUnwrap(container.subviews.first)
+        let fixedSize = CGSize(width: 500, height: 500)
+
+        for size in [
+            CGSize(width: 340, height: 86),
+            fixedSize,
+            CGSize(width: 360, height: 90),
+            CGSize(width: 640, height: 120),
+            fixedSize
+        ] {
+            let frame = CGRect(origin: CGPoint(x: 100, y: 200), size: size)
+            panel.setFrame(frame, display: false)
+            panel.layoutIfNeeded()
+
+            XCTAssertEqual(panel.frame, frame)
+            XCTAssertEqual(hostingView.frame.size, fixedSize)
+            XCTAssertEqual(hostingView.bounds.size, fixedSize)
+            XCTAssertEqual(hostingView.frame.midX, container.bounds.midX, accuracy: 0.01)
+            XCTAssertEqual(hostingView.frame.maxY, container.bounds.maxY, accuracy: 0.01)
+        }
+    }
+
+    func testFeedbackTransitionsKeepSwiftUIRootSizeAndIgnoreSystemSafeArea() async throws {
+        let model = NotchLayoutProbeModel()
+        let panel = try makePanel { _ in NotchLayoutProbeView(model: model) }
+        panel.alphaValue = 0
+        defer { panel.orderOut(nil) }
+        panel.show()
+        let container = try XCTUnwrap(panel.contentView)
+
+        for interactive in [false, true, false, true, false] {
+            withAnimation(.easeOut(duration: 0.24)) {
+                model.feedback = interactive
+                panel.updateFeedbackInteraction(isInteractive: interactive)
+            }
+            let expectedFrame = panel.frame
+            for inset in [CGFloat(32), 64, 0] {
+                container.additionalSafeAreaInsets = NSEdgeInsets(top: inset, left: 0, bottom: 0, right: 0)
+                panel.layoutIfNeeded()
+                try await Task.sleep(for: .milliseconds(50))
+
+                XCTAssertFalse(model.rootSizes.isEmpty)
+                XCTAssertTrue(model.rootSizes.allSatisfy { $0 == CGSize(width: 500, height: 500) })
+                XCTAssertEqual(model.safeArea, EdgeInsets())
+                XCTAssertEqual(panel.frame, expectedFrame)
+                XCTAssertFalse(panel.canBecomeKey)
+                XCTAssertFalse(panel.canBecomeMain)
+            }
+        }
+    }
+
     func testPlacementRefreshDoesNotCancelInFlightDismissal() async throws {
         let panel = try makePanel()
         defer { panel.orderOut(nil) }
@@ -1603,7 +1706,48 @@ final class NotchIndicatorPanelLifecycleTests: XCTestCase {
         XCTAssertTrue(panel.isVisible)
     }
 
+    func testFeedbackInteractionChangeDoesNotCancelInFlightDismissal() async throws {
+        let panel = try makePanel()
+        defer { panel.orderOut(nil) }
+
+        panel.show()
+        await Task.yield()
+        panel.updateFeedbackInteraction(isInteractive: true)
+        XCTAssertTrue(panel.isVisible)
+
+        // Dictation ends while an action-feedback toast is up: the state sink
+        // dismisses, then the feedback sink flips interaction back off inside
+        // the dismissal animation window. That second callback must not
+        // resurrect the panel — previously it cancelled the pending orderOut
+        // and left a blank window stuck over the notch.
+        panel.dismiss()
+        panel.updateFeedbackInteraction(isInteractive: false)
+        try await Task.sleep(for: .milliseconds(300))
+
+        XCTAssertFalse(panel.isVisible)
+    }
+
+    func testShowAfterFeedbackInteractionChangeDuringDismissalStillPresents() async throws {
+        let panel = try makePanel()
+        defer { panel.orderOut(nil) }
+
+        panel.show()
+        await Task.yield()
+        panel.dismiss()
+        panel.updateFeedbackInteraction(isInteractive: true)
+        panel.show()
+        try await Task.sleep(for: .milliseconds(300))
+
+        XCTAssertTrue(panel.isVisible)
+    }
+
     private func makePanel() throws -> NotchIndicatorPanel {
+        try makePanel { _ in EmptyView() }
+    }
+
+    private func makePanel<Content: View>(
+        @ViewBuilder content: (NotchGeometry) -> Content
+    ) throws -> NotchIndicatorPanel {
         guard let screen = NSScreen.screens.first else {
             throw XCTSkip("Notch indicator panel tests require an available screen")
         }
@@ -1620,7 +1764,7 @@ final class NotchIndicatorPanelLifecycleTests: XCTestCase {
         return NotchIndicatorPanel(
             screenResolver: resolver,
             displayModeProvider: { .activeScreen },
-            content: { _ in EmptyView() }
+            content: content
         )
     }
 }

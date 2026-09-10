@@ -31,7 +31,7 @@ extension ServiceContainer {
         }
 
         seedScreenshotHistory(content.history, languageCode: language.rawValue)
-        usageStatisticsService.replaceWithHistoryRecords(historyService.records)
+        usageStatisticsService.replaceWithHistoryRecords(historyService.allRecords())
 
         dictionaryService.addEntries(
             content.terms.map {
@@ -126,7 +126,7 @@ extension ServiceContainer {
                 audioSamples: includesAudio ? Array(repeating: Float.zero, count: 1_600) : nil
             )
 
-            guard let record = historyService.records.first(where: { $0.id == recordID }) else {
+            guard let record = historyService.record(withID: recordID) else {
                 continue
             }
             record.source = source
@@ -149,7 +149,7 @@ extension ServiceContainer {
         }
 
         if AppConstants.screenshotState == "history",
-           let selectedRecord = historyService.records.first(where: { $0.processingState == .ready }) {
+           let selectedRecord = historyService.allRecords().first(where: { $0.processingState == .ready }) {
             historyViewModel.requestRecordSelection([selectedRecord.id])
         }
     }
