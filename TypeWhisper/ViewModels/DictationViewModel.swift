@@ -2290,11 +2290,16 @@ final class DictationViewModel: ObservableObject {
             )
         }
 
-        // Race the whole transcription phase against a deadline. Whichever finishes
-        // first wins and the other is cancelled, so a request that neither errors
-        // nor completes (a stalled upload, a server that accepted the audio and
-        // went silent) cannot leave the app stuck in "Transcribing..." with no way
-        // out but Escape.
+        // Bound the whole transcription phase (primary, hedge, and the sequential
+        // fallback) by a deadline that holds regardless of how the runners behave:
+        // the phase is an unstructured task settled through an arbiter, so when
+        // the deadline fires the caller gets TranscriptionDeadlineExceeded at the
+        // bound. The in-flight work is cancelled - which aborts the transport for
+        // runners that honour cancellation - but it is never awaited, so a runner
+        // that ignores cancellation (a stalled upload, a server that accepted the
+        // audio and went silent, a plugin without prompt cancellation) cannot
+        // hold the app in "Transcribing..." past the bound. Its late result is
+        // dropped by the arbiter.
         let transcriptionOperation: @MainActor () async throws -> FinalTranscriptionOutput = { [self] in
             try await self.transcribeFinalAudioWithoutDeadline(
                 audioSamples: audioSamples,
@@ -2307,18 +2312,76 @@ final class DictationViewModel: ObservableObject {
                 normalizeNumbers: normalizeNumbers
             )
         }
-        return try await withThrowingTaskGroup(of: FinalTranscriptionOutput.self) { group in
-            group.addTask { try await transcriptionOperation() }
-            group.addTask { [logger] in
-                try await Task.sleep(nanoseconds: UInt64(deadline * 1_000_000_000))
-                logger.error("Final transcription exceeded its deadline of \(deadline, format: .fixed(precision: 1))s; abandoning in-flight requests")
-                throw TranscriptionDeadlineExceeded(seconds: deadline)
+        let arbiter = DeadlineArbiter<FinalTranscriptionOutput>()
+        // The continuation only signals completion; the (non-Sendable) outcome
+        // stays inside the main-actor arbiter and is read back here.
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                arbiter.begin(continuation)
+                let work = Task { @MainActor in
+                    do {
+                        arbiter.settle(.success(try await transcriptionOperation()))
+                    } catch {
+                        arbiter.settle(.failure(error))
+                    }
+                }
+                let timer = Task { @MainActor [logger] in
+                    do {
+                        try await Task.sleep(nanoseconds: UInt64(deadline * 1_000_000_000))
+                    } catch {
+                        return
+                    }
+                    logger.error("Final transcription exceeded its deadline of \(deadline, format: .fixed(precision: 1))s; abandoning in-flight requests")
+                    arbiter.settle(.failure(TranscriptionDeadlineExceeded(seconds: deadline)))
+                }
+                arbiter.register(work: work, timer: timer)
             }
-            defer { group.cancelAll() }
-            guard let output = try await group.next() else {
-                throw TranscriptionDeadlineExceeded(seconds: deadline)
+        } onCancel: {
+            Task { @MainActor in
+                arbiter.settle(.failure(CancellationError()))
             }
-            return output
+        }
+        return try arbiter.takeOutcome().get()
+    }
+
+    /// Settles a deadline-bounded operation on its first outcome: the work's own
+    /// result, the deadline, or outer cancellation. Everything runs on the main
+    /// actor; the first call resumes the caller and cancels both tasks, later
+    /// calls are dropped, and neither task is ever awaited.
+    @MainActor
+    private final class DeadlineArbiter<Value> {
+        private var continuation: CheckedContinuation<Void, Never>?
+        private var work: Task<Void, Never>?
+        private var timer: Task<Void, Never>?
+        private var settled = false
+        private var outcome: Result<Value, Error>?
+
+        func begin(_ continuation: CheckedContinuation<Void, Never>) {
+            self.continuation = continuation
+        }
+
+        func takeOutcome() -> Result<Value, Error> {
+            outcome ?? .failure(CancellationError())
+        }
+
+        func register(work: Task<Void, Never>, timer: Task<Void, Never>) {
+            self.work = work
+            self.timer = timer
+            if settled {
+                work.cancel()
+                timer.cancel()
+            }
+        }
+
+        func settle(_ outcome: Result<Value, Error>) {
+            guard !settled else { return }
+            settled = true
+            self.outcome = outcome
+            work?.cancel()
+            timer?.cancel()
+            let continuation = self.continuation
+            self.continuation = nil
+            continuation?.resume()
         }
     }
 

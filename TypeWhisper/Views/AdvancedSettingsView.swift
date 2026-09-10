@@ -636,6 +636,9 @@ struct AdvancedSettingsView: View {
             },
             recoveryRetentionPolicyDidChange: { policy in
                 _ = container.audioRecordingService.updateRecoveryRetentionPolicy(policy)
+            },
+            dictationRecoveryPreferencesDidChange: {
+                DictationRecoveryViewModel.shared.reloadPreferencesFromDefaults()
             }
         )
 

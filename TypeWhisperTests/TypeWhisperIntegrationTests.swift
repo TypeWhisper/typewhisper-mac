@@ -11950,6 +11950,45 @@ extension TypeWhisperIntegrationTests {
     }
 
     @MainActor
+    func testTranscriptionDeadlineHoldsAgainstRunnersThatIgnoreCancellation() async throws {
+        // Both runners wait on plain dispatch timers that no Task cancellation can
+        // interrupt, i.e. engines whose transport never aborts. The deadline must
+        // still return at the bound instead of waiting for them.
+        var primaryFinished = false
+        var fallbackFinished = false
+        let harness = try makeHedgedDictationViewModel(
+            hedgeThreshold: 0.1,
+            transcriptionDeadline: 0.5,
+            primaryRunner: { _, _, _, _, _, _, _, _ in
+                await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                    DispatchQueue.global().asyncAfter(deadline: .now() + 3.0) { continuation.resume() }
+                }
+                primaryFinished = true
+                return Self.hedgeTranscriptionResult(text: "primary", engine: "primary")
+            },
+            fallbackRunner: { _, _, _, _, _, _, _ in
+                await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                    DispatchQueue.global().asyncAfter(deadline: .now() + 3.0) { continuation.resume() }
+                }
+                fallbackFinished = true
+                return Self.hedgeTranscriptionResult(text: "fallback", engine: "test-fallback")
+            }
+        )
+        defer { harness.cleanup() }
+
+        let start = ContinuousClock.now
+        do {
+            _ = try await harness.viewModel.transcribeFinalAudioForTesting()
+            XCTFail("The deadline must fire while both runners are still hung")
+        } catch let error as DictationViewModel.TranscriptionDeadlineExceeded {
+            XCTAssertEqual(error.seconds, 0.5)
+        }
+        XCTAssertLessThan(ContinuousClock.now - start, .seconds(1.5), "the bound must not wait for runners that ignore cancellation")
+        XCTAssertFalse(primaryFinished, "the primary was still hung when the deadline returned")
+        XCTAssertFalse(fallbackFinished, "the fallback was still hung when the deadline returned")
+    }
+
+    @MainActor
     func testTranscriptionDeadlineDoesNotInterfereWithFastPrimary() async throws {
         let harness = try makeHedgedDictationViewModel(
             hedgeThreshold: 1.0,

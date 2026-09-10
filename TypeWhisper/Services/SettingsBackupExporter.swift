@@ -634,7 +634,8 @@ enum SettingsBackupExporter {
         usageStatisticsService: UsageStatisticsService,
         userDefaults: UserDefaults = .standard,
         liveFieldTranscriptEnabledDidChange: ((Bool) -> Void)? = nil,
-        recoveryRetentionPolicyDidChange: ((DictationRecoveryRetentionPolicy) -> Void)? = nil
+        recoveryRetentionPolicyDidChange: ((DictationRecoveryRetentionPolicy) -> Void)? = nil,
+        dictationRecoveryPreferencesDidChange: (() -> Void)? = nil
     ) async -> ImportResult {
         var result = ImportResult()
 
@@ -875,6 +876,12 @@ enum SettingsBackupExporter {
             forKey: UserDefaultsKeys.dictationRecoveryHedgeThresholdSeconds
         )
         apply(preferences.dictationRecoveryRetentionDays, forKey: UserDefaultsKeys.dictationRecoveryRetentionDays)
+        if preferences.dictationRecoveryLanguage != nil
+            || preferences.dictationRecoveryAutomaticFallbackEnabled != nil
+            || preferences.dictationRecoveryHedgeEnabled != nil
+            || preferences.dictationRecoveryHedgeThresholdSeconds != nil {
+            dictationRecoveryPreferencesDidChange?()
+        }
         if preferences.dictationRecoveryRetentionDays != nil {
             recoveryRetentionPolicyDidChange?(DictationRecoveryRetentionPolicy.load(from: userDefaults))
         }

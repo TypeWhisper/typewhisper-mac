@@ -627,6 +627,53 @@ final class SettingsBackupExporterTests: XCTestCase {
         XCTAssertFalse(result.updateChannelApplied)
     }
 
+    func testImportNotifiesWhenRecoveryPreferencesWereApplied() async throws {
+        func makeBackup(_ configure: (inout SettingsBackupExporter.PreferencesDTO) -> Void) -> SettingsBackupExporter.SettingsBackup {
+            var preferences = SettingsBackupExporter.PreferencesDTO.empty
+            configure(&preferences)
+            return SettingsBackupExporter.SettingsBackup(
+                schemaVersion: SettingsBackupExporter.schemaVersion,
+                exportedAt: Date(),
+                appVersion: "1.0",
+                workflows: [], dictionaryEntries: [], snippets: [], promptActions: [], profiles: [],
+                hotkeys: [:], plugins: [],
+                history: [],
+                updateChannel: nil,
+                preferences: preferences
+            )
+        }
+        let destination = try makeFixture()
+        defer { teardown(destination) }
+
+        var notifications = 0
+        func importing(_ backup: SettingsBackupExporter.SettingsBackup) async {
+            _ = await SettingsBackupExporter.importBackup(
+                backup,
+                workflowService: destination.workflowService,
+                dictionaryService: destination.dictionaryService,
+                snippetService: destination.snippetService,
+                profileService: destination.profileService,
+                promptActionService: destination.promptActionService,
+                pluginManager: destination.pluginManager,
+                pluginRegistryService: destination.pluginRegistryService,
+                historyService: destination.historyService,
+                usageStatisticsService: destination.usageStatisticsService,
+                userDefaults: destination.userDefaults,
+                dictationRecoveryPreferencesDidChange: { notifications += 1 }
+            )
+        }
+
+        await importing(makeBackup { _ in })
+        XCTAssertEqual(notifications, 0, "no recovery preference in the backup, nothing to reload")
+
+        await importing(makeBackup { $0.dictationRecoveryHedgeThresholdSeconds = 7.5 })
+        XCTAssertEqual(notifications, 1)
+        XCTAssertEqual(destination.userDefaults.double(forKey: UserDefaultsKeys.dictationRecoveryHedgeThresholdSeconds), 7.5)
+
+        await importing(makeBackup { $0.dictationRecoveryHedgeEnabled = true })
+        XCTAssertEqual(notifications, 2)
+    }
+
     func testImportRejectsOutOfRangeHedgeThreshold() async throws {
         // A backup is user-editable JSON; a value the UI could never produce must
         // not reach the hedge timer (1e308 seconds would overflow the sleep).
