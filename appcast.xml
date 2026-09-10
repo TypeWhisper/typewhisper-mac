@@ -5,6 +5,15 @@
     <language>en</language>
     <description>Stable, release candidate, and daily updates for TypeWhisper.</description>
     <item>
+      <title>Version 1.7.0-rc1</title>
+      <pubDate>Thu, 10 Sep 2026 15:01:08 +0000</pubDate>
+      <sparkle:version>1220</sparkle:version>
+      <sparkle:shortVersionString>1.7.0-rc1</sparkle:shortVersionString>
+      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+      <sparkle:channel>release-candidate</sparkle:channel>
+      <enclosure url="https://github.com/TypeWhisper/typewhisper-mac/releases/download/v1.7.0-rc1/TypeWhisper-v1.7.0-rc1.zip" sparkle:edSignature="qtOQq68/tT3GVmnWc5+UiidxocVCi0vg9whbd1tP3V4nYrG77rxOjDHtTcIlH+/FFIZXwYyRcvNU+tmO8yCJAQ==" length="13180175" type="application/octet-stream" />
+    </item>
+    <item>
       <title>Version 1.7.0-daily.20260910</title>
       <pubDate>Thu, 10 Sep 2026 09:04:37 +0000</pubDate>
       <sparkle:version>1217</sparkle:version>
@@ -20,15 +29,6 @@
       <sparkle:shortVersionString>1.6.0</sparkle:shortVersionString>
       <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
       <enclosure url="https://github.com/TypeWhisper/typewhisper-mac/releases/download/v1.6.0/TypeWhisper-v1.6.0.zip" sparkle:edSignature="X4m6/hVdlR+nhQcjoya4AulCBc0QWeb8F0SM8lSZaAGkuwHZuPoNexu8je7+IPb5SrLwBkTgEJjzzdg4u/mzAQ==" length="11419108" type="application/octet-stream" />
-    </item>
-    <item>
-      <title>Version 1.6.0-rc2</title>
-      <pubDate>Sun, 16 Aug 2026 08:24:46 +0000</pubDate>
-      <sparkle:version>1083</sparkle:version>
-      <sparkle:shortVersionString>1.6.0-rc2</sparkle:shortVersionString>
-      <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-      <sparkle:channel>release-candidate</sparkle:channel>
-      <enclosure url="https://github.com/TypeWhisper/typewhisper-mac/releases/download/v1.6.0-rc2/TypeWhisper-v1.6.0-rc2.zip" sparkle:edSignature="zCeyDWhURrdhpbTLZa+IgcDJbT5Qd5xwzB4ikXo8Rc2HF/O6FpVW/WtX0D9n10y3zWA1YYIOms6Iy5otHn5WBw==" length="11395137" type="application/octet-stream" />
     </item>
   </channel>
 </rss>
