@@ -689,6 +689,16 @@ extension SaluteSpeechPlugin {
             throw PluginTranscriptionError.networkError("Invalid response")
         }
 
+        if successStatusCodes.contains(httpResponse.statusCode),
+           let htmlPageSummary = PluginHTTPErrorBodyFormatter.htmlPageSummary(
+               from: data,
+               response: httpResponse
+           ) {
+            throw PluginTranscriptionError.apiError(
+                "Failed to parse Sber SaluteSpeech response: \(htmlPageSummary)"
+            )
+        }
+
         guard !successStatusCodes.contains(httpResponse.statusCode) else { return }
 
         switch httpResponse.statusCode {
@@ -702,24 +712,25 @@ extension SaluteSpeechPlugin {
             throw PluginTranscriptionError.rateLimited
         default:
             throw PluginTranscriptionError.apiError(
-                "Sber SaluteSpeech HTTP \(httpResponse.statusCode): \(responseBodyMessage(data: data))"
+                "Sber SaluteSpeech HTTP \(httpResponse.statusCode): \(responseBodyMessage(data: data, response: httpResponse))"
             )
         }
     }
 
-    static func responseBodyMessage(data: Data) -> String {
+    static func responseBodyMessage(data: Data, response: HTTPURLResponse? = nil) -> String {
         if let object = try? JSONSerialization.jsonObject(with: data) {
             if let message = firstStringValue(
                 in: object,
                 keys: ["message", "error_description", "error", "detail"]
             ) {
-                return message
+                return PluginHTTPErrorBodyFormatter.summary(from: message)
             }
         }
 
-        let body = String(data: data, encoding: .utf8)?
-            .trimmingCharacters(in: .whitespacesAndNewlines)
-        return body?.nilIfEmpty ?? "Unknown error"
+        if let response {
+            return PluginHTTPErrorBodyFormatter.summary(from: data, response: response)
+        }
+        return PluginHTTPErrorBodyFormatter.summary(from: data, contentType: nil)
     }
 
     static func parseTokenResponse(_ data: Data) throws -> TokenResponse {

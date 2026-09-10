@@ -218,17 +218,21 @@ struct AdvancedSettingsView: View {
                     )
                 }
 
-                Toggle(isOn: $dictation.requireSecondEscapeToCancelRecording) {
+                Picker(selection: $dictation.cancellationBehavior) {
+                    ForEach(CancellationBehavior.allCases, id: \.self) { behavior in
+                        Text(behavior.title).tag(behavior)
+                    }
+                } label: {
                     SettingsInfoLabel(
-                        title: String(localized: "Require second Esc press to cancel recording"),
-                        info: String(localized: "When disabled, pressing Esc once immediately discards the active recording.")
+                        title: String(localized: "Cancellation behavior"),
+                        info: String(localized: "Double: press Esc twice to cancel. Single: press Esc once. Both show a cancellation banner for 1.5 seconds. Instant: press Esc once without a banner. Applies to recording and processing.")
                     )
                 }
 
                 Toggle(isOn: $dictation.liveFieldTranscriptEnabled) {
                     SettingsInfoLabel(
                         title: String(localized: "Show live transcript in the active text field"),
-                        info: String(localized: "Supported text fields are updated while you speak. TypeWhisper inserts the final transcript normally when direct updates are unavailable.")
+                        info: String(localized: "Supported text fields are updated while you speak. The field focused when recording starts remains the final insertion target, including apps that require paste. If it can no longer be restored safely, the final transcript remains in Recent Transcriptions.")
                     )
                 }
 
@@ -458,6 +462,29 @@ struct AdvancedSettingsView: View {
                         }
                     }
                 }
+
+                HStack(alignment: .top, spacing: 12) {
+                    Image(systemName: "iphone")
+                        .font(.title2)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 24)
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(localizedAppText("iPhone & iPad App", de: "iOS- und iPad-App"))
+                            .font(.headline)
+
+                        HStack {
+                            Button(localizedAppText("Show", de: "Anzeigen")) {
+                                IOSCompanionPromoCoordinator.shared.requestManualPresentation()
+                            }
+
+                            SettingsInfoButton(text: localizedAppText(
+                                "Show the TypeWhisper companion app for iPhone and iPad again.",
+                                de: "Zeigt die TypeWhisper-App für iPhone und iPad erneut an."
+                            ))
+                        }
+                    }
+                }
                 }
             }
             .formStyle(.grouped)
@@ -596,16 +623,21 @@ struct AdvancedSettingsView: View {
     /// right away.
     private func beginExport() {
         let container = ServiceContainer.shared
-        let backup = SettingsBackupExporter.buildBackup(
-            workflowService: container.workflowService,
-            dictionaryService: container.dictionaryService,
-            snippetService: container.snippetService,
-            profileService: container.profileService,
-            promptActionService: container.promptActionService,
-            pluginManager: container.pluginManager,
-            historyService: container.historyService
-        )
-        exportBackupDraft = ExportBackupDraft(backup: backup)
+        do {
+            let backup = try SettingsBackupExporter.buildBackup(
+                workflowService: container.workflowService,
+                dictionaryService: container.dictionaryService,
+                snippetService: container.snippetService,
+                profileService: container.profileService,
+                promptActionService: container.promptActionService,
+                pluginManager: container.pluginManager,
+                historyService: container.historyService
+            )
+            exportBackupDraft = ExportBackupDraft(backup: backup)
+        } catch {
+            backupErrorMessage = error.localizedDescription
+            showBackupError = true
+        }
     }
 
     private func performBackupExport(_ backup: SettingsBackupExporter.SettingsBackup, categories: Set<SettingsBackupExporter.Category>) {
@@ -633,6 +665,9 @@ struct AdvancedSettingsView: View {
             usageStatisticsService: container.usageStatisticsService,
             liveFieldTranscriptEnabledDidChange: { enabled in
                 dictation.liveFieldTranscriptEnabled = enabled
+            },
+            cancellationBehaviorDidChange: { behavior in
+                dictation.cancellationBehavior = behavior
             },
             recoveryRetentionPolicyDidChange: { policy in
                 _ = container.audioRecordingService.updateRecoveryRetentionPolicy(policy)

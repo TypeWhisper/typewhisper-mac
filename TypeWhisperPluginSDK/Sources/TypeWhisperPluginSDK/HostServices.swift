@@ -287,10 +287,16 @@ public struct PluginWavEncoder {
         data.append(contentsOf: [0x64, 0x61, 0x74, 0x61]) // "data"
         data.append(contentsOf: withUnsafeBytes(of: dataSize.littleEndian) { Array($0) })
 
-        for sample in samples {
-            let clamped = max(-1.0, min(1.0, sample))
-            let int16Value = Int16(clamped * 32767)
-            data.append(contentsOf: withUnsafeBytes(of: int16Value.littleEndian) { Array($0) })
+        // Fill the PCM payload in one allocation instead of appending each sample.
+        data.count = 44 + Int(dataSize)
+        data.withUnsafeMutableBytes { (bytes: UnsafeMutableRawBufferPointer) in
+            for (index, sample) in samples.enumerated() {
+                let clamped = max(-1.0, min(1.0, sample))
+                let value = UInt16(bitPattern: Int16(clamped * 32767))
+                // Explicit bytes avoid alignment assumptions and preserve little endian PCM.
+                bytes[44 + index * 2] = UInt8(truncatingIfNeeded: value)
+                bytes[45 + index * 2] = UInt8(truncatingIfNeeded: value >> 8)
+            }
         }
 
         return data
@@ -308,6 +314,20 @@ public struct PluginAudioUploadFile: Sendable, Equatable {
         self.filename = filename
         self.contentType = contentType
         self.format = format
+    }
+}
+
+/// Preserves the raw HTTP response used to classify an upload retry while
+/// keeping the user-facing error bounded and provider-specific.
+public struct PluginAudioUploadHTTPFailure: Error, @unchecked Sendable {
+    public let statusCode: Int
+    public let responseData: Data
+    public let underlyingError: any Error
+
+    public init(statusCode: Int, responseData: Data, underlyingError: any Error) {
+        self.statusCode = statusCode
+        self.responseData = responseData
+        self.underlyingError = underlyingError
     }
 }
 
@@ -373,17 +393,40 @@ public enum PluginAudioUploadEncoder {
         do {
             preferredUpload = try compressedM4AUpload(from: uploadAudio)
         } catch {
-            return try await operation(wavUpload(from: uploadAudio))
+            do {
+                return try await operation(wavUpload(from: uploadAudio))
+            } catch {
+                throw underlyingUploadError(error)
+            }
         }
 
         do {
             return try await operation(preferredUpload)
         } catch {
-            guard shouldRetryWithWavUpload(error: error) else {
-                throw error
+            let shouldRetry: Bool
+            if let failure = error as? PluginAudioUploadHTTPFailure {
+                shouldRetry = shouldRetryWithWavUpload(
+                    statusCode: failure.statusCode,
+                    responseData: failure.responseData
+                )
+            } else {
+                shouldRetry = shouldRetryWithWavUpload(error: error)
             }
-            return try await operation(wavUpload(from: uploadAudio))
+
+            guard shouldRetry else {
+                throw underlyingUploadError(error)
+            }
+
+            do {
+                return try await operation(wavUpload(from: uploadAudio))
+            } catch {
+                throw underlyingUploadError(error)
+            }
         }
+    }
+
+    private static func underlyingUploadError(_ error: any Error) -> any Error {
+        (error as? PluginAudioUploadHTTPFailure)?.underlyingError ?? error
     }
 
     public static func shouldRetryWithWavUpload(statusCode: Int, responseData: Data) -> Bool {
@@ -789,35 +832,37 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
         responseFormat: String? = nil,
         apiVersion: String?
     ) async throws -> PluginTranscriptionResult {
+        let uploadAudio = normalizedAudioForUpload(audio)
+        let preferredUpload: PluginAudioUploadFile
         do {
-            return try await transcribeCompressedAudio(
-                audio: audio,
-                apiKey: apiKey,
-                modelName: modelName,
-                language: language,
-                translate: translate,
-                prompt: prompt,
-                requestTimeout: requestTimeout,
-                responseFormat: responseFormat,
-                apiVersion: apiVersion
-            )
+            preferredUpload = try PluginAudioUploadEncoder.compressedM4AUpload(from: uploadAudio)
         } catch {
-            guard PluginAudioUploadEncoder.shouldRetryWithWavUpload(error: error) else {
-                throw error
-            }
-
-            return try await transcribe(
-                audio: audio,
+            return try await performTranscribe(
+                audio: uploadAudio,
                 apiKey: apiKey,
                 modelName: modelName,
                 language: language,
                 translate: translate,
                 prompt: prompt,
-                requestTimeout: requestTimeout,
                 responseFormat: responseFormat,
+                requestTimeout: requestTimeout,
                 apiVersion: apiVersion
             )
         }
+
+        return try await performTranscribe(
+            audio: uploadAudio,
+            apiKey: apiKey,
+            modelName: modelName,
+            language: language,
+            translate: translate,
+            prompt: prompt,
+            responseFormat: responseFormat,
+            requestTimeout: requestTimeout,
+            uploadFile: preferredUpload,
+            apiVersion: apiVersion,
+            allowsWavFallback: true
+        )
     }
 
     public func transcribeWithUploadFallback(
@@ -857,38 +902,19 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
         uploadFile: PluginAudioUploadFile,
         apiVersion: String?
     ) async throws -> PluginTranscriptionResult {
-        do {
-            return try await performTranscribe(
-                audio: audio,
-                apiKey: apiKey,
-                modelName: modelName,
-                language: language,
-                translate: translate,
-                prompt: prompt,
-                responseFormat: responseFormat,
-                requestTimeout: requestTimeout,
-                uploadFile: uploadFile,
-                apiVersion: apiVersion
-            )
-        } catch {
-            guard uploadFile.format != "wav",
-                  PluginAudioUploadEncoder.shouldRetryWithWavUpload(error: error) else {
-                throw error
-            }
-
-            return try await performTranscribe(
-                audio: audio,
-                apiKey: apiKey,
-                modelName: modelName,
-                language: language,
-                translate: translate,
-                prompt: prompt,
-                responseFormat: responseFormat,
-                requestTimeout: requestTimeout,
-                uploadFile: PluginAudioUploadEncoder.wavUpload(from: normalizedAudioForUpload(audio)),
-                apiVersion: apiVersion
-            )
-        }
+        try await performTranscribe(
+            audio: audio,
+            apiKey: apiKey,
+            modelName: modelName,
+            language: language,
+            translate: translate,
+            prompt: prompt,
+            responseFormat: responseFormat,
+            requestTimeout: requestTimeout,
+            uploadFile: uploadFile,
+            apiVersion: apiVersion,
+            allowsWavFallback: true
+        )
     }
 
     public func transcribe(
@@ -952,7 +978,8 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
         responseFormat: String?,
         requestTimeout: TimeInterval,
         uploadFile: PluginAudioUploadFile? = nil,
-        apiVersion: String? = nil
+        apiVersion: String? = nil,
+        allowsWavFallback: Bool = false
     ) async throws -> PluginTranscriptionResult {
         let path = translate ? "/v1/audio/translations" : "/v1/audio/transcriptions"
         guard let url = requestURL(path: path, apiVersion: apiVersion) else {
@@ -1003,6 +1030,26 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
             throw PluginTranscriptionError.networkError("Invalid response")
         }
 
+        if allowsWavFallback,
+           uploadFile.format != "wav",
+           PluginAudioUploadEncoder.shouldRetryWithWavUpload(
+            statusCode: httpResponse.statusCode,
+            responseData: responseData
+           ) {
+            return try await performTranscribe(
+                audio: audio,
+                apiKey: apiKey,
+                modelName: modelName,
+                language: language,
+                translate: translate,
+                prompt: prompt,
+                responseFormat: responseFormat,
+                requestTimeout: requestTimeout,
+                uploadFile: PluginAudioUploadEncoder.wavUpload(from: normalizedAudioForUpload(audio)),
+                apiVersion: apiVersion
+            )
+        }
+
         switch httpResponse.statusCode {
         case 200:
             break
@@ -1013,11 +1060,14 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
         case 413:
             throw PluginTranscriptionError.fileTooLarge
         default:
-            let errorMessage = String(data: responseData, encoding: .utf8) ?? "Unknown error"
+            let errorMessage = PluginHTTPErrorBodyFormatter.summary(
+                from: responseData,
+                response: httpResponse
+            )
             throw PluginTranscriptionError.apiError("HTTP \(httpResponse.statusCode): \(errorMessage)")
         }
 
-        return try parseResponse(responseData)
+        return try parseResponse(responseData, response: httpResponse)
     }
 
     public func validateApiKey(_ apiKey: String) async -> Bool {
@@ -1071,7 +1121,19 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
         let segments: [APISegment]?
     }
 
-    private func parseResponse(_ data: Data) throws -> PluginTranscriptionResult {
+    private func parseResponse(
+        _ data: Data,
+        response: HTTPURLResponse
+    ) throws -> PluginTranscriptionResult {
+        if let htmlPageSummary = PluginHTTPErrorBodyFormatter.htmlPageSummary(
+            from: data,
+            response: response
+        ) {
+            throw PluginTranscriptionError.apiError(
+                "Failed to parse response: \(htmlPageSummary)"
+            )
+        }
+
         do {
             let response = try JSONDecoder().decode(APIResponse.self, from: data)
             let segments = (response.segments ?? []).map {
@@ -1269,12 +1331,34 @@ public struct PluginOpenAIChatHelper: Sendable {
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let choices = json["choices"] as? [[String: Any]],
               let first = choices.first,
-              let message = first["message"] as? [String: Any],
-              let content = message["content"] as? String else {
+              let message = first["message"] as? [String: Any] else {
             throw PluginChatError.apiError("Failed to parse response")
         }
 
-        return content.trimmingCharacters(in: .whitespacesAndNewlines)
+        return Self.chatMessageContent(from: message).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Extracts assistant text from an OpenAI-compatible chat `message`.
+    /// Reasoning-capable models (e.g. gpt-oss on Cerebras, some OpenRouter
+    /// models) return `content: null` when the visible answer is empty - that
+    /// is a valid empty response, not a malformed one. Some providers also
+    /// return `content` as an array of typed parts. Reasoning text is never
+    /// promoted to content.
+    public static func chatMessageContent(from message: [String: Any]) -> String {
+        if let text = message["content"] as? String {
+            return text
+        }
+        if let parts = message["content"] as? [[String: Any]] {
+            // Only typed text parts contribute. A `reasoning` (or any other
+            // typed) part may also carry a `text` field and must never be
+            // promoted into the visible answer.
+            return parts.compactMap { part -> String? in
+                guard (part["type"] as? String) == "text" else { return nil }
+                return (part["text"] as? String) ?? (part["content"] as? String)
+            }.joined()
+        }
+        // null or absent content: an intentionally empty visible answer
+        return ""
     }
 
     public func process(

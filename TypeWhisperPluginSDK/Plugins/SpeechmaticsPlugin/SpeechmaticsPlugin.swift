@@ -299,8 +299,14 @@ final class SpeechmaticsPlugin: NSObject, TranscriptionEnginePlugin, DictionaryT
         case 401: throw PluginTranscriptionError.invalidApiKey
         case 429: throw PluginTranscriptionError.rateLimited
         default:
-            let responseBody = String(data: data, encoding: .utf8) ?? ""
-            throw PluginTranscriptionError.apiError("Submit failed HTTP \(httpResponse.statusCode): \(responseBody)")
+            let responseBody = PluginHTTPErrorBodyFormatter.summary(from: data, response: httpResponse)
+            throw PluginAudioUploadHTTPFailure(
+                statusCode: httpResponse.statusCode,
+                responseData: data,
+                underlyingError: PluginTranscriptionError.apiError(
+                    "Submit failed HTTP \(httpResponse.statusCode): \(responseBody)"
+                )
+            )
         }
 
         guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],

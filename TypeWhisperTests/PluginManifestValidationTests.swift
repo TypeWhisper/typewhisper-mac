@@ -34,9 +34,9 @@ final class PluginManifestValidationTests: XCTestCase {
                 "\(manifestURL.lastPathComponent) must declare a stable three-component host version"
             )
             XCTAssertNotEqual(
-                PluginRegistryService.compareVersions(minHostVersion, "1.6.0"),
+                PluginRegistryService.compareVersions(minHostVersion, "1.7.0"),
                 .orderedAscending,
-                "\(manifestURL.lastPathComponent) must require TypeWhisper 1.6.0 or newer"
+                "\(manifestURL.lastPathComponent) must require TypeWhisper 1.7.0 or newer"
             )
             XCTAssertEqual(
                 manifest.sdkCompatibilityVersion,
@@ -102,8 +102,8 @@ final class PluginManifestValidationTests: XCTestCase {
 
     func testSourceFootageProgressPluginsDeclareCapability() throws {
         let manifestExpectations = [
-            ("TypeWhisperPluginSDK/Plugins/WhisperKitPlugin/manifest.json", "1.6.0"),
-            ("TypeWhisperPluginSDK/Plugins/ParakeetPlugin/manifest.json", "1.6.0"),
+            ("TypeWhisperPluginSDK/Plugins/WhisperKitPlugin/manifest.json", "1.7.0"),
+            ("TypeWhisperPluginSDK/Plugins/ParakeetPlugin/manifest.json", "1.7.0"),
             ("TypeWhisperPluginSDK/Plugins/SonioxPlugin/manifest.json", "1.7.0"),
         ]
 
@@ -116,7 +116,7 @@ final class PluginManifestValidationTests: XCTestCase {
         }
     }
 
-    func testWhisperKitPlugin12RequiresCompatibleHost16() throws {
+    func testWhisperKitPlugin12RequiresCompatibleHost17() throws {
         let manifestURL = TestSupport.repoRoot.appendingPathComponent(
             "TypeWhisperPluginSDK/Plugins/WhisperKitPlugin/manifest.json"
         )
@@ -124,17 +124,17 @@ final class PluginManifestValidationTests: XCTestCase {
         let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
 
         XCTAssertEqual(manifest.version, "1.2.0")
-        XCTAssertEqual(manifest.minHostVersion, "1.6.0")
+        XCTAssertEqual(manifest.minHostVersion, "1.7.0")
         XCTAssertEqual(manifest.sdkCompatibilityVersion, PluginSDKCompatibility.currentVersion)
         XCTAssertEqual(manifest.supportedArchitectures, ["arm64"])
     }
 
-    func testMLXStoragePluginReleasesRequireHost16() throws {
+    func testMLXStoragePluginReleasesRequireHost17() throws {
         let manifestExpectations = [
             ("TypeWhisperPluginSDK/Plugins/Qwen3Plugin/manifest.json", "1.1.8"),
             ("TypeWhisperPluginSDK/Plugins/VoxtralPlugin/manifest.json", "1.0.14"),
             ("TypeWhisperPluginSDK/Plugins/GranitePlugin/manifest.json", "1.0.10"),
-            ("TypeWhisperPluginSDK/Plugins/Gemma4Plugin/manifest.json", "1.1.4"),
+            ("TypeWhisperPluginSDK/Plugins/Gemma4Plugin/manifest.json", "1.1.6"),
         ]
 
         for (relativePath, expectedVersion) in manifestExpectations {
@@ -142,30 +142,30 @@ final class PluginManifestValidationTests: XCTestCase {
             let data = try Data(contentsOf: manifestURL)
             let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
             XCTAssertEqual(manifest.version, expectedVersion, relativePath)
-            XCTAssertEqual(manifest.minHostVersion, "1.6.0", relativePath)
+            XCTAssertEqual(manifest.minHostVersion, "1.7.0", relativePath)
         }
     }
 
-    func testCohereLocalPlugin10RequiresCompatibleHost16() throws {
+    func testCohereLocalPlugin101RequiresCompatibleHost17() throws {
         let manifestURL = TestSupport.repoRoot.appendingPathComponent(
             "TypeWhisperPluginSDK/Plugins/CohereLocalPlugin/manifest.json"
         )
         let data = try Data(contentsOf: manifestURL)
         let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
 
-        XCTAssertEqual(manifest.version, "1.0.0")
-        XCTAssertEqual(manifest.minHostVersion, "1.6.0")
+        XCTAssertEqual(manifest.version, "1.0.1")
+        XCTAssertEqual(manifest.minHostVersion, "1.7.0")
         XCTAssertEqual(manifest.sdkCompatibilityVersion, PluginSDKCompatibility.currentVersion)
         XCTAssertEqual(manifest.supportedArchitectures, ["arm64"])
     }
 
-    func testOpenAIPlugin133RequiresCompatibleHost16AndDeclaresCloudHosting() throws {
+    func testOpenAIPlugin133RequiresCompatibleHost17AndDeclaresCloudHosting() throws {
         let manifestURL = TestSupport.repoRoot.appendingPathComponent("TypeWhisperPluginSDK/Plugins/OpenAIPlugin/manifest.json")
         let data = try Data(contentsOf: manifestURL)
         let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
 
         XCTAssertEqual(manifest.version, "1.3.3")
-        XCTAssertEqual(manifest.minHostVersion, "1.6.0")
+        XCTAssertEqual(manifest.minHostVersion, "1.7.0")
         XCTAssertEqual(manifest.sdkCompatibilityVersion, PluginSDKCompatibility.currentVersion)
         XCTAssertEqual(manifest.hosting, .cloud)
         XCTAssertEqual(manifest.requiresAPIKey, false)
@@ -185,13 +185,39 @@ final class PluginManifestValidationTests: XCTestCase {
         XCTAssertEqual(manifest.sdkCompatibilityVersion, PluginSDKCompatibility.currentVersion)
     }
 
-    func testGroqPluginReleaseRequiresHost16() throws {
+    func testMetaPlugin100RequiresCompatibleHost17() throws {
+        let manifestURL = TestSupport.repoRoot.appendingPathComponent(
+            "TypeWhisperPluginSDK/Plugins/MetaPlugin/manifest.json"
+        )
+        let data = try Data(contentsOf: manifestURL)
+        let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
+
+        XCTAssertEqual(manifest.version, "1.0.0")
+        XCTAssertEqual(manifest.minHostVersion, "1.7.0")
+        XCTAssertEqual(manifest.sdkCompatibilityVersion, PluginSDKCompatibility.currentVersion)
+    }
+
+    func testVercelAIGatewayPlugin100RequiresCompatibleHost17() throws {
+        let manifestURL = TestSupport.repoRoot.appendingPathComponent(
+            "TypeWhisperPluginSDK/Plugins/VercelAIGatewayPlugin/manifest.json"
+        )
+        let data = try Data(contentsOf: manifestURL)
+        let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
+
+        XCTAssertEqual(manifest.version, "1.0.0")
+        XCTAssertEqual(manifest.minHostVersion, "1.7.0")
+        XCTAssertEqual(manifest.sdkCompatibilityVersion, PluginSDKCompatibility.currentVersion)
+        XCTAssertEqual(manifest.hosting, .cloud)
+        XCTAssertEqual(manifest.categories, ["transcription", "llm"])
+    }
+
+    func testGroqPluginReleaseRequiresHost17() throws {
         let manifestURL = TestSupport.repoRoot.appendingPathComponent("TypeWhisperPluginSDK/Plugins/GroqPlugin/manifest.json")
         let data = try Data(contentsOf: manifestURL)
         let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
 
         XCTAssertEqual(manifest.version, "1.0.24")
-        XCTAssertEqual(manifest.minHostVersion, "1.6.0")
+        XCTAssertEqual(manifest.minHostVersion, "1.7.0")
         XCTAssertEqual(manifest.sdkCompatibilityVersion, PluginSDKCompatibility.currentVersion)
     }
 
@@ -1558,6 +1584,39 @@ final class PluginDictionaryGuardTests: XCTestCase {
         XCTAssertTrue(DeepgramPlugin().supportedLanguages.contains("multi"))
     }
 
+    func testDeepgramAdvertisesLiveDictationTranscription() {
+        let plugin: Any = DeepgramPlugin()
+
+        XCTAssertTrue(plugin is any LiveTranscriptionCapablePlugin)
+        XCTAssertFalse(plugin is any LiveTranscriptionProgressModeProviding)
+    }
+
+    func testDeepgramRemainsLoadableByDeclaredTypeWhisper16Host() throws {
+        let sourceURL = TestSupport.repoRoot.appendingPathComponent(
+            "TypeWhisperPluginSDK/Plugins/DeepgramPlugin/DeepgramPlugin.swift"
+        )
+        let source = try String(contentsOf: sourceURL, encoding: .utf8)
+
+        XCTAssertFalse(source.contains("PluginHTTPClient.ensureNetworkAccessIsAllowed"))
+        XCTAssertFalse(source.contains("LiveTranscriptionProgressModeProviding"))
+    }
+
+    func testDeepgramLocalNetworkPolicyAllowsNormalRuntime() {
+        XCTAssertNoThrow(
+            try DeepgramNetworkAccessPolicy.ensureAccessIsAllowed(arguments: ["TypeWhisper"])
+        )
+    }
+
+    func testDeepgramLocalNetworkPolicyBlocksScreenshotAutomation() {
+        XCTAssertThrowsError(
+            try DeepgramNetworkAccessPolicy.ensureAccessIsAllowed(
+                arguments: ["TypeWhisper", "--store-screenshots"]
+            )
+        ) { error in
+            XCTAssertEqual((error as? URLError)?.code, .notConnectedToInternet)
+        }
+    }
+
     func testDeepgramDictionaryQueryItemsLimitDictionaryTermsTo100AndPreserveOrder() {
         let prompt = PluginDictionaryTerms.prompt(from: makeLongTerms(count: 150, length: 10), maxLength: 10_000)
         let queryItems = DeepgramPlugin.dictionaryQueryItems(prompt: prompt, modelId: "nova-2")
@@ -1628,6 +1687,104 @@ final class PluginDictionaryGuardTests: XCTestCase {
             queryItems.filter { $0.name == "keyterm" }.compactMap(\.value),
             ["TypeWhisper", "Deepgram"]
         )
+    }
+
+    func testDeepgramStreamingRequestURLUsesMultilingualFallbackAndPreservesProxyURL() throws {
+        let prompt = PluginDictionaryTerms.prompt(from: ["TypeWhisper", "Deepgram"], maxLength: 10_000)
+        let url = try DeepgramPlugin.streamingRequestURL(
+            baseURL: "http://localhost:8080/deepgram?gateway=true",
+            modelId: "nova-3",
+            language: nil,
+            prompt: prompt
+        )
+        let components = try XCTUnwrap(URLComponents(url: url, resolvingAgainstBaseURL: false))
+        let queryItems = components.queryItems ?? []
+        let firstValue = { (name: String) in
+            queryItems.first(where: { $0.name == name })?.value
+        }
+
+        XCTAssertEqual(components.scheme, "http")
+        XCTAssertEqual(components.host, "localhost")
+        XCTAssertEqual(components.port, 8080)
+        XCTAssertEqual(components.path, "/deepgram/v1/listen")
+        XCTAssertEqual(firstValue("gateway"), "true")
+        XCTAssertEqual(firstValue("model"), "nova-3")
+        XCTAssertEqual(firstValue("language"), "multi")
+        XCTAssertNil(firstValue("detect_language"))
+        XCTAssertEqual(
+            queryItems.filter { $0.name == "keyterm" }.compactMap(\.value),
+            ["TypeWhisper", "Deepgram"]
+        )
+    }
+
+    func testDeepgramWebSocketHostHeaderIncludesOnlyNonDefaultPorts() {
+        XCTAssertEqual(
+            DeepgramPlugin.webSocketHostHeader(host: "api.deepgram.com", port: 443, usesTLS: true),
+            "api.deepgram.com"
+        )
+        XCTAssertEqual(
+            DeepgramPlugin.webSocketHostHeader(host: "proxy.example", port: 8443, usesTLS: true),
+            "proxy.example:8443"
+        )
+        XCTAssertEqual(
+            DeepgramPlugin.webSocketHostHeader(host: "::1", port: 8080, usesTLS: false),
+            "[::1]:8080"
+        )
+    }
+
+    func testDeepgramLiveOutboundSerializesAudioBeforeFinalization() async throws {
+        let audioStarted = DeepgramOutboundTestGate()
+        let allowAudioToFinish = DeepgramOutboundTestGate()
+        let events = DeepgramOutboundTestEvents()
+        let outbound = DeepgramLiveOutboundOperationQueue(
+            sendAudio: { _ in
+                await events.append("audio-start")
+                await audioStarted.open()
+                await allowAudioToFinish.wait()
+                await events.append("audio-end")
+            },
+            sendCloseStream: {
+                await events.append("close-stream")
+            },
+            cancel: {}
+        )
+
+        let appendTask = Task {
+            try await outbound.appendAudio(samples: [0.25, -0.25])
+        }
+        await audioStarted.wait()
+        let finishTask = Task {
+            try await outbound.finishIfNeeded()
+        }
+
+        try await Task.sleep(for: .milliseconds(25))
+        let eventsWhileAudioIsPending = await events.snapshot()
+        XCTAssertEqual(eventsWhileAudioIsPending, ["audio-start"])
+
+        await allowAudioToFinish.open()
+        try await appendTask.value
+        let didFinish = try await finishTask.value
+        XCTAssertTrue(didFinish)
+        let finalEvents = await events.snapshot()
+        XCTAssertEqual(finalEvents, ["audio-start", "audio-end", "close-stream"])
+    }
+
+    func testDeepgramStreamingRequestURLRejectsUnsupportedSchemes() {
+        for baseURL in ["not a URL", "file:///tmp/deepgram", "ftp://example.com"] {
+            XCTAssertThrowsError(
+                try DeepgramPlugin.streamingRequestURL(
+                    baseURL: baseURL,
+                    modelId: "nova-3",
+                    language: nil,
+                    prompt: nil
+                ),
+                baseURL
+            ) { error in
+                guard case PluginTranscriptionError.apiError = error else {
+                    return XCTFail("Expected apiError for \(baseURL), got \(error)")
+                }
+            }
+        }
     }
 
     @available(macOS 26, *)
@@ -1939,6 +2096,16 @@ final class PluginManagerLoadOrderTests: XCTestCase {
         XCTAssertEqual(
             sorted.map(\.lastPathComponent),
             ["Gemma4Plugin.bundle", "ParakeetPlugin.bundle", "VoxtralPlugin.bundle"]
+        )
+
+        // Metadata is a per-sort snapshot, not a persistent cache of enablement.
+        defaults.set(true, forKey: voxtralKey)
+        defaults.set(false, forKey: gemmaKey)
+        defaults.set(false, forKey: parakeetKey)
+        XCTAssertEqual(
+            manager.sortedPluginBundleURLs([enabledGemma, disabledVoxtral, enabledParakeet], isBundledSource: false)
+                .map(\.lastPathComponent),
+            ["VoxtralPlugin.bundle", "Gemma4Plugin.bundle", "ParakeetPlugin.bundle"]
         )
     }
 
@@ -2780,5 +2947,39 @@ final class OpenAIPluginTokenParameterTests: XCTestCase {
 
     func testLegacyChatCompletionsKeepTemperature() {
         XCTAssertEqual(OpenAIPlugin.chatCompletionTemperature(for: "gpt-4o", reasoningEffort: nil), 0.3)
+    }
+}
+
+private actor DeepgramOutboundTestGate {
+    private var isOpen = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async {
+        guard !isOpen else { return }
+        await withCheckedContinuation { continuation in
+            waiters.append(continuation)
+        }
+    }
+
+    func open() {
+        guard !isOpen else { return }
+        isOpen = true
+        let pendingWaiters = waiters
+        waiters.removeAll()
+        for waiter in pendingWaiters {
+            waiter.resume()
+        }
+    }
+}
+
+private actor DeepgramOutboundTestEvents {
+    private var events: [String] = []
+
+    func append(_ event: String) {
+        events.append(event)
+    }
+
+    func snapshot() -> [String] {
+        events
     }
 }

@@ -371,28 +371,35 @@ final class MeetingAutomationCountdownIndicatorTests: XCTestCase {
             screenResolver: resolver,
             displayModeProvider: { .activeScreen },
             countdownModel: model,
-            content: { _ in EmptyView() }
+            content: { _ in Color.black }
         )
         let overlay = OverlayIndicatorPanel(
             screenResolver: resolver,
             displayModeProvider: { .activeScreen },
             overlayPositionProvider: { .top },
             countdownModel: model,
-            content: { EmptyView() }
+            content: { Color.black }
         )
         let minimal = MinimalIndicatorPanel(
             screenResolver: resolver,
             displayModeProvider: { .activeScreen },
             overlayPositionProvider: { .top },
             countdownModel: model,
-            content: { EmptyView() }
+            content: { Color.black }
         )
         let panels: [NSPanel] = [notch, overlay, minimal]
 
         for panel in panels {
             XCTAssertFalse(panel.canBecomeKey)
             XCTAssertFalse(panel.canBecomeMain)
-            XCTAssertTrue(panel.contentView?.acceptsFirstMouse(for: nil) == true)
+            let content = try XCTUnwrap(panel.contentView)
+            content.layoutSubtreeIfNeeded()
+            let point = content.convert(
+                CGPoint(x: content.bounds.midX, y: content.bounds.midY),
+                to: content.superview
+            )
+            let hitView = try XCTUnwrap(content.hitTest(point))
+            XCTAssertTrue(hitView.acceptsFirstMouse(for: nil))
         }
     }
 }

@@ -1,0 +1,58 @@
+name: Dependency Coverage
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: ruby scripts/dependency_coverage.rb check
+      - run: ruby scripts/test_dependency_coverage.rb
+
+  submit:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: validate
+    runs-on: ubuntu-latest
+    concurrency:
+      group: swift-dependency-submission
+      cancel-in-progress: false
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # A queued run submits the latest main, never an older lockfile snapshot.
+          ref: main
+          persist-credentials: false
+      - name: Submit committed Swift lockfiles
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ruby scripts/dependency_coverage.rb check
+          sha=$(git rev-parse HEAD)
+          ruby scripts/dependency_coverage.rb snapshot "$sha" refs/heads/main > "$RUNNER_TEMP/swift-snapshot.json"
+          gh api --method POST "repos/$GITHUB_REPOSITORY/dependency-graph/snapshots" --input "$RUNNER_TEMP/swift-snapshot.json"
+      - name: Verify Swift and Ruby coverage in GitHub SBOM
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          sha=$(git rev-parse HEAD)
+          for attempt in 1 2 3 4 5 6; do
+            gh api "repos/$GITHUB_REPOSITORY/dependency-graph/sbom" > "$RUNNER_TEMP/dependency-sbom.json"
+            if ruby scripts/dependency_coverage.rb sbom "$RUNNER_TEMP/dependency-sbom.json" "$sha"; then
+              exit 0
+            fi
+            if [ "$attempt" -lt 6 ]; then sleep 20; fi
+          done
+          echo "GitHub SBOM did not ingest all expected dependencies. Check the submission and graph before closing the issue."
+          exit 1

@@ -1,5 +1,6 @@
-import XCTest
+import SwiftUI
 import TypeWhisperPluginSDK
+import XCTest
 @testable import TypeWhisper
 
 final class PluginRegistryServiceTests: XCTestCase {
@@ -188,6 +189,49 @@ final class PluginRegistryServiceTests: XCTestCase {
         XCTAssertEqual(pre14Plugins.first?.downloadURL, "https://example.com/compatible-1.3.zip")
         XCTAssertEqual(plugins14.first?.version, "1.2.0")
         XCTAssertEqual(plugins14.first?.downloadURL, "https://example.com/requires-1.4.zip")
+    }
+
+    func testNew17PluginReleasePreservesCompatibleUpdateFor16Host() throws {
+        let data = Data(
+            """
+            {
+              "schemaVersion": 2,
+              "plugins": [{
+                "id": "com.typewhisper.example",
+                "name": "Example",
+                "author": "TypeWhisper",
+                "description": "Host-gated plugin updates.",
+                "category": "transcription",
+                "releases": [
+                  {
+                    "version": "2.0.0",
+                    "minHostVersion": "1.7.0",
+                    "sdkCompatibilityVersion": "v1",
+                    "size": 20,
+                    "downloadURL": "https://example.com/requires-1.7.zip"
+                  },
+                  {
+                    "version": "1.9.0",
+                    "minHostVersion": "1.6.0",
+                    "sdkCompatibilityVersion": "v1",
+                    "size": 10,
+                    "downloadURL": "https://example.com/compatible-1.6.zip"
+                  }
+                ]
+              }]
+            }
+            """.utf8
+        )
+        let response = try JSONDecoder().decode(PluginRegistryResponse.self, from: data)
+        let legacy = response.resolvedPlugins(appVersion: "1.6.0", sdkCompatibilityVersion: "v1")
+        let current = response.resolvedPlugins(appVersion: "1.7.0", sdkCompatibilityVersion: "v1")
+
+        XCTAssertEqual(legacy.count, 1)
+        XCTAssertEqual(legacy.first?.version, "1.9.0")
+        XCTAssertEqual(legacy.first?.downloadURL, "https://example.com/compatible-1.6.zip")
+        XCTAssertEqual(current.count, 1)
+        XCTAssertEqual(current.first?.version, "2.0.0")
+        XCTAssertEqual(current.first?.downloadURL, "https://example.com/requires-1.7.zip")
     }
 
     func testRegistryEntryDecodesMultipleCategoryIdentifiers() throws {
@@ -580,21 +624,24 @@ final class PluginRegistryServiceTests: XCTestCase {
             version: "1.0.0"
         )
         let bundle = try XCTUnwrap(Bundle(url: bundleURL))
-        pluginManager.loadedPlugins = [
-            LoadedPlugin(
-                manifest: PluginManifest(
-                    id: pluginId,
-                    name: "Update Uninstall Plugin",
-                    version: "1.0.0",
-                    sdkCompatibilityVersion: PluginSDKCompatibility.currentVersion,
-                    principalClass: "RuntimeUpdatePlugin"
-                ),
-                instance: MockRuntimeUpdatePlugin(),
-                bundle: bundle,
-                sourceURL: bundleURL,
-                isEnabled: false
+        let loadedPlugin = LoadedPlugin(
+            manifest: PluginManifest(
+                id: pluginId,
+                name: "Update Uninstall Plugin",
+                version: "1.0.0",
+                sdkCompatibilityVersion: PluginSDKCompatibility.currentVersion,
+                principalClass: "RuntimeUpdatePlugin"
             ),
-        ]
+            instance: MockRuntimeUpdatePlugin(),
+            bundle: bundle,
+            sourceURL: bundleURL,
+            isEnabled: false
+        )
+        pluginManager.loadedPlugins = [loadedPlugin]
+
+        PluginSettingsWindowManager.shared.present(loadedPlugin)
+        XCTAssertNotNil(PluginSettingsWindowManager.shared.managedWindow(for: pluginId))
+        defer { PluginSettingsWindowManager.shared.closeWindow(for: pluginId) }
 
         let service = PluginRegistryService(
             registryBaseURL: URL(string: "https://example.com")!,
@@ -618,6 +665,7 @@ final class PluginRegistryServiceTests: XCTestCase {
         XCTAssertTrue(service.availableUpdatePlugins().isEmpty)
         XCTAssertTrue(pluginManager.loadedPlugins.isEmpty)
         XCTAssertFalse(FileManager.default.fileExists(atPath: bundleURL.path))
+        XCTAssertNil(PluginSettingsWindowManager.shared.managedWindow(for: pluginId))
 
         var installerWasCalled = false
         let result = await service.updateAllAvailablePlugins { _ in
@@ -1687,5 +1735,14 @@ final class PluginRegistryServiceTests: XCTestCase {
 
         func activate(host: any HostServices) {}
         func deactivate() {}
+
+        @MainActor
+        var settingsView: AnyView? {
+            AnyView(
+                Picker("Model", selection: .constant("muse-voice-transcribe-1.0")) {
+                    Text("Muse Voice Transcribe").tag("muse-voice-transcribe-1.0")
+                }
+            )
+        }
     }
 }

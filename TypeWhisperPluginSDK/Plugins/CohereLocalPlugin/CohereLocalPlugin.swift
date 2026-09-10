@@ -17,7 +17,7 @@ enum CohereLocalNetworkAccessPolicy {
 // MARK: - Plugin Entry Point
 
 @objc(CohereLocalPlugin)
-final class CohereLocalPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding, DictionaryTermsCapabilityProviding, PluginSettingsActivityReporting, PluginDownloadedModelManaging, HostModelLifecyclePolicyAwarePlugin, PluginSettingsWindowLayoutProviding, @unchecked Sendable {
+final class CohereLocalPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding, DictionaryTermsCapabilityProviding, PluginSettingsActivityReporting, PluginDownloadedModelManaging, HostModelLifecyclePolicyAwarePlugin, PluginSettingsWindowLayoutProviding, PassiveModelRestoreProviding, @unchecked Sendable {
     static let pluginId = "com.typewhisper.cohere-transcribe"
     static let pluginName = "Cohere Transcribe (Local)"
     static let providerIdentifier = "cohere-transcribe"
@@ -102,6 +102,16 @@ final class CohereLocalPlugin: NSObject, TranscriptionEnginePlugin, Transcriptio
 
     private let state = OSAllocatedUnfairLock(initialState: State())
 
+    private let passiveRestoreController = PluginPassiveModelRestoreController()
+    private let modelLoadGate = PluginLocalInferenceGate()
+
+    func requestPassiveModelRestore() {
+        passiveRestoreController.request { [weak self] in
+            guard let self else { return }
+            await self.restoreLoadedModel(allowDownloads: false, passively: true)
+        }
+    }
+
     required override init() {
         super.init()
     }
@@ -128,13 +138,12 @@ final class CohereLocalPlugin: NSObject, TranscriptionEnginePlugin, Transcriptio
             host.setUserDefault(selectedModelId, forKey: "selectedModel")
         }
         if shouldRestore {
-            Task { [weak self] in
-                await self?.restoreLoadedModel(allowDownloads: false)
-            }
+            requestPassiveModelRestore()
         }
     }
 
     func deactivate() {
+        passiveRestoreController.cancel()
         let servers = state.withLock { state -> (Runtime?, CrispAsrServer?) in
             let runtime = state.runtime
             let startingServer = state.startingServer
@@ -318,7 +327,27 @@ final class CohereLocalPlugin: NSObject, TranscriptionEnginePlugin, Transcriptio
 
     // MARK: - Model Management
 
-    func loadModel(allowDownloads: Bool = true) async {
+    func loadModel(allowDownloads: Bool = true, passively: Bool = false, restoredModelId: String? = nil) async {
+        try? await modelLoadGate.withLock { [self] in
+            let host = state.withLock { $0.host }
+            guard let host else { return }
+            if passively {
+                guard host.shouldRestoreLoadedModelsPassively, !isConfigured else { return }
+            }
+            if !allowDownloads || passively {
+                guard let model = Self.model(for: restoredModelId ?? selectedModelId),
+                      CohereLocalModelAssets(
+                        pluginDataDirectory: host.pluginDataDirectory, model: model
+                      ).isInstalled else { return }
+            }
+            if let restoredModelId {
+                state.withLock { $0.selectedModelId = restoredModelId }
+            }
+            await performModelLoad(allowDownloads: allowDownloads && !passively)
+        }
+    }
+
+    private func performModelLoad(allowDownloads: Bool) async {
         guard let context = beginModelLoad() else { return }
         let assets = CohereLocalModelAssets(
             pluginDataDirectory: context.host.pluginDataDirectory,
@@ -400,15 +429,15 @@ final class CohereLocalPlugin: NSObject, TranscriptionEnginePlugin, Transcriptio
         }
     }
 
-    func restoreLoadedModel(allowDownloads: Bool = false) async {
+    func restoreLoadedModel(allowDownloads: Bool = false, passively: Bool = false) async {
+        guard !Task.isCancelled else { return }
         let host = state.withLock { $0.host }
         let persistedModelId = host?.userDefault(forKey: "loadedModel") as? String
         guard host != nil,
               let loadedModelId = Self.model(for: persistedModelId)?.id else {
             return
         }
-        state.withLock { $0.selectedModelId = loadedModelId }
-        await loadModel(allowDownloads: allowDownloads)
+        await loadModel(allowDownloads: allowDownloads, passively: passively, restoredModelId: loadedModelId)
     }
 
     func unloadModel(clearPersistence: Bool = true) {

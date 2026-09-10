@@ -4,8 +4,8 @@ This document defines the release and maintenance gates for the current `1.x`
 product path, with stable `1.6.0` as its published baseline.
 
 TypeWhisper `1.x` is a stable direct-download release line for macOS. The Mac
-App Store remains out of scope. The `main` branch is the current `1.6`
-development and maintenance line. The `release/1.5` branch is retained only for
+App Store remains out of scope. The `main` branch is the current `1.7`
+development line. The `release/1.5` branch is retained only for
 explicitly approved legacy backports; it is no longer the stable baseline.
 
 ## Audience
@@ -36,16 +36,19 @@ These surfaces remain part of `1.x`, but they are positioned as advanced or auto
 - Widgets
 - Watch Folder
 
-## `1.6` Maintenance Focus
+## `1.7` Development and `1.6` Compatibility
 
-- Keep `main` on the current `1.6` version line; daily builds currently publish
-  as `v1.6.0-daily.*`.
+- Keep `main` on the current `1.7` version line; daily builds publish
+  as `v1.7.0-daily.*`.
 - Treat stable `1.6.0` as the release baseline and `release/1.5` as a legacy
   backport branch only.
 - Preserve the `1.x` stability contracts for the HTTP API, CLI, plugin SDK, widgets, and watch folders.
-- Avoid raising plugin `minHostVersion` values to `1.6.0` unless a plugin genuinely requires new host APIs.
+- New plugin release builds require `minHostVersion: "1.7.0"` or newer and use
+  the SDK shipped with 1.7 on the current `v1` compatibility line. Preserve published plugin binaries and their historical
+  registry entries so 1.6 hosts retain compatible releases. Keep
+  `sdkCompatibilityVersion` unchanged unless the SDK compatibility contract changes.
 - Keep release-channel behavior stable: RC and daily builds are prereleases, while Homebrew and stable website messaging update only at the final stable tag.
-- Keep tagged app releases on the no-iCloud distribution path until the production container and Developer ID provisioning profile are approved and validated. Tag pushes matching `v*` therefore build without automatic private iCloud sync; scheduled builds continue to use `MACOS_SCHEDULED_WITHOUT_ICLOUD`, and manual dispatches continue to use the explicit `without_icloud` input.
+- Every app release (Daily, RC, stable, and local Developer ID build) includes iCloud through the isolated bridge. The production Developer ID provisioning profile is required; there is no no-iCloud release switch or scheduled fallback.
 
 ## Stability Contracts for `1.x`
 
@@ -84,6 +87,8 @@ are met:
 - The app release build passes.
 - There are no first-party build warnings.
 - Plugin manifests validate successfully.
+- Every plugin release build imports only symbols exported by the
+  `TypeWhisperPluginSDK.framework` shipped in its declared `minHostVersion`.
 - README, security guidance, support matrix, and plugin documentation are up to date.
 - The applicable release-candidate or daily line ran on real machines for
   multiple days without P0/P1 blockers before the stable tag.
@@ -92,7 +97,7 @@ are met:
   appear in the shared Sparkle appcast only on their own channels, and do not
   update Homebrew.
 - The appcast entry for preview builds advertises `minimumSystemVersion` `14.0`.
-- Automatic private iCloud sync remains hidden in no-iCloud builds. Enabling it for a future release requires the explicit build flag, an embedded Developer ID provisioning profile, matching signed iCloud entitlements, Sparkle upgrade proof, and a real two-Mac sync validation.
+- Every release must include the bridge with its embedded production Developer ID provisioning profile and matching signed iCloud entitlements. Record real-device sync and Sparkle upgrade validation for the candidate in its release checklist.
 
 ## Manual Release Validation
 

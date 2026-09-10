@@ -1977,7 +1977,7 @@ final class CloudFolderSyncTests: XCTestCase {
         let diagnostics = await controller.installPendingSynchronizedAudio(in: folder)
 
         XCTAssertTrue(diagnostics.isEmpty)
-        let record = try XCTUnwrap(historyService.records.first { $0.id == recordID })
+        let record = try XCTUnwrap(historyService.recentRecords.first { $0.id == recordID })
         let installedURL = try XCTUnwrap(historyService.audioFileURL(for: record))
         XCTAssertEqual(try Data(contentsOf: installedURL), try Data(contentsOf: sourceURL))
     }
@@ -2045,7 +2045,7 @@ final class CloudFolderSyncTests: XCTestCase {
         let diagnostics = await controller.installPendingSynchronizedAudio(in: folder)
 
         XCTAssertTrue(diagnostics.isEmpty)
-        let record = try XCTUnwrap(historyService.records.first { $0.id == recordID })
+        let record = try XCTUnwrap(historyService.recentRecords.first { $0.id == recordID })
         XCTAssertNil(historyService.audioFileURL(for: record))
     }
 
