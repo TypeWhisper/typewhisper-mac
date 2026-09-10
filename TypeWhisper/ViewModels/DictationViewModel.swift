@@ -2389,8 +2389,12 @@ final class DictationViewModel: ObservableObject {
     ) async throws -> FinalTranscriptionOutput {
         let fallbackConfiguration = recoveryFallbackConfigurationProvider(primaryEngineId, task)
         do {
+            // The provider is injectable; only a finite, positive threshold can be
+            // converted to a sleep duration, anything else means no hedge (the
+            // sequential error-path fallback below still applies).
             if let configuration = fallbackConfiguration,
-               let hedgeThreshold = recoveryHedgeThresholdProvider() {
+               let hedgeThreshold = recoveryHedgeThresholdProvider(),
+               hedgeThreshold.isFinite, hedgeThreshold > 0 {
                 return try await hedgedTranscription(
                     audioSamples: audioSamples,
                     languageSelection: languageSelection,
