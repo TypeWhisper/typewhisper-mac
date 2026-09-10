@@ -715,6 +715,31 @@ final class MCPClientPluginTests: XCTestCase {
         await session.close()
     }
 
+    func testTimeoutWaitsForCleanupWithoutReturningItsCancellationError() async throws {
+        let session = MCPServerSession(resolvedServer: Self.resolvedFixtureServer(try Self.fixtureResources()))
+        let probe = MCPTimeoutCleanupProbe()
+
+        do {
+            let _: Void = try await session.withTimeout(
+                .milliseconds(10),
+                operationName: "cleanup race",
+                onTimeout: {
+                    await probe.cancelOperation()
+                    try? await Task.sleep(for: .milliseconds(50))
+                    await probe.finishCleanup()
+                },
+                operation: { try await probe.waitForCancellation() }
+            )
+            XCTFail("Expected timeout")
+        } catch let error as MCPClientError {
+            guard case .timedOut = error else {
+                return XCTFail("Expected timedOut, got \(error)")
+            }
+        }
+        let cleanupFinished = await probe.cleanupFinished
+        XCTAssertTrue(cleanupFinished, "Timeout cleanup must finish before the caller resumes")
+    }
+
     func testConnectionTimeoutClosesHungInitialization() async throws {
         let fixture = try Self.fixtureResources()
         defer { try? FileManager.default.removeItem(at: fixture.counter) }
@@ -1198,5 +1223,27 @@ final class MCPClientPluginTests: XCTestCase {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
+    }
+}
+
+
+private actor MCPTimeoutCleanupProbe {
+    private var continuation: CheckedContinuation<Void, Error>?
+    private var isCancelled = false
+    private(set) var cleanupFinished = false
+
+    func waitForCancellation() async throws {
+        if isCancelled { throw CancellationError() }
+        try await withCheckedThrowingContinuation { continuation = $0 }
+    }
+
+    func cancelOperation() {
+        isCancelled = true
+        continuation?.resume(throwing: CancellationError())
+        continuation = nil
+    }
+
+    func finishCleanup() {
+        cleanupFinished = true
     }
 }
