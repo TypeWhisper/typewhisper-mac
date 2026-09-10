@@ -50,6 +50,12 @@ final class VercelAIGatewayPlugin: NSObject,
     private let lock = NSLock()
     private var state = State()
 
+    /// Serialises API key commits (generation bump plus the Keychain and
+    /// defaults writes that belong to them). `lock` alone only orders the
+    /// in-memory change; without this, an older save could still write its
+    /// key to the Keychain after a newer save or removal.
+    private let apiKeyCommitLock = NSLock()
+
     private func readState<T>(_ body: (State) -> T) -> T {
         lock.withLock { body(state) }
     }
@@ -448,41 +454,70 @@ final class VercelAIGatewayPlugin: NSObject,
     // MARK: - API Key Management
 
     func setApiKey(_ key: String) {
-        _ = beginApiKeyUpdate(key)
-        if let host {
-            do {
-                try host.storeSecret(key: Self.StorageKeys.apiKey, value: key)
-            } catch {
-                print("[VercelAIGatewayPlugin] Failed to store API key: \(error)")
-            }
-            host.notifyCapabilitiesChanged()
-        }
+        _ = commitApiKey(key)
     }
 
     func removeApiKey() {
-        _ = beginApiKeyUpdate(nil)
-        if let host {
-            do {
-                try host.storeSecret(key: Self.StorageKeys.apiKey, value: "")
-            } catch {
-                print("[VercelAIGatewayPlugin] Failed to delete API key: \(error)")
-            }
-            host.notifyCapabilitiesChanged()
-        }
+        _ = commitApiKey(nil)
     }
 
-    /// Stores the key in memory and returns the generation token that any
-    /// asynchronous follow-up work must present via `isCurrentApiKeyUpdate`.
-    private func beginApiKeyUpdate(_ key: String?) -> Int {
-        lock.withLock {
-            state.apiKey = key
-            state.apiKeyGeneration += 1
-            return state.apiKeyGeneration
+    /// Commits a key change as one ordered operation: bump the generation,
+    /// update memory, and write the Keychain, all under `apiKeyCommitLock`.
+    /// Returns the generation token that asynchronous follow-up work must
+    /// present to `commitCatalogIfCurrent`. The capability notification is
+    /// sent after the lock is released because the host may call back into
+    /// the plugin.
+    private func commitApiKey(_ key: String?) -> Int {
+        let (generation, host) = apiKeyCommitLock.withLock {
+            let generation = lock.withLock {
+                state.apiKey = key
+                state.apiKeyGeneration += 1
+                return state.apiKeyGeneration
+            }
+            let host = self.host
+            if let host {
+                do {
+                    try host.storeSecret(key: Self.StorageKeys.apiKey, value: key ?? "")
+                } catch {
+                    print("[VercelAIGatewayPlugin] Failed to store API key: \(error)")
+                }
+            }
+            return (generation, host)
         }
+        host?.notifyCapabilitiesChanged()
+        return generation
     }
 
     func isCurrentApiKeyUpdate(_ generation: Int) -> Bool {
         readState { $0.apiKeyGeneration == generation }
+    }
+
+    /// Publishes a fetched catalogue only if `generation` is still the
+    /// current key generation, with the check and the memory/defaults
+    /// writes in the same critical section as key commits. A save that was
+    /// superseded while its requests were in flight therefore publishes
+    /// nothing, and a removal cannot slip in between the check and the write.
+    private func commitCatalogIfCurrent(_ generation: Int, catalog: VercelAIGatewayModelCatalog) -> Bool {
+        let committedHost: HostServices?? = apiKeyCommitLock.withLock {
+            guard readState({ $0.apiKeyGeneration == generation }) else { return nil }
+            let host = self.host
+            if !catalog.llmModels.isEmpty {
+                updateState { $0.fetchedLLMModels = catalog.llmModels }
+                if let data = try? JSONEncoder().encode(catalog.llmModels) {
+                    host?.setUserDefault(data, forKey: Self.StorageKeys.fetchedModels)
+                }
+            }
+            if !catalog.transcriptionModels.isEmpty {
+                updateState { $0.fetchedTranscriptionModels = catalog.transcriptionModels }
+                if let data = try? JSONEncoder().encode(catalog.transcriptionModels) {
+                    host?.setUserDefault(data, forKey: Self.StorageKeys.fetchedTranscriptionModels)
+                }
+            }
+            return .some(host)
+        }
+        guard let committedHost else { return false }
+        committedHost?.notifyCapabilitiesChanged()
+        return true
     }
 
     /// Result of `saveApiKey`. `catalog` and `balance` are only populated
@@ -505,15 +540,7 @@ final class VercelAIGatewayPlugin: NSObject,
         _ key: String,
         validate: @Sendable (String) async -> Bool
     ) async -> ApiKeySaveResult? {
-        let generation = beginApiKeyUpdate(key)
-        if let host {
-            do {
-                try host.storeSecret(key: Self.StorageKeys.apiKey, value: key)
-            } catch {
-                print("[VercelAIGatewayPlugin] Failed to store API key: \(error)")
-            }
-            host.notifyCapabilitiesChanged()
-        }
+        let generation = commitApiKey(key)
 
         let isValid = await validate(key)
         guard isCurrentApiKeyUpdate(generation) else { return nil }
@@ -524,16 +551,10 @@ final class VercelAIGatewayPlugin: NSObject,
         async let catalogTask = fetchModelCatalog()
         async let creditsTask = fetchCredits()
         let (catalog, balance) = await (catalogTask, creditsTask)
-        guard isCurrentApiKeyUpdate(generation) else { return nil }
 
-        // Publish the catalogue from here so a superseded save can never
-        // reach `setFetched*` through the view.
-        if !catalog.llmModels.isEmpty {
-            setFetchedLLMModels(catalog.llmModels)
-        }
-        if !catalog.transcriptionModels.isEmpty {
-            setFetchedTranscriptionModels(catalog.transcriptionModels)
-        }
+        // The generation check and the publication happen in one ordered
+        // commit, so a superseded save can never publish a stale catalogue.
+        guard commitCatalogIfCurrent(generation, catalog: catalog) else { return nil }
         return ApiKeySaveResult(isValid: true, catalog: catalog, balance: balance)
     }
 

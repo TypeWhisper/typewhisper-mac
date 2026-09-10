@@ -827,6 +827,166 @@ final class VercelAIGatewayPluginTests: XCTestCase {
         XCTAssertEqual(host.loadSecret(key: "api-key"), "vck_bad")
     }
 
+    // MARK: - Key commit ordering against host side effects
+
+    /// Wraps the test host so a test can pause inside a host write and
+    /// observe how the plugin orders its side effects around it.
+    private final class BarrierHostServices: HostServices, @unchecked Sendable {
+        let inner: PluginTestHostServices
+        private let lock = NSLock()
+        private var secretBarrierValue: String?
+        private var defaultsBarrierKey: String?
+        private var reached = false
+        private let proceed = DispatchSemaphore(value: 0)
+
+        init(inner: PluginTestHostServices) { self.inner = inner }
+
+        /// Pause the next `storeSecret` that writes `value`.
+        func pauseStoreSecret(value: String) { lock.withLock { secretBarrierValue = value } }
+        /// Pause the next `setUserDefault` for `key`.
+        func pauseSetUserDefault(key: String) { lock.withLock { defaultsBarrierKey = key } }
+
+        var hasReachedBarrier: Bool { lock.withLock { reached } }
+        func waitUntilBarrierReached() async {
+            while !hasReachedBarrier { try? await Task.sleep(nanoseconds: 1_000_000) }
+        }
+        func releaseBarrier() { proceed.signal() }
+
+        private func block() {
+            lock.withLock { reached = true }
+            proceed.wait()
+        }
+
+        func storeSecret(key: String, value: String) throws {
+            let shouldBlock = lock.withLock {
+                guard secretBarrierValue == value else { return false }
+                secretBarrierValue = nil
+                return true
+            }
+            if shouldBlock { block() }
+            try inner.storeSecret(key: key, value: value)
+        }
+
+        func setUserDefault(_ value: Any?, forKey key: String) {
+            let shouldBlock = lock.withLock {
+                guard defaultsBarrierKey == key else { return false }
+                defaultsBarrierKey = nil
+                return true
+            }
+            if shouldBlock { block() }
+            inner.setUserDefault(value, forKey: key)
+        }
+
+        func loadSecret(key: String) -> String? { inner.loadSecret(key: key) }
+        func userDefault(forKey key: String) -> Any? { inner.userDefault(forKey: key) }
+        var pluginDataDirectory: URL { inner.pluginDataDirectory }
+        var activeAppBundleId: String? { inner.activeAppBundleId }
+        var activeAppName: String? { inner.activeAppName }
+        var eventBus: EventBusProtocol { inner.eventBus }
+        var availableRuleNames: [String] { inner.availableRuleNames }
+        var availableWorkflows: [PluginWorkflowInfo] { inner.availableWorkflows }
+        func notifyCapabilitiesChanged() { inner.notifyCapabilitiesChanged() }
+        func openPluginSettings() { inner.openPluginSettings() }
+        func openSettingsSidebarItem(_ itemId: String) { inner.openSettingsSidebarItem(itemId) }
+        func enqueueImportedMediaForTranscription(
+            _ media: PluginImportedMedia,
+            fromMediaImporterId mediaImporterId: String
+        ) async -> Bool {
+            await inner.enqueueImportedMediaForTranscription(media, fromMediaImporterId: mediaImporterId)
+        }
+        func setStreamingDisplayActive(_ active: Bool) { inner.setStreamingDisplayActive(active) }
+    }
+
+    func testRemovalDuringPausedSaveCannotRestoreRemovedKey() async throws {
+        let inner = try PluginTestHostServices()
+        let host = BarrierHostServices(inner: inner)
+        let plugin = VercelAIGatewayPlugin()
+        plugin.activate(host: host)
+
+        // The older save is paused right before its Keychain write lands.
+        host.pauseStoreSecret(value: "vck_old")
+        let oldSave = Task.detached {
+            await plugin.saveApiKey("vck_old", validate: { _ in true })
+        }
+        await host.waitUntilBarrierReached()
+
+        // The removal must queue behind the paused commit instead of being
+        // overwritten by it once the save resumes.
+        let removal = Task.detached { plugin.removeApiKey() }
+        try await Task.sleep(nanoseconds: 20_000_000)
+        host.releaseBarrier()
+        _ = await removal.value
+        let oldResult = await oldSave.value
+
+        XCTAssertNil(oldResult, "The superseded save must not publish a result")
+        XCTAssertFalse(plugin.isAvailable)
+        XCTAssertEqual(inner.loadSecret(key: "api-key") ?? "", "")
+
+        let reactivated = VercelAIGatewayPlugin()
+        reactivated.activate(host: inner)
+        XCTAssertFalse(reactivated.isConfigured, "Reactivation must not resurrect the removed key")
+    }
+
+    func testNewerSaveWinsOverPausedOlderSaveInKeychain() async throws {
+        let inner = try PluginTestHostServices()
+        let host = BarrierHostServices(inner: inner)
+        let plugin = VercelAIGatewayPlugin()
+        plugin.activate(host: host)
+
+        host.pauseStoreSecret(value: "vck_old")
+        let oldSave = Task.detached {
+            await plugin.saveApiKey("vck_old", validate: { _ in true })
+        }
+        await host.waitUntilBarrierReached()
+
+        let newSave = Task.detached {
+            await plugin.saveApiKey("vck_new", validate: { _ in false })
+        }
+        try await Task.sleep(nanoseconds: 20_000_000)
+        host.releaseBarrier()
+        let newResult = await newSave.value
+        let oldResult = await oldSave.value
+
+        XCTAssertNil(oldResult)
+        XCTAssertEqual(newResult?.isValid, false)
+        XCTAssertEqual(inner.loadSecret(key: "api-key"), "vck_new")
+
+        let reactivated = VercelAIGatewayPlugin()
+        reactivated.activate(host: inner)
+        XCTAssertTrue(reactivated.isConfigured)
+    }
+
+    func testCatalogPublicationAndRemovalAreOrdered() async throws {
+        let inner = try PluginTestHostServices()
+        let host = BarrierHostServices(inner: inner)
+        let plugin = VercelAIGatewayPlugin()
+        plugin.activate(host: host)
+
+        PluginHTTPClientTestHarness.configure { _ in
+            PluginHTTPClientMockSession(outcomes: Self.catalogAndCreditsOutcomes(balance: "5.00"))
+        }
+
+        // Pause after the generation check passed, inside the catalogue write.
+        host.pauseSetUserDefault(key: "fetchedModels")
+        let save = Task.detached {
+            await plugin.saveApiKey("vck_A", validate: { _ in true })
+        }
+        await host.waitUntilBarrierReached()
+
+        let removal = Task.detached { plugin.removeApiKey() }
+        try await Task.sleep(nanoseconds: 20_000_000)
+        host.releaseBarrier()
+        _ = await removal.value
+        let result = await save.value
+
+        // The save was current when it committed, so its catalogue stands;
+        // the removal is applied strictly after that commit.
+        XCTAssertEqual(result?.isValid, true)
+        XCTAssertEqual(plugin.supportedModels.map(\.id), ["x/current"])
+        XCTAssertFalse(plugin.isAvailable)
+        XCTAssertEqual(inner.loadSecret(key: "api-key") ?? "", "")
+    }
+
     // MARK: - Helpers
 
     private static func audio() -> AudioData {
