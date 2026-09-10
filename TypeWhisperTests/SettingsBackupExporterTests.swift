@@ -737,6 +737,45 @@ final class SettingsBackupExporterTests: XCTestCase {
         XCTAssertEqual(notifications, 3, "a retention-only import must also reload the view model")
     }
 
+    func testAutomationImportForwardsRecoveryPreferencesReload() async throws {
+        // The local HTTP API imports through SettingsBackupAutomationService; it
+        // must forward the live-reload callbacks like the settings view does.
+        var preferences = SettingsBackupExporter.PreferencesDTO.empty
+        preferences.dictationRecoveryHedgeThresholdSeconds = 6.5
+        let backup = SettingsBackupExporter.SettingsBackup(
+            schemaVersion: SettingsBackupExporter.schemaVersion,
+            exportedAt: Date(),
+            appVersion: "1.0",
+            workflows: [], dictionaryEntries: [], snippets: [], promptActions: [], profiles: [],
+            hotkeys: [:], plugins: [],
+            history: [],
+            updateChannel: nil,
+            preferences: preferences
+        )
+        let destination = try makeFixture()
+        defer { teardown(destination) }
+
+        var reloads = 0
+        let service = SettingsBackupAutomationService(
+            workflowService: destination.workflowService,
+            dictionaryService: destination.dictionaryService,
+            snippetService: destination.snippetService,
+            profileService: destination.profileService,
+            promptActionService: destination.promptActionService,
+            pluginManager: destination.pluginManager,
+            pluginRegistryService: destination.pluginRegistryService,
+            historyService: destination.historyService,
+            usageStatisticsService: destination.usageStatisticsService,
+            userDefaults: destination.userDefaults,
+            dictationRecoveryPreferencesDidChange: { reloads += 1 }
+        )
+
+        _ = try await service.importData(SettingsBackupExporter.encodedJSON(backup))
+
+        XCTAssertEqual(reloads, 1)
+        XCTAssertEqual(destination.userDefaults.double(forKey: UserDefaultsKeys.dictationRecoveryHedgeThresholdSeconds), 6.5)
+    }
+
     func testImportRejectsOutOfRangeHedgeThreshold() async throws {
         // A backup is user-editable JSON; a value the UI could never produce must
         // not reach the hedge timer (1e308 seconds would overflow the sleep).
