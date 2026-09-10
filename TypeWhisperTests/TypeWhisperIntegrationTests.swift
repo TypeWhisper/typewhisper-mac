@@ -13379,6 +13379,29 @@ extension TypeWhisperIntegrationTests {
     }
 
     @MainActor
+    func testInvalidHedgeThresholdSkipsTheHedgeInsteadOfTrapping() async throws {
+        for invalid in [Double.infinity, Double.nan, -1.0, 0.0] {
+            var fallbackCalled = false
+            let harness = try makeHedgedDictationViewModel(
+                hedgeThreshold: invalid,
+                primaryRunner: { _, _, _, _, _, _, _, _ in
+                    Self.hedgeTranscriptionResult(text: "primary", engine: "primary")
+                },
+                fallbackRunner: { _, _, _, _, _, _, _ in
+                    fallbackCalled = true
+                    return Self.hedgeTranscriptionResult(text: "fallback", engine: "test-fallback")
+                }
+            )
+            defer { harness.cleanup() }
+
+            let output = try await harness.viewModel.transcribeFinalAudioForTesting()
+            XCTAssertEqual(output.text, "primary", "threshold \(invalid) must fall back to the primary path")
+            XCTAssertFalse(output.usedRecoveryFallback)
+            XCTAssertFalse(fallbackCalled)
+        }
+    }
+
+    @MainActor
     func testHedgePrimaryWinsBeforeThresholdWithoutDispatchingFallback() async throws {
         var fallbackCalled = false
         let harness = try makeHedgedDictationViewModel(
