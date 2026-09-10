@@ -732,6 +732,9 @@ final class SettingsBackupExporterTests: XCTestCase {
 
         await importing(makeBackup { $0.dictationRecoveryHedgeEnabled = true })
         XCTAssertEqual(notifications, 2)
+
+        await importing(makeBackup { $0.dictationRecoveryRetentionDays = 7 })
+        XCTAssertEqual(notifications, 3, "a retention-only import must also reload the view model")
     }
 
     func testImportRejectsOutOfRangeHedgeThreshold() async throws {

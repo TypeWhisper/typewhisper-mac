@@ -286,6 +286,7 @@ final class DictationRecoveryViewModel: ObservableObject {
         hedgeThresholdSeconds = Self.clampedHedgeThreshold(
             defaults.object(forKey: UserDefaultsKeys.dictationRecoveryHedgeThresholdSeconds) as? Double
         )
+        retentionPolicy = DictationRecoveryRetentionPolicy.load(from: defaults)
         normalizeLanguageSelectionForResolvedEngine()
     }
 

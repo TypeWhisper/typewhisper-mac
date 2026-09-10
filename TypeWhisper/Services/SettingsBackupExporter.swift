@@ -884,7 +884,8 @@ enum SettingsBackupExporter {
         if preferences.dictationRecoveryLanguage != nil
             || preferences.dictationRecoveryAutomaticFallbackEnabled != nil
             || preferences.dictationRecoveryHedgeEnabled != nil
-            || preferences.dictationRecoveryHedgeThresholdSeconds != nil {
+            || preferences.dictationRecoveryHedgeThresholdSeconds != nil
+            || preferences.dictationRecoveryRetentionDays != nil {
             dictationRecoveryPreferencesDidChange?()
         }
         if preferences.dictationRecoveryRetentionDays != nil {

@@ -885,6 +885,12 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         defaults.set(1e308, forKey: UserDefaultsKeys.dictationRecoveryHedgeThresholdSeconds)
         viewModel.reloadPreferencesFromDefaults()
         XCTAssertEqual(viewModel.hedgeThresholdSeconds, 15.0, "a reloaded value is clamped like a stored one")
+
+        let retentionBefore = viewModel.retentionPolicy
+        defaults.set(180, forKey: UserDefaultsKeys.dictationRecoveryRetentionDays)
+        viewModel.reloadPreferencesFromDefaults()
+        XCTAssertEqual(viewModel.retentionPolicy, DictationRecoveryRetentionPolicy.load(from: defaults))
+        XCTAssertNotEqual(viewModel.retentionPolicy, retentionBefore, "a retention-only import must reach the view model")
     }
 
     func testHedgeThresholdIsClampedToTheSupportedRange() throws {
