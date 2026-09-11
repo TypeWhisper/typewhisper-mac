@@ -2389,12 +2389,12 @@ final class DictationViewModel: ObservableObject {
     ) async throws -> FinalTranscriptionOutput {
         let fallbackConfiguration = recoveryFallbackConfigurationProvider(primaryEngineId, task)
         do {
-            // The provider is injectable; only a finite, positive threshold can be
-            // converted to a sleep duration, anything else means no hedge (the
-            // sequential error-path fallback below still applies).
+            // The provider is injectable; only a threshold that converts to a
+            // sleep duration safely starts a race, anything else means no hedge
+            // (the sequential error-path fallback below still applies).
             if let configuration = fallbackConfiguration,
                let hedgeThreshold = recoveryHedgeThresholdProvider(),
-               hedgeThreshold.isFinite, hedgeThreshold > 0 {
+               Self.hedgeDelayNanoseconds(forThreshold: hedgeThreshold) != nil {
                 return try await hedgedTranscription(
                     audioSamples: audioSamples,
                     languageSelection: languageSelection,
@@ -2555,6 +2555,22 @@ final class DictationViewModel: ObservableObject {
         }
     }
 
+    /// Longest hedge threshold the race accepts. The settings UI offers 1...15 s;
+    /// anything past a minute is not a hedge any more and is treated as "no
+    /// hedge" rather than being converted.
+    nonisolated static let maximumHedgeThreshold: TimeInterval = 60
+
+    /// Converts a hedge threshold to a sleep duration, or nil when the value
+    /// must not be converted: non-finite, non-positive, or so large that the
+    /// nanosecond product would overflow (`UInt64(1e308 * 1e9)` traps). Guarding
+    /// the value alone is not enough; the product is what gets converted.
+    nonisolated static func hedgeDelayNanoseconds(forThreshold threshold: TimeInterval) -> UInt64? {
+        guard threshold.isFinite, threshold > 0, threshold <= maximumHedgeThreshold else { return nil }
+        let nanoseconds = threshold * 1_000_000_000
+        guard nanoseconds.isFinite, nanoseconds < Double(UInt64.max) else { return nil }
+        return UInt64(nanoseconds)
+    }
+
     /// Races the primary engine against the recovery fallback engine: the fallback
     /// request is dispatched only after `threshold` elapses with the primary still
     /// running, the first successful transcription wins, and the loser is cancelled.
@@ -2624,7 +2640,12 @@ final class DictationViewModel: ObservableObject {
                 }
                 let fallbackTask = Task { @MainActor [logger] in
                     do {
-                        try await Task.sleep(nanoseconds: UInt64(threshold * 1_000_000_000))
+                        // The caller only starts the race for a convertible threshold.
+                        guard let delay = Self.hedgeDelayNanoseconds(forThreshold: threshold) else {
+                            arbiter.fallbackSkipped()
+                            return
+                        }
+                        try await Task.sleep(nanoseconds: delay)
                     } catch {
                         arbiter.fallbackSkipped()
                         return
