@@ -13511,9 +13511,24 @@ extension TypeWhisperIntegrationTests {
         XCTAssertFalse(primaryFinished, "the loser was still running when the winner was returned")
     }
 
+    func testHedgeDelayConversionRejectsUnconvertibleThresholds() {
+        XCTAssertEqual(DictationViewModel.hedgeDelayNanoseconds(forThreshold: 0.1), 100_000_000)
+        XCTAssertEqual(DictationViewModel.hedgeDelayNanoseconds(forThreshold: 15), 15_000_000_000)
+        XCTAssertEqual(DictationViewModel.hedgeDelayNanoseconds(forThreshold: 60), 60_000_000_000)
+        XCTAssertNil(DictationViewModel.hedgeDelayNanoseconds(forThreshold: 60.5))
+        XCTAssertNil(DictationViewModel.hedgeDelayNanoseconds(forThreshold: 1e308))
+        XCTAssertNil(DictationViewModel.hedgeDelayNanoseconds(forThreshold: 1e12))
+        XCTAssertNil(DictationViewModel.hedgeDelayNanoseconds(forThreshold: .infinity))
+        XCTAssertNil(DictationViewModel.hedgeDelayNanoseconds(forThreshold: .nan))
+        XCTAssertNil(DictationViewModel.hedgeDelayNanoseconds(forThreshold: 0))
+        XCTAssertNil(DictationViewModel.hedgeDelayNanoseconds(forThreshold: -1))
+    }
+
     @MainActor
     func testInvalidHedgeThresholdSkipsTheHedgeInsteadOfTrapping() async throws {
-        for invalid in [Double.infinity, Double.nan, -1.0, 0.0] {
+        // 1e308 is finite and positive but its nanosecond product is infinite;
+        // 1e12 s is finite yet far past any sensible hedge and past UInt64 nanoseconds.
+        for invalid in [Double.infinity, Double.nan, -1.0, 0.0, 1e308, 1e12, 61.0] {
             var fallbackCalled = false
             let harness = try makeHedgedDictationViewModel(
                 hedgeThreshold: invalid,
