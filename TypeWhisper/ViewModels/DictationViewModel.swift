@@ -169,11 +169,14 @@ final class DictationViewModel: ObservableObject {
     struct TranscriptionDeadlineExceeded: LocalizedError, Equatable {
         let seconds: TimeInterval
 
+        // Describes the timeout only. Whether a recovery recording exists is
+        // decided by the failure path (retention policy, file move), which
+        // appends the recovery confirmation and action itself when one does.
         var errorDescription: String? {
             let rounded = Int(seconds.rounded())
             return localizedAppText(
-                "Transcription timed out after \(rounded) seconds. The recording was kept in Dictation Recovery.",
-                de: "Die Transkription hat nach \(rounded) Sekunden das Zeitlimit überschritten. Die Aufnahme wurde in der Diktat-Wiederherstellung behalten."
+                "Transcription timed out after \(rounded) seconds.",
+                de: "Die Transkription hat nach \(rounded) Sekunden das Zeitlimit überschritten."
             )
         }
     }
