@@ -343,20 +343,27 @@ final class ElevenLabsPlugin: NSObject, DictionaryTermHintTranscriptionEnginePlu
             },
             onRealtimeFailure: { error in
                 self.logger.warning("Realtime transcription failed, falling back to REST: \(error.localizedDescription)")
-            }
+            },
+            onProgress: onProgress
         )
     }
 
     static func transcribeWithRESTFallback(
         realtime: () async throws -> PluginTranscriptionResult,
         rest: () async throws -> PluginTranscriptionResult,
-        onRealtimeFailure: (Error) -> Void = { _ in }
+        onRealtimeFailure: (Error) -> Void = { _ in },
+        onProgress: (String) -> Bool = { _ in true }
     ) async throws -> PluginTranscriptionResult {
         do {
             return try await realtime()
         } catch {
+            guard !(error is CancellationError), !Task.isCancelled else {
+                throw error
+            }
             onRealtimeFailure(error)
-            return try await rest()
+            let result = try await rest()
+            _ = onProgress(result.text)
+            return result
         }
     }
 

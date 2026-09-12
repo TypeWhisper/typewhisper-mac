@@ -393,6 +393,69 @@ final class ElevenLabsPluginTests: XCTestCase {
         XCTAssertEqual(calls.values, ["realtime", "failure", "rest"])
     }
 
+    func testRESTFallbackReplacesPartialRealtimeProgressWithFinalText() async throws {
+        let progress = StringRecorder()
+        let result = try await ElevenLabsPlugin.transcribeWithRESTFallback(
+            realtime: {
+                progress.append("Partial realtime")
+                throw URLError(.cannotConnectToHost)
+            },
+            rest: { PluginTranscriptionResult(text: "Final REST transcript") },
+            onProgress: { text in
+                progress.append(text)
+                return true
+            }
+        )
+
+        XCTAssertEqual(result.text, "Final REST transcript")
+        XCTAssertEqual(progress.values, ["Partial realtime", "Final REST transcript"])
+    }
+
+    func testCancellationErrorDoesNotStartRESTFallback() async {
+        let calls = StringRecorder()
+        do {
+            _ = try await ElevenLabsPlugin.transcribeWithRESTFallback(
+                realtime: { throw CancellationError() },
+                rest: {
+                    calls.append("rest")
+                    return PluginTranscriptionResult(text: "Unexpected")
+                },
+                onRealtimeFailure: { _ in calls.append("failure") },
+                onProgress: { _ in calls.append("progress"); return true }
+            )
+            XCTFail("Expected cancellation")
+        } catch {
+            XCTAssertTrue(error is CancellationError)
+        }
+        XCTAssertTrue(calls.values.isEmpty)
+    }
+
+    func testCancelledTaskDoesNotFallbackAfterTransportError() async {
+        let calls = StringRecorder()
+        let task = Task {
+            do {
+                _ = try await ElevenLabsPlugin.transcribeWithRESTFallback(
+                    realtime: {
+                        withUnsafeCurrentTask { $0?.cancel() }
+                        throw URLError(.cancelled)
+                    },
+                    rest: {
+                        calls.append("rest")
+                        return PluginTranscriptionResult(text: "Unexpected")
+                    },
+                    onRealtimeFailure: { _ in calls.append("failure") },
+                    onProgress: { _ in calls.append("progress"); return true }
+                )
+                XCTFail("Expected transport cancellation")
+            } catch {
+                XCTAssertTrue(Task.isCancelled)
+                XCTAssertEqual((error as? URLError)?.code, .cancelled)
+            }
+        }
+        await task.value
+        XCTAssertTrue(calls.values.isEmpty)
+    }
+
     func testSettingsUIExposesLocalizedOptionsAndStableAccessibilityIdentifiers() throws {
         let source = try String(
             contentsOf: Self.pluginRoot.appendingPathComponent("ElevenLabsPlugin.swift"),
