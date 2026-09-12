@@ -4,7 +4,7 @@ enum NumberWordNormalizer {
     private static let supportedLanguageCodes: Set<String> = ["en", "de", "fr", "es", "nl", "zh", "ja"]
     private static let cjkNumberCharacters = Set("零〇一二两兩三四五六七八九十百千万萬亿億点點負负".map { $0 })
 
-    static func normalize(text: String, language: String?) -> String {
+    static func normalize(text: String, language: String?, minimumValue: Int = 0) -> String {
         guard let languageCode = PunctuationLanguageNormalizer.normalize(language),
               supportedLanguageCodes.contains(languageCode),
               !text.isEmpty else {
@@ -22,7 +22,12 @@ enum NumberWordNormalizer {
                 index = decimal.endIndex
             } else if tokens[index].isWord,
                let parsed = parseNumber(startingAt: index, in: tokens, languageCode: languageCode) {
-                result.append(parsed.replacement)
+                if parsed.words.shouldNormalize(minimumValue: minimumValue) {
+                    result.append(parsed.words.value)
+                } else {
+                    // Consume the entire expression even when keeping its original spelling.
+                    result.append(contentsOf: tokens[index..<parsed.endIndex].map(\.text).joined())
+                }
                 index = parsed.endIndex
             } else {
                 result.append(tokens[index].text)
@@ -34,8 +39,29 @@ enum NumberWordNormalizer {
     }
 
     struct ParsedWords {
+        enum Kind {
+            case number
+            case decimal
+            case digitSequence
+        }
+
         let value: String
         let consumedWords: Int
+        let kind: Kind
+
+        init(value: String, consumedWords: Int, kind: Kind = .number) {
+            self.value = value
+            self.consumedWords = consumedWords
+            self.kind = kind
+        }
+
+        func shouldNormalize(minimumValue: Int) -> Bool {
+            guard minimumValue > 0, kind == .number else { return true }
+            // Parsers emit ASCII digits, optionally signed and with an ordinal suffix.
+            let magnitude = value.drop(while: { $0 == "-" }).prefix(while: { $0.isASCII && $0.isNumber })
+            guard let number = UInt64(magnitude) else { return false }
+            return number >= UInt64(minimumValue)
+        }
     }
 
     private enum TokenKind {
@@ -72,8 +98,10 @@ enum NumberWordNormalizer {
     }
 
     private struct ParsedNumber {
-        let replacement: String
+        let words: ParsedWords
         let endIndex: Int
+
+        var replacement: String { words.value }
     }
 
     private struct WordCandidate {
@@ -94,7 +122,11 @@ enum NumberWordNormalizer {
         }
 
         return ParsedNumber(
-            replacement: tokens[index].text + decimalSeparator + tokens[index + 4].text,
+            words: ParsedWords(
+                value: tokens[index].text + decimalSeparator + tokens[index + 4].text,
+                consumedWords: 1,
+                kind: .decimal
+            ),
             endIndex: index + 5
         )
     }
@@ -143,7 +175,7 @@ enum NumberWordNormalizer {
         }
 
         let finalTokenIndex = words[parsed.consumedWords - 1].tokenIndex
-        return ParsedNumber(replacement: parsed.value, endIndex: finalTokenIndex + 1)
+        return ParsedNumber(words: parsed, endIndex: finalTokenIndex + 1)
     }
 
     private static func wordCandidates(startingAt index: Int, in tokens: [Token]) -> [WordCandidate] {

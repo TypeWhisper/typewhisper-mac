@@ -685,6 +685,9 @@ struct RecordingSettingsView: View {
     @State private var customSounds: [String] = SoundChoice.installedCustomSounds()
     @State private var draggedInputDevicePriorityItem: AudioInputDevicePriorityItem?
     @AppStorage(UserDefaultsKeys.airPodsInstantStartEnabled) private var bluetoothInstantStartEnabled = false
+    @AppStorage(UserDefaultsKeys.transcriptionNumberNormalizationEnabled) private var numberNormalizationEnabled = true
+    @AppStorage(UserDefaultsKeys.transcriptionNumberNormalizationMinimumValue)
+    private var numberNormalizationMinimumValue = TranscriptionNormalizationService.defaultNumberNormalizationMinimumValue
     private let soundService = ServiceContainer.shared.soundService
     private let audioRecordingService = ServiceContainer.shared.audioRecordingService
 
@@ -1071,12 +1074,16 @@ struct RecordingSettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
-                Toggle(String(localized: "Normalize spoken numbers to digits"), isOn: Binding(
-                    get: { TranscriptionNormalizationService.numberNormalizationEnabled() },
-                    set: { UserDefaults.standard.set($0, forKey: UserDefaultsKeys.transcriptionNumberNormalizationEnabled) }
-                ))
+                Toggle(String(localized: "Normalize spoken numbers to digits"), isOn: $numberNormalizationEnabled)
 
-                Text(String(localized: "Converts spoken numbers in supported languages into digits before insertion and export."))
+                Picker(String(localized: "Convert numbers to digits"), selection: $numberNormalizationMinimumValue) {
+                    Text(String(localized: "Always")).tag(0)
+                    Text(String(localized: "10 and above")).tag(10)
+                    Text(String(localized: "100 and above")).tag(100)
+                }
+                .disabled(!numberNormalizationEnabled)
+
+                Text(String(localized: "Smaller numbers stay as spoken words. Decimals and digit sequences still convert to digits. Existing digits stay unchanged."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

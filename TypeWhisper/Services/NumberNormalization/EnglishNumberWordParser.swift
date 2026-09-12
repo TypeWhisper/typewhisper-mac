@@ -84,10 +84,12 @@ enum EnglishNumberWordParser {
             }
 
             var replacement = "\(integer.value)"
+            var kind = NumberWordNormalizer.ParsedWords.Kind.number
 
             if index < normalizedWords.count, normalizedWords[index] == "point" {
                 let decimal = parseDecimalDigits(normalizedWords, startingAt: index + 1)
                 if !decimal.digits.isEmpty {
+                    kind = .decimal
                     replacement += ".\(decimal.digits)"
                     index = decimal.nextIndex
                 }
@@ -97,7 +99,7 @@ enum EnglishNumberWordParser {
                 replacement = "-" + replacement
             }
 
-            return NumberWordNormalizer.ParsedWords(value: replacement, consumedWords: index)
+            return NumberWordNormalizer.ParsedWords(value: replacement, consumedWords: index, kind: kind)
         }
 
         // Standalone ordinal word ("eighth", "twelfth", "twentieth", ...),
@@ -142,7 +144,7 @@ enum EnglishNumberWordParser {
             sequence += "\(unitValues[words[position]] ?? 0)"
         }
 
-        return NumberWordNormalizer.ParsedWords(value: sequence, consumedWords: positions)
+        return NumberWordNormalizer.ParsedWords(value: sequence, consumedWords: positions, kind: .digitSequence)
     }
 
     private static func makeResult(_ value: Int, ordinal: Bool, isNegative: Bool, consumedWords: Int) -> NumberWordNormalizer.ParsedWords {

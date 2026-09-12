@@ -33,10 +33,12 @@ enum FrenchNumberWordParser {
         }
         index = integer.nextIndex
         var replacement = "\(integer.value)"
+        var kind = NumberWordNormalizer.ParsedWords.Kind.number
 
         if index < normalizedWords.count, let decimalSeparator = decimalSeparator(for: normalizedWords[index]) {
             let decimal = parseDecimalDigits(normalizedWords, startingAt: index + 1)
             if !decimal.digits.isEmpty {
+                kind = .decimal
                 replacement += "\(decimalSeparator)\(decimal.digits)"
                 index = decimal.nextIndex
             }
@@ -46,7 +48,7 @@ enum FrenchNumberWordParser {
             replacement = "-" + replacement
         }
 
-        return NumberWordNormalizer.ParsedWords(value: replacement, consumedWords: index)
+        return NumberWordNormalizer.ParsedWords(value: replacement, consumedWords: index, kind: kind)
     }
 
     private static func parseInteger(

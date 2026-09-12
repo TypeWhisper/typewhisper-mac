@@ -35,10 +35,12 @@ enum GermanNumberWordParser {
         guard let integer = parseInteger(normalizedWords, startingAt: index) else { return nil }
         index = integer.nextIndex
         var replacement = "\(integer.value)"
+        var kind = NumberWordNormalizer.ParsedWords.Kind.number
 
         if index < normalizedWords.count, normalizedWords[index] == "komma" {
             let decimal = parseDecimalDigits(normalizedWords, startingAt: index + 1)
             if !decimal.digits.isEmpty {
+                kind = .decimal
                 replacement += ",\(decimal.digits)"
                 index = decimal.nextIndex
             }
@@ -48,7 +50,7 @@ enum GermanNumberWordParser {
             replacement = "-" + replacement
         }
 
-        return NumberWordNormalizer.ParsedWords(value: replacement, consumedWords: index)
+        return NumberWordNormalizer.ParsedWords(value: replacement, consumedWords: index, kind: kind)
     }
 
     private static func parseInteger(_ words: [String], startingAt startIndex: Int) -> (value: Int, nextIndex: Int)? {
