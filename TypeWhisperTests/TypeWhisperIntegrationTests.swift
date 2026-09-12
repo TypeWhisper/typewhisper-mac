@@ -816,6 +816,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         nonisolated(unsafe) private static var _lastLanguageSelection = PluginLanguageSelection()
         nonisolated(unsafe) private static var _responseText = "transcribed"
         nonisolated(unsafe) private static var _failureMessage: String?
+        nonisolated(unsafe) private static var _hangSeconds: TimeInterval?
         nonisolated(unsafe) private static var _transcribeCallCount = 0
 
         static var lastPrompt: String? {
@@ -836,7 +837,24 @@ final class TypeWhisperIntegrationTests: XCTestCase {
                 _lastLanguageSelection = PluginLanguageSelection()
                 _responseText = "transcribed"
                 _failureMessage = nil
+                _hangSeconds = nil
                 _transcribeCallCount = 0
+            }
+        }
+
+        /// Makes every transcribe call wait on a plain dispatch timer that no Task
+        /// cancellation can interrupt, i.e. an engine whose transport never aborts.
+        static func setHang(seconds: TimeInterval) {
+            promptLock.withLock {
+                _hangSeconds = seconds
+            }
+        }
+
+        private static func hangIfRequested() async {
+            let seconds = promptLock.withLock { _hangSeconds }
+            guard let seconds else { return }
+            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                DispatchQueue.global().asyncAfter(deadline: .now() + seconds) { continuation.resume() }
             }
         }
 
@@ -875,6 +893,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
                 Self._transcribeCallCount += 1
                 return (text: Self._responseText, failureMessage: Self._failureMessage)
             }
+            await Self.hangIfRequested()
             if let failureMessage = result.failureMessage {
                 throw PluginTranscriptionError.apiError(failureMessage)
             }
@@ -893,6 +912,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
                 Self._transcribeCallCount += 1
                 return (text: Self._responseText, failureMessage: Self._failureMessage)
             }
+            await Self.hangIfRequested()
             if let failureMessage = result.failureMessage {
                 throw PluginTranscriptionError.apiError(failureMessage)
             }
@@ -8513,6 +8533,115 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testTranscriptionTimeoutFeedbackWithoutRecoveryDescribesOnlyTheTimeout() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let recoveryStore = DictationRecoveryAudioStore(
+            directory: appSupportDirectory.appendingPathComponent("dictation-recovery", isDirectory: true),
+            retentionPolicy: .immediately
+        )
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            MockTranscriptionPlugin.reset()
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        MockTranscriptionPlugin.setHang(seconds: 3.0)
+        dictationContext = Self.makeDictationContext(
+            appSupportDirectory: appSupportDirectory,
+            audioRecordingRecoveryAudioStore: recoveryStore,
+            transcriptionDeadline: 0.4
+        )
+        let context = try XCTUnwrap(dictationContext)
+        let samples = Array(repeating: Float(0.25), count: Int(AudioRecordingService.targetSampleRate))
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { _ in samples }
+        context.textInsertionService.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
+        context.textInsertionService.selectedTextOverride = { nil }
+
+        let sessionID = context.dictationViewModel.apiStartRecording()
+        await context.dictationViewModel.testingWaitForRecordingStart()
+        recoveryStore.append(samples)
+        _ = context.dictationViewModel.apiStopRecording()
+
+        for _ in 0..<80 {
+            if context.dictationViewModel.apiDictationSession(id: sessionID)?.status == .failed {
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+
+        let expectedTimeout = DictationViewModel.TranscriptionDeadlineExceeded(seconds: 0.4).localizedDescription
+        XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.status, .failed)
+        XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.error, expectedTimeout)
+        XCTAssertTrue(recoveryStore.recoveryURLs.isEmpty, "retention 'Immediately' keeps no recovery file")
+        XCTAssertEqual(context.dictationViewModel.actionFeedbackMessage, expectedTimeout)
+        XCTAssertFalse(expectedTimeout.contains("Recovery"), "the timeout text must not promise a recovery recording")
+        XCTAssertNil(context.dictationViewModel.actionFeedbackActionTitle)
+        XCTAssertTrue(context.dictationViewModel.actionFeedbackIsError)
+    }
+
+    @MainActor
+    func testTranscriptionTimeoutFeedbackSurfacesPreservedRecoveryAndOpenAction() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let recoveryStore = DictationRecoveryAudioStore(
+            directory: appSupportDirectory.appendingPathComponent("dictation-recovery", isDirectory: true),
+            retentionPolicy: .never
+        )
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            MockTranscriptionPlugin.reset()
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        MockTranscriptionPlugin.setHang(seconds: 3.0)
+        dictationContext = Self.makeDictationContext(
+            appSupportDirectory: appSupportDirectory,
+            audioRecordingRecoveryAudioStore: recoveryStore,
+            transcriptionDeadline: 0.4
+        )
+        let context = try XCTUnwrap(dictationContext)
+        let samples = Array(repeating: Float(0.25), count: Int(AudioRecordingService.targetSampleRate))
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { _ in samples }
+        context.textInsertionService.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
+        context.textInsertionService.selectedTextOverride = { nil }
+
+        let sessionID = context.dictationViewModel.apiStartRecording()
+        await context.dictationViewModel.testingWaitForRecordingStart()
+        recoveryStore.append(samples)
+        _ = context.dictationViewModel.apiStopRecording()
+
+        for _ in 0..<80 {
+            if context.dictationViewModel.apiDictationSession(id: sessionID)?.status == .failed {
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+
+        let expectedTimeout = DictationViewModel.TranscriptionDeadlineExceeded(seconds: 0.4).localizedDescription
+        let recoveryMessage = try TestSupport.localizedCatalogValueForCurrentLocale(
+            for: "The recording was saved to Dictation Recovery."
+        )
+        let openRecoveryTitle = try TestSupport.localizedCatalogValueForCurrentLocale(for: "Open Recovery")
+        XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.status, .failed)
+        XCTAssertEqual(recoveryStore.recoveryURLs.count, 1)
+        XCTAssertEqual(
+            context.dictationViewModel.actionFeedbackMessage,
+            "\(expectedTimeout)\n\(recoveryMessage)"
+        )
+        XCTAssertEqual(context.dictationViewModel.actionFeedbackActionTitle, openRecoveryTitle)
+        XCTAssertTrue(context.dictationViewModel.actionFeedbackIsError)
+    }
+
+    @MainActor
     func testFailedTranscriptionWithoutNewRecoveryKeepsOriginalFeedback() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         let recoveryStore = DictationRecoveryAudioStore(
@@ -9097,7 +9226,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         audioDeviceDefaultInputController: AudioInputDeviceDefaultControlling = CoreAudioInputDeviceDefaultController(),
         audioRecordingBluetoothInputRouteStabilizer: BluetoothInputRouteStabilizing = CoreAudioBluetoothInputRouteStabilizer(),
         audioRecordingRecoveryAudioStore: DictationRecoveryAudioStore = DictationRecoveryAudioStore(),
-        licenseService: LicenseService? = nil
+        licenseService: LicenseService? = nil,
+        transcriptionDeadline: TimeInterval? = nil
     ) -> DictationContext {
         EventBus.shared = EventBus()
         PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
@@ -9223,7 +9353,10 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             speechFeedbackService: speechFeedbackService,
             accessibilityAnnouncementService: accessibilityAnnouncementService,
             errorLogService: errorLogService,
-            mediaPlaybackService: mediaPlaybackService
+            mediaPlaybackService: mediaPlaybackService,
+            transcriptionDeadlineProvider: transcriptionDeadline.map { deadline -> DictationViewModel.TranscriptionDeadlineProvider in
+                { _ in deadline }
+            }
         )
         dictationViewModel.soundFeedbackEnabled = false
         dictationViewModel.spokenFeedbackEnabled = false
@@ -13140,6 +13273,7 @@ extension TypeWhisperIntegrationTests {
     @MainActor
     private func makeHedgedDictationViewModel(
         hedgeThreshold: TimeInterval?,
+        transcriptionDeadline: TimeInterval? = nil,
         primaryRunner: @escaping DictationViewModel.PrimaryTranscriptionRunner,
         fallbackRunner: @escaping DictationViewModel.RecoveryFallbackRunner
     ) throws -> (viewModel: DictationViewModel, cleanup: () -> Void) {
@@ -13205,10 +13339,120 @@ extension TypeWhisperIntegrationTests {
             },
             recoveryFallbackRunner: fallbackRunner,
             recoveryHedgeThresholdProvider: { hedgeThreshold },
-            primaryTranscriptionRunner: primaryRunner
+            primaryTranscriptionRunner: primaryRunner,
+            transcriptionDeadlineProvider: transcriptionDeadline.map { deadline -> DictationViewModel.TranscriptionDeadlineProvider in
+                { _ in deadline }
+            }
         )
         viewModel.soundFeedbackEnabled = false
         return (viewModel, { TestSupport.remove(appSupportDirectory) })
+    }
+
+    @MainActor
+    func testTranscriptionDeadlineAbandonsHungPrimaryAndFallback() async throws {
+        var primaryCancelled = false
+        var fallbackCancelled = false
+        let harness = try makeHedgedDictationViewModel(
+            hedgeThreshold: 0.1,
+            transcriptionDeadline: 0.5,
+            primaryRunner: { _, _, _, _, _, _, _, _ in
+                do {
+                    try await Task.sleep(nanoseconds: 30_000_000_000)
+                } catch {
+                    primaryCancelled = true
+                    throw error
+                }
+                return Self.hedgeTranscriptionResult(text: "primary", engine: "primary")
+            },
+            fallbackRunner: { _, _, _, _, _, _, _ in
+                do {
+                    try await Task.sleep(nanoseconds: 30_000_000_000)
+                } catch {
+                    fallbackCancelled = true
+                    throw error
+                }
+                return Self.hedgeTranscriptionResult(text: "fallback", engine: "test-fallback")
+            }
+        )
+        defer { harness.cleanup() }
+
+        let start = ContinuousClock.now
+        do {
+            _ = try await harness.viewModel.transcribeFinalAudioForTesting()
+            XCTFail("A transcription that never completes must hit the deadline")
+        } catch let error as DictationViewModel.TranscriptionDeadlineExceeded {
+            XCTAssertEqual(error.seconds, 0.5)
+        }
+        XCTAssertLessThan(ContinuousClock.now - start, .seconds(5))
+
+        try await Task.sleep(nanoseconds: 200_000_000)
+        XCTAssertTrue(primaryCancelled, "the hung primary request must be cancelled once the deadline passes")
+        XCTAssertTrue(fallbackCancelled, "the hung fallback request must be cancelled once the deadline passes")
+    }
+
+    @MainActor
+    func testTranscriptionDeadlineHoldsAgainstRunnersThatIgnoreCancellation() async throws {
+        // Both runners wait on plain dispatch timers that no Task cancellation can
+        // interrupt, i.e. engines whose transport never aborts. The deadline must
+        // still return at the bound instead of waiting for them.
+        var primaryFinished = false
+        var fallbackFinished = false
+        let harness = try makeHedgedDictationViewModel(
+            hedgeThreshold: 0.1,
+            transcriptionDeadline: 0.5,
+            primaryRunner: { _, _, _, _, _, _, _, _ in
+                await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                    DispatchQueue.global().asyncAfter(deadline: .now() + 3.0) { continuation.resume() }
+                }
+                primaryFinished = true
+                return Self.hedgeTranscriptionResult(text: "primary", engine: "primary")
+            },
+            fallbackRunner: { _, _, _, _, _, _, _ in
+                await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                    DispatchQueue.global().asyncAfter(deadline: .now() + 3.0) { continuation.resume() }
+                }
+                fallbackFinished = true
+                return Self.hedgeTranscriptionResult(text: "fallback", engine: "test-fallback")
+            }
+        )
+        defer { harness.cleanup() }
+
+        let start = ContinuousClock.now
+        do {
+            _ = try await harness.viewModel.transcribeFinalAudioForTesting()
+            XCTFail("The deadline must fire while both runners are still hung")
+        } catch let error as DictationViewModel.TranscriptionDeadlineExceeded {
+            XCTAssertEqual(error.seconds, 0.5)
+        }
+        XCTAssertLessThan(ContinuousClock.now - start, .seconds(1.5), "the bound must not wait for runners that ignore cancellation")
+        XCTAssertFalse(primaryFinished, "the primary was still hung when the deadline returned")
+        XCTAssertFalse(fallbackFinished, "the fallback was still hung when the deadline returned")
+    }
+
+    @MainActor
+    func testTranscriptionDeadlineDoesNotInterfereWithFastPrimary() async throws {
+        let harness = try makeHedgedDictationViewModel(
+            hedgeThreshold: 1.0,
+            transcriptionDeadline: 5.0,
+            primaryRunner: { _, _, _, _, _, _, _, _ in
+                Self.hedgeTranscriptionResult(text: "primary", engine: "primary")
+            },
+            fallbackRunner: { _, _, _, _, _, _, _ in
+                XCTFail("fallback must not run when the primary answers immediately")
+                return Self.hedgeTranscriptionResult(text: "fallback", engine: "test-fallback")
+            }
+        )
+        defer { harness.cleanup() }
+
+        let output = try await harness.viewModel.transcribeFinalAudioForTesting()
+        XCTAssertEqual(output.text, "primary")
+        XCTAssertFalse(output.usedRecoveryFallback)
+    }
+
+    func testDefaultTranscriptionDeadlineScalesWithRecordingLength() {
+        XCTAssertEqual(DictationViewModel.defaultTranscriptionDeadline(forAudioDuration: 0), 60)
+        XCTAssertEqual(DictationViewModel.defaultTranscriptionDeadline(forAudioDuration: 90), 150)
+        XCTAssertEqual(DictationViewModel.defaultTranscriptionDeadline(forAudioDuration: -5), 60)
     }
 
     @MainActor

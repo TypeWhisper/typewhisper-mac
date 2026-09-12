@@ -132,6 +132,10 @@ final class DictationViewModel: ObservableObject {
         _ normalizeNumbers: Bool?
     ) async throws -> TranscriptionResult
     typealias RecoveryHedgeThresholdProvider = @MainActor () -> TimeInterval?
+    /// Upper bound, in seconds, on the whole final-transcription phase (primary,
+    /// hedge, and sequential fallback together) for a recording of the given
+    /// duration. `nil` disables the bound.
+    typealias TranscriptionDeadlineProvider = @MainActor (_ audioDurationSeconds: TimeInterval) -> TimeInterval?
     typealias PrimaryTranscriptionRunner = @MainActor (
         _ samples: [Float],
         _ languageSelection: LanguageSelection,
@@ -143,7 +147,7 @@ final class DictationViewModel: ObservableObject {
         _ normalizeNumbers: Bool?
     ) async throws -> TranscriptionResult
 
-    private struct FinalTranscriptionOutput {
+    private struct FinalTranscriptionOutput: Sendable {
         let result: TranscriptionResult
         let modelId: String?
         let modelDisplayName: String?
@@ -160,6 +164,28 @@ final class DictationViewModel: ObservableObject {
                 de: "Primäre Transkription fehlgeschlagen: \(primaryDescription). Recovery-Fallback fehlgeschlagen: \(fallbackDescription)"
             )
         }
+    }
+
+    struct TranscriptionDeadlineExceeded: LocalizedError, Equatable {
+        let seconds: TimeInterval
+
+        // Describes the timeout only. Whether a recovery recording exists is
+        // decided by the failure path (retention policy, file move), which
+        // appends the recovery confirmation and action itself when one does.
+        var errorDescription: String? {
+            let rounded = Int(seconds.rounded())
+            return localizedAppText(
+                "Transcription timed out after \(rounded) seconds.",
+                de: "Die Transkription hat nach \(rounded) Sekunden das Zeitlimit überschritten."
+            )
+        }
+    }
+
+    /// Default final-transcription bound: a minute of headroom plus the
+    /// recording's own length, so long recordings on slow local engines are not
+    /// cut off while a hung cloud request can never pin the app in "Transcribing".
+    nonisolated static func defaultTranscriptionDeadline(forAudioDuration duration: TimeInterval) -> TimeInterval {
+        60 + max(0, duration)
     }
 
     nonisolated(unsafe) static var _shared: DictationViewModel?
@@ -348,6 +374,7 @@ final class DictationViewModel: ObservableObject {
     private let recoveryFallbackConfigurationProvider: RecoveryFallbackConfigurationProvider
     private let recoveryFallbackRunner: RecoveryFallbackRunner
     private let recoveryHedgeThresholdProvider: RecoveryHedgeThresholdProvider
+    private let transcriptionDeadlineProvider: TranscriptionDeadlineProvider
     private let primaryTranscriptionRunner: PrimaryTranscriptionRunner
     private var matchedWorkflow: Workflow?
     private var activeWorkflowMatch: WorkflowMatchResult?
@@ -459,7 +486,8 @@ final class DictationViewModel: ObservableObject {
         recoveryFallbackConfigurationProvider: RecoveryFallbackConfigurationProvider? = nil,
         recoveryFallbackRunner: RecoveryFallbackRunner? = nil,
         recoveryHedgeThresholdProvider: RecoveryHedgeThresholdProvider? = nil,
-        primaryTranscriptionRunner: PrimaryTranscriptionRunner? = nil
+        primaryTranscriptionRunner: PrimaryTranscriptionRunner? = nil,
+        transcriptionDeadlineProvider: TranscriptionDeadlineProvider? = nil
     ) {
         self.audioRecordingService = audioRecordingService
         self.textInsertionService = textInsertionService
@@ -498,6 +526,9 @@ final class DictationViewModel: ObservableObject {
         self.mediaPlaybackService = mediaPlaybackService
         self.recoveryFallbackConfigurationProvider = recoveryFallbackConfigurationProvider ?? { _, _ in nil }
         self.recoveryHedgeThresholdProvider = recoveryHedgeThresholdProvider ?? { nil }
+        self.transcriptionDeadlineProvider = transcriptionDeadlineProvider ?? { duration in
+            Self.defaultTranscriptionDeadline(forAudioDuration: duration)
+        }
         self.primaryTranscriptionRunner = primaryTranscriptionRunner ?? { [modelManager] samples, languageSelection, task, engineOverrideId, cloudModelOverride, prompt, dictionaryTermHints, normalizeNumbers in
             try await modelManager.transcribe(
                 audioSamples: samples,
@@ -2378,6 +2409,125 @@ final class DictationViewModel: ObservableObject {
     }
 
     private func transcribeFinalAudio(
+        audioSamples: [Float],
+        languageSelection: LanguageSelection,
+        task: TranscriptionTask,
+        primaryEngineId: String?,
+        primaryCloudModelOverride: String?,
+        prompt: String?,
+        dictionaryTermHints: [PluginDictionaryTermHint],
+        normalizeNumbers: Bool?
+    ) async throws -> FinalTranscriptionOutput {
+        let audioDuration = Double(audioSamples.count) / AudioRecordingService.targetSampleRate
+        guard let deadline = transcriptionDeadlineProvider(audioDuration), deadline > 0 else {
+            return try await transcribeFinalAudioWithoutDeadline(
+                audioSamples: audioSamples,
+                languageSelection: languageSelection,
+                task: task,
+                primaryEngineId: primaryEngineId,
+                primaryCloudModelOverride: primaryCloudModelOverride,
+                prompt: prompt,
+                dictionaryTermHints: dictionaryTermHints,
+                normalizeNumbers: normalizeNumbers
+            )
+        }
+
+        // Bound the whole transcription phase (primary, hedge, and the sequential
+        // fallback) by a deadline that holds regardless of how the runners behave:
+        // the phase is an unstructured task settled through an arbiter, so when
+        // the deadline fires the caller gets TranscriptionDeadlineExceeded at the
+        // bound. The in-flight work is cancelled - which aborts the transport for
+        // runners that honour cancellation - but it is never awaited, so a runner
+        // that ignores cancellation (a stalled upload, a server that accepted the
+        // audio and went silent, a plugin without prompt cancellation) cannot
+        // hold the app in "Transcribing..." past the bound. Its late result is
+        // dropped by the arbiter.
+        let transcriptionOperation: @MainActor () async throws -> FinalTranscriptionOutput = { [self] in
+            try await self.transcribeFinalAudioWithoutDeadline(
+                audioSamples: audioSamples,
+                languageSelection: languageSelection,
+                task: task,
+                primaryEngineId: primaryEngineId,
+                primaryCloudModelOverride: primaryCloudModelOverride,
+                prompt: prompt,
+                dictionaryTermHints: dictionaryTermHints,
+                normalizeNumbers: normalizeNumbers
+            )
+        }
+        let arbiter = DeadlineArbiter<FinalTranscriptionOutput>()
+        // The continuation only signals completion; the (non-Sendable) outcome
+        // stays inside the main-actor arbiter and is read back here.
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                arbiter.begin(continuation)
+                let work = Task { @MainActor in
+                    do {
+                        arbiter.settle(.success(try await transcriptionOperation()))
+                    } catch {
+                        arbiter.settle(.failure(error))
+                    }
+                }
+                let timer = Task { @MainActor [logger] in
+                    do {
+                        try await Task.sleep(nanoseconds: UInt64(deadline * 1_000_000_000))
+                    } catch {
+                        return
+                    }
+                    logger.error("Final transcription exceeded its deadline of \(deadline, format: .fixed(precision: 1))s; abandoning in-flight requests")
+                    arbiter.settle(.failure(TranscriptionDeadlineExceeded(seconds: deadline)))
+                }
+                arbiter.register(work: work, timer: timer)
+            }
+        } onCancel: {
+            Task { @MainActor in
+                arbiter.settle(.failure(CancellationError()))
+            }
+        }
+        return try arbiter.takeOutcome().get()
+    }
+
+    /// Settles a deadline-bounded operation on its first outcome: the work's own
+    /// result, the deadline, or outer cancellation. Everything runs on the main
+    /// actor; the first call resumes the caller and cancels both tasks, later
+    /// calls are dropped, and neither task is ever awaited.
+    @MainActor
+    private final class DeadlineArbiter<Value> {
+        private var continuation: CheckedContinuation<Void, Never>?
+        private var work: Task<Void, Never>?
+        private var timer: Task<Void, Never>?
+        private var settled = false
+        private var outcome: Result<Value, Error>?
+
+        func begin(_ continuation: CheckedContinuation<Void, Never>) {
+            self.continuation = continuation
+        }
+
+        func takeOutcome() -> Result<Value, Error> {
+            outcome ?? .failure(CancellationError())
+        }
+
+        func register(work: Task<Void, Never>, timer: Task<Void, Never>) {
+            self.work = work
+            self.timer = timer
+            if settled {
+                work.cancel()
+                timer.cancel()
+            }
+        }
+
+        func settle(_ outcome: Result<Value, Error>) {
+            guard !settled else { return }
+            settled = true
+            self.outcome = outcome
+            work?.cancel()
+            timer?.cancel()
+            let continuation = self.continuation
+            self.continuation = nil
+            continuation?.resume()
+        }
+    }
+
+    private func transcribeFinalAudioWithoutDeadline(
         audioSamples: [Float],
         languageSelection: LanguageSelection,
         task: TranscriptionTask,

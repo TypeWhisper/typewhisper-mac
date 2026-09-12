@@ -636,7 +636,8 @@ enum SettingsBackupExporter {
         userDefaults: UserDefaults = .standard,
         liveFieldTranscriptEnabledDidChange: ((Bool) -> Void)? = nil,
         cancellationBehaviorDidChange: ((CancellationBehavior) -> Void)? = nil,
-        recoveryRetentionPolicyDidChange: ((DictationRecoveryRetentionPolicy) -> Void)? = nil
+        recoveryRetentionPolicyDidChange: ((DictationRecoveryRetentionPolicy) -> Void)? = nil,
+        dictationRecoveryPreferencesDidChange: (() -> Void)? = nil
     ) async -> ImportResult {
         var result = ImportResult()
 
@@ -880,6 +881,13 @@ enum SettingsBackupExporter {
             forKey: UserDefaultsKeys.dictationRecoveryHedgeThresholdSeconds
         )
         apply(preferences.dictationRecoveryRetentionDays, forKey: UserDefaultsKeys.dictationRecoveryRetentionDays)
+        if preferences.dictationRecoveryLanguage != nil
+            || preferences.dictationRecoveryAutomaticFallbackEnabled != nil
+            || preferences.dictationRecoveryHedgeEnabled != nil
+            || preferences.dictationRecoveryHedgeThresholdSeconds != nil
+            || preferences.dictationRecoveryRetentionDays != nil {
+            dictationRecoveryPreferencesDidChange?()
+        }
         if preferences.dictationRecoveryRetentionDays != nil {
             recoveryRetentionPolicyDidChange?(DictationRecoveryRetentionPolicy.load(from: userDefaults))
         }
@@ -941,6 +949,8 @@ final class SettingsBackupAutomationService {
     private let userDefaults: UserDefaults
     private let liveFieldTranscriptEnabledDidChange: ((Bool) -> Void)?
     private let recoveryRetentionPolicyDidChange: ((DictationRecoveryRetentionPolicy) -> Void)?
+    private let cancellationBehaviorDidChange: ((CancellationBehavior) -> Void)?
+    private let dictationRecoveryPreferencesDidChange: (() -> Void)?
 
     init(
         workflowService: WorkflowService,
@@ -954,7 +964,9 @@ final class SettingsBackupAutomationService {
         usageStatisticsService: UsageStatisticsService,
         userDefaults: UserDefaults = .standard,
         liveFieldTranscriptEnabledDidChange: ((Bool) -> Void)? = nil,
-        recoveryRetentionPolicyDidChange: ((DictationRecoveryRetentionPolicy) -> Void)? = nil
+        recoveryRetentionPolicyDidChange: ((DictationRecoveryRetentionPolicy) -> Void)? = nil,
+        cancellationBehaviorDidChange: ((CancellationBehavior) -> Void)? = nil,
+        dictationRecoveryPreferencesDidChange: (() -> Void)? = nil
     ) {
         self.workflowService = workflowService
         self.dictionaryService = dictionaryService
@@ -968,6 +980,8 @@ final class SettingsBackupAutomationService {
         self.userDefaults = userDefaults
         self.liveFieldTranscriptEnabledDidChange = liveFieldTranscriptEnabledDidChange
         self.recoveryRetentionPolicyDidChange = recoveryRetentionPolicyDidChange
+        self.cancellationBehaviorDidChange = cancellationBehaviorDidChange
+        self.dictationRecoveryPreferencesDidChange = dictationRecoveryPreferencesDidChange
     }
 
     func exportData() throws -> Data {
@@ -999,7 +1013,9 @@ final class SettingsBackupAutomationService {
             usageStatisticsService: usageStatisticsService,
             userDefaults: userDefaults,
             liveFieldTranscriptEnabledDidChange: liveFieldTranscriptEnabledDidChange,
-            recoveryRetentionPolicyDidChange: recoveryRetentionPolicyDidChange
+            cancellationBehaviorDidChange: cancellationBehaviorDidChange,
+            recoveryRetentionPolicyDidChange: recoveryRetentionPolicyDidChange,
+            dictationRecoveryPreferencesDidChange: dictationRecoveryPreferencesDidChange
         )
     }
 }
