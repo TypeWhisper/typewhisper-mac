@@ -184,6 +184,8 @@ enum SettingsBackupExporter {
         // Dictation Recovery
         var dictationRecoveryLanguage: String? = nil
         var dictationRecoveryAutomaticFallbackEnabled: Bool? = nil
+        var dictationRecoveryHedgeEnabled: Bool? = nil
+        var dictationRecoveryHedgeThresholdSeconds: Double? = nil
         var dictationRecoveryRetentionDays: Int? = nil
         // File Transcription
         var fileTranscriptionLanguage: String? = nil
@@ -231,6 +233,8 @@ enum SettingsBackupExporter {
             if cancellationBehavior != nil || requireSecondEscapeToCancelRecording != nil { count += 1 }
             if dictationRecoveryLanguage != nil { count += 1 }
             if dictationRecoveryAutomaticFallbackEnabled != nil { count += 1 }
+            if dictationRecoveryHedgeEnabled != nil { count += 1 }
+            if dictationRecoveryHedgeThresholdSeconds != nil { count += 1 }
             if dictationRecoveryRetentionDays != nil { count += 1 }
             if fileTranscriptionLanguage != nil { count += 1 }
             if recorderMicEnabled != nil { count += 1 }
@@ -577,6 +581,8 @@ enum SettingsBackupExporter {
                 cancellationBehavior: DictationViewModel.loadCancellationBehavior(defaults: userDefaults).rawValue,
                 dictationRecoveryLanguage: userDefaults.string(forKey: UserDefaultsKeys.dictationRecoveryLanguage),
                 dictationRecoveryAutomaticFallbackEnabled: userDefaults.object(forKey: UserDefaultsKeys.dictationRecoveryAutomaticFallbackEnabled) as? Bool,
+                dictationRecoveryHedgeEnabled: userDefaults.object(forKey: UserDefaultsKeys.dictationRecoveryHedgeEnabled) as? Bool,
+                dictationRecoveryHedgeThresholdSeconds: userDefaults.object(forKey: UserDefaultsKeys.dictationRecoveryHedgeThresholdSeconds) as? Double,
                 dictationRecoveryRetentionDays: userDefaults.object(forKey: UserDefaultsKeys.dictationRecoveryRetentionDays) == nil
                     ? nil
                     : DictationRecoveryRetentionPolicy.load(from: userDefaults).rawValue,
@@ -862,6 +868,17 @@ enum SettingsBackupExporter {
         }
         apply(preferences.dictationRecoveryLanguage, forKey: UserDefaultsKeys.dictationRecoveryLanguage)
         apply(preferences.dictationRecoveryAutomaticFallbackEnabled, forKey: UserDefaultsKeys.dictationRecoveryAutomaticFallbackEnabled)
+        apply(preferences.dictationRecoveryHedgeEnabled, forKey: UserDefaultsKeys.dictationRecoveryHedgeEnabled)
+        // A backup is user-editable JSON: only a finite value inside the range
+        // the UI offers is restored, anything else keeps the current setting.
+        apply(
+            preferences.dictationRecoveryHedgeThresholdSeconds.flatMap { value -> Double? in
+                guard value.isFinite,
+                      DictationRecoveryViewModel.hedgeThresholdRange.contains(value) else { return nil }
+                return value
+            },
+            forKey: UserDefaultsKeys.dictationRecoveryHedgeThresholdSeconds
+        )
         apply(preferences.dictationRecoveryRetentionDays, forKey: UserDefaultsKeys.dictationRecoveryRetentionDays)
         if preferences.dictationRecoveryRetentionDays != nil {
             recoveryRetentionPolicyDidChange?(DictationRecoveryRetentionPolicy.load(from: userDefaults))

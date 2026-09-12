@@ -155,6 +155,39 @@ struct DictationRecoveryView: View {
                 }
                 .disabled(viewModel.isProcessing || !viewModel.canUseAutomaticFallback)
 
+                Toggle(isOn: $viewModel.hedgeEnabled) {
+                    Label(
+                        localizedAppText("Race this engine when the primary is slow", de: "Diese Engine starten, wenn die primäre Engine langsam ist"),
+                        systemImage: "hare"
+                    )
+                }
+                .disabled(viewModel.isProcessing || !viewModel.canUseAutomaticFallback || !viewModel.automaticFallbackEnabled)
+
+                if viewModel.hedgeEnabled {
+                    HStack {
+                        Text(localizedAppText("Start racing after", de: "Rennen starten nach"))
+                        Spacer()
+                        Stepper(
+                            value: $viewModel.hedgeThresholdSeconds,
+                            in: 1.0...15.0,
+                            step: 0.5
+                        ) {
+                            Text(localizedAppText(
+                                "\(hedgeThresholdLabelValue) seconds",
+                                de: "\(hedgeThresholdLabelValue) Sekunden"
+                            ))
+                        }
+                    }
+                    .disabled(viewModel.isProcessing || !viewModel.canUseAutomaticFallback || !viewModel.automaticFallbackEnabled)
+
+                    Text(localizedAppText(
+                        "If the primary engine hasn't answered by then, the same audio is also sent to this engine; whichever finishes first is used and the other request is cancelled. A dispatched race costs one extra API call.",
+                        de: "Antwortet die primäre Engine bis dahin nicht, wird dasselbe Audio zusätzlich an diese Engine gesendet; das schnellere Ergebnis wird verwendet, die andere Anfrage abgebrochen. Ein ausgelöstes Rennen kostet einen zusätzlichen API-Aufruf."
+                    ))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                }
+
                 if let message = viewModel.automaticFallbackUnavailableMessage {
                     Text(message)
                         .font(.caption)
@@ -214,6 +247,10 @@ struct DictationRecoveryView: View {
             }
             .disabled(viewModel.isProcessing)
         }
+    }
+
+    private var hedgeThresholdLabelValue: String {
+        viewModel.hedgeThresholdSeconds.formatted(.number.precision(.fractionLength(1)))
     }
 
     private var recoveryLanguageOptions: [(code: String, name: String)] {

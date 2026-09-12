@@ -131,6 +131,17 @@ final class DictationViewModel: ObservableObject {
         _ dictionaryTermHints: [PluginDictionaryTermHint],
         _ normalizeNumbers: Bool?
     ) async throws -> TranscriptionResult
+    typealias RecoveryHedgeThresholdProvider = @MainActor () -> TimeInterval?
+    typealias PrimaryTranscriptionRunner = @MainActor (
+        _ samples: [Float],
+        _ languageSelection: LanguageSelection,
+        _ task: TranscriptionTask,
+        _ engineOverrideId: String?,
+        _ cloudModelOverride: String?,
+        _ prompt: String?,
+        _ dictionaryTermHints: [PluginDictionaryTermHint],
+        _ normalizeNumbers: Bool?
+    ) async throws -> TranscriptionResult
 
     private struct FinalTranscriptionOutput {
         let result: TranscriptionResult
@@ -336,6 +347,8 @@ final class DictationViewModel: ObservableObject {
     private let postProcessingPipeline: PostProcessingPipeline
     private let recoveryFallbackConfigurationProvider: RecoveryFallbackConfigurationProvider
     private let recoveryFallbackRunner: RecoveryFallbackRunner
+    private let recoveryHedgeThresholdProvider: RecoveryHedgeThresholdProvider
+    private let primaryTranscriptionRunner: PrimaryTranscriptionRunner
     private var matchedWorkflow: Workflow?
     private var activeWorkflowMatch: WorkflowMatchResult?
     private var forcedWorkflowId: UUID?
@@ -444,7 +457,9 @@ final class DictationViewModel: ObservableObject {
         mediaPlaybackService: MediaPlaybackService,
         usageStatisticsRecorder: UsageStatisticsRecording? = nil,
         recoveryFallbackConfigurationProvider: RecoveryFallbackConfigurationProvider? = nil,
-        recoveryFallbackRunner: RecoveryFallbackRunner? = nil
+        recoveryFallbackRunner: RecoveryFallbackRunner? = nil,
+        recoveryHedgeThresholdProvider: RecoveryHedgeThresholdProvider? = nil,
+        primaryTranscriptionRunner: PrimaryTranscriptionRunner? = nil
     ) {
         self.audioRecordingService = audioRecordingService
         self.textInsertionService = textInsertionService
@@ -482,6 +497,19 @@ final class DictationViewModel: ObservableObject {
         self.errorLogService = errorLogService
         self.mediaPlaybackService = mediaPlaybackService
         self.recoveryFallbackConfigurationProvider = recoveryFallbackConfigurationProvider ?? { _, _ in nil }
+        self.recoveryHedgeThresholdProvider = recoveryHedgeThresholdProvider ?? { nil }
+        self.primaryTranscriptionRunner = primaryTranscriptionRunner ?? { [modelManager] samples, languageSelection, task, engineOverrideId, cloudModelOverride, prompt, dictionaryTermHints, normalizeNumbers in
+            try await modelManager.transcribe(
+                audioSamples: samples,
+                languageSelection: languageSelection,
+                task: task,
+                engineOverrideId: engineOverrideId,
+                cloudModelOverride: cloudModelOverride,
+                prompt: prompt,
+                dictionaryTermHints: dictionaryTermHints,
+                normalizeNumbers: normalizeNumbers
+            )
+        }
         self.recoveryFallbackRunner = recoveryFallbackRunner ?? { [modelManager] samples, languageSelection, task, configuration, prompt, dictionaryTermHints, normalizeNumbers in
             try await modelManager.transcribe(
                 audioSamples: samples,
@@ -2359,16 +2387,36 @@ final class DictationViewModel: ObservableObject {
         dictionaryTermHints: [PluginDictionaryTermHint],
         normalizeNumbers: Bool?
     ) async throws -> FinalTranscriptionOutput {
+        let fallbackConfiguration = recoveryFallbackConfigurationProvider(primaryEngineId, task)
         do {
-            let result = try await modelManager.transcribe(
-                audioSamples: audioSamples,
-                languageSelection: languageSelection,
-                task: task,
-                engineOverrideId: primaryEngineId,
-                cloudModelOverride: primaryCloudModelOverride,
-                prompt: prompt,
-                dictionaryTermHints: dictionaryTermHints,
-                normalizeNumbers: normalizeNumbers
+            // The provider is injectable; only a threshold that converts to a
+            // sleep duration safely starts a race, anything else means no hedge
+            // (the sequential error-path fallback below still applies).
+            if let configuration = fallbackConfiguration,
+               let hedgeThreshold = recoveryHedgeThresholdProvider(),
+               Self.hedgeDelayNanoseconds(forThreshold: hedgeThreshold) != nil {
+                return try await hedgedTranscription(
+                    audioSamples: audioSamples,
+                    languageSelection: languageSelection,
+                    task: task,
+                    primaryEngineId: primaryEngineId,
+                    primaryCloudModelOverride: primaryCloudModelOverride,
+                    prompt: prompt,
+                    dictionaryTermHints: dictionaryTermHints,
+                    normalizeNumbers: normalizeNumbers,
+                    configuration: configuration,
+                    threshold: hedgeThreshold
+                )
+            }
+            let result = try await primaryTranscriptionRunner(
+                audioSamples,
+                languageSelection,
+                task,
+                primaryEngineId,
+                primaryCloudModelOverride,
+                prompt,
+                dictionaryTermHints,
+                normalizeNumbers
             )
             return finalTranscriptionOutput(
                 result: result,
@@ -2376,10 +2424,13 @@ final class DictationViewModel: ObservableObject {
                 modelId: primaryCloudModelOverride,
                 usedRecoveryFallback: false
             )
+        } catch let failure as AutomaticRecoveryFallbackFailure {
+            // The hedge already ran the fallback; don't retry it below.
+            throw failure
         } catch {
             let primaryError = error
             guard shouldAttemptAutomaticRecoveryFallback(after: primaryError),
-                  let configuration = recoveryFallbackConfigurationProvider(primaryEngineId, task) else {
+                  let configuration = fallbackConfiguration else {
                 throw primaryError
             }
 
@@ -2417,6 +2468,235 @@ final class DictationViewModel: ObservableObject {
                     fallbackDescription: error.localizedDescription
                 )
             }
+        }
+    }
+
+    private enum HedgedTranscriptionEvent {
+        case primary(Result<TranscriptionResult, Error>)
+        case fallback(Result<TranscriptionResult, Error>)
+        case fallbackSkipped
+    }
+
+    private enum HedgedTranscriptionOutcome {
+        case primaryWon(TranscriptionResult)
+        case fallbackWon(TranscriptionResult)
+        case primaryFailedBeforeHedge(Error)
+        case bothFailed(primary: Error, fallback: Error)
+    }
+
+    /// Collects the outcome of a hedged race. Every transition happens on the
+    /// main actor; the first decisive event resumes the continuation and
+    /// cancels both tasks, everything that arrives afterwards is dropped.
+    @MainActor
+    private final class HedgedTranscriptionArbiter {
+        private var continuation: CheckedContinuation<HedgedTranscriptionOutcome, Never>?
+        private var primaryTask: Task<Void, Never>?
+        private var fallbackTask: Task<Void, Never>?
+        private var primaryError: Error?
+        private var fallbackError: Error?
+        private var fallbackDispatched = false
+        private var settled = false
+
+        func begin(_ continuation: CheckedContinuation<HedgedTranscriptionOutcome, Never>) {
+            self.continuation = continuation
+        }
+
+        func register(primary: Task<Void, Never>, fallback: Task<Void, Never>) {
+            primaryTask = primary
+            fallbackTask = fallback
+            if settled {
+                primary.cancel()
+                fallback.cancel()
+            }
+        }
+
+        /// Returns false when the race is already over, so a late timer never
+        /// dispatches a fallback request nobody is waiting for.
+        func markFallbackDispatched() -> Bool {
+            guard !settled else { return false }
+            fallbackDispatched = true
+            return true
+        }
+
+        func primaryFailed(_ error: Error, eligibleForFallback: Bool) {
+            guard !settled else { return }
+            // Before the hedge fires (or for errors the sequential fallback must
+            // not retry) the caller's existing error path applies unchanged.
+            guard fallbackDispatched, eligibleForFallback else {
+                return settle(.primaryFailedBeforeHedge(error))
+            }
+            if let fallbackError {
+                return settle(.bothFailed(primary: error, fallback: fallbackError))
+            }
+            primaryError = error
+        }
+
+        func fallbackFailed(_ error: Error) {
+            guard !settled else { return }
+            if let primaryError {
+                return settle(.bothFailed(primary: primaryError, fallback: error))
+            }
+            fallbackError = error
+        }
+
+        func fallbackSkipped() {
+            guard !settled, let primaryError else { return }
+            settle(.primaryFailedBeforeHedge(primaryError))
+        }
+
+        func settle(_ outcome: HedgedTranscriptionOutcome) {
+            guard !settled else { return }
+            settled = true
+            primaryTask?.cancel()
+            fallbackTask?.cancel()
+            let continuation = self.continuation
+            self.continuation = nil
+            continuation?.resume(returning: outcome)
+        }
+    }
+
+    /// Longest hedge threshold the race accepts. The settings UI offers 1...15 s;
+    /// anything past a minute is not a hedge any more and is treated as "no
+    /// hedge" rather than being converted.
+    nonisolated static let maximumHedgeThreshold: TimeInterval = 60
+
+    /// Converts a hedge threshold to a sleep duration, or nil when the value
+    /// must not be converted: non-finite, non-positive, or so large that the
+    /// nanosecond product would overflow (`UInt64(1e308 * 1e9)` traps). Guarding
+    /// the value alone is not enough; the product is what gets converted.
+    nonisolated static func hedgeDelayNanoseconds(forThreshold threshold: TimeInterval) -> UInt64? {
+        guard threshold.isFinite, threshold > 0, threshold <= maximumHedgeThreshold else { return nil }
+        let nanoseconds = threshold * 1_000_000_000
+        guard nanoseconds.isFinite, nanoseconds < Double(UInt64.max) else { return nil }
+        return UInt64(nanoseconds)
+    }
+
+    /// Races the primary engine against the recovery fallback engine: the fallback
+    /// request is dispatched only after `threshold` elapses with the primary still
+    /// running, the first successful transcription wins, and the loser is cancelled.
+    /// A primary failure before the hedge fires is rethrown so the caller's
+    /// sequential error-path fallback applies unchanged.
+    private func hedgedTranscription(
+        audioSamples: [Float],
+        languageSelection: LanguageSelection,
+        task: TranscriptionTask,
+        primaryEngineId: String?,
+        primaryCloudModelOverride: String?,
+        prompt: String?,
+        dictionaryTermHints: [PluginDictionaryTermHint],
+        normalizeNumbers: Bool?,
+        configuration: DictationRecoveryFallbackConfiguration,
+        threshold: TimeInterval
+    ) async throws -> FinalTranscriptionOutput {
+        let fallbackPrompt = dictionaryService.getTermsForPrompt(providerId: configuration.engineId)
+        let fallbackDictionaryTermHints = dictionaryService.getTermHints(providerId: configuration.engineId)
+
+        let primaryOperation: @MainActor () async throws -> TranscriptionResult = { [primaryTranscriptionRunner] in
+            try await primaryTranscriptionRunner(
+                audioSamples,
+                languageSelection,
+                task,
+                primaryEngineId,
+                primaryCloudModelOverride,
+                prompt,
+                dictionaryTermHints,
+                normalizeNumbers
+            )
+        }
+        let fallbackOperation: @MainActor () async throws -> TranscriptionResult = { [recoveryFallbackRunner] in
+            try await recoveryFallbackRunner(
+                audioSamples,
+                languageSelection,
+                task,
+                configuration,
+                fallbackPrompt,
+                fallbackDictionaryTermHints,
+                normalizeNumbers
+            )
+        }
+
+        let fallbackEngineId = configuration.engineId
+        // The race is settled by the first decisive event and returns at once.
+        // Both requests run as unstructured tasks so a losing engine that does
+        // not honour cooperative cancellation (the plugin contract does not
+        // guarantee prompt cancellation) cannot delay the winner: it is
+        // cancelled, its eventual result is dropped by the arbiter, and it is
+        // never awaited. A structured task group would wait for it.
+        let arbiter = HedgedTranscriptionArbiter()
+        let outcome = await withTaskCancellationHandler {
+            await withCheckedContinuation { (continuation: CheckedContinuation<HedgedTranscriptionOutcome, Never>) in
+                arbiter.begin(continuation)
+                let primaryTask = Task { @MainActor [weak self] in
+                    do {
+                        let result = try await primaryOperation()
+                        arbiter.settle(.primaryWon(result))
+                    } catch {
+                        guard let self else { return arbiter.settle(.primaryFailedBeforeHedge(error)) }
+                        arbiter.primaryFailed(
+                            error,
+                            eligibleForFallback: self.shouldAttemptAutomaticRecoveryFallback(after: error)
+                        )
+                    }
+                }
+                let fallbackTask = Task { @MainActor [logger] in
+                    do {
+                        // The caller only starts the race for a convertible threshold.
+                        guard let delay = Self.hedgeDelayNanoseconds(forThreshold: threshold) else {
+                            arbiter.fallbackSkipped()
+                            return
+                        }
+                        try await Task.sleep(nanoseconds: delay)
+                    } catch {
+                        arbiter.fallbackSkipped()
+                        return
+                    }
+                    guard arbiter.markFallbackDispatched() else { return }
+                    logger.info(
+                        "Primary transcription exceeded hedge threshold (\(threshold, format: .fixed(precision: 1))s); racing recovery fallback engine \(fallbackEngineId, privacy: .public)"
+                    )
+                    do {
+                        let result = try await fallbackOperation()
+                        arbiter.settle(.fallbackWon(result))
+                    } catch {
+                        arbiter.fallbackFailed(error)
+                    }
+                }
+                arbiter.register(primary: primaryTask, fallback: fallbackTask)
+            }
+        } onCancel: {
+            Task { @MainActor in
+                arbiter.settle(.primaryFailedBeforeHedge(CancellationError()))
+            }
+        }
+
+        switch outcome {
+        case .primaryWon(let result):
+            return finalTranscriptionOutput(
+                result: result,
+                engineId: primaryEngineId,
+                modelId: primaryCloudModelOverride,
+                usedRecoveryFallback: false
+            )
+        case .fallbackWon(let result):
+            logger.info(
+                "Hedged recovery fallback won the race with engine \(configuration.engineId, privacy: .public)"
+            )
+            return finalTranscriptionOutput(
+                result: result,
+                engineId: configuration.engineId,
+                modelId: configuration.modelId,
+                usedRecoveryFallback: true
+            )
+        case .primaryFailedBeforeHedge(let error):
+            throw error
+        case .bothFailed(let primary, let fallback):
+            logger.error(
+                "Hedged transcription failed on both engines; primary: \(primary.localizedDescription, privacy: .public), fallback: \(fallback.localizedDescription, privacy: .public)"
+            )
+            throw AutomaticRecoveryFallbackFailure(
+                primaryDescription: primary.localizedDescription,
+                fallbackDescription: fallback.localizedDescription
+            )
         }
     }
 
@@ -3631,3 +3911,27 @@ func paddedSamplesForFinalTranscription(_ samples: [Float], rawDuration: TimeInt
 
     return paddedSamples
 }
+
+#if DEBUG
+extension DictationViewModel {
+    func transcribeFinalAudioForTesting(
+        audioSamples: [Float] = [],
+        languageSelection: LanguageSelection = LanguageSelection(storedValue: nil, nilBehavior: .auto),
+        task: TranscriptionTask = .transcribe,
+        primaryEngineId: String? = nil,
+        primaryCloudModelOverride: String? = nil
+    ) async throws -> (text: String, usedRecoveryFallback: Bool) {
+        let output = try await transcribeFinalAudio(
+            audioSamples: audioSamples,
+            languageSelection: languageSelection,
+            task: task,
+            primaryEngineId: primaryEngineId,
+            primaryCloudModelOverride: primaryCloudModelOverride,
+            prompt: nil,
+            dictionaryTermHints: [],
+            normalizeNumbers: nil
+        )
+        return (output.result.text, output.usedRecoveryFallback)
+    }
+}
+#endif

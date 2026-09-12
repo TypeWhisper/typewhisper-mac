@@ -687,6 +687,65 @@ final class SettingsBackupExporterTests: XCTestCase {
         XCTAssertFalse(result.updateChannelApplied)
     }
 
+    func testImportRejectsOutOfRangeHedgeThreshold() async throws {
+        // A backup is user-editable JSON; a value the UI could never produce must
+        // not reach the hedge timer (1e308 seconds would overflow the sleep).
+        func makeBackup(threshold: Double?) -> SettingsBackupExporter.SettingsBackup {
+            var preferences = SettingsBackupExporter.PreferencesDTO.empty
+            preferences.dictationRecoveryHedgeThresholdSeconds = threshold
+            return SettingsBackupExporter.SettingsBackup(
+                schemaVersion: SettingsBackupExporter.schemaVersion,
+                exportedAt: Date(),
+                appVersion: "1.0",
+                workflows: [], dictionaryEntries: [], snippets: [], promptActions: [], profiles: [],
+                hotkeys: [:], plugins: [],
+                history: [],
+                updateChannel: nil,
+                preferences: preferences
+            )
+        }
+
+        let destination = try makeFixture()
+        defer { teardown(destination) }
+        destination.userDefaults.set(4.5, forKey: UserDefaultsKeys.dictationRecoveryHedgeThresholdSeconds)
+
+        for invalid in [1e308, -1, 0.0, 16, Double.infinity] {
+            _ = await SettingsBackupExporter.importBackup(
+                makeBackup(threshold: invalid),
+                workflowService: destination.workflowService,
+                dictionaryService: destination.dictionaryService,
+                snippetService: destination.snippetService,
+                profileService: destination.profileService,
+                promptActionService: destination.promptActionService,
+                pluginManager: destination.pluginManager,
+                pluginRegistryService: destination.pluginRegistryService,
+                historyService: destination.historyService,
+                usageStatisticsService: destination.usageStatisticsService,
+                userDefaults: destination.userDefaults
+            )
+            XCTAssertEqual(
+                destination.userDefaults.double(forKey: UserDefaultsKeys.dictationRecoveryHedgeThresholdSeconds),
+                4.5,
+                "threshold \(invalid) must be rejected"
+            )
+        }
+
+        _ = await SettingsBackupExporter.importBackup(
+            makeBackup(threshold: 7.5),
+            workflowService: destination.workflowService,
+            dictionaryService: destination.dictionaryService,
+            snippetService: destination.snippetService,
+            profileService: destination.profileService,
+            promptActionService: destination.promptActionService,
+            pluginManager: destination.pluginManager,
+            pluginRegistryService: destination.pluginRegistryService,
+            historyService: destination.historyService,
+            usageStatisticsService: destination.usageStatisticsService,
+            userDefaults: destination.userDefaults
+        )
+        XCTAssertEqual(destination.userDefaults.double(forKey: UserDefaultsKeys.dictationRecoveryHedgeThresholdSeconds), 7.5)
+    }
+
     func testUsageStatisticsNotRecordedWhenHistoryRecordSkipped() async throws {
         // rawText/finalText of only NUL characters sanitizes to an empty
         // string in HistoryService, so addRecord silently declines to insert
