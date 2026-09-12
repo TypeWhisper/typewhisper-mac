@@ -162,11 +162,14 @@ final class SecureInputDiagnosticsProviderTests: XCTestCase {
 
 final class TypeWhisperIntegrationTests: XCTestCase {
     private var originalCancellationBehavior: Any?
+    private var originalNumberNormalizationMinimumValue: Any?
 
     override func setUp() {
         super.setUp()
         originalCancellationBehavior = UserDefaults.standard.object(forKey: UserDefaultsKeys.cancellationBehavior)
         UserDefaults.standard.set(CancellationBehavior.doubleEscape.rawValue, forKey: UserDefaultsKeys.cancellationBehavior)
+        originalNumberNormalizationMinimumValue = UserDefaults.standard.object(forKey: UserDefaultsKeys.transcriptionNumberNormalizationMinimumValue)
+        UserDefaults.standard.set(10, forKey: UserDefaultsKeys.transcriptionNumberNormalizationMinimumValue)
     }
 
     override func tearDown() {
@@ -174,6 +177,11 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             UserDefaults.standard.set(originalCancellationBehavior, forKey: UserDefaultsKeys.cancellationBehavior)
         } else {
             UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.cancellationBehavior)
+        }
+        if let originalNumberNormalizationMinimumValue {
+            UserDefaults.standard.set(originalNumberNormalizationMinimumValue, forKey: UserDefaultsKeys.transcriptionNumberNormalizationMinimumValue)
+        } else {
+            UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.transcriptionNumberNormalizationMinimumValue)
         }
         super.tearDown()
     }
@@ -2457,7 +2465,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(MockTranscriptionPlugin.lastPrompt, "TypeWhisper, WhisperKit")
     }
 
-    func testTranscribeEndpointNormalizesNumbersByDefault() async throws {
+    func testTranscribeEndpointUsesDefaultNumberThreshold() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         var context: APIContext?
         defer {
@@ -2467,7 +2475,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         MockTranscriptionPlugin.reset()
         defer { MockTranscriptionPlugin.reset() }
-        MockTranscriptionPlugin.setResponseText("two")
+        MockTranscriptionPlugin.setResponseText("two, ten, one hundred")
         context = await MainActor.run {
             Self.makeAPIContext(appSupportDirectory: appSupportDirectory, withMockTranscriptionPlugin: true)
         }
@@ -2485,7 +2493,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             )
         ))
 
-        XCTAssertEqual(response["text"] as? String, "2")
+        XCTAssertEqual(response["text"] as? String, "two, 10, 100")
     }
 
     func testTranscribeEndpointNormalizeNumbersFalsePreservesRawText() async throws {
@@ -2498,7 +2506,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         MockTranscriptionPlugin.reset()
         defer { MockTranscriptionPlugin.reset() }
-        MockTranscriptionPlugin.setResponseText("two")
+        MockTranscriptionPlugin.setResponseText("two, ten, one hundred")
         context = await MainActor.run {
             Self.makeAPIContext(appSupportDirectory: appSupportDirectory, withMockTranscriptionPlugin: true)
         }
@@ -2520,7 +2528,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             )
         ))
 
-        XCTAssertEqual(response["text"] as? String, "two")
+        XCTAssertEqual(response["text"] as? String, "two, ten, one hundred")
     }
 
     func testTranscribeEndpointAppliesDictionaryCorrectionsByDefault() async throws {

@@ -3,6 +3,23 @@ import TypeWhisperPluginSDK
 @testable import TypeWhisper
 
 final class SpeechPunctuationServiceTests: XCTestCase {
+    private var originalNumberNormalizationMinimumValue: Any?
+
+    override func setUp() {
+        super.setUp()
+        originalNumberNormalizationMinimumValue = UserDefaults.standard.object(forKey: UserDefaultsKeys.transcriptionNumberNormalizationMinimumValue)
+        UserDefaults.standard.set(10, forKey: UserDefaultsKeys.transcriptionNumberNormalizationMinimumValue)
+    }
+
+    override func tearDown() {
+        if let originalNumberNormalizationMinimumValue {
+            UserDefaults.standard.set(originalNumberNormalizationMinimumValue, forKey: UserDefaultsKeys.transcriptionNumberNormalizationMinimumValue)
+        } else {
+            UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.transcriptionNumberNormalizationMinimumValue)
+        }
+        super.tearDown()
+    }
+
     @MainActor
     func testRepeatedNormalizationKeepsLanguageRulesAndAliasesSeparate() {
         let service = SpeechPunctuationService(rulesLoader: makeRulesLoader())
