@@ -99,6 +99,7 @@ enum HotkeySlotType: String, CaseIterable, Sendable {
     case promptPalette
     case recentTranscriptions
     case copyLastTranscription
+    case pasteLastTranscription
     case recorderToggle
 
     var defaultsKey: String {
@@ -109,6 +110,7 @@ enum HotkeySlotType: String, CaseIterable, Sendable {
         case .promptPalette: return UserDefaultsKeys.promptPaletteHotkey
         case .recentTranscriptions: return UserDefaultsKeys.recentTranscriptionsHotkey
         case .copyLastTranscription: return UserDefaultsKeys.copyLastTranscriptionHotkey
+        case .pasteLastTranscription: return UserDefaultsKeys.pasteLastTranscriptionHotkey
         case .recorderToggle: return UserDefaultsKeys.recorderToggleHotkey
         }
     }
@@ -121,6 +123,7 @@ enum HotkeySlotType: String, CaseIterable, Sendable {
         case .promptPalette: return UserDefaultsKeys.promptPaletteHotkeys
         case .recentTranscriptions: return UserDefaultsKeys.recentTranscriptionsHotkeys
         case .copyLastTranscription: return UserDefaultsKeys.copyLastTranscriptionHotkeys
+        case .pasteLastTranscription: return UserDefaultsKeys.pasteLastTranscriptionHotkeys
         case .recorderToggle: return UserDefaultsKeys.recorderToggleHotkeys
         }
     }
@@ -131,7 +134,7 @@ private extension HotkeySlotType {
         switch self {
         case .hybrid, .pushToTalk, .toggle:
             true
-        case .promptPalette, .recentTranscriptions, .copyLastTranscription, .recorderToggle:
+        case .promptPalette, .recentTranscriptions, .copyLastTranscription, .pasteLastTranscription, .recorderToggle:
             false
         }
     }
@@ -207,6 +210,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     var onPromptPaletteToggle: (() -> Void)?
     var onRecentTranscriptionsToggle: (() -> Void)?
     var onCopyLastTranscription: (() -> Void)?
+    var onPasteLastTranscription: (() -> Void)?
     var onRecorderToggle: (() -> Void)?
     var onProfileDictationStart: ((UUID, UInt64) -> Void)?
     var onWorkflowDictationStart: ((UUID, UInt64) -> Void)?
@@ -2053,6 +2057,10 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             onCopyLastTranscription?()
             return
         }
+        if slotType == .pasteLastTranscription {
+            onPasteLastTranscription?()
+            return
+        }
         if slotType == .recorderToggle {
             onRecorderToggle?()
             return
@@ -2130,6 +2138,8 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         case .recentTranscriptions:
             break // handled on keyDown only
         case .copyLastTranscription:
+            break // handled on keyDown only
+        case .pasteLastTranscription:
             break // handled on keyDown only
         case .recorderToggle:
             break // handled on keyDown only

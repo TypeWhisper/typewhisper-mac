@@ -7,6 +7,7 @@ final class RecentTranscriptionPaletteHandler {
     private let historyService: HistoryService
     private let recentTranscriptionStore: RecentTranscriptionStore
     private let relativeDateFormatter = RelativeDateTimeFormatter()
+    private var isInsertionInProgress = false
 
     var onShowNotchFeedback: ((String, String, TimeInterval, Bool, String?) -> Void)?
     var getPreserveClipboard: (() -> Bool)?
@@ -28,6 +29,16 @@ final class RecentTranscriptionPaletteHandler {
         paletteController.hide()
     }
 
+    func insertLatest(currentState: DictationViewModel.State) {
+        guard currentState == .idle else { return }
+        guard let entry = recentTranscriptionStore.latestEntry(historyRecords: historyService.recentRecords) else {
+            showNoRecentTranscriptionsFeedback()
+            return
+        }
+
+        startInsertion(entry)
+    }
+
     func triggerSelection(currentState: DictationViewModel.State) {
         if paletteController.isVisible {
             paletteController.hide()
@@ -38,13 +49,7 @@ final class RecentTranscriptionPaletteHandler {
 
         let entries = recentTranscriptionStore.mergedEntries(historyRecords: historyService.recentRecords)
         guard !entries.isEmpty else {
-            onShowNotchFeedback?(
-                String(localized: "No recent transcriptions"),
-                "clock.arrow.circlepath",
-                2.5,
-                false,
-                nil
-            )
+            showNoRecentTranscriptionsFeedback()
             return
         }
 
@@ -69,9 +74,18 @@ final class RecentTranscriptionPaletteHandler {
             items: items
         ) { [weak self] item in
             guard let self, let entry = entriesByID[item.id] else { return }
-            Task { @MainActor in
-                await self.insert(entry)
-            }
+            self.startInsertion(entry)
+        }
+    }
+
+    private func startInsertion(_ entry: RecentTranscriptionStore.Entry) {
+        guard !isInsertionInProgress else { return }
+        isInsertionInProgress = true
+
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            defer { isInsertionInProgress = false }
+            await insert(entry)
         }
     }
 
@@ -86,6 +100,16 @@ final class RecentTranscriptionPaletteHandler {
         } catch {
             onShowNotchFeedback?(error.localizedDescription, "xmark.circle.fill", 2.5, true, "recentTranscriptions")
         }
+    }
+
+    private func showNoRecentTranscriptionsFeedback() {
+        onShowNotchFeedback?(
+            String(localized: "No recent transcriptions"),
+            "clock.arrow.circlepath",
+            2.5,
+            false,
+            nil
+        )
     }
 
     private func subtitle(for entry: RecentTranscriptionStore.Entry) -> String {

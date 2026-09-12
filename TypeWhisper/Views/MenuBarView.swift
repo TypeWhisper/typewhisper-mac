@@ -18,6 +18,7 @@ private final class MenuBarState: ObservableObject {
     @Published var dictationHotkeysPaused: Bool
     @Published var recentTranscriptionsMenuShortcut: HotkeyService.MenuShortcutDescriptor?
     @Published var copyLastTranscriptionMenuShortcut: HotkeyService.MenuShortcutDescriptor?
+    @Published var pasteLastTranscriptionMenuShortcut: HotkeyService.MenuShortcutDescriptor?
     @Published var recorderToggleMenuShortcut: HotkeyService.MenuShortcutDescriptor?
 
     private var cancellables = Set<AnyCancellable>()
@@ -43,6 +44,7 @@ private final class MenuBarState: ObservableObject {
         self.dictationHotkeysPaused = hotkeyService.dictationHotkeysPaused
         self.recentTranscriptionsMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .recentTranscriptions)
         self.copyLastTranscriptionMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .copyLastTranscription)
+        self.pasteLastTranscriptionMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .pasteLastTranscription)
         self.recorderToggleMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .recorderToggle)
         let modelStatus = Self.idleModelStatus(from: modelManager)
         self.statusText = modelStatus.text
@@ -206,6 +208,7 @@ private final class MenuBarState: ObservableObject {
     private func refreshMenuShortcuts() {
         recentTranscriptionsMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .recentTranscriptions)
         copyLastTranscriptionMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .copyLastTranscription)
+        pasteLastTranscriptionMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .pasteLastTranscription)
         recorderToggleMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .recorderToggle)
     }
 }
@@ -221,6 +224,7 @@ enum MenuBarMenuItem: Hashable {
     case lastTranscription
     case recentTranscriptions
     case copyLastTranscription
+    case pasteLastTranscription
     case readBackLastTranscription
     case checkForUpdates
 }
@@ -459,6 +463,7 @@ struct MenuBarView: View {
             Menu {
                 recentTranscriptionsButton
                 copyLastTranscriptionButton
+                pasteLastTranscriptionButton
                 readBackLastTranscriptionButton
             } label: {
                 Label(
@@ -477,6 +482,9 @@ struct MenuBarView: View {
 
         case .copyLastTranscription:
             copyLastTranscriptionButton
+
+        case .pasteLastTranscription:
+            pasteLastTranscriptionButton
 
         case .readBackLastTranscription:
             readBackLastTranscriptionButton
@@ -514,6 +522,17 @@ struct MenuBarView: View {
             Label(String(localized: "Copy Last Transcription"), systemImage: "doc.on.doc")
         }
         .keyboardShortcut(keyboardShortcut(from: status.copyLastTranscriptionMenuShortcut))
+        .disabled(!status.canCopyLastTranscription)
+    }
+
+    @ViewBuilder
+    private var pasteLastTranscriptionButton: some View {
+        Button {
+            DictationViewModel.shared.pasteLastTranscription()
+        } label: {
+            Label(String(localized: "Paste Last Transcription"), systemImage: "text.insert")
+        }
+        .keyboardShortcut(keyboardShortcut(from: status.pasteLastTranscriptionMenuShortcut))
         .disabled(!status.canCopyLastTranscription)
     }
 
