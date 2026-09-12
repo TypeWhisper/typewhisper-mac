@@ -816,6 +816,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         nonisolated(unsafe) private static var _lastLanguageSelection = PluginLanguageSelection()
         nonisolated(unsafe) private static var _responseText = "transcribed"
         nonisolated(unsafe) private static var _failureMessage: String?
+        nonisolated(unsafe) private static var _hangSeconds: TimeInterval?
         nonisolated(unsafe) private static var _transcribeCallCount = 0
 
         static var lastPrompt: String? {
@@ -836,7 +837,24 @@ final class TypeWhisperIntegrationTests: XCTestCase {
                 _lastLanguageSelection = PluginLanguageSelection()
                 _responseText = "transcribed"
                 _failureMessage = nil
+                _hangSeconds = nil
                 _transcribeCallCount = 0
+            }
+        }
+
+        /// Makes every transcribe call wait on a plain dispatch timer that no Task
+        /// cancellation can interrupt, i.e. an engine whose transport never aborts.
+        static func setHang(seconds: TimeInterval) {
+            promptLock.withLock {
+                _hangSeconds = seconds
+            }
+        }
+
+        private static func hangIfRequested() async {
+            let seconds = promptLock.withLock { _hangSeconds }
+            guard let seconds else { return }
+            await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                DispatchQueue.global().asyncAfter(deadline: .now() + seconds) { continuation.resume() }
             }
         }
 
@@ -875,6 +893,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
                 Self._transcribeCallCount += 1
                 return (text: Self._responseText, failureMessage: Self._failureMessage)
             }
+            await Self.hangIfRequested()
             if let failureMessage = result.failureMessage {
                 throw PluginTranscriptionError.apiError(failureMessage)
             }
@@ -893,6 +912,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
                 Self._transcribeCallCount += 1
                 return (text: Self._responseText, failureMessage: Self._failureMessage)
             }
+            await Self.hangIfRequested()
             if let failureMessage = result.failureMessage {
                 throw PluginTranscriptionError.apiError(failureMessage)
             }
@@ -7631,7 +7651,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(0x35), keyDown: true)
         )
         let escapeEvent = try XCTUnwrap(NSEvent(cgEvent: escapeCGEvent))
-        XCTAssertFalse(context.hotkeyService.processEventForTesting(escapeEvent, source: .monitor))
+        XCTAssertTrue(context.hotkeyService.processEventForTesting(escapeEvent, source: .monitor))
 
         XCTAssertEqual(context.dictationViewModel.recordingDuration, 0)
         XCTAssertFalse(context.dictationViewModel.isRecordingInputReady)
@@ -8513,6 +8533,115 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testTranscriptionTimeoutFeedbackWithoutRecoveryDescribesOnlyTheTimeout() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let recoveryStore = DictationRecoveryAudioStore(
+            directory: appSupportDirectory.appendingPathComponent("dictation-recovery", isDirectory: true),
+            retentionPolicy: .immediately
+        )
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            MockTranscriptionPlugin.reset()
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        MockTranscriptionPlugin.setHang(seconds: 3.0)
+        dictationContext = Self.makeDictationContext(
+            appSupportDirectory: appSupportDirectory,
+            audioRecordingRecoveryAudioStore: recoveryStore,
+            transcriptionDeadline: 0.4
+        )
+        let context = try XCTUnwrap(dictationContext)
+        let samples = Array(repeating: Float(0.25), count: Int(AudioRecordingService.targetSampleRate))
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { _ in samples }
+        context.textInsertionService.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
+        context.textInsertionService.selectedTextOverride = { nil }
+
+        let sessionID = context.dictationViewModel.apiStartRecording()
+        await context.dictationViewModel.testingWaitForRecordingStart()
+        recoveryStore.append(samples)
+        _ = context.dictationViewModel.apiStopRecording()
+
+        for _ in 0..<80 {
+            if context.dictationViewModel.apiDictationSession(id: sessionID)?.status == .failed {
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+
+        let expectedTimeout = DictationViewModel.TranscriptionDeadlineExceeded(seconds: 0.4).localizedDescription
+        XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.status, .failed)
+        XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.error, expectedTimeout)
+        XCTAssertTrue(recoveryStore.recoveryURLs.isEmpty, "retention 'Immediately' keeps no recovery file")
+        XCTAssertEqual(context.dictationViewModel.actionFeedbackMessage, expectedTimeout)
+        XCTAssertFalse(expectedTimeout.contains("Recovery"), "the timeout text must not promise a recovery recording")
+        XCTAssertNil(context.dictationViewModel.actionFeedbackActionTitle)
+        XCTAssertTrue(context.dictationViewModel.actionFeedbackIsError)
+    }
+
+    @MainActor
+    func testTranscriptionTimeoutFeedbackSurfacesPreservedRecoveryAndOpenAction() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let recoveryStore = DictationRecoveryAudioStore(
+            directory: appSupportDirectory.appendingPathComponent("dictation-recovery", isDirectory: true),
+            retentionPolicy: .never
+        )
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            MockTranscriptionPlugin.reset()
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        MockTranscriptionPlugin.setHang(seconds: 3.0)
+        dictationContext = Self.makeDictationContext(
+            appSupportDirectory: appSupportDirectory,
+            audioRecordingRecoveryAudioStore: recoveryStore,
+            transcriptionDeadline: 0.4
+        )
+        let context = try XCTUnwrap(dictationContext)
+        let samples = Array(repeating: Float(0.25), count: Int(AudioRecordingService.targetSampleRate))
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { _ in samples }
+        context.textInsertionService.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
+        context.textInsertionService.selectedTextOverride = { nil }
+
+        let sessionID = context.dictationViewModel.apiStartRecording()
+        await context.dictationViewModel.testingWaitForRecordingStart()
+        recoveryStore.append(samples)
+        _ = context.dictationViewModel.apiStopRecording()
+
+        for _ in 0..<80 {
+            if context.dictationViewModel.apiDictationSession(id: sessionID)?.status == .failed {
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+
+        let expectedTimeout = DictationViewModel.TranscriptionDeadlineExceeded(seconds: 0.4).localizedDescription
+        let recoveryMessage = try TestSupport.localizedCatalogValueForCurrentLocale(
+            for: "The recording was saved to Dictation Recovery."
+        )
+        let openRecoveryTitle = try TestSupport.localizedCatalogValueForCurrentLocale(for: "Open Recovery")
+        XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.status, .failed)
+        XCTAssertEqual(recoveryStore.recoveryURLs.count, 1)
+        XCTAssertEqual(
+            context.dictationViewModel.actionFeedbackMessage,
+            "\(expectedTimeout)\n\(recoveryMessage)"
+        )
+        XCTAssertEqual(context.dictationViewModel.actionFeedbackActionTitle, openRecoveryTitle)
+        XCTAssertTrue(context.dictationViewModel.actionFeedbackIsError)
+    }
+
+    @MainActor
     func testFailedTranscriptionWithoutNewRecoveryKeepsOriginalFeedback() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         let recoveryStore = DictationRecoveryAudioStore(
@@ -9097,7 +9226,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         audioDeviceDefaultInputController: AudioInputDeviceDefaultControlling = CoreAudioInputDeviceDefaultController(),
         audioRecordingBluetoothInputRouteStabilizer: BluetoothInputRouteStabilizing = CoreAudioBluetoothInputRouteStabilizer(),
         audioRecordingRecoveryAudioStore: DictationRecoveryAudioStore = DictationRecoveryAudioStore(),
-        licenseService: LicenseService? = nil
+        licenseService: LicenseService? = nil,
+        transcriptionDeadline: TimeInterval? = nil
     ) -> DictationContext {
         EventBus.shared = EventBus()
         PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
@@ -9223,7 +9353,10 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             speechFeedbackService: speechFeedbackService,
             accessibilityAnnouncementService: accessibilityAnnouncementService,
             errorLogService: errorLogService,
-            mediaPlaybackService: mediaPlaybackService
+            mediaPlaybackService: mediaPlaybackService,
+            transcriptionDeadlineProvider: transcriptionDeadline.map { deadline -> DictationViewModel.TranscriptionDeadlineProvider in
+                { _ in deadline }
+            }
         )
         dictationViewModel.soundFeedbackEnabled = false
         dictationViewModel.spokenFeedbackEnabled = false
@@ -12803,12 +12936,24 @@ final class TypeWhisperIntegrationTests: XCTestCase {
                 context.dictationViewModel.cancellationBehavior = behavior
                 context.dictationViewModel.state = state
 
-                context.dictationViewModel.handleCancelHotkey()
+                let downCGEvent = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: 0x35, keyDown: true))
+                let upCGEvent = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: 0x35, keyDown: false))
+                let down = try XCTUnwrap(NSEvent(cgEvent: downCGEvent))
+                let up = try XCTUnwrap(NSEvent(cgEvent: upCGEvent))
+                XCTAssertTrue(context.hotkeyService.processEventForTesting(down, source: .eventTap))
+                await withCheckedContinuation { continuation in
+                    DispatchQueue.main.async { continuation.resume() }
+                }
+                XCTAssertTrue(context.hotkeyService.processEventForTesting(up, source: .eventTap))
                 if behavior == .doubleEscape {
                     XCTAssertEqual(context.dictationViewModel.state, state)
                     XCTAssertNotNil(context.dictationViewModel.cancelWarningMessage)
                     XCTAssertNil(context.dictationViewModel.actionFeedbackMessage)
-                    context.dictationViewModel.handleCancelHotkey()
+                    XCTAssertTrue(context.hotkeyService.processEventForTesting(down, source: .eventTap))
+                    await withCheckedContinuation { continuation in
+                        DispatchQueue.main.async { continuation.resume() }
+                    }
+                    XCTAssertTrue(context.hotkeyService.processEventForTesting(up, source: .eventTap))
                 }
 
                 XCTAssertNil(context.dictationViewModel.cancelWarningMessage)
@@ -12819,6 +12964,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
                     XCTAssertEqual(context.dictationViewModel.state, .inserting)
                     XCTAssertEqual(context.dictationViewModel.actionFeedbackMessage, String(localized: "Cancelled"))
                 }
+                XCTAssertFalse(context.hotkeyService.processEventForTesting(down, source: .eventTap))
+                XCTAssertFalse(context.hotkeyService.processEventForTesting(up, source: .eventTap))
                 await context.dictationViewModel.testingWaitForRecordingCleanup()
             }
         }
@@ -13140,6 +13287,7 @@ extension TypeWhisperIntegrationTests {
     @MainActor
     private func makeHedgedDictationViewModel(
         hedgeThreshold: TimeInterval?,
+        transcriptionDeadline: TimeInterval? = nil,
         primaryRunner: @escaping DictationViewModel.PrimaryTranscriptionRunner,
         fallbackRunner: @escaping DictationViewModel.RecoveryFallbackRunner
     ) throws -> (viewModel: DictationViewModel, cleanup: () -> Void) {
@@ -13205,10 +13353,120 @@ extension TypeWhisperIntegrationTests {
             },
             recoveryFallbackRunner: fallbackRunner,
             recoveryHedgeThresholdProvider: { hedgeThreshold },
-            primaryTranscriptionRunner: primaryRunner
+            primaryTranscriptionRunner: primaryRunner,
+            transcriptionDeadlineProvider: transcriptionDeadline.map { deadline -> DictationViewModel.TranscriptionDeadlineProvider in
+                { _ in deadline }
+            }
         )
         viewModel.soundFeedbackEnabled = false
         return (viewModel, { TestSupport.remove(appSupportDirectory) })
+    }
+
+    @MainActor
+    func testTranscriptionDeadlineAbandonsHungPrimaryAndFallback() async throws {
+        var primaryCancelled = false
+        var fallbackCancelled = false
+        let harness = try makeHedgedDictationViewModel(
+            hedgeThreshold: 0.1,
+            transcriptionDeadline: 0.5,
+            primaryRunner: { _, _, _, _, _, _, _, _ in
+                do {
+                    try await Task.sleep(nanoseconds: 30_000_000_000)
+                } catch {
+                    primaryCancelled = true
+                    throw error
+                }
+                return Self.hedgeTranscriptionResult(text: "primary", engine: "primary")
+            },
+            fallbackRunner: { _, _, _, _, _, _, _ in
+                do {
+                    try await Task.sleep(nanoseconds: 30_000_000_000)
+                } catch {
+                    fallbackCancelled = true
+                    throw error
+                }
+                return Self.hedgeTranscriptionResult(text: "fallback", engine: "test-fallback")
+            }
+        )
+        defer { harness.cleanup() }
+
+        let start = ContinuousClock.now
+        do {
+            _ = try await harness.viewModel.transcribeFinalAudioForTesting()
+            XCTFail("A transcription that never completes must hit the deadline")
+        } catch let error as DictationViewModel.TranscriptionDeadlineExceeded {
+            XCTAssertEqual(error.seconds, 0.5)
+        }
+        XCTAssertLessThan(ContinuousClock.now - start, .seconds(5))
+
+        try await Task.sleep(nanoseconds: 200_000_000)
+        XCTAssertTrue(primaryCancelled, "the hung primary request must be cancelled once the deadline passes")
+        XCTAssertTrue(fallbackCancelled, "the hung fallback request must be cancelled once the deadline passes")
+    }
+
+    @MainActor
+    func testTranscriptionDeadlineHoldsAgainstRunnersThatIgnoreCancellation() async throws {
+        // Both runners wait on plain dispatch timers that no Task cancellation can
+        // interrupt, i.e. engines whose transport never aborts. The deadline must
+        // still return at the bound instead of waiting for them.
+        var primaryFinished = false
+        var fallbackFinished = false
+        let harness = try makeHedgedDictationViewModel(
+            hedgeThreshold: 0.1,
+            transcriptionDeadline: 0.5,
+            primaryRunner: { _, _, _, _, _, _, _, _ in
+                await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                    DispatchQueue.global().asyncAfter(deadline: .now() + 3.0) { continuation.resume() }
+                }
+                primaryFinished = true
+                return Self.hedgeTranscriptionResult(text: "primary", engine: "primary")
+            },
+            fallbackRunner: { _, _, _, _, _, _, _ in
+                await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+                    DispatchQueue.global().asyncAfter(deadline: .now() + 3.0) { continuation.resume() }
+                }
+                fallbackFinished = true
+                return Self.hedgeTranscriptionResult(text: "fallback", engine: "test-fallback")
+            }
+        )
+        defer { harness.cleanup() }
+
+        let start = ContinuousClock.now
+        do {
+            _ = try await harness.viewModel.transcribeFinalAudioForTesting()
+            XCTFail("The deadline must fire while both runners are still hung")
+        } catch let error as DictationViewModel.TranscriptionDeadlineExceeded {
+            XCTAssertEqual(error.seconds, 0.5)
+        }
+        XCTAssertLessThan(ContinuousClock.now - start, .seconds(1.5), "the bound must not wait for runners that ignore cancellation")
+        XCTAssertFalse(primaryFinished, "the primary was still hung when the deadline returned")
+        XCTAssertFalse(fallbackFinished, "the fallback was still hung when the deadline returned")
+    }
+
+    @MainActor
+    func testTranscriptionDeadlineDoesNotInterfereWithFastPrimary() async throws {
+        let harness = try makeHedgedDictationViewModel(
+            hedgeThreshold: 1.0,
+            transcriptionDeadline: 5.0,
+            primaryRunner: { _, _, _, _, _, _, _, _ in
+                Self.hedgeTranscriptionResult(text: "primary", engine: "primary")
+            },
+            fallbackRunner: { _, _, _, _, _, _, _ in
+                XCTFail("fallback must not run when the primary answers immediately")
+                return Self.hedgeTranscriptionResult(text: "fallback", engine: "test-fallback")
+            }
+        )
+        defer { harness.cleanup() }
+
+        let output = try await harness.viewModel.transcribeFinalAudioForTesting()
+        XCTAssertEqual(output.text, "primary")
+        XCTAssertFalse(output.usedRecoveryFallback)
+    }
+
+    func testDefaultTranscriptionDeadlineScalesWithRecordingLength() {
+        XCTAssertEqual(DictationViewModel.defaultTranscriptionDeadline(forAudioDuration: 0), 60)
+        XCTAssertEqual(DictationViewModel.defaultTranscriptionDeadline(forAudioDuration: 90), 150)
+        XCTAssertEqual(DictationViewModel.defaultTranscriptionDeadline(forAudioDuration: -5), 60)
     }
 
     @MainActor
@@ -13397,7 +13655,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
     }
 
     @MainActor
-    func testEscapeKeyStillInvokesCancelHandlerWithoutSuppression() throws {
+    func testEscapeKeyPassesThroughWithoutCancellableOperation() throws {
         let service = HotkeyService()
         service.suspendMonitoring()
 
@@ -13409,27 +13667,131 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         let escape = try makeKeyboardEvent(keyCode: 0x35, keyDown: true, flags: [])
 
         XCTAssertFalse(service.processEventForTesting(escape, source: .monitor))
-        XCTAssertEqual(cancelCount, 1)
+        XCTAssertEqual(cancelCount, 0)
+        let keyUp = try makeKeyboardEvent(keyCode: 0x35, keyDown: false, flags: [])
+        XCTAssertFalse(service.processEventForTesting(keyUp, source: .monitor))
     }
 
     @MainActor
     func testEscapeKeyDedupesFollowingEventTapDispatch() async throws {
         let service = HotkeyService()
         service.suspendMonitoring()
+        service.isCancellationAvailable = true
 
         var cancelCount = 0
-        service.onCancelPressed = {
+        let cancelled = expectation(description: "Escape cancellation dispatched")
+        service.onCancelPressed = { [weak service] in
             cancelCount += 1
+            service?.isCancellationAvailable = false
+            cancelled.fulfill()
         }
 
         let escape = try makeKeyboardEvent(keyCode: 0x35, keyDown: true, flags: [])
+        XCTAssertTrue(service.processEventForTesting(escape, source: .eventTap))
+        await fulfillment(of: [cancelled], timeout: 1)
+        XCTAssertEqual(cancelCount, 1)
 
+        XCTAssertTrue(service.processEventForTesting(escape, source: .monitor))
+        XCTAssertEqual(cancelCount, 1)
+        let keyUp = try makeKeyboardEvent(keyCode: 0x35, keyDown: false, flags: [])
+        XCTAssertTrue(service.processEventForTesting(keyUp, source: .eventTap))
         XCTAssertFalse(service.processEventForTesting(escape, source: .eventTap))
-        await Task.yield()
-        XCTAssertEqual(cancelCount, 1)
+    }
 
-        XCTAssertFalse(service.processEventForTesting(escape, source: .monitor))
+    @MainActor
+    func testEscapeKeyConsumesHeldPressAfterCancellationUntilRelease() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        service.isCancellationAvailable = true
+        var cancelCount = 0
+        service.onCancelPressed = { [weak service] in
+            cancelCount += 1
+            service?.isCancellationAvailable = false
+        }
+        let down = try makeKeyboardEvent(keyCode: 0x35, keyDown: true, flags: [])
+        let repeated = try makeKeyboardEvent(keyCode: 0x35, keyDown: true, flags: [], isRepeat: true)
+        let up = try makeKeyboardEvent(keyCode: 0x35, keyDown: false, flags: [])
+
+        XCTAssertTrue(service.processEventForTesting(down, source: .monitor))
+        XCTAssertTrue(service.processEventForTesting(repeated, source: .monitor))
         XCTAssertEqual(cancelCount, 1)
+        XCTAssertTrue(service.processEventForTesting(up, source: .monitor))
+        XCTAssertFalse(service.processEventForTesting(down, source: .monitor))
+        XCTAssertFalse(service.processEventForTesting(up, source: .monitor))
+        XCTAssertEqual(cancelCount, 1)
+    }
+
+    @MainActor
+    func testEscapeKeyRequiresSeparatePressesAndAcceptsQuickSecondPress() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        service.isCancellationAvailable = true
+        var cancelCount = 0
+        service.onCancelPressed = { cancelCount += 1 }
+        let down = try makeKeyboardEvent(keyCode: 0x35, keyDown: true, flags: [])
+        let repeated = try makeKeyboardEvent(keyCode: 0x35, keyDown: true, flags: [], isRepeat: true)
+        let up = try makeKeyboardEvent(keyCode: 0x35, keyDown: false, flags: [])
+
+        XCTAssertTrue(service.processEventForTesting(down, source: .monitor))
+        XCTAssertTrue(service.processEventForTesting(repeated, source: .monitor))
+        XCTAssertEqual(cancelCount, 1)
+        XCTAssertTrue(service.processEventForTesting(up, source: .monitor))
+        XCTAssertTrue(service.processEventForTesting(down, source: .monitor))
+        XCTAssertEqual(cancelCount, 2)
+        XCTAssertTrue(service.processEventForTesting(up, source: .monitor))
+    }
+
+    @MainActor
+    func testEscapeHeldBeforeDictationDoesNotCancelOnRepeat() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        var cancelCount = 0
+        service.onCancelPressed = { cancelCount += 1 }
+        let down = try makeKeyboardEvent(keyCode: 0x35, keyDown: true, flags: [])
+        let repeated = try makeKeyboardEvent(keyCode: 0x35, keyDown: true, flags: [], isRepeat: true)
+        let up = try makeKeyboardEvent(keyCode: 0x35, keyDown: false, flags: [])
+
+        XCTAssertFalse(service.processEventForTesting(down, source: .monitor))
+        service.isCancellationAvailable = true
+        XCTAssertFalse(service.processEventForTesting(repeated, source: .monitor))
+        XCTAssertFalse(service.processEventForTesting(up, source: .monitor))
+        XCTAssertEqual(cancelCount, 0)
+    }
+
+    @MainActor
+    func testEscapeKeyRecoversMissedReleaseAfterEventTapDisable() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        service.isCancellationAvailable = true
+        var escapeIsDown = true
+        service.keyStateProvider = { _ in escapeIsDown }
+        let down = try makeKeyboardEvent(keyCode: 0x35, keyDown: true, flags: [])
+        let repeated = try makeKeyboardEvent(keyCode: 0x35, keyDown: true, flags: [], isRepeat: true)
+
+        XCTAssertTrue(service.processEventForTesting(down, source: .monitor))
+        service.isCancellationAvailable = false
+        service.recoverReleasedActiveHotkeyAfterEventTapDisableForTesting()
+        XCTAssertTrue(service.processEventForTesting(repeated, source: .monitor))
+        escapeIsDown = false
+        service.recoverReleasedActiveHotkeyAfterEventTapDisableForTesting()
+        XCTAssertFalse(service.processEventForTesting(down, source: .monitor))
+    }
+
+    @MainActor
+    func testLocalMonitorConsumesEscapeOnlyDuringCancellation() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        let down = try makeKeyboardEvent(keyCode: 0x35, keyDown: true, flags: [])
+        let up = try makeKeyboardEvent(keyCode: 0x35, keyDown: false, flags: [])
+        XCTAssertNotNil(service.processLocalEventForTesting(down))
+        XCTAssertNotNil(service.processLocalEventForTesting(up))
+        service.isCancellationAvailable = true
+        service.onCancelPressed = { [weak service] in service?.isCancellationAvailable = false }
+        XCTAssertNil(service.processLocalEventForTesting(down))
+        XCTAssertNil(service.processLocalEventForTesting(up))
+        XCTAssertNotNil(service.processLocalEventForTesting(down))
+        let unrelated = try makeKeyboardEvent(keyCode: 0x00, keyDown: true, flags: [])
+        XCTAssertNotNil(service.processLocalEventForTesting(unrelated))
     }
 
     @MainActor
@@ -14846,7 +15208,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         XCTAssertFalse(service.processEventForTesting(escape, source: .monitor))
 
         try await Task.sleep(for: .milliseconds(50))
-        XCTAssertEqual(cancelCount, 1)
+        XCTAssertEqual(cancelCount, 0)
         XCTAssertEqual(startCount, 0)
         XCTAssertNil(service.currentMode)
 
@@ -15918,12 +16280,14 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
     private func makeKeyboardEvent(
         keyCode: UInt16,
         keyDown: Bool,
-        flags: CGEventFlags = [.maskControl, .maskAlternate, .maskShift, .maskCommand]
+        flags: CGEventFlags = [.maskControl, .maskAlternate, .maskShift, .maskCommand],
+        isRepeat: Bool = false
     ) throws -> NSEvent {
         let event = try XCTUnwrap(
             CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(keyCode), keyDown: keyDown)
         )
         event.flags = flags
+        event.setIntegerValueField(.keyboardEventAutorepeat, value: isRepeat ? 1 : 0)
         return try XCTUnwrap(NSEvent(cgEvent: event))
     }
 

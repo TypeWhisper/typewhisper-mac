@@ -850,6 +850,49 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         XCTAssertNil(viewModel.automaticFallbackConfiguration(excluding: "groq", task: .transcribe))
     }
 
+    func testReloadPreferencesFromDefaultsPicksUpImportedValues() throws {
+        let defaults = try makeDefaults()
+        let store = DictationRecoveryAudioStore(directory: makeTemporaryDirectory())
+        let viewModel = DictationRecoveryViewModel(
+            audioRecordingService: AudioRecordingService(recoveryAudioStore: store),
+            modelManager: ModelManagerService(),
+            historyService: HistoryService(appSupportDirectory: makeTemporaryDirectory()),
+            audioFileService: AudioFileService(),
+            defaults: defaults
+        )
+        XCTAssertFalse(viewModel.hedgeEnabled)
+        XCTAssertEqual(viewModel.hedgeThresholdSeconds, 3.0)
+
+        // A settings-backup import writes straight to UserDefaults behind the
+        // already-initialized view model.
+        defaults.set("imported-engine", forKey: UserDefaultsKeys.dictationRecoveryEngine)
+        defaults.set("imported-model", forKey: UserDefaultsKeys.dictationRecoveryModel)
+        defaults.set(true, forKey: UserDefaultsKeys.dictationRecoveryAutomaticFallbackEnabled)
+        defaults.set(true, forKey: UserDefaultsKeys.dictationRecoveryHedgeEnabled)
+        defaults.set(7.5, forKey: UserDefaultsKeys.dictationRecoveryHedgeThresholdSeconds)
+        defaults.set("de", forKey: UserDefaultsKeys.dictationRecoveryLanguage)
+
+        viewModel.reloadPreferencesFromDefaults()
+
+        XCTAssertEqual(viewModel.selectedEngine, "imported-engine")
+        XCTAssertEqual(viewModel.selectedModel, "imported-model", "reloading the engine must not reset the imported model")
+        XCTAssertTrue(viewModel.automaticFallbackEnabled)
+        XCTAssertTrue(viewModel.hedgeEnabled)
+        XCTAssertEqual(viewModel.hedgeThresholdSeconds, 7.5)
+        XCTAssertEqual(viewModel.automaticHedgeThreshold, 7.5)
+        XCTAssertEqual(viewModel.languageSelection, LanguageSelection(storedValue: "de", nilBehavior: .auto))
+
+        defaults.set(1e308, forKey: UserDefaultsKeys.dictationRecoveryHedgeThresholdSeconds)
+        viewModel.reloadPreferencesFromDefaults()
+        XCTAssertEqual(viewModel.hedgeThresholdSeconds, 15.0, "a reloaded value is clamped like a stored one")
+
+        let retentionBefore = viewModel.retentionPolicy
+        defaults.set(180, forKey: UserDefaultsKeys.dictationRecoveryRetentionDays)
+        viewModel.reloadPreferencesFromDefaults()
+        XCTAssertEqual(viewModel.retentionPolicy, DictationRecoveryRetentionPolicy.load(from: defaults))
+        XCTAssertNotEqual(viewModel.retentionPolicy, retentionBefore, "a retention-only import must reach the view model")
+    }
+
     func testHedgeThresholdIsClampedToTheSupportedRange() throws {
         let defaults = try makeDefaults()
         defaults.set(true, forKey: UserDefaultsKeys.dictationRecoveryAutomaticFallbackEnabled)

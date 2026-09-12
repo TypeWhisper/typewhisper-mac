@@ -268,6 +268,28 @@ final class DictationRecoveryViewModel: ObservableObject {
         )
     }
 
+    /// Re-reads the recovery preferences after a settings-backup import wrote
+    /// them to UserDefaults. The view model is initialized once at launch and is
+    /// what ServiceContainer consults for the live fallback and hedge values, so
+    /// without this the imported values stayed invisible until a restart.
+    func reloadPreferencesFromDefaults() {
+        isInitialized = false
+        defer { isInitialized = true }
+        selectedEngine = defaults.string(forKey: UserDefaultsKeys.dictationRecoveryEngine)
+        selectedModel = defaults.string(forKey: UserDefaultsKeys.dictationRecoveryModel)
+        languageSelection = LanguageSelection(
+            storedValue: defaults.string(forKey: UserDefaultsKeys.dictationRecoveryLanguage),
+            nilBehavior: .auto
+        )
+        automaticFallbackEnabled = defaults.bool(forKey: UserDefaultsKeys.dictationRecoveryAutomaticFallbackEnabled)
+        hedgeEnabled = defaults.bool(forKey: UserDefaultsKeys.dictationRecoveryHedgeEnabled)
+        hedgeThresholdSeconds = Self.clampedHedgeThreshold(
+            defaults.object(forKey: UserDefaultsKeys.dictationRecoveryHedgeThresholdSeconds) as? Double
+        )
+        retentionPolicy = DictationRecoveryRetentionPolicy.load(from: defaults)
+        normalizeLanguageSelectionForResolvedEngine()
+    }
+
     func observePluginManager() {
         guard let pluginManager = PluginManager.shared else { return }
         pluginManager.objectWillChange

@@ -261,6 +261,12 @@ final class ServiceContainer: ObservableObject {
             },
             recoveryRetentionPolicyDidChange: { [audioRecordingService] policy in
                 _ = audioRecordingService.updateRecoveryRetentionPolicy(policy)
+            },
+            cancellationBehaviorDidChange: { [dictationViewModel] behavior in
+                dictationViewModel.cancellationBehavior = behavior
+            },
+            dictationRecoveryPreferencesDidChange: { [recoveryViewModel] in
+                recoveryViewModel.reloadPreferencesFromDefaults()
             }
         )
         let handlers = APIHandlers(
