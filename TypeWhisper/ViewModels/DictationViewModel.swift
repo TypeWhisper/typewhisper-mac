@@ -231,7 +231,10 @@ final class DictationViewModel: ObservableObject {
     }
 
     @Published var state: State = .idle {
-        didSet { clearCancelWarningIfStateNoLongerMatches() }
+        didSet {
+            hotkeyService.isCancellationAvailable = cancelWarningTargetForCurrentState() != nil
+            clearCancelWarningIfStateNoLongerMatches()
+        }
     }
     @Published var audioLevel: Float = 0
     @Published var recordingDuration: TimeInterval = 0
