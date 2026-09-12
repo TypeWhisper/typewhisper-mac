@@ -492,6 +492,86 @@ final class SettingsBackupExporterTests: XCTestCase {
         }
     }
 
+    func testNumberNormalizationPreferencesRoundTrip() async throws {
+        for minimumValue in [0, 10, 100] {
+            let source = try makeFixture()
+            let destination = try makeFixture()
+            defer { teardown(source); teardown(destination) }
+            let enabled = minimumValue == 10
+            source.userDefaults.set(enabled, forKey: UserDefaultsKeys.transcriptionNumberNormalizationEnabled)
+            source.userDefaults.set(minimumValue, forKey: UserDefaultsKeys.transcriptionNumberNormalizationMinimumValue)
+            let backup = try SettingsBackupExporter.buildBackup(
+                workflowService: source.workflowService,
+                dictionaryService: source.dictionaryService,
+                snippetService: source.snippetService,
+                profileService: source.profileService,
+                promptActionService: source.promptActionService,
+                pluginManager: source.pluginManager,
+                historyService: source.historyService,
+                userDefaults: source.userDefaults
+            )
+            let decoded = try SettingsBackupExporter.parse(SettingsBackupExporter.encodedJSON(backup))
+            XCTAssertEqual(decoded.preferences.transcriptionNumberNormalizationEnabled, enabled)
+            XCTAssertEqual(decoded.preferences.transcriptionNumberNormalizationMinimumValue, minimumValue)
+            destination.userDefaults.set(!enabled, forKey: UserDefaultsKeys.transcriptionNumberNormalizationEnabled)
+            destination.userDefaults.set(999, forKey: UserDefaultsKeys.transcriptionNumberNormalizationMinimumValue)
+            await SettingsBackupExporter.importBackup(
+                decoded,
+                workflowService: destination.workflowService,
+                dictionaryService: destination.dictionaryService,
+                snippetService: destination.snippetService,
+                profileService: destination.profileService,
+                promptActionService: destination.promptActionService,
+                pluginManager: destination.pluginManager,
+                pluginRegistryService: destination.pluginRegistryService,
+                historyService: destination.historyService,
+                usageStatisticsService: destination.usageStatisticsService,
+                userDefaults: destination.userDefaults
+            )
+            XCTAssertEqual(destination.userDefaults.bool(forKey: UserDefaultsKeys.transcriptionNumberNormalizationEnabled), enabled)
+            XCTAssertEqual(destination.userDefaults.integer(forKey: UserDefaultsKeys.transcriptionNumberNormalizationMinimumValue), minimumValue)
+            var preferences = SettingsBackupExporter.PreferencesDTO.empty
+            preferences.transcriptionNumberNormalizationEnabled = enabled
+            preferences.transcriptionNumberNormalizationMinimumValue = minimumValue
+            XCTAssertEqual(preferences.nonNilCount, 2)
+        }
+    }
+
+    func testMissingAndInvalidBackupThresholdsPreserveDestinationPreferences() async throws {
+        for minimumValue: Int? in [nil, -1, 3, 999] {
+            let destination = try makeFixture()
+            defer { teardown(destination) }
+            destination.userDefaults.set(false, forKey: UserDefaultsKeys.transcriptionNumberNormalizationEnabled)
+            destination.userDefaults.set(100, forKey: UserDefaultsKeys.transcriptionNumberNormalizationMinimumValue)
+            var preferences = SettingsBackupExporter.PreferencesDTO.empty
+            preferences.transcriptionNumberNormalizationMinimumValue = minimumValue
+            let backup = SettingsBackupExporter.SettingsBackup(
+                schemaVersion: SettingsBackupExporter.schemaVersion,
+                exportedAt: Date(), appVersion: "1.0",
+                workflows: [], dictionaryEntries: [], snippets: [], promptActions: [], profiles: [],
+                hotkeys: [:], plugins: [], history: [], updateChannel: nil, preferences: preferences
+            )
+            // Optional fields are omitted from JSON, matching older settings backups.
+            let decoded = try SettingsBackupExporter.parse(SettingsBackupExporter.encodedJSON(backup))
+            let result = await SettingsBackupExporter.importBackup(
+                decoded,
+                workflowService: destination.workflowService,
+                dictionaryService: destination.dictionaryService,
+                snippetService: destination.snippetService,
+                profileService: destination.profileService,
+                promptActionService: destination.promptActionService,
+                pluginManager: destination.pluginManager,
+                pluginRegistryService: destination.pluginRegistryService,
+                historyService: destination.historyService,
+                usageStatisticsService: destination.usageStatisticsService,
+                userDefaults: destination.userDefaults
+            )
+            XCTAssertEqual(result.preferencesApplied, 0)
+            XCTAssertFalse(destination.userDefaults.bool(forKey: UserDefaultsKeys.transcriptionNumberNormalizationEnabled))
+            XCTAssertEqual(destination.userDefaults.integer(forKey: UserDefaultsKeys.transcriptionNumberNormalizationMinimumValue), 100)
+        }
+    }
+
     func testUpdateChannelAndPreferencesRoundTrip() async throws {
         let source = try makeFixture()
         defer { teardown(source) }
