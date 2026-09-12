@@ -7651,7 +7651,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(0x35), keyDown: true)
         )
         let escapeEvent = try XCTUnwrap(NSEvent(cgEvent: escapeCGEvent))
-        XCTAssertFalse(context.hotkeyService.processEventForTesting(escapeEvent, source: .monitor))
+        XCTAssertTrue(context.hotkeyService.processEventForTesting(escapeEvent, source: .monitor))
 
         XCTAssertEqual(context.dictationViewModel.recordingDuration, 0)
         XCTAssertFalse(context.dictationViewModel.isRecordingInputReady)
@@ -12936,12 +12936,24 @@ final class TypeWhisperIntegrationTests: XCTestCase {
                 context.dictationViewModel.cancellationBehavior = behavior
                 context.dictationViewModel.state = state
 
-                context.dictationViewModel.handleCancelHotkey()
+                let downCGEvent = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: 0x35, keyDown: true))
+                let upCGEvent = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: 0x35, keyDown: false))
+                let down = try XCTUnwrap(NSEvent(cgEvent: downCGEvent))
+                let up = try XCTUnwrap(NSEvent(cgEvent: upCGEvent))
+                XCTAssertTrue(context.hotkeyService.processEventForTesting(down, source: .eventTap))
+                await withCheckedContinuation { continuation in
+                    DispatchQueue.main.async { continuation.resume() }
+                }
+                XCTAssertTrue(context.hotkeyService.processEventForTesting(up, source: .eventTap))
                 if behavior == .doubleEscape {
                     XCTAssertEqual(context.dictationViewModel.state, state)
                     XCTAssertNotNil(context.dictationViewModel.cancelWarningMessage)
                     XCTAssertNil(context.dictationViewModel.actionFeedbackMessage)
-                    context.dictationViewModel.handleCancelHotkey()
+                    XCTAssertTrue(context.hotkeyService.processEventForTesting(down, source: .eventTap))
+                    await withCheckedContinuation { continuation in
+                        DispatchQueue.main.async { continuation.resume() }
+                    }
+                    XCTAssertTrue(context.hotkeyService.processEventForTesting(up, source: .eventTap))
                 }
 
                 XCTAssertNil(context.dictationViewModel.cancelWarningMessage)
@@ -12952,6 +12964,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
                     XCTAssertEqual(context.dictationViewModel.state, .inserting)
                     XCTAssertEqual(context.dictationViewModel.actionFeedbackMessage, String(localized: "Cancelled"))
                 }
+                XCTAssertFalse(context.hotkeyService.processEventForTesting(down, source: .eventTap))
+                XCTAssertFalse(context.hotkeyService.processEventForTesting(up, source: .eventTap))
                 await context.dictationViewModel.testingWaitForRecordingCleanup()
             }
         }
@@ -13641,7 +13655,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
     }
 
     @MainActor
-    func testEscapeKeyStillInvokesCancelHandlerWithoutSuppression() throws {
+    func testEscapeKeyPassesThroughWithoutCancellableOperation() throws {
         let service = HotkeyService()
         service.suspendMonitoring()
 
@@ -13653,27 +13667,131 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         let escape = try makeKeyboardEvent(keyCode: 0x35, keyDown: true, flags: [])
 
         XCTAssertFalse(service.processEventForTesting(escape, source: .monitor))
-        XCTAssertEqual(cancelCount, 1)
+        XCTAssertEqual(cancelCount, 0)
+        let keyUp = try makeKeyboardEvent(keyCode: 0x35, keyDown: false, flags: [])
+        XCTAssertFalse(service.processEventForTesting(keyUp, source: .monitor))
     }
 
     @MainActor
     func testEscapeKeyDedupesFollowingEventTapDispatch() async throws {
         let service = HotkeyService()
         service.suspendMonitoring()
+        service.isCancellationAvailable = true
 
         var cancelCount = 0
-        service.onCancelPressed = {
+        let cancelled = expectation(description: "Escape cancellation dispatched")
+        service.onCancelPressed = { [weak service] in
             cancelCount += 1
+            service?.isCancellationAvailable = false
+            cancelled.fulfill()
         }
 
         let escape = try makeKeyboardEvent(keyCode: 0x35, keyDown: true, flags: [])
+        XCTAssertTrue(service.processEventForTesting(escape, source: .eventTap))
+        await fulfillment(of: [cancelled], timeout: 1)
+        XCTAssertEqual(cancelCount, 1)
 
+        XCTAssertTrue(service.processEventForTesting(escape, source: .monitor))
+        XCTAssertEqual(cancelCount, 1)
+        let keyUp = try makeKeyboardEvent(keyCode: 0x35, keyDown: false, flags: [])
+        XCTAssertTrue(service.processEventForTesting(keyUp, source: .eventTap))
         XCTAssertFalse(service.processEventForTesting(escape, source: .eventTap))
-        await Task.yield()
-        XCTAssertEqual(cancelCount, 1)
+    }
 
-        XCTAssertFalse(service.processEventForTesting(escape, source: .monitor))
+    @MainActor
+    func testEscapeKeyConsumesHeldPressAfterCancellationUntilRelease() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        service.isCancellationAvailable = true
+        var cancelCount = 0
+        service.onCancelPressed = { [weak service] in
+            cancelCount += 1
+            service?.isCancellationAvailable = false
+        }
+        let down = try makeKeyboardEvent(keyCode: 0x35, keyDown: true, flags: [])
+        let repeated = try makeKeyboardEvent(keyCode: 0x35, keyDown: true, flags: [], isRepeat: true)
+        let up = try makeKeyboardEvent(keyCode: 0x35, keyDown: false, flags: [])
+
+        XCTAssertTrue(service.processEventForTesting(down, source: .monitor))
+        XCTAssertTrue(service.processEventForTesting(repeated, source: .monitor))
         XCTAssertEqual(cancelCount, 1)
+        XCTAssertTrue(service.processEventForTesting(up, source: .monitor))
+        XCTAssertFalse(service.processEventForTesting(down, source: .monitor))
+        XCTAssertFalse(service.processEventForTesting(up, source: .monitor))
+        XCTAssertEqual(cancelCount, 1)
+    }
+
+    @MainActor
+    func testEscapeKeyRequiresSeparatePressesAndAcceptsQuickSecondPress() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        service.isCancellationAvailable = true
+        var cancelCount = 0
+        service.onCancelPressed = { cancelCount += 1 }
+        let down = try makeKeyboardEvent(keyCode: 0x35, keyDown: true, flags: [])
+        let repeated = try makeKeyboardEvent(keyCode: 0x35, keyDown: true, flags: [], isRepeat: true)
+        let up = try makeKeyboardEvent(keyCode: 0x35, keyDown: false, flags: [])
+
+        XCTAssertTrue(service.processEventForTesting(down, source: .monitor))
+        XCTAssertTrue(service.processEventForTesting(repeated, source: .monitor))
+        XCTAssertEqual(cancelCount, 1)
+        XCTAssertTrue(service.processEventForTesting(up, source: .monitor))
+        XCTAssertTrue(service.processEventForTesting(down, source: .monitor))
+        XCTAssertEqual(cancelCount, 2)
+        XCTAssertTrue(service.processEventForTesting(up, source: .monitor))
+    }
+
+    @MainActor
+    func testEscapeHeldBeforeDictationDoesNotCancelOnRepeat() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        var cancelCount = 0
+        service.onCancelPressed = { cancelCount += 1 }
+        let down = try makeKeyboardEvent(keyCode: 0x35, keyDown: true, flags: [])
+        let repeated = try makeKeyboardEvent(keyCode: 0x35, keyDown: true, flags: [], isRepeat: true)
+        let up = try makeKeyboardEvent(keyCode: 0x35, keyDown: false, flags: [])
+
+        XCTAssertFalse(service.processEventForTesting(down, source: .monitor))
+        service.isCancellationAvailable = true
+        XCTAssertFalse(service.processEventForTesting(repeated, source: .monitor))
+        XCTAssertFalse(service.processEventForTesting(up, source: .monitor))
+        XCTAssertEqual(cancelCount, 0)
+    }
+
+    @MainActor
+    func testEscapeKeyRecoversMissedReleaseAfterEventTapDisable() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        service.isCancellationAvailable = true
+        var escapeIsDown = true
+        service.keyStateProvider = { _ in escapeIsDown }
+        let down = try makeKeyboardEvent(keyCode: 0x35, keyDown: true, flags: [])
+        let repeated = try makeKeyboardEvent(keyCode: 0x35, keyDown: true, flags: [], isRepeat: true)
+
+        XCTAssertTrue(service.processEventForTesting(down, source: .monitor))
+        service.isCancellationAvailable = false
+        service.recoverReleasedActiveHotkeyAfterEventTapDisableForTesting()
+        XCTAssertTrue(service.processEventForTesting(repeated, source: .monitor))
+        escapeIsDown = false
+        service.recoverReleasedActiveHotkeyAfterEventTapDisableForTesting()
+        XCTAssertFalse(service.processEventForTesting(down, source: .monitor))
+    }
+
+    @MainActor
+    func testLocalMonitorConsumesEscapeOnlyDuringCancellation() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        let down = try makeKeyboardEvent(keyCode: 0x35, keyDown: true, flags: [])
+        let up = try makeKeyboardEvent(keyCode: 0x35, keyDown: false, flags: [])
+        XCTAssertNotNil(service.processLocalEventForTesting(down))
+        XCTAssertNotNil(service.processLocalEventForTesting(up))
+        service.isCancellationAvailable = true
+        service.onCancelPressed = { [weak service] in service?.isCancellationAvailable = false }
+        XCTAssertNil(service.processLocalEventForTesting(down))
+        XCTAssertNil(service.processLocalEventForTesting(up))
+        XCTAssertNotNil(service.processLocalEventForTesting(down))
+        let unrelated = try makeKeyboardEvent(keyCode: 0x00, keyDown: true, flags: [])
+        XCTAssertNotNil(service.processLocalEventForTesting(unrelated))
     }
 
     @MainActor
@@ -14928,7 +15046,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         XCTAssertFalse(service.processEventForTesting(escape, source: .monitor))
 
         try await Task.sleep(for: .milliseconds(50))
-        XCTAssertEqual(cancelCount, 1)
+        XCTAssertEqual(cancelCount, 0)
         XCTAssertEqual(startCount, 0)
         XCTAssertNil(service.currentMode)
 
@@ -16000,12 +16118,14 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
     private func makeKeyboardEvent(
         keyCode: UInt16,
         keyDown: Bool,
-        flags: CGEventFlags = [.maskControl, .maskAlternate, .maskShift, .maskCommand]
+        flags: CGEventFlags = [.maskControl, .maskAlternate, .maskShift, .maskCommand],
+        isRepeat: Bool = false
     ) throws -> NSEvent {
         let event = try XCTUnwrap(
             CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(keyCode), keyDown: keyDown)
         )
         event.flags = flags
+        event.setIntegerValueField(.keyboardEventAutorepeat, value: isRepeat ? 1 : 0)
         return try XCTUnwrap(NSEvent(cgEvent: event))
     }
 
