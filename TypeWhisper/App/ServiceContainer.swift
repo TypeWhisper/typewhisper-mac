@@ -216,6 +216,9 @@ final class ServiceContainer: ObservableObject {
                     excluding: primaryEngineId,
                     task: task
                 )
+            },
+            recoveryHedgeThresholdProvider: { [recoveryViewModel] in
+                recoveryViewModel.automaticHedgeThreshold
             }
         )
         audioRecorderViewModel = AudioRecorderViewModel(
@@ -351,7 +354,9 @@ final class ServiceContainer: ObservableObject {
 
         hotkeyService.setup()
         dictationViewModel.registerInitialTriggerHotkeys()
-        usageStatisticsService.backfillFromHistoryIfNeeded(historyService.records)
+        usageStatisticsService.backfillFromHistoryIfNeeded {
+            try historyService.allRecordsThrowing()
+        }
         let retentionDays = UserDefaults.standard.integer(forKey: UserDefaultsKeys.historyRetentionDays)
         if retentionDays > 0 { historyService.purgeOldRecords(retentionDays: retentionDays) }
 
@@ -367,7 +372,8 @@ final class ServiceContainer: ObservableObject {
         }
         pluginManager.scanAndLoadPlugins()
 
-        // Re-restore provider selection now that plugins are loaded
+        // Activation hydrates credentials and custom profiles before selection can settle.
+        // Reconciliation also requests passive restore from the final selected engine.
         modelManagerService.restoreProviderSelection()
         audioRecorderViewModel.reconcileSelectionWithAvailablePlugins()
         watchFolderViewModel.reconcileSelectionWithAvailablePlugins()

@@ -10,6 +10,17 @@ import Tokenizers
 @_spi(FirstPartyPlugins) import TypeWhisperPluginSDK
 import os
 
+// Keep this policy plugin-local because the SDK network guard was added after TypeWhisper 1.6.0.
+enum Gemma4NetworkAccessPolicy {
+    static func ensureAccessIsAllowed(
+        arguments: [String] = ProcessInfo.processInfo.arguments
+    ) throws {
+        guard !arguments.contains("--store-screenshots") else {
+            throw URLError(.notConnectedToInternet)
+        }
+    }
+}
+
 private struct Gemma4DownloadProgressReport: Equatable {
     let completedUnitCount: Int64
     let totalUnitCount: Int64
@@ -601,7 +612,7 @@ final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemp
         let downloadedDirectory = usableModelDirectory(for: modelDef)
         let isAlreadyDownloaded = downloadedDirectory != nil
         if !isAlreadyDownloaded {
-            try PluginHTTPClient.ensureNetworkAccessIsAllowed()
+            try Gemma4NetworkAccessPolicy.ensureAccessIsAllowed()
         }
         let loadGeneration = beginModelLoad(for: modelDef, isAlreadyDownloaded: isAlreadyDownloaded)
         startModelLoadTimeout(generation: loadGeneration, modelName: modelDef.displayName)

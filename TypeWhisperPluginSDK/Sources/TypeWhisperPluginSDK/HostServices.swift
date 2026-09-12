@@ -84,6 +84,30 @@ public extension HostServices {
 
 @_spi(Testing) extension URLSession: PluginHTTPClientSession {}
 
+/// Whether a request rides the transient-failure retry ladder.
+///
+/// Retries are ON BY DEFAULT, so an ordinary plugin call rides out a brief upstream
+/// failure without changing. `.disabled` restores exactly the behaviour that existed
+/// before the ladder: one immediate retry after a session reset on a stale-connection
+/// error, and nothing else.
+///
+/// Opt out where the caller is already looping, already retrying, or is holding
+/// something the user is waiting on:
+/// - polling loops that re-issue on a non-200 anyway, where a ladder multiplies the
+///   loop's own bound;
+/// - callers with their own retry, where two layers compound;
+/// - teardown that a finished result is blocked behind.
+public struct PluginHTTPRetryPolicy: Sendable, Equatable {
+    public let laddersTransientFailures: Bool
+
+    public static let `default` = PluginHTTPRetryPolicy(laddersTransientFailures: true)
+    public static let disabled = PluginHTTPRetryPolicy(laddersTransientFailures: false)
+
+    public init(laddersTransientFailures: Bool) {
+        self.laddersTransientFailures = laddersTransientFailures
+    }
+}
+
 /// Drop-in replacement for `URLSession.shared.data(for:)` that reuses one ephemeral
 /// session so fast plugin requests can keep DNS/TLS/HTTP connections warm.
 public enum PluginHTTPClient {
@@ -91,14 +115,70 @@ public enum PluginHTTPClient {
     private static let defaultRequestTimeout: TimeInterval = 30
     private static let longRunningResourceTimeout: TimeInterval = 600
     private static let lock = NSLock()
+
+    /// Budget for retry SCHEDULING, not for the whole operation.
+    ///
+    /// It bounds the sum of the backoff sleeps: no retry sleep begins after it. It
+    /// does NOT bound elapsed time, and calling it a wall-clock budget would be wrong.
+    /// A request started just inside the deadline still runs its own timeout, so the
+    /// true worst case is this budget plus one request timeout (30 s by default, and
+    /// some callers set 120 s or 600 s). Bounding in-flight time would mean cancelling
+    /// live requests, which is a larger change than this one.
+    ///
+    /// 25 s sits above Nielsen's 10 s "you owe a progress indicator" threshold and
+    /// below the roughly 30 s at which users report frustration. No primary source
+    /// gives a ceiling for a user-facing retry, so this is a synthesis, and it is
+    /// deliberately conservative because a failed dictation preserves its recording.
+    static let retrySchedulingBudget: Duration = .seconds(25)
+    static let retryBaseDelay: Duration = .milliseconds(500)
+    /// Per-delay ceiling. Note the ladder `retryMaxAttempts` permits ends at
+    /// exactly this value (0.5s * 2^4), so under the current bound the cap never
+    /// actually binds and is carried defensively, for if that bound is raised.
+    static let retryMaxDelay: Duration = .seconds(8)
+    /// Total attempts, initial included, so at most five retries.
+    ///
+    /// The budget alone is not a sufficient bound: full jitter draws from
+    /// `random(0, capped)`, so an endpoint that fails instantly can draw a run of
+    /// near-zero delays and burn a great many attempts inside 25 s. Un-jittered the
+    /// ladder here is 0.5 + 1 + 2 + 4 + 8 = 15.5 s, comfortably inside the budget, so
+    /// in practice attempts bind first and the budget catches the slow cases: a
+    /// long-running request, or a `Retry-After` that would overshoot.
+    static let retryMaxAttempts = 6
+
+    /// Injectable so tests assert the SCHEDULE without sleeping through it.
+    nonisolated(unsafe) private static var _sleeper: @Sendable (Duration) async throws -> Void = {
+        try await Task.sleep(for: $0)
+    }
+    private static var sleeper: @Sendable (Duration) async throws -> Void {
+        lock.withLock { _sleeper }
+    }
+    /// Injectable so tests see a deterministic ladder instead of jittered values.
+    nonisolated(unsafe) private static var _jitterFraction: @Sendable () -> Double = {
+        Double.random(in: 0...1)
+    }
+    private static var jitterFraction: @Sendable () -> Double {
+        lock.withLock { _jitterFraction }
+    }
     nonisolated(unsafe) private static var sharedSession: (any PluginHTTPClientSession)?
     nonisolated(unsafe) private static var sessionFactory: (URLSessionConfiguration) -> any PluginHTTPClientSession = {
         URLSession(configuration: $0)
     }
 
+    /// Kept as a distinct one-argument overload, NOT collapsed into a defaulted
+    /// parameter on the call below. Nine call sites pass `PluginHTTPClient.data` as an
+    /// unapplied function reference typed
+    /// `@Sendable (URLRequest) async throws -> (Data, URLResponse)`, and a defaulted
+    /// parameter does not preserve that type.
     public static func data(for request: URLRequest) async throws -> (Data, URLResponse) {
+        try await data(for: request, retry: .default)
+    }
+
+    public static func data(
+        for request: URLRequest,
+        retry policy: PluginHTTPRetryPolicy
+    ) async throws -> (Data, URLResponse) {
         try ensureNetworkAccessIsAllowed()
-        return try await data(for: request, allowsRetry: true)
+        return try await dataWithRetries(for: request, policy: policy)
     }
 
     public static func data(
@@ -107,7 +187,7 @@ public enum PluginHTTPClient {
     ) async throws -> (Data, URLResponse) {
         try ensureNetworkAccessIsAllowed()
         guard let resourceTimeout, resourceTimeout > longRunningResourceTimeout else {
-            return try await data(for: request, allowsRetry: true)
+            return try await dataWithRetries(for: request, policy: .default)
         }
 
         let config = URLSessionConfiguration.ephemeral
@@ -164,42 +244,293 @@ public enum PluginHTTPClient {
         }
     }
 
+    /// Replaces the sleep and jitter sources so a test asserts the retry SCHEDULE
+    /// deterministically instead of sleeping through it. `jitterFraction` returning 1
+    /// gives the un-jittered upper bound of the ladder, which is the readable case to
+    /// assert against.
+    @_spi(Testing) public static func configureRetryForTesting(
+        sleeper newSleeper: @escaping @Sendable (Duration) async throws -> Void,
+        jitterFraction newJitter: @escaping @Sendable () -> Double = { 1.0 }
+    ) {
+        lock.withLock {
+            _sleeper = newSleeper
+            _jitterFraction = newJitter
+        }
+    }
+
     @_spi(Testing) public static func resetTestingHooks() {
         resetSharedSession(reason: "test cleanup")
         lock.withLock {
             sessionFactory = { URLSession(configuration: $0) }
+            _sleeper = { try await Task.sleep(for: $0) }
+            _jitterFraction = { Double.random(in: 0...1) }
         }
     }
 
-    private static func data(
+    /// Runs `request` against the shared session, retrying transient failures.
+    ///
+    /// Two failure shapes reach this and they are not the same:
+    ///
+    /// - A thrown `URLError`. The first retry is IMMEDIATE after resetting the shared
+    ///   session, and only for the stale-pooled-connection codes that reset actually
+    ///   fixes. This is the behaviour that existed before the ladder and is preserved
+    ///   verbatim, including under `.disabled`.
+    /// - A delivered response carrying a retryable status. This never threw, so before
+    ///   the ladder it went straight back to the plugin. That is the gap that let a
+    ///   Cloudflare 522 in front of a transcription API fail a dictation with no retry.
+    ///
+    /// On exhaustion the last response is RETURNED, not thrown, so the caller still
+    /// sees the real status and body. Note two in-repo callers ignore the response
+    /// entirely, so an exhausted 503 reads to them as success; that predates this and
+    /// is called out in the pull request rather than silently relied upon.
+    private static func dataWithRetries(
         for request: URLRequest,
-        allowsRetry: Bool
+        policy: PluginHTTPRetryPolicy
     ) async throws -> (Data, URLResponse) {
-        let session = sharedOrCreateSession()
+        let deadline = ContinuousClock.now + retrySchedulingBudget
         let method = request.httpMethod ?? "GET"
         let url = request.url?.absoluteString ?? "unknown"
-        logger.info("\(method) \(url)")
-        let start = ContinuousClock.now
+        var attempt = 0
+        var usedRetryAfterGrace = false
 
-        do {
-            let (data, response) = try await session.data(for: request)
-            let elapsed = ContinuousClock.now - start
-            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-            logger.info("\(method) \(url) -> \(status) (\(elapsed))")
-            return (data, response)
-        } catch {
-            let elapsed = ContinuousClock.now - start
-            if allowsRetry, isTransientNetworkError(error) {
-                logger.warning("\(method) \(url) transient failure after \(elapsed), resetting session and retrying once: \(error.localizedDescription)")
+        while true {
+            let session = sharedOrCreateSession()
+            logger.info("\(method) \(url) (attempt \(attempt + 1))")
+            let start = ContinuousClock.now
+
+            do {
+                let (data, response) = try await session.data(for: request)
+                let elapsed = ContinuousClock.now - start
+                let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+                logger.info("\(method) \(url) -> \(status) (\(elapsed))")
+
+                guard policy.laddersTransientFailures,
+                      let http = response as? HTTPURLResponse
+                else {
+                    return (data, response)
+                }
+
+                let decision = retryAfterDecision(from: http)
+
+                // A well-formed Retry-After beyond the honoured ceiling is a refusal, not
+                // a delay: the server is asking us to stay away for longer than we are
+                // ever willing to sleep. Stop, rather than falling through to the ladder
+                // and retrying almost immediately.
+                if case .refusal = decision {
+                    logger.warning("\(method) \(url) -> \(status), Retry-After beyond the honoured ceiling, treating as a refusal and not retrying")
+                    return (data, response)
+                }
+
+                let retryAfter: Duration?
+                if case let .after(delay) = decision {
+                    retryAfter = delay
+                } else {
+                    retryAfter = nil
+                }
+
+                // 429: one retry, only on an explicit Retry-After that fits.
+                if isRetryAfterOnlyStatus(http.statusCode) {
+                    guard !usedRetryAfterGrace,
+                          attempt + 1 < retryMaxAttempts,
+                          let retryAfter,
+                          retryAfter <= deadline - ContinuousClock.now
+                    else {
+                        return (data, response)
+                    }
+                    usedRetryAfterGrace = true
+                    attempt += 1
+                    logger.warning("\(method) \(url) -> 429, honouring Retry-After \(retryAfter) once")
+                    try await sleeper(retryAfter)
+                    continue
+                }
+
+                guard isRetryableStatus(http.statusCode, method: method) else {
+                    return (data, response)
+                }
+                guard attempt + 1 < retryMaxAttempts,
+                      let delay = backoffDelay(forAttempt: attempt, deadline: deadline, retryAfter: retryAfter)
+                else {
+                    logger.warning("\(method) \(url) -> \(status), retries exhausted after \(attempt + 1) attempt(s)")
+                    return (data, response)
+                }
+
+                attempt += 1
+                logger.warning("\(method) \(url) -> \(status), retrying in \(delay) (attempt \(attempt + 1))")
+                try await sleeper(delay)
+            } catch {
+                let elapsed = ContinuousClock.now - start
+                guard isTransientNetworkError(error) else {
+                    logger.error("\(method) \(url) failed after \(elapsed): \(error.localizedDescription)")
+                    throw error
+                }
+
                 resetSharedSession(matching: session, reason: "transient network error")
-                return try await data(for: request, allowsRetry: false)
-            }
 
-            logger.error("\(method) \(url) failed after \(elapsed): \(error.localizedDescription)")
-            throw error
+                // Compatibility, and it applies under BOTH policies: one immediate
+                // retry after the reset, for ANY transient error. This is exactly what
+                // this client did before the ladder existed, and narrowing it would be
+                // an alteration rather than an addition. A poll loop that opts out with
+                // `.disabled` therefore behaves precisely as it did before.
+                if attempt == 0 {
+                    attempt += 1
+                    logger.warning("\(method) \(url) transient failure after \(elapsed), reset session, retrying immediately: \(error.localizedDescription)")
+                    continue
+                }
+
+                // Everything past that first retry is new, and is gated the same way
+                // the status ladder is. A POST can time out AFTER the origin processed
+                // it, so laddering a non-idempotent request risks duplicating the work.
+                guard policy.laddersTransientFailures,
+                      isIdempotentMethod(method),
+                      attempt + 1 < retryMaxAttempts,
+                      let delay = backoffDelay(forAttempt: attempt, deadline: deadline, retryAfter: nil)
+                else {
+                    logger.error("\(method) \(url) transient failure after \(elapsed), not retrying further: \(error.localizedDescription)")
+                    throw error
+                }
+
+                attempt += 1
+                logger.warning("\(method) \(url) transient failure after \(elapsed), retrying in \(delay) (attempt \(attempt + 1)): \(error.localizedDescription)")
+                try await sleeper(delay)
+            }
         }
     }
 
+    /// Whether a delivered status is worth retrying FOR THIS REQUEST'S METHOD.
+    ///
+    /// The axis is not "is this a server error" but "could the origin already have
+    /// applied the request". This client is shared by plugins that POST
+    /// side-effecting requests: `WebhookPlugin` delivers a user-configured method,
+    /// `LinearPlugin` runs GraphQL mutations, `OpenAIVectorMemoryPlugin` uploads and
+    /// attaches files. Duplicating those is worse than failing.
+    ///
+    /// - Always safe: the request provably never reached a working origin. 408 was
+    ///   never received; Cloudflare 521 (origin down), 522 (connection timed out),
+    ///   523 (origin unreachable) and 525/526 (TLS handshake failed) all fail before
+    ///   the origin sees a byte. The failure that motivated this work was a 522 on a
+    ///   POST, and it stays retried for every method.
+    /// - Idempotent methods only: 502, 503, 504, 520 and 524 do NOT establish that
+    ///   the origin skipped the work. Cloudflare documents 524 as the connection
+    ///   having been established with no timely answer, so the origin may still
+    ///   complete it.
+    ///
+    ///   503 sits here rather than above, which is a change of mind. Its semantics do
+    ///   say the origin declined to handle the request, and on that reasoning it was
+    ///   originally any-method. But two independent reviewers pointed at the same
+    ///   concrete exposure: `AssemblyAIPlugin.submitTranscription` POSTs job creation
+    ///   through the default policy, so a 503 returned after the job was created would
+    ///   resubmit it, and Linear mutations and vector-store uploads have the same
+    ///   shape. A semantic argument does not outweigh a duplicate transcription job,
+    ///   and the outage case this work exists for is a 52x, which is unaffected.
+    /// - Never: 500, which can mean the origin accepted the work and then failed
+    ///   partway, and 429, which is a deliberate refusal the origin explained. See
+    ///   `retryAfterOnlyStatuses` for how 429 is handled instead.
+    static func isRetryableStatus(_ status: Int, method: String) -> Bool {
+        switch status {
+        case 408, 521, 522, 523, 525, 526:
+            return true
+        case 502, 503, 504, 520, 524:
+            return isIdempotentMethod(method)
+        default:
+            return false
+        }
+    }
+
+    /// RFC 9110 section 9.2.2: these are safe to repeat. POST and PATCH are not.
+    static func isIdempotentMethod(_ method: String) -> Bool {
+        switch method.uppercased() {
+        case "GET", "HEAD", "PUT", "DELETE", "OPTIONS", "TRACE":
+            return true
+        default:
+            return false
+        }
+    }
+
+    /// 429 gets exactly one retry, and only when the origin said when to come back.
+    ///
+    /// Not laddered. The plugins above already map 429 to a rate-limit or quota error,
+    /// and a quota will not clear inside this budget. But a provider that sends
+    /// `Retry-After: 2` on a burst throttle is telling us something actionable, and
+    /// ignoring it is pessimistic. No header means no retry.
+    static func isRetryAfterOnlyStatus(_ status: Int) -> Bool {
+        status == 429
+    }
+
+    /// Full jitter: `random(0, min(cap, base * 2^attempt))`, the shipped consensus.
+    /// Returns nil when nothing more fits inside the budget, which is the signal to
+    /// stop. A `Retry-After` longer than the remaining budget also stops rather than
+    /// sleeping past the deadline.
+    static func backoffDelay(
+        forAttempt attempt: Int,
+        deadline: ContinuousClock.Instant,
+        retryAfter: Duration?
+    ) -> Duration? {
+        let remaining = deadline - ContinuousClock.now
+        guard remaining > .zero else { return nil }
+
+        if let retryAfter {
+            return retryAfter <= remaining ? retryAfter : nil
+        }
+
+        // Arithmetic in seconds rather than on Duration: explicit, and it keeps the
+        // jitter multiply off Duration's operator surface.
+        let base = seconds(of: retryBaseDelay)
+        let cap = seconds(of: retryMaxDelay)
+        // Bounded shift so a long-lived ladder cannot overflow; the cap makes it moot.
+        let growth = Double(1 << min(max(attempt, 0), 20))
+        let capped = min(base * growth, cap)
+        let jittered = Duration.seconds(capped * jitterFraction())
+        guard jittered <= remaining else { return nil }
+        return jittered
+    }
+
+    static func seconds(of duration: Duration) -> Double {
+        let parts = duration.components
+        return Double(parts.seconds) + Double(parts.attoseconds) * 1e-18
+    }
+
+    /// Parses the delta-seconds form of `Retry-After`.
+    ///
+    /// Parsed as an INTEGER, which is what RFC 9110 defines delta-seconds to be, and
+    /// clamped. That is not tidiness: `Double("999999999999999999999999")` is finite
+    /// and non-negative, passes an `isFinite` guard, and then TRAPS inside
+    /// `Duration.seconds(_:)` with an overflow in multiplication, killing the process.
+    /// A hostile or merely broken origin could crash the app from a response header.
+    ///
+    /// The HTTP-date form is not honoured. It needs clock-skew handling to be safe and
+    /// falls through to the ordinary ladder instead.
+    /// How to treat a `Retry-After` on a retryable response.
+    enum RetryAfterDecision: Equatable {
+        /// No usable header: absent, empty, non-integer, or negative. Fall through to
+        /// the ordinary backoff ladder.
+        case none
+        /// A usable delay. Honour it, subject to the remaining budget.
+        case after(Duration)
+        /// A well-formed delta-seconds beyond `maxHonouredRetryAfterSeconds`. This is a
+        /// refusal, not a delay, so we do not retry at all.
+        case refusal
+    }
+
+    static func retryAfterDecision(from response: HTTPURLResponse) -> RetryAfterDecision {
+        guard let raw = response.value(forHTTPHeaderField: "Retry-After")?
+            .trimmingCharacters(in: .whitespaces),
+            let seconds = Int(raw),
+            seconds >= 0
+        else {
+            // Absent, empty, non-integer, or negative. Note an oversized value like
+            // "999999999999999999999999" also lands here: it overflows Int and parses
+            // as nil, so it is treated as an unusable header, not a refusal.
+            return .none
+        }
+        if seconds > maxHonouredRetryAfterSeconds {
+            return .refusal
+        }
+        return .after(.seconds(seconds))
+    }
+
+    /// A day. Anything longer is not a delay, it is a refusal, and we do not sleep on
+    /// it. Also keeps the value far below the range where Duration arithmetic traps.
+    static let maxHonouredRetryAfterSeconds = 86_400
     private static func sharedOrCreateSession() -> any PluginHTTPClientSession {
         lock.withLock {
             if let sharedSession {
@@ -219,23 +550,6 @@ public enum PluginHTTPClient {
         return config
     }
 
-    private static func resetSharedSession(matching session: any PluginHTTPClientSession, reason: String) {
-        let didRemoveSharedSession = lock.withLock {
-            guard let current = sharedSession, current === session else {
-                return false
-            }
-            sharedSession = nil
-            return true
-        }
-
-        session.finishTasksAndInvalidate()
-        if didRemoveSharedSession {
-            logger.info("Reset shared plugin HTTP session: \(reason)")
-        } else {
-            logger.info("Invalidated plugin HTTP session after \(reason)")
-        }
-    }
-
     private static func isTransientNetworkError(_ error: Error) -> Bool {
         guard let urlError = error as? URLError else {
             return false
@@ -253,6 +567,23 @@ public enum PluginHTTPClient {
             return false
         }
     }
+    private static func resetSharedSession(matching session: any PluginHTTPClientSession, reason: String) {
+        let didRemoveSharedSession = lock.withLock {
+            guard let current = sharedSession, current === session else {
+                return false
+            }
+            sharedSession = nil
+            return true
+        }
+
+        session.finishTasksAndInvalidate()
+        if didRemoveSharedSession {
+            logger.info("Reset shared plugin HTTP session: \(reason)")
+        } else {
+            logger.info("Invalidated plugin HTTP session after \(reason)")
+        }
+    }
+
 }
 
 // MARK: - WAV Encoder Utility
@@ -287,10 +618,16 @@ public struct PluginWavEncoder {
         data.append(contentsOf: [0x64, 0x61, 0x74, 0x61]) // "data"
         data.append(contentsOf: withUnsafeBytes(of: dataSize.littleEndian) { Array($0) })
 
-        for sample in samples {
-            let clamped = max(-1.0, min(1.0, sample))
-            let int16Value = Int16(clamped * 32767)
-            data.append(contentsOf: withUnsafeBytes(of: int16Value.littleEndian) { Array($0) })
+        // Fill the PCM payload in one allocation instead of appending each sample.
+        data.count = 44 + Int(dataSize)
+        data.withUnsafeMutableBytes { (bytes: UnsafeMutableRawBufferPointer) in
+            for (index, sample) in samples.enumerated() {
+                let clamped = max(-1.0, min(1.0, sample))
+                let value = UInt16(bitPattern: Int16(clamped * 32767))
+                // Explicit bytes avoid alignment assumptions and preserve little endian PCM.
+                bytes[44 + index * 2] = UInt8(truncatingIfNeeded: value)
+                bytes[45 + index * 2] = UInt8(truncatingIfNeeded: value >> 8)
+            }
         }
 
         return data
@@ -308,6 +645,20 @@ public struct PluginAudioUploadFile: Sendable, Equatable {
         self.filename = filename
         self.contentType = contentType
         self.format = format
+    }
+}
+
+/// Preserves the raw HTTP response used to classify an upload retry while
+/// keeping the user-facing error bounded and provider-specific.
+public struct PluginAudioUploadHTTPFailure: Error, @unchecked Sendable {
+    public let statusCode: Int
+    public let responseData: Data
+    public let underlyingError: any Error
+
+    public init(statusCode: Int, responseData: Data, underlyingError: any Error) {
+        self.statusCode = statusCode
+        self.responseData = responseData
+        self.underlyingError = underlyingError
     }
 }
 
@@ -373,17 +724,40 @@ public enum PluginAudioUploadEncoder {
         do {
             preferredUpload = try compressedM4AUpload(from: uploadAudio)
         } catch {
-            return try await operation(wavUpload(from: uploadAudio))
+            do {
+                return try await operation(wavUpload(from: uploadAudio))
+            } catch {
+                throw underlyingUploadError(error)
+            }
         }
 
         do {
             return try await operation(preferredUpload)
         } catch {
-            guard shouldRetryWithWavUpload(error: error) else {
-                throw error
+            let shouldRetry: Bool
+            if let failure = error as? PluginAudioUploadHTTPFailure {
+                shouldRetry = shouldRetryWithWavUpload(
+                    statusCode: failure.statusCode,
+                    responseData: failure.responseData
+                )
+            } else {
+                shouldRetry = shouldRetryWithWavUpload(error: error)
             }
-            return try await operation(wavUpload(from: uploadAudio))
+
+            guard shouldRetry else {
+                throw underlyingUploadError(error)
+            }
+
+            do {
+                return try await operation(wavUpload(from: uploadAudio))
+            } catch {
+                throw underlyingUploadError(error)
+            }
         }
+    }
+
+    private static func underlyingUploadError(_ error: any Error) -> any Error {
+        (error as? PluginAudioUploadHTTPFailure)?.underlyingError ?? error
     }
 
     public static func shouldRetryWithWavUpload(statusCode: Int, responseData: Data) -> Bool {
@@ -789,35 +1163,37 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
         responseFormat: String? = nil,
         apiVersion: String?
     ) async throws -> PluginTranscriptionResult {
+        let uploadAudio = normalizedAudioForUpload(audio)
+        let preferredUpload: PluginAudioUploadFile
         do {
-            return try await transcribeCompressedAudio(
-                audio: audio,
-                apiKey: apiKey,
-                modelName: modelName,
-                language: language,
-                translate: translate,
-                prompt: prompt,
-                requestTimeout: requestTimeout,
-                responseFormat: responseFormat,
-                apiVersion: apiVersion
-            )
+            preferredUpload = try PluginAudioUploadEncoder.compressedM4AUpload(from: uploadAudio)
         } catch {
-            guard PluginAudioUploadEncoder.shouldRetryWithWavUpload(error: error) else {
-                throw error
-            }
-
-            return try await transcribe(
-                audio: audio,
+            return try await performTranscribe(
+                audio: uploadAudio,
                 apiKey: apiKey,
                 modelName: modelName,
                 language: language,
                 translate: translate,
                 prompt: prompt,
-                requestTimeout: requestTimeout,
                 responseFormat: responseFormat,
+                requestTimeout: requestTimeout,
                 apiVersion: apiVersion
             )
         }
+
+        return try await performTranscribe(
+            audio: uploadAudio,
+            apiKey: apiKey,
+            modelName: modelName,
+            language: language,
+            translate: translate,
+            prompt: prompt,
+            responseFormat: responseFormat,
+            requestTimeout: requestTimeout,
+            uploadFile: preferredUpload,
+            apiVersion: apiVersion,
+            allowsWavFallback: true
+        )
     }
 
     public func transcribeWithUploadFallback(
@@ -857,38 +1233,19 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
         uploadFile: PluginAudioUploadFile,
         apiVersion: String?
     ) async throws -> PluginTranscriptionResult {
-        do {
-            return try await performTranscribe(
-                audio: audio,
-                apiKey: apiKey,
-                modelName: modelName,
-                language: language,
-                translate: translate,
-                prompt: prompt,
-                responseFormat: responseFormat,
-                requestTimeout: requestTimeout,
-                uploadFile: uploadFile,
-                apiVersion: apiVersion
-            )
-        } catch {
-            guard uploadFile.format != "wav",
-                  PluginAudioUploadEncoder.shouldRetryWithWavUpload(error: error) else {
-                throw error
-            }
-
-            return try await performTranscribe(
-                audio: audio,
-                apiKey: apiKey,
-                modelName: modelName,
-                language: language,
-                translate: translate,
-                prompt: prompt,
-                responseFormat: responseFormat,
-                requestTimeout: requestTimeout,
-                uploadFile: PluginAudioUploadEncoder.wavUpload(from: normalizedAudioForUpload(audio)),
-                apiVersion: apiVersion
-            )
-        }
+        try await performTranscribe(
+            audio: audio,
+            apiKey: apiKey,
+            modelName: modelName,
+            language: language,
+            translate: translate,
+            prompt: prompt,
+            responseFormat: responseFormat,
+            requestTimeout: requestTimeout,
+            uploadFile: uploadFile,
+            apiVersion: apiVersion,
+            allowsWavFallback: true
+        )
     }
 
     public func transcribe(
@@ -952,7 +1309,8 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
         responseFormat: String?,
         requestTimeout: TimeInterval,
         uploadFile: PluginAudioUploadFile? = nil,
-        apiVersion: String? = nil
+        apiVersion: String? = nil,
+        allowsWavFallback: Bool = false
     ) async throws -> PluginTranscriptionResult {
         let path = translate ? "/v1/audio/translations" : "/v1/audio/transcriptions"
         guard let url = requestURL(path: path, apiVersion: apiVersion) else {
@@ -1003,6 +1361,26 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
             throw PluginTranscriptionError.networkError("Invalid response")
         }
 
+        if allowsWavFallback,
+           uploadFile.format != "wav",
+           PluginAudioUploadEncoder.shouldRetryWithWavUpload(
+            statusCode: httpResponse.statusCode,
+            responseData: responseData
+           ) {
+            return try await performTranscribe(
+                audio: audio,
+                apiKey: apiKey,
+                modelName: modelName,
+                language: language,
+                translate: translate,
+                prompt: prompt,
+                responseFormat: responseFormat,
+                requestTimeout: requestTimeout,
+                uploadFile: PluginAudioUploadEncoder.wavUpload(from: normalizedAudioForUpload(audio)),
+                apiVersion: apiVersion
+            )
+        }
+
         switch httpResponse.statusCode {
         case 200:
             break
@@ -1013,11 +1391,14 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
         case 413:
             throw PluginTranscriptionError.fileTooLarge
         default:
-            let errorMessage = String(data: responseData, encoding: .utf8) ?? "Unknown error"
+            let errorMessage = PluginHTTPErrorBodyFormatter.summary(
+                from: responseData,
+                response: httpResponse
+            )
             throw PluginTranscriptionError.apiError("HTTP \(httpResponse.statusCode): \(errorMessage)")
         }
 
-        return try parseResponse(responseData)
+        return try parseResponse(responseData, response: httpResponse)
     }
 
     public func validateApiKey(_ apiKey: String) async -> Bool {
@@ -1071,7 +1452,19 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
         let segments: [APISegment]?
     }
 
-    private func parseResponse(_ data: Data) throws -> PluginTranscriptionResult {
+    private func parseResponse(
+        _ data: Data,
+        response: HTTPURLResponse
+    ) throws -> PluginTranscriptionResult {
+        if let htmlPageSummary = PluginHTTPErrorBodyFormatter.htmlPageSummary(
+            from: data,
+            response: response
+        ) {
+            throw PluginTranscriptionError.apiError(
+                "Failed to parse response: \(htmlPageSummary)"
+            )
+        }
+
         do {
             let response = try JSONDecoder().decode(APIResponse.self, from: data)
             let segments = (response.segments ?? []).map {
@@ -1269,12 +1662,34 @@ public struct PluginOpenAIChatHelper: Sendable {
         guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
               let choices = json["choices"] as? [[String: Any]],
               let first = choices.first,
-              let message = first["message"] as? [String: Any],
-              let content = message["content"] as? String else {
+              let message = first["message"] as? [String: Any] else {
             throw PluginChatError.apiError("Failed to parse response")
         }
 
-        return content.trimmingCharacters(in: .whitespacesAndNewlines)
+        return Self.chatMessageContent(from: message).trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    /// Extracts assistant text from an OpenAI-compatible chat `message`.
+    /// Reasoning-capable models (e.g. gpt-oss on Cerebras, some OpenRouter
+    /// models) return `content: null` when the visible answer is empty - that
+    /// is a valid empty response, not a malformed one. Some providers also
+    /// return `content` as an array of typed parts. Reasoning text is never
+    /// promoted to content.
+    public static func chatMessageContent(from message: [String: Any]) -> String {
+        if let text = message["content"] as? String {
+            return text
+        }
+        if let parts = message["content"] as? [[String: Any]] {
+            // Only typed text parts contribute. A `reasoning` (or any other
+            // typed) part may also carry a `text` field and must never be
+            // promoted into the visible answer.
+            return parts.compactMap { part -> String? in
+                guard (part["type"] as? String) == "text" else { return nil }
+                return (part["text"] as? String) ?? (part["content"] as? String)
+            }.joined()
+        }
+        // null or absent content: an intentionally empty visible answer
+        return ""
     }
 
     public func process(

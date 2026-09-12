@@ -85,7 +85,7 @@ final class PromptPaletteHandler {
         guard currentState == .idle else { return }
 
         let workflows = workflowService.workflows.filter { $0.isEnabled && $0.isManuallyRunnable }
-        let recentEntries = recentTranscriptionStore.mergedEntries(historyRecords: historyService.records)
+        let recentEntries = recentTranscriptionStore.mergedEntries(historyRecords: historyService.recentRecords)
         guard !workflows.isEmpty || !recentEntries.isEmpty else { return }
 
         if workflows.isEmpty {

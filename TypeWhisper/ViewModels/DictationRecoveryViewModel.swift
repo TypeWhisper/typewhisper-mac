@@ -76,6 +76,36 @@ final class DictationRecoveryViewModel: ObservableObject {
             defaults.set(automaticFallbackEnabled, forKey: UserDefaultsKeys.dictationRecoveryAutomaticFallbackEnabled)
         }
     }
+    @Published var hedgeEnabled: Bool {
+        didSet {
+            defaults.set(hedgeEnabled, forKey: UserDefaultsKeys.dictationRecoveryHedgeEnabled)
+        }
+    }
+    @Published var hedgeThresholdSeconds: Double {
+        didSet {
+            defaults.set(hedgeThresholdSeconds, forKey: UserDefaultsKeys.dictationRecoveryHedgeThresholdSeconds)
+        }
+    }
+
+    /// Threshold after which a still-running primary transcription should race the
+    /// recovery fallback engine, or nil when hedging is off. The engine/licensing
+    /// gates live in `automaticFallbackConfiguration` — hedging only activates when
+    /// that returns a configuration.
+    /// Bounds of the hedge threshold the settings UI offers; stored values
+    /// (including ones restored from a settings backup) are clamped into it so
+    /// an out-of-range or non-finite value can never reach the race timer.
+    static let hedgeThresholdRange: ClosedRange<TimeInterval> = 1.0...15.0
+    static let defaultHedgeThresholdSeconds: TimeInterval = 3.0
+
+    static func clampedHedgeThreshold(_ value: Double?) -> TimeInterval {
+        guard let value, value.isFinite else { return defaultHedgeThresholdSeconds }
+        return min(max(value, hedgeThresholdRange.lowerBound), hedgeThresholdRange.upperBound)
+    }
+
+    var automaticHedgeThreshold: TimeInterval? {
+        guard hedgeEnabled, automaticFallbackEnabled else { return nil }
+        return Self.clampedHedgeThreshold(hedgeThresholdSeconds)
+    }
     @Published var retentionPolicy: DictationRecoveryRetentionPolicy {
         didSet {
             defaults.set(retentionPolicy.rawValue, forKey: UserDefaultsKeys.dictationRecoveryRetentionDays)
@@ -138,6 +168,10 @@ final class DictationRecoveryViewModel: ObservableObject {
         self.selectedEngine = defaults.string(forKey: UserDefaultsKeys.dictationRecoveryEngine)
         self.selectedModel = defaults.string(forKey: UserDefaultsKeys.dictationRecoveryModel)
         self.automaticFallbackEnabled = defaults.bool(forKey: UserDefaultsKeys.dictationRecoveryAutomaticFallbackEnabled)
+        self.hedgeEnabled = defaults.bool(forKey: UserDefaultsKeys.dictationRecoveryHedgeEnabled)
+        self.hedgeThresholdSeconds = Self.clampedHedgeThreshold(
+            defaults.object(forKey: UserDefaultsKeys.dictationRecoveryHedgeThresholdSeconds) as? Double
+        )
         self.retentionPolicy = retentionPolicy
         self.isInitialized = true
 
@@ -404,12 +438,15 @@ final class DictationRecoveryViewModel: ObservableObject {
     }
 
     private func reconcileSelectionWithAvailablePlugins() {
-        guard let pluginManager = PluginManager.shared else { return }
-        if let selectedEngine,
-           pluginManager.transcriptionEngine(for: selectedEngine) == nil {
-            self.selectedEngine = nil
-            selectedModel = nil
-        }
+        // Deliberately keeps the stored engine selection even when the plugin
+        // manager cannot resolve it right now. This runs on every plugin-manager
+        // change, including the transient states while plugin bundles are still
+        // loading at launch or being reloaded, and clearing the selection there
+        // silently erased the user's fallback engine for good (observed in the
+        // field: the recovery engine keys vanished after a relaunch and the
+        // hedge race stopped dispatching). An unresolved selection already
+        // degrades safely: `resolvedEngine` is nil, so the automatic fallback
+        // configuration is withheld until the plugin is available again.
         normalizeLanguageSelectionForResolvedEngine()
     }
 

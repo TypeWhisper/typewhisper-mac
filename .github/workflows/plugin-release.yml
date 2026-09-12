@@ -22,13 +22,18 @@ on:
         options:
           - official
           - community
+      allow_prerelease_host:
+        description: Allow SDK validation against the latest matching daily host release
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
 
 jobs:
   build:
-    runs-on: macos-15
+    runs-on: macos-26
     concurrency:
       group: plugin-release-${{ github.event_name == 'workflow_dispatch' && format('{0}-{1}-v{2}', inputs.distribution_source, inputs.plugin_name, inputs.plugin_version) || github.ref_name }}
       cancel-in-progress: true
@@ -38,11 +43,13 @@ jobs:
           INPUT_PLUGIN_NAME: ${{ inputs.plugin_name }}
           INPUT_PLUGIN_VERSION: ${{ inputs.plugin_version }}
           INPUT_DISTRIBUTION_SOURCE: ${{ inputs.distribution_source }}
+          INPUT_ALLOW_PRERELEASE_HOST: ${{ inputs.allow_prerelease_host }}
         run: |
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             PLUGIN_NAME="$INPUT_PLUGIN_NAME"
             PLUGIN_VERSION="$INPUT_PLUGIN_VERSION"
             DISTRIBUTION_SOURCE="$INPUT_DISTRIBUTION_SOURCE"
+            ALLOW_PRERELEASE_HOST="${INPUT_ALLOW_PRERELEASE_HOST:-false}"
             TAG="plugin-${PLUGIN_NAME}-v${PLUGIN_VERSION}"
           else
             TAG="${GITHUB_REF_NAME}"
@@ -55,6 +62,7 @@ jobs:
               exit 1
             fi
             DISTRIBUTION_SOURCE="official"
+            ALLOW_PRERELEASE_HOST="false"
           fi
           if [[ ! "$PLUGIN_NAME" =~ ^[A-Za-z0-9_-]+$ ]]; then
             echo "Invalid plugin name: $PLUGIN_NAME"
@@ -68,13 +76,18 @@ jobs:
             official|community) ;;
             *) echo "Unknown distribution source: $DISTRIBUTION_SOURCE" && exit 1 ;;
           esac
+          case "$ALLOW_PRERELEASE_HOST" in
+            true|false) ;;
+            *) echo "Invalid allow_prerelease_host value: $ALLOW_PRERELEASE_HOST" && exit 1 ;;
+          esac
           {
             echo "TAG=$TAG"
             echo "PLUGIN_NAME=$PLUGIN_NAME"
             echo "PLUGIN_VERSION=$PLUGIN_VERSION"
             echo "DISTRIBUTION_SOURCE=$DISTRIBUTION_SOURCE"
+            echo "ALLOW_PRERELEASE_HOST=$ALLOW_PRERELEASE_HOST"
           } >> "$GITHUB_ENV"
-          echo "Plugin: $PLUGIN_NAME, Version: $PLUGIN_VERSION, Source: $DISTRIBUTION_SOURCE, Tag: $TAG"
+          echo "Plugin: $PLUGIN_NAME, Version: $PLUGIN_VERSION, Source: $DISTRIBUTION_SOURCE, Tag: $TAG, Allow prerelease host: $ALLOW_PRERELEASE_HOST"
 
       - name: Resolve target name
         run: |
@@ -86,6 +99,8 @@ jobs:
             webhook) TARGET="WebhookPlugin" ;;
             groq) TARGET="GroqPlugin" ;;
             openai) TARGET="OpenAIPlugin" ;;
+            meta) TARGET="MetaPlugin" ;;
+            microsoft-ai) TARGET="MicrosoftAIPlugin" ;;
             mistral) TARGET="MistralAIPlugin" ;;
             gemini) TARGET="GeminiPlugin" ;;
             whisperkit) TARGET="WhisperKitPlugin" ;;
@@ -117,6 +132,7 @@ jobs:
             web-link) TARGET="WebLinkPlugin" ;;
             cerebras) TARGET="CerebrasPlugin" ;;
             openrouter) TARGET="OpenRouterPlugin" ;;
+            vercel-ai-gateway) TARGET="VercelAIGatewayPlugin" ;;
             soniox) TARGET="SonioxPlugin" ;;
             sber-salutespeech) TARGET="SaluteSpeechPlugin" ;;
             reson8) TARGET="Reson8Plugin" ;;
@@ -130,13 +146,13 @@ jobs:
             *) echo "Unknown plugin: $PLUGIN_NAME" && exit 1 ;;
           esac
           # Set deployment target and Swift embedding per plugin
-          # All plugins use Xcode 26.3 (mlx-audio-swift requires Swift 6.2+ for package resolution,
+          # All plugins use Xcode 26.6 (mlx-swift 0.31.6 requires Swift 6.3+ for package resolution,
           # and workspace-state.json v7 from Xcode 26.x is incompatible with Xcode 16.2)
           # - SpeechAnalyzer: macOS 26 deployment target
           # - Qwen3/Voxtral/Granite/Gemma4: macOS 14 + embed Swift compat libs (MLX uses Swift 6.2 features)
           # - All others: macOS 14, no compat libs needed (simple Foundation/SDK code)
           EMBED_SWIFT_LIBS="NO"
-          XCODE_VERSION="26.3"
+          XCODE_VERSION="26.6"
           if [ "$TARGET" = "SpeechAnalyzerPlugin" ]; then
             DEPLOY_TARGET="26.0"
           elif [ "$TARGET" = "Qwen3Plugin" ] || [ "$TARGET" = "VoxtralPlugin" ] || [ "$TARGET" = "GranitePlugin" ] || [ "$TARGET" = "Gemma4Plugin" ]; then
@@ -154,7 +170,7 @@ jobs:
           echo "Target: $TARGET (macOS $DEPLOY_TARGET, Xcode $XCODE_VERSION, embed=$EMBED_SWIFT_LIBS)"
 
       - name: Checkout
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Validate community plugin registry metadata
         run: |
@@ -163,8 +179,19 @@ jobs:
           fi
           python3 scripts/assemble_community_plugin_registry.py
 
+      - name: Validate release manifest
+        run: |
+          MANIFEST="TypeWhisperPluginSDK/Plugins/${TARGET}/manifest.json"
+          if [ ! -f "$MANIFEST" ]; then
+            echo "Missing manifest for ${TARGET}: $MANIFEST"
+            exit 1
+          fi
+          python3 scripts/validate_plugin_release_manifest.py "$MANIFEST" --version "$PLUGIN_VERSION"
+          echo "Validated $MANIFEST for release $PLUGIN_VERSION"
+          cat "$MANIFEST"
+
       - name: Setup Xcode
-        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1
+        uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
           xcode-version: ${{ env.XCODE_VERSION }}
 
@@ -173,59 +200,6 @@ jobs:
           xcodebuild -resolvePackageDependencies \
             -project TypeWhisper.xcodeproj \
             -scheme TypeWhisper
-
-      - name: Validate release manifest
-        run: |
-          MANIFEST="TypeWhisperPluginSDK/Plugins/${TARGET}/manifest.json"
-          if [ ! -f "$MANIFEST" ]; then
-            echo "Missing manifest for ${TARGET}: $MANIFEST"
-            exit 1
-          fi
-          export MANIFEST
-          python3 <<'PYEOF'
-          import json
-          import os
-          import re
-
-          manifest_path = os.environ["MANIFEST"]
-          expected_version = os.environ["PLUGIN_VERSION"]
-
-          with open(manifest_path) as manifest_file:
-              manifest = json.load(manifest_file)
-
-          actual_version = manifest.get("version")
-          if actual_version != expected_version:
-              raise SystemExit(
-                  f"manifest version {actual_version!r} does not match release version {expected_version!r}"
-              )
-
-          min_host_version = manifest.get("minHostVersion")
-          if not isinstance(min_host_version, str) or not re.fullmatch(
-              r"[0-9]+\.[0-9]+\.[0-9]+",
-              min_host_version,
-          ):
-              raise SystemExit(
-                  f"manifest minHostVersion {min_host_version!r} must be a release version like 1.6.0"
-              )
-          minimum_host_version = (1, 6, 0)
-          host_version = tuple(int(part) for part in min_host_version.split("."))
-          if host_version < minimum_host_version:
-              raise SystemExit(
-                  f"manifest minHostVersion {min_host_version!r} must be 1.6.0 or newer"
-              )
-
-          sdk_compatibility_version = manifest.get("sdkCompatibilityVersion")
-          if not isinstance(sdk_compatibility_version, str) or not re.fullmatch(
-              r"v[1-9][0-9]*",
-              sdk_compatibility_version,
-          ):
-              raise SystemExit(
-                  "manifest sdkCompatibilityVersion "
-                  f"{sdk_compatibility_version!r} must use the format vN"
-              )
-          PYEOF
-          echo "Validated $MANIFEST for release $PLUGIN_VERSION"
-          cat "$MANIFEST"
 
       - name: Build Plugin
         run: |
@@ -238,7 +212,7 @@ jobs:
               "LD_RUNPATH_SEARCH_PATHS=@loader_path/../Frameworks"
             )
           fi
-          xcodebuild -project TypeWhisper.xcodeproj \
+          xcodebuild -skipPackagePluginValidation -project TypeWhisper.xcodeproj \
             -target "$TARGET" \
             -configuration Release \
             SYMROOT="$(pwd)/build" \
@@ -249,6 +223,76 @@ jobs:
             MACOSX_DEPLOYMENT_TARGET="$DEPLOY_TARGET" \
             MARKETING_VERSION="$PLUGIN_VERSION" \
             "${EXTRA_SETTINGS[@]}"
+
+      - name: Verify plugin SDK compatibility with minHostVersion
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          MANIFEST="TypeWhisperPluginSDK/Plugins/${TARGET}/manifest.json"
+          MIN_HOST_VERSION=$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["minHostVersion"])' "$MANIFEST")
+          WORKDIR="$RUNNER_TEMP/min-host-sdk-${TARGET}"
+          mkdir -p "$WORKDIR/app"
+
+          RESOLVE_ARGS=(
+            --repository "$GITHUB_REPOSITORY"
+            --min-host-version "$MIN_HOST_VERSION"
+          )
+          if [ "$ALLOW_PRERELEASE_HOST" = "true" ]; then
+            RESOLVE_ARGS+=(--allow-prerelease-host)
+          fi
+          HOST_RELEASE_JSON=$(python3 scripts/resolve_plugin_host_release.py "${RESOLVE_ARGS[@]}")
+
+          RESOLVED_TAG=$(jq -r '.tagName' <<<"$HOST_RELEASE_JSON")
+          HOST_ASSET_NAME="TypeWhisper-${RESOLVED_TAG}.zip"
+          echo "Using host release ${RESOLVED_TAG} for SDK compatibility validation"
+
+          if ! jq -e --arg asset "$HOST_ASSET_NAME" \
+            '[.assets[] | select(.name == $asset)] | length == 1' \
+            <<<"$HOST_RELEASE_JSON" >/dev/null; then
+            echo "::error::Release ${HOST_TAG} must contain exactly one ${HOST_ASSET_NAME} asset"
+            exit 1
+          fi
+
+          gh release download "$RESOLVED_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --pattern "$HOST_ASSET_NAME" \
+            --dir "$WORKDIR"
+
+          HOST_ZIP="$WORKDIR/$HOST_ASSET_NAME"
+          EXPECTED_DIGEST=$(jq -r --arg asset "$HOST_ASSET_NAME" \
+            '.assets[] | select(.name == $asset) | .digest // ""' \
+            <<<"$HOST_RELEASE_JSON")
+          if [[ "$EXPECTED_DIGEST" == sha256:* ]]; then
+            ACTUAL_DIGEST="sha256:$(shasum -a 256 "$HOST_ZIP" | awk '{print $1}')"
+            if [ "$ACTUAL_DIGEST" != "$EXPECTED_DIGEST" ]; then
+              echo "::error::Host asset digest mismatch: expected ${EXPECTED_DIGEST}, got ${ACTUAL_DIGEST}"
+              exit 1
+            fi
+          fi
+
+          ditto -x -k "$HOST_ZIP" "$WORKDIR/app"
+          HOST_SDK=$(find "$WORKDIR/app" \
+            -path '*TypeWhisperPluginSDK.framework/Versions/A/TypeWhisperPluginSDK' \
+            -type f -print -quit)
+          BUILD_SDK=$(find build \
+            -path '*TypeWhisperPluginSDK.framework/Versions/A/TypeWhisperPluginSDK' \
+            -type f -print -quit)
+          PLUGIN_BINARY="build/Release/${TARGET}.bundle/Contents/MacOS/${TARGET}"
+
+          if [ -z "$HOST_SDK" ]; then
+            echo "::error::TypeWhisperPluginSDK.framework not found in host release ${RESOLVED_TAG}"
+            exit 1
+          fi
+          if [ -z "$BUILD_SDK" ]; then
+            echo "::error::TypeWhisperPluginSDK.framework used for the plugin build was not found"
+            exit 1
+          fi
+
+          python3 scripts/check_plugin_sdk_symbol_compatibility.py \
+            --plugin-binary "$PLUGIN_BINARY" \
+            --build-sdk "$BUILD_SDK" \
+            --host-sdk "$HOST_SDK" \
+            --min-host-version "$MIN_HOST_VERSION"
 
       - name: Import Signing Certificate
         env:

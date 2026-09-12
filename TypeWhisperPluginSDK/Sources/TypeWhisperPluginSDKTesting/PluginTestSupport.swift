@@ -259,10 +259,21 @@ public final class PluginTestHostServices: HostServices, HostModelLifecyclePolic
 }
 
 @_spi(Testing) public enum PluginHTTPClientTestHarness {
+    /// Installs a mock session AND a no-op sleeper.
+    ///
+    /// The sleeper matters: a mock whose last outcome is a sticky transient failure or
+    /// a sticky 503 now drives the real retry ladder, so without this a single plugin
+    /// test can sleep for tens of seconds and its duration becomes non-deterministic
+    /// in CI. Pass `laddersTransientFailures: true` only when the test is deliberately
+    /// exercising retry timing.
     public static func configure(
-        _ factory: @escaping (URLSessionConfiguration) -> PluginHTTPClientMockSession
+        _ factory: @escaping (URLSessionConfiguration) -> PluginHTTPClientMockSession,
+        sleepsForRealBackoff: Bool = false
     ) {
         PluginHTTPClient.configureForTesting(factory)
+        if !sleepsForRealBackoff {
+            PluginHTTPClient.configureRetryForTesting(sleeper: { _ in })
+        }
     }
 
     public static func reset() {

@@ -31,6 +31,36 @@ private class FirstMouseHostingView<Content: View>: NSHostingView<Content> {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 }
 
+/// Positions a fixed-size hosting view without involving SwiftUI in window sizing.
+private final class NotchHostingContainerView: NSView {
+    private let hostingView: NSView
+
+    init(hostingView: NSView, size: NSSize) {
+        self.hostingView = hostingView
+        super.init(frame: NSRect(origin: .zero, size: size))
+        hostingView.frame = bounds
+        hostingView.autoresizingMask = []
+        addSubview(hostingView)
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func resizeSubviews(withOldSize oldSize: NSSize) {
+        // Flexible margins do not reliably center an oversized subview when
+        // both horizontal margins initially have zero width. Move only the
+        // origin: resizing the hosting view reintroduces the layout feedback loop.
+        let origin = NSPoint(
+            x: bounds.midX - hostingView.frame.width / 2,
+            y: bounds.maxY - hostingView.frame.height
+        )
+        if hostingView.frame.origin != origin {
+            hostingView.setFrameOrigin(origin)
+        }
+    }
+}
+
 /// Panel that visually extends the MacBook notch, centered over the hardware notch.
 /// Only shown on displays with a hardware notch - hidden on non-notch displays regardless of settings.
 class NotchIndicatorPanel: NSPanel {
@@ -47,6 +77,10 @@ class NotchIndicatorPanel: NSPanel {
     private var dismissTask: Task<Void, Never>?
     private var isActionFeedbackInteractive = false
     private var isMeetingCountdownPresented = false
+    /// True while a deferred dismissal is in flight: content already blanked,
+    /// `orderOut` pending. Callers that only want to refresh an already-visible
+    /// panel (not change visibility policy) must not resurrect it in this window.
+    private var isDismissing = false
 
     private var isFeedbackInteractive: Bool {
         isActionFeedbackInteractive || isMeetingCountdownPresented
@@ -111,7 +145,26 @@ class NotchIndicatorPanel: NSPanel {
 
         let hostingView = FirstMouseHostingView(rootView: content(notchGeometry))
         hostingView.sizingOptions = []
-        contentView = hostingView
+        // The notch content lays itself out from NotchGeometry and never consumes
+        // the safe area; opting out also drops NSHostingView's safe-area-corner
+        // KVO observer, which this panel (the only window over the notch) would
+        // otherwise service on every frame change.
+        hostingView.safeAreaRegions = []
+
+        // The hosting view is never resized: it stays at the non-interactive
+        // panel size inside a plain container and only the window changes size.
+        // NSHostingView keeps a WindowSizeBridge that, whenever the root view's
+        // size changes inside an animated SwiftUI transaction, animates the
+        // window frame to follow it from windowDidLayout (observed live: the
+        // bridge asked to resize this panel back to 500x500 while it sat at the
+        // toast size). A window resize issued from inside the layout pass
+        // re-enters constraint updates and AppKit raises
+        // NSInternalInconsistencyException from _postWindowNeedsUpdateConstraints,
+        // which the display-cycle observer rethrows and the process aborts
+        // (#1229). With the hosting view's size constant the root size never
+        // animates, so the bridge has nothing to animate. The container explicitly
+        // centers and top-anchors the hosting view as the window changes size.
+        contentView = NotchHostingContainerView(hostingView: hostingView, size: initialSize)
     }
 
     override var canBecomeKey: Bool { false }
@@ -219,6 +272,7 @@ class NotchIndicatorPanel: NSPanel {
     func show() {
         showTask?.cancel()
         dismissTask?.cancel()
+        isDismissing = false
 
         let wasVisible = isVisible
         placePanel()
@@ -271,7 +325,13 @@ class NotchIndicatorPanel: NSPanel {
             in: screenFrame
         )
 
-        setFrame(panelFrame, display: true)
+        // display: false — a synchronous display pass here re-enters the display
+        // cycle on the NSHostingView content and can raise
+        // NSInternalInconsistencyException from _postWindowNeedsUpdateConstraints
+        // (via NSHostingView.invalidateSafeAreaCornerInsets) when placement is
+        // triggered from a display-cycle observer such as the screen-parameters
+        // notification. The next regular display cycle picks up the new frame.
+        setFrame(panelFrame, display: false)
         ignoresMouseEvents = !isFeedbackInteractive
         FloatingPanelSpacePolicy.orderIndicatorFront(
             self,
@@ -290,7 +350,16 @@ class NotchIndicatorPanel: NSPanel {
         if displayModeProvider() == .activeScreen {
             cachedScreen = nil
         }
-        placePanel()
+        // Hop to the next runloop turn: this refresh is driven by
+        // display-cycle-adjacent triggers (screen-parameter changes, the global
+        // mouse monitor), and re-placing the hosting-view-backed window
+        // synchronously from inside the display cycle raises
+        // NSInternalInconsistencyException from _postWindowNeedsUpdateConstraints
+        // (via NSHostingView.invalidateSafeAreaCornerInsets).
+        DispatchQueue.main.async { [weak self] in
+            guard let self, self.isVisible, self.notchGeometry.isPresented else { return }
+            self.placePanel()
+        }
     }
 
     func updateFeedbackInteraction(isInteractive: Bool) {
@@ -299,7 +368,11 @@ class NotchIndicatorPanel: NSPanel {
         }
         guard isActionFeedbackInteractive != isInteractive else { return }
         isActionFeedbackInteractive = isInteractive
-        if isVisible {
+        // This callback only wants to resize/re-arm an already-visible panel.
+        // While a dismissal is in flight the window is still ordered in but its
+        // content is blanked; calling show() here cancelled the pending orderOut
+        // and left an empty panel stuck over the notch.
+        if isVisible, !isDismissing {
             show()
         }
     }
@@ -323,20 +396,27 @@ class NotchIndicatorPanel: NSPanel {
 
         guard isVisible else {
             notchGeometry.isPresented = false
+            isDismissing = false
             orderOut(nil)
             return
         }
 
+        isDismissing = true
         withAnimation(.easeInOut(duration: 0.18)) {
             notchGeometry.isPresented = false
         }
 
         dismissTask = Task { @MainActor [weak self] in
             try? await Task.sleep(for: Self.presentationAnimationDuration)
-            guard !Task.isCancelled else { return }
-            guard let self, !self.notchGeometry.isPresented else { return }
-            self.orderOut(nil)
+            guard !Task.isCancelled, let self else { return }
             self.dismissTask = nil
+            guard !self.notchGeometry.isPresented else {
+                // A show() re-presented the panel during the animation window;
+                // it also cleared isDismissing. Leave the window up.
+                return
+            }
+            self.orderOut(nil)
+            self.isDismissing = false
         }
     }
 }

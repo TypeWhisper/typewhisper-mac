@@ -858,8 +858,13 @@ private struct OpenAIContextAwareFileTranscriptionClient: Sendable {
         case 429:
             throw PluginTranscriptionError.rateLimited
         default:
-            throw PluginTranscriptionError.apiError(
-                Self.errorMessage(from: responseData, statusCode: httpResponse.statusCode)
+            let error = PluginTranscriptionError.apiError(
+                Self.errorMessage(from: responseData, response: httpResponse)
+            )
+            throw PluginAudioUploadHTTPFailure(
+                statusCode: httpResponse.statusCode,
+                responseData: responseData,
+                underlyingError: error
             )
         }
 
@@ -881,17 +886,15 @@ private struct OpenAIContextAwareFileTranscriptionClient: Sendable {
         }
     }
 
-    private static func errorMessage(from data: Data, statusCode: Int) -> String {
+    private static func errorMessage(from data: Data, response: HTTPURLResponse) -> String {
         if let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
            let error = json["error"] as? [String: Any],
            let message = error["message"] as? String,
            !message.isEmpty {
-            return "HTTP \(statusCode): \(message)"
+            return "HTTP \(response.statusCode): \(PluginHTTPErrorBodyFormatter.summary(from: message))"
         }
-        if let body = String(data: data, encoding: .utf8), !body.isEmpty {
-            return "HTTP \(statusCode): \(body)"
-        }
-        return "HTTP \(statusCode)"
+        let body = PluginHTTPErrorBodyFormatter.summary(from: data, response: response)
+        return "HTTP \(response.statusCode): \(body)"
     }
 }
 

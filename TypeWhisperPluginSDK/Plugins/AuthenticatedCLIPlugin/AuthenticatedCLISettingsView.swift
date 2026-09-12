@@ -126,6 +126,8 @@ struct AuthenticatedCLISettingsView: View {
 
             if status.kind == .codex, status.isReady {
                 codexModelCatalogDetails
+            } else if status.kind == .opencode, status.isReady {
+                openCodeModelCatalogDetails
             } else if status.kind == .antigravity, status.isReady {
                 antigravityModelCatalogDetails
             }
@@ -192,6 +194,57 @@ struct AuthenticatedCLISettingsView: View {
         if snapshot.refreshError != nil {
             Label(
                 String(localized: "The Codex model list could not be refreshed. The last cached list remains available.", bundle: bundle),
+                systemImage: "exclamationmark.triangle"
+            )
+            .font(.caption)
+            .foregroundStyle(.orange)
+        }
+    }
+
+    @ViewBuilder
+    private var openCodeModelCatalogDetails: some View {
+        let snapshot = plugin.openCodeModelCatalogSnapshot()
+        if let catalog = snapshot.catalog, !catalog.models.isEmpty {
+            LabeledContent(String(localized: "Available models", bundle: bundle)) {
+                Text(catalog.models.count, format: .number)
+                    .font(.caption.monospacedDigit())
+            }
+
+            let freeModelCount = catalog.models.filter(\.isFree).count
+            if freeModelCount > 0 {
+                LabeledContent(String(localized: "Currently free", bundle: bundle)) {
+                    Text(freeModelCount, format: .number)
+                        .font(.caption.monospacedDigit())
+                }
+            }
+
+            Text(String(
+                localized: "Free models are loaded dynamically from OpenCode Zen. Offers can change or end at any time.",
+                bundle: bundle
+            ))
+            .font(.caption)
+            .foregroundStyle(.secondary)
+
+            Label(
+                String(
+                    localized: "Some free OpenCode Zen models may use prompts and completions for training. Do not send personal or confidential data unless the selected model's terms allow it.",
+                    bundle: bundle
+                ),
+                systemImage: "hand.raised.fill"
+            )
+            .font(.caption)
+            .foregroundStyle(.orange)
+
+            Link(
+                String(localized: "Review Zen privacy and pricing", bundle: bundle),
+                destination: URL(string: "https://opencode.ai/docs/zen/")!
+            )
+            .font(.caption)
+        }
+
+        if snapshot.refreshError != nil {
+            Label(
+                String(localized: "The OpenCode Zen model list could not be refreshed. The last cached list remains available.", bundle: bundle),
                 systemImage: "exclamationmark.triangle"
             )
             .font(.caption)
@@ -270,6 +323,8 @@ struct AuthenticatedCLISettingsView: View {
             String(localized: "OpenAI account via Codex", bundle: bundle)
         case .claude:
             String(localized: "Anthropic account via Claude Code", bundle: bundle)
+        case .opencode:
+            String(localized: "Free OpenCode Zen models via your existing login", bundle: bundle)
         case .antigravity:
             String(localized: "Best-effort integration", bundle: bundle)
         }

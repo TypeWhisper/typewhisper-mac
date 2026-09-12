@@ -21,6 +21,8 @@ enum UserDefaultsKeys {
     static let dictationHotkeysPaused = "dictationHotkeysPaused"
     static let transcribeShortQuietClipsAggressively = "transcribeShortQuietClipsAggressively"
     static let microphoneBoostEnabled = "microphoneBoostEnabled"
+    static let cancellationBehavior = "cancellationBehavior"
+    // Legacy preference, retained for migration and old settings backups.
     static let requireSecondEscapeToCancelRecording = "requireSecondEscapeToCancelRecording"
 
     // MARK: - Hotkey (JSON-encoded UnifiedHotkey per slot, legacy mirror for first binding)
@@ -150,6 +152,8 @@ enum UserDefaultsKeys {
     static let dictationRecoveryModel = "dictationRecoveryModel"
     static let dictationRecoveryLanguage = "dictationRecoveryLanguage"
     static let dictationRecoveryAutomaticFallbackEnabled = "dictationRecoveryAutomaticFallbackEnabled"
+    static let dictationRecoveryHedgeEnabled = "dictationRecoveryHedgeEnabled"
+    static let dictationRecoveryHedgeThresholdSeconds = "dictationRecoveryHedgeThresholdSeconds"
     static let dictationRecoveryRetentionDays = "dictationRecoveryRetentionDays"
 
     // MARK: - Watch Folder
@@ -180,6 +184,7 @@ enum UserDefaultsKeys {
     static let workUsagePromptDismissed = "workUsagePromptDismissed"
     static let lastSeenReleaseFingerprint = "lastSeenReleaseFingerprint"
     static let lastAcknowledgedPostUpdatePromptRelease = "lastAcknowledgedPostUpdatePromptRelease"
+    static let iOSCompanionPromoCampaign = "iOSCompanionPromoCampaign"
 
     // MARK: - Supporter
     static let supporterTier = "supporterTier"

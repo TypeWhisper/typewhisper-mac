@@ -79,7 +79,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         fixture.promptActionService.addPreset(PromptAction.presets[0])
         fixture.promptActionService.addAction(name: "Custom", prompt: "Do the thing")
 
-        let backup = SettingsBackupExporter.buildBackup(
+        let backup = try SettingsBackupExporter.buildBackup(
             workflowService: fixture.workflowService,
             dictionaryService: fixture.dictionaryService,
             snippetService: fixture.snippetService,
@@ -103,7 +103,7 @@ final class SettingsBackupExporterTests: XCTestCase {
             makeLoadedPlugin(id: "com.typewhisper.community", name: "Community", version: "2.1.0", isEnabled: false, bundled: false),
         ]
 
-        let backup = SettingsBackupExporter.buildBackup(
+        let backup = try SettingsBackupExporter.buildBackup(
             workflowService: fixture.workflowService,
             dictionaryService: fixture.dictionaryService,
             snippetService: fixture.snippetService,
@@ -134,7 +134,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         source.dictionaryService.addEntry(type: .correction, original: "teh", replacement: "the")
         source.snippetService.addSnippet(trigger: ";sig", replacement: "Best, Alex")
 
-        let backup = SettingsBackupExporter.buildBackup(
+        let backup = try SettingsBackupExporter.buildBackup(
             workflowService: source.workflowService,
             dictionaryService: source.dictionaryService,
             snippetService: source.snippetService,
@@ -183,7 +183,7 @@ final class SettingsBackupExporterTests: XCTestCase {
             promptActionId: action.id.uuidString
         )
 
-        let backup = SettingsBackupExporter.buildBackup(
+        let backup = try SettingsBackupExporter.buildBackup(
             workflowService: source.workflowService,
             dictionaryService: source.dictionaryService,
             snippetService: source.snippetService,
@@ -227,7 +227,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         let hotkey = UnifiedHotkey(keyCode: 8, modifierFlags: 0x100, isFn: false)
         source.userDefaults.set(try JSONEncoder().encode([hotkey]), forKey: UserDefaultsKeys.toggleHotkeys)
 
-        let backup = SettingsBackupExporter.buildBackup(
+        let backup = try SettingsBackupExporter.buildBackup(
             workflowService: source.workflowService,
             dictionaryService: source.dictionaryService,
             snippetService: source.snippetService,
@@ -295,7 +295,7 @@ final class SettingsBackupExporterTests: XCTestCase {
             makeLoadedPlugin(id: "com.typewhisper.gone", name: "Gone Plugin", version: "1.0.0", isEnabled: true, bundled: false),
         ]
 
-        let backup = SettingsBackupExporter.buildBackup(
+        let backup = try SettingsBackupExporter.buildBackup(
             workflowService: source.workflowService,
             dictionaryService: source.dictionaryService,
             snippetService: source.snippetService,
@@ -340,7 +340,7 @@ final class SettingsBackupExporterTests: XCTestCase {
             makeLoadedPlugin(id: "com.typewhisper.already", name: "Already Installed", version: "1.0.0", isEnabled: true, bundled: false),
         ]
 
-        let backup = SettingsBackupExporter.buildBackup(
+        let backup = try SettingsBackupExporter.buildBackup(
             workflowService: source.workflowService,
             dictionaryService: source.dictionaryService,
             snippetService: source.snippetService,
@@ -393,7 +393,7 @@ final class SettingsBackupExporterTests: XCTestCase {
             pipelineSteps: ["dictionary", "formatting"]
         )
 
-        let backup = SettingsBackupExporter.buildBackup(
+        let backup = try SettingsBackupExporter.buildBackup(
             workflowService: source.workflowService,
             dictionaryService: source.dictionaryService,
             snippetService: source.snippetService,
@@ -427,7 +427,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         )
 
         XCTAssertEqual(result.historyImported, 1)
-        let importedRecord = try XCTUnwrap(destination.historyService.records.first)
+        let importedRecord = try XCTUnwrap(destination.historyService.recentRecords.first)
         XCTAssertEqual(importedRecord.finalText, "Hello, world.")
         XCTAssertEqual(importedRecord.timestamp.timeIntervalSince1970, originalTimestamp.timeIntervalSince1970, accuracy: 0.001)
         XCTAssertNil(importedRecord.audioFileName)
@@ -436,6 +436,60 @@ final class SettingsBackupExporterTests: XCTestCase {
         // importing history mid-session must explicitly feed it too, or the
         // Statistics tab silently shows no data for the imported entries.
         XCTAssertTrue(destination.usageStatisticsService.hasAnyStatistics)
+    }
+
+    func testCancellationBehaviorBackupCompatibility() async throws {
+        let source = try makeFixture()
+        defer { teardown(source) }
+        let backup = try SettingsBackupExporter.buildBackup(
+            workflowService: source.workflowService,
+            dictionaryService: source.dictionaryService,
+            snippetService: source.snippetService,
+            profileService: source.profileService,
+            promptActionService: source.promptActionService,
+            pluginManager: source.pluginManager,
+            historyService: source.historyService,
+            userDefaults: source.userDefaults
+        )
+        let cases: [(String?, Bool?, CancellationBehavior?)] = [
+            ("doubleEscape", nil, .doubleEscape),
+            ("singleEscape", nil, .singleEscape),
+            ("instant", true, .instant),
+            (nil, true, .doubleEscape),
+            (nil, false, .singleEscape),
+            ("unknown", false, .singleEscape),
+            ("unknown", nil, nil),
+            (nil, nil, nil)
+        ]
+        for (rawValue, legacyValue, expected) in cases {
+            var json = try XCTUnwrap(JSONSerialization.jsonObject(with: JSONEncoder().encode(backup)) as? [String: Any])
+            var preferences: [String: Any] = [:]
+            preferences["cancellationBehavior"] = rawValue
+            preferences["requireSecondEscapeToCancelRecording"] = legacyValue
+            json["preferences"] = preferences
+            let decoded = try JSONDecoder().decode(SettingsBackupExporter.SettingsBackup.self, from: JSONSerialization.data(withJSONObject: json))
+            let destination = try makeFixture()
+            defer { teardown(destination) }
+            destination.userDefaults.set("instant", forKey: UserDefaultsKeys.cancellationBehavior)
+            var applied: CancellationBehavior?
+            let result = await SettingsBackupExporter.importBackup(
+                decoded,
+                workflowService: destination.workflowService,
+                dictionaryService: destination.dictionaryService,
+                snippetService: destination.snippetService,
+                profileService: destination.profileService,
+                promptActionService: destination.promptActionService,
+                pluginManager: destination.pluginManager,
+                pluginRegistryService: destination.pluginRegistryService,
+                historyService: destination.historyService,
+                usageStatisticsService: destination.usageStatisticsService,
+                userDefaults: destination.userDefaults,
+                cancellationBehaviorDidChange: { applied = $0 }
+            )
+            XCTAssertEqual(applied, expected)
+            XCTAssertEqual(DictationViewModel.loadCancellationBehavior(defaults: destination.userDefaults), expected ?? .instant)
+            XCTAssertEqual(result.preferencesApplied, expected == nil ? 0 : 1)
+        }
     }
 
     func testUpdateChannelAndPreferencesRoundTrip() async throws {
@@ -449,6 +503,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         source.userDefaults.set(0.35, forKey: UserDefaultsKeys.audioDuckingLevel)
         source.userDefaults.set(3, forKey: UserDefaultsKeys.indicatorTranscriptPreviewFontSizeOffset)
         source.userDefaults.set("overlay", forKey: UserDefaultsKeys.indicatorStyle)
+        source.userDefaults.set("instant", forKey: UserDefaultsKeys.cancellationBehavior)
         source.userDefaults.set(false, forKey: UserDefaultsKeys.indicatorVisibleInScreenCaptures)
         source.userDefaults.set(true, forKey: UserDefaultsKeys.liveFieldTranscriptEnabled)
         source.userDefaults.set(true, forKey: UserDefaultsKeys.recorderSystemAudioEnabled)
@@ -456,7 +511,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         // Deliberately excluded: engine/model selections must not be exported.
         source.userDefaults.set("com.typewhisper.some-engine", forKey: UserDefaultsKeys.fileTranscriptionEngine)
 
-        let backup = SettingsBackupExporter.buildBackup(
+        let backup = try SettingsBackupExporter.buildBackup(
             workflowService: source.workflowService,
             dictionaryService: source.dictionaryService,
             snippetService: source.snippetService,
@@ -474,6 +529,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         XCTAssertEqual(backup.preferences.audioDuckingLevel, 0.35)
         XCTAssertEqual(backup.preferences.indicatorTranscriptPreviewFontSizeOffset, 3)
         XCTAssertEqual(backup.preferences.indicatorStyle, "overlay")
+        XCTAssertEqual(backup.preferences.cancellationBehavior, "instant")
         XCTAssertEqual(backup.preferences.indicatorVisibleInScreenCaptures, false)
         XCTAssertEqual(backup.preferences.liveFieldTranscriptEnabled, true)
         XCTAssertEqual(backup.preferences.recorderSystemAudioEnabled, true)
@@ -483,6 +539,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         defer { teardown(destination) }
         var appliedRecoveryRetentionPolicy: DictationRecoveryRetentionPolicy?
         var appliedLiveFieldTranscriptEnabled: Bool?
+        var appliedCancellationBehavior: CancellationBehavior?
 
         let result = await SettingsBackupExporter.importBackup(
             backup,
@@ -497,6 +554,7 @@ final class SettingsBackupExporterTests: XCTestCase {
             usageStatisticsService: destination.usageStatisticsService,
             userDefaults: destination.userDefaults,
             liveFieldTranscriptEnabledDidChange: { appliedLiveFieldTranscriptEnabled = $0 },
+            cancellationBehaviorDidChange: { appliedCancellationBehavior = $0 },
             recoveryRetentionPolicyDidChange: { appliedRecoveryRetentionPolicy = $0 }
         )
 
@@ -513,6 +571,8 @@ final class SettingsBackupExporterTests: XCTestCase {
         )
         XCTAssertEqual(destination.userDefaults.bool(forKey: UserDefaultsKeys.liveFieldTranscriptEnabled), true)
         XCTAssertEqual(appliedLiveFieldTranscriptEnabled, true)
+        XCTAssertEqual(appliedCancellationBehavior, .instant)
+        XCTAssertEqual(DictationViewModel.loadCancellationBehavior(defaults: destination.userDefaults), .instant)
         XCTAssertEqual(destination.userDefaults.integer(forKey: UserDefaultsKeys.dictationRecoveryRetentionDays), 7)
         XCTAssertEqual(appliedRecoveryRetentionPolicy, .sevenDays)
         XCTAssertNil(destination.userDefaults.string(forKey: UserDefaultsKeys.fileTranscriptionEngine))
@@ -531,7 +591,7 @@ final class SettingsBackupExporterTests: XCTestCase {
             ]
         )
 
-        let backup = SettingsBackupExporter.buildBackup(
+        let backup = try SettingsBackupExporter.buildBackup(
             workflowService: source.workflowService,
             dictionaryService: source.dictionaryService,
             snippetService: source.snippetService,
@@ -554,7 +614,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         source.userDefaults.set(AppConstants.ReleaseChannel.daily.rawValue, forKey: UserDefaultsKeys.updateChannel)
         source.userDefaults.set("de", forKey: UserDefaultsKeys.selectedLanguage)
 
-        let backup = SettingsBackupExporter.buildBackup(
+        let backup = try SettingsBackupExporter.buildBackup(
             workflowService: source.workflowService,
             dictionaryService: source.dictionaryService,
             snippetService: source.snippetService,
@@ -587,7 +647,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         source.snippetService.addSnippet(trigger: ";sig", replacement: "Best, Alex")
         source.userDefaults.set(AppConstants.ReleaseChannel.daily.rawValue, forKey: UserDefaultsKeys.updateChannel)
 
-        let backup = SettingsBackupExporter.buildBackup(
+        let backup = try SettingsBackupExporter.buildBackup(
             workflowService: source.workflowService,
             dictionaryService: source.dictionaryService,
             snippetService: source.snippetService,
@@ -625,6 +685,65 @@ final class SettingsBackupExporterTests: XCTestCase {
         XCTAssertEqual(result.dictionaryImported, 0)
         XCTAssertEqual(result.snippetsImported, 0)
         XCTAssertFalse(result.updateChannelApplied)
+    }
+
+    func testImportRejectsOutOfRangeHedgeThreshold() async throws {
+        // A backup is user-editable JSON; a value the UI could never produce must
+        // not reach the hedge timer (1e308 seconds would overflow the sleep).
+        func makeBackup(threshold: Double?) -> SettingsBackupExporter.SettingsBackup {
+            var preferences = SettingsBackupExporter.PreferencesDTO.empty
+            preferences.dictationRecoveryHedgeThresholdSeconds = threshold
+            return SettingsBackupExporter.SettingsBackup(
+                schemaVersion: SettingsBackupExporter.schemaVersion,
+                exportedAt: Date(),
+                appVersion: "1.0",
+                workflows: [], dictionaryEntries: [], snippets: [], promptActions: [], profiles: [],
+                hotkeys: [:], plugins: [],
+                history: [],
+                updateChannel: nil,
+                preferences: preferences
+            )
+        }
+
+        let destination = try makeFixture()
+        defer { teardown(destination) }
+        destination.userDefaults.set(4.5, forKey: UserDefaultsKeys.dictationRecoveryHedgeThresholdSeconds)
+
+        for invalid in [1e308, -1, 0.0, 16, Double.infinity] {
+            _ = await SettingsBackupExporter.importBackup(
+                makeBackup(threshold: invalid),
+                workflowService: destination.workflowService,
+                dictionaryService: destination.dictionaryService,
+                snippetService: destination.snippetService,
+                profileService: destination.profileService,
+                promptActionService: destination.promptActionService,
+                pluginManager: destination.pluginManager,
+                pluginRegistryService: destination.pluginRegistryService,
+                historyService: destination.historyService,
+                usageStatisticsService: destination.usageStatisticsService,
+                userDefaults: destination.userDefaults
+            )
+            XCTAssertEqual(
+                destination.userDefaults.double(forKey: UserDefaultsKeys.dictationRecoveryHedgeThresholdSeconds),
+                4.5,
+                "threshold \(invalid) must be rejected"
+            )
+        }
+
+        _ = await SettingsBackupExporter.importBackup(
+            makeBackup(threshold: 7.5),
+            workflowService: destination.workflowService,
+            dictionaryService: destination.dictionaryService,
+            snippetService: destination.snippetService,
+            profileService: destination.profileService,
+            promptActionService: destination.promptActionService,
+            pluginManager: destination.pluginManager,
+            pluginRegistryService: destination.pluginRegistryService,
+            historyService: destination.historyService,
+            usageStatisticsService: destination.usageStatisticsService,
+            userDefaults: destination.userDefaults
+        )
+        XCTAssertEqual(destination.userDefaults.double(forKey: UserDefaultsKeys.dictationRecoveryHedgeThresholdSeconds), 7.5)
     }
 
     func testUsageStatisticsNotRecordedWhenHistoryRecordSkipped() async throws {
@@ -674,7 +793,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         )
 
         XCTAssertEqual(result.historyImported, 0)
-        XCTAssertTrue(destination.historyService.records.isEmpty)
+        XCTAssertTrue(destination.historyService.recentRecords.isEmpty)
         XCTAssertFalse(destination.usageStatisticsService.hasAnyStatistics)
     }
 
@@ -723,7 +842,7 @@ final class SettingsBackupExporterTests: XCTestCase {
 
         XCTAssertEqual(result.historyImported, 1)
         XCTAssertEqual(result.historySkippedByRetention, 1)
-        XCTAssertEqual(destination.historyService.records.first?.finalText, "recent")
+        XCTAssertEqual(destination.historyService.recentRecords.first?.finalText, "recent")
     }
 
     func testProfileImportAppendsRatherThanReusingSourcePriority() async throws {
@@ -731,7 +850,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         defer { teardown(source) }
         source.profileService.addProfile(name: "Slack", bundleIdentifiers: ["com.tinyspeck.slackmacgap"], priority: 0)
 
-        let backup = SettingsBackupExporter.buildBackup(
+        let backup = try SettingsBackupExporter.buildBackup(
             workflowService: source.workflowService,
             dictionaryService: source.dictionaryService,
             snippetService: source.snippetService,
@@ -786,7 +905,7 @@ final class SettingsBackupExporterTests: XCTestCase {
             promptActionId: action.id.uuidString
         )
 
-        let backup = SettingsBackupExporter.buildBackup(
+        let backup = try SettingsBackupExporter.buildBackup(
             workflowService: source.workflowService,
             dictionaryService: source.dictionaryService,
             snippetService: source.snippetService,

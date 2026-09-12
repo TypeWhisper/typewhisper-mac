@@ -1,3 +1,4 @@
+import Darwin
 import Foundation
 import TypeWhisperPluginSDK
 import TypeWhisperPluginSDKTesting
@@ -27,7 +28,7 @@ final class MCPClientPluginTests: XCTestCase {
 
         XCTAssertEqual(manifest.id, "com.typewhisper.mcp-client")
         XCTAssertEqual(manifest.version, "0.2.1")
-        XCTAssertEqual(manifest.minHostVersion, "1.6.0")
+        XCTAssertEqual(manifest.minHostVersion, "1.7.0")
         XCTAssertEqual(manifest.sdkCompatibilityVersion, "v1")
         XCTAssertEqual(manifest.category, "action")
 
@@ -578,7 +579,7 @@ final class MCPClientPluginTests: XCTestCase {
     func testStreamableHTTPContractSupportsNoAuthenticationAndBearerToken() async throws {
         for token in [nil, "fixture-bearer-token"] as [String?] {
             let fixture = try await Self.startHTTPFixture(expectedToken: token)
-            defer { Self.stopHTTPFixture(fixture) }
+            addTeardownBlock { await Self.stopHTTPFixture(fixture) }
             let configuration = MCPServerConfiguration(
                 name: "HTTP Fixture",
                 transport: .streamableHTTP,
@@ -615,6 +616,18 @@ final class MCPClientPluginTests: XCTestCase {
             XCTAssertTrue(methods.contains("tools/list"))
             XCTAssertTrue(methods.contains("tools/call"))
         }
+    }
+
+    func testHTTPFixtureCleanupKillsServerIgnoringTermination() async throws {
+        let fixture = try await Self.startHTTPFixture(expectedToken: nil, ignoreTermination: true)
+        addTeardownBlock { await Self.stopHTTPFixture(fixture) }
+        try "fixture counter".write(to: fixture.counter, atomically: true, encoding: .utf8)
+
+        await Self.stopHTTPFixture(fixture)
+
+        XCTAssertFalse(fixture.process.isRunning)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: fixture.portFile.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: fixture.counter.path))
     }
 
     func testDraftDiscoveryDoesNotPersistServerOrSecrets() async throws {
@@ -700,6 +713,31 @@ final class MCPClientPluginTests: XCTestCase {
 
         XCTAssertEqual(try Self.requestCount(at: fixture.counter), 1)
         await session.close()
+    }
+
+    func testTimeoutWaitsForCleanupWithoutReturningItsCancellationError() async throws {
+        let session = MCPServerSession(resolvedServer: Self.resolvedFixtureServer(try Self.fixtureResources()))
+        let probe = MCPTimeoutCleanupProbe()
+
+        do {
+            let _: Void = try await session.withTimeout(
+                .milliseconds(10),
+                operationName: "cleanup race",
+                onTimeout: {
+                    await probe.cancelOperation()
+                    try? await Task.sleep(for: .milliseconds(50))
+                    await probe.finishCleanup()
+                },
+                operation: { try await probe.waitForCancellation() }
+            )
+            XCTFail("Expected timeout")
+        } catch let error as MCPClientError {
+            guard case .timedOut = error else {
+                return XCTFail("Expected timedOut, got \(error)")
+            }
+        }
+        let cleanupFinished = await probe.cleanupFinished
+        XCTAssertTrue(cleanupFinished, "Timeout cleanup must finish before the caller resumes")
     }
 
     func testConnectionTimeoutClosesHungInitialization() async throws {
@@ -1080,14 +1118,17 @@ final class MCPClientPluginTests: XCTestCase {
         return (pythonPath, script, counter)
     }
 
-    private struct HTTPFixture {
+    private struct HTTPFixture: Sendable {
         let process: Process
         let endpoint: URL
         let portFile: URL
         let counter: URL
     }
 
-    private static func startHTTPFixture(expectedToken: String?) async throws -> HTTPFixture {
+    private static func startHTTPFixture(
+        expectedToken: String?,
+        ignoreTermination: Bool = false
+    ) async throws -> HTTPFixture {
         let pythonPath = "/usr/bin/python3"
         guard FileManager.default.isExecutableFile(atPath: pythonPath) else {
             throw XCTSkip("System Python is unavailable")
@@ -1103,36 +1144,58 @@ final class MCPClientPluginTests: XCTestCase {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: pythonPath)
         process.arguments = [script.path, portFile.path, counter.path, expectedToken ?? ""]
+        if ignoreTermination { process.arguments?.append("--ignore-termination") }
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
         try process.run()
 
-        for _ in 0..<200 {
-            if let value = try? String(contentsOf: portFile, encoding: .utf8),
-               let port = Int(value),
-               let endpoint = URL(string: "http://127.0.0.1:\(port)/mcp") {
-                return HTTPFixture(process: process, endpoint: endpoint, portFile: portFile, counter: counter)
+        do {
+            for _ in 0..<200 {
+                if let value = try? String(contentsOf: portFile, encoding: .utf8),
+                   let port = Int(value),
+                   let endpoint = URL(string: "http://127.0.0.1:\(port)/mcp") {
+                    return HTTPFixture(process: process, endpoint: endpoint, portFile: portFile, counter: counter)
+                }
+                guard process.isRunning else {
+                    throw MCPClientError.invalidConfiguration("HTTP fixture stopped before publishing its port.")
+                }
+                try await Task.sleep(for: .milliseconds(10))
             }
-            guard process.isRunning else {
-                throw MCPClientError.invalidConfiguration("HTTP fixture stopped before publishing its port.")
-            }
-            try await Task.sleep(for: .milliseconds(10))
+            throw MCPClientError.timedOut("HTTP fixture startup")
+        } catch {
+            await stopHTTPFixtureProcess(process)
+            try? FileManager.default.removeItem(at: portFile)
+            try? FileManager.default.removeItem(at: counter)
+            throw error
         }
-
-        if process.isRunning {
-            process.terminate()
-            process.waitUntilExit()
-        }
-        throw MCPClientError.timedOut("HTTP fixture startup")
     }
 
-    private static func stopHTTPFixture(_ fixture: HTTPFixture) {
-        if fixture.process.isRunning {
-            fixture.process.terminate()
-            fixture.process.waitUntilExit()
-        }
+    private static func stopHTTPFixture(_ fixture: HTTPFixture) async {
+        await stopHTTPFixtureProcess(fixture.process)
         try? FileManager.default.removeItem(at: fixture.portFile)
         try? FileManager.default.removeItem(at: fixture.counter)
+    }
+
+    private static func stopHTTPFixtureProcess(_ process: Process) async {
+        // Cleanup must finish even when the test's task was cancelled. Yielding also
+        // avoids blocking Foundation's process-exit delivery with waitUntilExit().
+        await Task.detached {
+            guard process.isRunning else { return }
+            process.terminate()
+            let clock = ContinuousClock()
+            let terminationDeadline = clock.now.advanced(by: .seconds(2))
+            while process.isRunning, clock.now < terminationDeadline {
+                try? await Task.sleep(for: .milliseconds(20))
+            }
+            if process.isRunning {
+                kill(process.processIdentifier, SIGKILL)
+                let killDeadline = clock.now.advanced(by: .seconds(2))
+                while process.isRunning, clock.now < killDeadline {
+                    try? await Task.sleep(for: .milliseconds(20))
+                }
+            }
+            XCTAssertFalse(process.isRunning, "HTTP fixture did not exit after SIGKILL")
+        }.value
     }
 
     private static func resolvedFixtureServer(
@@ -1160,5 +1223,27 @@ final class MCPClientPluginTests: XCTestCase {
         URL(fileURLWithPath: #filePath)
             .deletingLastPathComponent()
             .deletingLastPathComponent()
+    }
+}
+
+
+private actor MCPTimeoutCleanupProbe {
+    private var continuation: CheckedContinuation<Void, Error>?
+    private var isCancelled = false
+    private(set) var cleanupFinished = false
+
+    func waitForCancellation() async throws {
+        if isCancelled { throw CancellationError() }
+        try await withCheckedThrowingContinuation { continuation = $0 }
+    }
+
+    func cancelOperation() {
+        isCancelled = true
+        continuation?.resume(throwing: CancellationError())
+        continuation = nil
+    }
+
+    func finishCleanup() {
+        cleanupFinished = true
     }
 }

@@ -22,28 +22,50 @@ final class TextDiffService {
         if origWords.isEmpty { return procWords.map { .added($0) } }
         if procWords.isEmpty { return origWords.map { .removed($0) } }
 
-        let m = origWords.count, n = procWords.count
+        // Backtracking always consumes an equal suffix first. Excluding it from
+        // the table preserves the original tie-breaking, including repeated words.
+        // An equal prefix cannot be trimmed with that same guarantee.
+        var m = origWords.count, n = procWords.count
+        while m > 0 && n > 0 && origWords[m - 1] == procWords[n - 1] {
+            m -= 1
+            n -= 1
+        }
 
-        // LCS dynamic programming
-        var dp = Array(repeating: Array(repeating: 0, count: n + 1), count: m + 1)
-        for i in 1...m {
-            for j in 1...n {
-                if origWords[i - 1] == procWords[j - 1] {
-                    dp[i][j] = dp[i - 1][j - 1] + 1
-                } else {
-                    dp[i][j] = max(dp[i - 1][j], dp[i][j - 1])
+        // Keep only the current LCS row and one byte per backtracking direction,
+        // rather than an Int for every cell in a nested copy-on-write array.
+        var row = Array(repeating: 0, count: n + 1)
+        var directions = Array(repeating: UInt8(0), count: m * n)
+        if m > 0 && n > 0 {
+            for i in 1...m {
+                var diagonal = 0
+                let rowOffset = (i - 1) * n
+                for j in 1...n {
+                    let above = row[j]
+                    if origWords[i - 1] == procWords[j - 1] {
+                        row[j] = diagonal + 1
+                    } else if row[j - 1] >= above {
+                        row[j] = row[j - 1]
+                        directions[rowOffset + j - 1] = 1 // added (left wins ties)
+                    } else {
+                        directions[rowOffset + j - 1] = 2 // removed
+                    }
+                    diagonal = above
                 }
             }
         }
 
         // Backtrack to produce segments
         var segments: [DiffSegment] = []
+        segments.reserveCapacity(origWords.count + procWords.count)
+        for word in origWords[m...].reversed() {
+            segments.append(.unchanged(word))
+        }
         var i = m, j = n
         while i > 0 || j > 0 {
-            if i > 0 && j > 0 && origWords[i - 1] == procWords[j - 1] {
+            if i > 0 && j > 0 && directions[(i - 1) * n + j - 1] == 0 {
                 segments.append(.unchanged(origWords[i - 1]))
                 i -= 1; j -= 1
-            } else if j > 0 && (i == 0 || dp[i][j - 1] >= dp[i - 1][j]) {
+            } else if j > 0 && (i == 0 || directions[(i - 1) * n + j - 1] == 1) {
                 segments.append(.added(procWords[j - 1]))
                 j -= 1
             } else {

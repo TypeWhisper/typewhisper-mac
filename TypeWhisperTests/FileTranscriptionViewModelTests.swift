@@ -827,6 +827,61 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         XCTAssertNil(viewModel.files.first?.errorMessage)
     }
 
+    func testRecoveryEngineSelectionSurvivesPluginThatCannotBeResolvedYet() throws {
+        // The plugin manager reports no engine for this id (plugins still loading,
+        // or a reload in flight). The stored choice must not be erased for it.
+        let defaults = try makeDefaults()
+        defaults.set("engine-not-loaded-yet", forKey: UserDefaultsKeys.dictationRecoveryEngine)
+        defaults.set("some-model", forKey: UserDefaultsKeys.dictationRecoveryModel)
+        let store = DictationRecoveryAudioStore(directory: makeTemporaryDirectory())
+
+        let viewModel = DictationRecoveryViewModel(
+            audioRecordingService: AudioRecordingService(recoveryAudioStore: store),
+            modelManager: ModelManagerService(),
+            historyService: HistoryService(appSupportDirectory: makeTemporaryDirectory()),
+            audioFileService: AudioFileService(),
+            defaults: defaults
+        )
+
+        XCTAssertEqual(viewModel.selectedEngine, "engine-not-loaded-yet")
+        XCTAssertEqual(viewModel.selectedModel, "some-model")
+        XCTAssertEqual(defaults.string(forKey: UserDefaultsKeys.dictationRecoveryEngine), "engine-not-loaded-yet")
+        XCTAssertNil(viewModel.resolvedEngine, "an unresolved selection degrades to no engine rather than being erased")
+        XCTAssertNil(viewModel.automaticFallbackConfiguration(excluding: "groq", task: .transcribe))
+    }
+
+    func testHedgeThresholdIsClampedToTheSupportedRange() throws {
+        let defaults = try makeDefaults()
+        defaults.set(true, forKey: UserDefaultsKeys.dictationRecoveryAutomaticFallbackEnabled)
+        defaults.set(true, forKey: UserDefaultsKeys.dictationRecoveryHedgeEnabled)
+        let store = DictationRecoveryAudioStore(directory: makeTemporaryDirectory())
+        func makeViewModel() -> DictationRecoveryViewModel {
+            DictationRecoveryViewModel(
+                audioRecordingService: AudioRecordingService(recoveryAudioStore: store),
+                modelManager: ModelManagerService(),
+                historyService: HistoryService(appSupportDirectory: makeTemporaryDirectory()),
+                audioFileService: AudioFileService(),
+                defaults: defaults
+            )
+        }
+
+        defaults.set(1e308, forKey: UserDefaultsKeys.dictationRecoveryHedgeThresholdSeconds)
+        XCTAssertEqual(makeViewModel().hedgeThresholdSeconds, 15.0)
+        XCTAssertEqual(makeViewModel().automaticHedgeThreshold, 15.0)
+
+        defaults.set(Double.nan, forKey: UserDefaultsKeys.dictationRecoveryHedgeThresholdSeconds)
+        XCTAssertEqual(makeViewModel().hedgeThresholdSeconds, 3.0)
+
+        defaults.set(0.05, forKey: UserDefaultsKeys.dictationRecoveryHedgeThresholdSeconds)
+        XCTAssertEqual(makeViewModel().hedgeThresholdSeconds, 1.0)
+
+        defaults.removeObject(forKey: UserDefaultsKeys.dictationRecoveryHedgeThresholdSeconds)
+        XCTAssertEqual(makeViewModel().hedgeThresholdSeconds, 3.0)
+
+        XCTAssertEqual(DictationRecoveryViewModel.clampedHedgeThreshold(-Double.infinity), 3.0)
+        XCTAssertEqual(DictationRecoveryViewModel.clampedHedgeThreshold(4.5), 4.5)
+    }
+
     func testRecoveryTranscribeUsesRecoveryEngineAndModelOverrides() async throws {
         let defaults = try makeDefaults()
         defaults.set(true, forKey: UserDefaultsKeys.saveAudioWithHistory)
@@ -889,7 +944,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         XCTAssertEqual(capturedTask, .translate)
         XCTAssertEqual(capturedEngineOverrideId, "parakeet")
         XCTAssertEqual(capturedModelOverrideId, "parakeet-large")
-        let historyRecord = try XCTUnwrap(historyService.records.first)
+        let historyRecord = try XCTUnwrap(historyService.recentRecords.first)
         XCTAssertEqual(historyRecord.rawText, "Recovered dictation")
         XCTAssertEqual(historyRecord.finalText, "Recovered dictation")
         XCTAssertEqual(historyRecord.language, "de")
@@ -933,7 +988,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         viewModel.transcribe()
         try await waitForRecoveryToSave(viewModel, historyService: historyService)
 
-        let historyRecord = try XCTUnwrap(historyService.records.first)
+        let historyRecord = try XCTUnwrap(historyService.recentRecords.first)
         XCTAssertNil(historyService.audioFileURL(for: historyRecord))
         XCTAssertFalse(FileManager.default.fileExists(atPath: recoveryURL.path))
         XCTAssertTrue(viewModel.recoveries.isEmpty)
@@ -1204,7 +1259,7 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         historyService: HistoryService
     ) async throws {
         for _ in 0..<50 {
-            if viewModel.lastSavedHistoryRecordID != nil, !historyService.records.isEmpty {
+            if viewModel.lastSavedHistoryRecordID != nil, !historyService.recentRecords.isEmpty {
                 return
             }
             try await Task.sleep(for: .milliseconds(20))

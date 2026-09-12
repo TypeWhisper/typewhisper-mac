@@ -396,7 +396,10 @@ final class ExampleWebhookService: ObservableObject, @unchecked Sendable {
 
         do {
             request.httpBody = try JSONEncoder().encode(payload)
-            let (_, response) = try await PluginHTTPClient.data(for: request)
+            // Opted out for two reasons: the method here is user-configured and often
+            // side-effecting, and this caller already retries once below. Laddering
+            // underneath that would multiply deliveries.
+            let (_, response) = try await PluginHTTPClient.data(for: request, retry: .disabled)
             let statusCode = (response as? HTTPURLResponse)?.statusCode ?? 0
             let success = (200...299).contains(statusCode)
 

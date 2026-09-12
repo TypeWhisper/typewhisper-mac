@@ -94,6 +94,66 @@ public extension PluginUserInterfaceProviding {
 
 public protocol HostModelLifecyclePolicyAwarePlugin: TypeWhisperPlugin {}
 
+/// Optional notification after the host reconciles its selected transcription engine.
+/// Implementations must re-check the live host policy, restore only installed assets,
+/// and coalesce this request with activation, settings and first-use model loads.
+/// The host may call this more than once; a request must not retry failed loads forever.
+public protocol PassiveModelRestoreProviding: HostModelLifecyclePolicyAwarePlugin {
+    func requestPassiveModelRestore()
+}
+
+/// Coalesces passive requests from activation and host selection reconciliation.
+/// Own one controller per plugin instance and cancel it on deactivation.
+public final class PluginPassiveModelRestoreController: @unchecked Sendable {
+    private let lock = NSLock()
+    private var task: Task<Void, Never>?
+    private var pendingRestore: (@Sendable () async -> Void)?
+    private var generation = 0
+
+    public init() {}
+
+    public func request(_ restore: @escaping @Sendable () async -> Void) {
+        lock.withLock {
+            // Keep the newest request even when an older gate read is finishing.
+            // Dropping it could miss a rapid away-and-back selection change.
+            pendingRestore = restore
+            guard task == nil else { return }
+            generation += 1
+            let currentGeneration = generation
+            // Start after the current main-actor selection/model update has finished.
+            // Correctness still comes from explicit reconciliation and the live gate.
+            task = Task { @MainActor [weak self] in
+                while !Task.isCancelled,
+                      let next = self?.takePending(currentGeneration) {
+                    await next()
+                }
+            }
+        }
+    }
+
+    public func cancel() {
+        lock.withLock {
+            generation += 1
+            task?.cancel()
+            task = nil
+            pendingRestore = nil
+        }
+    }
+
+    private func takePending(_ currentGeneration: Int) -> (@Sendable () async -> Void)? {
+        lock.withLock {
+            guard generation == currentGeneration else { return nil }
+            guard let next = pendingRestore else {
+                task = nil
+                return nil
+            }
+            pendingRestore = nil
+            return next
+        }
+    }
+}
+
+
 // MARK: - Shared Settings Activity
 
 public struct PluginSettingsActivity: Sendable, Equatable {
