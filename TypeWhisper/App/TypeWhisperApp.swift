@@ -766,6 +766,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
             UserDefaultsKeys.updateChannel: AppConstants.defaultReleaseChannel.rawValue,
             UserDefaultsKeys.appFormattingEnabled: true,
             UserDefaultsKeys.transcriptionNumberNormalizationEnabled: true,
+            UserDefaultsKeys.transcriptionNumberNormalizationMinimumValue: TranscriptionNormalizationService.defaultNumberNormalizationMinimumValue,
             UserDefaultsKeys.targetAppCorrectionLearningEnabled: false,
             UserDefaultsKeys.calendarMeetingStartMode: CalendarMeetingStartMode.off.rawValue,
             UserDefaultsKeys.calendarMeetingAutoStopEnabled: false,

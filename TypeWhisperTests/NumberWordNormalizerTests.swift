@@ -2,6 +2,83 @@ import XCTest
 @testable import TypeWhisper
 
 final class NumberWordNormalizerTests: XCTestCase {
+    func testMinimumTenPreservesSmallNumbersAndConvertsWholeExpressions() {
+        XCTAssertEqual(
+            NumberWordNormalizer.normalize(text: "I was talking to one of my clients about four hundred ninety seven files", language: "en", minimumValue: 10),
+            "I was talking to one of my clients about 497 files"
+        )
+        XCTAssertEqual(
+            NumberWordNormalizer.normalize(text: "Zero, Three, nine, ten, eleven", language: "en", minimumValue: 10),
+            "Zero, Three, nine, 10, 11"
+        )
+    }
+
+    func testMinimumHundredPreservesEntireExpressionAndOriginalSeparators() {
+        XCTAssertEqual(
+            NumberWordNormalizer.normalize(text: "Twenty-Three, ninety\nnine, one hundred, one hundred and one", language: "en", minimumValue: 100),
+            "Twenty-Three, ninety\nnine, 100, 101"
+        )
+    }
+
+    func testThresholdAppliesToMagnitudeAndOrdinals() {
+        XCTAssertEqual(
+            NumberWordNormalizer.normalize(text: "minus nine, minus ten, negative one hundred", language: "en", minimumValue: 10),
+            "minus nine, -10, -100"
+        )
+        XCTAssertEqual(
+            NumberWordNormalizer.normalize(text: "fourth, ninth, tenth, twenty-first", language: "en", minimumValue: 10),
+            "fourth, ninth, 10th, 21st"
+        )
+        XCTAssertEqual(
+            NumberWordNormalizer.normalize(text: "twenty-first, one hundred first", language: "en", minimumValue: 100),
+            "twenty-first, 101st"
+        )
+    }
+
+    func testThresholdPreservesDigitSequencesAndTheirLeadingZeros() {
+        for (spoken, expected) in [
+            ("zero zero zero one", "0001"),
+            ("zero zero zero zero", "0000"),
+            ("four oh oh two", "4002"),
+            ("one two three", "one two three")
+        ] {
+            XCTAssertEqual(NumberWordNormalizer.normalize(text: spoken, language: "en", minimumValue: 100), expected)
+        }
+    }
+
+    func testThresholdKeepsDecimalsNormalizedAcrossLanguages() {
+        for (language, spoken, expected) in [
+            ("en", "minus two point five", "-2.5"),
+            ("de", "minus zwei komma fünf", "-2,5"),
+            ("fr", "deux virgule cinq", "2,5"),
+            ("fr", "3 point 14", "3.14"),
+            ("es", "dos coma cinco", "2,5"),
+            ("nl", "twee komma vijf", "2,5"),
+            ("zh", "二点五", "2.5"),
+            ("ja", "二点五", "2.5")
+        ] {
+            XCTAssertEqual(NumberWordNormalizer.normalize(text: spoken, language: language, minimumValue: 100), expected, language)
+        }
+    }
+
+    func testThresholdAcrossSupportedLanguages() {
+        for (language, spoken, expected) in [
+            ("de", "drei, neun, zehn, siebenundneunzig", "drei, neun, 10, 97"),
+            ("fr", "trois, neuf, dix", "trois, neuf, 10"),
+            ("es", "tres, nueve, diez", "tres, nueve, 10"),
+            ("nl", "drie, negen, tien", "drie, negen, 10"),
+            ("zh", "三，九，十", "三，九，10"),
+            ("ja", "三、九、十", "三、九、10")
+        ] {
+            XCTAssertEqual(NumberWordNormalizer.normalize(text: spoken, language: language, minimumValue: 10), expected, language)
+        }
+    }
+
+    func testAlwaysConvertsSmallNumbersAndThresholdLeavesExistingDigitsAlone() {
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "zero, three, minus nine", language: "en", minimumValue: 0), "0, 3, -9")
+        XCTAssertEqual(NumberWordNormalizer.normalize(text: "1 of my clients, 3rd, -2.5, 0001", language: "en", minimumValue: 100), "1 of my clients, 3rd, -2.5, 0001")
+    }
+
     func testEnglishSimpleNumbersNormalizeToDigits() {
         XCTAssertEqual(NumberWordNormalizer.normalize(text: "I have two questions", language: "en"), "I have 2 questions")
     }

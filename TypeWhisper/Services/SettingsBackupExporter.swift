@@ -176,6 +176,8 @@ enum SettingsBackupExporter {
         var liveFieldTranscriptEnabled: Bool? = nil
         var indicatorTranscriptPreviewFontSizeOffset: Int? = nil
         var preserveClipboard: Bool? = nil
+        var transcriptionNumberNormalizationEnabled: Bool? = nil
+        var transcriptionNumberNormalizationMinimumValue: Int? = nil
         var mediaPauseEnabled: Bool? = nil
         var transcribeShortQuietClipsAggressively: Bool? = nil
         var microphoneBoostEnabled: Bool? = nil
@@ -227,6 +229,8 @@ enum SettingsBackupExporter {
             if liveFieldTranscriptEnabled != nil { count += 1 }
             if indicatorTranscriptPreviewFontSizeOffset != nil { count += 1 }
             if preserveClipboard != nil { count += 1 }
+            if transcriptionNumberNormalizationEnabled != nil { count += 1 }
+            if transcriptionNumberNormalizationMinimumValue != nil { count += 1 }
             if mediaPauseEnabled != nil { count += 1 }
             if transcribeShortQuietClipsAggressively != nil { count += 1 }
             if microphoneBoostEnabled != nil { count += 1 }
@@ -575,6 +579,10 @@ enum SettingsBackupExporter {
                 liveFieldTranscriptEnabled: userDefaults.object(forKey: UserDefaultsKeys.liveFieldTranscriptEnabled) as? Bool,
                 indicatorTranscriptPreviewFontSizeOffset: userDefaults.object(forKey: UserDefaultsKeys.indicatorTranscriptPreviewFontSizeOffset) as? Int,
                 preserveClipboard: userDefaults.object(forKey: UserDefaultsKeys.preserveClipboard) as? Bool,
+                transcriptionNumberNormalizationEnabled: userDefaults.object(forKey: UserDefaultsKeys.transcriptionNumberNormalizationEnabled) as? Bool,
+                transcriptionNumberNormalizationMinimumValue: userDefaults.object(forKey: UserDefaultsKeys.transcriptionNumberNormalizationMinimumValue) == nil
+                    ? nil
+                    : TranscriptionNormalizationService.numberNormalizationMinimumValue(defaults: userDefaults),
                 mediaPauseEnabled: userDefaults.object(forKey: UserDefaultsKeys.mediaPauseEnabled) as? Bool,
                 transcribeShortQuietClipsAggressively: userDefaults.object(forKey: UserDefaultsKeys.transcribeShortQuietClipsAggressively) as? Bool,
                 microphoneBoostEnabled: userDefaults.object(forKey: UserDefaultsKeys.microphoneBoostEnabled) as? Bool,
@@ -858,6 +866,11 @@ enum SettingsBackupExporter {
         }
         apply(preferences.indicatorTranscriptPreviewFontSizeOffset, forKey: UserDefaultsKeys.indicatorTranscriptPreviewFontSizeOffset)
         apply(preferences.preserveClipboard, forKey: UserDefaultsKeys.preserveClipboard)
+        apply(preferences.transcriptionNumberNormalizationEnabled, forKey: UserDefaultsKeys.transcriptionNumberNormalizationEnabled)
+        if let minimumValue = preferences.transcriptionNumberNormalizationMinimumValue,
+           [0, 10, 100].contains(minimumValue) {
+            apply(minimumValue, forKey: UserDefaultsKeys.transcriptionNumberNormalizationMinimumValue)
+        }
         apply(preferences.mediaPauseEnabled, forKey: UserDefaultsKeys.mediaPauseEnabled)
         apply(preferences.transcribeShortQuietClipsAggressively, forKey: UserDefaultsKeys.transcribeShortQuietClipsAggressively)
         apply(preferences.microphoneBoostEnabled, forKey: UserDefaultsKeys.microphoneBoostEnabled)

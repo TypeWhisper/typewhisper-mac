@@ -38,7 +38,7 @@ enum HanNumberWordParser {
         let numberText = pieces.joined()
         guard containsNumberMarker(numberText) else { return nil }
         guard let parsed = parseNumberText(numberText) else { return nil }
-        return NumberWordNormalizer.ParsedWords(value: parsed, consumedWords: consumedWords)
+        return NumberWordNormalizer.ParsedWords(value: parsed, consumedWords: consumedWords, kind: parsed.contains(".") ? .decimal : .number)
     }
 
     private static func parseNumberText(_ text: String) -> String? {

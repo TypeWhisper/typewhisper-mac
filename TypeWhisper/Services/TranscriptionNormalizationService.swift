@@ -1,6 +1,16 @@
 import Foundation
 
 enum TranscriptionNormalizationService {
+    static let defaultNumberNormalizationMinimumValue = 10
+
+    static func numberNormalizationMinimumValue(defaults: UserDefaults = .standard) -> Int {
+        guard let value = defaults.object(forKey: UserDefaultsKeys.transcriptionNumberNormalizationMinimumValue) as? Int,
+              [0, 10, 100].contains(value) else {
+            return defaultNumberNormalizationMinimumValue
+        }
+        return value
+    }
+
     static func numberNormalizationEnabled(
         override: Bool? = nil,
         defaults: UserDefaults = .standard
@@ -45,8 +55,9 @@ enum TranscriptionNormalizationService {
             return text
         }
 
+        let minimumValue = numberNormalizationMinimumValue(defaults: defaults)
         for language in prioritizedLanguages(primary: nil, candidates: languages) {
-            let normalized = NumberWordNormalizer.normalize(text: text, language: language)
+            let normalized = NumberWordNormalizer.normalize(text: text, language: language, minimumValue: minimumValue)
             if normalized != text {
                 return normalized
             }

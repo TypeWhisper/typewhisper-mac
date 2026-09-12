@@ -1,6 +1,72 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "10 and above" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ab 10"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "10以上"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "10及以上"
+          }
+        }
+      }
+    },
+    "100 and above" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ab 100"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "100以上"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "100及以上"
+          }
+        }
+      }
+    },
+    "Convert numbers to digits" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zahlen in Ziffern umwandeln"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "数字に変換する範囲"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "转换为数字的范围"
+          }
+        }
+      }
+    },
     "No Integration Commands" : {
       "localizations" : {
         "de" : {
@@ -253,6 +319,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "2回：Escキーを2回押してキャンセルします。1回：Escキーを1回押します。どちらもキャンセル通知を1.5秒間表示します。即時：Escキーを1回押すと、通知を表示せずにキャンセルします。録音中と処理中の両方に適用されます。"
+          }
+        }
+      }
+    },
+    "Smaller numbers stay as spoken words. Decimals and digit sequences still convert to digits. Existing digits stay unchanged." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kleinere Zahlen bleiben ausgeschrieben. Dezimalzahlen und Ziffernfolgen werden weiterhin in Ziffern umgewandelt. Vorhandene Ziffern bleiben unverändert."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "小さい数は元の表記を保持します。小数と数字の並びは引き続き数字に変換します。既存の数字は変更しません。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "较小的数保留原来的文字写法。小数和逐位口述的数字串仍会转换为数字。已有的数字保持不变。"
           }
         }
       }
@@ -3298,6 +3386,12 @@
     },
     "Always" : {
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Immer"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -18038,6 +18132,12 @@
     },
     "Normalize spoken numbers to digits" : {
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gesprochene Zahlen in Ziffern umwandeln"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",

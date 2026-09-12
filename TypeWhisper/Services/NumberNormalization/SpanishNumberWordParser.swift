@@ -47,10 +47,12 @@ enum SpanishNumberWordParser {
         }
         index = integer.nextIndex
         var replacement = "\(integer.value)"
+        var kind = NumberWordNormalizer.ParsedWords.Kind.number
 
         if index < normalizedWords.count, normalizedWords[index] == "coma" {
             let decimal = parseDecimalDigits(normalizedWords, startingAt: index + 1)
             if !decimal.digits.isEmpty {
+                kind = .decimal
                 replacement += ",\(decimal.digits)"
                 index = decimal.nextIndex
             }
@@ -60,7 +62,7 @@ enum SpanishNumberWordParser {
             replacement = "-" + replacement
         }
 
-        return NumberWordNormalizer.ParsedWords(value: replacement, consumedWords: index)
+        return NumberWordNormalizer.ParsedWords(value: replacement, consumedWords: index, kind: kind)
     }
 
     private static func parseInteger(
