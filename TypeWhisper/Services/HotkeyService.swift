@@ -157,7 +157,6 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
 
     private struct HotkeyDispatchKey: Hashable {
         enum Target: Hashable {
-            case cancel
             case meetingCountdown(UUID)
             case slot(HotkeySlotType)
             case profile(UUID)
@@ -213,6 +212,14 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     var onWorkflowDictationStart: ((UUID, UInt64) -> Void)?
     var onWorkflowTextProcessing: ((UUID) -> Void)?
     var onCancelPressed: (() -> Void)?
+    // Mirror the view model's cancellable state without entering MainActor from the event tap.
+    private let cancellationAvailable = OSAllocatedUnfairLock(initialState: false)
+    var isCancellationAvailable: Bool {
+        get { cancellationAvailable.withLock { $0 } }
+        set { cancellationAvailable.withLock { $0 = newValue } }
+    }
+    // Accessed by the event tap and NSEvent monitors on the main run loop.
+    private var isEscapeKeySuppressed = false
     var onPushToTalkInterruption: (() -> Void)?
     var discardPushToTalkRecordingOnExtraKeyPress = false
     var modifierFlagsStateProvider: () -> NSEvent.ModifierFlags = {
@@ -242,7 +249,6 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     private static let doubleTapThreshold: TimeInterval = 0.4
     private static let monitorDedupWindow: TimeInterval = 0.12
     private static let escapeKeyCode: UInt16 = 0x35
-    private static let escapeHotkey = UnifiedHotkey(keyCode: escapeKeyCode, modifierFlags: 0, isFn: false)
     private static let meetingCountdownHotkey = UnifiedHotkey(
         keyCode: 0x2F,
         modifierFlags: NSEvent.ModifierFlags.command.rawValue,
@@ -650,8 +656,8 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     private func installLocalEventMonitor(includeMouse: Bool) {
         let mask = eventMonitorMask(includeMouse: includeMouse)
         localMonitor = NSEvent.addLocalMonitorForEvents(matching: mask) { [weak self] event in
-            _ = self?.handleEvent(event, source: .monitor)
-            return event
+            guard let self else { return event }
+            return self.handleLocalMonitorEvent(event)
         }
     }
 
@@ -662,10 +668,17 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             _ = self?.handleEvent(event, source: .monitor)
         }
 
-        localMonitor = NSEvent.addLocalMonitorForEvents(matching: mask) { [weak self] event in
-            _ = self?.handleEvent(event, source: .monitor)
-            return event
+        installLocalEventMonitor(includeMouse: includeMouse)
+    }
+
+    private func handleLocalMonitorEvent(_ event: NSEvent) -> NSEvent? {
+        let shouldSuppress = handleEvent(event, source: .monitor)
+        if shouldSuppress,
+           event.type == .keyDown || event.type == .keyUp,
+           event.keyCode == Self.escapeKeyCode {
+            return nil
         }
+        return event
     }
 
     private func eventMonitorMask(includeMouse: Bool) -> NSEvent.EventTypeMask {
@@ -679,6 +692,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
 
     private func tearDownMonitor() {
         cancelPendingHybridModifierHold()
+        isEscapeKeySuppressed = false
         tearDownCarbonHotkeys()
 
         if let monitor = globalMonitor {
@@ -1128,20 +1142,22 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
 
     @discardableResult
     private func handleEvent(_ event: NSEvent, source: HotkeyEventSource) -> Bool {
-        // Escape key cancels active recording/transcription
+        // Own the entire Escape press, including repeats and key-up after cancellation.
+        if event.type == .keyUp && event.keyCode == Self.escapeKeyCode && isEscapeKeySuppressed {
+            isEscapeKeySuppressed = false
+            return true
+        }
         if event.type == .keyDown && event.keyCode == Self.escapeKeyCode {
             cancelPendingHybridModifierHold()
-            if shouldDispatch(
-                target: .cancel,
-                phase: .down,
-                hotkey: Self.escapeHotkey,
-                source: source
-            ) {
-                performHotkeyAction(source: source) { [weak self] in
-                    self?.onCancelPressed?()
-                }
+            if isEscapeKeySuppressed { return true }
+            guard isCancellationAvailable, !event.isARepeat else { return false }
+
+            isEscapeKeySuppressed = true
+            // The press latch deduplicates fallback delivery without dropping a quick second press.
+            performHotkeyAction(source: source) { [weak self] in
+                self?.onCancelPressed?()
             }
-            return false
+            return true
         }
 
         cancelPendingHybridModifierHoldIfInterrupted(by: event)
@@ -1594,6 +1610,9 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     }
 
     private func recoverReleasedActiveHotkeyAfterEventTapDisable() {
+        if isEscapeKeySuppressed, !keyStateProvider(Self.escapeKeyCode) {
+            isEscapeKeySuppressed = false
+        }
         guard isActive,
               currentMode == .pushToTalk,
               activeProfileId == nil,
@@ -1669,6 +1688,10 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     @discardableResult
     func processEventForTesting(_ event: NSEvent, source: HotkeyEventSource) -> Bool {
         handleEvent(event, source: source)
+    }
+
+    func processLocalEventForTesting(_ event: NSEvent) -> NSEvent? {
+        handleLocalMonitorEvent(event)
     }
 
     func recoverReleasedActiveHotkeyAfterEventTapDisableForTesting() {
