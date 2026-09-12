@@ -329,7 +329,9 @@ final class SpeechmaticsPlugin: NSObject, TranscriptionEnginePlugin, DictionaryT
         for _ in 0..<300 {
             try await Task.sleep(for: .seconds(1))
 
-            let (data, response) = try await PluginHTTPClient.data(for: statusRequest)
+            // This loop already re-issues on any non-200, up to 300 times. A ladder here
+            // would multiply the loop's own bound rather than add resilience.
+            let (data, response) = try await PluginHTTPClient.data(for: statusRequest, retry: .disabled)
 
             guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
                 continue
