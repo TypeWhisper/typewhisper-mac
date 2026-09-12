@@ -133,6 +133,56 @@ final class DictionaryServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testLongerCorrectionOriginalsApplyBeforeShorterPrefixes() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        // Alphabetical order would apply "clawed" first and leave "Claude code".
+        service.addEntry(type: .correction, original: "clawed", replacement: "Claude")
+        service.addEntry(type: .correction, original: "clawed code", replacement: "Claude Code")
+
+        XCTAssertEqual(service.corrections.map(\.original), ["clawed", "clawed code"])
+        XCTAssertEqual(service.correctionsForApplication.map(\.original), ["clawed code", "clawed"])
+        XCTAssertEqual(
+            service.applyCorrections(to: "Clawed code is not Clawed desktop"),
+            "Claude Code is not Claude desktop"
+        )
+    }
+
+    @MainActor
+    func testPreviewCorrectionsDoesNotCountUsage() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.addEntry(type: .correction, original: "clawed", replacement: "Claude")
+        service.addEntry(type: .correction, original: "clawed code", replacement: "Claude Code")
+
+        XCTAssertEqual(service.previewCorrections(to: "clawed code and clawed"), "Claude Code and Claude")
+        XCTAssertEqual(service.corrections.map(\.usageCount), [0, 0])
+    }
+
+    @MainActor
+    func testVocabularyForPromptMergesTermsAndCorrectionTargets() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.addEntry(type: .term, original: "Wikipeadia")
+        service.addEntry(type: .term, original: "Claude")
+        service.addEntry(type: .correction, original: "dev and think", replacement: "DEVONthink")
+        service.addEntry(type: .correction, original: "claw", replacement: "claude")
+        service.addEntry(type: .correction, original: "um", replacement: "")
+        service.addEntry(type: .term, original: "Disabled Term")
+        let disabledTerm = try XCTUnwrap(service.terms.first { $0.original == "Disabled Term" })
+        service.setEntryEnabled(disabledTerm, enabled: false)
+
+        XCTAssertEqual(service.vocabularyForPrompt(), ["Claude", "DEVONthink", "Wikipeadia"])
+        XCTAssertEqual(service.vocabularyForPrompt(limit: 2), ["Claude", "DEVONthink"])
+    }
+
+    @MainActor
     func testBatchCorrectionsUpdateRelatedTextsAndCountEachCorrectionOnce() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }

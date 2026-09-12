@@ -74,7 +74,7 @@ final class PostProcessingPipeline {
             case -5: return "Speech Punctuation"
             case -1: return llmStepName ?? "Prompt"
             case -2: return "Snippets"
-            case -3: return "Corrections"
+            case -3, -8: return "Corrections"
             default: return plugins[id].processorName
             }
         }
@@ -102,7 +102,7 @@ final class PostProcessingPipeline {
                 }
                 let changed = result != before
                 logger.info("Post-processing step '\(name)' finished in \(ContinuousClock.now - stepStart), changed: \(changed)")
-                if changed {
+                if changed, !appliedSteps.contains(name) {
                     appliedSteps.append(name)
                 }
             } catch {
@@ -162,7 +162,9 @@ final class PostProcessingPipeline {
         outputFormat: String?,
         normalizeNumbers: Bool?
     ) -> String {
-        let steps = orderedSteps(includesLLMStep: false, outputFormat: outputFormat, plugins: [])
+        // Ordered as for an LLM run so the pre-LLM correction pass is included; the LLM
+        // step itself is excluded by the priority filter.
+        let steps = orderedSteps(includesLLMStep: true, outputFormat: outputFormat, plugins: [])
         var result = text
         for step in steps where step.priority < Self.llmStepPriority {
             result = applyBuiltInStep(
@@ -171,7 +173,8 @@ final class PostProcessingPipeline {
                 context: context,
                 dictationContext: dictationContext,
                 outputFormat: outputFormat,
-                normalizeNumbers: normalizeNumbers
+                normalizeNumbers: normalizeNumbers,
+                recordsUsage: false
             )
         }
         return result
@@ -180,7 +183,8 @@ final class PostProcessingPipeline {
     private static let llmStepPriority = 300
 
     /// Builds the priority-ordered step list: (priority, id).
-    /// IDs: -1 = LLM, -2 = snippets, -3 = dictionary, -4 = app formatter, -5 = punctuation, -6 = normalization, -7 = time notation (late), 0+ = plugin index
+    /// IDs: -1 = LLM, -2 = snippets, -3 = dictionary, -4 = app formatter, -5 = punctuation, -6 = normalization, -7 = time notation (late),
+    /// -8 = dictionary (pre-LLM pass), 0+ = plugin index
     private func orderedSteps(
         includesLLMStep: Bool,
         outputFormat: String?,
@@ -199,6 +203,10 @@ final class PostProcessingPipeline {
         steps.append((200, -5))
 
         if includesLLMStep {
+            // Apply dictionary corrections before the LLM sees the text as well as after it.
+            // The LLM otherwise rewrites the raw misrecognition (re-punctuates it, swaps a
+            // hyphen, drops a word) and the exact-match correction at 600 no longer fires.
+            steps.append((250, -8))
             steps.append((Self.llmStepPriority, -1))
         }
         for (index, plugin) in plugins.enumerated() {
@@ -233,7 +241,8 @@ final class PostProcessingPipeline {
         dictationContext: DictationRuntimeContext?,
         outputFormat: String?,
         normalizeNumbers: Bool?,
-        deferUsageCountSave: Bool = false
+        deferUsageCountSave: Bool = false,
+        recordsUsage: Bool = true
     ) -> String {
         switch id {
         case -6:
@@ -281,7 +290,10 @@ final class PostProcessingPipeline {
             }
         case -2:
             return snippetService.applySnippets(to: text, deferUsageCountSave: deferUsageCountSave)
-        case -3:
+        case -3, -8:
+            guard recordsUsage else {
+                return dictionaryService.previewCorrections(to: text)
+            }
             return dictionaryService.applyCorrections(to: text, deferUsageCountSave: deferUsageCountSave)
         default:
             return text

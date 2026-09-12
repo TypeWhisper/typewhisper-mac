@@ -54,6 +54,10 @@ final class DictionaryService: ObservableObject {
     @Published private(set) var entries: [DictionaryEntry] = []
     @Published private(set) var terms: [DictionaryEntry] = []
     @Published private(set) var corrections: [DictionaryEntry] = []
+    /// Enabled corrections in application order: longer originals first, so a multi-word
+    /// correction ("clawed code" → "Claude Code") wins over a shorter prefix correction
+    /// ("clawed" → "Claude") that would otherwise consume part of the longer match.
+    private(set) var correctionsForApplication: [DictionaryEntry] = []
     @Published private(set) var termsCount: Int = 0
     @Published private(set) var correctionsCount: Int = 0
     @Published private(set) var enabledTermsCount: Int = 0
@@ -121,6 +125,7 @@ final class DictionaryService: ObservableObject {
 
             terms = newTerms
             corrections = newCorrections
+            correctionsForApplication = Self.orderedForApplication(newCorrections)
             termsCount = newTermsCount
             correctionsCount = newCorrectionsCount
             enabledTermsCount = newEnabledTermsCount
@@ -631,12 +636,48 @@ final class DictionaryService: ObservableObject {
         applyCorrections(to: [text], deferUsageCountSave: deferUsageCountSave).first ?? text
     }
 
+    /// Orders corrections for application: longest original first, ties keep the
+    /// caller's (alphabetical) order so results stay deterministic.
+    static func orderedForApplication(_ entries: [DictionaryEntry]) -> [DictionaryEntry] {
+        entries.enumerated()
+            .sorted { lhs, rhs in
+                let lhsLength = lhs.element.original.trimmingCharacters(in: .whitespacesAndNewlines).count
+                let rhsLength = rhs.element.original.trimmingCharacters(in: .whitespacesAndNewlines).count
+                if lhsLength != rhsLength {
+                    return lhsLength > rhsLength
+                }
+                return lhs.offset < rhs.offset
+            }
+            .map(\.element)
+    }
+
+    /// Spellings that LLM post-processing must preserve: enabled terms plus the target
+    /// spellings of enabled corrections, de-duplicated case- and diacritic-insensitively
+    /// (terms win ties) and sorted for a stable prompt.
+    func vocabularyForPrompt(limit: Int = 400) -> [String] {
+        var seenKeys = Set<String>()
+        var result: [String] = []
+        let candidates = terms.map(\.original) + corrections.compactMap(\.replacement)
+        for candidate in candidates {
+            let trimmed = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            let key = trimmed.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            guard seenKeys.insert(key).inserted else { continue }
+            result.append(trimmed)
+        }
+        return Array(
+            result
+                .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+                .prefix(limit)
+        )
+    }
+
     /// Apply all enabled corrections to related text fields while counting each correction once.
     func applyCorrections(to texts: [String], deferUsageCountSave: Bool = false) -> [String] {
         var results = texts
         var needsSave = false
 
-        for correction in corrections {
+        for correction in correctionsForApplication {
             guard let replacement = correction.replacement else { continue }
 
             var correctionWasApplied = false
@@ -661,6 +702,15 @@ final class DictionaryService: ObservableObject {
         }
 
         return results
+    }
+
+    /// Applies all enabled corrections without touching usage counters, for text that is
+    /// prepared repeatedly while recording and will be corrected again when dictation stops.
+    func previewCorrections(to text: String) -> String {
+        correctionsForApplication.reduce(text) { result, correction in
+            guard let replacement = correction.replacement else { return result }
+            return applyCorrection(correction, to: result, replacement: replacement)
+        }
     }
 
     /// Saves usage counters left unsaved by `applyCorrections(to:deferUsageCountSave:)`.
