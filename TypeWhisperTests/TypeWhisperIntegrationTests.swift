@@ -6740,6 +6740,92 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testPhysicalSubmitSurvivesWorkflowChangeBeforeCallbackDelivery() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            MockTranscriptionPlugin.reset()
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        MockTranscriptionPlugin.setResponseText("Ready to send press enter.")
+        let urlRequested = expectation(description: "Browser lookup started")
+        let urlGate = DispatchSemaphore(value: 0)
+        defer { urlGate.signal() }
+        let resolver = BrowserURLResolver { _, _ in
+            urlRequested.fulfill()
+            urlGate.wait()
+            return BrowserResolution(url: URL(string: "https://example.com/chat"), title: nil)
+        }
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory, browserURLResolver: resolver)
+        let context = try XCTUnwrap(dictationContext)
+        context.dictationViewModel.preserveClipboard = false
+        _ = context.workflowService.addWorkflow(
+            name: "Physical Submit",
+            template: .dictation,
+            trigger: .app("com.apple.Notes"),
+            output: WorkflowOutput(autoEnterMode: .duringDictation)
+        )
+
+        let pasteboard = NSPasteboard.withUniqueName()
+        var returnCount = 0
+        context.textInsertionService.pasteboardProvider = { pasteboard }
+        context.textInsertionService.captureActiveAppOverride = {
+            ("Notes", "com.apple.Notes", nil)
+        }
+        context.textInsertionService.accessibilityGrantedOverride = true
+        context.textInsertionService.selectedTextOverride = { nil }
+        context.textInsertionService.focusedTextElementOverride = { nil }
+        context.textInsertionService.pasteVerificationAttempts = 0
+        context.textInsertionService.pasteSimulatorOverride = {}
+        context.textInsertionService.returnSimulatorOverride = {
+            returnCount += 1
+        }
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { _ in
+            Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
+        }
+
+        _ = context.workflowService.addWorkflow(
+            name: "Website Never Submit", template: .dictation,
+            trigger: .website("example.com"), output: WorkflowOutput(autoEnterMode: .never)
+        )
+        let sessionID = context.dictationViewModel.apiStartRecording()
+        await context.dictationViewModel.testingWaitForRecordingStart()
+        await fulfillment(of: [urlRequested], timeout: 1)
+        XCTAssertEqual(context.dictationViewModel.activeRuleName, "Physical Submit")
+        let deliverSubmit = try XCTUnwrap(context.hotkeyService.onSubmitDictationPressed)
+        var capturedSessionID: UUID?
+        // Hold delivery after HotkeyService captures the eligible physical press.
+        context.hotkeyService.onSubmitDictationPressed = { capturedSessionID = $0 }
+        let enter = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: 0x24, keyDown: true))
+        XCTAssertTrue(context.hotkeyService.processEventForTesting(try XCTUnwrap(NSEvent(cgEvent: enter)), source: .monitor))
+        XCTAssertEqual(capturedSessionID, sessionID)
+        urlGate.signal()
+        for _ in 0..<80 {
+            if context.dictationViewModel.activeRuleName == "Website Never Submit" { break }
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        XCTAssertEqual(context.dictationViewModel.activeRuleName, "Website Never Submit")
+        XCTAssertNil(context.hotkeyService.submitOnEnterSessionID)
+        deliverSubmit(try XCTUnwrap(capturedSessionID))
+        XCTAssertEqual(context.dictationViewModel.state, .processing)
+        for _ in 0..<80 {
+            if context.dictationViewModel.apiDictationSession(id: sessionID)?.status == .completed { break }
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        XCTAssertEqual(context.dictationViewModel.activeRuleName, "Website Never Submit")
+        let session = try XCTUnwrap(context.dictationViewModel.apiDictationSession(id: sessionID))
+        XCTAssertEqual(session.status, .completed)
+        XCTAssertEqual(session.transcription?.text, "Ready to send press enter.")
+        XCTAssertEqual(returnCount, 1)
+    }
+
+    @MainActor
     func testDictationRuntimeStripsSpokenSubmitCommandBeforeActionPluginWithoutPressingReturn() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         var dictationContext: DictationContext?

@@ -1156,8 +1156,10 @@ final class DictationViewModel: ObservableObject {
         }
 
         hotkeyService.onSubmitDictationPressed = { [weak self] sessionID in
+            // The event handler already captured eligibility with this recording ID.
+            // A URL workflow update before main-queue delivery must not revoke the press.
             guard let self, self.activeDictationSessionID == sessionID,
-                  self.state == .recording, self.effectiveAutoEnterMode == .duringDictation else { return }
+                  self.state == .recording else { return }
             self.hotkeyService.cancelDictation()
             self.stopDictation(submitRequested: true)
         }
