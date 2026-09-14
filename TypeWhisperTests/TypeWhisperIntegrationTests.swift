@@ -6770,6 +6770,26 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testWebsiteSubmitPreparationTabChangeDuringAudioStartup() async throws {
+        try await assertWebsiteSubmitPreparation(scenario: "tab")
+    }
+
+    @MainActor
+    func testWebsiteSubmitPreparationCancellationDuringRevalidation() async throws {
+        try await assertWebsiteSubmitPreparation(scenario: "revalidateCancel")
+    }
+
+    @MainActor
+    func testWebsiteSubmitPreparationEnterDuringRevalidation() async throws {
+        try await assertWebsiteSubmitPreparation(scenario: "revalidateEnter")
+    }
+
+    @MainActor
+    func testWebsiteSubmitPreparationRejectsUnavailableKeySuppression() async throws {
+        try await assertWebsiteSubmitPreparation(scenario: "suppression")
+    }
+
+    @MainActor
     private func assertWebsiteSubmitPreparation(scenario: String) async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         var dictationContext: DictationContext?
@@ -6783,10 +6803,30 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         MockTranscriptionPlugin.setResponseText("Ready to send press enter.")
         let urlRequested = expectation(description: "Browser lookup started")
         let urlGate = DispatchSemaphore(value: 0)
-        defer { urlGate.signal() }
+        let firstLookupCompleted = LockedFlag()
+        let audioStarted = LockedFlag()
+        let blocksRevalidation = scenario.hasPrefix("revalidate")
+        let revalidationRequested = blocksRevalidation ? expectation(description: "Browser revalidation started") : nil
+        let revalidationGate = DispatchSemaphore(value: 0)
+        defer {
+            urlGate.signal()
+            revalidationGate.signal()
+        }
         let resolver = BrowserURLResolver { _, _ in
-            urlRequested.fulfill()
-            urlGate.wait()
+            if !firstLookupCompleted.value {
+                urlRequested.fulfill()
+                urlGate.wait()
+                firstLookupCompleted.set()
+            } else {
+                XCTAssertTrue(audioStarted.value, "Revalidate after microphone preparation")
+                if let revalidationRequested {
+                    revalidationRequested.fulfill()
+                    revalidationGate.wait()
+                }
+                if scenario == "tab" {
+                    return BrowserResolution(url: URL(string: "https://other.example/chat"), title: nil)
+                }
+            }
             return BrowserResolution(url: URL(string: scenario == "miss" ? "https://other.example/chat" : "https://example.com/chat"), title: nil)
         }
         dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory, browserURLResolver: resolver)
@@ -6817,8 +6857,10 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         context.audioRecordingService.hasMicrophonePermissionOverride = true
         context.audioRecordingService.inputAvailabilityOverride = { _ in true }
         context.audioRecordingService.startRecordingOverride = {
-            XCTAssertFalse(["cancel", "stop", "focus"].contains(scenario), "Audio must not start before cancellation")
+            XCTAssertFalse(["cancel", "stop", "focus", "suppression"].contains(scenario), "Audio must not start before cancellation")
+            audioStarted.set()
         }
+        context.hotkeyService.externalKeySuppressionAvailableOverride = scenario != "suppression"
         context.audioRecordingService.stopRecordingOverride = { _ in
             Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
         }
@@ -6849,12 +6891,28 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             foregroundBundleID = "com.apple.TextEdit"
         }
         urlGate.signal()
+        if let revalidationRequested {
+            await fulfillment(of: [revalidationRequested], timeout: 1)
+            XCTAssertFalse(context.dictationViewModel.isRecordingInputReady)
+            if scenario == "revalidateCancel" {
+                context.dictationViewModel.handleCancelHotkey()
+            } else {
+                context.hotkeyService.onSubmitDictationPressed?(sessionID)
+            }
+            XCTAssertEqual(context.dictationViewModel.state, .idle)
+            revalidationGate.signal()
+        }
         await context.dictationViewModel.testingWaitForRecordingStart()
-        if ["cancel", "stop", "focus"].contains(scenario) {
+        if ["cancel", "stop", "focus", "tab", "revalidateCancel", "revalidateEnter", "suppression"].contains(scenario) {
             await context.dictationViewModel.testingWaitForRecordingCleanup()
             XCTAssertFalse(context.audioRecordingService.isRecording)
             XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.status, .failed)
             XCTAssertEqual(returnCount, 0)
+            if scenario == "suppression" {
+                XCTAssertNotNil(context.dictationViewModel.apiDictationSession(id: sessionID)?.error)
+                XCTAssertNil(context.hotkeyService.submitOnEnterSessionID)
+                return
+            }
             // The next forced recording skips website detection and starts normally.
             context.audioRecordingService.startRecordingOverride = {}
             _ = context.dictationViewModel.apiStartRecording(forcedWorkflowId: siteWorkflow.id)
@@ -9747,6 +9805,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         )
         let hotkeyService = HotkeyService()
         let textInsertionService = TextInsertionService(browserURLResolver: browserURLResolver)
+        hotkeyService.externalKeySuppressionAvailableOverride = true
         let historyService = HistoryService(appSupportDirectory: appSupportDirectory)
         let recentTranscriptionStore = RecentTranscriptionStore()
         let profileService = ProfileService(appSupportDirectory: appSupportDirectory)

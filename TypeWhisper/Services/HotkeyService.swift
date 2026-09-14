@@ -374,6 +374,17 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
 
     var accessibilityTrustedProvider: () -> Bool = { AXIsProcessTrusted() }
 
+    var canSuppressExternalKeyEvents: Bool {
+#if DEBUG
+        if let externalKeySuppressionAvailableOverride { return externalKeySuppressionAvailableOverride }
+#endif
+        return eventTap.map { CGEvent.tapIsEnabled(tap: $0) } ?? false
+    }
+
+#if DEBUG
+    var externalKeySuppressionAvailableOverride: Bool?
+#endif
+
     private let logger = Logger(subsystem: AppConstants.loggerSubsystem, category: "HotkeyService")
 
     deinit {

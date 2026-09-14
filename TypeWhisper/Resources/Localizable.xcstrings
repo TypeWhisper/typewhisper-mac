@@ -67,6 +67,22 @@
         }
       }
     },
+    "Enter submission is unavailable. Check Accessibility access and restart TypeWhisper, or choose another Enter option." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enter キーで送信できません。アクセシビリティのアクセスを確認して TypeWhisper を再起動するか、別の Enter オプションを選択してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "无法使用 Enter 发送。请检查辅助功能权限并重启 TypeWhisper，或选择其他 Enter 选项。"
+          }
+        }
+      }
+    },
     "No Integration Commands" : {
       "localizations" : {
         "de" : {
