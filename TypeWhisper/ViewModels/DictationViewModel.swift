@@ -395,6 +395,7 @@ final class DictationViewModel: ObservableObject {
     private let settingsHandler: DictationSettingsHandler
     private var transcriptionTask: Task<Void, Never>?
     private var recordingStartTask: Task<Void, Never>?
+    private var submitAvailabilityMonitor: Task<Void, Never>?
     // A new capture must wait until the previous recorder has stopped and discarded its audio.
     private var recordingCleanupTask: Task<Void, Never>?
     private var stopFinalizationTask: Task<Void, Never>?
@@ -1423,7 +1424,8 @@ final class DictationViewModel: ObservableObject {
         }
 
         let resolveWebsiteBeforeRecording = initialForcedWorkflow == nil && workflowService.workflows.contains { workflow in
-            guard workflow.isEnabled, workflow.output.autoEnterMode == .duringDictation,
+            guard workflow.isEnabled,
+                  workflow.output.autoEnterMode == .duringDictation || effectiveAutoEnterMode == .duringDictation,
                   let trigger = workflow.trigger, !trigger.websitePatterns.isEmpty else { return false }
             return trigger.appBundleIdentifiers.isEmpty
                 || trigger.appBundleIdentifiers.contains(initialActiveApp.bundleId ?? "")
@@ -1863,6 +1865,22 @@ final class DictationViewModel: ObservableObject {
     private func updateSubmitOnEnterAvailability() {
         hotkeyService.submitOnEnterSessionID = state == .recording && effectiveAutoEnterMode == .duringDictation
             ? activeDictationSessionID : nil
+        submitAvailabilityMonitor?.cancel()
+        submitAvailabilityMonitor = nil
+        guard let sessionID = hotkeyService.submitOnEnterSessionID else { return }
+        // Secure Input and event-tap loss can happen without delivering a key event.
+        submitAvailabilityMonitor = Task { @MainActor [weak self] in
+            while !Task.isCancelled {
+                do {
+                    try await Task.sleep(for: .milliseconds(100))
+                } catch {
+                    return
+                }
+                guard let self, self.activeDictationSessionID == sessionID,
+                      self.state == .recording, self.effectiveAutoEnterMode == .duringDictation else { return }
+                guard self.ensureSubmitKeySuppressionAvailable() else { return }
+            }
+        }
     }
 
     private func ensureSubmitKeySuppressionAvailable() -> Bool {

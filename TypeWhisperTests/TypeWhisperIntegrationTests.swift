@@ -6717,12 +6717,13 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
         }
 
+        let sessionID = context.dictationViewModel.apiStartRecording()
+        await context.dictationViewModel.testingWaitForRecordingStart()
+        // A rule added after recording starts may still change the deferred match.
         _ = context.workflowService.addWorkflow(
             name: "Website Never Submit", template: .dictation,
             trigger: .website("example.com"), output: WorkflowOutput(autoEnterMode: .never)
         )
-        let sessionID = context.dictationViewModel.apiStartRecording()
-        await context.dictationViewModel.testingWaitForRecordingStart()
         await fulfillment(of: [urlRequested], timeout: 1)
         XCTAssertEqual(context.dictationViewModel.activeRuleName, "Physical Submit")
         context.hotkeyService.onSubmitDictationPressed?(sessionID)
@@ -6795,6 +6796,16 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testWebsiteSubmitRecordingCancelsWhenSecureInputBecomesActive() async throws {
+        try await assertWebsiteSubmitPreparation(scenario: "secureInputTransition")
+    }
+
+    @MainActor
+    func testWebsiteNeverSubmitOverridesAppSubmitBeforeRecording() async throws {
+        try await assertWebsiteSubmitPreparation(scenario: "websiteOverride")
+    }
+
+    @MainActor
     func testEarlyAppWorkflowAssignmentDoesNotSwitchModesDuringAudioStartup() async throws {
         let directory = try TestSupport.makeTemporaryDirectory()
         var context: DictationContext? = Self.makeDictationContext(appSupportDirectory: directory)
@@ -6844,6 +6855,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let urlGate = DispatchSemaphore(value: 0)
         let firstLookupCompleted = LockedFlag()
         let audioStarted = LockedFlag()
+        let secureInputActivated = LockedFlag()
         let blocksRevalidation = scenario.hasPrefix("revalidate")
         let revalidationRequested = blocksRevalidation ? expectation(description: "Browser revalidation started") : nil
         let revalidationGate = DispatchSemaphore(value: 0)
@@ -6875,7 +6887,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             name: "App Fallback",
             template: .dictation,
             trigger: .app("com.apple.Notes"),
-            output: WorkflowOutput(autoEnterMode: .never)
+            output: WorkflowOutput(autoEnterMode: scenario == "websiteOverride" ? .duringDictation : .never)
         )
 
         let pasteboard = NSPasteboard.withUniqueName()
@@ -6900,7 +6912,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             audioStarted.set()
         }
         context.hotkeyService.externalKeySuppressionAvailableOverride = scenario != "suppression"
-        context.hotkeyService.secureInputEnabledProvider = { scenario == "secureInput" }
+        context.hotkeyService.secureInputEnabledProvider = { scenario == "secureInput" || secureInputActivated.value }
         context.audioRecordingService.stopRecordingOverride = { _ in
             Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
         }
@@ -6913,7 +6925,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             : WorkflowTrigger.website("example.com")
         let siteWorkflow = try XCTUnwrap(context.workflowService.addWorkflow(
             name: "Website Submit", template: .dictation, trigger: trigger,
-            output: WorkflowOutput(autoEnterMode: .duringDictation)
+            output: WorkflowOutput(autoEnterMode: scenario == "websiteOverride" ? .never : .duringDictation)
         ))
         let sessionID = context.dictationViewModel.apiStartRecording()
         await fulfillment(of: [urlRequested], timeout: 1)
@@ -6943,12 +6955,21 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             revalidationGate.signal()
         }
         await context.dictationViewModel.testingWaitForRecordingStart()
-        if ["cancel", "stop", "focus", "tab", "revalidateCancel", "revalidateEnter", "suppression", "secureInput"].contains(scenario) {
+        if scenario == "secureInputTransition" {
+            XCTAssertEqual(context.hotkeyService.submitOnEnterSessionID, sessionID)
+            XCTAssertTrue(context.audioRecordingService.isRecording)
+            secureInputActivated.set()
+            for _ in 0..<50 {
+                if context.dictationViewModel.apiDictationSession(id: sessionID)?.status == .failed { break }
+                try await Task.sleep(for: .milliseconds(20))
+            }
+        }
+        if ["cancel", "stop", "focus", "tab", "revalidateCancel", "revalidateEnter", "suppression", "secureInput", "secureInputTransition"].contains(scenario) {
             await context.dictationViewModel.testingWaitForRecordingCleanup()
             XCTAssertFalse(context.audioRecordingService.isRecording)
             XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.status, .failed)
             XCTAssertEqual(returnCount, 0)
-            if ["suppression", "secureInput"].contains(scenario) {
+            if ["suppression", "secureInput", "secureInputTransition"].contains(scenario) {
                 XCTAssertNotNil(context.dictationViewModel.apiDictationSession(id: sessionID)?.error)
                 XCTAssertNil(context.hotkeyService.submitOnEnterSessionID)
                 return
@@ -6962,7 +6983,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         } else {
             XCTAssertEqual(context.dictationViewModel.state, .recording)
             XCTAssertEqual(context.dictationViewModel.activeRuleName, scenario == "miss" ? "App Fallback" : "Website Submit")
-            if scenario == "miss" {
+            if ["miss", "websiteOverride"].contains(scenario) {
                 XCTAssertNil(context.hotkeyService.submitOnEnterSessionID)
                 _ = context.dictationViewModel.apiStopRecording()
             } else {
@@ -7029,12 +7050,13 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
         }
 
+        let sessionID = context.dictationViewModel.apiStartRecording()
+        await context.dictationViewModel.testingWaitForRecordingStart()
+        // A rule added after recording starts may still change the deferred match.
         _ = context.workflowService.addWorkflow(
             name: "Website Never Submit", template: .dictation,
             trigger: .website("example.com"), output: WorkflowOutput(autoEnterMode: .never)
         )
-        let sessionID = context.dictationViewModel.apiStartRecording()
-        await context.dictationViewModel.testingWaitForRecordingStart()
         await fulfillment(of: [urlRequested], timeout: 1)
         XCTAssertEqual(context.dictationViewModel.activeRuleName, "Physical Submit")
         let deliverSubmit = try XCTUnwrap(context.hotkeyService.onSubmitDictationPressed)
