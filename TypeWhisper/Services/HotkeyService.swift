@@ -1169,7 +1169,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             }
             if canSuppressSubmit, event.type == .keyDown {
                 if suppressedSubmitKeyCodes.contains(event.keyCode) { return true }
-                if let sessionID = submitOnEnterSessionID, !event.isARepeat {
+                if let sessionID = submitOnEnterSessionID, !event.isARepeat, !matchesDictationHotkey(event) {
                     suppressedSubmitKeyCodes.insert(event.keyCode)
                     // Consume before the extra-key interruption check for push-to-talk.
                     performHotkeyAction(source: source) { [weak self] in
@@ -1590,6 +1590,25 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             DispatchQueue.main.async(execute: action)
         case .monitor, .carbon:
             action()
+        }
+    }
+
+    private func matchesDictationHotkey(_ event: NSEvent) -> Bool {
+        guard !dictationHotkeysPaused else { return false }
+        func matches(_ hotkey: UnifiedHotkey, keyWasDown: Bool) -> Bool {
+            detectKeyEvent(event, hotkey: hotkey, fnWasDown: false,
+                           modifierWasDown: false, keyWasDown: keyWasDown) != .none
+        }
+        for slotType in HotkeySlotType.allCases where slotType.startsDictation {
+            for state in slots[slotType] ?? [] {
+                if let hotkey = state.hotkey, matches(hotkey, keyWasDown: state.keyWasDown) { return true }
+            }
+        }
+        if profileSlots.values.contains(where: { matches($0.hotkey, keyWasDown: $0.keyWasDown) }) {
+            return true
+        }
+        return workflowSlots.values.contains { states in
+            states.contains { $0.behavior == .startDictation && matches($0.hotkey, keyWasDown: $0.keyWasDown) }
         }
     }
 

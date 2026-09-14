@@ -6740,6 +6740,147 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testWebsiteSubmitPreparationWebsiteMatch() async throws {
+        try await assertWebsiteSubmitPreparation(scenario: "website")
+    }
+
+    @MainActor
+    func testWebsiteSubmitPreparationAppAndWebsiteMatch() async throws {
+        try await assertWebsiteSubmitPreparation(scenario: "appSite")
+    }
+
+    @MainActor
+    func testWebsiteSubmitPreparationWebsiteMiss() async throws {
+        try await assertWebsiteSubmitPreparation(scenario: "miss")
+    }
+
+    @MainActor
+    func testWebsiteSubmitPreparationCancellationAndRestart() async throws {
+        try await assertWebsiteSubmitPreparation(scenario: "cancel")
+    }
+
+    @MainActor
+    func testWebsiteSubmitPreparationStopAndRestart() async throws {
+        try await assertWebsiteSubmitPreparation(scenario: "stop")
+    }
+
+    @MainActor
+    func testWebsiteSubmitPreparationForegroundAppChange() async throws {
+        try await assertWebsiteSubmitPreparation(scenario: "focus")
+    }
+
+    @MainActor
+    private func assertWebsiteSubmitPreparation(scenario: String) async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            MockTranscriptionPlugin.reset()
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        MockTranscriptionPlugin.setResponseText("Ready to send press enter.")
+        let urlRequested = expectation(description: "Browser lookup started")
+        let urlGate = DispatchSemaphore(value: 0)
+        defer { urlGate.signal() }
+        let resolver = BrowserURLResolver { _, _ in
+            urlRequested.fulfill()
+            urlGate.wait()
+            return BrowserResolution(url: URL(string: scenario == "miss" ? "https://other.example/chat" : "https://example.com/chat"), title: nil)
+        }
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory, browserURLResolver: resolver)
+        let context = try XCTUnwrap(dictationContext)
+        context.dictationViewModel.preserveClipboard = false
+        _ = context.workflowService.addWorkflow(
+            name: "App Fallback",
+            template: .dictation,
+            trigger: .app("com.apple.Notes"),
+            output: WorkflowOutput(autoEnterMode: .never)
+        )
+
+        let pasteboard = NSPasteboard.withUniqueName()
+        var returnCount = 0
+        context.textInsertionService.pasteboardProvider = { pasteboard }
+        var foregroundBundleID = "com.apple.Notes"
+        context.textInsertionService.captureActiveAppOverride = {
+            ("Notes", foregroundBundleID, nil)
+        }
+        context.textInsertionService.accessibilityGrantedOverride = true
+        context.textInsertionService.selectedTextOverride = { nil }
+        context.textInsertionService.focusedTextElementOverride = { nil }
+        context.textInsertionService.pasteVerificationAttempts = 0
+        context.textInsertionService.pasteSimulatorOverride = {}
+        context.textInsertionService.returnSimulatorOverride = {
+            returnCount += 1
+        }
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {
+            XCTAssertFalse(["cancel", "stop", "focus"].contains(scenario), "Audio must not start before cancellation")
+        }
+        context.audioRecordingService.stopRecordingOverride = { _ in
+            Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
+        }
+
+        let originalCancellation = UserDefaults.standard.object(forKey: UserDefaultsKeys.cancellationBehavior)
+        defer { Self.restoreUserDefault(originalCancellation, forKey: UserDefaultsKeys.cancellationBehavior) }
+        context.dictationViewModel.cancellationBehavior = .instant
+        let trigger = scenario == "appSite"
+            ? WorkflowTrigger(kind: .website, appBundleIdentifiers: ["com.apple.Notes"], websitePatterns: ["example.com"])
+            : WorkflowTrigger.website("example.com")
+        let siteWorkflow = try XCTUnwrap(context.workflowService.addWorkflow(
+            name: "Website Submit", template: .dictation, trigger: trigger,
+            output: WorkflowOutput(autoEnterMode: .duringDictation)
+        ))
+        let sessionID = context.dictationViewModel.apiStartRecording()
+        await fulfillment(of: [urlRequested], timeout: 1)
+        XCTAssertEqual(context.dictationViewModel.state, .processing)
+        XCTAssertFalse(context.audioRecordingService.isRecording)
+        XCTAssertFalse(context.dictationViewModel.isRecordingInputReady)
+        XCTAssertNil(context.hotkeyService.submitOnEnterSessionID)
+        if scenario == "cancel" {
+            context.dictationViewModel.handleCancelHotkey()
+            XCTAssertEqual(context.dictationViewModel.state, .idle)
+        } else if scenario == "stop" {
+            XCTAssertEqual(context.dictationViewModel.apiStopRecording(), sessionID)
+            XCTAssertEqual(context.dictationViewModel.state, .idle)
+        } else if scenario == "focus" {
+            foregroundBundleID = "com.apple.TextEdit"
+        }
+        urlGate.signal()
+        await context.dictationViewModel.testingWaitForRecordingStart()
+        if ["cancel", "stop", "focus"].contains(scenario) {
+            await context.dictationViewModel.testingWaitForRecordingCleanup()
+            XCTAssertFalse(context.audioRecordingService.isRecording)
+            XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.status, .failed)
+            XCTAssertEqual(returnCount, 0)
+            // The next forced recording skips website detection and starts normally.
+            context.audioRecordingService.startRecordingOverride = {}
+            _ = context.dictationViewModel.apiStartRecording(forcedWorkflowId: siteWorkflow.id)
+            await context.dictationViewModel.testingWaitForRecordingStart()
+            XCTAssertEqual(context.dictationViewModel.state, .recording)
+            _ = context.dictationViewModel.apiStopRecording()
+        } else {
+            XCTAssertEqual(context.dictationViewModel.state, .recording)
+            XCTAssertEqual(context.dictationViewModel.activeRuleName, scenario == "miss" ? "App Fallback" : "Website Submit")
+            if scenario == "miss" {
+                XCTAssertNil(context.hotkeyService.submitOnEnterSessionID)
+                _ = context.dictationViewModel.apiStopRecording()
+            } else {
+                XCTAssertEqual(context.hotkeyService.submitOnEnterSessionID, sessionID)
+                context.hotkeyService.onSubmitDictationPressed?(sessionID)
+            }
+        }
+        for _ in 0..<160 {
+            if context.dictationViewModel.state == .idle { break }
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        XCTAssertEqual(context.dictationViewModel.state, .idle)
+        XCTAssertEqual(returnCount, ["website", "appSite"].contains(scenario) ? 1 : 0)
+    }
+
+    @MainActor
     func testPhysicalSubmitSurvivesWorkflowChangeBeforeCallbackDelivery() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         var dictationContext: DictationContext?
@@ -14346,6 +14487,62 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         let down = try makeKeyboardEvent(keyCode: 0x24, keyDown: true, flags: [])
         XCTAssertNil(service.processLocalEventForTesting(down))
         XCTAssertEqual(submitCount, 1)
+    }
+
+    @MainActor
+    func testConfiguredReturnToggleStopsNormallyInsteadOfSubmitting() async throws {
+        for keyCode: UInt16 in [0x24, 0x4C] {
+            let service = HotkeyService()
+            service.suspendMonitoring()
+            let hotkey = UnifiedHotkey(keyCode: keyCode, modifierFlags: NSEvent.ModifierFlags.command.rawValue, isFn: false)
+            service.setHotkeyForTesting(hotkey, for: .toggle)
+            var startCount = 0
+            var stopCount = 0
+            var submitCount = 0
+            service.onDictationStart = { _ in startCount += 1 }
+            service.onDictationStop = { stopCount += 1 }
+            service.onSubmitDictationPressed = { _ in submitCount += 1 }
+            let down = try makeKeyboardEvent(keyCode: keyCode, keyDown: true, flags: [.maskCommand])
+            let up = try makeKeyboardEvent(keyCode: keyCode, keyDown: false, flags: [.maskCommand])
+            XCTAssertTrue(service.processEventForTesting(down, source: .monitor))
+            _ = service.processEventForTesting(up, source: .monitor)
+            XCTAssertEqual(startCount, 1)
+            try await Task.sleep(for: .milliseconds(150))
+            service.submitOnEnterSessionID = UUID()
+            XCTAssertTrue(service.processEventForTesting(down, source: .monitor))
+            XCTAssertEqual(stopCount, 1)
+            XCTAssertEqual(submitCount, 0)
+            _ = service.processEventForTesting(up, source: .monitor)
+            let plainReturn = try makeKeyboardEvent(keyCode: keyCode, keyDown: true, flags: [])
+            XCTAssertTrue(service.processEventForTesting(plainReturn, source: .monitor))
+            XCTAssertEqual(submitCount, 1)
+        }
+    }
+
+    @MainActor
+    func testConfiguredWorkflowReturnStopsNormallyInsteadOfSubmitting() async throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        let workflowID = UUID()
+        let hotkey = UnifiedHotkey(keyCode: 0x24, modifierFlags: NSEvent.ModifierFlags.command.rawValue, isFn: false)
+        service.registerWorkflowHotkeys([(id: workflowID, hotkey: hotkey, behavior: .startDictation)])
+        service.suspendMonitoring()
+        var startCount = 0
+        var stopCount = 0
+        var submitCount = 0
+        service.onWorkflowDictationStart = { _, _ in startCount += 1 }
+        service.onDictationStop = { stopCount += 1 }
+        service.onSubmitDictationPressed = { _ in submitCount += 1 }
+        let down = try makeKeyboardEvent(keyCode: 0x24, keyDown: true, flags: [.maskCommand])
+        let up = try makeKeyboardEvent(keyCode: 0x24, keyDown: false, flags: [.maskCommand])
+        XCTAssertTrue(service.processEventForTesting(down, source: .monitor))
+        _ = service.processEventForTesting(up, source: .monitor)
+        XCTAssertEqual(startCount, 1)
+        try await Task.sleep(for: .milliseconds(150))
+        service.submitOnEnterSessionID = UUID()
+        XCTAssertTrue(service.processEventForTesting(down, source: .monitor))
+        XCTAssertEqual(stopCount, 1)
+        XCTAssertEqual(submitCount, 0)
     }
 
     @MainActor

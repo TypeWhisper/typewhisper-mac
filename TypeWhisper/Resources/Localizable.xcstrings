@@ -5586,6 +5586,22 @@
         }
       }
     },
+    "Checking website…" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ウェブサイトを確認中…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "正在检查网站…"
+          }
+        }
+      }
+    },
     "Choose a cloud-synced folder for TypeWhisper." : {
       "localizations" : {
         "de" : {
