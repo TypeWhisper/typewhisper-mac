@@ -1401,6 +1401,12 @@ final class DictationViewModel: ObservableObject {
         prepareRecordingStartCue(playsSound: !selectedInputUsesBluetooth)
         let audioStartTimestamp = DispatchTime.now().uptimeNanoseconds
 
+        // Arm Enter before slow microphone preparation makes recording visible.
+        let initialActiveApp = pendingLiveFieldCapture?.activeApp ?? textInsertionService.captureActiveApp()
+        let initialWorkflowMatch = initialForcedWorkflow.map { workflowService.forcedWorkflowMatch(for: $0) }
+            ?? workflowService.matchWorkflow(bundleIdentifier: initialActiveApp.bundleId, url: nil)
+        applyWorkflowMatch(initialWorkflowMatch, activeApp: initialActiveApp)
+
         beginRecordingPreparation()
         let requestToFeedbackMs = Self.elapsedMilliseconds(
             from: requestUptimeNanoseconds,
@@ -2044,7 +2050,8 @@ final class DictationViewModel: ObservableObject {
                 }
 
                 let actionPluginId = self.effectiveActionPluginId
-                let autoEnterMode = self.effectiveAutoEnterMode
+                // An accepted physical submit survives a later browser URL workflow match.
+                let autoEnterMode: WorkflowAutoEnterMode = submitRequested ? .duringDictation : self.effectiveAutoEnterMode
                 let autoEnterResolution = WorkflowAutoEnterResolver.resolve(
                     text: text,
                     mode: autoEnterMode,

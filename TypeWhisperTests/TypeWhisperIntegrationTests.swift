@@ -6667,6 +6667,79 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testPhysicalSubmitSurvivesDeferredBrowserWorkflowChange() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            MockTranscriptionPlugin.reset()
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        MockTranscriptionPlugin.setResponseText("Ready to send press enter.")
+        let urlRequested = expectation(description: "Browser lookup started")
+        let urlGate = DispatchSemaphore(value: 0)
+        defer { urlGate.signal() }
+        let resolver = BrowserURLResolver { _, _ in
+            urlRequested.fulfill()
+            urlGate.wait()
+            return BrowserResolution(url: URL(string: "https://example.com/chat"), title: nil)
+        }
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory, browserURLResolver: resolver)
+        let context = try XCTUnwrap(dictationContext)
+        context.dictationViewModel.preserveClipboard = false
+        _ = context.workflowService.addWorkflow(
+            name: "Physical Submit",
+            template: .dictation,
+            trigger: .app("com.apple.Notes"),
+            output: WorkflowOutput(autoEnterMode: .duringDictation)
+        )
+
+        let pasteboard = NSPasteboard.withUniqueName()
+        var returnCount = 0
+        context.textInsertionService.pasteboardProvider = { pasteboard }
+        context.textInsertionService.captureActiveAppOverride = {
+            ("Notes", "com.apple.Notes", nil)
+        }
+        context.textInsertionService.accessibilityGrantedOverride = true
+        context.textInsertionService.selectedTextOverride = { nil }
+        context.textInsertionService.focusedTextElementOverride = { nil }
+        context.textInsertionService.pasteVerificationAttempts = 0
+        context.textInsertionService.pasteSimulatorOverride = {}
+        context.textInsertionService.returnSimulatorOverride = {
+            returnCount += 1
+        }
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { _ in
+            Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
+        }
+
+        _ = context.workflowService.addWorkflow(
+            name: "Website Never Submit", template: .dictation,
+            trigger: .website("example.com"), output: WorkflowOutput(autoEnterMode: .never)
+        )
+        let sessionID = context.dictationViewModel.apiStartRecording()
+        await context.dictationViewModel.testingWaitForRecordingStart()
+        await fulfillment(of: [urlRequested], timeout: 1)
+        XCTAssertEqual(context.dictationViewModel.activeRuleName, "Physical Submit")
+        context.hotkeyService.onSubmitDictationPressed?(sessionID)
+        XCTAssertEqual(context.dictationViewModel.state, .processing)
+        urlGate.signal()
+        for _ in 0..<80 {
+            if context.dictationViewModel.apiDictationSession(id: sessionID)?.status == .completed { break }
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        XCTAssertEqual(context.dictationViewModel.activeRuleName, "Website Never Submit")
+        let session = try XCTUnwrap(context.dictationViewModel.apiDictationSession(id: sessionID))
+        XCTAssertEqual(session.status, .completed)
+        XCTAssertEqual(session.transcription?.text, "Ready to send press enter.")
+        XCTAssertEqual(returnCount, 1)
+    }
+
+    @MainActor
     func testDictationRuntimeStripsSpokenSubmitCommandBeforeActionPluginWithoutPressingReturn() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         var dictationContext: DictationContext?
@@ -7680,6 +7753,83 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let stoppedSessionID = context.dictationViewModel.apiStopRecording()
 
         XCTAssertEqual(stoppedSessionID, sessionID)
+        XCTAssertEqual(context.dictationViewModel.recordingDuration, 0)
+        XCTAssertFalse(context.dictationViewModel.isRecordingInputReady)
+        XCTAssertEqual(context.dictationViewModel.state, .inserting)
+
+        audioStartGate.signal()
+        await context.dictationViewModel.testingWaitForRecordingStart()
+        try await Task.sleep(for: .milliseconds(20))
+
+        XCTAssertFalse(context.audioRecordingService.isRecording)
+        XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.status, .failed)
+        XCTAssertEqual(
+            context.dictationViewModel.apiDictationSession(id: sessionID)?.error,
+            String(localized: "Cancelled")
+        )
+    }
+
+    @MainActor
+    func testSubmitEnterStopsForcedWorkflowDuringBluetoothPreparation() async throws {
+        try await assertSubmitEnterStopsBluetoothPreparation(forced: true)
+    }
+
+    @MainActor
+    func testSubmitEnterStopsAppWorkflowDuringBluetoothPreparation() async throws {
+        try await assertSubmitEnterStopsBluetoothPreparation(forced: false)
+    }
+
+    @MainActor
+    private func assertSubmitEnterStopsBluetoothPreparation(forced: Bool) async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let originalSelectedInputDeviceUID = UserDefaults.standard.object(forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        let originalPriorityList = UserDefaults.standard.object(forKey: UserDefaultsKeys.inputDevicePriorityList)
+        UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.selectedInputDeviceUID)
+        UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.inputDevicePriorityList)
+        let defaultInputDeviceID = AudioDeviceID(939)
+        let audioStartEntered = expectation(description: "Bluetooth preparation entered")
+        let audioStartGate = DispatchSemaphore(value: 0)
+        defer { audioStartGate.signal() }
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+            Self.restoreSelectedInputDeviceUID(originalSelectedInputDeviceUID)
+            Self.restoreUserDefault(originalPriorityList, forKey: UserDefaultsKeys.inputDevicePriorityList)
+        }
+
+        dictationContext = Self.makeDictationContext(
+            appSupportDirectory: appSupportDirectory,
+            audioDeviceTransportResolver: FakeAudioDeviceTransportResolver(
+                transports: [defaultInputDeviceID: kAudioDeviceTransportTypeBluetooth]
+            ),
+            audioDeviceDefaultInputController: APIFakeAudioInputDeviceDefaultController(
+                defaultInputDeviceID: defaultInputDeviceID
+            ),
+            audioRecordingBluetoothInputRouteStabilizer: FakeBluetoothInputRouteStabilizer { _, _ in true }
+        )
+        let context = try XCTUnwrap(dictationContext)
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.startRecordingOverride = {
+            audioStartEntered.fulfill()
+            audioStartGate.wait()
+        }
+        context.audioRecordingService.stopRecordingOverride = { _ in [] }
+
+        context.textInsertionService.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
+        let workflow = context.workflowService.addWorkflow(
+            name: "Early Submit", template: .dictation, trigger: .app("com.apple.Notes"),
+            output: WorkflowOutput(autoEnterMode: .duringDictation)
+        )
+        let sessionID = context.dictationViewModel.apiStartRecording(forcedWorkflowId: forced ? try XCTUnwrap(workflow).id : nil)
+        await fulfillment(of: [audioStartEntered], timeout: 1)
+
+        XCTAssertEqual(context.hotkeyService.submitOnEnterSessionID, sessionID)
+        let down = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: 0x24, keyDown: true))
+        XCTAssertTrue(context.hotkeyService.processEventForTesting(try XCTUnwrap(NSEvent(cgEvent: down)), source: .monitor))
+        let up = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: 0x24, keyDown: false))
+        XCTAssertTrue(context.hotkeyService.processEventForTesting(try XCTUnwrap(NSEvent(cgEvent: up)), source: .monitor))
+        XCTAssertNil(context.hotkeyService.submitOnEnterSessionID)
         XCTAssertEqual(context.dictationViewModel.recordingDuration, 0)
         XCTAssertFalse(context.dictationViewModel.isRecordingInputReady)
         XCTAssertEqual(context.dictationViewModel.state, .inserting)
@@ -9311,6 +9461,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     @MainActor
     private static func makeDictationContext(
         appSupportDirectory: URL,
+        browserURLResolver: BrowserURLResolver = BrowserURLResolver(),
         audioDuckingService: AudioDuckingService? = nil,
         mediaPlaybackService: MediaPlaybackService? = nil,
         soundService: SoundService? = nil,
@@ -9368,7 +9519,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             recoveryAudioStore: audioRecordingRecoveryAudioStore
         )
         let hotkeyService = HotkeyService()
-        let textInsertionService = TextInsertionService()
+        let textInsertionService = TextInsertionService(browserURLResolver: browserURLResolver)
         let historyService = HistoryService(appSupportDirectory: appSupportDirectory)
         let recentTranscriptionStore = RecentTranscriptionStore()
         let profileService = ProfileService(appSupportDirectory: appSupportDirectory)
@@ -14071,6 +14222,44 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         XCTAssertEqual(discardCount, 0)
         let up = try makeKeyboardEvent(keyCode: 0x4C, keyDown: false, flags: [.maskControl, .maskAlternate, .maskShift, .maskCommand, .maskNumericPad])
         XCTAssertTrue(service.processEventForTesting(up, source: .monitor))
+    }
+
+    @MainActor
+    func testGlobalMonitorIgnoresGeneratedReturnEvenWhenItIsADictationHotkey() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        service.setHotkeyForTesting(UnifiedHotkey(keyCode: 0x24, modifierFlags: 0, isFn: false), for: .toggle)
+        var startCount = 0
+        service.onDictationStart = { _ in startCount += 1 }
+        for keyDown in [true, false] {
+            let cgEvent = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: 0x24, keyDown: keyDown))
+            cgEvent.setIntegerValueField(.eventSourceUserData, value: TextInsertionService.simulatedReturnEventMarker)
+            service.processGlobalEventForTesting(try XCTUnwrap(NSEvent(cgEvent: cgEvent)))
+        }
+        XCTAssertEqual(startCount, 0)
+    }
+
+    @MainActor
+    func testGlobalMonitorDoesNotSubmitOrLatchReturnWithoutSuppression() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        service.submitOnEnterSessionID = UUID()
+        var submitCount = 0
+        service.onSubmitDictationPressed = { _ in submitCount += 1 }
+        for keyCode: UInt16 in [0x24, 0x4C] {
+            let down = try makeKeyboardEvent(keyCode: keyCode, keyDown: true, flags: [])
+            let up = try makeKeyboardEvent(keyCode: keyCode, keyDown: false, flags: [])
+            service.processGlobalEventForTesting(down)
+            service.processGlobalEventForTesting(up)
+            XCTAssertEqual(submitCount, 0)
+            service.submitOnEnterSessionID = nil
+            XCTAssertNotNil(service.processLocalEventForTesting(up))
+            service.submitOnEnterSessionID = UUID()
+        }
+        // The local monitor can still safely consume Enter in TypeWhisper's own UI.
+        let down = try makeKeyboardEvent(keyCode: 0x24, keyDown: true, flags: [])
+        XCTAssertNil(service.processLocalEventForTesting(down))
+        XCTAssertEqual(submitCount, 1)
     }
 
     @MainActor

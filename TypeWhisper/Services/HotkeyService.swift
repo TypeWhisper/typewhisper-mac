@@ -676,10 +676,15 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         let mask = eventMonitorMask(includeMouse: includeMouse)
 
         globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: mask) { [weak self] event in
-            _ = self?.handleEvent(event, source: .monitor)
+            self?.handleGlobalMonitorEvent(event)
         }
 
         installLocalEventMonitor(includeMouse: includeMouse)
+    }
+
+    private func handleGlobalMonitorEvent(_ event: NSEvent) {
+        // Global monitors observe events after delivery and cannot consume Return.
+        _ = handleEvent(event, source: .monitor, canSuppressSubmit: false)
     }
 
     private func handleLocalMonitorEvent(_ event: NSEvent) -> NSEvent? {
@@ -1153,16 +1158,16 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     // MARK: - NSEvent Fallback
 
     @discardableResult
-    private func handleEvent(_ event: NSEvent, source: HotkeyEventSource) -> Bool {
+    private func handleEvent(_ event: NSEvent, source: HotkeyEventSource, canSuppressSubmit: Bool = true) -> Bool {
         if event.type == .keyDown || event.type == .keyUp, Self.returnKeyCodes.contains(event.keyCode) {
             // A submitted Return must pass even while the physical key is held.
             if event.cgEvent?.getIntegerValueField(.eventSourceUserData) == TextInsertionService.simulatedReturnEventMarker {
                 return false
             }
-            if event.type == .keyUp, suppressedSubmitKeyCodes.remove(event.keyCode) != nil {
+            if canSuppressSubmit, event.type == .keyUp, suppressedSubmitKeyCodes.remove(event.keyCode) != nil {
                 return true
             }
-            if event.type == .keyDown {
+            if canSuppressSubmit, event.type == .keyDown {
                 if suppressedSubmitKeyCodes.contains(event.keyCode) { return true }
                 if let sessionID = submitOnEnterSessionID, !event.isARepeat {
                     suppressedSubmitKeyCodes.insert(event.keyCode)
@@ -1722,6 +1727,10 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     @discardableResult
     func processEventForTesting(_ event: NSEvent, source: HotkeyEventSource) -> Bool {
         handleEvent(event, source: source)
+    }
+
+    func processGlobalEventForTesting(_ event: NSEvent) {
+        handleGlobalMonitorEvent(event)
     }
 
     func processLocalEventForTesting(_ event: NSEvent) -> NSEvent? {
