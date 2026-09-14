@@ -373,8 +373,10 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     private var capsLockOriginSuppressionUntil: Date?
 
     var accessibilityTrustedProvider: () -> Bool = { AXIsProcessTrusted() }
+    var secureInputEnabledProvider: () -> Bool = { IsSecureEventInputEnabled() }
 
     var canSuppressExternalKeyEvents: Bool {
+        guard !secureInputEnabledProvider() else { return false }
 #if DEBUG
         if let externalKeySuppressionAvailableOverride { return externalKeySuppressionAvailableOverride }
 #endif
@@ -1180,7 +1182,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             }
             if canSuppressSubmit, event.type == .keyDown {
                 if suppressedSubmitKeyCodes.contains(event.keyCode) { return true }
-                if let sessionID = submitOnEnterSessionID, !event.isARepeat, !matchesDictationHotkey(event) {
+                if let sessionID = submitOnEnterSessionID, !event.isARepeat, !matchesConfiguredHotkey(event) {
                     suppressedSubmitKeyCodes.insert(event.keyCode)
                     // Consume before the extra-key interruption check for push-to-talk.
                     performHotkeyAction(source: source) { [weak self] in
@@ -1604,22 +1606,26 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         }
     }
 
-    private func matchesDictationHotkey(_ event: NSEvent) -> Bool {
-        guard !dictationHotkeysPaused else { return false }
+    private func matchesConfiguredHotkey(_ event: NSEvent) -> Bool {
         func matches(_ hotkey: UnifiedHotkey, keyWasDown: Bool) -> Bool {
             detectKeyEvent(event, hotkey: hotkey, fnWasDown: false,
                            modifierWasDown: false, keyWasDown: keyWasDown) != .none
         }
-        for slotType in HotkeySlotType.allCases where slotType.startsDictation {
+        for slotType in HotkeySlotType.allCases {
+            if dictationHotkeysPaused && slotType.startsDictation { continue }
             for state in slots[slotType] ?? [] {
                 if let hotkey = state.hotkey, matches(hotkey, keyWasDown: state.keyWasDown) { return true }
             }
         }
-        if profileSlots.values.contains(where: { matches($0.hotkey, keyWasDown: $0.keyWasDown) }) {
+        if !dictationHotkeysPaused,
+           profileSlots.values.contains(where: { matches($0.hotkey, keyWasDown: $0.keyWasDown) }) {
             return true
         }
         return workflowSlots.values.contains { states in
-            states.contains { $0.behavior == .startDictation && matches($0.hotkey, keyWasDown: $0.keyWasDown) }
+            states.contains {
+                !(dictationHotkeysPaused && $0.behavior == .startDictation)
+                    && matches($0.hotkey, keyWasDown: $0.keyWasDown)
+            }
         }
     }
 

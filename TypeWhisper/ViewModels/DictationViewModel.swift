@@ -1456,7 +1456,8 @@ final class DictationViewModel: ObservableObject {
                 await previousCleanup?.value
                 try Task.checkCancellation()
                 guard self.activeDictationSessionID == sessionID else { return }
-                var resolvedStartupApp: (name: String?, bundleId: String?, url: String?)?
+                var resolvedStartupApp: (name: String?, bundleId: String?, url: String?)? = needsEarlyWorkflowMatch
+                    ? initialActiveApp : nil
                 if resolveWebsiteBeforeRecording {
                     let resolvedURL: String?
                     if let bundleID = initialActiveApp.bundleId {
@@ -1476,7 +1477,7 @@ final class DictationViewModel: ObservableObject {
                     self.processingPhase = nil
                     self.beginRecordingPreparation()
                 }
-                // Do not apply a resolved website rule to a different foreground app.
+                // Keep the application used for early workflow assignment fixed through startup.
                 if resolvedStartupApp != nil,
                    self.textInsertionService.captureActiveApp().bundleId != initialActiveApp.bundleId {
                     self.abortActiveRecordingImmediately(sessionMessage: String(localized: "Cancelled"))
@@ -1492,11 +1493,9 @@ final class DictationViewModel: ObservableObject {
                     return
                 }
                 if let resolvedStartupApp {
-                    let currentURL: String?
-                    if let bundleID = resolvedStartupApp.bundleId {
+                    var currentURL = resolvedStartupApp.url
+                    if resolveWebsiteBeforeRecording, let bundleID = resolvedStartupApp.bundleId {
                         currentURL = await self.textInsertionService.resolveBrowserURL(bundleId: bundleID)
-                    } else {
-                        currentURL = nil
                     }
                     try Task.checkCancellation()
                     guard self.activeDictationSessionID == sessionID, self.state == .recording else { return }
@@ -1515,7 +1514,8 @@ final class DictationViewModel: ObservableObject {
                     audioStartTimestamp: audioStartTimestamp,
                     selectedInputUsesBluetooth: selectedInputUsesBluetooth,
                     initialForcedWorkflow: initialForcedWorkflow,
-                    resolvedStartupApp: resolvedStartupApp
+                    resolvedStartupApp: resolvedStartupApp,
+                    websiteResolvedBeforeRecording: resolveWebsiteBeforeRecording
                 )
             } catch is CancellationError {
                 logger.info("Recording preparation cancelled")
@@ -1582,7 +1582,8 @@ final class DictationViewModel: ObservableObject {
         audioStartTimestamp: UInt64,
         selectedInputUsesBluetooth: Bool,
         initialForcedWorkflow: Workflow?,
-        resolvedStartupApp: (name: String?, bundleId: String?, url: String?)? = nil
+        resolvedStartupApp: (name: String?, bundleId: String?, url: String?)? = nil,
+        websiteResolvedBeforeRecording: Bool = false
     ) {
         guard activeDictationSessionID == sessionID else { return }
 
@@ -1673,7 +1674,7 @@ final class DictationViewModel: ObservableObject {
         scheduleDeferredRecordingMetadataCapture(
             activeApp: activeApp,
             forcedWorkflowId: forcedWorkflowId,
-            resolveURL: resolvedStartupApp == nil
+            resolveURL: !websiteResolvedBeforeRecording
         )
 
         let totalStartMs = (CFAbsoluteTimeGetCurrent() - startTimestamp) * 1000

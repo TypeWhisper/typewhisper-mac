@@ -6790,6 +6790,45 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testWebsiteSubmitPreparationRejectsSecureInput() async throws {
+        try await assertWebsiteSubmitPreparation(scenario: "secureInput")
+    }
+
+    @MainActor
+    func testEarlyAppWorkflowAssignmentDoesNotSwitchModesDuringAudioStartup() async throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        var context: DictationContext? = Self.makeDictationContext(appSupportDirectory: directory)
+        defer {
+            context = nil
+            MockTranscriptionPlugin.reset()
+            TestSupport.remove(directory)
+        }
+        let services = try XCTUnwrap(context)
+        _ = services.workflowService.addWorkflow(
+            name: "Notes Submit", template: .dictation, trigger: .app("com.apple.Notes"),
+            output: WorkflowOutput(autoEnterMode: .duringDictation)
+        )
+        let audioStarted = LockedFlag()
+        services.textInsertionService.captureActiveAppOverride = {
+            ("App", audioStarted.value ? "com.apple.Notes" : "com.apple.TextEdit", nil)
+        }
+        services.textInsertionService.focusedTextElementOverride = { nil }
+        services.audioRecordingService.hasMicrophonePermissionOverride = true
+        services.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        services.audioRecordingService.startRecordingOverride = { audioStarted.set() }
+        services.audioRecordingService.stopRecordingOverride = { _ in [] }
+        let sessionID = services.dictationViewModel.apiStartRecording()
+        XCTAssertNil(services.hotkeyService.submitOnEnterSessionID)
+        await services.dictationViewModel.testingWaitForRecordingStart()
+        await services.dictationViewModel.testingWaitForRecordingCleanup()
+        XCTAssertTrue(audioStarted.value)
+        XCTAssertFalse(services.audioRecordingService.isRecording)
+        XCTAssertEqual(services.dictationViewModel.apiDictationSession(id: sessionID)?.status, .failed)
+        XCTAssertNotEqual(services.dictationViewModel.activeRuleName, "Notes Submit")
+        XCTAssertNil(services.hotkeyService.submitOnEnterSessionID)
+    }
+
+    @MainActor
     private func assertWebsiteSubmitPreparation(scenario: String) async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         var dictationContext: DictationContext?
@@ -6857,10 +6896,11 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         context.audioRecordingService.hasMicrophonePermissionOverride = true
         context.audioRecordingService.inputAvailabilityOverride = { _ in true }
         context.audioRecordingService.startRecordingOverride = {
-            XCTAssertFalse(["cancel", "stop", "focus", "suppression"].contains(scenario), "Audio must not start before cancellation")
+            XCTAssertFalse(["cancel", "stop", "focus", "suppression", "secureInput"].contains(scenario), "Audio must not start before cancellation")
             audioStarted.set()
         }
         context.hotkeyService.externalKeySuppressionAvailableOverride = scenario != "suppression"
+        context.hotkeyService.secureInputEnabledProvider = { scenario == "secureInput" }
         context.audioRecordingService.stopRecordingOverride = { _ in
             Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
         }
@@ -6903,12 +6943,12 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             revalidationGate.signal()
         }
         await context.dictationViewModel.testingWaitForRecordingStart()
-        if ["cancel", "stop", "focus", "tab", "revalidateCancel", "revalidateEnter", "suppression"].contains(scenario) {
+        if ["cancel", "stop", "focus", "tab", "revalidateCancel", "revalidateEnter", "suppression", "secureInput"].contains(scenario) {
             await context.dictationViewModel.testingWaitForRecordingCleanup()
             XCTAssertFalse(context.audioRecordingService.isRecording)
             XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.status, .failed)
             XCTAssertEqual(returnCount, 0)
-            if scenario == "suppression" {
+            if ["suppression", "secureInput"].contains(scenario) {
                 XCTAssertNotNil(context.dictationViewModel.apiDictationSession(id: sessionID)?.error)
                 XCTAssertNil(context.hotkeyService.submitOnEnterSessionID)
                 return
@@ -9806,6 +9846,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let hotkeyService = HotkeyService()
         let textInsertionService = TextInsertionService(browserURLResolver: browserURLResolver)
         hotkeyService.externalKeySuppressionAvailableOverride = true
+        hotkeyService.secureInputEnabledProvider = { false }
         let historyService = HistoryService(appSupportDirectory: appSupportDirectory)
         let recentTranscriptionStore = RecentTranscriptionStore()
         let profileService = ProfileService(appSupportDirectory: appSupportDirectory)
@@ -14576,6 +14617,38 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
             XCTAssertTrue(service.processEventForTesting(plainReturn, source: .monitor))
             XCTAssertEqual(submitCount, 1)
         }
+    }
+
+    @MainActor
+    func testConfiguredReturnPaletteShortcutTakesPrecedenceOverSubmission() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        service.setHotkeyForTesting(
+            UnifiedHotkey(keyCode: 0x24, modifierFlags: NSEvent.ModifierFlags.command.rawValue, isFn: false),
+            for: .promptPalette
+        )
+        var paletteCount = 0
+        var submitCount = 0
+        service.onPromptPaletteToggle = { paletteCount += 1 }
+        service.onSubmitDictationPressed = { _ in submitCount += 1 }
+        service.submitOnEnterSessionID = UUID()
+        let down = try makeKeyboardEvent(keyCode: 0x24, keyDown: true, flags: [.maskCommand])
+        let up = try makeKeyboardEvent(keyCode: 0x24, keyDown: false, flags: [.maskCommand])
+        XCTAssertTrue(service.processEventForTesting(down, source: .monitor))
+        _ = service.processEventForTesting(up, source: .monitor)
+        XCTAssertEqual(paletteCount, 1)
+        XCTAssertEqual(submitCount, 0)
+    }
+
+    @MainActor
+    func testSecureInputDisablesExternalKeySuppressionAvailability() {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        service.externalKeySuppressionAvailableOverride = true
+        service.secureInputEnabledProvider = { false }
+        XCTAssertTrue(service.canSuppressExternalKeyEvents)
+        service.secureInputEnabledProvider = { true }
+        XCTAssertFalse(service.canSuppressExternalKeyEvents)
     }
 
     @MainActor
