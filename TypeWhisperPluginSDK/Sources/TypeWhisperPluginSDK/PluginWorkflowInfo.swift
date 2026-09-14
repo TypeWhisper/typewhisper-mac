@@ -114,6 +114,7 @@ public enum PluginWorkflowAutoEnterMode: String, Codable, CaseIterable, Sendable
     case never
     case spokenCommand
     case always
+    case duringDictation
 }
 
 public struct PluginWorkflowOutput: Codable, Sendable, Equatable {

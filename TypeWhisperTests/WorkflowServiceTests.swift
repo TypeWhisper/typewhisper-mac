@@ -222,6 +222,46 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertFalse(output.autoEnter)
     }
 
+    func testWorkflowOutputPersistsPhysicalAutoEnterModeWithoutEnablingAlwaysAutoEnter() throws {
+        let output = WorkflowOutput(autoEnterMode: .duringDictation)
+
+        XCTAssertFalse(output.autoEnter)
+        XCTAssertEqual(output.autoEnterMode, .duringDictation)
+
+        let encoded = try JSONEncoder().encode(output)
+        let decoded = try JSONDecoder().decode(WorkflowOutput.self, from: encoded)
+
+        XCTAssertFalse(decoded.autoEnter)
+        XCTAssertEqual(decoded.autoEnterMode, .duringDictation)
+    }
+
+    func testWorkflowDraftPreservesPhysicalAutoEnterMode() {
+        let workflow = Workflow(
+            name: "Physical Submit",
+            template: .dictation,
+            trigger: .global(),
+            output: WorkflowOutput(autoEnterMode: .duringDictation)
+        )
+
+        let draft = WorkflowDraft(workflow)
+        let output = draft.resolvedOutput()
+
+        XCTAssertEqual(workflow.pluginWorkflowInfo.output.autoEnterMode, .duringDictation)
+        XCTAssertEqual(draft.autoEnterMode, .duringDictation)
+        XCTAssertEqual(output.autoEnterMode, .duringDictation)
+        XCTAssertFalse(output.autoEnter)
+    }
+
+    func testPhysicalAutoEnterResolverRequiresExplicitSubmitAndPreservesSpokenWords() {
+        let text = "Ready to send press enter."
+        XCTAssertEqual(WorkflowAutoEnterResolver.resolve(text: text, mode: .duringDictation),
+                       WorkflowAutoEnterResolution(text: text, shouldPressEnter: false))
+        XCTAssertEqual(WorkflowAutoEnterResolver.resolve(text: text, mode: .duringDictation, submitRequested: true),
+                       WorkflowAutoEnterResolution(text: text, shouldPressEnter: true))
+        XCTAssertFalse(WorkflowAutoEnterResolver.resolve(text: "  ", mode: .duringDictation, submitRequested: true).shouldPressEnter)
+        XCTAssertFalse(WorkflowAutoEnterResolver.resolve(text: text, mode: .never, submitRequested: true).shouldPressEnter)
+    }
+
     func testSpokenAutoEnterResolverStripsTerminalCommands() {
         let scenarios: [(input: String, expected: String)] = [
             ("Draft ready press enter", "Draft ready"),

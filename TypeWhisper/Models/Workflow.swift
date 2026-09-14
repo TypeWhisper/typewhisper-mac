@@ -336,6 +336,7 @@ enum WorkflowAutoEnterMode: String, CaseIterable, Identifiable, Codable, Sendabl
     case never
     case spokenCommand
     case always
+    case duringDictation
 
     var id: String { rawValue }
 
@@ -351,6 +352,8 @@ enum WorkflowAutoEnterMode: String, CaseIterable, Identifiable, Codable, Sendabl
             )
         case .always:
             localizedAppText("Always", de: "Immer")
+        case .duringDictation:
+            localizedAppText("When I press Enter during dictation", de: "Wenn ich während des Diktats Enter drücke")
         }
     }
 
@@ -365,6 +368,11 @@ enum WorkflowAutoEnterMode: String, CaseIterable, Identifiable, Codable, Sendabl
             localizedAppText(
                 "Presses Enter when the dictation ends with “press enter” or “press return”.",
                 de: "Drückt Enter, wenn das Diktat mit „press enter“ oder „press return“ endet."
+            )
+        case .duringDictation:
+            localizedAppText(
+                "Press Enter during recording to stop, insert the text, and submit. Stopping normally only inserts the text.",
+                de: "Drücke während der Aufnahme Enter, um sie zu stoppen, den Text einzufügen und abzusenden. Normales Stoppen fügt nur den Text ein."
             )
         case .always:
             localizedAppText(
@@ -383,7 +391,7 @@ struct WorkflowAutoEnterResolution: Equatable, Sendable {
 enum WorkflowAutoEnterResolver {
     private static let spokenCommandPattern = #"^(.+?)\s+press\s+(?:enter|return)[\s\p{P}\p{S}]*$"#
 
-    static func resolve(text: String, mode: WorkflowAutoEnterMode) -> WorkflowAutoEnterResolution {
+    static func resolve(text: String, mode: WorkflowAutoEnterMode, submitRequested: Bool = false) -> WorkflowAutoEnterResolution {
         let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
 
         switch mode {
@@ -391,6 +399,8 @@ enum WorkflowAutoEnterResolver {
             return WorkflowAutoEnterResolution(text: text, shouldPressEnter: false)
         case .always:
             return WorkflowAutoEnterResolution(text: text, shouldPressEnter: true)
+        case .duringDictation:
+            return WorkflowAutoEnterResolution(text: text, shouldPressEnter: submitRequested && !trimmedText.isEmpty)
         case .spokenCommand:
             break
         }

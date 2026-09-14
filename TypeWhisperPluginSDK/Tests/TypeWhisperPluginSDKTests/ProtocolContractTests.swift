@@ -662,7 +662,14 @@ final class ProtocolContractTests: XCTestCase {
         XCTAssertEqual(host.availableWorkflows.first?.output.targetActionPluginId, "com.example.action")
     }
 
-    func testWorkflowOutputPreservesSpokenAutoEnterModeAndDecodesLegacyPayloads() throws {
+    func testWorkflowOutputPreservesAutoEnterModesAndDecodesLegacyPayloads() throws {
+        let physicalOutput = PluginWorkflowOutput(autoEnterMode: .duringDictation)
+        let decodedPhysicalOutput = try JSONDecoder().decode(
+            PluginWorkflowOutput.self, from: JSONEncoder().encode(physicalOutput)
+        )
+        XCTAssertEqual(decodedPhysicalOutput.autoEnterMode, .duringDictation)
+        XCTAssertFalse(decodedPhysicalOutput.autoEnter)
+
         let spokenOutput = PluginWorkflowOutput(autoEnterMode: .spokenCommand)
         let spokenData = try JSONEncoder().encode(spokenOutput)
         let decodedSpokenOutput = try JSONDecoder().decode(PluginWorkflowOutput.self, from: spokenData)

@@ -6581,6 +6581,92 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testDictationRuntimePhysicalSubmitDoesNotLeakIntoFollowingDictation() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            MockTranscriptionPlugin.reset()
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        MockTranscriptionPlugin.setResponseText("Ready to send press enter.")
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        let context = try XCTUnwrap(dictationContext)
+        context.dictationViewModel.preserveClipboard = false
+        _ = context.workflowService.addWorkflow(
+            name: "Physical Submit",
+            template: .dictation,
+            trigger: .app("com.apple.Notes"),
+            output: WorkflowOutput(autoEnterMode: .duringDictation)
+        )
+
+        let pasteboard = NSPasteboard.withUniqueName()
+        var returnCount = 0
+        context.textInsertionService.pasteboardProvider = { pasteboard }
+        context.textInsertionService.captureActiveAppOverride = {
+            ("Notes", "com.apple.Notes", nil)
+        }
+        context.textInsertionService.accessibilityGrantedOverride = true
+        context.textInsertionService.selectedTextOverride = { nil }
+        context.textInsertionService.focusedTextElementOverride = { nil }
+        context.textInsertionService.pasteVerificationAttempts = 0
+        context.textInsertionService.pasteSimulatorOverride = {}
+        context.textInsertionService.returnSimulatorOverride = {
+            returnCount += 1
+        }
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { _ in
+            Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
+        }
+
+        for scenario in ["submit", "normal", "empty", "failure", "cancel", "normal"] {
+            MockTranscriptionPlugin.reset()
+            MockTranscriptionPlugin.setResponseText(scenario == "empty" ? "" : "Ready to send press enter.")
+            if scenario == "failure" { MockTranscriptionPlugin.setFailureMessage("Transcription failed") }
+            pasteboard.clearContents()
+            let submitRequested = scenario != "normal"
+            let sessionID = context.dictationViewModel.apiStartRecording()
+            await context.dictationViewModel.testingWaitForRecordingStart()
+            XCTAssertEqual(context.hotkeyService.submitOnEnterSessionID, sessionID)
+            if submitRequested {
+                let event = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: 0x24, keyDown: true))
+                XCTAssertTrue(context.hotkeyService.processEventForTesting(try XCTUnwrap(NSEvent(cgEvent: event)), source: .monitor))
+                let keyUp = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: 0x24, keyDown: false))
+                XCTAssertTrue(context.hotkeyService.processEventForTesting(try XCTUnwrap(NSEvent(cgEvent: keyUp)), source: .monitor))
+            } else {
+                // A delayed callback belonging to an old recording cannot stop this one.
+                context.hotkeyService.onSubmitDictationPressed?(UUID())
+                XCTAssertEqual(context.dictationViewModel.state, .recording)
+                _ = context.dictationViewModel.apiStopRecording()
+            }
+            XCTAssertNil(context.hotkeyService.submitOnEnterSessionID)
+            if scenario == "cancel" {
+                context.dictationViewModel.handleCancelHotkey()
+                context.dictationViewModel.handleCancelHotkey()
+            }
+            for _ in 0..<240 {
+                if context.dictationViewModel.state == .idle { break }
+                try await Task.sleep(for: .milliseconds(25))
+            }
+            let session = try XCTUnwrap(context.dictationViewModel.apiDictationSession(id: sessionID))
+            if scenario == "submit" || scenario == "normal" {
+                XCTAssertEqual(session.status, .completed, scenario)
+                XCTAssertEqual(session.transcription?.text, "Ready to send press enter.", scenario)
+                XCTAssertEqual(pasteboard.string(forType: .string), "Ready to send press enter.", scenario)
+            } else {
+                XCTAssertNotEqual(session.status, .completed, scenario)
+                XCTAssertNil(pasteboard.string(forType: .string), scenario)
+            }
+            XCTAssertEqual(context.dictationViewModel.state, .idle, scenario)
+            XCTAssertEqual(returnCount, 1, scenario)
+        }
+    }
+
+    @MainActor
     func testDictationRuntimeStripsSpokenSubmitCommandBeforeActionPluginWithoutPressingReturn() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         var dictationContext: DictationContext?
@@ -13800,6 +13886,208 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         XCTAssertNotNil(service.processLocalEventForTesting(down))
         let unrelated = try makeKeyboardEvent(keyCode: 0x00, keyDown: true, flags: [])
         XCTAssertNotNil(service.processLocalEventForTesting(unrelated))
+    }
+
+    @MainActor
+    func testSubmitEnterKeyPassesThroughWithoutEligibleOperation() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        var submitCount = 0
+        service.onSubmitDictationPressed = { _ in
+            submitCount += 1
+        }
+
+        let enter = try makeKeyboardEvent(keyCode: 0x24, keyDown: true, flags: [])
+
+        XCTAssertFalse(service.processEventForTesting(enter, source: .monitor))
+        XCTAssertEqual(submitCount, 0)
+        let keyUp = try makeKeyboardEvent(keyCode: 0x24, keyDown: false, flags: [])
+        XCTAssertFalse(service.processEventForTesting(keyUp, source: .monitor))
+    }
+
+    @MainActor
+    func testSubmitEnterKeyDedupesFollowingEventTapDispatch() async throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        service.submitOnEnterSessionID = UUID()
+
+        var submitCount = 0
+        let submitted = expectation(description: "SubmitEnter submission dispatched")
+        service.onSubmitDictationPressed = { [weak service] _ in
+            submitCount += 1
+            service?.submitOnEnterSessionID = nil
+            submitted.fulfill()
+        }
+
+        let enter = try makeKeyboardEvent(keyCode: 0x24, keyDown: true, flags: [])
+        XCTAssertTrue(service.processEventForTesting(enter, source: .eventTap))
+        await fulfillment(of: [submitted], timeout: 1)
+        XCTAssertEqual(submitCount, 1)
+
+        XCTAssertTrue(service.processEventForTesting(enter, source: .monitor))
+        XCTAssertEqual(submitCount, 1)
+        let keyUp = try makeKeyboardEvent(keyCode: 0x24, keyDown: false, flags: [])
+        XCTAssertTrue(service.processEventForTesting(keyUp, source: .eventTap))
+        XCTAssertFalse(service.processEventForTesting(enter, source: .eventTap))
+    }
+
+    @MainActor
+    func testSubmitEnterKeyConsumesHeldPressAfterSubmitUntilRelease() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        service.submitOnEnterSessionID = UUID()
+        var submitCount = 0
+        service.onSubmitDictationPressed = { [weak service] _ in
+            submitCount += 1
+            service?.submitOnEnterSessionID = nil
+        }
+        let down = try makeKeyboardEvent(keyCode: 0x24, keyDown: true, flags: [])
+        let repeated = try makeKeyboardEvent(keyCode: 0x24, keyDown: true, flags: [], isRepeat: true)
+        let up = try makeKeyboardEvent(keyCode: 0x24, keyDown: false, flags: [])
+
+        XCTAssertTrue(service.processEventForTesting(down, source: .monitor))
+        XCTAssertTrue(service.processEventForTesting(repeated, source: .monitor))
+        XCTAssertEqual(submitCount, 1)
+        XCTAssertTrue(service.processEventForTesting(up, source: .monitor))
+        XCTAssertFalse(service.processEventForTesting(down, source: .monitor))
+        XCTAssertFalse(service.processEventForTesting(up, source: .monitor))
+        XCTAssertEqual(submitCount, 1)
+    }
+
+    @MainActor
+    func testSubmitEnterKeyRequiresSeparatePressesAndAcceptsQuickSecondPress() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        service.submitOnEnterSessionID = UUID()
+        var submitCount = 0
+        service.onSubmitDictationPressed = { _ in submitCount += 1 }
+        let down = try makeKeyboardEvent(keyCode: 0x24, keyDown: true, flags: [])
+        let repeated = try makeKeyboardEvent(keyCode: 0x24, keyDown: true, flags: [], isRepeat: true)
+        let up = try makeKeyboardEvent(keyCode: 0x24, keyDown: false, flags: [])
+
+        XCTAssertTrue(service.processEventForTesting(down, source: .monitor))
+        XCTAssertTrue(service.processEventForTesting(repeated, source: .monitor))
+        XCTAssertEqual(submitCount, 1)
+        XCTAssertTrue(service.processEventForTesting(up, source: .monitor))
+        XCTAssertTrue(service.processEventForTesting(down, source: .monitor))
+        XCTAssertEqual(submitCount, 2)
+        XCTAssertTrue(service.processEventForTesting(up, source: .monitor))
+    }
+
+    @MainActor
+    func testSubmitEnterHeldBeforeDictationDoesNotSubmitOnRepeat() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        var submitCount = 0
+        service.onSubmitDictationPressed = { _ in submitCount += 1 }
+        let down = try makeKeyboardEvent(keyCode: 0x24, keyDown: true, flags: [])
+        let repeated = try makeKeyboardEvent(keyCode: 0x24, keyDown: true, flags: [], isRepeat: true)
+        let up = try makeKeyboardEvent(keyCode: 0x24, keyDown: false, flags: [])
+
+        XCTAssertFalse(service.processEventForTesting(down, source: .monitor))
+        service.submitOnEnterSessionID = UUID()
+        XCTAssertFalse(service.processEventForTesting(repeated, source: .monitor))
+        XCTAssertFalse(service.processEventForTesting(up, source: .monitor))
+        XCTAssertEqual(submitCount, 0)
+    }
+
+    @MainActor
+    func testSubmitEnterKeyRecoversMissedReleaseAfterEventTapDisable() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        service.submitOnEnterSessionID = UUID()
+        var enterIsDown = true
+        service.keyStateProvider = { _ in enterIsDown }
+        let down = try makeKeyboardEvent(keyCode: 0x24, keyDown: true, flags: [])
+        let repeated = try makeKeyboardEvent(keyCode: 0x24, keyDown: true, flags: [], isRepeat: true)
+
+        XCTAssertTrue(service.processEventForTesting(down, source: .monitor))
+        service.submitOnEnterSessionID = nil
+        service.recoverReleasedActiveHotkeyAfterEventTapDisableForTesting()
+        XCTAssertTrue(service.processEventForTesting(repeated, source: .monitor))
+        enterIsDown = false
+        service.recoverReleasedActiveHotkeyAfterEventTapDisableForTesting()
+        XCTAssertFalse(service.processEventForTesting(down, source: .monitor))
+    }
+
+    @MainActor
+    func testLocalMonitorConsumesSubmitEnterOnlyDuringSubmit() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        let down = try makeKeyboardEvent(keyCode: 0x24, keyDown: true, flags: [])
+        let up = try makeKeyboardEvent(keyCode: 0x24, keyDown: false, flags: [])
+        XCTAssertNotNil(service.processLocalEventForTesting(down))
+        XCTAssertNotNil(service.processLocalEventForTesting(up))
+        service.submitOnEnterSessionID = UUID()
+        service.onSubmitDictationPressed = { [weak service] _ in service?.submitOnEnterSessionID = nil }
+        XCTAssertNil(service.processLocalEventForTesting(down))
+        XCTAssertNil(service.processLocalEventForTesting(up))
+        XCTAssertNotNil(service.processLocalEventForTesting(down))
+        let unrelated = try makeKeyboardEvent(keyCode: 0x00, keyDown: true, flags: [])
+        XCTAssertNotNil(service.processLocalEventForTesting(unrelated))
+    }
+
+    @MainActor
+    func testSubmitEnterPassesSyntheticReturnWithoutReleasingPhysicalLatch() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        service.submitOnEnterSessionID = UUID()
+        let down = try makeKeyboardEvent(keyCode: 0x24, keyDown: true, flags: [])
+        XCTAssertTrue(service.processEventForTesting(down, source: .monitor))
+        service.submitOnEnterSessionID = nil
+        for keyDown in [true, false] {
+            let cgEvent = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: 0x24, keyDown: keyDown))
+            cgEvent.setIntegerValueField(.eventSourceUserData, value: TextInsertionService.simulatedReturnEventMarker)
+            let event = try XCTUnwrap(NSEvent(cgEvent: cgEvent))
+            XCTAssertFalse(service.processEventForTesting(event, source: .eventTap))
+        }
+        XCTAssertTrue(service.processEventForTesting(down, source: .monitor))
+        let up = try makeKeyboardEvent(keyCode: 0x24, keyDown: false, flags: [])
+        XCTAssertTrue(service.processEventForTesting(up, source: .monitor))
+        XCTAssertFalse(service.processEventForTesting(down, source: .monitor))
+    }
+
+    @MainActor
+    func testSubmitKeypadEnterTakesPriorityOverPushToTalkDiscard() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        service.discardPushToTalkRecordingOnExtraKeyPress = true
+        service.setHotkeyForTesting(spaceHotkey(), for: .pushToTalk)
+        var startCount = 0
+        service.onDictationStart = { _ in startCount += 1 }
+        let space = try makeKeyboardEvent(keyCode: 0x31, keyDown: true, flags: [.maskControl, .maskAlternate, .maskShift, .maskCommand])
+        _ = service.processEventForTesting(space, source: .monitor)
+        XCTAssertEqual(startCount, 1)
+        let sessionID = UUID()
+        service.submitOnEnterSessionID = sessionID
+        var submittedSessionID: UUID?
+        var discardCount = 0
+        service.onSubmitDictationPressed = { submittedSessionID = $0 }
+        service.onPushToTalkInterruption = { discardCount += 1 }
+        let enter = try makeKeyboardEvent(keyCode: 0x4C, keyDown: true, flags: [.maskControl, .maskAlternate, .maskShift, .maskCommand, .maskNumericPad])
+        XCTAssertTrue(service.processEventForTesting(enter, source: .monitor))
+        XCTAssertEqual(submittedSessionID, sessionID)
+        XCTAssertEqual(discardCount, 0)
+        let up = try makeKeyboardEvent(keyCode: 0x4C, keyDown: false, flags: [.maskControl, .maskAlternate, .maskShift, .maskCommand, .maskNumericPad])
+        XCTAssertTrue(service.processEventForTesting(up, source: .monitor))
+    }
+
+    @MainActor
+    func testSubmitEnterEventTapCapturesOriginalRecordingIdentity() async throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        let sessionID = UUID()
+        service.submitOnEnterSessionID = sessionID
+        let submitted = expectation(description: "Original recording captured")
+        service.onSubmitDictationPressed = { capturedID in
+            XCTAssertEqual(capturedID, sessionID)
+            submitted.fulfill()
+        }
+        let enter = try makeKeyboardEvent(keyCode: 0x24, keyDown: true, flags: [])
+        XCTAssertTrue(service.processEventForTesting(enter, source: .eventTap))
+        service.submitOnEnterSessionID = UUID()
+        await fulfillment(of: [submitted], timeout: 1)
     }
 
     @MainActor

@@ -128,7 +128,8 @@ final class SettingsBackupExporterTests: XCTestCase {
         source.workflowService.addWorkflow(
             name: "Cleanup",
             template: .cleanedText,
-            trigger: .app("com.apple.mail")
+            trigger: .app("com.apple.mail"),
+            output: WorkflowOutput(autoEnterMode: .duringDictation)
         )
         source.dictionaryService.addEntry(type: .term, original: "Kubernetes")
         source.dictionaryService.addEntry(type: .correction, original: "teh", replacement: "the")
@@ -169,6 +170,8 @@ final class SettingsBackupExporterTests: XCTestCase {
         XCTAssertEqual(result.dictionaryImported, 2)
         XCTAssertEqual(result.snippetsImported, 1)
         XCTAssertEqual(destination.workflowService.workflows.first?.name, "Cleanup")
+        XCTAssertEqual(destination.workflowService.workflows.first?.output.autoEnterMode, .duringDictation)
+        XCTAssertEqual(destination.workflowService.workflows.first?.output.autoEnter, false)
         XCTAssertEqual(destination.snippetService.snippets.first?.trigger, ";sig")
     }
 

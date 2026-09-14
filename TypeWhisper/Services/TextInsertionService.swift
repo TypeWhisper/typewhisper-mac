@@ -1049,6 +1049,8 @@ final class TextInsertionService {
         return point
     }
 
+    nonisolated static let simulatedReturnEventMarker: Int64 = 0x545752455455524E
+
     func simulateReturn() {
         if let returnSimulatorOverride {
             returnSimulatorOverride()
@@ -1057,10 +1059,12 @@ final class TextInsertionService {
         let returnKeyCode: CGKeyCode = 0x24
         let eventSource = CGEventSource(stateID: .combinedSessionState)
         let keyDown = CGEvent(keyboardEventSource: eventSource, virtualKey: returnKeyCode, keyDown: true)
+        keyDown?.setIntegerValueField(.eventSourceUserData, value: Self.simulatedReturnEventMarker)
         keyDown?.flags = []
         keyDown?.post(tap: .cghidEventTap)
 
         let keyUp = CGEvent(keyboardEventSource: eventSource, virtualKey: returnKeyCode, keyDown: false)
+        keyUp?.setIntegerValueField(.eventSourceUserData, value: Self.simulatedReturnEventMarker)
         keyUp?.flags = []
         keyUp?.post(tap: .cghidEventTap)
     }

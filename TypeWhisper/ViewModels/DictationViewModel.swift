@@ -233,6 +233,7 @@ final class DictationViewModel: ObservableObject {
     @Published var state: State = .idle {
         didSet {
             hotkeyService.isCancellationAvailable = cancelWarningTargetForCurrentState() != nil
+            updateSubmitOnEnterAvailability()
             clearCancelWarningIfStateNoLongerMatches()
         }
     }
@@ -1154,6 +1155,13 @@ final class DictationViewModel: ObservableObject {
             self?.processWorkflowHotkeyText(workflowId: workflowId)
         }
 
+        hotkeyService.onSubmitDictationPressed = { [weak self] sessionID in
+            guard let self, self.activeDictationSessionID == sessionID,
+                  self.state == .recording, self.effectiveAutoEnterMode == .duringDictation else { return }
+            self.hotkeyService.cancelDictation()
+            self.stopDictation(submitRequested: true)
+        }
+
         hotkeyService.onCancelPressed = { [weak self] in
             self?.handleCancelHotkey()
         }
@@ -1768,7 +1776,12 @@ final class DictationViewModel: ObservableObject {
             || !PluginManager.shared.postProcessors.isEmpty
     }
 
-    private func stopDictation() {
+    private func updateSubmitOnEnterAvailability() {
+        hotkeyService.submitOnEnterSessionID = state == .recording && effectiveAutoEnterMode == .duringDictation
+            ? activeDictationSessionID : nil
+    }
+
+    private func stopDictation(submitRequested: Bool = false) {
         guard state == .recording, !isStopInFlight else { return }
         clearCancelWarning()
         if recordingStartTask != nil, !isRecordingInputReady {
@@ -1787,11 +1800,11 @@ final class DictationViewModel: ObservableObject {
         markActiveDictationSessionProcessingIfNeeded()
         stopFinalizationTask = Task { [weak self] in
             guard let self else { return }
-            await finalizeStopDictation()
+            await finalizeStopDictation(submitRequested: submitRequested)
         }
     }
 
-    private func finalizeStopDictation() async {
+    private func finalizeStopDictation(submitRequested: Bool) async {
         var didStartTranscriptionTask = false
         defer {
             if Task.isCancelled {
@@ -2034,7 +2047,8 @@ final class DictationViewModel: ObservableObject {
                 let autoEnterMode = self.effectiveAutoEnterMode
                 let autoEnterResolution = WorkflowAutoEnterResolver.resolve(
                     text: text,
-                    mode: autoEnterMode
+                    mode: autoEnterMode,
+                    submitRequested: submitRequested
                 )
                 text = autoEnterResolution.text
                 if autoEnterMode == .spokenCommand, autoEnterResolution.shouldPressEnter {
@@ -2969,6 +2983,7 @@ final class DictationViewModel: ObservableObject {
     ) {
         activeWorkflowMatch = match
         matchedWorkflow = match?.workflow
+        updateSubmitOnEnterAvailability()
         activeRuleName = match?.workflow.name
         activeRuleReasonLabel = match?.kind.label
         activeRuleExplanation = match.map { workflowExplanation(for: $0, activeApp: activeApp) }
@@ -3216,6 +3231,7 @@ final class DictationViewModel: ObservableObject {
 
     private func clearActiveRuleState() {
         matchedWorkflow = nil
+        updateSubmitOnEnterAvailability()
         activeWorkflowMatch = nil
         forcedWorkflowId = nil
         activeRuleName = nil

@@ -20889,6 +20889,22 @@
         }
       }
     },
+    "Press Enter during recording to stop, insert the text, and submit. Stopping normally only inserts the text." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "録音中にEnterキーを押すと、録音を停止してテキストを挿入し、送信します。通常の停止ではテキストの挿入のみを行います。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "录音期间按 Enter 可停止录音、插入文本并发送。正常停止只会插入文本。"
+          }
+        }
+      }
+    },
     "Press Enter Automatically" : {
       "localizations" : {
         "ja" : {
@@ -34475,6 +34491,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "隐藏后，仅在 TypeWhisper 窗口打开时显示程序坞图标。如需再次打开设置，请从 Spotlight 或“应用程序”文件夹重新启动 TypeWhisper。"
+          }
+        }
+      }
+    },
+    "When I press Enter during dictation" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ディクテーション中にEnterキーを押したとき"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当我在听写期间按下 Enter 时"
           }
         }
       }
