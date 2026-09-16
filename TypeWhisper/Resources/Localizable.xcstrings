@@ -11054,6 +11054,12 @@
             "state" : "translated",
             "value" : "Schnellerer AirPods-Start"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更快启动 AirPods"
+          }
         }
       }
     },
@@ -13760,6 +13766,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Hält das AirPods-Mikrofon zwischen Diktaten aktiv. Dadurch wird der orangefarbene Mikrofonindikator angezeigt, der Akku stärker beansprucht und die AirPods-Audioqualität im Telefonie-Modus gehalten."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "在两次听写之间保持 AirPods 麦克风处于活动状态。这会显示橙色麦克风指示灯、消耗更多电量，并使 AirPods 音频保持通话音质模式。"
           }
         }
       }
