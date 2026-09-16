@@ -914,7 +914,7 @@ final class PromptPaletteHandlerTests: XCTestCase {
             recentTranscriptionStore: RecentTranscriptionStore(),
             promptProcessingService: PromptProcessingService(),
             workflowTextProcessingService: WorkflowTextProcessingService(
-                promptProcessor: { _, _, _, _, _ in "Processed: Selected source" },
+                promptProcessor: { _, text, _, _, _ in "Processed: \(text)" },
                 appleTranslator: nil
             ),
             soundService: SoundService(),
