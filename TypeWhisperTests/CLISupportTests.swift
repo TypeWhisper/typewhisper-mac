@@ -932,6 +932,61 @@ final class CLISupportTests: XCTestCase {
     }
 
     @MainActor
+    func testManagedSupporterPersistenceFailureRollsBackWithoutLosingExistingLicense() async throws {
+        let fixture = try ManagedLicenseFixture()
+        defer { fixture.cleanup() }
+        await fixture.service.validateIfNeeded()
+        let commercial = Self.loadKeychainValue(service: fixture.suite, account: "polar-license")
+        await fixture.server.configure(supporter: true)
+        await fixture.service.activateSupporterKey("existing-supporter-key")
+        let supporter = Self.loadKeychainValue(service: fixture.suite, account: "polar-supporter")
+        let lastValidation = fixture.defaults.object(forKey: UserDefaultsKeys.lastSupporterValidation) as? Date
+        let server = fixture.server
+
+        let failingService = LicenseService(
+            defaults: fixture.defaults,
+            keychainServiceName: fixture.suite,
+            keychainUpdate: { _, _ in errSecInteractionNotAllowed },
+            keychainAdd: { _ in XCTFail("An update failure must not insert another item"); return errSecSuccess },
+            dataTransport: { try await server.respond(to: $0) }
+        )
+        await failingService.activateSupporterKey("replacement-supporter-key")
+
+        XCTAssertNotNil(failingService.supporterActivationError)
+        XCTAssertTrue(failingService.isSupporter)
+        XCTAssertTrue(failingService.hasCommercialLicense)
+        XCTAssertEqual(Self.loadKeychainValue(service: fixture.suite, account: "polar-supporter"), supporter)
+        XCTAssertEqual(Self.loadKeychainValue(service: fixture.suite, account: "polar-license"), commercial)
+        XCTAssertEqual(fixture.defaults.object(forKey: UserDefaultsKeys.lastSupporterValidation) as? Date, lastValidation)
+        let paths = await server.paths
+        XCTAssertEqual(Array(paths.suffix(3)), ["activate", "validate", "deactivate"])
+    }
+
+    @MainActor
+    func testManagedSupporterInsertFailureDoesNotReportActivationSuccess() async throws {
+        let fixture = try ManagedLicenseFixture()
+        defer { fixture.cleanup() }
+        await fixture.server.configure(supporter: true)
+        let server = fixture.server
+        let failingService = LicenseService(
+            defaults: fixture.defaults,
+            keychainServiceName: fixture.suite,
+            keychainUpdate: { _, _ in errSecItemNotFound },
+            keychainAdd: { _ in errSecInteractionNotAllowed },
+            dataTransport: { try await server.respond(to: $0) }
+        )
+
+        await failingService.activateSupporterKey("personal-supporter-key")
+
+        XCTAssertNotNil(failingService.supporterActivationError)
+        XCTAssertFalse(failingService.isSupporter)
+        XCTAssertNil(Self.loadKeychainValue(service: fixture.suite, account: "polar-supporter"))
+        XCTAssertNil(fixture.defaults.object(forKey: UserDefaultsKeys.lastSupporterValidation))
+        let paths = await server.paths
+        XCTAssertEqual(paths, ["activate", "validate", "deactivate"])
+    }
+
+    @MainActor
     func testManagedSupporterEntryCannotReplaceCommercialLicense() async throws {
         let fixture = try ManagedLicenseFixture()
         defer { fixture.cleanup() }

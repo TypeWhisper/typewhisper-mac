@@ -158,6 +158,8 @@ final class LicenseService: ObservableObject {
     private let defaults: UserDefaults
     private let dataTransport: LicenseDataTransport
     private let keychainServiceName: String
+    private let keychainUpdate: (CFDictionary, CFDictionary) -> OSStatus
+    private let keychainAdd: (CFDictionary) -> OSStatus
 
     // MARK: - Published state (Business)
 
@@ -244,12 +246,16 @@ final class LicenseService: ObservableObject {
     init(
         defaults: UserDefaults = .standard,
         keychainServiceName: String = AppConstants.keychainServicePrefix + "license",
+        keychainUpdate: @escaping (CFDictionary, CFDictionary) -> OSStatus = { SecItemUpdate($0, $1) },
+        keychainAdd: @escaping (CFDictionary) -> OSStatus = { SecItemAdd($0, nil) },
         dataTransport: @escaping LicenseDataTransport = { request in
             try await URLSession.shared.data(for: request)
         }
     ) {
         self.defaults = defaults
         self.keychainServiceName = keychainServiceName
+        self.keychainUpdate = keychainUpdate
+        self.keychainAdd = keychainAdd
         self.dataTransport = dataTransport
         self.isLicenseManaged = Self.configuredLicenseKey(defaults: defaults) != nil
 
@@ -611,7 +617,7 @@ final class LicenseService: ObservableObject {
                     )
                 }
 
-                applySupporterActivation(
+                try applySupporterActivation(
                     key: key,
                     activationId: response.id,
                     tier: supporterTier
@@ -862,21 +868,25 @@ final class LicenseService: ObservableObject {
     }
 
     private func saveLicenseToKeychain(key: String, activationId: String) throws {
+        try saveKeychainPayload(key: key, activationId: activationId, account: "polar-license")
+    }
+
+    private func saveKeychainPayload(key: String, activationId: String, account: String) throws {
         let payload = LicenseKeychainPayload(key: key, activationId: activationId)
         let data = try JSONEncoder().encode(payload)
 
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: keychainService,
-            kSecAttrAccount as String: "polar-license",
+            kSecAttrAccount as String: account,
         ]
 
         let attributes = [kSecValueData as String: data]
-        var status = SecItemUpdate(query as CFDictionary, attributes as CFDictionary)
+        var status = keychainUpdate(query as CFDictionary, attributes as CFDictionary)
         if status == errSecItemNotFound {
             var addQuery = query
             addQuery[kSecValueData as String] = data
-            status = SecItemAdd(addQuery as CFDictionary, nil)
+            status = keychainAdd(addQuery as CFDictionary)
         }
         guard status == errSecSuccess else { throw LicenseError.keychainUnavailable }
     }
@@ -940,28 +950,8 @@ final class LicenseService: ObservableObject {
 
     // MARK: - Supporter Keychain
 
-    private func saveSupporterToKeychain(key: String, activationId: String) {
-        let payload = LicenseKeychainPayload(key: key, activationId: activationId)
-
-        let data: Data
-        do {
-            data = try JSONEncoder().encode(payload)
-        } catch {
-            logger.error("Failed to encode supporter keychain payload: \(error)")
-            return
-        }
-
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: keychainService,
-            kSecAttrAccount as String: "polar-supporter",
-        ]
-
-        SecItemDelete(query as CFDictionary)
-
-        var addQuery = query
-        addQuery[kSecValueData as String] = data
-        SecItemAdd(addQuery as CFDictionary, nil)
+    private func saveSupporterToKeychain(key: String, activationId: String) throws {
+        try saveKeychainPayload(key: key, activationId: activationId, account: "polar-supporter")
     }
 
     private func loadSupporterFromKeychain() -> (key: String, activationId: String)? {
@@ -1014,8 +1004,8 @@ final class LicenseService: ObservableObject {
         key: String,
         activationId: String,
         tier: SupporterTier
-    ) {
-        saveSupporterToKeychain(key: key, activationId: activationId)
+    ) throws {
+        try saveSupporterToKeychain(key: key, activationId: activationId)
         supporterStatus = .active
         supporterTier = tier
         defaults.set(Date(), forKey: UserDefaultsKeys.lastSupporterValidation)
