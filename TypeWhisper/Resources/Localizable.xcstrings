@@ -11412,12 +11412,6 @@
             "state" : "translated",
             "value" : "更快启动蓝牙麦克风"
           }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "更快启动 AirPods"
-          }
         }
       }
     },
@@ -14196,12 +14190,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "在两次听写之间保持蓝牙麦克风处于启用状态。两次听写之间的音频会被丢弃。这会显示橙色麦克风指示器、增加耗电量，并让耳机音频保持通话音质模式。"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "在两次听写之间保持 AirPods 麦克风处于活动状态。这会显示橙色麦克风指示灯、消耗更多电量，并使 AirPods 音频保持通话音质模式。"
           }
         }
       }
