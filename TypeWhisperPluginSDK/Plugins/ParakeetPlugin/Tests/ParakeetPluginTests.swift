@@ -181,6 +181,8 @@ final class ParakeetPluginTests: XCTestCase {
             ("Kubernetes-Cluster", "Kubernetes"),
             ("Redisdiensten.", "Redis"),
             ("Café-Straße", "Café"),
+            ("Cafe services", "Café"),
+            ("CAFÉ services", "cafe"),
         ] {
             XCTAssertTrue(ParakeetPlugin.removesTextAroundExistingTerm(
                 original: original, replacement: replacement
@@ -194,6 +196,8 @@ final class ParakeetPluginTests: XCTestCase {
             ("type whisper", "TypeWhisper"),
             ("Github actions.", "GitHub Actions"),
             ("dockr", "Docker"),
+            ("Cafe", "Café"),
+            ("CAFÉ", "cafe"),
             ("anything", ""),
         ] {
             XCTAssertFalse(ParakeetPlugin.removesTextAroundExistingTerm(

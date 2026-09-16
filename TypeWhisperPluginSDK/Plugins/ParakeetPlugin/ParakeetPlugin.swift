@@ -596,7 +596,10 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         // Ignore spelling separators so compounds and split names are protected
         // too, while capitalization/spacing-only corrections remain possible.
         func lettersAndNumbers(_ text: String) -> String {
-            String(text.lowercased().filter { $0.isLetter || $0.isNumber })
+            String(text.folding(
+                options: [.caseInsensitive, .diacriticInsensitive],
+                locale: Locale(identifier: "en_US_POSIX")
+            ).filter { $0.isLetter || $0.isNumber })
         }
         let source = lettersAndNumbers(original)
         let term = lettersAndNumbers(replacement)
