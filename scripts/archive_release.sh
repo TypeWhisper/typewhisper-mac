@@ -203,6 +203,8 @@ set -o pipefail
 archive_arguments=(
   # The pinned MLX dependency includes CudaBuild (a no-op on macOS).
   -skipPackagePluginValidation
+  -disableAutomaticPackageResolution
+  -onlyUsePackageVersionsFromResolvedFile
   archive
   -project "$project" \
   -scheme "$scheme" \

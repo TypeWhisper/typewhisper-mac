@@ -1,7 +1,7 @@
 # Dependency monitoring
 
-Dependabot checks GitHub Actions, Swift and Bundler weekly. Each ecosystem has a
-minor/patch version-update group and a limit of three open version-update PRs.
+Dependabot checks GitHub Actions, Swift, Bundler and release-tool Python packages
+weekly. Each ecosystem has a minor/patch version-update group and a limit of three open version-update PRs.
 Routine major upgrades are maintainer-led changes with a separate compatibility
 review. No dependency PR is automatically merged.
 
@@ -16,9 +16,15 @@ settings; `dependabot.yml` alone does not enable them.
 | Files | Dependabot entry | Dependency graph source |
 | --- | --- | --- |
 | `.github/workflows/*.yml` | `github-actions`, `/` | GitHub static analysis |
+| `.github/release-tools/requirements.txt` | `pip`, `/.github/release-tools` | GitHub static analysis |
 | `Gemfile`, `Gemfile.lock` | `bundler`, `/` | GitHub static analysis |
 | `TypeWhisper.xcodeproj/project.pbxproj` and `TypeWhisper.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved` | `swift`, `/` | Committed lockfile submission |
 | `TypeWhisperPluginSDK/Package.swift`, `TypeWhisperPluginSDK/Package.resolved` | `swift`, `/TypeWhisperPluginSDK` | Committed lockfile submission |
+
+Python release-tool updates must preserve wheel-only hash verification and pass
+the release tooling policy tests; see [the update procedure](release-tooling-security.md).
+The custom SBOM assertion below covers Swift and Ruby; confirm Python graph
+discovery in GitHub after the requirements file first reaches main.
 
 The root Swift entry discovers the Xcode project; the SDK requires its own
 directory. The current upstream Swift updater handles Xcode manifests and
@@ -28,7 +34,7 @@ support alone is not proof that this repository's update jobs succeed.
 Both Swift locks use format 3. On 2026-09-08 GitHub's static SBOM contained Ruby
 and Actions but no Swift packages. `Dependency Coverage` therefore submits both
 committed locks on every main push and on manual runs from main. It also checks
-the inventory on every PR, so a newly tracked Swift/Bundler manifest or Xcode
+the inventory on every PR, so a newly tracked Swift/Bundler/Python manifest or Xcode
 project requires an explicit coverage decision.
 
 Snapshots retain each lockfile's path and all pinned versions, including
@@ -57,7 +63,7 @@ actionlint .github/workflows/dependency-coverage.yml
 git diff --check
 ```
 
-The check covers all tracked Swift/Bundler manifests and locks, the Xcode
+The check covers all tracked Swift/Bundler/Python manifests and locks, the Xcode
 manifest, and the Actions workflow directory. When adding a dependency ecosystem,
 extend the inventory and check rather than assuming this inventory covers it.
 

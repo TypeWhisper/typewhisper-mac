@@ -1,7 +1,9 @@
 # Release Validation Process
 
 Release scope, compatibility contracts, channels, and automated ship gates are
-defined in the [release readiness guide](release-readiness.md).
+defined in the [release readiness guide](release-readiness.md). Tool integrity,
+signing-secret cleanup, and rotation procedures are documented in
+[release tooling security](release-tooling-security.md).
 
 Automated build, test, signing, packaging, and appcast checks belong in
 [`release.yml`](../.github/workflows/release.yml) and

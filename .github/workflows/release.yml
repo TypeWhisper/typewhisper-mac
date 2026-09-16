@@ -19,8 +19,7 @@ env:
   PROJECT: TypeWhisper.xcodeproj
 
 permissions:
-  contents: write
-  pages: write
+  contents: read
 
 jobs:
   prepare:
@@ -100,6 +99,7 @@ jobs:
           bash scripts/check_release_binary_instrumentation.sh --self-test
           bash scripts/check_release_signing.sh --self-test
           python3 scripts/test_icloud_release_policy.py
+          python3 scripts/test_release_tooling.py
 
   app-tests:
     needs: [prepare]
@@ -118,15 +118,15 @@ jobs:
 
       - name: Resolve Swift packages
         run: |
-          xcodebuild -resolvePackageDependencies \
-            -project $PROJECT \
-            -scheme $SCHEME
+          xcodebuild -resolvePackageDependencies -onlyUsePackageVersionsFromResolvedFile \
+            -project "$PROJECT" \
+            -scheme "$SCHEME"
 
       - name: Run App Tests
         run: |
           set -o pipefail
-          xcodebuild test -skipPackagePluginValidation -project $PROJECT \
-            -scheme $SCHEME \
+          xcodebuild test -skipPackagePluginValidation -project "$PROJECT" \
+            -scheme "$SCHEME" \
             -destination 'platform=macOS,arch=arm64' \
             -parallel-testing-enabled NO \
             CODE_SIGN_IDENTITY="-" \
@@ -155,6 +155,8 @@ jobs:
         run: swift test --package-path TypeWhisperPluginSDK
 
   build:
+    permissions:
+      contents: write # Release assets and the gh-pages appcast commit.
     needs:
       - prepare
       - verify-release-tools
@@ -168,6 +170,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          persist-credentials: false
           fetch-depth: 0
 
       - name: Setup Xcode
@@ -177,9 +180,14 @@ jobs:
 
       - name: Resolve Swift packages
         run: |
-          xcodebuild -resolvePackageDependencies \
-            -project $PROJECT \
-            -scheme $SCHEME
+          xcodebuild -resolvePackageDependencies -onlyUsePackageVersionsFromResolvedFile \
+            -project "$PROJECT" \
+            -scheme "$SCHEME"
+
+      - name: Prepare Verified Release Tools
+        run: |
+          python3 scripts/prepare_release_tools.py --tools-dir "$RUNNER_TEMP/release-tools"
+          echo "$RUNNER_TEMP/release-tools/dmgbuild-venv/bin" >> "$GITHUB_PATH"
 
       - name: Import Signing Certificate
         env:
@@ -189,18 +197,20 @@ jobs:
           KEYCHAIN_PATH="$RUNNER_TEMP/typewhisper-signing.keychain-db"
           KEYCHAIN_PASSWORD="$(uuidgen)"
 
-          echo "$MACOS_SIGNING_P12" | base64 --decode > /tmp/cert.p12
+          echo "::add-mask::$KEYCHAIN_PASSWORD"
+          CERTIFICATE_PATH="$RUNNER_TEMP/typewhisper-signing.p12"
+          umask 077
+          trap 'rm -f "$CERTIFICATE_PATH"' EXIT
+          trap 'exit 130' INT
+          trap 'exit 143' TERM
+          printf '%s' "$MACOS_SIGNING_P12" | base64 --decode > "$CERTIFICATE_PATH"
 
           security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
           security set-keychain-settings -lut 21600 "$KEYCHAIN_PATH"
           security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-          security import /tmp/cert.p12 -k "$KEYCHAIN_PATH" -P "$MACOS_SIGNING_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
+          security import "$CERTIFICATE_PATH" -k "$KEYCHAIN_PATH" -P "$MACOS_SIGNING_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security
           security list-keychains -d user -s "$KEYCHAIN_PATH"
-          security default-keychain -s "$KEYCHAIN_PATH"
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
-
-          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> $GITHUB_ENV
-          echo "KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD" >> $GITHUB_ENV
 
       - name: Verify Instrumentation Check Script
         run: |
@@ -211,6 +221,7 @@ jobs:
         env:
           MACOS_ICLOUD_HELPER_DEVELOPER_ID_PROVISIONING_PROFILE: ${{ secrets.MACOS_ICLOUD_HELPER_DEVELOPER_ID_PROVISIONING_PROFILE }}
         run: |
+          umask 077
           PROFILE_PATH="${RUNNER_TEMP}/TypeWhisperICloudBridge.provisionprofile"
           if [ -z "$MACOS_ICLOUD_HELPER_DEVELOPER_ID_PROVISIONING_PROFILE" ]; then
             echo "MACOS_ICLOUD_HELPER_DEVELOPER_ID_PROVISIONING_PROFILE is required for every app release" >&2
@@ -232,8 +243,8 @@ jobs:
           VERSION="${RAW_VERSION%%-*}"
           BUILD_NUMBER=$(git rev-list --count HEAD)
           echo "Building version: $VERSION (build $BUILD_NUMBER)"
-          echo "BUILD_NUMBER=$BUILD_NUMBER" >> $GITHUB_ENV
-          echo "DISPLAY_VERSION=$RAW_VERSION" >> $GITHUB_ENV
+          echo "BUILD_NUMBER=$BUILD_NUMBER" >> "$GITHUB_ENV"
+          echo "DISPLAY_VERSION=$RAW_VERSION" >> "$GITHUB_ENV"
 
           RELEASE_CHANNEL="stable"
           IS_PRERELEASE="false"
@@ -244,8 +255,8 @@ jobs:
             RELEASE_CHANNEL="release-candidate"
             IS_PRERELEASE="true"
           fi
-          echo "RELEASE_CHANNEL=$RELEASE_CHANNEL" >> $GITHUB_ENV
-          echo "IS_PRERELEASE=$IS_PRERELEASE" >> $GITHUB_ENV
+          echo "RELEASE_CHANNEL=$RELEASE_CHANNEL" >> "$GITHUB_ENV"
+          echo "IS_PRERELEASE=$IS_PRERELEASE" >> "$GITHUB_ENV"
 
           ARCHIVE_ARGS=(
             --archive-path build/TypeWhisper.xcarchive
@@ -276,14 +287,18 @@ jobs:
           APPLE_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
           APPLE_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
         run: |
-          printf '%s' "$APPLE_API_KEY_P8" > /tmp/AuthKey.p8
-          chmod 600 /tmp/AuthKey.p8
+          KEY_PATH="$RUNNER_TEMP/typewhisper-notary-app.p8"
+          umask 077
+          trap 'rm -f "$KEY_PATH"' EXIT
+          trap 'exit 130' INT
+          trap 'exit 143' TERM
+          printf '%s' "$APPLE_API_KEY_P8" > "$KEY_PATH"
 
           cd build/export
           ditto -c -k --keepParent TypeWhisper.app TypeWhisper-notarize.zip
 
           xcrun notarytool submit TypeWhisper-notarize.zip \
-            --key /tmp/AuthKey.p8 \
+            --key "$KEY_PATH" \
             --key-id "$APPLE_API_KEY_ID" \
             --issuer "$APPLE_API_ISSUER_ID" \
             --wait
@@ -297,15 +312,6 @@ jobs:
             --require-notarization \
             --spawn \
             build/export/TypeWhisper.app
-
-      - name: Install dmgbuild
-        run: |
-          VENV_DIR="${RUNNER_TEMP}/dmgbuild-venv"
-          python3 -m venv "$VENV_DIR"
-          source "$VENV_DIR/bin/activate"
-          python -m pip install --upgrade pip
-          python -m pip install dmgbuild
-          echo "$VENV_DIR/bin" >> $GITHUB_PATH
 
       - name: Create DMG
         run: |
@@ -329,14 +335,16 @@ jobs:
           APPLE_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_ISSUER_ID }}
           APPLE_API_KEY_P8: ${{ secrets.APP_STORE_CONNECT_API_KEY_P8 }}
         run: |
-          if [ ! -f /tmp/AuthKey.p8 ]; then
-            printf '%s' "$APPLE_API_KEY_P8" > /tmp/AuthKey.p8
-            chmod 600 /tmp/AuthKey.p8
-          fi
+          KEY_PATH="$RUNNER_TEMP/typewhisper-notary-dmg.p8"
+          umask 077
+          trap 'rm -f "$KEY_PATH"' EXIT
+          trap 'exit 130' INT
+          trap 'exit 143' TERM
+          printf '%s' "$APPLE_API_KEY_P8" > "$KEY_PATH"
 
           DMG_PATH="build/export/TypeWhisper-${RELEASE_TAG}.dmg"
           xcrun notarytool submit "$DMG_PATH" \
-            --key /tmp/AuthKey.p8 \
+            --key "$KEY_PATH" \
             --key-id "$APPLE_API_KEY_ID" \
             --issuer "$APPLE_API_ISSUER_ID" \
             --wait
@@ -350,11 +358,7 @@ jobs:
 
       - name: Cleanup Signing Assets
         if: always()
-        run: |
-          if [ -n "$KEYCHAIN_PATH" ]; then
-            security delete-keychain "$KEYCHAIN_PATH" || true
-          fi
-          rm -f /tmp/AuthKey.p8 /tmp/cert.p12
+        run: bash scripts/cleanup_release_signing.sh
 
       - name: Sign ZIP with Sparkle EdDSA
         env:
@@ -363,21 +367,17 @@ jobs:
           TAG="$RELEASE_TAG"
           ZIP_PATH="build/export/TypeWhisper-${TAG}.zip"
 
-          # Download Sparkle CLI tools
-          SPARKLE_VERSION="2.8.1"
-          curl -L "https://github.com/sparkle-project/Sparkle/releases/download/${SPARKLE_VERSION}/Sparkle-${SPARKLE_VERSION}.tar.xz" -o /tmp/sparkle.tar.xz
-          mkdir -p /tmp/sparkle
-          tar -xf /tmp/sparkle.tar.xz -C /tmp/sparkle
-
-          # Sign the ZIP
-          SIGNATURE=$(/tmp/sparkle/bin/sign_update "$ZIP_PATH" --ed-key-file <(echo "$SPARKLE_EDDSA_KEY"))
-          echo "SPARKLE_SIGNATURE<<EOF" >> $GITHUB_ENV
-          echo "$SIGNATURE" >> $GITHUB_ENV
-          echo "EOF" >> $GITHUB_ENV
+          # The archive was hash-verified and extracted before importing secrets.
+          SIGNATURE=$("$RUNNER_TEMP/release-tools/sparkle/bin/sign_update" "$ZIP_PATH" --ed-key-file <(printf '%s\n' "$SPARKLE_EDDSA_KEY"))
+          {
+            echo "SPARKLE_SIGNATURE<<EOF"
+            echo "$SIGNATURE"
+            echo "EOF"
+          } >> "$GITHUB_ENV"
 
           # Get file size
           ZIP_SIZE=$(stat -f%z "$ZIP_PATH")
-          echo "ZIP_SIZE=$ZIP_SIZE" >> $GITHUB_ENV
+          echo "ZIP_SIZE=$ZIP_SIZE" >> "$GITHUB_ENV"
 
       - name: Create GitHub Release
         run: |
@@ -551,6 +551,11 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          export GIT_CONFIG_COUNT=1
+          export GIT_CONFIG_KEY_0="http.https://github.com/.extraheader"
+          AUTH_HEADER="$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 | tr -d '\n')"
+          echo "::add-mask::$AUTH_HEADER"
+          export GIT_CONFIG_VALUE_0="AUTHORIZATION: basic $AUTH_HEADER"
           TAG="$RELEASE_TAG"
           DOWNLOAD_URL="https://github.com/TypeWhisper/typewhisper-mac/releases/download/${TAG}/TypeWhisper-${TAG}.zip"
           PUB_DATE=$(date -u +"%a, %d %b %Y %H:%M:%S %z")
@@ -636,7 +641,7 @@ jobs:
           VERSION="${TAG#v}"
           DMG_URL="https://github.com/TypeWhisper/typewhisper-mac/releases/download/${TAG}/TypeWhisper-${TAG}.dmg"
 
-          curl -L -o TypeWhisper.dmg "$DMG_URL"
+          curl --fail --show-error --silent --location --proto '=https' --proto-redir '=https' -o TypeWhisper.dmg "$DMG_URL"
           SHA256=$(shasum -a 256 TypeWhisper.dmg | awk '{print $1}')
 
           git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/TypeWhisper/homebrew-tap.git"

@@ -15,7 +15,7 @@ module DependencyCoverage
     TypeWhisper.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
     TypeWhisperPluginSDK/Package.resolved
   ].freeze
-  MANIFESTS = (LOCKS + %w[Gemfile Gemfile.lock TypeWhisperPluginSDK/Package.swift TypeWhisper.xcodeproj/project.pbxproj]).freeze
+  MANIFESTS = (LOCKS + %w[Gemfile Gemfile.lock TypeWhisperPluginSDK/Package.swift TypeWhisper.xcodeproj/project.pbxproj .github/release-tools/requirements.txt]).freeze
 
   def self.git(*args)
     output, status = Open3.capture2("git", "-C", ROOT, *args)
@@ -55,7 +55,7 @@ module DependencyCoverage
 
   def self.check
     tracked = git("ls-files", "-z").split("\0")
-    discovered = tracked.select { |p| %w[Package.swift Package.resolved Gemfile Gemfile.lock project.pbxproj].include?(File.basename(p)) }
+    discovered = tracked.select { |p| %w[Package.swift Package.resolved Gemfile Gemfile.lock project.pbxproj requirements.txt].include?(File.basename(p)) }
     raise "Dependency inventory changed: #{(discovered.to_set ^ MANIFESTS.to_set).to_a.join(', ')}" unless discovered.to_set == MANIFESTS.to_set
     config = YAML.safe_load(read(".github/dependabot.yml"))
     raise "Expected Dependabot v2" unless config.fetch("version") == 2
@@ -63,7 +63,7 @@ module DependencyCoverage
     coverage = entries.flat_map do |entry|
       (entry["directories"] || [entry.fetch("directory")]).map { |dir| [entry.fetch("package-ecosystem"), dir] }
     end
-    expected = [["github-actions", "/"], ["swift", "/"], ["swift", "/TypeWhisperPluginSDK"], ["bundler", "/"]]
+    expected = [["github-actions", "/"], ["swift", "/"], ["swift", "/TypeWhisperPluginSDK"], ["bundler", "/"], ["pip", "/.github/release-tools"]]
     raise "Dependabot directory coverage changed: #{coverage.inspect}" unless coverage.sort == expected.sort
     entries.each do |entry|
       raise "Expected a limit of three open version-update PRs" unless entry["open-pull-requests-limit"] == 3
