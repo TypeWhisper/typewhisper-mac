@@ -1,4 +1,6 @@
 import XCTest
+@preconcurrency import AVFoundation
+import CryptoKit
 import TypeWhisperPluginSDK
 @_spi(Testing) import TypeWhisperPluginSDKTesting
 @testable import ParakeetPlugin
@@ -64,6 +66,50 @@ final class ParakeetPluginTests: XCTestCase {
             try? FileManager.default.removeItem(at: directory)
         }
         return directory
+    }
+
+    /// Opt-in Core ML regression using FluidAudio 0.15.7's published fixture:
+    /// Tests/FluidAudioTests/ASR/Parakeet/SlidingWindow/Fixtures/02-release-readiness-19.8s.wav.
+    /// Requires an installed Parakeet v3 model; passive restore never downloads it.
+    func testInstalledV3ModelPreservesLongFormQuestionPunctuation() async throws {
+        guard let path = ProcessInfo.processInfo.environment["TYPEWHISPER_PARAKEET_REGRESSION_WAV"] else {
+            throw XCTSkip("Set TYPEWHISPER_PARAKEET_REGRESSION_WAV and install Parakeet v3 to run Core ML inference")
+        }
+        let url = URL(fileURLWithPath: path)
+        let wavData = try Data(contentsOf: url)
+        let checksum = SHA256.hash(data: wavData).map { String(format: "%02x", $0) }.joined()
+        guard checksum == "8802fabce33b67d3093d3ac2a2c3fdc77bfd00ef69c98dde5d161564ee95747e" else {
+            XCTFail("The recording does not match the pinned FluidAudio 0.15.7 regression fixture")
+            return
+        }
+        let file = try AVAudioFile(forReading: url)
+        XCTAssertEqual(file.processingFormat.sampleRate, 16_000)
+        XCTAssertEqual(file.processingFormat.channelCount, 1)
+        let buffer = try XCTUnwrap(AVAudioPCMBuffer(
+            pcmFormat: file.processingFormat,
+            frameCapacity: AVAudioFrameCount(file.length)
+        ))
+        try file.read(into: buffer)
+        let channel = try XCTUnwrap(buffer.floatChannelData?[0])
+        let samples = Array(UnsafeBufferPointer(start: channel, count: Int(buffer.frameLength)))
+        let audio = AudioData(samples: samples, wavData: wavData, duration: Double(samples.count) / 16_000)
+
+        let host = try PluginTestHostServices(defaults: [
+            "loadedModel": "parakeet-tdt-0.6b-v3",
+            "vocabularyBoostingEnabled": false,
+        ])
+        let plugin = makePlugin()
+        plugin.activate(host: host)
+        defer { plugin.deactivate() }
+        // Await the production restore/load path directly to avoid an activation-task race.
+        await plugin.restoreLoadedModel(allowDownloads: false, passively: true)
+        guard plugin.isConfigured else {
+            XCTFail("Installed Parakeet v3 failed to load: \(plugin.modelState)")
+            return
+        }
+        let result = try await plugin.transcribe(audio: audio, language: nil, translate: false, prompt: nil)
+        XCTAssertTrue(result.text.contains("work we've done?"), result.text)
+        XCTAssertTrue(result.text.hasSuffix("cutting a release?"), result.text)
     }
 
     func testPassiveLocalLoaderPreservesCorruptCacheAndDoesNotRepairIt() throws {
