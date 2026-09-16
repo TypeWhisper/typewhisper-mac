@@ -27,6 +27,11 @@ Issues in these areas are especially relevant.
 - API keys are stored in the macOS Keychain and must never appear in exported diagnostics.
 - Support diagnostics are exported as a privacy-safe JSON report and exclude API keys, audio payloads, and transcription history.
 
+## Maintainer Procedures
+
+Maintainers should follow the [secret scanning and credential incident runbook](docs/secret-scanning.md)
+for alert triage, blocked pushes, emergency bypasses, and credential rotation.
+
 ## Supported Versions
 
 | Version | Supported |

@@ -47,6 +47,19 @@ swift test --package-path TypeWhisperPluginSDK
 - Localization: use `String(localized:)` for all user-facing strings
 - SwiftData for persistence, Combine for reactive updates
 
+## Credentials and Test Fixtures
+
+Never commit real credentials, including revoked credentials copied from production.
+Use clearly non-functional placeholders such as `test-key` or `fixture-token` in tests
+and generated examples. Do not generate realistic provider tokens unless the test
+specifically requires their format. Keep such tests isolated and explain why the
+fixture cannot authenticate.
+
+GitHub push protection blocks supported secret patterns. If a push is rejected,
+remove the credential from every affected commit before retrying; a later deletion
+commit does not remove it from history. Follow the
+[maintainer runbook](docs/secret-scanning.md) for remediation and exceptional bypasses.
+
 ## Reporting Issues
 
 Use the [issue templates](https://github.com/TypeWhisper/typewhisper-mac/issues/new/choose) for bug reports and feature requests.
