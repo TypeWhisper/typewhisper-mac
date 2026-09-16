@@ -158,6 +158,8 @@ final class LicenseService: ObservableObject {
     private let defaults: UserDefaults
     private let dataTransport: LicenseDataTransport
     private let keychainServiceName: String
+    private let keychainUpdate: (CFDictionary, CFDictionary) -> OSStatus
+    private let keychainAdd: (CFDictionary) -> OSStatus
 
     // MARK: - Published state (Business)
 
@@ -177,6 +179,8 @@ final class LicenseService: ObservableObject {
         didSet { defaults.set(licenseIsLifetime, forKey: UserDefaultsKeys.licenseIsLifetime) }
     }
     @Published var isActivating = false
+    @Published private(set) var isLicenseManaged: Bool
+    @Published private(set) var managedLicenseError: String?
     @Published var activationError: String?
     @Published var deactivationError: String?
 
@@ -222,11 +226,11 @@ final class LicenseService: ObservableObject {
     }
 
     var needsWelcomeSheet: Bool {
-        !defaults.bool(forKey: UserDefaultsKeys.welcomeSheetShown)
+        !isLicenseManaged && !defaults.bool(forKey: UserDefaultsKeys.welcomeSheetShown)
     }
 
     var shouldShowReminder: Bool {
-        requiresCommercialLicense && licenseStatus != .active
+        !isLicenseManaged && requiresCommercialLicense && licenseStatus != .active
     }
 
     var requiresCommercialLicense: Bool {
@@ -234,7 +238,7 @@ final class LicenseService: ObservableObject {
     }
 
     var shouldShowWorkUsagePrompt: Bool {
-        usageIntent == .personalOSS && licenseStatus != .active
+        !isLicenseManaged && usageIntent == .personalOSS && licenseStatus != .active
     }
 
     // MARK: - Init
@@ -242,13 +246,18 @@ final class LicenseService: ObservableObject {
     init(
         defaults: UserDefaults = .standard,
         keychainServiceName: String = AppConstants.keychainServicePrefix + "license",
+        keychainUpdate: @escaping (CFDictionary, CFDictionary) -> OSStatus = { SecItemUpdate($0, $1) },
+        keychainAdd: @escaping (CFDictionary) -> OSStatus = { SecItemAdd($0, nil) },
         dataTransport: @escaping LicenseDataTransport = { request in
             try await URLSession.shared.data(for: request)
         }
     ) {
         self.defaults = defaults
         self.keychainServiceName = keychainServiceName
+        self.keychainUpdate = keychainUpdate
+        self.keychainAdd = keychainAdd
         self.dataTransport = dataTransport
+        self.isLicenseManaged = Self.configuredLicenseKey(defaults: defaults) != nil
 
         let migratedUsageIntent = Self.migrateUsageIntent(defaults: defaults)
 
@@ -289,6 +298,7 @@ final class LicenseService: ObservableObject {
     }
 
     func setUsageIntent(_ intent: UsageIntent) {
+        guard !isLicenseManaged else { return }
         usageIntent = intent
         markWelcomeSheetShown()
     }
@@ -306,6 +316,7 @@ final class LicenseService: ObservableObject {
     // MARK: - Polar License Key
 
     func activateAnyKey(_ key: String) async -> ActivatedEntitlement? {
+        guard !isLicenseManaged, !isActivating else { return nil }
         let trimmedKey = key.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedKey.isEmpty else { return nil }
 
@@ -328,6 +339,7 @@ final class LicenseService: ObservableObject {
     }
 
     func activateLicenseKey(_ key: String) async {
+        guard !isLicenseManaged, !isActivating else { return }
         let trimmedKey = key.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedKey.isEmpty else { return }
 
@@ -369,14 +381,81 @@ final class LicenseService: ObservableObject {
                 logger.warning("Stored license activation no longer exists on Polar; clearing local license state")
                 clearLicenseState()
             } else {
-                logger.error("License validation failed: \(error)")
+                if isLicenseManaged {
+                    logger.error("Managed license validation failed")
+                } else {
+                    logger.error("License validation failed: \(error)")
+                }
                 // Keep current status on network errors - don't downgrade offline users
             }
         }
     }
 
     func validateIfNeeded() async {
-        guard hasStoredLicense else {
+        // Provision in the app's user context, so MDM scripts never need to write Keychain items.
+        if await reconcileManagedLicense() { return }
+        await validateStoredLicenseIfNeeded()
+    }
+
+    private static func configuredLicenseKey(defaults: UserDefaults) -> String? {
+        let key = (defaults.object(forKey: UserDefaultsKeys.managedLicenseKey) as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return key?.isEmpty == false ? key : nil
+    }
+
+    /// Returns true when provisioning handled this validation pass (including failures).
+    private func reconcileManagedLicense() async -> Bool {
+        let key = Self.configuredLicenseKey(defaults: defaults)
+        isLicenseManaged = key != nil
+        managedLicenseError = nil
+        guard let key else { return false }
+        guard !isActivating else { return true }
+        isActivating = true
+        defer { isActivating = false }
+
+        do {
+            // A locked/unavailable Keychain is not an absent activation. Do not consume another seat.
+            let previous = try readLicenseFromKeychain()
+            if previous?.key == key {
+                await validateStoredLicenseIfNeeded()
+                // Reuse active/offline/revoked records; recreate only an activation Polar deleted.
+                if try readLicenseFromKeychain() != nil { return true }
+            }
+
+            _ = try await activateKey(key, expecting: .commercial)
+            markWelcomeSheetShown()
+
+            // Only retire the old activation after the replacement is validated and saved.
+            if let previous {
+                do {
+                    try await polarDeactivate(key: previous.key, activationId: previous.activationId)
+                } catch {
+                    logger.warning("Previous license activation could not be retired after managed key rotation")
+                }
+            }
+        } catch {
+            // Server error bodies can contain submitted data. Never expose them for a managed key.
+            managedLicenseError = localizedAppText(
+                "The organization license could not be activated. Check the network connection and contact your administrator if this continues.",
+                de: "Die Organisationslizenz konnte nicht aktiviert werden. Prüfe die Netzwerkverbindung und kontaktiere bei anhaltenden Problemen deine Administration."
+            )
+            logger.error("Managed license provisioning failed")
+            // A rejected replacement must not prevent the old license's normal expiry checks.
+            await validateStoredLicenseIfNeeded()
+        }
+        return true
+    }
+
+    private func validateStoredLicenseIfNeeded() async {
+        let storedLicense: (key: String, activationId: String)?
+        do {
+            storedLicense = try readLicenseFromKeychain()
+        } catch {
+            // A temporarily unavailable Keychain must not erase cached offline entitlement state.
+            logger.warning("License validation deferred because Keychain is unavailable")
+            return
+        }
+        guard storedLicense != nil else {
             if licenseStatus != .unlicensed || licenseTier != nil {
                 licenseStatus = .unlicensed
                 licenseTier = nil
@@ -399,6 +478,7 @@ final class LicenseService: ObservableObject {
     }
 
     func deactivateLicense() async {
+        guard !isLicenseManaged, !isActivating else { return }
         guard let (key, activationId) = loadLicenseFromKeychain() else { return }
         deactivationError = nil
 
@@ -421,6 +501,7 @@ final class LicenseService: ObservableObject {
     // MARK: - Supporter License
 
     func activateSupporterKey(_ key: String) async {
+        guard !isSupporterActivating else { return }
         let trimmedKey = key.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedKey.isEmpty else { return }
 
@@ -536,7 +617,7 @@ final class LicenseService: ObservableObject {
                     )
                 }
 
-                applySupporterActivation(
+                try applySupporterActivation(
                     key: key,
                     activationId: response.id,
                     tier: supporterTier
@@ -555,7 +636,7 @@ final class LicenseService: ObservableObject {
                 }
 
                 let isLifetime = validation.expiresAt == nil
-                applyCommercialActivation(
+                try applyCommercialActivation(
                     key: key,
                     activationId: response.id,
                     tier: licenseTier,
@@ -772,7 +853,6 @@ final class LicenseService: ObservableObject {
     // MARK: - Keychain
 
     private var keychainService: String { keychainServiceName }
-    private var hasStoredLicense: Bool { loadLicenseFromKeychain() != nil }
 
     private func clearLicenseState() {
         removeLicenseFromKeychain()
@@ -787,31 +867,35 @@ final class LicenseService: ObservableObject {
         let activationId: String
     }
 
-    private func saveLicenseToKeychain(key: String, activationId: String) {
-        let payload = LicenseKeychainPayload(key: key, activationId: activationId)
+    private func saveLicenseToKeychain(key: String, activationId: String) throws {
+        try saveKeychainPayload(key: key, activationId: activationId, account: "polar-license")
+    }
 
-        let data: Data
-        do {
-            data = try JSONEncoder().encode(payload)
-        } catch {
-            logger.error("Failed to encode license keychain payload: \(error)")
-            return
-        }
+    private func saveKeychainPayload(key: String, activationId: String, account: String) throws {
+        let payload = LicenseKeychainPayload(key: key, activationId: activationId)
+        let data = try JSONEncoder().encode(payload)
 
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: keychainService,
-            kSecAttrAccount as String: "polar-license",
+            kSecAttrAccount as String: account,
         ]
 
-        SecItemDelete(query as CFDictionary)
-
-        var addQuery = query
-        addQuery[kSecValueData as String] = data
-        SecItemAdd(addQuery as CFDictionary, nil)
+        let attributes = [kSecValueData as String: data]
+        var status = keychainUpdate(query as CFDictionary, attributes as CFDictionary)
+        if status == errSecItemNotFound {
+            var addQuery = query
+            addQuery[kSecValueData as String] = data
+            status = keychainAdd(addQuery as CFDictionary)
+        }
+        guard status == errSecSuccess else { throw LicenseError.keychainUnavailable }
     }
 
     private func loadLicenseFromKeychain() -> (key: String, activationId: String)? {
+        try? readLicenseFromKeychain()
+    }
+
+    private func readLicenseFromKeychain() throws -> (key: String, activationId: String)? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: keychainService,
@@ -821,8 +905,9 @@ final class LicenseService: ObservableObject {
 
         var result: AnyObject?
         let status = SecItemCopyMatching(query as CFDictionary, &result)
+        if status == errSecItemNotFound { return nil }
         guard status == errSecSuccess, let data = result as? Data else {
-            return nil
+            throw LicenseError.keychainUnavailable
         }
 
         if let payload = try? JSONDecoder().decode(LicenseKeychainPayload.self, from: data) {
@@ -837,7 +922,7 @@ final class LicenseService: ObservableObject {
             }
         }
 
-        return nil
+        throw LicenseError.keychainUnavailable
     }
 
     private func removeLicenseFromKeychain() {
@@ -854,8 +939,8 @@ final class LicenseService: ObservableObject {
         activationId: String,
         tier: LicenseTier,
         isLifetime: Bool
-    ) {
-        saveLicenseToKeychain(key: key, activationId: activationId)
+    ) throws {
+        try saveLicenseToKeychain(key: key, activationId: activationId)
         licenseStatus = .active
         licenseTier = tier
         licenseIsLifetime = isLifetime
@@ -865,28 +950,8 @@ final class LicenseService: ObservableObject {
 
     // MARK: - Supporter Keychain
 
-    private func saveSupporterToKeychain(key: String, activationId: String) {
-        let payload = LicenseKeychainPayload(key: key, activationId: activationId)
-
-        let data: Data
-        do {
-            data = try JSONEncoder().encode(payload)
-        } catch {
-            logger.error("Failed to encode supporter keychain payload: \(error)")
-            return
-        }
-
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: keychainService,
-            kSecAttrAccount as String: "polar-supporter",
-        ]
-
-        SecItemDelete(query as CFDictionary)
-
-        var addQuery = query
-        addQuery[kSecValueData as String] = data
-        SecItemAdd(addQuery as CFDictionary, nil)
+    private func saveSupporterToKeychain(key: String, activationId: String) throws {
+        try saveKeychainPayload(key: key, activationId: activationId, account: "polar-supporter")
     }
 
     private func loadSupporterFromKeychain() -> (key: String, activationId: String)? {
@@ -939,8 +1004,8 @@ final class LicenseService: ObservableObject {
         key: String,
         activationId: String,
         tier: SupporterTier
-    ) {
-        saveSupporterToKeychain(key: key, activationId: activationId)
+    ) throws {
+        try saveSupporterToKeychain(key: key, activationId: activationId)
         supporterStatus = .active
         supporterTier = tier
         defaults.set(Date(), forKey: UserDefaultsKeys.lastSupporterValidation)
@@ -973,6 +1038,7 @@ final class LicenseService: ObservableObject {
 // MARK: - Errors
 
 enum LicenseError: LocalizedError {
+    case keychainUnavailable
     case networkError
     case activationFailed(String)
     case validationFailed(statusCode: Int, detail: String)
@@ -982,13 +1048,15 @@ enum LicenseError: LocalizedError {
         switch self {
         case .validationFailed(let statusCode, _), .deactivationFailed(let statusCode, _):
             statusCode == 404
-        case .networkError, .activationFailed:
+        case .networkError, .activationFailed, .keychainUnavailable:
             false
         }
     }
 
     var errorDescription: String? {
         switch self {
+        case .keychainUnavailable:
+            return localizedAppText("The license could not be read or saved in Keychain.", de: "Die Lizenz konnte nicht im Schlüsselbund gelesen oder gespeichert werden.")
         case .networkError:
             return String(localized: "Network error. Please check your internet connection.")
         case .activationFailed(let detail):

@@ -177,6 +177,7 @@ enum UserDefaultsKeys {
     static let workflowShortTranscriptionMinimumWords = "workflowShortTranscriptionMinimumWords"
 
     // MARK: - Licensing
+    static let managedLicenseKey = "ManagedLicenseKey"
     static let usageIntent = "usageIntent"
     static let userType = "userType"
     static let licenseStatus = "licenseStatus"
