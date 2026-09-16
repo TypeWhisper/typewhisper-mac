@@ -413,13 +413,31 @@ struct LicenseSettingsView: View {
                             .font(.caption)
                     }
                 } else {
-                    Text(localizedAppText(
-                        "If you already bought a supporter key, enter it above. GitHub Sponsors can still be claimed on the web.",
-                        de: "Wenn du bereits einen Supporter-Schlüssel gekauft hast, gib ihn oben ein. GitHub Sponsors kannst du weiter im Web bestätigen."
-                    ))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
+                    if license.isLicenseManaged {
+                        Text(localizedAppText(
+                            "Activate a personal supporter key. Your organization's commercial license stays unchanged.",
+                            de: "Aktiviere einen persönlichen Supporter-Schlüssel. Die kommerzielle Lizenz deiner Organisation bleibt unverändert."
+                        ))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                        keyActivationField(
+                            input: $licenseKeyInput,
+                            isActivating: license.isSupporterActivating,
+                            error: license.supporterActivationError
+                        ) {
+                            await license.activateSupporterKey(licenseKeyInput)
+                            if license.isSupporter { licenseKeyInput = "" }
+                        }
+                    } else {
+                        Text(localizedAppText(
+                            "If you already bought a supporter key, enter it above. GitHub Sponsors can still be claimed on the web.",
+                            de: "Wenn du bereits einen Supporter-Schlüssel gekauft hast, gib ihn oben ein. GitHub Sponsors kannst du weiter im Web bestätigen."
+                        ))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    }
 
                     actionButton(
                         title: localizedAppText("Claim GitHub Sponsors status on the web", de: "GitHub-Sponsors-Status im Web bestätigen"),

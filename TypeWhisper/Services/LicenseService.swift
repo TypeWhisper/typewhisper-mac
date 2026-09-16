@@ -495,6 +495,7 @@ final class LicenseService: ObservableObject {
     // MARK: - Supporter License
 
     func activateSupporterKey(_ key: String) async {
+        guard !isSupporterActivating else { return }
         let trimmedKey = key.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedKey.isEmpty else { return }
 

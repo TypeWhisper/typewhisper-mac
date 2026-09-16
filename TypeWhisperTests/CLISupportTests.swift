@@ -917,6 +917,36 @@ final class CLISupportTests: XCTestCase {
     }
 
     @MainActor
+    func testManagedLicenseAllowsSeparatePersonalSupporterActivation() async throws {
+        let fixture = try ManagedLicenseFixture()
+        defer { fixture.cleanup() }
+        await fixture.service.validateIfNeeded()
+        let commercial = Self.loadKeychainValue(service: fixture.suite, account: "polar-license")
+        await fixture.server.configure(supporter: true)
+        await fixture.service.activateSupporterKey("personal-supporter-key")
+        XCTAssertTrue(fixture.service.isSupporter)
+        XCTAssertEqual(fixture.service.supporterTier, .gold)
+        XCTAssertTrue(fixture.service.hasCommercialLicense)
+        XCTAssertEqual(Self.loadKeychainValue(service: fixture.suite, account: "polar-license"), commercial)
+        XCTAssertNotNil(Self.loadKeychainValue(service: fixture.suite, account: "polar-supporter"))
+    }
+
+    @MainActor
+    func testManagedSupporterEntryCannotReplaceCommercialLicense() async throws {
+        let fixture = try ManagedLicenseFixture()
+        defer { fixture.cleanup() }
+        await fixture.service.validateIfNeeded()
+        let commercial = Self.loadKeychainValue(service: fixture.suite, account: "polar-license")
+        await fixture.service.activateSupporterKey("another-commercial-key")
+        XCTAssertFalse(fixture.service.isSupporter)
+        XCTAssertNotNil(fixture.service.supporterActivationError)
+        XCTAssertTrue(fixture.service.hasCommercialLicense)
+        XCTAssertEqual(Self.loadKeychainValue(service: fixture.suite, account: "polar-license"), commercial)
+        let paths = await fixture.server.paths
+        XCTAssertEqual(paths, ["activate", "validate", "activate", "validate", "deactivate"])
+    }
+
+    @MainActor
     func testManagedLicenseRecoversDeletedActivation() async throws {
         let fixture = try ManagedLicenseFixture()
         defer { fixture.cleanup() }
