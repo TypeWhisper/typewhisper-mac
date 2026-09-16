@@ -65,9 +65,10 @@ when a command fails. App and DMG notarization use separate short-lived P8 files
 The keychain password is masked and never exported through `GITHUB_ENV`.
 
 An `always()` cleanup step deletes the temporary keychain and any remaining
-P12/P8/profile files using fixed paths, including partial-import failures. It
-still attempts file cleanup when keychain deletion fails, and reports failure
-instead of silently publishing. Sparkle receives its secret through a pipe;
+P12/P8/profile files using fixed paths, including partial-import failures. If
+`security delete-keychain` fails, it also attempts to remove the keychain database
+directly along with the other files. It preserves the original cleanup failure
+status instead of silently publishing. Sparkle receives its secret through a pipe;
 no private key file is written. These steps cover normal success, failure and
 cancellation. Hard termination or runner loss can prevent any trap from running;
 the hosted ephemeral runner is the final containment boundary. Do not move this

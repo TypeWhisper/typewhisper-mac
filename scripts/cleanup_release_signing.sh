@@ -7,8 +7,14 @@ status=0
 if [[ -f "$keychain" ]]; then
   security delete-keychain "$keychain" || status=$?
 fi
-rm -f "$RUNNER_TEMP/typewhisper-signing.p12" \
+# Also remove the database if the security command could not delete it.
+rm -f "$keychain" "$RUNNER_TEMP/typewhisper-signing.p12" \
   "$RUNNER_TEMP/typewhisper-notary-app.p8" \
   "$RUNNER_TEMP/typewhisper-notary-dmg.p8" \
-  "$RUNNER_TEMP/TypeWhisperICloudBridge.provisionprofile" || status=$?
+  "$RUNNER_TEMP/TypeWhisperICloudBridge.provisionprofile" || {
+  removal_status=$?
+  if [[ "$status" -eq 0 ]]; then
+    status="$removal_status"
+  fi
+}
 exit "$status"

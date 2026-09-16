@@ -100,7 +100,7 @@ class CleanupTests(unittest.TestCase):
             env = dict(os.environ, RUNNER_TEMP=directory, PATH=f"{directory}:{os.environ['PATH']}")
             result = subprocess.run(["bash", str(tools.ROOT / "scripts/cleanup_release_signing.sh")], env=env)
             self.assertEqual(result.returncode, 17)
-            for name in files:
+            for name in files + ["typewhisper-signing.keychain-db"]:
                 self.assertFalse((root / name).exists(), name)
 
     def test_cleanup_is_safe_before_import_and_when_repeated(self):
