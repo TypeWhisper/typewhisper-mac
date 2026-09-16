@@ -891,9 +891,11 @@ final class PromptPaletteHandlerTests: XCTestCase {
             TextInsertionService.TextSelection(text: "Selected source", element: selectedElement)
         }
 
+        let insertionCompleted = expectation(description: "Workflow result inserted")
         var insertedText: String?
         textInsertionService.insertTextAtOverride = { _, text in
             insertedText = text
+            insertionCompleted.fulfill()
             return true
         }
 
@@ -926,7 +928,7 @@ final class PromptPaletteHandlerTests: XCTestCase {
         XCTAssertEqual(controller.lastEntryDescriptions, ["workflow:Palette Cleanup"])
         controller.selectWorkflow(named: "Palette Cleanup")
 
-        try await Task.sleep(for: .milliseconds(100))
+        await fulfillment(of: [insertionCompleted], timeout: 5.0)
 
         XCTAssertEqual(insertedText, "Processed: Selected source")
     }
