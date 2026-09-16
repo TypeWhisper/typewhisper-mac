@@ -3,6 +3,24 @@ import XCTest
 
 @MainActor
 final class PostUpdatePromptCoordinatorTests: XCTestCase {
+    func testManagedLicenseSuppressesPurchasePromptsBeforeActivationCompletes() throws {
+        let (defaults, suiteName) = try makeIsolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set("managed-key", forKey: UserDefaultsKeys.managedLicenseKey)
+        defaults.set("1.6.0+1@stable", forKey: UserDefaultsKeys.lastSeenReleaseFingerprint)
+        let license = LicenseService(defaults: defaults)
+        let coordinator = PostUpdatePromptCoordinator(
+            defaults: defaults,
+            licenseService: license,
+            currentReleaseFingerprint: "1.6.1+1@stable"
+        )
+        XCTAssertFalse(license.needsWelcomeSheet)
+        XCTAssertFalse(license.shouldShowReminder)
+        XCTAssertFalse(license.shouldShowWorkUsagePrompt)
+        XCTAssertFalse(coordinator.shouldPresentPrompt)
+        XCTAssertNil(coordinator.activeSheetRoute)
+    }
+
     func testInitialWindowPolicyOpensSetupWhenRequired() {
         XCTAssertEqual(
             InitialWindowPresentationPolicy.presentation(

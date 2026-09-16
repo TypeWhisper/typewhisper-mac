@@ -707,6 +707,277 @@ final class CLISupportTests: XCTestCase {
         XCTAssertNil(Self.loadKeychainValue(service: keychainServiceName, account: "polar-supporter"))
     }
 
+    private actor ManagedLicenseServer {
+        var paths: [String] = []
+        var activationCount = 0
+        var failActivation = false
+        var revoked = false
+        var failValidation = false
+        var missingActivation = false
+        var supporter = false
+
+        func configure(failValidation: Bool = false, failActivation: Bool = false, revoked: Bool = false, missingActivation: Bool = false, supporter: Bool = false) {
+            self.failActivation = failActivation
+            self.failValidation = failValidation
+            self.revoked = revoked
+            self.missingActivation = missingActivation
+            self.supporter = supporter
+        }
+
+        func respond(to request: URLRequest) async throws -> (Data, URLResponse) {
+            let url = request.url!
+            paths.append(url.lastPathComponent)
+            var status = 200
+            let body: String
+            switch url.lastPathComponent {
+            case "activate":
+                if failActivation { throw URLError(.notConnectedToInternet) }
+                activationCount += 1
+                body = "{\"id\":\"activation-\(activationCount)\"}"
+                // Exercise MainActor reentrancy while another startup/retry request arrives.
+                try await Task.sleep(for: .milliseconds(20))
+            case "validate":
+                if failValidation { throw URLError(.notConnectedToInternet) }
+                if missingActivation {
+                    missingActivation = false
+                    status = 404
+                    body = #"{"detail":"Not found"}"#
+                } else {
+                    let benefit = supporter ? "0c695b7a-2f3a-4797-81c7-1410dbb76cc2" : "40b82917-f74e-4cc3-8165-937f1f47b294"
+                    body = "{\"id\":\"license\",\"status\":\"\(revoked ? "revoked" : "granted")\",\"benefit_id\":\"\(benefit)\"}"
+                }
+            case "deactivate":
+                body = "{}"
+            default:
+                XCTFail("Unexpected managed license request")
+                body = "{}"
+                status = 500
+            }
+            return (Data(body.utf8), HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: nil)!)
+        }
+    }
+
+    @MainActor
+    private struct ManagedLicenseFixture {
+        let suite = "TypeWhisperTests.Managed.\(UUID().uuidString)"
+        let defaults: UserDefaults
+        let server = ManagedLicenseServer()
+        let service: LicenseService
+
+        init(key: String? = "managed-key") throws {
+            defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
+            if let key { defaults.set(key, forKey: UserDefaultsKeys.managedLicenseKey) }
+            let server = server
+            service = LicenseService(defaults: defaults, keychainServiceName: suite, dataTransport: { request in
+                try await server.respond(to: request)
+            })
+        }
+
+        func cleanup() {
+            defaults.removePersistentDomain(forName: suite)
+            CLISupportTests.deleteKeychainValue(service: suite, account: "polar-license")
+            CLISupportTests.deleteKeychainValue(service: suite, account: "polar-supporter")
+        }
+    }
+
+    @MainActor
+    func testManagedLicenseActivatesAndReusesKeychainAfterRestart() async throws {
+        let fixture = try ManagedLicenseFixture(key: "  managed-key\n")
+        defer { fixture.cleanup() }
+        XCTAssertTrue(fixture.service.isLicenseManaged)
+        XCTAssertFalse(fixture.service.needsWelcomeSheet)
+        await fixture.service.validateIfNeeded()
+        XCTAssertEqual(fixture.service.licenseTier, .enterprise)
+        XCTAssertEqual(fixture.service.usageIntent, .enterprise)
+        XCTAssertTrue(fixture.service.hasCommercialLicense)
+        XCTAssertNil(fixture.service.managedLicenseError)
+        let stored = try XCTUnwrap(Self.loadKeychainValue(service: fixture.suite, account: "polar-license"))
+        XCTAssertTrue(stored.contains("\"key\":\"managed-key\""))
+        let server = fixture.server
+        let restarted = LicenseService(defaults: fixture.defaults, keychainServiceName: fixture.suite, dataTransport: { request in
+            try await server.respond(to: request)
+        })
+        await restarted.validateIfNeeded()
+        let paths = await fixture.server.paths
+        XCTAssertEqual(paths, ["activate", "validate"])
+        XCTAssertTrue(restarted.hasCommercialLicense)
+    }
+
+    @MainActor
+    func testManagedLicenseEmptyConfigurationLeavesManualActivationAvailable() async throws {
+        let fixture = try ManagedLicenseFixture(key: " \n")
+        defer { fixture.cleanup() }
+        await fixture.service.validateIfNeeded()
+        XCTAssertFalse(fixture.service.isLicenseManaged)
+        XCTAssertTrue(fixture.service.needsWelcomeSheet)
+        let paths = await fixture.server.paths
+        XCTAssertTrue(paths.isEmpty)
+        await fixture.service.activateLicenseKey("manual-key")
+        XCTAssertTrue(fixture.service.hasCommercialLicense)
+    }
+
+    @MainActor
+    func testManagedLicenseFailureCanRetryWithoutRevealingKey() async throws {
+        let fixture = try ManagedLicenseFixture()
+        defer { fixture.cleanup() }
+        await fixture.server.configure(failActivation: true)
+        await fixture.service.validateIfNeeded()
+        XCTAssertFalse(fixture.service.hasCommercialLicense)
+        let error = try XCTUnwrap(fixture.service.managedLicenseError)
+        XCTAssertFalse(error.contains("managed-key"))
+        XCTAssertNil(Self.loadKeychainValue(service: fixture.suite, account: "polar-license"))
+        await fixture.server.configure()
+        await fixture.service.validateIfNeeded()
+        XCTAssertTrue(fixture.service.hasCommercialLicense)
+        XCTAssertNil(fixture.service.managedLicenseError)
+    }
+
+    @MainActor
+    func testManagedLicenseFailedRotationPreservesExistingLicense() async throws {
+        let fixture = try ManagedLicenseFixture()
+        defer { fixture.cleanup() }
+        await fixture.service.validateIfNeeded()
+        let original = Self.loadKeychainValue(service: fixture.suite, account: "polar-license")
+        fixture.defaults.set("replacement-key", forKey: UserDefaultsKeys.managedLicenseKey)
+        await fixture.server.configure(failActivation: true)
+        await fixture.service.validateIfNeeded()
+        XCTAssertEqual(Self.loadKeychainValue(service: fixture.suite, account: "polar-license"), original)
+        XCTAssertTrue(fixture.service.hasCommercialLicense)
+        XCTAssertNotNil(fixture.service.managedLicenseError)
+        let paths = await fixture.server.paths
+        XCTAssertFalse(paths.contains("deactivate"))
+    }
+
+    @MainActor
+    func testManagedLicenseRotationSavesReplacementBeforeRetiringOldActivation() async throws {
+        let fixture = try ManagedLicenseFixture()
+        defer { fixture.cleanup() }
+        await fixture.service.validateIfNeeded()
+        fixture.defaults.set("replacement-key", forKey: UserDefaultsKeys.managedLicenseKey)
+        await fixture.service.validateIfNeeded()
+        let stored = try XCTUnwrap(Self.loadKeychainValue(service: fixture.suite, account: "polar-license"))
+        XCTAssertTrue(stored.contains("replacement-key"))
+        XCTAssertTrue(stored.contains("activation-2"))
+        let paths = await fixture.server.paths
+        XCTAssertEqual(paths, ["activate", "validate", "activate", "validate", "deactivate"])
+    }
+
+    @MainActor
+    func testManagedLicensePreventsManualReplacementAndDeactivation() async throws {
+        let fixture = try ManagedLicenseFixture()
+        defer { fixture.cleanup() }
+        await fixture.service.validateIfNeeded()
+        await fixture.service.activateLicenseKey("other")
+        let result = await fixture.service.activateAnyKey("other")
+        XCTAssertNil(result)
+        await fixture.service.deactivateLicense()
+        fixture.service.setUsageIntent(.personalOSS)
+        XCTAssertEqual(fixture.service.usageIntent, .enterprise)
+        XCTAssertTrue(fixture.service.hasCommercialLicense)
+        let paths = await fixture.server.paths
+        XCTAssertEqual(paths, ["activate", "validate"])
+    }
+
+    @MainActor
+    func testManagedLicenseRemovalRetainsLicenseAndAllowsManualDeactivation() async throws {
+        let fixture = try ManagedLicenseFixture()
+        defer { fixture.cleanup() }
+        await fixture.service.validateIfNeeded()
+        fixture.defaults.removeObject(forKey: UserDefaultsKeys.managedLicenseKey)
+        await fixture.service.validateIfNeeded()
+        XCTAssertFalse(fixture.service.isLicenseManaged)
+        XCTAssertTrue(fixture.service.hasCommercialLicense)
+        await fixture.service.deactivateLicense()
+        XCTAssertFalse(fixture.service.hasCommercialLicense)
+    }
+
+    @MainActor
+    func testManagedLicenseRejectsSupporterKeyAndRollsBackActivation() async throws {
+        let fixture = try ManagedLicenseFixture()
+        defer { fixture.cleanup() }
+        await fixture.server.configure(supporter: true)
+        await fixture.service.validateIfNeeded()
+        XCTAssertFalse(fixture.service.hasCommercialLicense)
+        XCTAssertFalse(fixture.service.isSupporter)
+        XCTAssertNotNil(fixture.service.managedLicenseError)
+        let paths = await fixture.server.paths
+        XCTAssertEqual(paths, ["activate", "validate", "deactivate"])
+    }
+
+    @MainActor
+    func testManagedLicenseConcurrentAttemptsCreateOneActivation() async throws {
+        let fixture = try ManagedLicenseFixture()
+        defer { fixture.cleanup() }
+        async let first: Void = fixture.service.validateIfNeeded()
+        async let second: Void = fixture.service.validateIfNeeded()
+        _ = await (first, second)
+        let count = await fixture.server.activationCount
+        XCTAssertEqual(count, 1)
+        XCTAssertTrue(fixture.service.hasCommercialLicense)
+    }
+
+    @MainActor
+    func testManagedLicenseRecoversDeletedActivation() async throws {
+        let fixture = try ManagedLicenseFixture()
+        defer { fixture.cleanup() }
+        await fixture.service.validateIfNeeded()
+        fixture.defaults.removeObject(forKey: UserDefaultsKeys.lastLicenseValidation)
+        await fixture.server.configure(missingActivation: true)
+        await fixture.service.validateIfNeeded()
+        let count = await fixture.server.activationCount
+        XCTAssertEqual(count, 2)
+        XCTAssertTrue(fixture.service.hasCommercialLicense)
+    }
+
+    @MainActor
+    func testManagedLicenseRevocationDoesNotCreateAnotherActivation() async throws {
+        let fixture = try ManagedLicenseFixture()
+        defer { fixture.cleanup() }
+        await fixture.service.validateIfNeeded()
+        fixture.defaults.removeObject(forKey: UserDefaultsKeys.lastLicenseValidation)
+        await fixture.server.configure(revoked: true)
+        await fixture.service.validateIfNeeded()
+        await fixture.service.validateIfNeeded()
+        let count = await fixture.server.activationCount
+        XCTAssertEqual(count, 1)
+        XCTAssertEqual(fixture.service.licenseStatus, .expired)
+    }
+
+    @MainActor
+    func testManagedLicenseOfflineValidationKeepsExistingActivation() async throws {
+        let fixture = try ManagedLicenseFixture()
+        defer { fixture.cleanup() }
+        await fixture.service.validateIfNeeded()
+        fixture.defaults.removeObject(forKey: UserDefaultsKeys.lastLicenseValidation)
+        await fixture.server.configure(failValidation: true)
+        await fixture.service.validateIfNeeded()
+        XCTAssertTrue(fixture.service.hasCommercialLicense)
+        let count = await fixture.server.activationCount
+        XCTAssertEqual(count, 1)
+    }
+
+    @MainActor
+    func testManagedLicenseInvalidPreferenceTypeDoesNotActivate() async throws {
+        let fixture = try ManagedLicenseFixture(key: nil)
+        defer { fixture.cleanup() }
+        fixture.defaults.set(123, forKey: UserDefaultsKeys.managedLicenseKey)
+        await fixture.service.validateIfNeeded()
+        XCTAssertFalse(fixture.service.isLicenseManaged)
+        let paths = await fixture.server.paths
+        XCTAssertTrue(paths.isEmpty)
+    }
+
+    @MainActor
+    func testManagedLicenseUnreadablePayloadDoesNotConsumeAnotherActivation() async throws {
+        let fixture = try ManagedLicenseFixture()
+        defer { fixture.cleanup() }
+        Self.storeKeychainValue("invalid payload", service: fixture.suite, account: "polar-license")
+        await fixture.service.validateIfNeeded()
+        XCTAssertNotNil(fixture.service.managedLicenseError)
+        let paths = await fixture.server.paths
+        XCTAssertTrue(paths.isEmpty)
+    }
+
     private func makeIsolatedDefaults() throws -> (UserDefaults, String) {
         let suiteName = "TypeWhisperTests.SupporterDiscord.\(UUID().uuidString)"
         guard let defaults = UserDefaults(suiteName: suiteName) else {

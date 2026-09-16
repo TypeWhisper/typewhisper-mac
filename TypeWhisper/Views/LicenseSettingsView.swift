@@ -40,17 +40,23 @@ struct LicenseSettingsView: View {
                             .frame(height: 0)
                             .id(ScrollAnchor.top)
 
-                        planSelectionSection
+                        if license.isLicenseManaged {
+                            managedLicenseSection
+                        } else {
+                            planSelectionSection
+                        }
 
-                        if shouldShowCommercialSection {
+                        if shouldShowCommercialSection && !license.isLicenseManaged {
                             commercialSection
                         }
 
                         supporterSection
                             .id(ScrollAnchor.supporter)
 
-                        sharedActivationSection
-                            .id(ScrollAnchor.activationKey)
+                        if !license.isLicenseManaged {
+                            sharedActivationSection
+                                .id(ScrollAnchor.activationKey)
+                        }
                     }
                     .padding(SettingsLayoutMetrics.pagePadding)
                 }
@@ -66,6 +72,42 @@ struct LicenseSettingsView: View {
                     guard request.tab == .license else { return }
                     handleNavigation(request.licenseTarget ?? .top, proxy: proxy)
                 }
+            }
+        }
+    }
+
+    private var managedLicenseSection: some View {
+        SettingsCard {
+            VStack(alignment: .leading, spacing: 12) {
+                Label(localizedAppText("Managed by your organization", de: "Von deiner Organisation verwaltet"), systemImage: "building.2")
+                    .font(.headline)
+                Text(localizedAppText(
+                    "Your administrator provides the license. TypeWhisper activates it automatically without manual key entry.",
+                    de: "Deine Administration stellt die Lizenz bereit. TypeWhisper aktiviert sie automatisch ohne manuelle Schlüsseleingabe."
+                ))
+                .foregroundStyle(.secondary)
+
+                if license.isActivating {
+                    ProgressView()
+                        .controlSize(.small)
+                } else if let error = license.managedLicenseError {
+                    Text(error)
+                        .foregroundStyle(.red)
+                } else if license.hasCommercialLicense {
+                    Label(localizedAppText("Licensed", de: "Lizenziert"), systemImage: "checkmark.seal.fill")
+                        .foregroundStyle(.green)
+                    if let tier = license.licenseTier {
+                        Text(activeTierLabel(for: tier))
+                    }
+                } else {
+                    Text(commercialStatusTitle)
+                        .foregroundStyle(.secondary)
+                }
+
+                Button(localizedAppText("Retry Activation", de: "Aktivierung erneut versuchen")) {
+                    Task { await license.validateIfNeeded() }
+                }
+                .disabled(license.isActivating)
             }
         }
     }
