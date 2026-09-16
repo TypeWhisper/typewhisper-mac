@@ -72,27 +72,7 @@ final class ParakeetPluginTests: XCTestCase {
     /// Tests/FluidAudioTests/ASR/Parakeet/SlidingWindow/Fixtures/02-release-readiness-19.8s.wav.
     /// Requires an installed Parakeet v3 model; passive restore never downloads it.
     func testInstalledV3ModelPreservesLongFormQuestionPunctuation() async throws {
-        guard let path = ProcessInfo.processInfo.environment["TYPEWHISPER_PARAKEET_REGRESSION_WAV"] else {
-            throw XCTSkip("Set TYPEWHISPER_PARAKEET_REGRESSION_WAV and install Parakeet v3 to run Core ML inference")
-        }
-        let url = URL(fileURLWithPath: path)
-        let wavData = try Data(contentsOf: url)
-        let checksum = SHA256.hash(data: wavData).map { String(format: "%02x", $0) }.joined()
-        guard checksum == "8802fabce33b67d3093d3ac2a2c3fdc77bfd00ef69c98dde5d161564ee95747e" else {
-            XCTFail("The recording does not match the pinned FluidAudio 0.15.7 regression fixture")
-            return
-        }
-        let file = try AVAudioFile(forReading: url)
-        XCTAssertEqual(file.processingFormat.sampleRate, 16_000)
-        XCTAssertEqual(file.processingFormat.channelCount, 1)
-        let buffer = try XCTUnwrap(AVAudioPCMBuffer(
-            pcmFormat: file.processingFormat,
-            frameCapacity: AVAudioFrameCount(file.length)
-        ))
-        try file.read(into: buffer)
-        let channel = try XCTUnwrap(buffer.floatChannelData?[0])
-        let samples = Array(UnsafeBufferPointer(start: channel, count: Int(buffer.frameLength)))
-        let audio = AudioData(samples: samples, wavData: wavData, duration: Double(samples.count) / 16_000)
+        let audio = try regressionAudio()
 
         let host = try PluginTestHostServices(defaults: [
             "loadedModel": "parakeet-tdt-0.6b-v3",
@@ -110,6 +90,147 @@ final class ParakeetPluginTests: XCTestCase {
         let result = try await plugin.transcribe(audio: audio, language: nil, translate: false, prompt: nil)
         XCTAssertTrue(result.text.contains("work we've done?"), result.text)
         XCTAssertTrue(result.text.hasSuffix("cutting a release?"), result.text)
+    }
+
+    func testInstalledV3ModelPreservesTextWithUnrelatedDictionaryTerms() async throws {
+        let audio = try regressionAudio()
+        let host = try PluginTestHostServices(defaults: [
+            "loadedModel": "parakeet-tdt-0.6b-v3",
+            "vocabularyBoostingEnabled": true,
+        ])
+        let plugin = makePlugin()
+        plugin.activate(host: host)
+        defer { plugin.deactivate() }
+        await plugin.restoreLoadedModel(allowDownloads: false, passively: true)
+        guard plugin.isConfigured else {
+            XCTFail("Installed Parakeet v3 failed to load: \(plugin.modelState)")
+            return
+        }
+        let plain = try await plugin.transcribe(audio: audio, language: nil, translate: false, prompt: nil)
+        let boosted = try await plugin.transcribe(
+            audio: audio,
+            language: nil,
+            translate: false,
+            prompt: nil,
+            dictionaryTermHints: ["Docker", "Postgres", "Redis", "TypeWhisper", "Kubernetes"].map {
+                PluginDictionaryTermHint(text: $0, ctcMinSimilarity: nil)
+            },
+            onProgress: { _ in true },
+            onSourceProgress: { _ in true }
+        )
+        // A failed CTC load must not turn this into a vacuous no-op success.
+        XCTAssertEqual(plugin.lastBoostingTermCount, 5)
+        XCTAssertEqual(boosted.text, plain.text)
+        XCTAssertTrue(boosted.text.hasSuffix("cutting a release?"), boosted.text)
+    }
+
+    /// Opt-in paired inference over six pinned German/English technical recordings.
+    func testInstalledV3DictionaryCorrectsMisspellingAndPreservesSurroundingWords() async throws {
+        guard let directory = ProcessInfo.processInfo.environment["TYPEWHISPER_PARAKEET_DICTIONARY_FIXTURES"] else {
+            throw XCTSkip("Set TYPEWHISPER_PARAKEET_DICTIONARY_FIXTURES to the pinned technical recordings")
+        }
+        let fixtures = [
+            ("de-hard-tech-02", "78167b2f5e72c723a3dc66965647dce071ec2600e6d724419a05454ca10d1c69"),
+            ("de-hard-tech-03", "e1032e7861218fc545be20b540428dbbf77445112a4871ece8cd86d7b5c6ea17"),
+            ("de-tech-01", "1dc0901dceb470b1abb721f7b0a3647da35019caf5caff849c23bccd1ec18718"),
+            ("en-hard-tech-02", "627581e9af1c1f3021c4c7a33e79edc6627fa6d8a983d96ec0539bf0fdbee677"),
+            ("en-hard-tech-03", "cefc041dd906c0f39506f744d889f642795e78d0a93a84a5d927d4ad57b4b97e"),
+            ("en-tech-01", "37c94932e545f87eca27988f89af1dc491e0464f5d00393c7d2439e89b04a077"),
+        ]
+        let host = try PluginTestHostServices(defaults: [
+            "loadedModel": "parakeet-tdt-0.6b-v3",
+            "vocabularyBoostingEnabled": true,
+        ])
+        let plugin = makePlugin()
+        plugin.activate(host: host)
+        defer { plugin.deactivate() }
+        await plugin.restoreLoadedModel(allowDownloads: false, passively: true)
+        guard plugin.isConfigured else {
+            XCTFail("Installed Parakeet v3 failed to load: \(plugin.modelState)")
+            return
+        }
+        let hints = ["Kubernetes", "nginx", "gRPC", "PostgreSQL", "GitHub Actions", "Docker Compose"].map {
+            PluginDictionaryTermHint(text: $0, ctcMinSimilarity: nil)
+        }
+        for (name, checksum) in fixtures {
+            let audio = try regressionAudio(
+                at: URL(fileURLWithPath: directory).appendingPathComponent(name + ".wav"),
+                sha256: checksum
+            )
+            let plain = try await plugin.transcribe(audio: audio, language: nil, translate: false, prompt: nil)
+            let boosted = try await plugin.transcribe(
+                audio: audio, language: nil, translate: false, prompt: nil,
+                dictionaryTermHints: hints,
+                onProgress: { _ in true }, onSourceProgress: { _ in true }
+            )
+            XCTAssertEqual(plugin.lastBoostingTermCount, hints.count)
+            if name == "en-hard-tech-02" {
+                XCTAssertTrue(plain.text.contains("PostGur SQL"), plain.text)
+                XCTAssertEqual(boosted.text, plain.text.replacingOccurrences(of: "PostGur SQL", with: "PostgreSQL"))
+                XCTAssertNotEqual(boosted.text, plain.text, "The dictionary must still correct the misspelling")
+            } else {
+                XCTAssertEqual(boosted.text, plain.text, name)
+            }
+        }
+    }
+
+    func testDictionaryCorrectionsDoNotConsumeTextAroundExistingTerms() {
+        for (original, replacement) in [
+            ("uses GitHub actions", "GitHub Actions"),
+            ("Docker Compose for", "Docker Compose"),
+            ("Kubernetes-Cluster", "Kubernetes"),
+            ("Redisdiensten.", "Redis"),
+            ("Café-Straße", "Café"),
+        ] {
+            XCTAssertTrue(ParakeetPlugin.removesTextAroundExistingTerm(
+                original: original, replacement: replacement
+            ), original)
+        }
+    }
+
+    func testDictionaryCorrectionsAllowMisspellingsAndFormatting() {
+        for (original, replacement) in [
+            ("PostGur SQL", "PostgreSQL"),
+            ("type whisper", "TypeWhisper"),
+            ("Github actions.", "GitHub Actions"),
+            ("dockr", "Docker"),
+            ("anything", ""),
+        ] {
+            XCTAssertFalse(ParakeetPlugin.removesTextAroundExistingTerm(
+                original: original, replacement: replacement
+            ), original)
+        }
+    }
+
+    private func regressionAudio() throws -> AudioData {
+        guard let path = ProcessInfo.processInfo.environment["TYPEWHISPER_PARAKEET_REGRESSION_WAV"] else {
+            throw XCTSkip("Set TYPEWHISPER_PARAKEET_REGRESSION_WAV and install Parakeet v3 to run Core ML inference")
+        }
+        return try regressionAudio(
+            at: URL(fileURLWithPath: path),
+            sha256: "8802fabce33b67d3093d3ac2a2c3fdc77bfd00ef69c98dde5d161564ee95747e"
+        )
+    }
+
+    private func regressionAudio(at url: URL, sha256: String) throws -> AudioData {
+        let wavData = try Data(contentsOf: url)
+        let checksum = SHA256.hash(data: wavData).map { String(format: "%02x", $0) }.joined()
+        guard checksum == sha256 else {
+            throw NSError(domain: "ParakeetRegressionFixture", code: 1, userInfo: [
+                NSLocalizedDescriptionKey: "The recording does not match the pinned regression fixture: \(url.lastPathComponent)",
+            ])
+        }
+        let file = try AVAudioFile(forReading: url)
+        XCTAssertEqual(file.processingFormat.sampleRate, 16_000)
+        XCTAssertEqual(file.processingFormat.channelCount, 1)
+        let buffer = try XCTUnwrap(AVAudioPCMBuffer(
+            pcmFormat: file.processingFormat,
+            frameCapacity: AVAudioFrameCount(file.length)
+        ))
+        try file.read(into: buffer)
+        let channel = try XCTUnwrap(buffer.floatChannelData?[0])
+        let samples = Array(UnsafeBufferPointer(start: channel, count: Int(buffer.frameLength)))
+        return AudioData(samples: samples, wavData: wavData, duration: Double(samples.count) / 16_000)
     }
 
     func testPassiveLocalLoaderPreservesCorruptCacheAndDoesNotRepairIt() throws {

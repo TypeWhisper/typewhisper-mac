@@ -500,6 +500,9 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
             let rescorer = try await VocabularyRescorer.create(
                 spotter: spotter,
                 vocabulary: vocab,
+                // Acoustic-only rescue can inject unrelated short dictionary words.
+                // Keep the text-similarity gate, including per-term overrides.
+                config: VocabularyRescorer.Config(spotterRescueEnabled: false),
                 ctcModelDirectory: ctcModelDir
             )
             customVocabulary = vocab
@@ -561,6 +564,15 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
             )
 
             guard rescoreOutput.wasModified else { return result }
+            // The upstream span search can shorten an already-correct phrase,
+            // e.g. "uses GitHub Actions" to "GitHub Actions". Its public output
+            // has no replacement ranges, so preserve the original transcript if
+            // any applied replacement would delete text around an existing term.
+            guard !rescoreOutput.replacements.contains(where: { replacement in
+                replacement.shouldReplace && replacement.replacementWord.map {
+                    Self.removesTextAroundExistingTerm(original: replacement.originalWord, replacement: $0)
+                } == true
+            }) else { return result }
 
             let detectedTerms = spotResult.detections.map(\.term.text)
             let appliedTerms = rescoreOutput.replacements.compactMap { replacement in
@@ -578,6 +590,17 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
             Self.logger.warning("Vocabulary rescoring failed: \(error.localizedDescription)")
             return result
         }
+    }
+
+    static func removesTextAroundExistingTerm(original: String, replacement: String) -> Bool {
+        // Ignore spelling separators so compounds and split names are protected
+        // too, while capitalization/spacing-only corrections remain possible.
+        func lettersAndNumbers(_ text: String) -> String {
+            String(text.lowercased().filter { $0.isLetter || $0.isNumber })
+        }
+        let source = lettersAndNumbers(original)
+        let term = lettersAndNumbers(replacement)
+        return !term.isEmpty && source != term && source.contains(term)
     }
 
     func setBoostingEnabled(_ enabled: Bool) {
