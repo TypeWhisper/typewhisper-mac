@@ -441,7 +441,15 @@ final class LicenseService: ObservableObject {
     }
 
     private func validateStoredLicenseIfNeeded() async {
-        guard hasStoredLicense else {
+        let storedLicense: (key: String, activationId: String)?
+        do {
+            storedLicense = try readLicenseFromKeychain()
+        } catch {
+            // A temporarily unavailable Keychain must not erase cached offline entitlement state.
+            logger.warning("License validation deferred because Keychain is unavailable")
+            return
+        }
+        guard storedLicense != nil else {
             if licenseStatus != .unlicensed || licenseTier != nil {
                 licenseStatus = .unlicensed
                 licenseTier = nil
@@ -838,7 +846,6 @@ final class LicenseService: ObservableObject {
     // MARK: - Keychain
 
     private var keychainService: String { keychainServiceName }
-    private var hasStoredLicense: Bool { loadLicenseFromKeychain() != nil }
 
     private func clearLicenseState() {
         removeLicenseFromKeychain()

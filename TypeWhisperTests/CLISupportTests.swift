@@ -972,8 +972,12 @@ final class CLISupportTests: XCTestCase {
         let fixture = try ManagedLicenseFixture()
         defer { fixture.cleanup() }
         Self.storeKeychainValue("invalid payload", service: fixture.suite, account: "polar-license")
+        fixture.service.licenseStatus = .active
+        fixture.service.licenseTier = .enterprise
         await fixture.service.validateIfNeeded()
         XCTAssertNotNil(fixture.service.managedLicenseError)
+        XCTAssertTrue(fixture.service.hasCommercialLicense)
+        XCTAssertEqual(fixture.service.licenseTier, .enterprise)
         let paths = await fixture.server.paths
         XCTAssertTrue(paths.isEmpty)
     }
