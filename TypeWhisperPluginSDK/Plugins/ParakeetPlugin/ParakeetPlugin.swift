@@ -643,7 +643,9 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
             }
             downloadProgress = 0.7
 
-            let manager = AsrManager(config: .default)
+            // Keep the pre-0.15.7 chunk context: the new v3 default changes
+            // punctuation at chunk boundaries in paired long-form recordings.
+            let manager = AsrManager(config: ASRConfig(melChunkContext: true))
             try await manager.loadModels(models)
             downloadProgress = 1.0
 
