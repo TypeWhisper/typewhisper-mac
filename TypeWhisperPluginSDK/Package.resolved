@@ -1,5 +1,5 @@
 {
-  "originHash" : "72f1f86b8dcc0d9e6490a2ffa168942c8774e1b1068bb9d5990099c7632eb45f",
+  "originHash" : "a14b03bfe0ceaafbc0e40da3e53fb51c1eb33770509785c81aad7399e172fefb",
   "pins" : [
     {
       "identity" : "eventsource",
@@ -15,8 +15,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/FluidInference/FluidAudio.git",
       "state" : {
-        "revision" : "4dbf4f9f9a5ff3a53ade848d7ba4e3df13db859b",
-        "version" : "0.15.6"
+        "revision" : "41540ea237350afe5117a082b5c28eda642d0612",
+        "version" : "0.15.7"
       }
     },
     {
@@ -122,8 +122,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-log.git",
       "state" : {
-        "revision" : "3ffafb9722d5d918c614feb496c8789a3b59d222",
-        "version" : "1.15.0"
+        "revision" : "9c6fb14227f55d8f711ce3847dc2f419fb0ecacb",
+        "version" : "1.15.1"
       }
     },
     {
