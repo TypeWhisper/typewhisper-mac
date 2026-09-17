@@ -132,8 +132,8 @@ struct SettingsView: View {
 
     var body: some View {
         Group {
-            if #available(macOS 27, *) {
-                SettingsSidebarShell(
+            if #available(macOS 26, *) {
+                SettingsNativeSidebarShell(
                     selectedTab: $selectedTab,
                     sections: destinationSections,
                     detail: settingsDetail(for:)
@@ -258,6 +258,38 @@ struct SettingsView: View {
                 )
             }
         }
+    }
+}
+
+// Let SwiftUI own the sidebar, its toolbar and search placement on Liquid Glass
+// systems. Embedding our own split controller prevents the window from treating
+// the sidebar as part of its chrome and caused a scroll-pocket overlay on macOS 27.
+@available(macOS 26, *)
+private struct SettingsNativeSidebarShell<DetailContent: View>: View {
+    @Binding var selectedTab: SettingsTab
+    let sections: [SettingsDestinationSection]
+    let detail: (SettingsTab) -> DetailContent
+
+    @State private var sidebarSearchText = ""
+
+    var body: some View {
+        NavigationSplitView {
+            SettingsSidebarList(
+                selectedTab: $selectedTab,
+                sidebarSearchText: sidebarSearchText,
+                sections: sections
+            )
+            .navigationSplitViewColumnWidth(min: 240, ideal: 260, max: 320)
+        } detail: {
+            detail(selectedTab)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        }
+        .navigationSplitViewStyle(.balanced)
+        .searchable(
+            text: $sidebarSearchText,
+            placement: .sidebar,
+            prompt: localizedAppText("Search Settings", de: "Einstellungen durchsuchen")
+        )
     }
 }
 
@@ -424,6 +456,23 @@ private struct SettingsSidebarContent: View {
     @Binding var sidebarSearchText: String
     let sections: [SettingsDestinationSection]
 
+    var body: some View {
+        VStack(spacing: 0) {
+            SettingsSidebarSearchField(text: $sidebarSearchText)
+            SettingsSidebarList(
+                selectedTab: $selectedTab,
+                sidebarSearchText: sidebarSearchText,
+                sections: sections
+            )
+        }
+    }
+}
+
+private struct SettingsSidebarList: View {
+    @Binding var selectedTab: SettingsTab
+    let sidebarSearchText: String
+    let sections: [SettingsDestinationSection]
+
     private var filteredSections: [SettingsDestinationSection] {
         let query = sidebarSearchText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty else { return sections }
@@ -441,28 +490,24 @@ private struct SettingsSidebarContent: View {
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            SettingsSidebarSearchField(text: $sidebarSearchText)
-
-            List(selection: $selectedTab) {
-                ForEach(filteredSections) { section in
-                    Section {
-                        ForEach(section.destinations) { destination in
-                            SettingsSidebarRow(
-                                destination: destination,
-                                isSelected: destination.tab == selectedTab
-                            )
-                            .tag(destination.tab)
-                        }
+        List(selection: $selectedTab) {
+            ForEach(filteredSections) { section in
+                Section {
+                    ForEach(section.destinations) { destination in
+                        SettingsSidebarRow(
+                            destination: destination,
+                            isSelected: destination.tab == selectedTab
+                        )
+                        .tag(destination.tab)
                     }
                 }
             }
-            .listStyle(.sidebar)
-            // Changing the section/row count via search filtering can leave stale,
-            // blank space behind from SwiftUI's incremental List diffing. Keying the
-            // List on the query forces a clean rebuild instead of a partial diff.
-            .id(sidebarSearchText)
         }
+        .listStyle(.sidebar)
+        // Changing the section/row count via search filtering can leave stale,
+        // blank space behind from SwiftUI's incremental List diffing. Keying the
+        // List on the query forces a clean rebuild instead of a partial diff.
+        .id(sidebarSearchText)
     }
 }
 
