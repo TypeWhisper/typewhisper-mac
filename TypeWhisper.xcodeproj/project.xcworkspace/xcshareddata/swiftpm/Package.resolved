@@ -212,8 +212,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/ibireme/yyjson.git",
       "state" : {
-        "revision" : "8b4a38dc994a110abaec8a400615567bd996105f",
-        "version" : "0.12.0"
+        "revision" : "6447536015f3d600f3d65323b10976103b337ca7",
+        "version" : "0.13.0"
       }
     }
   ],
