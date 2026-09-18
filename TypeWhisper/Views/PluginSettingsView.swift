@@ -1469,6 +1469,7 @@ private let typeWhisperAddonSlugsByPluginID: [String: String] = [
     "com.typewhisper.google-cloud-stt": "google-cloud-stt",
     "com.typewhisper.granite": "granite",
     "com.typewhisper.groq": "groq",
+    "com.typewhisper.inferenceapis": "inferenceapis",
     "com.typewhisper.linear": "linear",
     "com.typewhisper.livetranscript": "live-transcript",
     "com.typewhisper.meta": "meta",

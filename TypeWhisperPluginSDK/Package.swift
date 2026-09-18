@@ -408,6 +408,16 @@ let package = Package(
                 .process("manifest.json"),
             ]
         ),
+        .target(
+            name: "InferenceAPIsPlugin",
+            dependencies: ["TypeWhisperPluginSDK"],
+            path: "Plugins/InferenceAPIsPlugin",
+            exclude: ["Tests"],
+            resources: [
+                .process("Localizable.xcstrings"),
+                .process("manifest.json"),
+            ]
+        ),
         .testTarget(
             name: "TypeWhisperPluginSDKTests",
             dependencies: ["TypeWhisperPluginSDK"]
@@ -743,6 +753,15 @@ let package = Package(
                 "MistralAIPlugin",
             ],
             path: "Plugins/MistralAIPlugin/Tests"
+        ),
+        .testTarget(
+            name: "InferenceAPIsPluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "InferenceAPIsPlugin",
+            ],
+            path: "Plugins/InferenceAPIsPlugin/Tests"
         ),
     ]
 )

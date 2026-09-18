@@ -221,6 +221,20 @@ final class PluginManifestValidationTests: XCTestCase {
         XCTAssertEqual(manifest.sdkCompatibilityVersion, PluginSDKCompatibility.currentVersion)
     }
 
+    func testInferenceAPIsPlugin100RequiresCompatibleHost17() throws {
+        let manifestURL = TestSupport.repoRoot.appendingPathComponent(
+            "TypeWhisperPluginSDK/Plugins/InferenceAPIsPlugin/manifest.json"
+        )
+        let data = try Data(contentsOf: manifestURL)
+        let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
+
+        XCTAssertEqual(manifest.version, "1.0.0")
+        XCTAssertEqual(manifest.minHostVersion, "1.7.0")
+        XCTAssertEqual(manifest.sdkCompatibilityVersion, PluginSDKCompatibility.currentVersion)
+        XCTAssertEqual(manifest.hosting, .cloud)
+        XCTAssertEqual(manifest.categories, ["transcription", "llm"])
+    }
+
     func testWebLinkUserInterfacePluginRequiresHost17() throws {
         let manifestURL = TestSupport.repoRoot.appendingPathComponent(
             "TypeWhisperPluginSDK/Plugins/WebLinkPlugin/manifest.json"

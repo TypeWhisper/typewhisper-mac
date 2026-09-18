@@ -66,6 +66,7 @@ PLUGIN_SCREENSHOTS = [
   { slug: "granite", target: "GranitePlugin", id: "com.typewhisper.granite" },
   { slug: "groq", target: "GroqPlugin", id: "com.typewhisper.groq" },
   { slug: "improve-typewhisper", target: "ContributorPlugin", id: "com.typewhisper.improve" },
+  { slug: "inferenceapis", target: "InferenceAPIsPlugin", id: "com.typewhisper.inferenceapis" },
   { slug: "linear", target: "LinearPlugin", id: "com.typewhisper.linear" },
   { slug: "live-transcript", target: "LiveTranscriptPlugin", id: "com.typewhisper.livetranscript" },
   { slug: "mcp-client", target: "MCPClientPlugin", id: "com.typewhisper.mcp-client" },

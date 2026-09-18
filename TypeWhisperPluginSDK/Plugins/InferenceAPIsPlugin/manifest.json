@@ -1,0 +1,24 @@
+{
+    "id": "com.typewhisper.inferenceapis",
+    "name": "Inference APIs",
+    "version": "1.0.0",
+    "minHostVersion": "1.7.0",
+    "sdkCompatibilityVersion": "v1",
+    "minOSVersion": "14.0",
+    "author": "TaylorHawkes",
+    "description": "Cloud transcription and LLM via Inference APIs. OpenAI-compatible, zero data retention, no subscription. Requires API key.",
+    "descriptions": {
+        "de": "Cloud-Transkription und LLM über Inference APIs. OpenAI-kompatibel, keine Datenspeicherung, kein Abonnement. Erfordert API-Key.",
+        "ja": "Inference APIsによるクラウド文字起こしとLLMです。OpenAI互換で、データは保持されず、サブスクリプションは不要です。APIキーが必要です。"
+    },
+    "category": "transcription",
+    "categories": [
+        "transcription",
+        "llm"
+    ],
+    "hosting": "cloud",
+    "iconSystemName": "cpu",
+    "principalClass": "InferenceAPIsPlugin",
+    "requiresAPIKey": true,
+    "detailsURL": "https://www.typewhisper.com/addons/inferenceapis/"
+}

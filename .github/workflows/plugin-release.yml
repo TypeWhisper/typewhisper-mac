@@ -133,6 +133,7 @@ jobs:
             cerebras) TARGET="CerebrasPlugin" ;;
             openrouter) TARGET="OpenRouterPlugin" ;;
             vercel-ai-gateway) TARGET="VercelAIGatewayPlugin" ;;
+            inferenceapis) TARGET="InferenceAPIsPlugin" ;;
             soniox) TARGET="SonioxPlugin" ;;
             sber-salutespeech) TARGET="SaluteSpeechPlugin" ;;
             reson8) TARGET="Reson8Plugin" ;;
