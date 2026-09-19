@@ -8517,6 +8517,41 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testMediaPlaybackServiceImmediatePauseIgnoresLateSnapshotAfterTimeout() async {
+        let controller = FakeMediaPlaybackController()
+        var deferredCallback: ((MediaPlaybackSnapshot?) -> Void)?
+        controller.onGetPlaybackSnapshot = { deferredCallback = $0 }
+        let service = MediaPlaybackService(startListening: false) { controller }
+        service.testingSetImmediateSnapshotTimeout(.milliseconds(20))
+
+        await service.pauseImmediatelyIfPlaying()
+        deferredCallback?(FakeMediaPlaybackController.snapshot(isPlaying: true, playbackRate: 1))
+
+        XCTAssertEqual(controller.pauseCalls, 0)
+    }
+
+    @MainActor
+    func testMediaPlaybackServiceImmediatePauseStopsWaitingWhenCancelled() async {
+        let controller = FakeMediaPlaybackController()
+        var deferredCallback: ((MediaPlaybackSnapshot?) -> Void)?
+        controller.onGetPlaybackSnapshot = { deferredCallback = $0 }
+        let service = MediaPlaybackService(startListening: false) { controller }
+        service.testingSetImmediateSnapshotTimeout(.seconds(5))
+        let pauseTask = Task { @MainActor in
+            await service.pauseImmediatelyIfPlaying()
+        }
+        while deferredCallback == nil {
+            await Task.yield()
+        }
+
+        pauseTask.cancel()
+        await pauseTask.value
+        deferredCallback?(FakeMediaPlaybackController.snapshot(isPlaying: true, playbackRate: 1))
+
+        XCTAssertEqual(controller.pauseCalls, 0)
+    }
+
+    @MainActor
     func testMediaPlaybackServiceSkipsPauseWhenPlaybackIsAlreadyStopped() {
         let controller = FakeMediaPlaybackController()
         controller.returnedSnapshot = FakeMediaPlaybackController.snapshot(isPlaying: false, playbackRate: nil, bundleIdentifier: nil)

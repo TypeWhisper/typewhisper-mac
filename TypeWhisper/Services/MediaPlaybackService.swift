@@ -72,6 +72,39 @@ protocol MediaPlaybackControlling: AnyObject {
     func togglePlayPause()
 }
 
+private final class MediaPlaybackSnapshotResolver: @unchecked Sendable {
+    private let lock = NSLock()
+    private var continuation: CheckedContinuation<MediaPlaybackSnapshot?, Never>?
+    private var resolvedSnapshot: MediaPlaybackSnapshot?
+    private var isResolved = false
+
+    func install(_ continuation: CheckedContinuation<MediaPlaybackSnapshot?, Never>) {
+        lock.lock()
+        guard !isResolved else {
+            let snapshot = resolvedSnapshot
+            lock.unlock()
+            continuation.resume(returning: snapshot)
+            return
+        }
+        self.continuation = continuation
+        lock.unlock()
+    }
+
+    func resolve(with snapshot: MediaPlaybackSnapshot?) {
+        lock.lock()
+        guard !isResolved else {
+            lock.unlock()
+            return
+        }
+        isResolved = true
+        resolvedSnapshot = snapshot
+        let continuation = continuation
+        self.continuation = nil
+        lock.unlock()
+        continuation?.resume(returning: snapshot)
+    }
+}
+
 extension MediaController: MediaPlaybackControlling {
     func getPlaybackSnapshot(_ onReceive: @escaping (_ snapshot: MediaPlaybackSnapshot?) -> Void) {
         getTrackInfo { trackInfo in
@@ -110,6 +143,7 @@ class MediaPlaybackService {
     private var pausedSnapshot: MediaPlaybackSnapshot?
     private var trackInfoRequestGeneration = 0
     private var resumeGeneration = 0
+    private var immediateSnapshotTimeout: Duration = .milliseconds(250)
 
     init(
         startListening _: Bool = true,
@@ -182,11 +216,12 @@ class MediaPlaybackService {
     /// Pauses active media before Bluetooth capture changes the system audio route.
     func pauseImmediatelyIfPlaying() async {
         cancelPendingResume()
-        guard !didPause else { return }
+        guard !didPause, !Task.isCancelled else { return }
         trackInfoRequestGeneration += 1
         let generation = trackInfoRequestGeneration
         let snapshot = await currentPlaybackSnapshot()
 
+        guard !Task.isCancelled else { return }
         guard generation == trackInfoRequestGeneration else { return }
         guard !didPause else { return }
         guard let snapshot, snapshot.isActivelyPlaying else {
@@ -255,12 +290,30 @@ class MediaPlaybackService {
     }
 
     private func currentPlaybackSnapshot() async -> MediaPlaybackSnapshot? {
-        await withCheckedContinuation { continuation in
-            mediaController.getPlaybackSnapshot { snapshot in
-                continuation.resume(returning: snapshot)
+        let resolver = MediaPlaybackSnapshotResolver()
+        let timeout = immediateSnapshotTimeout
+
+        return await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                resolver.install(continuation)
+                Task.detached {
+                    try? await Task.sleep(for: timeout)
+                    resolver.resolve(with: nil)
+                }
+                mediaController.getPlaybackSnapshot { snapshot in
+                    resolver.resolve(with: snapshot)
+                }
             }
+        } onCancel: {
+            resolver.resolve(with: nil)
         }
     }
+
+    #if DEBUG
+    func testingSetImmediateSnapshotTimeout(_ timeout: Duration) {
+        immediateSnapshotTimeout = timeout
+    }
+    #endif
 
     private func logSkippedPause(stage: String, snapshot: MediaPlaybackSnapshot?) {
         logger.info("Media pause skipped at \(stage, privacy: .public) probe (\(snapshot?.logDescription ?? "nil", privacy: .public))")
