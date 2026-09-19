@@ -179,6 +179,28 @@ class MediaPlaybackService {
         }
     }
 
+    /// Pauses active media before Bluetooth capture changes the system audio route.
+    func pauseImmediatelyIfPlaying() async {
+        cancelPendingResume()
+        guard !didPause else { return }
+        trackInfoRequestGeneration += 1
+        let generation = trackInfoRequestGeneration
+        let snapshot = await currentPlaybackSnapshot()
+
+        guard generation == trackInfoRequestGeneration else { return }
+        guard !didPause else { return }
+        guard let snapshot, snapshot.isActivelyPlaying else {
+            logSkippedPause(stage: "immediate", snapshot: snapshot)
+            return
+        }
+
+        nowPlayingBundleID = snapshot.bundleIdentifier
+        pausedSnapshot = snapshot
+        mediaController.pause()
+        didPause = true
+        logger.info("Media paused before Bluetooth capture (\(snapshot.logDescription, privacy: .public))")
+    }
+
     /// Resumes playback only if we previously paused it.
     func resumeIfWePaused() {
         trackInfoRequestGeneration += 1
@@ -232,6 +254,14 @@ class MediaPlaybackService {
         resumeGeneration += 1
     }
 
+    private func currentPlaybackSnapshot() async -> MediaPlaybackSnapshot? {
+        await withCheckedContinuation { continuation in
+            mediaController.getPlaybackSnapshot { snapshot in
+                continuation.resume(returning: snapshot)
+            }
+        }
+    }
+
     private func logSkippedPause(stage: String, snapshot: MediaPlaybackSnapshot?) {
         logger.info("Media pause skipped at \(stage, privacy: .public) probe (\(snapshot?.logDescription ?? "nil", privacy: .public))")
     }
@@ -246,6 +276,7 @@ class MediaPlaybackService {
     #else
     init(startListening: Bool = true) {}
     func pauseIfPlaying() {}
+    func pauseImmediatelyIfPlaying() async {}
     func resumeIfWePaused() {}
     #endif
 }
