@@ -13689,6 +13689,32 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testHandleCancelHotkey_secondEscapeAfterConfirmationWindowDoesNotCancel() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        let context = try XCTUnwrap(dictationContext)
+        context.dictationViewModel.cancellationBehavior = .doubleEscape
+        context.dictationViewModel.testingSetCancelConfirmationWindow(.milliseconds(20))
+        context.dictationViewModel.state = .recording
+
+        context.dictationViewModel.handleCancelHotkey()
+        try await Task.sleep(for: .milliseconds(40))
+
+        XCTAssertNil(context.dictationViewModel.cancelWarningMessage)
+
+        context.dictationViewModel.handleCancelHotkey()
+
+        XCTAssertEqual(context.dictationViewModel.state, .recording)
+        XCTAssertNotNil(context.dictationViewModel.cancelWarningMessage)
+    }
+
+    @MainActor
     func testHandleCancelHotkey_firstEscapeDuringRecordingCancelsWhenConfirmationDisabled() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         var dictationContext: DictationContext?

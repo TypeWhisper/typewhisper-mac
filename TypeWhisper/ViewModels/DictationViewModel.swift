@@ -406,6 +406,10 @@ final class DictationViewModel: ObservableObject {
     private var insertingResetTask: Task<Void, Never>?
     private var pendingHotkeyStartTask: Task<Void, Never>?
     @Published private var cancelWarningTarget: CancelWarningTarget?
+    private var cancelWarningResetTask: Task<Void, Never>?
+    private var cancelConfirmationWindow: Duration = .seconds(3)
+    private let cancelConfirmationClock = ContinuousClock()
+    private var cancelWarningDeadline: ContinuousClock.Instant?
     private var urlResolutionTask: Task<Void, Never>?
     private var metadataCaptureTask: Task<Void, Never>?
     var pasteboardProvider: () -> NSPasteboard = { .general }
@@ -1259,11 +1263,29 @@ final class DictationViewModel: ObservableObject {
             return
         }
 
-        if cancelWarningTarget == target {
+        if cancelWarningTarget == target,
+           let cancelWarningDeadline,
+           cancelConfirmationClock.now < cancelWarningDeadline {
             clearCancelWarning()
             cancelCurrentOperation()
         } else {
-            cancelWarningTarget = target
+            armCancelWarning(for: target)
+        }
+    }
+
+    private func armCancelWarning(for target: CancelWarningTarget) {
+        cancelWarningResetTask?.cancel()
+        cancelWarningTarget = target
+        let confirmationWindow = cancelConfirmationWindow
+        cancelWarningDeadline = cancelConfirmationClock.now.advanced(by: confirmationWindow)
+        cancelWarningResetTask = Task { @MainActor [weak self] in
+            do {
+                try await Task.sleep(for: confirmationWindow)
+            } catch {
+                return
+            }
+            guard self?.cancelWarningTarget == target else { return }
+            self?.clearCancelWarning()
         }
     }
 
@@ -1283,12 +1305,21 @@ final class DictationViewModel: ObservableObject {
               cancelWarningTargetForCurrentState() != cancelWarningTarget else {
             return
         }
-        self.cancelWarningTarget = nil
+        clearCancelWarning()
     }
 
     private func clearCancelWarning() {
+        cancelWarningResetTask?.cancel()
+        cancelWarningResetTask = nil
         cancelWarningTarget = nil
+        cancelWarningDeadline = nil
     }
+
+    #if DEBUG
+    func testingSetCancelConfirmationWindow(_ window: Duration) {
+        cancelConfirmationWindow = window
+    }
+    #endif
 
     private func cancelCurrentOperation() {
         let cancelledMessage = String(localized: "Cancelled")
