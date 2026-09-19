@@ -468,6 +468,50 @@ final class OpenRouterPluginTests: XCTestCase {
         XCTAssertLessThan(uploadedAudio[3].count, uploadedAudio[2].count)
     }
 
+    func testLargeAudio413RetriesOtherModelChunksAsWav() async throws {
+        let host = try PluginTestHostServices(secrets: ["api-key": "openrouter-key"])
+        let plugin = OpenRouterPlugin()
+        plugin.activate(host: host)
+        plugin.selectModel("example/new-transcription-model")
+        plugin.testingSetSplitRetryChunkDuration(1)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(Data(), Self.httpResponse(
+                    url: "https://openrouter.ai/api/v1/audio/transcriptions",
+                    statusCode: 413
+                )),
+                .success(Data(#"{"text":"first"}"#.utf8), Self.httpResponse(
+                    url: "https://openrouter.ai/api/v1/audio/transcriptions",
+                    statusCode: 200
+                )),
+                .success(Data(#"{"text":"second"}"#.utf8), Self.httpResponse(
+                    url: "https://openrouter.ai/api/v1/audio/transcriptions",
+                    statusCode: 200
+                )),
+                .success(Data(#"{"text":"third"}"#.utf8), Self.httpResponse(
+                    url: "https://openrouter.ai/api/v1/audio/transcriptions",
+                    statusCode: 200
+                )),
+            ])
+        }
+
+        _ = try await plugin.transcribe(
+            audio: Self.audio(duration: 2.5),
+            language: nil,
+            translate: false,
+            prompt: nil
+        )
+
+        let formats = try store.sessions.flatMap(\.requestedRequests).map { request in
+            let body = try Self.jsonBody(from: request)
+            let inputAudio = try XCTUnwrap(body["input_audio"] as? [String: Any])
+            return try XCTUnwrap(inputAudio["format"] as? String)
+        }
+        XCTAssertEqual(formats, ["m4a", "wav", "wav", "wav"])
+    }
+
     func testTranscribeRetriesWithWavWhenM4AIsRejected() async throws {
         let host = try PluginTestHostServices(
             defaults: ["selectedModel": "openai/whisper-1"],
