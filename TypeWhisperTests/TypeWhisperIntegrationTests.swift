@@ -13704,7 +13704,12 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         context.dictationViewModel.state = .recording
 
         context.dictationViewModel.handleCancelHotkey()
-        try await Task.sleep(for: .milliseconds(40))
+        for _ in 0..<40 {
+            if context.dictationViewModel.cancelWarningMessage == nil {
+                break
+            }
+            try await Task.sleep(for: .milliseconds(5))
+        }
 
         XCTAssertNil(context.dictationViewModel.cancelWarningMessage)
 
