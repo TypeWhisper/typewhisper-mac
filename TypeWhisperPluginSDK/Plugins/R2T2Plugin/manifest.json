@@ -6,12 +6,12 @@
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
     "author": "TypeWhisper",
-    "description": "Real-time streaming transcription via a self-hosted Confucius4-R2T2 (NetEase Youdao) WebSocket server. Append-only output, 160 ms chunks, Chinese and English optimized.",
+    "description": "On-device real-time streaming transcription with Confucius4-R2T2 (NetEase Youdao) via a local audio.cpp server on Metal. Append-only output, Chinese and English optimized.",
     "descriptions": {
-        "de": "Echtzeit-Streaming-Transkription über einen selbst gehosteten Confucius4-R2T2-WebSocket-Server (NetEase Youdao). Append-only-Ausgabe, 160-ms-Chunks, optimiert für Chinesisch und Englisch."
+        "de": "Lokale Echtzeit-Streaming-Transkription mit Confucius4-R2T2 (NetEase Youdao) über einen lokalen audio.cpp-Server auf Metal. Append-only-Ausgabe, optimiert für Chinesisch und Englisch."
     },
     "category": "transcription",
-    "hosting": "self-hosted",
+    "hosting": "local",
     "iconSystemName": "waveform.badge.mic",
     "principalClass": "R2T2Plugin",
     "requiresAPIKey": false,

@@ -1,12 +1,22 @@
 {
   "sourceLanguage": "en",
   "strings": {
-    "Audio is streamed as 16 kHz PCM to your own R2T2 server. Nothing is sent anywhere else.": {
+    "audiocpp_server with a confucius4_r2t2 model in streaming mode.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Audio wird als 16-kHz-PCM an deinen eigenen R2T2-Server gestreamt. Es werden keine Daten an andere Stellen gesendet."
+            "value": "audiocpp_server mit einem confucius4_r2t2-Modell im Streaming-Modus."
+          }
+        }
+      }
+    },
+    "Audio is streamed as 16 kHz PCM to your local audio.cpp server. Nothing is sent anywhere else.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Audio wird als 16-kHz-PCM an deinen lokalen audio.cpp-Server gestreamt. Es werden keine Daten an andere Stellen gesendet."
           }
         }
       }
@@ -21,12 +31,12 @@
         }
       }
     },
-    "Must match secret_key_list in ws_server.py. Leave empty for the server default.": {
+    "Model ID": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Muss mit secret_key_list in ws_server.py übereinstimmen. Leer lassen für den Server-Standard."
+            "value": "Modell-ID"
           }
         }
       }
@@ -41,32 +51,12 @@
         }
       }
     },
-    "Secret Key": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Secret Key"
-          }
-        }
-      }
-    },
     "Server URL": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
             "value": "Server-URL"
-          }
-        }
-      }
-    },
-    "Server-side VAD": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Serverseitige VAD"
           }
         }
       }
@@ -81,12 +71,12 @@
         }
       }
     },
-    "WebSocket endpoint of the Confucius4-R2T2 ws_server.py (path /asr_stream_api_v1).": {
+    "The \"id\" of the model entry in the server config.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "WebSocket-Endpunkt der Confucius4-R2T2 ws_server.py (Pfad /asr_stream_api_v1)."
+            "value": "Die \"id\" des Modelleintrags in der Server-Konfiguration."
           }
         }
       }
