@@ -59,7 +59,13 @@ enum R2T2Protocol {
         return components.url
     }
 
-    static func livePath(modelId: String, language: String?) -> String {
+    /// Joins TypeWhisper dictionary terms into the comma-separated hotword context R2T2 expects.
+    static func contextPrompt(from prompt: String?) -> String? {
+        let terms = PluginDictionaryTerms.terms(fromPrompt: prompt)
+        return terms.isEmpty ? nil : terms.joined(separator: ", ")
+    }
+
+    static func livePath(modelId: String, language: String?, prompt: String? = nil) -> String {
         var items = [
             URLQueryItem(name: "model", value: modelId),
             URLQueryItem(name: "sample_rate", value: String(sampleRate)),
@@ -67,16 +73,17 @@ enum R2T2Protocol {
             URLQueryItem(name: "sample_format", value: "s16le"),
         ]
         if let language { items.append(URLQueryItem(name: "language", value: language)) }
+        if let prompt, !prompt.isEmpty { items.append(URLQueryItem(name: "prompt", value: prompt)) }
         var components = URLComponents()
         components.path = "/v1/audio/transcriptions/live"
         components.queryItems = items
         return components.string ?? "/v1/audio/transcriptions/live"
     }
 
-    static func makeLiveRequestHead(serverURL: URL, modelId: String, language: String?) -> Data {
+    static func makeLiveRequestHead(serverURL: URL, modelId: String, language: String?, prompt: String? = nil) -> Data {
         let hostHeader = serverURL.port.map { "\(serverURL.host ?? ""):\($0)" } ?? (serverURL.host ?? "")
         let head = [
-            "POST \(livePath(modelId: modelId, language: language)) HTTP/1.1",
+            "POST \(livePath(modelId: modelId, language: language, prompt: prompt)) HTTP/1.1",
             "Host: \(hostHeader)",
             "Content-Type: application/octet-stream",
             "Transfer-Encoding: chunked",
@@ -296,7 +303,7 @@ private final class R2T2LiveConnection: @unchecked Sendable {
     private let parserLock = OSAllocatedUnfairLock(initialState: R2T2ResponseParser())
     private var sentTerminator = false
 
-    init(serverURL: URL, modelId: String, language: String?, onProgress: @Sendable @escaping (String) -> Bool) async throws {
+    init(serverURL: URL, modelId: String, language: String?, prompt: String?, onProgress: @Sendable @escaping (String) -> Bool) async throws {
         try PluginHTTPClient.ensureNetworkAccessIsAllowed()
         guard let host = serverURL.host else { throw PluginTranscriptionError.notConfigured }
         let isTLS = serverURL.scheme == "https"
@@ -309,7 +316,7 @@ private final class R2T2LiveConnection: @unchecked Sendable {
         self.onProgress = onProgress
 
         try await waitUntilReady(serverURL: serverURL)
-        try await send(R2T2Protocol.makeLiveRequestHead(serverURL: serverURL, modelId: modelId, language: language))
+        try await send(R2T2Protocol.makeLiveRequestHead(serverURL: serverURL, modelId: modelId, language: language, prompt: prompt))
         receiveLoop()
     }
 
@@ -477,7 +484,7 @@ private final class R2T2LiveTranscriptionSession: LiveTranscriptionSession, @unc
 
 @objc(R2T2Plugin)
 final class R2T2Plugin: NSObject, TranscriptionEnginePlugin, LiveTranscriptionCapablePlugin,
-    LiveTranscriptionProgressModeProviding, @unchecked Sendable
+    LiveTranscriptionProgressModeProviding, DictionaryTermsCapabilityProviding, @unchecked Sendable
 {
     static let pluginId = "com.typewhisper.r2t2"
     static let pluginName = "Confucius4-R2T2"
@@ -520,6 +527,7 @@ final class R2T2Plugin: NSObject, TranscriptionEnginePlugin, LiveTranscriptionCa
     var supportsTranslation: Bool { false }
     var supportsStreaming: Bool { true }
     var liveTranscriptionProgressMode: LiveTranscriptionProgressMode { .completeSnapshot }
+    var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
     var supportedLanguages: [String] { Array(R2T2Protocol.languageNames.keys).sorted() }
 
     var serverURLString: String { _serverURL }
@@ -536,7 +544,7 @@ final class R2T2Plugin: NSObject, TranscriptionEnginePlugin, LiveTranscriptionCa
         prompt: String?,
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> PluginTranscriptionResult {
-        let connection = try await openConnection(language: language, onProgress: onProgress)
+        let connection = try await openConnection(language: language, prompt: prompt, onProgress: onProgress)
         do {
             // 4096 samples = 256 ms per HTTP chunk.
             let chunk = 4096
@@ -562,11 +570,11 @@ final class R2T2Plugin: NSObject, TranscriptionEnginePlugin, LiveTranscriptionCa
         prompt: String?,
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> any LiveTranscriptionSession {
-        let connection = try await openConnection(language: language, onProgress: onProgress)
+        let connection = try await openConnection(language: language, prompt: prompt, onProgress: onProgress)
         return R2T2LiveTranscriptionSession(connection: connection, language: language)
     }
 
-    private func openConnection(language: String?, onProgress: @Sendable @escaping (String) -> Bool) async throws -> R2T2LiveConnection {
+    private func openConnection(language: String?, prompt: String?, onProgress: @Sendable @escaping (String) -> Bool) async throws -> R2T2LiveConnection {
         guard let url = R2T2Protocol.normalizedServerURL(_serverURL), !_modelId.isEmpty else {
             throw PluginTranscriptionError.notConfigured
         }
@@ -574,6 +582,7 @@ final class R2T2Plugin: NSObject, TranscriptionEnginePlugin, LiveTranscriptionCa
             serverURL: url,
             modelId: _modelId,
             language: R2T2Protocol.languageName(for: language),
+            prompt: R2T2Protocol.contextPrompt(from: prompt),
             onProgress: onProgress
         )
     }

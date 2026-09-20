@@ -24,6 +24,23 @@ final class R2T2PluginTests: XCTestCase {
         XCTAssertFalse(R2T2Protocol.livePath(modelId: "r2t2", language: nil).contains("language"))
     }
 
+    func testPromptIsForwardedAsURLEncodedQueryParameter() {
+        let path = R2T2Protocol.livePath(modelId: "r2t2", language: nil, prompt: "CaperWhite, Gerrit, Shop Server")
+        XCTAssertTrue(path.hasSuffix("&prompt=CaperWhite,%20Gerrit,%20Shop%20Server"), path)
+        XCTAssertFalse(R2T2Protocol.livePath(modelId: "r2t2", language: nil, prompt: "").contains("prompt"))
+    }
+
+    func testContextPromptJoinsDictionaryTerms() {
+        XCTAssertNil(R2T2Protocol.contextPrompt(from: nil))
+        XCTAssertNil(R2T2Protocol.contextPrompt(from: "   "))
+        let joined = R2T2Protocol.contextPrompt(from: "CaperWhite, Gerrit\nShopServer")
+        XCTAssertNotNil(joined)
+        for term in ["CaperWhite", "Gerrit", "ShopServer"] {
+            XCTAssertTrue(joined!.contains(term), joined!)
+        }
+        XCTAssertEqual(R2T2Plugin().dictionaryTermsSupport, .supported)
+    }
+
     func testChunkFraming() {
         XCTAssertEqual([UInt8](R2T2Protocol.chunkFrame(Data([1, 2, 3]))), Array("3\r\n".utf8) + [1, 2, 3] + Array("\r\n".utf8))
         XCTAssertEqual(String(decoding: R2T2Protocol.chunkFrame(Data(repeating: 0, count: 4096)).prefix(6), as: UTF8.self), "1000\r\n")
