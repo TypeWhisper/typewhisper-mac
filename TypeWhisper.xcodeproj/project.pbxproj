@@ -420,6 +420,10 @@
 		5B2200000000000000000001 /* SaluteSpeechPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B2200000000000000000010 /* SaluteSpeechPlugin.swift */; };
 		5B2200000000000000000002 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 5B2200000000000000000011 /* manifest.json */; };
 		5B2200000000000000000003 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 5B2200000000000000000030 /* TypeWhisperPluginSDK */; };
+		5C3300000000000000000001 /* R2T2Plugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5C3300000000000000000010 /* R2T2Plugin.swift */; };
+		5C3300000000000000000002 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 5C3300000000000000000011 /* manifest.json */; };
+		5C3300000000000000000003 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 5C3300000000000000000013 /* Localizable.xcstrings */; };
+		5C3300000000000000000004 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 5C3300000000000000000030 /* TypeWhisperPluginSDK */; };
 		CART00000000000000000001 /* CartesiaPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = CART00000000000000000010 /* CartesiaPlugin.swift */; };
 		CART00000000000000000002 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = CART00000000000000000011 /* manifest.json */; };
 		CART00000000000000000004 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = CART00000000000000000013 /* Localizable.xcstrings */; };
@@ -1037,6 +1041,10 @@
 		5B2200000000000000000010 /* SaluteSpeechPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SaluteSpeechPlugin.swift; sourceTree = "<group>"; };
 		5B2200000000000000000011 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		5B2200000000000000000012 /* SaluteSpeechPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SaluteSpeechPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
+		5C3300000000000000000010 /* R2T2Plugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = R2T2Plugin.swift; sourceTree = "<group>"; };
+		5C3300000000000000000011 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
+		5C3300000000000000000012 /* R2T2Plugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = R2T2Plugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
+		5C3300000000000000000013 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		CART00000000000000000010 /* CartesiaPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CartesiaPlugin.swift; sourceTree = "<group>"; };
 		CART00000000000000000011 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		CART00000000000000000012 /* CartesiaPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CartesiaPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -1480,6 +1488,14 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		5C3300000000000000000051 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5C3300000000000000000004 /* TypeWhisperPluginSDK in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		CART00000000000000000051 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -1796,6 +1812,7 @@
 				RESG00000000000000001 /* Reson8Plugin */,
 				5A1100000000000000000020 /* SmallestAIPlugin */,
 				5B2200000000000000000020 /* SaluteSpeechPlugin */,
+				5C3300000000000000000020 /* R2T2Plugin */,
 				CART00000000000000000020 /* CartesiaPlugin */,
 				CC00000000000000000030 /* ObsidianPlugin */,
 				C07D00000000000000000001 /* ContributorPlugin */,
@@ -2435,6 +2452,17 @@
 			path = TypeWhisperPluginSDK/Plugins/SaluteSpeechPlugin;
 			sourceTree = "<group>";
 		};
+		5C3300000000000000000020 /* R2T2Plugin */ = {
+			isa = PBXGroup;
+			children = (
+				5C3300000000000000000010 /* R2T2Plugin.swift */,
+				5C3300000000000000000011 /* manifest.json */,
+				5C3300000000000000000013 /* Localizable.xcstrings */,
+			);
+			name = R2T2Plugin;
+			path = TypeWhisperPluginSDK/Plugins/R2T2Plugin;
+			sourceTree = "<group>";
+		};
 		CART00000000000000000020 /* CartesiaPlugin */ = {
 			isa = PBXGroup;
 			children = (
@@ -2823,6 +2851,7 @@
 				BB00000000000000000203 /* AssemblyAIPlugin.bundle */,
 				5A1100000000000000000013 /* SmallestAIPlugin.bundle */,
 				5B2200000000000000000012 /* SaluteSpeechPlugin.bundle */,
+				5C3300000000000000000012 /* R2T2Plugin.bundle */,
 				CART00000000000000000012 /* CartesiaPlugin.bundle */,
 				BB00000000000000000211 /* ObsidianPlugin.bundle */,
 				C07B00000000000000000007 /* ContributorPlugin.bundle */,
@@ -3484,6 +3513,26 @@
 			);
 			productName = SaluteSpeechPlugin;
 			productReference = 5B2200000000000000000012 /* SaluteSpeechPlugin.bundle */;
+			productType = "com.apple.product-type.bundle";
+		};
+		5C3300000000000000000040 /* R2T2Plugin */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5C3300000000000000000062 /* Build configuration list for PBXNativeTarget "R2T2Plugin" */;
+			buildPhases = (
+				5C3300000000000000000050 /* Sources */,
+				5C3300000000000000000051 /* Frameworks */,
+				5C3300000000000000000052 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = R2T2Plugin;
+			packageProductDependencies = (
+				5C3300000000000000000030 /* TypeWhisperPluginSDK */,
+			);
+			productName = R2T2Plugin;
+			productReference = 5C3300000000000000000012 /* R2T2Plugin.bundle */;
 			productType = "com.apple.product-type.bundle";
 		};
 		CART00000000000000000040 /* CartesiaPlugin */ = {
@@ -4213,6 +4262,7 @@
 				DD00000000000000000017 /* AssemblyAIPlugin */,
 				5A1100000000000000000040 /* SmallestAIPlugin */,
 				5B2200000000000000000040 /* SaluteSpeechPlugin */,
+				5C3300000000000000000040 /* R2T2Plugin */,
 				CART00000000000000000040 /* CartesiaPlugin */,
 				DD00000000000000000018 /* ObsidianPlugin */,
 				C07E00000000000000000001 /* ContributorPlugin */,
@@ -4462,6 +4512,15 @@
 			buildActionMask = 2147483647;
 			files = (
 				5B2200000000000000000002 /* manifest.json in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5C3300000000000000000052 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5C3300000000000000000002 /* manifest.json in Resources */,
+				5C3300000000000000000003 /* Localizable.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -5289,6 +5348,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				5B2200000000000000000001 /* SaluteSpeechPlugin.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		5C3300000000000000000050 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				5C3300000000000000000001 /* R2T2Plugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -6954,6 +7021,78 @@
 				MARKETING_VERSION = 0.1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.sber-salutespeech";
 				PRODUCT_NAME = SaluteSpeechPlugin;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_INCLUDE_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/TypeWhisperPluginSDK/build/$(CONFIGURATION)",
+				);
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Release;
+		};
+		5C3300000000000000000060 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/TypeWhisperPluginSDK/build/$(CONFIGURATION)/PackageFrameworks",
+				);
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Confucius4-R2T2";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = R2T2Plugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+					/usr/lib/swift,
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.r2t2;
+				PRODUCT_NAME = R2T2Plugin;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_INCLUDE_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/TypeWhisperPluginSDK/build/$(CONFIGURATION)",
+				);
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Debug;
+		};
+		5C3300000000000000000061 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				FRAMEWORK_SEARCH_PATHS = (
+					"$(inherited)",
+					"$(PROJECT_DIR)/TypeWhisperPluginSDK/build/$(CONFIGURATION)/PackageFrameworks",
+				);
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Confucius4-R2T2";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = R2T2Plugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"@executable_path/../Frameworks",
+					"@loader_path/../Frameworks",
+					/usr/lib/swift,
+				);
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.r2t2;
+				PRODUCT_NAME = R2T2Plugin;
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_INCLUDE_PATHS = (
@@ -8731,6 +8870,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		5C3300000000000000000062 /* Build configuration list for PBXNativeTarget "R2T2Plugin" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				5C3300000000000000000060 /* Debug */,
+				5C3300000000000000000061 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		CART00000000000000000062 /* Build configuration list for PBXNativeTarget "CartesiaPlugin" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -9225,6 +9373,11 @@
 			productName = TypeWhisperPluginSDK;
 		};
 		5B2200000000000000000030 /* TypeWhisperPluginSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = RR00000000000000000005 /* XCLocalSwiftPackageReference "TypeWhisperPluginSDK" */;
+			productName = TypeWhisperPluginSDK;
+		};
+		5C3300000000000000000030 /* TypeWhisperPluginSDK */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = RR00000000000000000005 /* XCLocalSwiftPackageReference "TypeWhisperPluginSDK" */;
 			productName = TypeWhisperPluginSDK;

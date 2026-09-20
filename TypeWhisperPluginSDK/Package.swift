@@ -396,6 +396,16 @@ let package = Package(
             ]
         ),
         .target(
+            name: "R2T2Plugin",
+            dependencies: ["TypeWhisperPluginSDK"],
+            path: "Plugins/R2T2Plugin",
+            exclude: ["README.md", "Tests"],
+            resources: [
+                .process("Localizable.xcstrings"),
+                .process("manifest.json"),
+            ]
+        ),
+        .target(
             name: "CartesiaPlugin",
             dependencies: ["TypeWhisperPluginSDK"],
             path: "Plugins/CartesiaPlugin",
@@ -742,6 +752,15 @@ let package = Package(
                 "SaluteSpeechPlugin",
             ],
             path: "Plugins/SaluteSpeechPlugin/Tests"
+        ),
+        .testTarget(
+            name: "R2T2PluginTests",
+            dependencies: [
+                "TypeWhisperPluginSDK",
+                "TypeWhisperPluginSDKTesting",
+                "R2T2Plugin",
+            ],
+            path: "Plugins/R2T2Plugin/Tests"
         ),
         .testTarget(
             name: "CartesiaPluginTests",

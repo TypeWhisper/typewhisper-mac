@@ -1,0 +1,96 @@
+{
+  "sourceLanguage": "en",
+  "strings": {
+    "Audio is streamed as 16 kHz PCM to your own R2T2 server. Nothing is sent anywhere else.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Audio wird als 16-kHz-PCM an deinen eigenen R2T2-Server gestreamt. Es werden keine Daten an andere Stellen gesendet."
+          }
+        }
+      }
+    },
+    "Connected": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbunden"
+          }
+        }
+      }
+    },
+    "Must match secret_key_list in ws_server.py. Leave empty for the server default.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Muss mit secret_key_list in ws_server.py übereinstimmen. Leer lassen für den Server-Standard."
+          }
+        }
+      }
+    },
+    "Save": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Speichern"
+          }
+        }
+      }
+    },
+    "Secret Key": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Secret Key"
+          }
+        }
+      }
+    },
+    "Server URL": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Server-URL"
+          }
+        }
+      }
+    },
+    "Server-side VAD": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Serverseitige VAD"
+          }
+        }
+      }
+    },
+    "Test Connection": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbindung testen"
+          }
+        }
+      }
+    },
+    "WebSocket endpoint of the Confucius4-R2T2 ws_server.py (path /asr_stream_api_v1).": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "WebSocket-Endpunkt der Confucius4-R2T2 ws_server.py (Pfad /asr_stream_api_v1)."
+          }
+        }
+      }
+    }
+  },
+  "version": "1.0"
+}
