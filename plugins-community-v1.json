@@ -11,7 +11,7 @@
         "ja": "Apple Speech\u30d5\u30ec\u30fc\u30e0\u30ef\u30fc\u30af\u3092\u4f7f\u3046\u30aa\u30f3\u30c7\u30d0\u30a4\u30b9\u97f3\u58f0\u8a8d\u8b58\u3067\u3059\u3002macOS 26\u4ee5\u964d\u304c\u5fc5\u8981\u3067\u3001\u30b9\u30c8\u30ea\u30fc\u30df\u30f3\u30b0\u306b\u5bfe\u5fdc\u3057\u307e\u3059\u3002"
       },
       "category": "transcription",
-      "downloadCount": 9299,
+      "downloadCount": 9304,
       "iconSystemName": "apple.logo",
       "detailsURL": "https://www.typewhisper.com/addons/apple-speech/",
       "releases": [
@@ -22,7 +22,7 @@
           "size": 222656,
           "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-speechanalyzer-v1.0.15/SpeechAnalyzerPlugin.zip",
           "minOSVersion": "26.0",
-          "downloadCount": 284
+          "downloadCount": 289
         },
         {
           "version": "1.0.14",
@@ -63,7 +63,7 @@
         "ja": "WhisperKit\u306b\u3088\u308b\u30ed\u30fc\u30ab\u30eb\u97f3\u58f0\u8a8d\u8b58\u3067\u3059\u30028\u7a2e\u985e\u306e\u30e2\u30c7\u30eb\u30b5\u30a4\u30ba\u300199\u8a00\u8a9e\u3001\u30b9\u30c8\u30ea\u30fc\u30df\u30f3\u30b0\u306b\u5bfe\u5fdc\u3057\u307e\u3059\u3002"
       },
       "category": "transcription",
-      "downloadCount": 14634,
+      "downloadCount": 14654,
       "iconSystemName": "waveform",
       "detailsURL": "https://www.typewhisper.com/addons/whisperkit/",
       "releases": [
@@ -77,7 +77,7 @@
           "supportedArchitectures": [
             "arm64"
           ],
-          "downloadCount": 751
+          "downloadCount": 769
         },
         {
           "version": "1.1.6",
@@ -89,7 +89,7 @@
           "supportedArchitectures": [
             "arm64"
           ],
-          "downloadCount": 576
+          "downloadCount": 577
         },
         {
           "version": "1.1.5",
@@ -185,7 +185,7 @@
           "supportedArchitectures": [
             "arm64"
           ],
-          "downloadCount": 3249
+          "downloadCount": 3250
         },
         {
           "version": "1.0.22",
@@ -247,7 +247,7 @@
         "ja": "NVIDIA Parakeet TDT\u306b\u3088\u308b\u30ed\u30fc\u30ab\u30eb\u97f3\u58f0\u8a8d\u8b58\u3067\u3059\u3002\u9ad8\u901f\u304b\u3064\u9ad8\u7cbe\u5ea6\u3067\u300125\u8a00\u8a9e\u306b\u5bfe\u5fdc\u3057\u307e\u3059\u3002"
       },
       "category": "transcription",
-      "downloadCount": 36767,
+      "downloadCount": 36823,
       "iconSystemName": "bird",
       "detailsURL": "https://www.typewhisper.com/addons/parakeet/",
       "releases": [
@@ -261,7 +261,7 @@
           "supportedArchitectures": [
             "arm64"
           ],
-          "downloadCount": 48
+          "downloadCount": 55
         },
         {
           "version": "1.3.1",
@@ -273,7 +273,7 @@
           "supportedArchitectures": [
             "arm64"
           ],
-          "downloadCount": 2406
+          "downloadCount": 2455
         },
         {
           "version": "1.3.0",
@@ -407,7 +407,7 @@
         "ja": "Groq API\u306b\u3088\u308b\u30af\u30e9\u30a6\u30c9\u6587\u5b57\u8d77\u3053\u3057\u3068LLM\u3067\u3059\u3002\u9ad8\u901f\u63a8\u8ad6\u306b\u5bfe\u5fdc\u3057\u3001API\u30ad\u30fc\u304c\u5fc5\u8981\u3067\u3059\u3002"
       },
       "category": "transcription",
-      "downloadCount": 9096,
+      "downloadCount": 9100,
       "iconSystemName": "bolt.fill",
       "iconURL": "https://www.typewhisper.com/brand-logos/groq/logo.svg",
       "requiresAPIKey": true,
@@ -420,7 +420,7 @@
           "size": 187153,
           "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-groq-v1.0.24/GroqPlugin.zip",
           "minOSVersion": "14.0",
-          "downloadCount": 513
+          "downloadCount": 517
         },
         {
           "version": "1.0.23",
@@ -492,7 +492,7 @@
         "ja": "\u30af\u30e9\u30a6\u30c9\u6587\u5b57\u8d77\u3053\u3057\u3001OpenAI/ChatGPT\u30d7\u30ed\u30f3\u30d7\u30c8\u3001\u97f3\u58f0\u5408\u6210\u306b\u5bfe\u5fdc\u3057\u307e\u3059\u3002\u97f3\u58f0\u8a8d\u8b58/\u97f3\u58f0\u5408\u6210\u306b\u306fAPI\u30ad\u30fc\u3001\u30d7\u30ed\u30f3\u30d7\u30c8\u306b\u306fChatGPT\u30ed\u30b0\u30a4\u30f3\u3092\u4f7f\u7528\u3067\u304d\u307e\u3059\u3002"
       },
       "category": "transcription",
-      "downloadCount": 2997,
+      "downloadCount": 3004,
       "iconSystemName": "brain",
       "iconURL": "https://www.typewhisper.com/brand-logos/openai/logo-light.svg",
       "iconDarkURL": "https://www.typewhisper.com/brand-logos/openai/logo-dark.svg",
@@ -506,7 +506,7 @@
           "size": 674420,
           "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-openai-v1.3.3/OpenAIPlugin.zip",
           "minOSVersion": "14.0",
-          "downloadCount": 251
+          "downloadCount": 258
         },
         {
           "version": "1.3.2",
@@ -607,7 +607,7 @@
         "ja": "\u6587\u5b57\u8d77\u3053\u3057\u3068LLM\u7528\u306b\u4efb\u610f\u306eOpenAI\u4e92\u63dbAPI\u30b5\u30fc\u30d0\u30fc\u3078\u63a5\u7d9a\u3057\u307e\u3059\u3002Ollama\u3001LM Studio\u3001vLLM\u306a\u3069\u3067\u52d5\u4f5c\u3057\u307e\u3059\u3002"
       },
       "category": "transcription",
-      "downloadCount": 2997,
+      "downloadCount": 3004,
       "iconSystemName": "server.rack",
       "detailsURL": "https://www.typewhisper.com/addons/openai-compatible/",
       "releases": [
@@ -744,7 +744,7 @@
         "ja": "Apple Silicon\u4e0a\u306eMLX\u3067\u52d5\u4f5c\u3059\u308b\u30ed\u30fc\u30ab\u30ebQwen3-ASR\u97f3\u58f0\u8a8d\u8b58\u3067\u3059\u300230\u8a00\u8a9e\u3068\u4e2d\u56fd\u8a9e\u65b9\u8a00\u306b\u5bfe\u5fdc\u3057\u3001API\u30ad\u30fc\u306f\u4e0d\u8981\u3067\u3059\u3002"
       },
       "category": "transcription",
-      "downloadCount": 4594,
+      "downloadCount": 4606,
       "iconSystemName": "cpu",
       "detailsURL": "https://www.typewhisper.com/addons/qwen3-asr/",
       "releases": [
@@ -758,7 +758,7 @@
           "supportedArchitectures": [
             "arm64"
           ],
-          "downloadCount": 412
+          "downloadCount": 424
         },
         {
           "version": "1.1.7",
@@ -1289,7 +1289,7 @@
         "ja": "Deepgram API\u306b\u3088\u308b\u30af\u30e9\u30a6\u30c9\u6587\u5b57\u8d77\u3053\u3057\u3067\u3059\u3002\u30ea\u30a2\u30eb\u30bf\u30a4\u30e0WebSocket\u30b9\u30c8\u30ea\u30fc\u30df\u30f3\u30b0\u306b\u5bfe\u5fdc\u3057\u3001API\u30ad\u30fc\u304c\u5fc5\u8981\u3067\u3059\u3002"
       },
       "category": "transcription",
-      "downloadCount": 245,
+      "downloadCount": 246,
       "iconSystemName": "waveform.badge.mic",
       "requiresAPIKey": true,
       "detailsURL": "https://www.typewhisper.com/addons/deepgram/",
@@ -1301,7 +1301,7 @@
           "size": 275165,
           "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-deepgram-v1.0.15/DeepgramPlugin.zip",
           "minOSVersion": "14.0",
-          "downloadCount": 21
+          "downloadCount": 22
         },
         {
           "version": "1.0.14",
@@ -1387,7 +1387,7 @@
         "ja": "Google Gemini API\u306b\u3088\u308bLLM\u30d7\u30ed\u30d0\u30a4\u30c0\u30fc\u3068\u30af\u30e9\u30a6\u30c9\u97f3\u58f0\u6587\u5b57\u8d77\u3053\u3057\u3067\u3059\u3002API\u30ad\u30fc\u304c\u5fc5\u8981\u3067\u3059\u3002"
       },
       "category": "transcription",
-      "downloadCount": 1801,
+      "downloadCount": 1802,
       "iconSystemName": "sparkles",
       "iconURL": "https://www.typewhisper.com/brand-logos/gemini/logo.svg",
       "requiresAPIKey": true,
@@ -1400,7 +1400,7 @@
           "size": 379029,
           "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-gemini-v1.1.0/GeminiPlugin.zip",
           "minOSVersion": "14.0",
-          "downloadCount": 147
+          "downloadCount": 148
         },
         {
           "version": "1.0.21",
@@ -1621,7 +1621,7 @@
         "de": "Cloud-Transkription ueber Google Cloud Speech-to-Text mit einem Service-Account-JSON-Schluessel. Zerlegt laengere Aufnahmen automatisch in mehrere Recognize-Requests."
       },
       "category": "transcription",
-      "downloadCount": 434,
+      "downloadCount": 435,
       "iconSystemName": "globe.badge.chevron.backward",
       "iconURL": "https://www.typewhisper.com/brand-logos/google-cloud/logo.svg",
       "requiresAPIKey": true,
@@ -1634,7 +1634,7 @@
           "size": 242032,
           "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-google-cloud-stt-v1.0.4/GoogleCloudSTTPlugin.zip",
           "minOSVersion": "14.0",
-          "downloadCount": 272
+          "downloadCount": 273
         },
         {
           "version": "1.0.3",
@@ -1859,7 +1859,7 @@
         "ja": "OpenAI\u3001Anthropic\u3001Meta\u3001Google\u306a\u3069\u306eOpenRouter\u97f3\u58f0\u8a8d\u8b58\u30e2\u30c7\u30eb\u3068300\u4ee5\u4e0a\u306eLLM\u306b\u30a2\u30af\u30bb\u30b9\u3067\u304d\u307e\u3059\u3002\u30e2\u30c7\u30eb\u6599\u91d1\u3068\u30a2\u30ab\u30a6\u30f3\u30c8\u6b8b\u9ad8\u3092\u8868\u793a\u3057\u3001API\u30ad\u30fc\u304c\u5fc5\u8981\u3067\u3059\u3002"
       },
       "category": "transcription",
-      "downloadCount": 1047,
+      "downloadCount": 1051,
       "iconSystemName": "globe",
       "iconURL": "https://www.typewhisper.com/brand-logos/openrouter/logo-light.svg",
       "iconDarkURL": "https://www.typewhisper.com/brand-logos/openrouter/logo-dark.svg",
@@ -1873,7 +1873,7 @@
           "size": 268445,
           "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-openrouter-v1.1.7/OpenRouterPlugin.zip",
           "minOSVersion": "14.0",
-          "downloadCount": 63
+          "downloadCount": 67
         },
         {
           "version": "1.1.5",
@@ -1962,7 +1962,7 @@
         "de": "Speichert und durchsucht Erinnerungen ueber die OpenAI Vector Store API mit semantischen Embeddings."
       },
       "category": "memory",
-      "downloadCount": 2997,
+      "downloadCount": 3004,
       "iconSystemName": "brain",
       "detailsURL": "https://www.typewhisper.com/addons/openai-vector-memory/",
       "releases": [
@@ -1995,7 +1995,7 @@
         "ja": "Apple Silicon\u4e0a\u3067MLX\u7d4c\u7531\u3067\u52d5\u4f5c\u3059\u308bGoogle Gemma 4\u30ed\u30fc\u30ab\u30ebLLM\u3067\u3059\u3002API\u30ad\u30fc\u306f\u4e0d\u8981\u3067\u3059\u3002"
       },
       "category": "llm",
-      "downloadCount": 5769,
+      "downloadCount": 5778,
       "iconSystemName": "cpu",
       "detailsURL": "https://www.typewhisper.com/addons/gemma4/",
       "releases": [
@@ -2009,7 +2009,7 @@
           "supportedArchitectures": [
             "arm64"
           ],
-          "downloadCount": 238
+          "downloadCount": 244
         },
         {
           "version": "1.1.5",
@@ -2045,7 +2045,7 @@
           "supportedArchitectures": [
             "arm64"
           ],
-          "downloadCount": 423
+          "downloadCount": 425
         },
         {
           "version": "1.1.2",
@@ -2105,7 +2105,7 @@
           "supportedArchitectures": [
             "arm64"
           ],
-          "downloadCount": 809
+          "downloadCount": 810
         },
         {
           "version": "1.0.5",
@@ -2480,7 +2480,7 @@
         "ja": "Apple Silicon\u4e0a\u306eMLX\u3067\u52d5\u4f5c\u3059\u308bIBM\u306e\u30ed\u30fc\u30ab\u30eb\u97f3\u58f0\u8a8d\u8b58\u3068\u7ffb\u8a33\u3067\u3059\u30026\u8a00\u8a9e\u306e\u53cc\u65b9\u5411\u7ffb\u8a33\u306b\u5bfe\u5fdc\u3057\u307e\u3059\u3002"
       },
       "category": "transcription",
-      "downloadCount": 983,
+      "downloadCount": 984,
       "iconSystemName": "cpu",
       "detailsURL": "https://www.typewhisper.com/addons/granite/",
       "releases": [
@@ -2494,7 +2494,7 @@
           "supportedArchitectures": [
             "arm64"
           ],
-          "downloadCount": 51
+          "downloadCount": 52
         },
         {
           "version": "1.0.9",
@@ -2568,7 +2568,7 @@
         "ja": "Apple Silicon\u4e0a\u306eVoxtral MLX\u3067\u52d5\u4f5c\u3059\u308b\u30ed\u30fc\u30ab\u30eb\u97f3\u58f0\u8a8d\u8b58\u3067\u3059\u3002\u9ad8\u901f\u304b\u3064\u9ad8\u7cbe\u5ea6\u3067\u3059\u3002"
       },
       "category": "transcription",
-      "downloadCount": 2002,
+      "downloadCount": 2005,
       "iconSystemName": "cpu",
       "detailsURL": "https://www.typewhisper.com/addons/voxtral/",
       "releases": [
@@ -2582,7 +2582,7 @@
           "supportedArchitectures": [
             "arm64"
           ],
-          "downloadCount": 125
+          "downloadCount": 127
         },
         {
           "version": "1.0.13",
@@ -2606,7 +2606,7 @@
           "supportedArchitectures": [
             "arm64"
           ],
-          "downloadCount": 656
+          "downloadCount": 657
         },
         {
           "version": "1.0.11",
@@ -2655,7 +2655,7 @@
         "de": "Entfernt F\u00fcllw\u00f6rter wie \u201e\u00e4hm\u201c und \u201e\u00e4h\u201c aus transkribiertem Text."
       },
       "category": "post-processor",
-      "downloadCount": 3733,
+      "downloadCount": 3750,
       "iconSystemName": "text.badge.minus",
       "requiresAPIKey": false,
       "detailsURL": "https://www.typewhisper.com/addons/filler-words/",
@@ -2667,7 +2667,7 @@
           "size": 82313,
           "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-filler-words-v1.0.1/FillerWordsPlugin.zip",
           "minOSVersion": "14.0",
-          "downloadCount": 1652
+          "downloadCount": 1669
         },
         {
           "version": "1.0.0",
@@ -2689,7 +2689,7 @@
         "de": "Experimentelles lokales Text-to-Speech mit Supertonic-3-ONNX-Modellen. Vor dem Download der Modellassets muss die OpenRAIL-M-Modelllizenz akzeptiert werden."
       },
       "category": "tts",
-      "downloadCount": 195,
+      "downloadCount": 196,
       "iconSystemName": "waveform.circle.fill",
       "requiresAPIKey": false,
       "hosting": "local",
@@ -2705,7 +2705,7 @@
           "supportedArchitectures": [
             "arm64"
           ],
-          "downloadCount": 178
+          "downloadCount": 179
         },
         {
           "version": "1.0.0",
@@ -2731,7 +2731,7 @@
         "ja": "xAI Grok API\u306b\u3088\u308b\u30af\u30e9\u30a6\u30c9LLM\u3001\u97f3\u58f0\u8a8d\u8b58\u3001\u97f3\u58f0\u5408\u6210\u3067\u3059\u3002xAI API\u30ad\u30fc\u304c\u5fc5\u8981\u3067\u3059\u3002"
       },
       "category": "transcription",
-      "downloadCount": 98,
+      "downloadCount": 99,
       "iconSystemName": "sparkles",
       "iconURL": "https://www.typewhisper.com/brand-logos/xai/logo-light.svg",
       "iconDarkURL": "https://www.typewhisper.com/brand-logos/xai/logo-dark.svg",
@@ -2746,7 +2746,7 @@
           "size": 306843,
           "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-xai-v1.0.2/XAIPlugin.zip",
           "minOSVersion": "14.0",
-          "downloadCount": 53
+          "downloadCount": 54
         },
         {
           "version": "1.0.1",
@@ -2806,7 +2806,7 @@
       "author": "Y. Vos",
       "description": "Cloud transcription via Reson8 speech-to-text API with real-time WebSocket streaming. Requires API key.",
       "category": "transcription",
-      "downloadCount": 58,
+      "downloadCount": 59,
       "descriptions": {
         "de": "Cloud-Transkription \u00fcber die Reson8-Speech-to-Text-API mit Echtzeit-WebSocket-Streaming. Erfordert API-Key."
       },
@@ -2821,7 +2821,7 @@
           "size": 253686,
           "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-reson8-v1.0.0/Reson8Plugin.zip",
           "minOSVersion": "14.0",
-          "downloadCount": 58
+          "downloadCount": 59
         }
       ]
     },
@@ -3169,7 +3169,7 @@
       "author": "TypeWhisper",
       "description": "Realtime and file transcription with Muse Voice Transcribe, optional speaker diarization, and prompt processing with Muse Spark. Requires a Meta Model API key.",
       "category": "transcription",
-      "downloadCount": 10,
+      "downloadCount": 11,
       "descriptions": {
         "de": "Echtzeit- und Datei-Transkription mit Muse Voice Transcribe, optionaler Sprechererkennung und Prompt-Verarbeitung mit Muse Spark. Erfordert einen Meta-Model-API-Schl\u00fcssel.",
         "ja": "Muse Voice Transcribe\u306b\u3088\u308b\u30ea\u30a2\u30eb\u30bf\u30a4\u30e0\u30fb\u30d5\u30a1\u30a4\u30eb\u6587\u5b57\u8d77\u3053\u3057\u3001\u30aa\u30d7\u30b7\u30e7\u30f3\u306e\u8a71\u8005\u5206\u96e2\u3001Muse Spark\u306b\u3088\u308b\u30d7\u30ed\u30f3\u30d7\u30c8\u51e6\u7406\u306b\u5bfe\u5fdc\u3057\u307e\u3059\u3002Meta Model API\u30ad\u30fc\u304c\u5fc5\u8981\u3067\u3059\u3002"
@@ -3190,7 +3190,7 @@
           "size": 332023,
           "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-meta-v1.0.0/MetaPlugin.zip",
           "minOSVersion": "14.0",
-          "downloadCount": 10
+          "downloadCount": 11
         }
       ]
     },
