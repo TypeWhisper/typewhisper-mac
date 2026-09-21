@@ -2167,7 +2167,8 @@ final class DictationViewModel: ObservableObject {
                     )
                 }
                 let result = transcription.result
-                logger.info("Stop timing: final transcription ready elapsedMs=\(stopElapsedMs(), privacy: .public), usedLiveResult=\(usedLiveSessionResult, privacy: .public)")
+                let diagnostics = result.diagnosticSummary(audioDuration: audioDuration)
+                logger.info("Stop timing: final transcription ready elapsedMs=\(stopElapsedMs(), privacy: .public), usedLiveResult=\(usedLiveSessionResult, privacy: .public), engine=\(result.engineUsed, privacy: .public), model=\(transcription.modelId ?? "unknown", privacy: .public), usedRecoveryFallback=\(transcription.usedRecoveryFallback, privacy: .public), primaryPromptChars=\(termsPrompt?.count ?? 0, privacy: .public), \(diagnostics, privacy: .public)")
 
                 // Bail out if a new recording started while we were transcribing
                 guard !Task.isCancelled else { return }
@@ -2456,7 +2457,8 @@ final class DictationViewModel: ObservableObject {
                     ruleName: self.effectiveRuleName
                 )))
 
-                audioRecordingService.discardActiveRecoveryRecording()
+                let recoveryPreservation = audioRecordingService.preserveActiveRecoveryRecordingResult(successful: true)
+                logger.info("Successful dictation recovery audio retained=\(recoveryPreservation.newlyPreservedURL != nil, privacy: .public)")
                 soundService.play(.transcriptionSuccess, enabled: soundFeedbackEnabled)
                 let wordCount = text.split(separator: " ").count
                 usageStatisticsRecorder?.recordTranscription(

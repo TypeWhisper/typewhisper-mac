@@ -36,6 +36,10 @@ struct DictationRecoveryView: View {
                 Text(String(localized: "Recovery recordings are stored only on this Mac. Immediately prevents TypeWhisper from creating local recovery WAV files. History audio is controlled separately, and cloud engines may still receive audio for transcription."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+
+                Text(String(localized: "The last three successful dictations are also kept for up to 24 hours so you can retry an incomplete result. Immediately disables this retry buffer too."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
             if let lastSavedRecoveryFileName = viewModel.lastSavedRecoveryFileName {
@@ -229,6 +233,12 @@ struct DictationRecoveryView: View {
                 Text(recovery.fileName)
                     .font(.body.weight(.medium))
                     .lineLimit(1)
+
+                if DictationRecoveryAudioStore.isRecentSuccessfulRecording(recovery.url) {
+                    Text(String(localized: "Recent successful dictation"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
 
                 if let errorMessage = recovery.errorMessage {
                     Text(errorMessage)

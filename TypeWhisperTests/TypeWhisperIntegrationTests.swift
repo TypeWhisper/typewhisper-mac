@@ -9000,6 +9000,77 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testSuccessfulButIncompleteTranscriptionKeepsCompleteRecoveryAudio() async throws {
+        try await assertSuccessfulDictationRetryBuffer(policy: .never, shouldKeepAudio: true)
+    }
+
+    @MainActor
+    func testSuccessfulDictationWithImmediatelyRetentionCreatesNoRecoveryAudio() async throws {
+        try await assertSuccessfulDictationRetryBuffer(policy: .immediately, shouldKeepAudio: false)
+    }
+
+    @MainActor
+    private func assertSuccessfulDictationRetryBuffer(
+        policy: DictationRecoveryRetentionPolicy,
+        shouldKeepAudio: Bool
+    ) async throws {
+        let originalSaveAudio = UserDefaults.standard.object(forKey: UserDefaultsKeys.saveAudioWithHistory)
+        UserDefaults.standard.set(false, forKey: UserDefaultsKeys.saveAudioWithHistory)
+        defer { Self.restoreUserDefault(originalSaveAudio, forKey: UserDefaultsKeys.saveAudioWithHistory) }
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let recoveryStore = DictationRecoveryAudioStore(
+            directory: appSupportDirectory.appendingPathComponent("dictation-recovery", isDirectory: true),
+            retentionPolicy: policy
+        )
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            MockTranscriptionPlugin.reset()
+            TestSupport.remove(appSupportDirectory)
+        }
+        MockTranscriptionPlugin.reset()
+        // HTTP-success-shaped provider output must not erase the original audio,
+        // even if it looks nonempty and is accepted as a completed dictation.
+        MockTranscriptionPlugin.setResponseText("Es ist ja naturgemäß eher so, dass man sehr wahrscheinlich die wärmeren Monate bevorzugt, denn man kann rausgehen, es ist auch die Zeit, wo man sich wahrscheinlich öfters mit Freunden außerhalb des Hauses trifft und sowas, das ist immer sehr schön. Thank you for watching!")
+        dictationContext = Self.makeDictationContext(
+            appSupportDirectory: appSupportDirectory,
+            audioRecordingRecoveryAudioStore: recoveryStore
+        )
+        let context = try XCTUnwrap(dictationContext)
+        let samples = [Float](repeating: 0.25, count: 40 * 16_000)
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { _ in samples }
+        context.textInsertionService.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
+        context.textInsertionService.selectedTextOverride = { nil }
+        context.textInsertionService.accessibilityGrantedOverride = true
+        let pasteboard = NSPasteboard.withUniqueName()
+        context.textInsertionService.pasteboardProvider = { pasteboard }
+        context.textInsertionService.pasteSimulatorOverride = {}
+        context.textInsertionService.focusedTextElementOverride = { nil }
+        context.textInsertionService.pasteVerificationAttempts = 0
+
+        let sessionID = context.dictationViewModel.apiStartRecording()
+        await context.dictationViewModel.testingWaitForRecordingStart()
+        recoveryStore.append(samples)
+        _ = context.dictationViewModel.apiStopRecording()
+        for _ in 0..<120 {
+            if context.dictationViewModel.apiDictationSession(id: sessionID)?.status == .completed { break }
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.status, .completed)
+        if shouldKeepAudio {
+            let url = try XCTUnwrap(recoveryStore.latestRecoveryURL)
+            XCTAssertTrue(DictationRecoveryAudioStore.isRecentSuccessfulRecording(url))
+            XCTAssertEqual(try Data(contentsOf: url).count, 44 + samples.count * 2)
+            XCTAssertEqual(context.audioRecordingService.recoveryRecordingURLs, [url])
+        } else {
+            XCTAssertTrue(recoveryStore.recoveryURLs.isEmpty)
+        }
+    }
+
+    @MainActor
     func testFailedTranscriptionSurfacesNewRecoveryAndOpenAction() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         let recoveryStore = DictationRecoveryAudioStore(

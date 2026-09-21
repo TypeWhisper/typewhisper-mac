@@ -1,6 +1,50 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Send dictionary terms": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wörterbuchbegriffe senden"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "辞書の用語を送信"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "发送词典术语"
+          }
+        }
+      }
+    },
+    "Turn this off to retry without dictionary context if words or passages are missing. This does not change dictionary corrections after transcription.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deaktiviere diese Option, um bei fehlenden Wörtern oder Abschnitten einen neuen Versuch ohne Wörterbuchkontext zu starten. Wörterbuchkorrekturen nach der Transkription bleiben unverändert."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "単語や文章が欠けている場合は、これをオフにして辞書の文脈なしで再試行してください。文字起こし後の辞書による修正には影響しません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "如果缺少单词或段落，请关闭此选项，在不使用词典上下文的情况下重试。这不会改变转写后的词典纠正。"
+          }
+        }
+      }
+    },
     "API Key": {
       "localizations": {
         "de": {

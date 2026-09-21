@@ -2583,8 +2583,8 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         preserveActiveRecoveryRecordingResult().latestRecoveryURL
     }
 
-    func preserveActiveRecoveryRecordingResult() -> DictationRecoveryPreservationResult {
-        let result = recoveryAudioStore.preserveActiveRecordingResult()
+    func preserveActiveRecoveryRecordingResult(successful: Bool = false) -> DictationRecoveryPreservationResult {
+        let result = recoveryAudioStore.preserveActiveRecordingResult(successful: successful)
         publishRecoverableRecordingURLs(recoveryAudioStore.recoveryURLs)
         return result
     }

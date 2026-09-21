@@ -5,6 +5,59 @@ import TypeWhisperPluginSDK
 @testable import GroqPlugin
 
 final class GroqPluginTests: XCTestCase {
+    func testDictionaryContextDefaultsToExistingBehaviorAndPersistsOptOut() throws {
+        let host = try PluginTestHostServices()
+        let plugin = GroqPlugin()
+        plugin.activate(host: host)
+        XCTAssertTrue(plugin.sendDictionaryTerms)
+        XCTAssertEqual(plugin.dictionaryTermsSupport, .supported)
+        plugin.setSendDictionaryTerms(false)
+        XCTAssertEqual(host.userDefault(forKey: GroqPlugin.sendDictionaryTermsKey) as? Bool, false)
+        XCTAssertEqual(plugin.dictionaryTermsSupport, .unsupported)
+        let reloaded = GroqPlugin()
+        reloaded.activate(host: host)
+        XCTAssertFalse(reloaded.sendDictionaryTerms)
+        reloaded.setSendDictionaryTerms(true)
+        XCTAssertTrue(reloaded.sendDictionaryTerms)
+        XCTAssertEqual(reloaded.dictionaryTermsSupport, .supported)
+    }
+
+    func testTranscribeOmitsDisabledPromptIncludingWavRetryAndRestoresUnmodifiedPrompt() async throws {
+        let host = try PluginTestHostServices(
+            defaults: ["selectedModel": "whisper-large-v3", "sendDictionaryTerms": false],
+            secrets: ["api-key": "groq-key"]
+        )
+        let plugin = GroqPlugin()
+        plugin.activate(host: host)
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(Data(#"{"error":{"message":"could not process file - is it a valid media file?"}}"#.utf8),
+                         Self.httpResponse(url: "https://api.groq.com/openai/v1/audio/transcriptions", statusCode: 400)),
+                .success(Data(#"{"text":"hello","language":"de"}"#.utf8),
+                         Self.httpResponse(url: "https://api.groq.com/openai/v1/audio/transcriptions", statusCode: 200)),
+                .success(Data(#"{"text":"hello","language":"de"}"#.utf8),
+                         Self.httpResponse(url: "https://api.groq.com/openai/v1/audio/transcriptions", statusCode: 200)),
+            ])
+        }
+        let samples = [Float](repeating: 0.1, count: 16_000)
+        let audio = AudioData(samples: samples, wavData: PluginWavEncoder.encode(samples), duration: 1)
+        let prompt = "TensorFlow, Prompt Engineering, Keras"
+        _ = try await plugin.transcribe(audio: audio, language: "de", translate: false, prompt: prompt)
+        let disabledRequests = try XCTUnwrap(store.sessions.first?.requestedRequests)
+        XCTAssertEqual(disabledRequests.count, 2)
+        for request in disabledRequests {
+            let body = String(decoding: try XCTUnwrap(request.httpBody), as: UTF8.self)
+            XCTAssertFalse(body.contains("name=\"prompt\""))
+        }
+        plugin.setSendDictionaryTerms(true)
+        _ = try await plugin.transcribe(audio: audio, language: "de", translate: false, prompt: prompt)
+        let request = try XCTUnwrap(store.sessions.first?.requestedRequests.last)
+        let body = String(decoding: try XCTUnwrap(request.httpBody), as: UTF8.self)
+        XCTAssertTrue(body.contains("name=\"prompt\"\r\n\r\n\(prompt)\r\n"))
+        XCTAssertFalse(body.contains("The audio may contain"))
+    }
+
     override func tearDown() {
         PluginHTTPClientTestHarness.reset()
         super.tearDown()

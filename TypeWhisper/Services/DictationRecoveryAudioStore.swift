@@ -36,7 +36,7 @@ struct DictationRecoveryPreservationResult: Equatable, Sendable {
 }
 
 /// Persists the active dictation as a temporary 16 kHz mono PCM WAV so the
-/// audio can be recovered if transcription fails after recording has stopped.
+/// audio can be recovered after a failure or an apparently successful but incomplete result.
 final class DictationRecoveryAudioStore: @unchecked Sendable {
     private enum Constants {
         static let sampleRate: UInt32 = 16_000
@@ -47,6 +47,9 @@ final class DictationRecoveryAudioStore: @unchecked Sendable {
         static let activeFileName = "active-dictation-recovery.wav"
         static let legacyLatestFileName = "last-dictation-recovery.wav"
         static let recoveryFilePrefix = "dictation-recovery-"
+        static let recentSuccessPrefix = "recent-dictation-"
+        static let maximumRecentSuccesses = 3
+        static let recentSuccessLifetime: TimeInterval = 24 * 60 * 60
         static let recoveryFileExtension = "wav"
     }
 
@@ -155,7 +158,7 @@ final class DictationRecoveryAudioStore: @unchecked Sendable {
         preserveActiveRecordingResult().latestRecoveryURL
     }
 
-    func preserveActiveRecordingResult() -> DictationRecoveryPreservationResult {
+    func preserveActiveRecordingResult(successful: Bool = false) -> DictationRecoveryPreservationResult {
         queue.sync {
             guard retentionPolicy.keepsRecoveryFiles else {
                 closeActiveHandle()
@@ -189,15 +192,17 @@ final class DictationRecoveryAudioStore: @unchecked Sendable {
             }
 
             finalizeActiveWavHeader(sampleCount: activeSampleCount)
-            let recoveryURL = makeUniqueRecoveryFileURL()
+            let recoveryURL = makeUniqueRecoveryFileURL(successful: successful)
 
             do {
                 try fileManager.moveItem(at: activeFileURL, to: recoveryURL)
                 activeSampleCount = 0
+                applyRetentionPolicy()
                 let canonicalRecoveryURL = canonicalFileURL(recoveryURL)
+                let retained = isStoredRecoveryFile(recoveryURL)
                 return DictationRecoveryPreservationResult(
-                    latestRecoveryURL: canonicalRecoveryURL,
-                    newlyPreservedURL: canonicalRecoveryURL
+                    latestRecoveryURL: retained ? canonicalRecoveryURL : storedRecoveryURLs().first,
+                    newlyPreservedURL: retained ? canonicalRecoveryURL : nil
                 )
             } catch {
                 activeSampleCount = 0
@@ -293,9 +298,11 @@ final class DictationRecoveryAudioStore: @unchecked Sendable {
 
     private func isGeneratedRecoveryFileName(_ fileName: String) -> Bool {
         let suffix = ".\(Constants.recoveryFileExtension)"
-        guard fileName.hasPrefix(Constants.recoveryFilePrefix), fileName.hasSuffix(suffix) else { return false }
+        let prefix = fileName.hasPrefix(Constants.recentSuccessPrefix)
+            ? Constants.recentSuccessPrefix : Constants.recoveryFilePrefix
+        guard fileName.hasPrefix(prefix), fileName.hasSuffix(suffix) else { return false }
 
-        let stemStart = fileName.index(fileName.startIndex, offsetBy: Constants.recoveryFilePrefix.count)
+        let stemStart = fileName.index(fileName.startIndex, offsetBy: prefix.count)
         let stemEnd = fileName.index(fileName.endIndex, offsetBy: -suffix.count)
         let components = fileName[stemStart..<stemEnd].split(separator: "-", omittingEmptySubsequences: false)
         guard components.count == 4 || components.count == 5 else { return false }
@@ -338,10 +345,15 @@ final class DictationRecoveryAudioStore: @unchecked Sendable {
         return (try? url.resourceValues(forKeys: [.isSymbolicLinkKey]).isSymbolicLink) == true
     }
 
-    private func makeUniqueRecoveryFileURL() -> URL {
+    static func isRecentSuccessfulRecording(_ url: URL) -> Bool {
+        url.lastPathComponent.hasPrefix(Constants.recentSuccessPrefix)
+    }
+
+    private func makeUniqueRecoveryFileURL(successful: Bool) -> URL {
         try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
         recoverySerialNumber += 1
-        let baseName = "\(Constants.recoveryFilePrefix)\(Self.recoveryTimestamp(from: now()))-\(String(format: "%04llu", recoverySerialNumber))"
+        let prefix = successful ? Constants.recentSuccessPrefix : Constants.recoveryFilePrefix
+        let baseName = "\(prefix)\(Self.recoveryTimestamp(from: now()))-\(String(format: "%04llu", recoverySerialNumber))"
         var candidate = directory
             .appendingPathComponent(baseName)
             .appendingPathExtension(Constants.recoveryFileExtension)
@@ -373,8 +385,17 @@ final class DictationRecoveryAudioStore: @unchecked Sendable {
             return
         }
 
-        guard let retentionDays = retentionPolicy.retentionDays else { return }
         let currentDate = now()
+        // Successful provider responses are not a completeness guarantee. Keep a
+        // small retry buffer independently of heuristics, never displacing failures.
+        let recentSuccesses = storedRecoveryURLs().filter(Self.isRecentSuccessfulRecording)
+        let recentCutoff = currentDate.addingTimeInterval(-Constants.recentSuccessLifetime)
+        for (index, url) in recentSuccesses.enumerated()
+            where index >= Constants.maximumRecentSuccesses || contentModificationDate(for: url) < recentCutoff {
+            removeItemIfExists(at: url)
+        }
+
+        guard let retentionDays = retentionPolicy.retentionDays else { return }
         let cutoff = Calendar.current.date(byAdding: .day, value: -retentionDays, to: currentDate) ?? currentDate
         for url in storedRecoveryURLs() where contentModificationDate(for: url) < cutoff {
             removeItemIfExists(at: url)

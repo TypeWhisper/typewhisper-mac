@@ -1,6 +1,50 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "The last three successful dictations are also kept for up to 24 hours so you can retry an incomplete result. Immediately disables this retry buffer too." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die letzten drei erfolgreichen Diktate werden ebenfalls bis zu 24 Stunden aufbewahrt, damit du unvollständige Ergebnisse erneut transkribieren kannst. „Sofort“ deaktiviert auch diesen Puffer."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不完全な結果を再度文字起こしできるよう、直近3件の成功した音声入力も最大24時間保存されます。「即時」を選ぶと、この一時保存も無効になります。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最近三次成功的听写也会保留最多24小时，以便重新转写不完整的结果。选择“立即”也会禁用此临时保存功能。"
+          }
+        }
+      }
+    },
+    "Recent successful dictation" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kürzlich erfolgreiches Diktat"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最近成功した音声入力"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最近成功的听写"
+          }
+        }
+      }
+    },
     "10 and above" : {
       "localizations" : {
         "de" : {
