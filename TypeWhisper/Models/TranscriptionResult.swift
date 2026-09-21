@@ -49,10 +49,11 @@ struct TranscriptionResult {
             return true
         }
         let duration = audioDuration.isFinite && audioDuration > 0 ? audioDuration : 0
-        let lastEnd = segments.map(\.end).filter { $0.isFinite && $0 >= 0 }.max()
-        let invalidSegments = segments.filter {
-            !$0.start.isFinite || !$0.end.isFinite || $0.start < 0 || $0.end < $0.start || $0.end > duration + 0.5
-        }.count
+        let validSegments = segments.filter {
+            $0.start.isFinite && $0.end.isFinite && $0.start >= 0 && $0.end >= $0.start && $0.end <= duration + 0.5
+        }
+        let lastEnd = validSegments.map(\.end).max()
+        let invalidSegments = segments.count - validSegments.count
         let endText = lastEnd.map { String(format: "%.3f", $0) } ?? "n/a"
         let tailText = lastEnd.map { String(format: "%.3f", max(0, duration - $0)) } ?? "n/a"
         return "audioDuration=\(String(format: "%.3f", duration)) words=\(wordCount)"

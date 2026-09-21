@@ -50,15 +50,18 @@ Xcode 27.0 (27A266a), macOS, Swift 6:
 
 - 20 `DictationRecoveryAudioStoreTests`: passed, including rolling count, expiry,
   restart, deletion, cancellation, disabled storage, and preservation of failures.
-- Six targeted application integration tests: passed, covering apparently
+- Eight targeted application integration/diagnostic tests: passed, covering apparently
   successful/incomplete output, disabled storage, provider errors, empty output,
-  and timeout feedback with/without recoverable audio.
+  timeout feedback with/without recoverable audio, and malformed/missing segment timing.
 - The two new success-path integration tests were then run again explicitly with
   `saveAudioWithHistory=false`: both passed. A 40-second recording with the measured
   truncated response completes normally while the full 640,000-sample WAV remains
   recoverable. Immediately leaves no recovery audio.
+- After review, all 28 selected app tests were rerun together. Invalid segments
+  are counted but excluded from the latest segment end and uncovered-tail metrics.
 - Five Groq plugin tests: passed, including persistence of the opt-out, omission
-  from both M4A and WAV retry requests, and restoration of the unchanged prompt.
+  from both M4A and WAV retry requests, restoration of the unchanged prompt, and
+  reporting disabled terms as requiring a plugin setting (including after reload).
 - Localization JSON validation (German, Japanese, Simplified Chinese) and
   `git diff --check`: passed.
 
@@ -95,6 +98,8 @@ xcodebuild test \
   -only-testing:TypeWhisperTests/TypeWhisperIntegrationTests/testEmptyTranscriptionSurfacesNewRecoveryAndOpenAction \
   -only-testing:TypeWhisperTests/TypeWhisperIntegrationTests/testTranscriptionTimeoutFeedbackWithoutRecoveryDescribesOnlyTheTimeout \
   -only-testing:TypeWhisperTests/TypeWhisperIntegrationTests/testTranscriptionTimeoutFeedbackSurfacesPreservedRecoveryAndOpenAction \
+  -only-testing:TypeWhisperTests/TypeWhisperIntegrationTests/testTranscriptionDiagnosticsExcludeMalformedSegments \
+  -only-testing:TypeWhisperTests/TypeWhisperIntegrationTests/testTranscriptionDiagnosticsHandleNoValidSegments \
   CODE_SIGNING_ALLOWED=NO
 ```
 

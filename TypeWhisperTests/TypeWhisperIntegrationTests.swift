@@ -9000,6 +9000,40 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testTranscriptionDiagnosticsExcludeMalformedSegments() {
+        let result = TranscriptionResult(
+            text: "Private transcript", detectedLanguage: "en", duration: 40,
+            processingTime: 1, engineUsed: "groq", segments: [
+                TranscriptionSegment(text: "Private transcript", start: 0, end: 12),
+                TranscriptionSegment(text: "", start: .nan, end: 40),
+                TranscriptionSegment(text: "", start: -1, end: 40),
+                TranscriptionSegment(text: "", start: 41, end: 40),
+                TranscriptionSegment(text: "", start: 0, end: 60),
+                TranscriptionSegment(text: "", start: 0, end: .infinity)
+            ]
+        )
+        let summary = result.diagnosticSummary(audioDuration: 40)
+        XCTAssertTrue(summary.contains("lastSegmentEnd=12.000 uncoveredTail=28.000"))
+        XCTAssertTrue(summary.contains("invalidSegmentTimestamps=5"))
+        XCTAssertTrue(summary.contains("words=2 wordsPerSecond=0.050"))
+        XCTAssertFalse(summary.contains("Private transcript"))
+    }
+
+    @MainActor
+    func testTranscriptionDiagnosticsHandleNoValidSegments() {
+        let result = TranscriptionResult(
+            text: "", detectedLanguage: nil, duration: 40,
+            processingTime: 1, engineUsed: "groq", segments: [
+                TranscriptionSegment(text: "", start: 0, end: 60)
+            ]
+        )
+        let summary = result.diagnosticSummary(audioDuration: 40)
+        XCTAssertTrue(summary.contains("lastSegmentEnd=n/a uncoveredTail=n/a"))
+        XCTAssertTrue(summary.contains("invalidSegmentTimestamps=1"))
+        XCTAssertTrue(summary.contains("words=0 wordsPerSecond=0.000"))
+    }
+
+    @MainActor
     func testSuccessfulButIncompleteTranscriptionKeepsCompleteRecoveryAudio() async throws {
         try await assertSuccessfulDictationRetryBuffer(policy: .never, shouldKeepAudio: true)
     }

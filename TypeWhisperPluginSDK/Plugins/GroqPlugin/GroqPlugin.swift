@@ -79,7 +79,7 @@ final class GroqPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapa
     }
 
     var supportsTranslation: Bool { true }
-    var dictionaryTermsSupport: DictionaryTermsSupport { _sendDictionaryTerms ? .supported : .unsupported }
+    var dictionaryTermsSupport: DictionaryTermsSupport { _sendDictionaryTerms ? .supported : .requiresPluginSetting }
     var sendDictionaryTerms: Bool { _sendDictionaryTerms }
 
     func setSendDictionaryTerms(_ enabled: Bool) {
