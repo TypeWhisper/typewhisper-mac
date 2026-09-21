@@ -465,7 +465,55 @@ final class OpenRouterPluginTests: XCTestCase {
         }
         XCTAssertGreaterThan(uploadedAudio[0].count, uploadedAudio[1].count)
         XCTAssertEqual(uploadedAudio[1].count, uploadedAudio[2].count)
-        XCTAssertLessThan(uploadedAudio[3].count, uploadedAudio[2].count)
+        XCTAssertEqual(uploadedAudio[3].count, uploadedAudio[2].count)
+    }
+
+    func testSplitRetryPadsShortFinalChunkWithoutChangingTimestampOffset() async throws {
+        let host = try PluginTestHostServices(secrets: ["api-key": "openrouter-key"])
+        let plugin = OpenRouterPlugin()
+        plugin.activate(host: host)
+        plugin.selectModel("microsoft/mai-transcribe-2")
+        plugin.testingSetSplitRetryChunkDuration(1)
+
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(Data(), Self.httpResponse(
+                    url: "https://openrouter.ai/api/v1/audio/transcriptions",
+                    statusCode: 413
+                )),
+                .success(Data(#"{"text":"first"}"#.utf8), Self.httpResponse(
+                    url: "https://openrouter.ai/api/v1/audio/transcriptions",
+                    statusCode: 200
+                )),
+                .success(Data(#"{"text":"second"}"#.utf8), Self.httpResponse(
+                    url: "https://openrouter.ai/api/v1/audio/transcriptions",
+                    statusCode: 200
+                )),
+                .success(
+                    Data(#"{"text":"final","segments":[{"start":0.02,"end":0.04,"text":"final"}]}"#.utf8),
+                    Self.httpResponse(url: "https://openrouter.ai/api/v1/audio/transcriptions", statusCode: 200)
+                ),
+            ])
+        }
+
+        let result = try await plugin.transcribe(
+            audio: Self.audio(duration: 2.05),
+            language: nil,
+            translate: false,
+            prompt: nil
+        )
+
+        let finalSegment = try XCTUnwrap(result.segments.first)
+        XCTAssertEqual(finalSegment.start, 2.02, accuracy: 0.0001)
+        XCTAssertEqual(finalSegment.end, 2.04, accuracy: 0.0001)
+        let uploadedAudio = try store.sessions.flatMap(\.requestedRequests).dropFirst().map { request -> Data in
+            let body = try Self.jsonBody(from: request)
+            let inputAudio = try XCTUnwrap(body["input_audio"] as? [String: Any])
+            return try XCTUnwrap(Data(base64Encoded: try XCTUnwrap(inputAudio["data"] as? String)))
+        }
+        XCTAssertEqual(uploadedAudio.count, 3)
+        XCTAssertEqual(uploadedAudio.map(\.count), Array(repeating: uploadedAudio[0].count, count: 3))
     }
 
     func testLargeAudio413RetriesOtherModelChunksAsWav() async throws {

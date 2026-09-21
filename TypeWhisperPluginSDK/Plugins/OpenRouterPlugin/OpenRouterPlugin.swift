@@ -175,12 +175,13 @@ final class OpenRouterPlugin: NSObject,
         language: String?,
         forceWav: Bool = false
     ) async throws -> (Data, URLResponse) {
+        let uploadAudio = PluginAudioUploadEncoder.normalizedAudioForUpload(audio)
         let preferredUpload: PluginAudioUploadFile
         if forceWav || modelId == "microsoft/mai-transcribe-2" {
-            preferredUpload = PluginAudioUploadEncoder.wavUpload(from: audio)
+            preferredUpload = PluginAudioUploadEncoder.wavUpload(from: uploadAudio)
         } else {
-            preferredUpload = (try? PluginAudioUploadEncoder.compressedM4AUpload(from: audio))
-                ?? PluginAudioUploadEncoder.wavUpload(from: audio)
+            preferredUpload = (try? PluginAudioUploadEncoder.compressedM4AUpload(from: uploadAudio))
+                ?? PluginAudioUploadEncoder.wavUpload(from: uploadAudio)
         }
         var request = try Self.makeTranscriptionRequest(
             uploadFile: preferredUpload,
@@ -197,7 +198,7 @@ final class OpenRouterPlugin: NSObject,
             responseData: data
            ) {
             request = try Self.makeTranscriptionRequest(
-                uploadFile: PluginAudioUploadEncoder.wavUpload(from: audio),
+                uploadFile: PluginAudioUploadEncoder.wavUpload(from: uploadAudio),
                 apiKey: apiKey,
                 modelId: modelId,
                 language: language,
