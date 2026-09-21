@@ -138,6 +138,8 @@
 			3A4B5C6D7E8F901234567890 /* AudioEngineRecoverySupportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3A4B5C6D7E8F901234567891 /* AudioEngineRecoverySupportTests.swift */; };
 			533A00000000000000000002 /* DictationRecoveryAudioStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 533A00000000000000000001 /* DictationRecoveryAudioStoreTests.swift */; };
 			533A00000000000000000004 /* DictationRecoveryAudioStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 533A00000000000000000003 /* DictationRecoveryAudioStore.swift */; };
+			135200000000000000000002 /* TranscriptionCoverageAssessmentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 135200000000000000000001 /* TranscriptionCoverageAssessmentTests.swift */; };
+			135200000000000000000004 /* TranscriptionCoverageAssessment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 135200000000000000000003 /* TranscriptionCoverageAssessment.swift */; };
 			604D00000000000000000002 /* AudioRecorderViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 604D00000000000000000001 /* AudioRecorderViewModelTests.swift */; };
 			533B00000000000000000002 /* FileTranscriptionViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 533B00000000000000000001 /* FileTranscriptionViewModelTests.swift */; };
 			5A6490000000000000000002 /* ModelManagerAppleSpeechModelSelectionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5A6490000000000000000001 /* ModelManagerAppleSpeechModelSelectionTests.swift */; };
@@ -714,6 +716,8 @@
 			3A4B5C6D7E8F901234567891 /* AudioEngineRecoverySupportTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AudioEngineRecoverySupportTests.swift; sourceTree = "<group>"; };
 			533A00000000000000000001 /* DictationRecoveryAudioStoreTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DictationRecoveryAudioStoreTests.swift; sourceTree = "<group>"; };
 			533A00000000000000000003 /* DictationRecoveryAudioStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationRecoveryAudioStore.swift; sourceTree = "<group>"; };
+			135200000000000000000001 /* TranscriptionCoverageAssessmentTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TranscriptionCoverageAssessmentTests.swift; sourceTree = "<group>"; };
+			135200000000000000000003 /* TranscriptionCoverageAssessment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionCoverageAssessment.swift; sourceTree = "<group>"; };
 			604D00000000000000000001 /* AudioRecorderViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AudioRecorderViewModelTests.swift; sourceTree = "<group>"; };
 			533B00000000000000000001 /* FileTranscriptionViewModelTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = FileTranscriptionViewModelTests.swift; sourceTree = "<group>"; };
 			5A6490000000000000000001 /* ModelManagerAppleSpeechModelSelectionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ModelManagerAppleSpeechModelSelectionTests.swift; sourceTree = "<group>"; };
@@ -1831,6 +1835,7 @@
 				BB00000000000000000010 /* AudioFileService.swift */,
 				BB00000000000000000030 /* AudioRecordingService.swift */,
 				533A00000000000000000003 /* DictationRecoveryAudioStore.swift */,
+				135200000000000000000003 /* TranscriptionCoverageAssessment.swift */,
 				BB00000000000000000350 /* ObjCExceptionCatcher.h */,
 				BB00000000000000000351 /* ObjCExceptionCatcher.m */,
 				C85600000000000000000002 /* CoreAudioHALCallbackContext.h */,
@@ -2825,6 +2830,7 @@
 					E5A1B2C3D4F5061728394A5E /* NotchIndicatorLayoutTests.swift */,
 					604D00000000000000000001 /* AudioRecorderViewModelTests.swift */,
 					533A00000000000000000001 /* DictationRecoveryAudioStoreTests.swift */,
+					135200000000000000000001 /* TranscriptionCoverageAssessmentTests.swift */,
 					533B00000000000000000001 /* FileTranscriptionViewModelTests.swift */,
 					5A6490000000000000000001 /* ModelManagerAppleSpeechModelSelectionTests.swift */,
 					5A6500000000000000000001 /* ModelManagerLiveSessionModelOverrideTests.swift */,
@@ -4671,6 +4677,7 @@
 					3A4B5C6D7E8F901234567890 /* AudioEngineRecoverySupportTests.swift in Sources */,
 					604D00000000000000000002 /* AudioRecorderViewModelTests.swift in Sources */,
 					533A00000000000000000002 /* DictationRecoveryAudioStoreTests.swift in Sources */,
+					135200000000000000000002 /* TranscriptionCoverageAssessmentTests.swift in Sources */,
 					533B00000000000000000002 /* FileTranscriptionViewModelTests.swift in Sources */,
 					5A6490000000000000000002 /* ModelManagerAppleSpeechModelSelectionTests.swift in Sources */,
 					5A6500000000000000000002 /* ModelManagerLiveSessionModelOverrideTests.swift in Sources */,
@@ -4781,6 +4788,7 @@
 				AA9400000000000000000001 /* SettingsVisualComponents.swift in Sources */,
 				AA00000000000000000030 /* AudioRecordingService.swift in Sources */,
 				533A00000000000000000004 /* DictationRecoveryAudioStore.swift in Sources */,
+				135200000000000000000004 /* TranscriptionCoverageAssessment.swift in Sources */,
 				AA00000000000000000350 /* ObjCExceptionCatcher.m in Sources */,
 				C85600000000000000000001 /* CoreAudioHALCallbackContext.c in Sources */,
 				AA00000000000000000230 /* AudioPlaybackService.swift in Sources */,

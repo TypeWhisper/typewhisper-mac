@@ -31207,6 +31207,28 @@
         }
       }
     },
+    "Transcription may be incomplete. Check the inserted text." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Transkription möglicherweise unvollständig. Bitte den eingefügten Text prüfen."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "文字起こしが不完全な可能性があります。挿入されたテキストを確認してください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "转写可能不完整。请检查插入的文本。"
+          }
+        }
+      }
+    },
     "Transcription success" : {
       "localizations" : {
         "de" : {

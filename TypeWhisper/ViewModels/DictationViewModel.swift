@@ -2167,7 +2167,16 @@ final class DictationViewModel: ObservableObject {
                     )
                 }
                 let result = transcription.result
-                logger.info("Stop timing: final transcription ready elapsedMs=\(stopElapsedMs(), privacy: .public), usedLiveResult=\(usedLiveSessionResult, privacy: .public)")
+                // Coverage check (#1352): a provider can return only part of the audio. Live
+                // session results use a rolling segment window and are not assessed.
+                let coverage: TranscriptionCoverageAssessment? = usedLiveSessionResult
+                    ? nil
+                    : TranscriptionCoverageAssessor.assess(
+                        text: result.text,
+                        segments: result.segments,
+                        audioDuration: audioDuration
+                    )
+                logger.info("Stop timing: final transcription ready elapsedMs=\(stopElapsedMs(), privacy: .public), usedLiveResult=\(usedLiveSessionResult, privacy: .public), coverage=\(coverage?.logDescription ?? "n/a", privacy: .public)")
 
                 // Bail out if a new recording started while we were transcribing
                 guard !Task.isCancelled else { return }
@@ -2286,6 +2295,12 @@ final class DictationViewModel: ObservableObject {
                 }
                 if transcription.usedRecoveryFallback {
                     pipelineSteps.append(localizedAppText("Recovery fallback", de: "Recovery-Fallback"))
+                }
+                if coverage?.isSuspicious == true {
+                    pipelineSteps.append(localizedAppText(
+                        "Possibly incomplete transcription",
+                        de: "Transkription möglicherweise unvollständig"
+                    ))
                 }
 
                 // Route to action plugin or insert text
@@ -2456,7 +2471,15 @@ final class DictationViewModel: ObservableObject {
                     ruleName: self.effectiveRuleName
                 )))
 
-                audioRecordingService.discardActiveRecoveryRecording()
+                // Keep the recovery audio when the provider may have covered only part of it
+                // (#1352), so the dictation can be transcribed again from Dictation Recovery.
+                let coverageRecoveryPreservation: DictationRecoveryPreservationResult?
+                if coverage?.isSuspicious == true {
+                    coverageRecoveryPreservation = audioRecordingService.preserveActiveRecoveryRecordingResult()
+                } else {
+                    audioRecordingService.discardActiveRecoveryRecording()
+                    coverageRecoveryPreservation = nil
+                }
                 soundService.play(.transcriptionSuccess, enabled: soundFeedbackEnabled)
                 let wordCount = text.split(separator: " ").count
                 usageStatisticsRecorder?.recordTranscription(
@@ -2490,7 +2513,20 @@ final class DictationViewModel: ObservableObject {
                 lastTranscribedText = text
                 lastTranscriptionLanguage = detectedLang
 
-                if postProcessingFallback != nil {
+                if let coverage, coverage.isSuspicious, let coverageRecoveryPreservation {
+                    // Possible data loss outranks the post-processing warning below.
+                    let coverageMessage = String(localized: "Transcription may be incomplete. Check the inserted text.")
+                    errorLogService.addEntry(
+                        message: "\(coverageMessage) (\(coverage.logDescription))",
+                        category: "transcription"
+                    )
+                    showRecoveryAwareFeedback(
+                        message: coverageMessage,
+                        icon: "exclamationmark.triangle.fill",
+                        duration: 6.0,
+                        recoveryPreservation: coverageRecoveryPreservation
+                    )
+                } else if postProcessingFallback != nil {
                     showNotchFeedback(
                         message: localizedAppText(
                             "AI post-processing failed — raw transcription inserted",

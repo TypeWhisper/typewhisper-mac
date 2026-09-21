@@ -5,14 +5,21 @@ import TypeWhisperPluginSDK
 // MARK: - Plugin Entry Point
 
 @objc(GroqPlugin)
-final class GroqPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, LLMProviderPlugin, LLMTemperatureControllableProvider, LLMModelSelectable, @unchecked Sendable {
+final class GroqPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapabilityProviding, DictionaryTermsBudgetProviding, LLMProviderPlugin, LLMTemperatureControllableProvider, LLMModelSelectable, @unchecked Sendable {
     static let pluginId = "com.typewhisper.groq"
     static let pluginName = "Groq"
     private static let transcriptionRequestTimeout: TimeInterval = 600
+    /// Character budget for the comma-separated term list the host builds (#1352).
+    /// Groq documents a 224-token prompt limit; the framed prompt stays at roughly half of it.
+    static let maxDictionaryTermChars = 350
+    /// Upper bound for the whole decoder prompt after framing.
+    static let maxConditioningPromptChars = 420
+    static let sendDictionaryTermsKey = "sendDictionaryTerms"
 
     fileprivate var host: HostServices?
     fileprivate var _apiKey: String?
     fileprivate var _selectedModelId: String?
+    fileprivate var _sendDictionaryTerms = true
     fileprivate var _selectedLLMModelId: String?
     fileprivate var _llmTemperatureModeRaw: String = PluginLLMTemperatureMode.providerDefault.rawValue
     fileprivate var _llmTemperatureValue: Double = 0.3
@@ -45,6 +52,7 @@ final class GroqPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapa
             ?? PluginLLMTemperatureMode.providerDefault.rawValue
         _llmTemperatureValue = host.userDefault(forKey: "llmTemperatureValue") as? Double
             ?? 0.3
+        _sendDictionaryTerms = host.userDefault(forKey: Self.sendDictionaryTermsKey) as? Bool ?? true
     }
 
     func deactivate() {
@@ -76,7 +84,65 @@ final class GroqPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapa
     }
 
     var supportsTranslation: Bool { true }
-    var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
+    var dictionaryTermsSupport: DictionaryTermsSupport {
+        _sendDictionaryTerms ? .supported : .requiresPluginSetting
+    }
+    var dictionaryTermsBudget: DictionaryTermsBudget {
+        DictionaryTermsBudget(maxTotalChars: Self.maxDictionaryTermChars)
+    }
+    var sendDictionaryTerms: Bool { _sendDictionaryTerms }
+
+    func setSendDictionaryTerms(_ enabled: Bool) {
+        guard _sendDictionaryTerms != enabled else { return }
+        _sendDictionaryTerms = enabled
+        host?.setUserDefault(enabled, forKey: Self.sendDictionaryTermsKey)
+        host?.notifyCapabilitiesChanged()
+    }
+
+    /// Turns the host's comma-separated term list into a short natural-language context
+    /// line and caps it (#1352). Whisper models react badly to a bare term list as decoder
+    /// prompt; the same framing is used by WhisperKitPlugin. Prompts that are not a plain
+    /// term list are trimmed and capped only.
+    static func conditioningPrompt(from prompt: String?) -> String? {
+        guard let trimmedPrompt = prompt?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmedPrompt.isEmpty else { return nil }
+
+        // Parse the term list before capping so that no term is ever cut in the middle:
+        // the budget below only drops whole terms.
+        let terms = PluginDictionaryTerms.terms(fromPrompt: trimmedPrompt)
+        if !terms.isEmpty && Self.looksLikePlainTermList(trimmedPrompt, terms: terms) {
+            let prefix = "The audio may contain these names or technical terms: "
+            let suffix = "."
+            let availableTermChars = max(0, maxConditioningPromptChars - prefix.count - suffix.count)
+            guard let termPrompt = PluginDictionaryTerms.prompt(from: terms, maxLength: availableTermChars) else {
+                return nil
+            }
+            return prefix + termPrompt + suffix
+        }
+
+        return String(trimmedPrompt.prefix(maxConditioningPromptChars))
+    }
+
+    private static func looksLikePlainTermList(_ prompt: String, terms: [String]) -> Bool {
+        let normalizedPrompt = prompt
+            .replacingOccurrences(of: "\n", with: ",")
+            .split(separator: ",")
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+
+        guard !normalizedPrompt.isEmpty, normalizedPrompt.count == terms.count else { return false }
+
+        // A single entry that ends like a sentence is free text, not a one-term list.
+        if normalizedPrompt.count == 1,
+           let last = normalizedPrompt[0].unicodeScalars.last,
+           CharacterSet(charactersIn: ".!?").contains(last) {
+            return false
+        }
+
+        return zip(normalizedPrompt, terms).allSatisfy { raw, parsed in
+            raw.compare(parsed, options: [.caseInsensitive, .diacriticInsensitive], range: nil, locale: .current) == .orderedSame
+        }
+    }
 
     var supportedLanguages: [String] {
         [
@@ -102,13 +168,15 @@ final class GroqPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapa
             throw PluginTranscriptionError.noModelSelected
         }
 
+        // With the switch off no prompt field goes on the wire (the helper skips nil prompts).
+        let effectivePrompt = _sendDictionaryTerms ? Self.conditioningPrompt(from: prompt) : nil
         return try await transcriptionHelper.transcribeCompressedAudioWithWavFallback(
             audio: audio,
             apiKey: apiKey,
             modelName: modelId,
             language: language,
             translate: translate,
-            prompt: prompt,
+            prompt: effectivePrompt,
             requestTimeout: Self.transcriptionRequestTimeout
         )
     }
@@ -296,6 +364,7 @@ private struct GroqSettingsView: View {
     @State private var validationResult: Bool?
     @State private var showApiKey = false
     @State private var selectedModel: String = ""
+    @State private var sendDictionaryTerms = true
     @State private var selectedLLMModel: String = ""
     @State private var llmTemperatureMode: PluginLLMTemperatureMode = .providerDefault
     @State private var llmTemperatureValue: Double = 0.3
@@ -380,6 +449,20 @@ private struct GroqSettingsView: View {
                     .onChange(of: selectedModel) {
                         plugin.selectModel(selectedModel)
                     }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Toggle(isOn: $sendDictionaryTerms) {
+                            Text("Send dictionary terms to Groq", bundle: bundle)
+                        }
+                        .onChange(of: sendDictionaryTerms) {
+                            plugin.setSendDictionaryTerms(sendDictionaryTerms)
+                        }
+
+                        Text("Sends active TypeWhisper dictionary terms as a short context prompt with each transcription request. Turn off to send no dictionary terms to Groq.", bundle: bundle)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
 
                 Divider()
@@ -461,6 +544,7 @@ private struct GroqSettingsView: View {
                 apiKeyInput = key
             }
             selectedModel = plugin.selectedModelId ?? plugin.transcriptionModels.first?.id ?? ""
+            sendDictionaryTerms = plugin.sendDictionaryTerms
             selectedLLMModel = plugin.selectedLLMModelId ?? plugin.supportedModels.first?.id ?? ""
             llmTemperatureMode = plugin.llmTemperatureMode
             llmTemperatureValue = plugin.llmTemperatureValue

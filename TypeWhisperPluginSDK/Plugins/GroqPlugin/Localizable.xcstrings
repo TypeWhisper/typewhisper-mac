@@ -133,6 +133,50 @@
         }
       }
     },
+    "Send dictionary terms to Groq": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wörterbuch-Begriffe an Groq senden"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "辞書用語をGroqに送信"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "向 Groq 发送词典术语"
+          }
+        }
+      }
+    },
+    "Sends active TypeWhisper dictionary terms as a short context prompt with each transcription request. Turn off to send no dictionary terms to Groq.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Sendet aktive TypeWhisper-Wörterbuch-Begriffe als kurzen Kontextsatz mit jeder Transkriptionsanfrage. Ausschalten, um keine Wörterbuch-Begriffe an Groq zu senden."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有効なTypeWhisperの辞書用語を、各文字起こしリクエストに短いコンテキストプロンプトとして送信します。オフにするとGroqに辞書用語を送信しません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "将启用的 TypeWhisper 词典术语作为简短的上下文提示随每次转写请求一起发送。关闭后不会向 Groq 发送词典术语。"
+          }
+        }
+      }
+    },
     "Valid API Key": {
       "localizations": {
         "de": {
