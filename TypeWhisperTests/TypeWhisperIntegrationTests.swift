@@ -1639,13 +1639,16 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     @MainActor
     private final class MockMediaPlaybackService: MediaPlaybackService {
         let onPause: () -> Void
+        let onImmediatePause: @MainActor () async -> Void
         let onResume: () -> Void
 
         init(
             onPause: @escaping () -> Void = {},
+            onImmediatePause: (@MainActor () async -> Void)? = nil,
             onResume: @escaping () -> Void = {}
         ) {
             self.onPause = onPause
+            self.onImmediatePause = onImmediatePause ?? { onPause() }
             self.onResume = onResume
             super.init(startListening: false)
         }
@@ -1655,7 +1658,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         }
 
         override func pauseImmediatelyIfPlaying() async {
-            onPause()
+            await onImmediatePause()
         }
 
         override func resumeIfWePaused() {
@@ -1760,6 +1763,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         )
         var snapshotQueue: [MediaPlaybackSnapshot?] = []
         var onGetPlaybackSnapshot: ((@escaping (_ snapshot: MediaPlaybackSnapshot?) -> Void) -> Void)?
+        var onPause: (() -> Void)?
         private(set) var pauseCalls = 0
         private(set) var playCalls = 0
         private(set) var togglePlayPauseCalls = 0
@@ -1784,6 +1788,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         func pause() {
             pauseCalls += 1
+            onPause?()
         }
 
         func togglePlayPause() {
@@ -7986,6 +7991,9 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let audioStartEntered = expectation(description: "Bluetooth audio start entered")
         let audioStartGate = DispatchSemaphore(value: 0)
         defer { audioStartGate.signal() }
+        let mediaPauseEntered = expectation(description: "Media pause entered")
+        var releaseMediaPause: CheckedContinuation<Void, Never>?
+        defer { releaseMediaPause?.resume() }
         let bluetoothDeviceID = AudioDeviceID(409)
         let soundService = MockSoundService { event, enabled in
             guard event == .recordingStarted, enabled else { return }
@@ -7994,9 +8002,12 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let audioDuckingService = MockAudioDuckingService(onDuck: { factor in
             events.append("duck_audio_\(factor)")
         })
-        let mediaPlaybackService = MockMediaPlaybackService {
+        let mediaPlaybackService = MockMediaPlaybackService(onImmediatePause: {
             events.append("pause_media")
-        }
+            mediaPauseEntered.fulfill()
+            await withCheckedContinuation { releaseMediaPause = $0 }
+            events.append("pause_confirmed")
+        })
         let transportResolver = FakeAudioDeviceTransportResolver(
             transports: [bluetoothDeviceID: kAudioDeviceTransportTypeBluetooth]
         ) { deviceID in
@@ -8064,8 +8075,17 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertFalse(context.dictationViewModel.isRecordingInputReady)
         XCTAssertEqual(context.dictationViewModel.recordingDuration, 0)
 
+        await fulfillment(of: [mediaPauseEntered], timeout: 1)
+        while releaseMediaPause == nil {
+            await Task.yield()
+        }
+        XCTAssertEqual(events, ["pause_media"])
+
+        releaseMediaPause?.resume()
+        releaseMediaPause = nil
+
         await fulfillment(of: [audioStartEntered], timeout: 1)
-        XCTAssertEqual(events, ["pause_media", "start_audio"])
+        XCTAssertEqual(events, ["pause_media", "pause_confirmed", "start_audio"])
         XCTAssertTrue(context.audioRecordingService.selectedInputDeviceUsesBluetoothTransport)
         XCTAssertTrue(context.audioRecordingService.hasExplicitDeviceSelection)
 
@@ -8075,13 +8095,13 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         audioStartGate.signal()
         await context.dictationViewModel.testingWaitForRecordingStart()
 
-        XCTAssertEqual(events, ["pause_media", "start_audio", "duck_audio_0.3"])
+        XCTAssertEqual(events, ["pause_media", "pause_confirmed", "start_audio", "duck_audio_0.3"])
         XCTAssertTrue(context.dictationViewModel.isRecordingInputReady)
 
         context.audioRecordingService.testingNotifyFirstRecordingAudioBuffer()
         context.audioRecordingService.testingNotifyFirstRecordingAudioBuffer()
 
-        XCTAssertEqual(events, ["pause_media", "start_audio", "duck_audio_0.3"])
+        XCTAssertEqual(events, ["pause_media", "pause_confirmed", "start_audio", "duck_audio_0.3"])
         XCTAssertTrue(context.dictationViewModel.isRecordingInputReady)
     }
 
@@ -8509,11 +8529,84 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             resumeDelay: 0.6,
             resumeScheduler: scheduler.schedule(after:action:)
         ) { controller }
+        controller.onPause = {
+            controller.returnedSnapshot = FakeMediaPlaybackController.snapshot(isPlaying: false, playbackRate: 0)
+        }
 
         await service.pauseImmediatelyIfPlaying()
 
         XCTAssertEqual(controller.pauseCalls, 1)
         XCTAssertTrue(scheduler.scheduledDelays.isEmpty)
+    }
+
+    @MainActor
+    func testMediaPlaybackServiceImmediatePauseWaitsForPlaybackConfirmation() async {
+        let controller = FakeMediaPlaybackController()
+        controller.returnedSnapshot = FakeMediaPlaybackController.snapshot(isPlaying: true, playbackRate: 1)
+        var confirmationCallback: ((MediaPlaybackSnapshot?) -> Void)?
+        controller.onPause = {
+            controller.onGetPlaybackSnapshot = { confirmationCallback = $0 }
+        }
+        let service = MediaPlaybackService(startListening: false) { controller }
+        var pauseFinished = false
+
+        let pauseTask = Task { @MainActor in
+            await service.pauseImmediatelyIfPlaying()
+            pauseFinished = true
+        }
+        while controller.pauseCalls == 0 || confirmationCallback == nil {
+            await Task.yield()
+        }
+
+        XCTAssertFalse(pauseFinished)
+        confirmationCallback?(FakeMediaPlaybackController.snapshot(isPlaying: false, playbackRate: 0))
+        await pauseTask.value
+
+        XCTAssertTrue(pauseFinished)
+        XCTAssertEqual(controller.pauseCalls, 1)
+    }
+
+    @MainActor
+    func testMediaPlaybackServiceImmediatePauseConfirmationIsBounded() async {
+        let controller = FakeMediaPlaybackController()
+        controller.returnedSnapshot = FakeMediaPlaybackController.snapshot(isPlaying: true, playbackRate: 1)
+        controller.onPause = {
+            controller.onGetPlaybackSnapshot = { _ in }
+        }
+        let service = MediaPlaybackService(startListening: false) { controller }
+        service.testingSetImmediateSnapshotTimeout(.milliseconds(20))
+        service.testingSetImmediatePauseConfirmation(timeout: .milliseconds(40), pollInterval: .milliseconds(5))
+        let start = ContinuousClock.now
+
+        await service.pauseImmediatelyIfPlaying()
+
+        XCTAssertEqual(controller.pauseCalls, 1)
+        XCTAssertLessThan(ContinuousClock.now - start, .seconds(1))
+    }
+
+    @MainActor
+    func testMediaPlaybackServiceImmediatePauseConfirmationStopsWhenCancelled() async {
+        let controller = FakeMediaPlaybackController()
+        controller.returnedSnapshot = FakeMediaPlaybackController.snapshot(isPlaying: true, playbackRate: 1)
+        var confirmationRequested = false
+        controller.onPause = {
+            controller.onGetPlaybackSnapshot = { _ in confirmationRequested = true }
+        }
+        let service = MediaPlaybackService(startListening: false) { controller }
+        service.testingSetImmediateSnapshotTimeout(.seconds(5))
+        service.testingSetImmediatePauseConfirmation(timeout: .seconds(5), pollInterval: .milliseconds(25))
+
+        let pauseTask = Task { @MainActor in
+            await service.pauseImmediatelyIfPlaying()
+        }
+        while !confirmationRequested {
+            await Task.yield()
+        }
+
+        pauseTask.cancel()
+        await pauseTask.value
+
+        XCTAssertEqual(controller.pauseCalls, 1)
     }
 
     @MainActor

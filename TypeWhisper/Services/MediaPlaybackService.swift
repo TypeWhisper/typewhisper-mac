@@ -144,6 +144,8 @@ class MediaPlaybackService {
     private var trackInfoRequestGeneration = 0
     private var resumeGeneration = 0
     private var immediateSnapshotTimeout: Duration = .milliseconds(250)
+    private var immediatePauseConfirmationTimeout: Duration = .milliseconds(500)
+    private var immediatePauseConfirmationPollInterval: Duration = .milliseconds(25)
 
     init(
         startListening _: Bool = true,
@@ -233,7 +235,19 @@ class MediaPlaybackService {
         pausedSnapshot = snapshot
         mediaController.pause()
         didPause = true
-        logger.info("Media paused before Bluetooth capture (\(snapshot.logDescription, privacy: .public))")
+        logger.info("Media pause requested before Bluetooth capture (\(snapshot.logDescription, privacy: .public))")
+
+        let pauseConfirmed = await waitForPlaybackToPause(
+            matching: snapshot,
+            requestGeneration: generation
+        )
+        guard !Task.isCancelled, generation == trackInfoRequestGeneration else { return }
+
+        if pauseConfirmed {
+            logger.info("Media pause confirmed before Bluetooth capture")
+        } else {
+            logger.warning("Media pause confirmation timed out; continuing with Bluetooth capture")
+        }
     }
 
     /// Resumes playback only if we previously paused it.
@@ -289,15 +303,45 @@ class MediaPlaybackService {
         resumeGeneration += 1
     }
 
-    private func currentPlaybackSnapshot() async -> MediaPlaybackSnapshot? {
+    private func waitForPlaybackToPause(
+        matching pausedMedia: MediaPlaybackSnapshot,
+        requestGeneration: Int
+    ) async -> Bool {
+        let deadline = ContinuousClock.now + immediatePauseConfirmationTimeout
+
+        while !Task.isCancelled, requestGeneration == trackInfoRequestGeneration {
+            let remaining = deadline - ContinuousClock.now
+            guard remaining > .zero else { return false }
+
+            let snapshot = await currentPlaybackSnapshot(timeout: min(immediateSnapshotTimeout, remaining))
+            guard !Task.isCancelled, requestGeneration == trackInfoRequestGeneration else { return false }
+            if let snapshot,
+               snapshot.matchesMediaContext(of: pausedMedia),
+               !snapshot.isActivelyPlaying {
+                return true
+            }
+
+            let delay = min(immediatePauseConfirmationPollInterval, deadline - ContinuousClock.now)
+            guard delay > .zero else { return false }
+            do {
+                try await Task.sleep(for: delay)
+            } catch {
+                return false
+            }
+        }
+
+        return false
+    }
+
+    private func currentPlaybackSnapshot(timeout: Duration? = nil) async -> MediaPlaybackSnapshot? {
         let resolver = MediaPlaybackSnapshotResolver()
-        let timeout = immediateSnapshotTimeout
+        let resolvedTimeout = timeout ?? immediateSnapshotTimeout
 
         return await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in
                 resolver.install(continuation)
                 Task.detached {
-                    try? await Task.sleep(for: timeout)
+                    try? await Task.sleep(for: resolvedTimeout)
                     resolver.resolve(with: nil)
                 }
                 mediaController.getPlaybackSnapshot { snapshot in
@@ -312,6 +356,11 @@ class MediaPlaybackService {
     #if DEBUG
     func testingSetImmediateSnapshotTimeout(_ timeout: Duration) {
         immediateSnapshotTimeout = timeout
+    }
+
+    func testingSetImmediatePauseConfirmation(timeout: Duration, pollInterval: Duration) {
+        immediatePauseConfirmationTimeout = timeout
+        immediatePauseConfirmationPollInterval = pollInterval
     }
     #endif
 
