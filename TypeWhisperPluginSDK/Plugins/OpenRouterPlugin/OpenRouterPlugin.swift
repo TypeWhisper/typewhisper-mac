@@ -245,11 +245,14 @@ final class OpenRouterPlugin: NSObject,
                 detectedLanguage = result.detectedLanguage
             }
             let timeOffset = Double(startIndex) / Double(Self.transcriptionSampleRate)
-            segments.append(contentsOf: result.segments.map {
-                PluginTranscriptionSegment(
+            let chunkEndTime = Double(endIndex) / Double(Self.transcriptionSampleRate)
+            segments.append(contentsOf: result.segments.compactMap {
+                let segmentStart = $0.start + timeOffset
+                guard segmentStart < chunkEndTime else { return nil }
+                return PluginTranscriptionSegment(
                     text: $0.text,
-                    start: $0.start + timeOffset,
-                    end: $0.end + timeOffset
+                    start: segmentStart,
+                    end: min($0.end + timeOffset, chunkEndTime)
                 )
             })
         }
