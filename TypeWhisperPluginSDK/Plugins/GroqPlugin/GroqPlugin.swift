@@ -132,9 +132,9 @@ final class GroqPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapa
 
         guard !normalizedPrompt.isEmpty, normalizedPrompt.count == terms.count else { return false }
 
-        // A single entry that ends like a sentence is free text, not a one-term list.
-        if normalizedPrompt.count == 1,
-           let last = normalizedPrompt[0].unicodeScalars.last,
+        // A prompt that ends like a sentence is free text, not a term list, even when
+        // commas split it into several entries ("Bitte höflich, aber genau transkribieren.").
+        if let last = normalizedPrompt.last?.unicodeScalars.last,
            CharacterSet(charactersIn: ".!?").contains(last) {
             return false
         }

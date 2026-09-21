@@ -263,6 +263,11 @@ final class GroqPluginTests: XCTestCase {
             GroqPlugin.conditioningPrompt(from: "  Bitte höflich transkribieren.  "),
             "Bitte höflich transkribieren."
         )
+        // A sentence that contains a comma is still free text, not a two-term list.
+        XCTAssertEqual(
+            GroqPlugin.conditioningPrompt(from: "Bitte höflich, aber genau transkribieren."),
+            "Bitte höflich, aber genau transkribieren."
+        )
         // A single entry without sentence punctuation is a one-term list (WhisperKit parity).
         XCTAssertEqual(
             GroqPlugin.conditioningPrompt(from: "TypeWhisper"),

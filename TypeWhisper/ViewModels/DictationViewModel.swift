@@ -2520,8 +2520,11 @@ final class DictationViewModel: ObservableObject {
                         message: "\(coverageMessage) (\(coverage.logDescription))",
                         category: "transcription"
                     )
+                    // A successful action plugin has already set its own feedback; keep it visible
+                    // above the warning instead of replacing it.
+                    let combinedMessage = actionFeedbackMessage.map { "\($0)\n\(coverageMessage)" } ?? coverageMessage
                     showRecoveryAwareFeedback(
-                        message: coverageMessage,
+                        message: combinedMessage,
                         icon: "exclamationmark.triangle.fill",
                         duration: 6.0,
                         recoveryPreservation: coverageRecoveryPreservation
