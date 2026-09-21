@@ -1037,6 +1037,60 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         XCTAssertTrue(viewModel.recoveries.isEmpty)
     }
 
+    func testRecentSuccessfulRecoverySurvivesRepeatedIncompleteRetriesUntilDiscarded() async throws {
+        let defaults = try makeDefaults()
+        defaults.set(false, forKey: UserDefaultsKeys.saveAudioWithHistory)
+        let historyService = HistoryService(appSupportDirectory: makeTemporaryDirectory())
+        let store = DictationRecoveryAudioStore(directory: makeTemporaryDirectory())
+        let samples = [Float](repeating: 0.25, count: 40 * 16_000)
+        store.startNewRecording()
+        store.append(samples)
+        let recoveryURL = try XCTUnwrap(store.preserveActiveRecordingResult(successful: true).newlyPreservedURL)
+        let originalAudio = try Data(contentsOf: recoveryURL)
+        let originalDate = try recoveryURL.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate
+        let audioRecordingService = AudioRecordingService(recoveryAudioStore: store)
+        let viewModel = DictationRecoveryViewModel(
+            audioRecordingService: audioRecordingService,
+            modelManager: ModelManagerService(),
+            historyService: historyService,
+            audioFileService: AudioFileService(),
+            defaults: defaults,
+            audioSamplesLoader: { url in
+                XCTAssertEqual(url, recoveryURL)
+                return samples
+            },
+            transcriptionRunner: { receivedSamples, _, _, _, _ in
+                XCTAssertEqual(receivedSamples.count, 40 * 16_000)
+                return TranscriptionResult(
+                    text: "Thank you for watching!", detectedLanguage: "en", duration: 40,
+                    processingTime: 0.1, engineUsed: "test", segments: []
+                )
+            },
+            engineReadinessChecker: { _ in true }
+        )
+
+        for attempt in 1...2 {
+            XCTAssertTrue(viewModel.canTranscribe)
+            viewModel.transcribe()
+            try await waitUntil { historyService.recentRecords.count == attempt }
+            XCTAssertEqual(viewModel.selectedRecovery?.state, .idle)
+            XCTAssertTrue(viewModel.canTranscribe)
+            XCTAssertEqual(audioRecordingService.recoveryRecordingURLs, [recoveryURL])
+            XCTAssertEqual(try Data(contentsOf: recoveryURL), originalAudio)
+            XCTAssertEqual(
+                try recoveryURL.resourceValues(forKeys: [.contentModificationDateKey]).contentModificationDate,
+                originalDate,
+                "Retries must not extend the recording's retention lifetime"
+            )
+            let historyRecord = try XCTUnwrap(historyService.recentRecords.first)
+            XCTAssertNil(historyService.audioFileURL(for: historyRecord))
+        }
+
+        viewModel.discardSelectedRecovery()
+        XCTAssertTrue(viewModel.recoveries.isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: recoveryURL.path))
+    }
+
     func testRecoveryRetentionPolicyDefaultsToThirtyDaysAndImmediatelyClearsStorage() throws {
         let defaults = try makeDefaults()
         let directory = makeTemporaryDirectory()

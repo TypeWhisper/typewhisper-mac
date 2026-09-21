@@ -12,6 +12,9 @@ Retention is enforced on startup, recording start, preservation, and recovery
 lookup/refresh. Failed recordings keep the existing user-selected retention and
 are not displaced by successes. Immediately disables both forms of recovery storage.
 Cancellation still discards the active recording. History audio remains independent.
+Retrying a recent successful recording keeps that same buffer entry available for
+further attempts, without resetting its age or evading the three-recording limit.
+Explicit discard still deletes it. Existing failed-recording recovery behavior is unchanged.
 
 Groq's dictionary-context option defaults to the previous enabled behavior. Turning
 it off removes the prompt field, including on the existing WAV retry path. Turning
@@ -59,6 +62,12 @@ Xcode 27.0 (27A266a), macOS, Swift 6:
   recoverable. Immediately leaves no recovery audio.
 - After review, all 28 selected app tests were rerun together. Invalid segments
   are counted but excluded from the latest segment end and uncovered-tail metrics.
+- The retry regression test failed before the follow-up fix (the source WAV was
+  deleted). After the fix, all 36 `FileTranscriptionViewModelTests` and the 28
+  selected store/integration/diagnostic tests passed together. Repeated incomplete
+  retries with History audio disabled preserve identical PCM and modification time,
+  restore the idle/retry state, and still support explicit discard. Existing failed
+  recording recovery and History audio tests remain green.
 - Five Groq plugin tests: passed, including persistence of the opt-out, omission
   from both M4A and WAV retry requests, restoration of the unchanged prompt, and
   reporting disabled terms as requiring a plugin setting (including after reload).
@@ -92,6 +101,7 @@ xcodebuild test \
   -clonedSourcePackagesDirPath "$HOME/Projects/typewhisper-mac-dev/DerivedData/SourcePackages" \
   -skipPackagePluginValidation \
   -only-testing:TypeWhisperTests/DictationRecoveryAudioStoreTests \
+  -only-testing:TypeWhisperTests/FileTranscriptionViewModelTests \
   -only-testing:TypeWhisperTests/TypeWhisperIntegrationTests/testSuccessfulButIncompleteTranscriptionKeepsCompleteRecoveryAudio \
   -only-testing:TypeWhisperTests/TypeWhisperIntegrationTests/testSuccessfulDictationWithImmediatelyRetentionCreatesNoRecoveryAudio \
   -only-testing:TypeWhisperTests/TypeWhisperIntegrationTests/testFailedTranscriptionSurfacesNewRecoveryAndOpenAction \

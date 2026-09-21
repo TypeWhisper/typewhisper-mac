@@ -387,7 +387,15 @@ final class DictationRecoveryViewModel: ObservableObject {
                 )
                 lastSavedRecoveryFileName = url.lastPathComponent
                 lastSavedHistoryRecordID = historyID
-                audioRecordingService.discardRecoveryRecording(at: url)
+                if DictationRecoveryAudioStore.isRecentSuccessfulRecording(url) {
+                    // A retry can also return incomplete nonempty text. Keep the
+                    // original buffer entry without extending its count/age limits.
+                    updateRecovery(id: recoveryID) { item in
+                        item.state = .idle
+                    }
+                } else {
+                    audioRecordingService.discardRecoveryRecording(at: url)
+                }
                 updateRecoveryURLs(audioRecordingService.recoveryRecordingURLs)
             } catch {
                 updateRecovery(id: recoveryID) { item in
