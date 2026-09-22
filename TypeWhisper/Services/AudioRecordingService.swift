@@ -248,6 +248,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     var inputAvailabilityOverride: ((AudioDeviceID?) -> Bool)?
     var startRecordingOverride: (() throws -> Void)?
     var stopRecordingOverride: ((StopPolicy) async -> [Float])?
+    var engineTeardownOverride: ((AVAudioEngine) -> Void)?
     var onFirstRecordingAudioBuffer: (() -> Void)?
 
     /// CoreAudio device ID to use for recording. nil = system default input.
@@ -2071,6 +2072,10 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     }
 
     private func teardownEngine(_ engine: AVAudioEngine) {
+        if let engineTeardownOverride {
+            engineTeardownOverride(engine)
+            return
+        }
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
     }

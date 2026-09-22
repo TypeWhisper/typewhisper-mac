@@ -2790,7 +2790,10 @@ final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
             hasExplicitDeviceSelection: true,
             usesBluetoothTransport: true
         )
-        service.testingSetAudioEngine(RunningAudioEngine())
+        let engine = AVAudioEngine()
+        var tornDownEngine: AVAudioEngine?
+        service.engineTeardownOverride = { tornDownEngine = $0 }
+        service.testingSetAudioEngine(engine)
         _ = service.testingBeginBluetoothInputGeneration()
 
         _ = await service.stopRecording(
@@ -2798,6 +2801,7 @@ final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
             bluetoothBehavior: .release
         )
 
+        XCTAssertTrue(tornDownEngine === engine)
         XCTAssertFalse(service.testingHasPreparedBluetoothInput())
         XCTAssertEqual(activation.restoreCalls, ["recording-stop"])
     }
