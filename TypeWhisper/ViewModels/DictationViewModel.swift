@@ -981,6 +981,20 @@ final class DictationViewModel: ObservableObject {
         mediaPlaybackService.resumeIfWePaused()
     }
 
+    private var bluetoothStopBehavior: AudioRecordingService.BluetoothStopBehavior {
+        Self.bluetoothStopBehavior(
+            usesBluetoothInput: audioRecordingService.selectedInputDeviceUsesBluetoothTransport,
+            restoresSystemAudio: mediaPauseEnabled || audioDuckingEnabled
+        )
+    }
+
+    static func bluetoothStopBehavior(
+        usesBluetoothInput: Bool,
+        restoresSystemAudio: Bool
+    ) -> AudioRecordingService.BluetoothStopBehavior {
+        usesBluetoothInput && restoresSystemAudio ? .release : .keepPrepared
+    }
+
     private func prepareRecordingStartCue(playsSound: Bool) {
         isRecordingInputReady = false
         recordingStartCuePending = true
@@ -1083,7 +1097,10 @@ final class DictationViewModel: ObservableObject {
         recordingCleanupTask = Task {
             await previousCleanup?.value
             await pendingStartTask?.value
-            _ = await audioRecordingService.stopRecording(policy: .immediate)
+            _ = await audioRecordingService.stopRecording(
+                policy: .immediate,
+                bluetoothBehavior: bluetoothStopBehavior
+            )
             restoreRecordingSideEffects()
             if preserveRecoveryAudio {
                 audioRecordingService.preserveActiveRecoveryRecording()
@@ -1980,7 +1997,10 @@ final class DictationViewModel: ObservableObject {
             streamingHandler.stop()
             lastStreamingParams = nil
             stopRecordingTimer()
-            _ = await audioRecordingService.stopRecording(policy: .immediate)
+            _ = await audioRecordingService.stopRecording(
+                policy: .immediate,
+                bluetoothBehavior: bluetoothStopBehavior
+            )
             restoreRecordingSideEffects()
             audioRecordingService.discardActiveRecoveryRecording()
             guard !Task.isCancelled else { return }
@@ -2005,7 +2025,10 @@ final class DictationViewModel: ObservableObject {
         stopRecordingTimer()
         let previewText = partialText.trimmingCharacters(in: .whitespacesAndNewlines)
         let stopPolicy = AudioRecordingService.StopPolicy.finalizeShortSpeech()
-        var samples = await audioRecordingService.stopRecording(policy: stopPolicy)
+        var samples = await audioRecordingService.stopRecording(
+            policy: stopPolicy,
+            bluetoothBehavior: bluetoothStopBehavior
+        )
         restoreRecordingSideEffects()
         guard !Task.isCancelled else { return }
         logger.info("Stop timing: stopRecording done elapsedMs=\(stopElapsedMs(), privacy: .public), previewTextLength=\(previewText.count, privacy: .public)")

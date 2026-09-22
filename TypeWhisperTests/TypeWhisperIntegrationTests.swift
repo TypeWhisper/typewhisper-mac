@@ -14116,6 +14116,31 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testBluetoothStopBehaviorReleasesInputWhenSystemAudioWillBeRestored() {
+        XCTAssertEqual(
+            DictationViewModel.bluetoothStopBehavior(
+                usesBluetoothInput: true,
+                restoresSystemAudio: true
+            ),
+            .release
+        )
+        XCTAssertEqual(
+            DictationViewModel.bluetoothStopBehavior(
+                usesBluetoothInput: true,
+                restoresSystemAudio: false
+            ),
+            .keepPrepared
+        )
+        XCTAssertEqual(
+            DictationViewModel.bluetoothStopBehavior(
+                usesBluetoothInput: false,
+                restoresSystemAudio: true
+            ),
+            .keepPrepared
+        )
+    }
+
+    @MainActor
     func testHandleCancelHotkey_processingRequiresSecondEscapeToCancel() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         var dictationContext: DictationContext?
