@@ -122,8 +122,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/huggingface/swift-huggingface.git",
       "state" : {
-        "revision" : "f2f99991f2d7d8fdb3187e4fd539cd2facf5c13d",
-        "version" : "0.11.0"
+        "revision" : "b5403ed09403f674601fd1123e07c5b32914d16f",
+        "version" : "0.10.1"
       }
     },
     {
@@ -212,8 +212,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/ibireme/yyjson.git",
       "state" : {
-        "revision" : "6447536015f3d600f3d65323b10976103b337ca7",
-        "version" : "0.13.0"
+        "revision" : "8b4a38dc994a110abaec8a400615567bd996105f",
+        "version" : "0.12.0"
       }
     }
   ],
