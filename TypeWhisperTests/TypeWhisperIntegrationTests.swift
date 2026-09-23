@@ -1133,8 +1133,10 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         private var _currentModelId: String?
         private var _currentSettingsActivity: PluginSettingsActivity?
         private var _restoreCount = 0
+        private var _restoreActivityPollsRemaining: Int?
+        private var _restoreActivityPollCount = 0
 
-        var restoreDelay: Duration = .milliseconds(0)
+        var restoreAfterActivityPolls = 2
         var restoreShouldConfigure = true
 
         var configured: Bool {
@@ -1156,6 +1158,10 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             stateLock.withLock { _restoreCount }
         }
 
+        var restoreActivityPollCount: Int {
+            stateLock.withLock { _restoreActivityPollCount }
+        }
+
         required override init() {}
 
         func activate(host: HostServices) {}
@@ -1166,26 +1172,33 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         var isConfigured: Bool { configured }
         var transcriptionModels: [PluginModelInfo] { [PluginModelInfo(id: "tiny", displayName: "Tiny")] }
         var selectedModelId: String? { currentModelId }
-        var currentSettingsActivity: PluginSettingsActivity? { activity }
+        var currentSettingsActivity: PluginSettingsActivity? {
+            stateLock.withLock {
+                let activity = _currentSettingsActivity
+                if let remaining = _restoreActivityPollsRemaining {
+                    _restoreActivityPollCount += 1
+                    if remaining == 1 {
+                        _configured = true
+                        _currentSettingsActivity = nil
+                        _restoreActivityPollsRemaining = nil
+                    } else {
+                        _restoreActivityPollsRemaining = remaining - 1
+                    }
+                }
+                return activity
+            }
+        }
         func selectModel(_ modelId: String) {
             currentModelId = modelId
         }
         var supportsTranslation: Bool { false }
 
         @objc func triggerRestoreModel() {
-            let delay = restoreDelay
-            let shouldConfigure = restoreShouldConfigure
             stateLock.withLock {
                 _restoreCount += 1
-            }
-
-            Task { [weak self] in
-                try? await Task.sleep(for: delay)
-                guard let self, shouldConfigure else { return }
-                self.stateLock.withLock {
-                    self._configured = true
-                    self._currentSettingsActivity = nil
-                }
+                _restoreActivityPollCount = 0
+                _restoreActivityPollsRemaining = restoreShouldConfigure
+                    ? max(1, restoreAfterActivityPolls) : nil
             }
         }
 
@@ -12878,7 +12891,9 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         plugin.currentModelId = "tiny"
         plugin.configured = false
         plugin.activity = PluginSettingsActivity(message: "Optimizing model")
-        plugin.restoreDelay = .milliseconds(60)
+        // Stay busy throughout the initial wait budget and complete only when
+        // the extended busy-wait phase observes the activity again.
+        plugin.restoreAfterActivityPolls = 2
 
         PluginManager.shared.loadedPlugins = [
             LoadedPlugin(
@@ -12898,8 +12913,8 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let modelManager = ModelManagerService()
         modelManager.setPluginRestoreWaitConfigurationForTesting(
             initialAttempts: 1,
-            busyAttempts: 20,
-            pollInterval: .milliseconds(10)
+            busyAttempts: 2,
+            pollInterval: .zero
         )
         modelManager.selectProvider(plugin.providerId)
 
@@ -12914,6 +12929,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         XCTAssertEqual(result.text, "transcribed")
         XCTAssertEqual(plugin.restoreCount, 1)
+        XCTAssertEqual(plugin.restoreActivityPollCount, 2)
     }
 
     @MainActor
