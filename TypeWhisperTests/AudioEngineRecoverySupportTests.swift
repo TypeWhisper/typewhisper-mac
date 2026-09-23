@@ -2810,6 +2810,44 @@ final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
         XCTAssertEqual(activation.restoreCalls, ["recording-stop"])
     }
 
+    func testBluetoothStopReleaseInvalidatesPreparedAndInFlightInputs() async {
+        let deviceID = AudioDeviceID(2)
+        let activation = FakeAudioInputDeviceActivator()
+        let service = AudioRecordingService(
+            inputActivationGuard: activation,
+            defaultInputController: FakeAudioInputDeviceDefaultController(defaultInputDeviceID: deviceID)
+        )
+        service.hasMicrophonePermissionOverride = true
+        service.configureInputSelection(
+            deviceID: deviceID,
+            hasExplicitDeviceSelection: true,
+            usesBluetoothTransport: true
+        )
+
+        let recordingEngine = AVAudioEngine()
+        let preparedEngine = AVAudioEngine()
+        var tornDownEngines: [AVAudioEngine] = []
+        service.engineTeardownOverride = { tornDownEngines.append($0) }
+        service.testingSetAudioEngine(recordingEngine)
+        service.testingSetPreparedBluetoothInput(preparedEngine, deviceID: deviceID)
+        let preparationGeneration = service.testingPreparedInputGeneration()
+
+        _ = await service.stopRecording(
+            policy: .immediate,
+            bluetoothBehavior: .release
+        )
+
+        XCTAssertNotEqual(service.testingPreparedInputGeneration(), preparationGeneration)
+        XCTAssertFalse(service.testingHasPreparedBluetoothInput())
+        XCTAssertEqual(tornDownEngines.count, 2)
+        XCTAssertTrue(tornDownEngines.contains { $0 === preparedEngine })
+        XCTAssertTrue(tornDownEngines.contains { $0 === recordingEngine })
+        XCTAssertEqual(
+            activation.restoreCalls,
+            ["bluetooth-instant-start-prewarm-invalidated", "recording-stop"]
+        )
+    }
+
     func testPreparedBluetoothInputWaitsForFreshSilentBuffer() throws {
 
         let clock = FakeReadinessClock()

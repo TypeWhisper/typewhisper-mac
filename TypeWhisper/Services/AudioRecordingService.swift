@@ -1393,6 +1393,9 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         }
 
         guard let engine = capture.engine else {
+            if bluetoothBehavior == .release {
+                invalidatePreparedRecordingInputs(reason: "bluetooth-recording-release-without-engine")
+            }
             outputVolumeGuard.clear()
             return []
         }
@@ -1415,6 +1418,9 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
 
         removeConfigurationObserver()
         outputVolumeGuard.captureBaseline()
+        if bluetoothBehavior == .release {
+            invalidatePreparedRecordingInputs(reason: "bluetooth-recording-release")
+        }
         let keptPreparedInput = bluetoothBehavior == .keepPrepared
             && keepBluetoothInputPrepared(engine)
         if !keptPreparedInput {
@@ -3043,6 +3049,22 @@ extension AudioRecordingService {
 
     func testingHasPreparedBluetoothInput() -> Bool {
         engineLock.withLock { preparedBluetoothInput != nil }
+    }
+
+    func testingPreparedInputGeneration() -> UInt64 {
+        engineLock.withLock { preparedInputGeneration }
+    }
+
+    func testingSetPreparedBluetoothInput(_ engine: AVAudioEngine, deviceID: AudioDeviceID) {
+        let format = AVAudioFormat(standardFormatWithSampleRate: Self.targetSampleRate, channels: 1)!
+        engineLock.withLock {
+            preparedBluetoothInput = PreparedBluetoothInput(
+                engine: engine,
+                deviceID: deviceID,
+                tapFormat: format,
+                inputGeneration: 1
+            )
+        }
     }
 
     func testingClaimPreparedBluetoothInput(_ engine: AVAudioEngine, deviceID: AudioDeviceID) -> Bool {
