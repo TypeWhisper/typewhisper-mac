@@ -2794,7 +2794,7 @@ final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
         var tornDownEngine: AVAudioEngine?
         service.engineTeardownOverride = { tornDownEngine = $0 }
         service.testingSetAudioEngine(engine)
-        _ = service.testingBeginBluetoothInputGeneration()
+        let generation = service.testingBeginBluetoothInputGeneration()
 
         _ = await service.stopRecording(
             policy: .immediate,
@@ -2802,6 +2802,10 @@ final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
         )
 
         XCTAssertTrue(tornDownEngine === engine)
+        XCTAssertEqual(
+            service.testingConsumeBluetoothInputSamples([0.5], inputRMS: 0.5, generation: generation),
+            .ignored
+        )
         XCTAssertFalse(service.testingHasPreparedBluetoothInput())
         XCTAssertEqual(activation.restoreCalls, ["recording-stop"])
     }

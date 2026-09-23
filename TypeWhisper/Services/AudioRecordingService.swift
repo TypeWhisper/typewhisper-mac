@@ -1418,6 +1418,9 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         let keptPreparedInput = bluetoothBehavior == .keepPrepared
             && keepBluetoothInputPrepared(engine)
         if !keptPreparedInput {
+            processingQueue.sync {
+                bluetoothInputStartupTracker.reset()
+            }
             teardownEngine(engine)
             // CoreAudio teardown callbacks can outlive the stopped engine.
             engineTeardownRetainer.retain(engine, for: Self.engineTeardownRetentionInterval)
