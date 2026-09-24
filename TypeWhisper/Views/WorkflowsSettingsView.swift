@@ -2867,10 +2867,10 @@ struct WorkflowDraft {
         !usesAppleTranslate && (template != .dictation || inlineCommandsEnabled == true)
     }
 
-    /// Mirrors `Workflow.supportsSegmentedPostProcessing`: a prompt-based LLM step
-    /// that is not an Inline Commands pass.
+    /// Mirrors `Workflow.supportsSegmentedPostProcessing`: a per-sentence
+    /// prompt template that is not processed by Apple Translate.
     var supportsSegmentedPostProcessing: Bool {
-        !usesAppleTranslate && template != .dictation
+        template.allowsSegmentedPostProcessing && !usesAppleTranslate
     }
 
     var reviewText: String {

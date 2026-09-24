@@ -3659,10 +3659,12 @@ final class DictationViewModel: ObservableObject {
         logger.info("Incremental workflow post-processing armed for this recording localProvider=\(configuration.policy.isLocalProvider, privacy: .public)")
     }
 
-    /// Segmentation tuned for the provider `request` will actually use.
+    /// Segmentation tuned for the provider `request` will actually use. Uses the
+    /// locality snapshotted into the request, so it matches the request identity.
     private func workflowSegmentationPolicy(for request: WorkflowLLMRequest) -> WorkflowSegmentationPolicy {
         WorkflowSegmentationPolicy.default.forLLMProvider(
-            isLocal: promptProcessingService.workflowUsesLocalLLMProvider(providerOverride: request.providerId)
+            isLocal: request.providerResolution?.isLocal
+                ?? promptProcessingService.workflowUsesLocalLLMProvider(providerOverride: request.providerId)
         )
     }
 

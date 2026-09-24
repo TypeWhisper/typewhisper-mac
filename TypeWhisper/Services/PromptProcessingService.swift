@@ -428,6 +428,53 @@ class PromptProcessingService: ObservableObject {
         return Self.isLocalLLMProvider(plugin)
     }
 
+    /// The provider, model, and effort attempts a workflow request with these
+    /// overrides resolves to right now. Without a provider override this is a
+    /// snapshot of the mutable global LLM fallback list.
+    func workflowProviderResolution(
+        providerOverride: String?,
+        cloudModelOverride: String?,
+        effortOverride: String?
+    ) -> WorkflowLLMProviderResolution {
+        let attempts = candidates(
+            providerOverride: providerOverride,
+            cloudModelOverride: cloudModelOverride,
+            effortOverride: effortOverride
+        ).map { candidate in
+            let providerId = normalizeProviderId(candidate.providerId)
+            let modelId = PluginManager.shared?.llmProvider(for: providerId).map {
+                resolvedModelHint(for: $0, providerId: providerId, requestedModelId: candidate.modelId)
+            } ?? Self.normalizedModelId(candidate.modelId)
+            return WorkflowLLMProviderResolution.Attempt(
+                providerId: providerId,
+                modelId: modelId,
+                effortId: Self.normalizedEffortId(candidate.effortId)
+            )
+        }
+        return WorkflowLLMProviderResolution(
+            attempts: attempts,
+            isLocal: workflowUsesLocalLLMProvider(providerOverride: providerOverride)
+        )
+    }
+
+    /// The attempts `execute` makes: the explicit provider, or the fallback list.
+    private func candidates(
+        providerOverride: String?,
+        cloudModelOverride: String?,
+        effortOverride: String?
+    ) -> [LLMFallbackPriorityItem] {
+        guard let explicitProviderId = Self.trimmedOrNil(providerOverride) else {
+            return fallbackPriorityList
+        }
+        return [
+            LLMFallbackPriorityItem(
+                providerId: normalizeProviderId(explicitProviderId),
+                modelId: Self.normalizedModelId(cloudModelOverride),
+                effortId: Self.normalizedEffortId(effortOverride)
+            )
+        ]
+    }
+
     func process(
         prompt: String,
         text: String,
@@ -474,20 +521,12 @@ class PromptProcessingService: ObservableObject {
             logger.info("Prompt memory retrieval skipped")
         }
 
-        let explicitProviderId = Self.trimmedOrNil(providerOverride)
-        let usesFallbackList = explicitProviderId == nil
-        let candidates: [LLMFallbackPriorityItem]
-        if let explicitProviderId {
-            candidates = [
-                LLMFallbackPriorityItem(
-                    providerId: normalizeProviderId(explicitProviderId),
-                    modelId: Self.normalizedModelId(cloudModelOverride),
-                    effortId: Self.normalizedEffortId(effortOverride)
-                )
-            ]
-        } else {
-            candidates = fallbackPriorityList
-        }
+        let usesFallbackList = Self.trimmedOrNil(providerOverride) == nil
+        let candidates = self.candidates(
+            providerOverride: providerOverride,
+            cloudModelOverride: cloudModelOverride,
+            effortOverride: effortOverride
+        )
 
         guard !candidates.isEmpty else {
             throw LLMFallbackExhaustedError(failures: [])

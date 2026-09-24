@@ -111,6 +111,18 @@ enum WorkflowTemplate: String, CaseIterable, Codable, Sendable {
             )
         }
     }
+
+    /// Whether the template's LLM step transforms each sentence on its own, so the
+    /// outputs of independent segments can be joined. Templates that restructure,
+    /// condense, or wrap the whole dictation (and custom instructions) cannot be split.
+    var allowsSegmentedPostProcessing: Bool {
+        switch self {
+        case .cleanedText, .translation:
+            true
+        case .emailReply, .meetingNotes, .checklist, .json, .summary, .dictation, .custom:
+            false
+        }
+    }
 }
 
 struct WorkflowTemplateDefinition: Identifiable, Equatable, Sendable {
@@ -716,11 +728,16 @@ extension Workflow {
     }
 
     /// Whether the workflow runs a prompt-based LLM step whose input can be split
-    /// into independent segments. Inline Commands and Apple Translate are excluded:
+    /// into independent segments. Only per-sentence templates qualify (see
+    /// `WorkflowTemplate.allowsSegmentedPostProcessing`), so a stored flag on any
+    /// other template is ignored. Inline Commands and Apple Translate are excluded:
     /// an inline instruction applies to the whole dictation, and Apple Translate
     /// runs on-device without an LLM request.
     var supportsSegmentedPostProcessing: Bool {
-        !usesInlineCommands && !usesAppleTranslate && systemPrompt() != nil
+        template.allowsSegmentedPostProcessing
+            && !usesInlineCommands
+            && !usesAppleTranslate
+            && systemPrompt() != nil
     }
 
     var usesSegmentedPostProcessing: Bool {

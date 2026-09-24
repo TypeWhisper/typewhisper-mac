@@ -7,6 +7,20 @@ private let workflowTextProcessingLogger = Logger(
     category: "WorkflowTextProcessingService"
 )
 
+/// The provider route a workflow LLM request resolved to when it was built.
+struct WorkflowLLMProviderResolution: Equatable, Sendable {
+    struct Attempt: Equatable, Sendable {
+        let providerId: String
+        let modelId: String?
+        let effortId: String?
+    }
+
+    /// The workflow's provider override, or the inherited global fallback list, in order.
+    let attempts: [Attempt]
+    /// Whether the request runs on an on-device model.
+    let isLocal: Bool
+}
+
 /// A fully resolved workflow LLM request. Segmented post-processing sends every
 /// segment with the same request, and compares requests to decide whether results
 /// computed during recording still match the configuration at stop.
@@ -16,6 +30,9 @@ struct WorkflowLLMRequest: Equatable, Sendable {
     let cloudModel: String?
     let temperatureDirective: PluginLLMTemperatureDirective
     let effortId: String?
+    /// Snapshot of the provider settings the request inherits, so a change to the
+    /// global LLM fallback list also changes the request identity.
+    var providerResolution: WorkflowLLMProviderResolution? = nil
 }
 
 @MainActor
@@ -42,17 +59,26 @@ struct WorkflowTextProcessingService {
         _ targetLanguageCode: String,
         _ sourceLanguageCode: String?
     ) async throws -> String
+
+    typealias ProviderResolver = (
+        _ providerId: String?,
+        _ cloudModel: String?,
+        _ effortId: String?
+    ) -> WorkflowLLMProviderResolution
     private let promptProcessor: PromptProcessor
     private let effortPromptProcessor: EffortPromptProcessor?
     private let appleTranslator: AppleTranslator?
+    private let providerResolver: ProviderResolver?
 
     init(
         promptProcessor: @escaping PromptProcessor,
-        appleTranslator: AppleTranslator?
+        appleTranslator: AppleTranslator?,
+        providerResolver: ProviderResolver? = nil
     ) {
         self.promptProcessor = promptProcessor
         self.effortPromptProcessor = nil
         self.appleTranslator = appleTranslator
+        self.providerResolver = providerResolver
     }
 
     init(promptProcessingService: PromptProcessingService, translationService: AnyObject?, workflowService _: WorkflowService? = nil) {
@@ -72,6 +98,13 @@ struct WorkflowTextProcessingService {
                 providerOverride: providerId,
                 cloudModelOverride: cloudModel,
                 temperatureDirective: temperatureDirective,
+                effortOverride: effortId
+            )
+        }
+        self.providerResolver = { providerId, cloudModel, effortId in
+            promptProcessingService.workflowProviderResolution(
+                providerOverride: providerId,
+                cloudModelOverride: cloudModel,
                 effortOverride: effortId
             )
         }
@@ -175,6 +208,7 @@ struct WorkflowTextProcessingService {
 
     /// The prompt request used for segmented processing, or nil when the workflow
     /// has no segmentable LLM step (see `Workflow.supportsSegmentedPostProcessing`).
+    /// The request includes the provider settings it currently resolves to.
     func segmentedPromptRequest(
         workflow: Workflow,
         fallbackTranslationTarget: String? = nil,
@@ -182,14 +216,18 @@ struct WorkflowTextProcessingService {
         configuredLanguage: String? = nil,
         resolvedOutputFormat: String? = nil
     ) -> WorkflowLLMRequest? {
-        guard workflow.supportsSegmentedPostProcessing else { return nil }
-        return Self.promptRequest(
-            workflow: workflow,
-            fallbackTranslationTarget: fallbackTranslationTarget,
-            detectedLanguage: detectedLanguage,
-            configuredLanguage: configuredLanguage,
-            resolvedOutputFormat: resolvedOutputFormat
-        )
+        guard workflow.supportsSegmentedPostProcessing,
+              var request = Self.promptRequest(
+                  workflow: workflow,
+                  fallbackTranslationTarget: fallbackTranslationTarget,
+                  detectedLanguage: detectedLanguage,
+                  configuredLanguage: configuredLanguage,
+                  resolvedOutputFormat: resolvedOutputFormat
+              ) else {
+            return nil
+        }
+        request.providerResolution = providerResolver?(request.providerId, request.cloudModel, request.effortId)
+        return request
     }
 
     private static func promptRequest(

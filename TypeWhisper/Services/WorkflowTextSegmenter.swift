@@ -184,6 +184,10 @@ enum WorkflowTextSegmenter {
     /// Terminators that end a sentence even without following whitespace.
     private static let unspacedSentenceTerminators: Set<Character> = ["。", "！", "？", "｡"]
 
+    /// Terminators that also end abbreviations or trailing thoughts ("...", "…"), so a
+    /// lower-case continuation after them does not start a new sentence.
+    private static let lowercaseContinuationTerminators: Set<Character> = [".", "…"]
+
     private static let closingPunctuation: Set<Character> = [
         "\"", "'", "”", "’", "»", "«", ")", "]", "}",
         "」", "』", "）", "】", "》", "〉", "〕", "］", "｝"
@@ -304,12 +308,15 @@ enum WorkflowTextSegmenter {
             return false
         }
 
-        // "etc. and", "z. B. das": a lower-case continuation is not a new sentence.
-        if characters[nextContentIndex].isLowercase {
+        let terminator = characters[terminatorIndex]
+        // "etc. and", "z. B. das", "well… maybe": after a period or an ellipsis, a
+        // lower-case continuation is not a new sentence. "!" and "?" still end one.
+        if lowercaseContinuationTerminators.contains(terminator),
+           characters[nextContentIndex].isLowercase {
             return false
         }
 
-        guard characters[terminatorIndex] == "." else { return true }
+        guard terminator == "." else { return true }
 
         var tokenStart = terminatorIndex
         while tokenStart > contentStart, !characters[tokenStart - 1].isWhitespace {

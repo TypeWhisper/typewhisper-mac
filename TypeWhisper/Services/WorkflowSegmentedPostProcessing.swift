@@ -69,29 +69,115 @@ enum WorkflowSegmentedPostProcessing {
         maximumConcurrentRequests: Int,
         processor: @escaping WorkflowSegmentProcessor
     ) async throws -> [String] {
-        guard !inputs.isEmpty else { return [] }
-        let width = max(1, maximumConcurrentRequests)
-
-        return try await withThrowingTaskGroup(of: (Int, String).self) { group in
-            var outputs = [String](repeating: "", count: inputs.count)
-            var nextIndex = 0
-            while nextIndex < min(width, inputs.count) {
-                let index = nextIndex
-                let input = inputs[index]
-                group.addTask { (index, try await processor(input)) }
-                nextIndex += 1
-            }
-            while let (index, output) = try await group.next() {
-                outputs[index] = output
-                if nextIndex < inputs.count {
-                    let nextInputIndex = nextIndex
-                    let input = inputs[nextInputIndex]
-                    group.addTask { (nextInputIndex, try await processor(input)) }
-                    nextIndex += 1
-                }
-            }
-            return outputs
+        try await collectInOrder(
+            count: inputs.count,
+            maximumConcurrentOperations: maximumConcurrentRequests
+        ) { index in
+            try await processor(inputs[index])
         }
+    }
+
+    /// Runs `operation` for every index below `count` with at most
+    /// `maximumConcurrentOperations` in flight and returns the results in index order.
+    /// The first failure, or cancellation of the caller, is returned immediately:
+    /// started operations are cancelled but not awaited, because a provider request
+    /// that ignores cancellation must not hold up the whole-text fallback. Results
+    /// that arrive afterwards are ignored.
+    @MainActor
+    static func collectInOrder(
+        count: Int,
+        maximumConcurrentOperations: Int,
+        operation: @escaping @MainActor @Sendable (Int) async throws -> String
+    ) async throws -> [String] {
+        guard count > 0 else { return [] }
+        try Task.checkCancellation()
+        let run = WorkflowSegmentRun(
+            count: count,
+            width: maximumConcurrentOperations,
+            operation: operation
+        )
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<[String], Error>) in
+                run.start(continuation)
+            }
+        } onCancel: {
+            Task { @MainActor in
+                run.fail(CancellationError())
+            }
+        }
+    }
+}
+
+/// One `collectInOrder` call. Resolves its continuation exactly once: with all
+/// outputs, or with the first failure, after which it cancels every started
+/// operation, starts no further ones, and ignores late results.
+@MainActor
+private final class WorkflowSegmentRun {
+    private let count: Int
+    private let width: Int
+    private let operation: @MainActor @Sendable (Int) async throws -> String
+    private var outputs: [String?]
+    private var remainingCount: Int
+    private var nextIndex = 0
+    private var tasks: [Task<Void, Never>] = []
+    private var continuation: CheckedContinuation<[String], Error>?
+    private var isResolved = false
+
+    init(count: Int, width: Int, operation: @escaping @MainActor @Sendable (Int) async throws -> String) {
+        self.count = count
+        self.width = max(1, width)
+        self.operation = operation
+        self.outputs = Array(repeating: nil, count: count)
+        self.remainingCount = count
+    }
+
+    func start(_ continuation: CheckedContinuation<[String], Error>) {
+        guard !isResolved else {
+            continuation.resume(throwing: CancellationError())
+            return
+        }
+        self.continuation = continuation
+        while nextIndex < min(width, count) {
+            startNext()
+        }
+    }
+
+    func fail(_ error: Error) {
+        guard !isResolved else { return }
+        isResolved = true
+        for task in tasks {
+            task.cancel()
+        }
+        continuation?.resume(throwing: error)
+        continuation = nil
+    }
+
+    private func startNext() {
+        guard !isResolved, nextIndex < count else { return }
+        let index = nextIndex
+        nextIndex += 1
+        let operation = self.operation
+        tasks.append(Task { @MainActor [weak self] in
+            do {
+                let output = try await operation(index)
+                self?.succeed(index, output: output)
+            } catch {
+                self?.fail(error)
+            }
+        })
+    }
+
+    private func succeed(_ index: Int, output: String) {
+        guard !isResolved else { return }
+        outputs[index] = output
+        remainingCount -= 1
+        guard remainingCount == 0 else {
+            startNext()
+            return
+        }
+        isResolved = true
+        continuation?.resume(returning: outputs.map { $0 ?? "" })
+        continuation = nil
     }
 }
 
@@ -246,7 +332,14 @@ final class WorkflowIncrementalPostProcessingSession {
         let outputs: [String]
         do {
             outputs = try await withTaskCancellationHandler {
-                try await Self.collectInOrder(tasks)
+                // Awaiting a task's value neither cancels it nor returns early; the
+                // catch below cancels the segment requests themselves.
+                try await WorkflowSegmentedPostProcessing.collectInOrder(
+                    count: tasks.count,
+                    maximumConcurrentOperations: tasks.count
+                ) { index in
+                    try await tasks[index].value
+                }
             } onCancel: {
                 for task in tasks { task.cancel() }
             }
@@ -336,25 +429,6 @@ final class WorkflowIncrementalPostProcessingSession {
             leadingWhitespace += whitespace
         } else {
             entries[entries.count - 1].separator += whitespace
-        }
-    }
-
-    private static func collectInOrder(_ tasks: [Task<String, Error>]) async throws -> [String] {
-        try await withThrowingTaskGroup(of: (Int, String).self) { group in
-            for (index, task) in tasks.enumerated() {
-                group.addTask { (index, try await task.value) }
-            }
-            var outputs = [String](repeating: "", count: tasks.count)
-            do {
-                while let (index, output) = try await group.next() {
-                    outputs[index] = output
-                }
-            } catch {
-                // Awaiting a task's value does not cancel it; stop the rest now.
-                for task in tasks { task.cancel() }
-                throw error
-            }
-            return outputs
         }
     }
 

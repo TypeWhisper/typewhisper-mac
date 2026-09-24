@@ -97,6 +97,33 @@ private final class FakeSegmentLLM {
     }
 }
 
+/// Provider request that ignores cancellation and only returns when the test
+/// releases it, like a stuck network call without cancellation support.
+@MainActor
+private final class NonCooperativeRequests {
+    private(set) var startedInputs: [String] = []
+    /// Inputs whose late result arrived, with whether they had been cancelled.
+    private(set) var lateResults: [(input: String, wasCancelled: Bool)] = []
+    private var pending: [CheckedContinuation<Void, Never>] = []
+
+    func hang(_ input: String) async -> String {
+        startedInputs.append(input)
+        await withCheckedContinuation { continuation in
+            pending.append(continuation)
+        }
+        lateResults.append((input, Task.isCancelled))
+        return "late \(input)"
+    }
+
+    func releaseAll() {
+        let continuations = pending
+        pending.removeAll()
+        for continuation in continuations {
+            continuation.resume()
+        }
+    }
+}
+
 @MainActor
 private final class CallRecorder {
     private(set) var inputs: [String] = []
@@ -232,6 +259,26 @@ final class WorkflowSegmentedPostProcessingTests: XCTestCase {
         XCTAssertEqual(segmentation.segments.map(\.text).first, "We met Dr. Smith and J. Doe today.")
     }
 
+    func testLowercaseContinuationOnlyBlocksSplitsAfterPeriods() {
+        let policy = WorkflowSegmentationPolicy(
+            targetSegmentLength: 20,
+            minimumSegmentLength: 5,
+            minimumSplitLength: 30,
+            maximumConcurrentRequests: 2,
+            incrementalStabilityMargin: 5
+        )
+        let text = "is this ready for review? yes, it is ready now! then we ship it today. and it goes on etc. and so on"
+
+        let segmentation = WorkflowTextSegmenter.segment(text, policy: policy)
+
+        XCTAssertEqual(segmentation.source, text)
+        XCTAssertEqual(segmentation.segments.map(\.text), [
+            "is this ready for review?",
+            "yes, it is ready now!",
+            "then we ship it today. and it goes on etc. and so on"
+        ])
+    }
+
     func testCJKSentenceEndsSplitWithoutWhitespace() {
         let sentence = "今天我们讨论了项目的进度和下一步的计划。"
         let text = String(repeating: sentence, count: 12)
@@ -359,6 +406,7 @@ final class WorkflowSegmentedPostProcessingTests: XCTestCase {
         } catch {
             XCTAssertTrue(error is ProviderFailure)
         }
+        await waitUntilCancelled(other, llm: llm)
         XCTAssertEqual(llm.cancelledInputs, [other])
         XCTAssertEqual(llm.receivedInputs.count, 2)
     }
@@ -382,6 +430,7 @@ final class WorkflowSegmentedPostProcessingTests: XCTestCase {
         } catch {
             XCTAssertTrue(error is CancellationError)
         }
+        await waitUntil { llm.cancelledInputs.count == 2 }
         XCTAssertEqual(Set(llm.cancelledInputs), Set(llm.receivedInputs))
         XCTAssertEqual(llm.receivedInputs.count, 2)
     }
@@ -604,6 +653,7 @@ final class WorkflowSegmentedPostProcessingTests: XCTestCase {
         } catch {
             XCTAssertTrue(error is CancellationError)
         }
+        await waitUntil { llm.cancelledInputs.count == 2 }
         XCTAssertEqual(Set(llm.cancelledInputs), [firstSentence, secondSentence])
     }
 
@@ -679,6 +729,97 @@ final class WorkflowSegmentedPostProcessingTests: XCTestCase {
         XCTAssertEqual(outcome.report.mode, .wholeText)
         XCTAssertTrue(outcome.report.fellBackToWholeText)
         XCTAssertEqual(wholeTextCalls.inputs, [text])
+    }
+
+    func testChunkFailureFallsBackWithoutAwaitingNonCooperativeSibling() async throws {
+        let llm = FakeSegmentLLM()
+        let stuck = NonCooperativeRequests()
+        let text = [firstSentence, secondSentence, thirdSentence].joined(separator: " ")
+        let wholeTextCalls = CallRecorder()
+        let stuckInput = secondSentence
+        let fallbackCompleted = expectation(description: "whole-text fallback completes")
+
+        let processing = Task {
+            defer { fallbackCompleted.fulfill() }
+            return try await WorkflowSegmentedPostProcessor(policy: smallPolicy).process(
+                text: text,
+                incrementalSession: nil,
+                incrementalRequest: nil,
+                segmentProcessor: { segment in
+                    if segment == stuckInput {
+                        return await stuck.hang(segment)
+                    }
+                    return try await llm.process(segment)
+                },
+                wholeTextProcessor: {
+                    wholeTextCalls.record(text)
+                    return "whole"
+                }
+            )
+        }
+
+        await llm.waitForCalls(1)
+        await waitUntil { stuck.startedInputs == [stuckInput] }
+        llm.fail(firstSentence, with: ProviderFailure())
+
+        // The stuck request never returns until released; the fallback must not wait for it.
+        await fulfillment(of: [fallbackCompleted], timeout: 10)
+        stuck.releaseAll()
+        let outcome = try await processing.value
+        XCTAssertEqual(outcome.text, "whole")
+        XCTAssertEqual(outcome.report.mode, .wholeText)
+        XCTAssertTrue(outcome.report.fellBackToWholeText)
+        XCTAssertEqual(wholeTextCalls.inputs, [text])
+        XCTAssertEqual(llm.receivedInputs, [firstSentence])
+
+        // The abandoned request was cancelled, and its late result is ignored.
+        await waitUntil { stuck.lateResults.count == 1 }
+        XCTAssertEqual(stuck.lateResults.first?.wasCancelled, true)
+        XCTAssertEqual(outcome.text, "whole")
+    }
+
+    func testIncrementalFailureFallsBackWithoutAwaitingNonCooperativeSegment() async throws {
+        let stuck = NonCooperativeRequests()
+        let stuckInput = firstSentence
+        let session = WorkflowIncrementalPostProcessingSession(
+            request: request,
+            policy: smallPolicy,
+            prepareInput: { $0 },
+            processor: { segment in
+                if segment == stuckInput {
+                    return await stuck.hang(segment)
+                }
+                throw ProviderFailure()
+            }
+        )
+        let confirmed = firstSentence + " " + secondSentence
+        session.ingest(confirmedText: confirmed)
+        await waitUntil { stuck.startedInputs == [stuckInput] }
+        let fallbackCompleted = expectation(description: "whole-text fallback completes")
+
+        let processing = Task {
+            defer { fallbackCompleted.fulfill() }
+            return try await WorkflowSegmentedPostProcessor(policy: smallPolicy).process(
+                text: confirmed,
+                incrementalSession: session,
+                incrementalRequest: request,
+                segmentProcessor: { _ in
+                    XCTFail("The tail belongs to the incremental session")
+                    return ""
+                },
+                wholeTextProcessor: { "whole" }
+            )
+        }
+
+        // The tail request fails while the first segment request never returns.
+        await fulfillment(of: [fallbackCompleted], timeout: 10)
+        stuck.releaseAll()
+        let outcome = try await processing.value
+        XCTAssertEqual(outcome.text, "whole")
+        XCTAssertTrue(outcome.report.fellBackToWholeText)
+
+        await waitUntil { stuck.lateResults.count == 1 }
+        XCTAssertEqual(stuck.lateResults.first?.wasCancelled, true)
     }
 
     func testIncrementalFailureFallsBackToWholeTextRequest() async throws {
@@ -952,8 +1093,27 @@ final class WorkflowSegmentedPostProcessingTests: XCTestCase {
         // Without an override, the primary fallback entry decides.
         XCTAssertTrue(service.workflowUsesLocalLLMProvider(providerOverride: nil))
         XCTAssertTrue(service.workflowUsesLocalLLMProvider(providerOverride: "  "))
+        let inherited = service.workflowProviderResolution(providerOverride: nil, cloudModelOverride: nil, effortOverride: nil)
+        XCTAssertEqual(inherited.attempts.map(\.providerId), ["Local Gemma", "Cloud Groq"])
+        XCTAssertTrue(inherited.isLocal)
+        let overridden = service.workflowProviderResolution(
+            providerOverride: " Cloud Groq ",
+            cloudModelOverride: " fast ",
+            effortOverride: nil
+        )
+        XCTAssertEqual(overridden.attempts, [.init(providerId: "Cloud Groq", modelId: "fast", effortId: nil)])
+        XCTAssertFalse(overridden.isLocal)
+
         service.moveLLMFallbacks(from: IndexSet(integer: 1), to: 0)
         XCTAssertFalse(service.workflowUsesLocalLLMProvider(providerOverride: nil))
+        let reordered = service.workflowProviderResolution(providerOverride: nil, cloudModelOverride: nil, effortOverride: nil)
+        XCTAssertEqual(reordered.attempts.map(\.providerId), ["Cloud Groq", "Local Gemma"])
+        XCTAssertFalse(reordered.isLocal)
+        XCTAssertNotEqual(reordered, inherited)
+        XCTAssertEqual(
+            service.workflowProviderResolution(providerOverride: " Cloud Groq ", cloudModelOverride: " fast ", effortOverride: nil),
+            overridden
+        )
 
         for item in service.fallbackPriorityList {
             service.removeLLMFallback(item)
@@ -984,6 +1144,27 @@ final class WorkflowSegmentedPostProcessingTests: XCTestCase {
         ]
         XCTAssertFalse(Workflow(name: "Translate", template: .translation, trigger: .manual(), behavior: appleTranslate).supportsSegmentedPostProcessing)
         XCTAssertFalse(Workflow(name: "Custom", template: .custom, trigger: .manual(), behavior: enabled).supportsSegmentedPostProcessing)
+
+        var llmTranslate = enabled
+        llmTranslate.settings = [WorkflowBehavior.targetLanguageSettingKey: "de"]
+        XCTAssertTrue(Workflow(name: "Translate", template: .translation, trigger: .manual(), behavior: llmTranslate).usesSegmentedPostProcessing)
+
+        // Whole-document templates ignore a stored flag, even with a prompt.
+        var customInstruction = enabled
+        customInstruction.settings = ["instruction": "Fix typos."]
+        let custom = Workflow(name: "Custom", template: .custom, trigger: .manual(), behavior: customInstruction)
+        XCTAssertNotNil(custom.systemPrompt())
+        XCTAssertFalse(custom.usesSegmentedPostProcessing)
+        for template in [WorkflowTemplate.summary, .json, .emailReply, .meetingNotes, .checklist] {
+            let workflow = Workflow(name: "Whole", template: template, trigger: .manual(), behavior: enabled)
+            XCTAssertNotNil(workflow.systemPrompt(), "\(template)")
+            XCTAssertEqual(workflow.behavior.segmentedPostProcessingEnabled, true)
+            XCTAssertFalse(workflow.usesSegmentedPostProcessing, "\(template)")
+        }
+        XCTAssertEqual(
+            WorkflowTemplate.allCases.filter(\.allowsSegmentedPostProcessing),
+            [.cleanedText, .translation]
+        )
     }
 
     func testBehaviorWithoutSegmentationFieldDecodesAsOff() throws {
@@ -1047,6 +1228,23 @@ final class WorkflowSegmentedPostProcessingTests: XCTestCase {
         dictationDraft.segmentedPostProcessingEnabled = true
         XCTAssertFalse(dictationDraft.supportsSegmentedPostProcessing)
         XCTAssertNil(dictationDraft.resolvedBehavior().segmentedPostProcessingEnabled)
+
+        for template in [WorkflowTemplate.summary, .json, .emailReply, .meetingNotes, .checklist, .custom] {
+            let stored = Workflow(
+                name: "Whole",
+                template: template,
+                trigger: .manual(),
+                behavior: WorkflowBehavior(segmentedPostProcessingEnabled: true)
+            )
+            let draft = WorkflowDraft(stored)
+            XCTAssertFalse(draft.supportsSegmentedPostProcessing, "\(template)")
+            XCTAssertNil(draft.resolvedBehavior().segmentedPostProcessingEnabled, "\(template)")
+        }
+        var translationDraft = WorkflowDraft(template: .translation)
+        translationDraft.translationProcessor = .llmPrompt
+        XCTAssertTrue(translationDraft.supportsSegmentedPostProcessing)
+        translationDraft.translationProcessor = .appleTranslate
+        XCTAssertFalse(translationDraft.supportsSegmentedPostProcessing)
     }
 
     // MARK: - Provider path and pipeline mirroring
@@ -1093,9 +1291,74 @@ final class WorkflowSegmentedPostProcessingTests: XCTestCase {
         ))
     }
 
+    func testSegmentedRequestIdentityIncludesInheritedProviderSettings() async throws {
+        let workflow = Workflow(
+            name: "Clean",
+            template: .cleanedText,
+            trigger: .manual(),
+            behavior: WorkflowBehavior(segmentedPostProcessingEnabled: true)
+        )
+        var resolution = WorkflowLLMProviderResolution(
+            attempts: [.init(providerId: "Groq", modelId: "llama-3.3", effortId: nil)],
+            isLocal: false
+        )
+        var resolverCalls: [(provider: String?, model: String?, effort: String?)] = []
+        let service = WorkflowTextProcessingService(
+            promptProcessor: { _, _, _, _, _ in "done" },
+            appleTranslator: nil,
+            providerResolver: { providerId, cloudModel, effortId in
+                resolverCalls.append((providerId, cloudModel, effortId))
+                return resolution
+            }
+        )
+
+        let armed = try XCTUnwrap(service.segmentedPromptRequest(workflow: workflow))
+        XCTAssertNil(armed.providerId)
+        XCTAssertEqual(armed.providerResolution, resolution)
+        XCTAssertEqual(service.segmentedPromptRequest(workflow: workflow), armed)
+        XCTAssertEqual(resolverCalls.count, 2)
+        XCTAssertNil(resolverCalls[0].provider)
+
+        // The global fallback list changes during the recording.
+        resolution = WorkflowLLMProviderResolution(
+            attempts: [.init(providerId: "Groq", modelId: "llama-4", effortId: nil)],
+            isLocal: false
+        )
+        let changedModel = try XCTUnwrap(service.segmentedPromptRequest(workflow: workflow))
+        XCTAssertNotEqual(changedModel, armed)
+        resolution = WorkflowLLMProviderResolution(
+            attempts: [.init(providerId: PromptProcessingService.appleIntelligenceId, modelId: nil, effortId: nil)],
+            isLocal: true
+        )
+        let changedLocality = try XCTUnwrap(service.segmentedPromptRequest(workflow: workflow))
+        XCTAssertNotEqual(changedLocality, armed)
+        XCTAssertEqual(changedLocality.providerResolution?.isLocal, true)
+
+        // Segments computed with the old settings are not reused.
+        let llm = FakeSegmentLLM()
+        let session = WorkflowIncrementalPostProcessingSession(
+            request: armed,
+            policy: smallPolicy,
+            prepareInput: { $0 },
+            processor: llm.processor
+        )
+        let confirmed = firstSentence + " " + secondSentence
+        session.ingest(confirmedText: confirmed)
+        await llm.waitForCalls(1)
+        guard case .notReusable(let reason) = try await session.finish(finalInput: confirmed, request: changedModel) else {
+            return XCTFail("Expected the provider change to prevent reuse")
+        }
+        XCTAssertEqual(reason, .configurationChanged)
+        await waitUntilCancelled(firstSentence, llm: llm)
+    }
+
     func testTextBeforeLLMStepMatchesPipelineLLMInput() async throws {
+        let previousPluginManager = PluginManager.shared
         let directory = try TestSupport.makeTemporaryDirectory()
-        defer { TestSupport.remove(directory) }
+        addTeardownBlock {
+            PluginManager.shared = previousPluginManager
+            TestSupport.remove(directory)
+        }
         PluginManager.shared = PluginManager(appSupportDirectory: directory)
         let suiteName = "WorkflowSegmentedPostProcessingTests-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
