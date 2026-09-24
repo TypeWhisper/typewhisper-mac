@@ -303,6 +303,61 @@ final class MLXPluginModelStorageTests: XCTestCase {
     }
 
     @MainActor
+    func testDeletingModelCancelsQueuedExplicitAndGenericLoads() async throws {
+        for explicit in [true, false] {
+            let qwen = Qwen3Plugin()
+            let granite = GranitePlugin()
+            let voxtral = VoxtralPlugin()
+            let canary = CanaryPlugin()
+            try await assertDeletionCancelsQueuedLoad(qwen, gate: qwen.modelLoadGate, explicit: explicit,
+                modelID: Qwen3Plugin.availableModels[0].id, repositoryID: Qwen3Plugin.availableModels[0].repoId,
+                task: { explicit ? qwen.explicitModelLoadTask : qwen.genericModelLoadTask })
+            try await assertDeletionCancelsQueuedLoad(granite, gate: granite.modelLoadGate, explicit: explicit,
+                modelID: GranitePlugin.availableModels[0].id, repositoryID: GranitePlugin.availableModels[0].repoId,
+                task: { explicit ? granite.explicitModelLoadTask : granite.genericModelLoadTask })
+            try await assertDeletionCancelsQueuedLoad(voxtral, gate: voxtral.modelLoadGate, explicit: explicit,
+                modelID: VoxtralPlugin.availableModels[0].id, repositoryID: VoxtralPlugin.availableModels[0].repoId,
+                task: { explicit ? voxtral.explicitModelLoadTask : voxtral.genericModelLoadTask })
+            try await assertDeletionCancelsQueuedLoad(canary, gate: canary.modelLoadGate, explicit: explicit,
+                modelID: CanaryPlugin.availableModels[0].id, repositoryID: CanaryPlugin.availableModels[0].repoId,
+                task: { explicit ? canary.explicitModelLoadTask : canary.genericModelLoadTask })
+        }
+    }
+
+    @MainActor
+    private func assertDeletionCancelsQueuedLoad<P: NSObject & TranscriptionEnginePlugin & PluginDownloadedModelManaging>(
+        _ plugin: P, gate: PluginLocalInferenceGate, explicit: Bool, modelID: String, repositoryID: String,
+        task: @escaping @MainActor @Sendable () -> Task<Void, Never>?
+    ) async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let snapshot = try fixture.writeSnapshot(repositoryID: repositoryID, commit: commit, requiredFiles: [
+            "config.json", "tokenizer.json", "tokenizer.model", "tekken.json", "vocab.json", "merges.txt",
+        ])
+        let host = MockHostServices(pluginDataDirectory: fixture.root, defaults: ["loadedModel": modelID])
+        plugin.activate(host: host)
+        defer { plugin.deactivate() }
+        try await gate.withLock {
+            let pending = await MainActor.run {
+                if explicit {
+                    _ = plugin.perform(NSSelectorFromString("triggerRestoreModelForModel:"), with: modelID as NSString)
+                } else {
+                    _ = plugin.perform(NSSelectorFromString("triggerRestoreModel"))
+                }
+                return task()
+            }
+            XCTAssertNotNil(pending)
+            for _ in 0..<10 { await Task.yield() }
+            try await plugin.deleteDownloadedModel(modelID)
+            XCTAssertTrue(pending?.isCancelled == true, "Deletion must invalidate a load already waiting for its gate")
+            XCTAssertFalse(FileManager.default.fileExists(atPath: snapshot.path))
+            XCTAssertNil(host.userDefault(forKey: "loadedModel"))
+            pending?.cancel() // Keep the failing regression from ever attempting native/network loading.
+            await pending?.value
+        }
+    }
+
+    @MainActor
     func testFailedGenericRestorePreservesPersistedModelAcrossDeactivation() async throws {
         let qwen = Qwen3Plugin()
         let granite = GranitePlugin()

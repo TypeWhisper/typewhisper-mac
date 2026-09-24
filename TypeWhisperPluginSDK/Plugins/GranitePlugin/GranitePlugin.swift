@@ -210,22 +210,34 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
     }
 
     func deleteDownloadedModel(_ modelId: String) async throws {
-        guard modelState != .loading else { throw PluginModelImportError.busy }
-        guard let modelDef = allModelDefinitions.first(where: { $0.id == modelId }) else { return }
+        try activationLock.withLock {
+            guard modelState != .loading else { throw PluginModelImportError.busy }
+            guard let modelDef = allModelDefinitions.first(where: { $0.id == modelId }) else { return }
 
-        if loadedModelId == modelId {
-            unloadModel(clearPersistence: true)
-        }
-        if _selectedModelId == modelId {
-            _selectedModelId = nil
-            host?.setUserDefault(nil, forKey: "selectedModel")
-        }
-        if host?.userDefault(forKey: "loadedModel") as? String == modelId {
-            host?.setUserDefault(nil, forKey: "loadedModel")
-        }
+            if _selectedModelId == modelId || host?.userDefault(forKey: "loadedModel") as? String == modelId {
+                // A task queued on modelLoadGate has not set .loading yet.
+                // Invalidate it before removing files it could redownload.
+                activationID = UUID()
+                genericModelLoadTask?.cancel()
+                genericModelLoadTask = nil
+                explicitModelLoadTask?.cancel()
+                explicitModelLoadTask = nil
+                passiveRestoreController.cancel()
+            }
+            if loadedModelId == modelId {
+                unloadModel(clearPersistence: true)
+            }
+            if _selectedModelId == modelId {
+                _selectedModelId = nil
+                host?.setUserDefault(nil, forKey: "selectedModel")
+            }
+            if host?.userDefault(forKey: "loadedModel") as? String == modelId {
+                host?.setUserDefault(nil, forKey: "loadedModel")
+            }
 
-        try deleteModelFiles(modelDef)
-        host?.notifyCapabilitiesChanged()
+            try deleteModelFiles(modelDef)
+            host?.notifyCapabilitiesChanged()
+        }
     }
 
     var supportedLanguages: [String] {
@@ -325,9 +337,11 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
 
     private func performModelLoad(_ modelDef: GraniteModelDef, allowDownloads: Bool,
                                   notifyHost: Bool, generation: UUID) async throws {
-        try Task.checkCancellation()
-        guard generation == activationID, host != nil else { throw CancellationError() }
-        modelState = .loading
+        try activationLock.withLock {
+            try Task.checkCancellation()
+            guard generation == activationID, host != nil else { throw CancellationError() }
+            modelState = .loading
+        }
         do {
             let modelsDir = host?.pluginDataDirectory.appendingPathComponent("models")
                 ?? FileManager.default.temporaryDirectory
