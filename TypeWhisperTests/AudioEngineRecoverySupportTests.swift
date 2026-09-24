@@ -1,6 +1,6 @@
 import AudioToolbox
 import AudioUnit
-import AVFoundation
+@preconcurrency import AVFoundation
 import Combine
 import XCTest
 @testable import TypeWhisper
