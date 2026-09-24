@@ -47,6 +47,39 @@ final class TextDiffServiceTests: XCTestCase {
         XCTAssertEqual(TextDiffService.wordDiff(original: "", processed: "new", maxComparisonCells: 0), [.added("new")])
     }
 
+    func testBoundedWordDiffChecksCancellationPeriodicallyAndStopsWhenCancelled() {
+        let wordCount = 1_000
+        let original = (0..<wordCount).map { "a\($0)" }.joined(separator: " ")
+        let processed = (0..<wordCount).map { "b\($0)" }.joined(separator: " ")
+        let cellCount = wordCount * wordCount
+
+        var checks = 0
+        let segments = TextDiffService.wordDiff(
+            original: original,
+            processed: processed,
+            maxComparisonCells: .max,
+            checkCancellation: { checks += 1 }
+        )
+        XCTAssertEqual(segments?.count, 2 * wordCount)
+        XCTAssertGreaterThanOrEqual(checks, cellCount / TextDiffService.cancellationCheckInterval)
+
+        checks = 0
+        XCTAssertThrowsError(
+            try TextDiffService.wordDiff(
+                original: original,
+                processed: processed,
+                maxComparisonCells: .max,
+                checkCancellation: {
+                    checks += 1
+                    if checks == 3 { throw CancellationError() }
+                }
+            )
+        ) { error in
+            XCTAssertTrue(error is CancellationError)
+        }
+        XCTAssertEqual(checks, 3, "The comparison must stop at the first failed check")
+    }
+
     func testExtractCorrectionsFindsLocalizedWordReplacement() {
         let service = TextDiffService()
 

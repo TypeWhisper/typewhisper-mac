@@ -41,6 +41,16 @@ struct HistoryQuery: Sendable {
     var hasSearchText: Bool {
         !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
+
+    /// Whether the query is evaluated by enumerating the complete history instead of a
+    /// SQLite page, because device identity and free-text search are matched in memory.
+    var requiresPostFiltering: Bool {
+        hasSearchText
+            || originDeviceID != nil
+            || appBundleIdentifier != nil
+            || cutoffDate != nil
+            || source != nil
+    }
 }
 
 /// Evaluates the history filters that are applied during enumeration instead of in SQLite.
@@ -357,7 +367,7 @@ final class HistoryService: ObservableObject {
 
         // Device identity combines persisted fields, and free-text search spans computed
         // values. Enumerate these queries in batches so only the requested page is retained.
-        if Self.requiresPostFiltering(query) {
+        if query.requiresPostFiltering {
             var records: [TranscriptionRecord] = []
             do {
                 let totalCount = try Self.enumerateMatches(
@@ -412,7 +422,7 @@ final class HistoryService: ObservableObject {
         offset: Int,
         limit: Int
     ) async -> HistoryPage? {
-        guard Self.requiresPostFiltering(query) else {
+        guard query.requiresPostFiltering else {
             return fetchPage(query: query, offset: offset, limit: limit)
         }
         let requestedOffset = max(offset, 0)
@@ -449,7 +459,7 @@ final class HistoryService: ObservableObject {
 
     func recordCountThrowing(query: HistoryQuery = HistoryQuery()) throws -> Int {
         let descriptor = Self.fetchDescriptor(for: query)
-        if Self.requiresPostFiltering(query) {
+        if query.requiresPostFiltering {
             return try Self.enumerateMatches(
                 in: modelContext,
                 descriptor: descriptor,
@@ -608,7 +618,7 @@ final class HistoryService: ObservableObject {
 
     func allRecordsThrowing(query: HistoryQuery = HistoryQuery()) throws -> [TranscriptionRecord] {
         let records = try modelContext.fetch(Self.fetchDescriptor(for: query))
-        guard Self.requiresPostFiltering(query) else { return records }
+        guard query.requiresPostFiltering else { return records }
         let filter = HistoryPostFilter(query: query)
         return records.filter { filter.matches($0) }
     }
@@ -1034,14 +1044,6 @@ final class HistoryService: ObservableObject {
             ]
         }
         return FetchDescriptor(predicate: predicate, sortBy: sortBy)
-    }
-
-    nonisolated private static func requiresPostFiltering(_ query: HistoryQuery) -> Bool {
-        query.hasSearchText
-            || query.originDeviceID != nil
-            || query.appBundleIdentifier != nil
-            || query.cutoffDate != nil
-            || query.source != nil
     }
 
     /// Enumerates a post-filtered query in batches, passing only the records inside the

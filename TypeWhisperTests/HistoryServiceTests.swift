@@ -1117,6 +1117,176 @@ final class HistoryServiceTests: XCTestCase {
         await viewModel.loadDiffPresentation(for: oversized)
         XCTAssertEqual(viewModel.diffPresentation(for: oversized), .tooLarge)
     }
+
+    @MainActor
+    func testHistoryViewModelRunsFilteredFullScansThroughBackgroundLoader() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "HistoryFilteredBackground")
+        defer { TestSupport.remove(appSupportDirectory) }
+        let historyService = HistoryService(appSupportDirectory: appSupportDirectory)
+        let baseDate = Date(timeIntervalSince1970: 1_800_000_000)
+        for index in 0..<105 {
+            historyService.addRecord(
+                timestamp: baseDate.addingTimeInterval(Double(index)),
+                rawText: "Notes \(index)",
+                finalText: "Notes \(index)",
+                appName: "Notes",
+                appBundleIdentifier: "com.apple.Notes",
+                durationSeconds: 1,
+                language: "en",
+                engineUsed: "test"
+            )
+        }
+        historyService.addRecord(
+            rawText: "Mail",
+            finalText: "Mail",
+            appName: "Mail",
+            appBundleIdentifier: "com.apple.mail",
+            durationSeconds: 1,
+            language: "en",
+            engineUsed: "test"
+        )
+        let loader = ControlledHistoryPageLoader(historyService: historyService)
+        let viewModel = HistoryViewModel(
+            historyService: historyService,
+            textDiffService: TextDiffService(),
+            dictionaryService: DictionaryService(appSupportDirectory: appSupportDirectory),
+            backgroundPageLoader: { await loader.load($0, offset: $1, limit: $2) }
+        )
+        viewModel.activate()
+        XCTAssertTrue(loader.requests.isEmpty)
+
+        viewModel.requestAppFilter("com.apple.Notes")
+        await viewModel.waitForPendingWork()
+        XCTAssertEqual(loader.requests.map(\.appBundleIdentifier), ["com.apple.Notes"])
+        XCTAssertEqual(viewModel.records.count, 100)
+        XCTAssertEqual(viewModel.totalMatchingRecordCount, 105)
+
+        viewModel.loadMoreRecords()
+        await viewModel.waitForPendingWork()
+        XCTAssertEqual(loader.requests.count, 2)
+        XCTAssertEqual(viewModel.records.count, 105)
+        XCTAssertFalse(viewModel.hasMoreRecords)
+        XCTAssertFalse(viewModel.isLoadingMore)
+    }
+
+    @MainActor
+    func testHistoryViewModelReloadsSearchDroppedForUnsavedDraftAfterDiscard() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "HistoryDeferredSearch")
+        defer { TestSupport.remove(appSupportDirectory) }
+        let historyService = HistoryService(appSupportDirectory: appSupportDirectory)
+        let alphaID = UUID()
+        for (id, text) in [(alphaID, "Alpha note"), (UUID(), "Beta note")] {
+            historyService.addRecord(
+                id: id,
+                rawText: text,
+                finalText: text,
+                appName: nil,
+                appBundleIdentifier: nil,
+                durationSeconds: 1,
+                language: "en",
+                engineUsed: "test"
+            )
+        }
+        let loader = ControlledHistoryPageLoader(historyService: historyService)
+        loader.holdsRequests = true
+        let viewModel = HistoryViewModel(
+            historyService: historyService,
+            textDiffService: TextDiffService(),
+            dictionaryService: DictionaryService(appSupportDirectory: appSupportDirectory),
+            backgroundPageLoader: { await loader.load($0, offset: $1, limit: $2) }
+        )
+        viewModel.activate()
+        viewModel.requestRecordSelection([alphaID])
+
+        let searched = loader.expectation(forRequestCount: 1, in: self)
+        viewModel.searchQuery = "beta"
+        await fulfillment(of: [searched], timeout: 5)
+        viewModel.editedText = "Alpha note, edited"
+        XCTAssertTrue(viewModel.isDirty)
+        loader.releaseRequest(searchText: "beta")
+        await viewModel.waitForPendingWork()
+        XCTAssertEqual(viewModel.records.count, 2, "The search result is held back while the draft is dirty")
+
+        loader.holdsRequests = false
+        viewModel.discardEditing()
+        await viewModel.waitForPendingWork()
+
+        XCTAssertEqual(loader.requests.map(\.searchText), ["beta", "beta"])
+        XCTAssertEqual(viewModel.records.map(\.finalText), ["Beta note"])
+        XCTAssertEqual(viewModel.totalMatchingRecordCount, 1)
+    }
+
+    @MainActor
+    func testHistoryDiffIgnoresSupersededAndCancelledComparisons() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "HistoryStaleDiff")
+        defer { TestSupport.remove(appSupportDirectory) }
+        let historyService = HistoryService(appSupportDirectory: appSupportDirectory)
+        let longText = (0..<600).map { "word\($0)" }.joined(separator: " ")
+        let recordID = UUID()
+        historyService.addRecord(
+            id: recordID,
+            rawText: longText,
+            finalText: longText + " first",
+            appName: nil,
+            appBundleIdentifier: nil,
+            durationSeconds: 1,
+            language: "en",
+            engineUsed: "test"
+        )
+        let record = try XCTUnwrap(historyService.record(withID: recordID))
+        let loader = ControlledDiffPresentationLoader()
+        let viewModel = HistoryViewModel(
+            historyService: historyService,
+            textDiffService: TextDiffService(),
+            dictionaryService: DictionaryService(appSupportDirectory: appSupportDirectory),
+            diffPresentationLoader: { await loader.load(rawText: $0, finalText: $1) }
+        )
+
+        // The first comparison is still running when the record's text changes and a
+        // second comparison starts. The older result arrives last and must not replace the newer one.
+        let firstRequested = loader.expectation(forRequestCount: 1, in: self)
+        let first = Task { await viewModel.loadDiffPresentation(for: record) }
+        await fulfillment(of: [firstRequested], timeout: 5)
+        historyService.updateRecord(record, finalText: longText + " second")
+        let secondRequested = loader.expectation(forRequestCount: 2, in: self)
+        let second = Task { await viewModel.loadDiffPresentation(for: record) }
+        await fulfillment(of: [secondRequested], timeout: 5)
+
+        loader.release(finalText: longText + " second")
+        await second.value
+        XCTAssertEqual(viewModel.diffPresentation(for: record), .segments([.added("second")]))
+        loader.release(finalText: longText + " first")
+        await first.value
+        XCTAssertEqual(viewModel.diffPresentation(for: record), .segments([.added("second")]))
+
+        // A comparison whose caller was cancelled is not cached, even if it still returns a result.
+        historyService.updateRecord(record, finalText: longText + " third")
+        let thirdRequested = loader.expectation(forRequestCount: 3, in: self)
+        let third = Task { await viewModel.loadDiffPresentation(for: record) }
+        await fulfillment(of: [thirdRequested], timeout: 5)
+        third.cancel()
+        loader.release(finalText: longText + " third")
+        await third.value
+        XCTAssertNil(viewModel.diffPresentation(for: record))
+    }
+
+    @MainActor
+    func testBackgroundDiffForwardsCancellationToComparison() async {
+        // Just below the comparison cap, so an uncancelled comparison would produce segments.
+        let wordCount = 1_500
+        XCTAssertLessThanOrEqual(wordCount * wordCount, HistoryViewModel.maxDiffComparisonCells)
+        let rawText = (0..<wordCount).map { "a\($0)" }.joined(separator: " ")
+        let finalText = (0..<wordCount).map { "b\($0)" }.joined(separator: " ")
+
+        // The task is cancelled before it starts, so the cancellation reaches the detached
+        // comparison as soon as it is awaited.
+        let comparison = Task {
+            await HistoryViewModel.computeDiffPresentationInBackground(rawText: rawText, finalText: finalText)
+        }
+        comparison.cancel()
+        let result = await comparison.value
+        XCTAssertNil(result)
+    }
 }
 
 /// Stands in for the background search so tests control when each result arrives.
@@ -1164,6 +1334,50 @@ private final class ControlledHistoryPageLoader {
     func releaseRequest(searchText: String) {
         guard let index = heldRequests.firstIndex(where: { $0.searchText == searchText }) else {
             return XCTFail("No held history request for \(searchText)")
+        }
+        heldRequests.remove(at: index).continuation.resume()
+    }
+}
+
+/// Stands in for the background diff so tests control when each comparison finishes.
+/// Each result names the last word of the compared final text.
+@MainActor
+private final class ControlledDiffPresentationLoader {
+    private struct HeldRequest {
+        let finalText: String
+        let continuation: CheckedContinuation<Void, Never>
+    }
+
+    private(set) var requestCount = 0
+    private var heldRequests: [HeldRequest] = []
+    private var requestExpectation: (count: Int, expectation: XCTestExpectation)?
+
+    func load(rawText: String, finalText: String) async -> HistoryDiffPresentation? {
+        requestCount += 1
+        if let pending = requestExpectation, requestCount >= pending.count {
+            requestExpectation = nil
+            pending.expectation.fulfill()
+        }
+        await withCheckedContinuation { continuation in
+            heldRequests.append(HeldRequest(finalText: finalText, continuation: continuation))
+        }
+        let lastWord = finalText.split(separator: " ").last.map(String.init) ?? ""
+        return .segments([.added(lastWord)])
+    }
+
+    func expectation(forRequestCount count: Int, in testCase: XCTestCase) -> XCTestExpectation {
+        let expectation = testCase.expectation(description: "Diff request \(count)")
+        if requestCount >= count {
+            expectation.fulfill()
+        } else {
+            requestExpectation = (count, expectation)
+        }
+        return expectation
+    }
+
+    func release(finalText: String) {
+        guard let index = heldRequests.firstIndex(where: { $0.finalText == finalText }) else {
+            return XCTFail("No held diff request for \(finalText)")
         }
         heldRequests.remove(at: index).continuation.resume()
     }

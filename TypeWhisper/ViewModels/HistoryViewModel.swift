@@ -174,6 +174,7 @@ private enum PendingHistoryTransition: Equatable {
 @MainActor
 final class HistoryViewModel: ObservableObject {
     typealias BackgroundPageLoader = @MainActor (HistoryQuery, _ offset: Int, _ limit: Int) async -> HistoryPage?
+    typealias DiffPresentationLoader = @MainActor (_ rawText: String, _ finalText: String) async -> HistoryDiffPresentation?
 
     private static let pageSize = 100
     /// Diffs whose inputs fit in this many UTF-8 bytes are computed inline while rendering.
@@ -237,8 +238,11 @@ final class HistoryViewModel: ObservableObject {
     private var isActive = false
     private var facetDevices: [HistoryDeviceFacet] = []
     private let backgroundPageLoader: BackgroundPageLoader
+    private let diffPresentationLoader: DiffPresentationLoader
     private let historyRefreshDelay: Duration
     private var queryGeneration = 0
+    /// A reload that was skipped or dropped while the draft had unsaved changes.
+    private var deferredReload: (preservingLoadedRecords: Bool, resetListIdentity: Bool)?
     private var queryTask: Task<Void, Never>?
     private var loadMoreAfterQuery = false
     private var facetsGeneration = 0
@@ -263,7 +267,8 @@ final class HistoryViewModel: ObservableObject {
         dictionaryService: DictionaryService,
         syncController: CloudFolderSyncController? = nil,
         historyRefreshDelay: Duration = .milliseconds(150),
-        backgroundPageLoader: BackgroundPageLoader? = nil
+        backgroundPageLoader: BackgroundPageLoader? = nil,
+        diffPresentationLoader: DiffPresentationLoader? = nil
     ) {
         self.historyService = historyService
         self.textDiffService = textDiffService
@@ -272,6 +277,9 @@ final class HistoryViewModel: ObservableObject {
         self.historyRefreshDelay = historyRefreshDelay
         self.backgroundPageLoader = backgroundPageLoader ?? { [historyService] query, offset, limit in
             await historyService.fetchPageInBackground(query: query, offset: offset, limit: limit)
+        }
+        self.diffPresentationLoader = diffPresentationLoader ?? { rawText, finalText in
+            await HistoryViewModel.computeDiffPresentationInBackground(rawText: rawText, finalText: finalText)
         }
         currentDeviceID = syncController?.historySyncPreferences?.deviceID
         records = historyService.recentRecords
@@ -382,7 +390,7 @@ final class HistoryViewModel: ObservableObject {
         let offset = records.count
         isLoadingMore = true
 
-        guard query.hasSearchText else {
+        guard query.requiresPostFiltering else {
             defer { isLoadingMore = false }
             appendPage(historyService.fetchPage(query: query, offset: offset, limit: Self.pageSize))
             return
@@ -515,6 +523,7 @@ final class HistoryViewModel: ObservableObject {
         editedText = newText
         originalDraftText = newText
         detailViewMode = .final
+        reloadDeferredQueryIfNeeded()
 
         let suggestions = textDiffService.extractCorrections(original: originalText, edited: newText)
         guard !suggestions.isEmpty else {
@@ -541,6 +550,7 @@ final class HistoryViewModel: ObservableObject {
         editedText = originalDraftText
         showCorrectionBanner = false
         correctionSuggestions = []
+        reloadDeferredQueryIfNeeded()
     }
 
     func markComplete(_ records: [TranscriptionRecord]) {
@@ -618,22 +628,45 @@ final class HistoryViewModel: ObservableObject {
             return cached.presentation
         }
         guard rawText.utf8.count + finalText.utf8.count <= Self.inlineDiffInputLimit else { return nil }
-        let presentation = Self.makeDiffPresentation(rawText: rawText, finalText: finalText)
+        let presentation = Self.makeDiffPresentation(rawText: rawText, finalText: finalText, checkCancellation: {})
         cacheDiff(presentation, for: record.id, rawText: rawText, finalText: finalText)
         return presentation
     }
 
-    /// Computes a missing diff off the main actor and publishes it once it is cached.
+    /// Computes a missing diff off the main actor and publishes it once it is cached. The result
+    /// is discarded when the caller was cancelled or the record's text changed in the meantime,
+    /// so a superseded comparison cannot replace the diff of the current text.
     func loadDiffPresentation(for record: TranscriptionRecord) async {
         guard diffPresentation(for: record) == nil else { return }
         let recordID = record.id
         let rawText = record.rawText
         let finalText = record.finalText
-        let presentation = await Task.detached(priority: .userInitiated) {
-            HistoryViewModel.makeDiffPresentation(rawText: rawText, finalText: finalText)
-        }.value
+        guard let presentation = await diffPresentationLoader(rawText, finalText),
+              !Task.isCancelled,
+              !record.isDeleted, record.modelContext != nil,
+              record.rawText == rawText, record.finalText == finalText
+        else { return }
         cacheDiff(presentation, for: recordID, rawText: rawText, finalText: finalText)
         objectWillChange.send()
+    }
+
+    /// Compares the texts on a detached task and forwards the caller's cancellation to it, so an
+    /// obsolete comparison stops early instead of finishing the LCS table. Returns `nil` when the
+    /// comparison was cancelled.
+    static func computeDiffPresentationInBackground(
+        rawText: String,
+        finalText: String
+    ) async -> HistoryDiffPresentation? {
+        let comparison = Task.detached(priority: .userInitiated) {
+            try HistoryViewModel.makeDiffPresentation(rawText: rawText, finalText: finalText) {
+                try Task.checkCancellation()
+            }
+        }
+        return await withTaskCancellationHandler {
+            try? await comparison.value
+        } onCancel: {
+            comparison.cancel()
+        }
     }
 
     func dismissCorrectionBanner() {
@@ -842,7 +875,11 @@ final class HistoryViewModel: ObservableObject {
         preservingLoadedRecords: Bool = false,
         resetListIdentity: Bool = true
     ) {
-        guard !isDirty else { return }
+        guard !isDirty else {
+            deferReload(preservingLoadedRecords: preservingLoadedRecords, resetListIdentity: resetListIdentity)
+            return
+        }
+        deferredReload = nil
         queryGeneration &+= 1
         queryTask?.cancel()
         queryTask = nil
@@ -856,7 +893,7 @@ final class HistoryViewModel: ObservableObject {
             limit = HistoryService.recentRecordsLimit
         }
         let query = currentQuery
-        guard query.hasSearchText else {
+        guard query.requiresPostFiltering else {
             applyReloadedPage(
                 historyService.fetchPage(query: query, offset: 0, limit: limit),
                 resetListIdentity: resetListIdentity
@@ -864,8 +901,9 @@ final class HistoryViewModel: ObservableObject {
             return
         }
 
-        // Free-text search scans the complete history, so it runs off the main actor. Its
-        // result is dropped when a newer query, deactivation, or an unsaved draft supersedes it.
+        // Free-text search and device, app, time, or source filters scan the complete history,
+        // so they run off the main actor. The result is dropped when a newer query or
+        // deactivation supersedes it, and deferred while the draft has unsaved changes.
         let generation = queryGeneration
         let loader = backgroundPageLoader
         queryTask = startTrackedTask { [weak self] in
@@ -874,6 +912,12 @@ final class HistoryViewModel: ObservableObject {
             self.queryTask = nil
             guard let page, !self.isDirty else {
                 self.loadMoreAfterQuery = false
+                if page != nil {
+                    self.deferReload(
+                        preservingLoadedRecords: preservingLoadedRecords,
+                        resetListIdentity: resetListIdentity
+                    )
+                }
                 return
             }
             self.applyReloadedPage(page, resetListIdentity: resetListIdentity)
@@ -882,6 +926,23 @@ final class HistoryViewModel: ObservableObject {
                 self.loadMoreRecords()
             }
         }
+    }
+
+    private func deferReload(preservingLoadedRecords: Bool, resetListIdentity: Bool) {
+        let pending = deferredReload
+        deferredReload = (
+            preservingLoadedRecords: (pending?.preservingLoadedRecords ?? true) && preservingLoadedRecords,
+            resetListIdentity: (pending?.resetListIdentity ?? false) || resetListIdentity
+        )
+    }
+
+    /// Runs the reload that the unsaved draft held back, now that the draft is clean again.
+    private func reloadDeferredQueryIfNeeded() {
+        guard let pending = deferredReload, !isDirty else { return }
+        reloadCurrentQuery(
+            preservingLoadedRecords: pending.preservingLoadedRecords,
+            resetListIdentity: pending.resetListIdentity
+        )
     }
 
     private func applyReloadedPage(_ page: HistoryPage, resetListIdentity: Bool) {
@@ -1001,6 +1062,7 @@ final class HistoryViewModel: ObservableObject {
     }
 
     private func cancelPendingQueryWork() {
+        deferredReload = nil
         queryGeneration &+= 1
         queryTask?.cancel()
         queryTask = nil
@@ -1026,12 +1088,14 @@ final class HistoryViewModel: ObservableObject {
 
     nonisolated private static func makeDiffPresentation(
         rawText: String,
-        finalText: String
-    ) -> HistoryDiffPresentation {
-        guard let segments = TextDiffService.wordDiff(
+        finalText: String,
+        checkCancellation: () throws -> Void
+    ) rethrows -> HistoryDiffPresentation {
+        guard let segments = try TextDiffService.wordDiff(
             original: rawText.trimmingCharacters(in: .whitespacesAndNewlines),
             processed: finalText,
-            maxComparisonCells: maxDiffComparisonCells
+            maxComparisonCells: maxDiffComparisonCells,
+            checkCancellation: checkCancellation
         ) else {
             return .tooLarge
         }

@@ -13,6 +13,8 @@ enum DiffSegment: Equatable, Sendable {
 }
 
 final class TextDiffService {
+    /// Number of LCS cells compared between two `checkCancellation` calls in `wordDiff`.
+    static let cancellationCheckInterval = 1 << 16
 
     func computeWordDiff(original: String, processed: String) -> [DiffSegment] {
         Self.wordDiff(original: original, processed: processed, maxComparisonCells: .max) ?? []
@@ -22,6 +24,18 @@ final class TextDiffService {
     /// building an LCS table with more than `maxComparisonCells` cells. The table costs
     /// O(m·n) time and one byte per cell, so callers can present a fallback for very long texts.
     static func wordDiff(original: String, processed: String, maxComparisonCells: Int) -> [DiffSegment]? {
+        wordDiff(original: original, processed: processed, maxComparisonCells: maxComparisonCells) {}
+    }
+
+    /// Like `wordDiff(original:processed:maxComparisonCells:)`, but runs `checkCancellation`
+    /// before the table is built and after every `cancellationCheckInterval` cells, so a
+    /// background caller can abandon the comparison by throwing.
+    static func wordDiff(
+        original: String,
+        processed: String,
+        maxComparisonCells: Int,
+        checkCancellation: () throws -> Void
+    ) rethrows -> [DiffSegment]? {
         let origWords = original.split(omittingEmptySubsequences: true, whereSeparator: \.isWhitespace).map(String.init)
         let procWords = processed.split(omittingEmptySubsequences: true, whereSeparator: \.isWhitespace).map(String.init)
 
@@ -41,12 +55,19 @@ final class TextDiffService {
         let (cellCount, overflow) = m.multipliedReportingOverflow(by: n)
         guard !overflow, cellCount <= maxComparisonCells else { return nil }
 
+        try checkCancellation()
         // Keep only the current LCS row and one byte per backtracking direction,
         // rather than an Int for every cell in a nested copy-on-write array.
         var row = Array(repeating: 0, count: n + 1)
         var directions = Array(repeating: UInt8(0), count: m * n)
         if m > 0 && n > 0 {
+            var cellsSinceCancellationCheck = 0
             for i in 1...m {
+                cellsSinceCancellationCheck += n
+                if cellsSinceCancellationCheck >= cancellationCheckInterval {
+                    cellsSinceCancellationCheck = 0
+                    try checkCancellation()
+                }
                 var diagonal = 0
                 let rowOffset = (i - 1) * n
                 for j in 1...n {
