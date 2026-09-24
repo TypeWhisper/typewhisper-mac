@@ -25,9 +25,10 @@ enum HistorySyncAssetStore {
         generation: String,
         recordID: UUID,
         updatedAt: Date,
-        durationSeconds: Double?
+        durationSeconds: Double?,
+        digestCache: CloudFolderSyncCache? = nil
     ) throws -> UserDataSyncHistoryAudioV1 {
-        let digest = try sha256AndSize(of: sourceURL)
+        let digest = try sha256AndSize(of: sourceURL, cache: digestCache)
         let relativePath = [
             "assets",
             "history",
@@ -56,7 +57,7 @@ enum HistorySyncAssetStore {
             }
         }
 
-        let published = try sha256AndSize(of: destination)
+        let published = try sha256AndSize(of: destination, cache: digestCache)
         guard published == digest else {
             throw HistorySyncAssetStoreError.integrityMismatch
         }
@@ -110,6 +111,15 @@ enum HistorySyncAssetStore {
             try await Task.sleep(for: .milliseconds(250))
         }
         throw HistorySyncAssetStoreError.missingAsset
+    }
+
+    /// Reuses the digest of an unchanged file so repeated syncs do not rehash every recording.
+    private static func sha256AndSize(
+        of url: URL,
+        cache: CloudFolderSyncCache?
+    ) throws -> (sha256: String, byteCount: Int64) {
+        guard let cache else { return try sha256AndSize(of: url) }
+        return try cache.digest(of: url, compute: sha256AndSize(of:))
     }
 
     static func sha256AndSize(of url: URL) throws -> (sha256: String, byteCount: Int64) {

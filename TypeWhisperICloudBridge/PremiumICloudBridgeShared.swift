@@ -121,6 +121,8 @@ enum PremiumICloudBridgeError: LocalizedError, Equatable, Sendable {
 }
 
 enum PremiumICloudBridgeFileMirror {
+    private static let modificationDateTolerance: TimeInterval = 0.001
+
     static func synchronize(
         localRoot: URL,
         remoteRoot: URL,
@@ -190,6 +192,8 @@ enum PremiumICloudBridgeFileMirror {
             includingPropertiesForKeys: [
                 .isDirectoryKey,
                 .isSymbolicLinkKey,
+                .isUbiquitousItemKey,
+                .fileSizeKey,
                 .contentModificationDateKey,
             ],
             options: [.skipsHiddenFiles]
@@ -225,9 +229,38 @@ enum PremiumICloudBridgeFileMirror {
         to destination: URL,
         fileManager: FileManager
     ) throws {
-        let isUbiquitous = (try? source.resourceValues(
-            forKeys: [.isUbiquitousItemKey]
-        ).isUbiquitousItem) == true
+        let sourceValues = try? source.resourceValues(forKeys: [
+            .isUbiquitousItemKey,
+            .fileSizeKey,
+        ])
+        let isUbiquitous = sourceValues?.isUbiquitousItem == true
+        let destinationExists = fileManager.fileExists(atPath: destination.path)
+        var sizesDiffer = false
+        if destinationExists {
+            let sourceDate = try source.resourceValues(
+                forKeys: [.contentModificationDateKey]
+            ).contentModificationDate
+            let destinationValues = try destination.resourceValues(
+                forKeys: [.fileSizeKey, .contentModificationDateKey]
+            )
+            let destinationDate = destinationValues.contentModificationDate
+            if let sourceSize = sourceValues?.fileSize,
+               let destinationSize = destinationValues.fileSize {
+                sizesDiffer = sourceSize != destinationSize
+                // Copies keep the source modification date, so a mirrored pair has matching
+                // metadata and neither side needs to be downloaded or read. The tolerance only
+                // absorbs the precision lost when the date is written back to the file system.
+                if !sizesDiffer,
+                   let sourceDate,
+                   let destinationDate,
+                   abs(sourceDate.timeIntervalSince(destinationDate)) < modificationDateTolerance {
+                    return
+                }
+            }
+            // An older source never replaces the destination, whatever its contents are.
+            guard (sourceDate ?? .distantPast) >= (destinationDate ?? .distantPast) else { return }
+        }
+
         if isUbiquitous {
             try? fileManager.startDownloadingUbiquitousItem(at: source)
         }
@@ -240,18 +273,13 @@ enum PremiumICloudBridgeFileMirror {
             // next periodic bridge pass will copy it without blocking uploads.
             return
         }
-        if fileManager.fileExists(atPath: destination.path) {
-            if let destinationData = try? Data(contentsOf: destination),
+        if destinationExists {
+            // Metadata was inconclusive; files of different sizes cannot be equal.
+            if !sizesDiffer,
+               let destinationData = try? Data(contentsOf: destination),
                destinationData == sourceData {
                 return
             }
-            let sourceDate = try source.resourceValues(
-                forKeys: [.contentModificationDateKey]
-            ).contentModificationDate ?? .distantPast
-            let destinationDate = try destination.resourceValues(
-                forKeys: [.contentModificationDateKey]
-            ).contentModificationDate ?? .distantPast
-            guard sourceDate >= destinationDate else { return }
         } else {
             try fileManager.createDirectory(
                 at: destination.deletingLastPathComponent(),

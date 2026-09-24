@@ -703,6 +703,24 @@ final class HistoryService: ObservableObject {
         refreshRecentRecords()
     }
 
+    /// Records that received a synchronized audio descriptor, newest first. Sync uses this
+    /// instead of loading the full history to find audio that still has to be installed.
+    func recordsWithSynchronizedAudio() -> [TranscriptionRecord] {
+        let descriptor = FetchDescriptor<TranscriptionRecord>(
+            predicate: #Predicate { $0.remoteAudioRelativePath != nil },
+            sortBy: [
+                SortDescriptor(\.timestamp, order: .reverse),
+                SortDescriptor(\.id, order: .forward),
+            ]
+        )
+        do {
+            return try modelContext.fetch(descriptor)
+        } catch {
+            logger.error("Failed to fetch synchronized audio records: \(error.localizedDescription)")
+            return []
+        }
+    }
+
     func synchronizedAudioDescriptor(
         for record: TranscriptionRecord
     ) -> UserDataSyncHistoryAudioV1? {

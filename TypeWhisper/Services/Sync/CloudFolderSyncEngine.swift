@@ -98,6 +98,8 @@ struct CloudFolderSyncResult: Equatable, Sendable {
     let syncedAt: Date
     let diagnostics: [CloudFolderSyncDiagnostic]
     let devices: [CloudFolderSyncDeviceRecord]
+    /// Package listing taken before the operations were read, so later remote changes differ from it.
+    let packageFingerprint: CloudFolderSyncPackageFingerprint?
 }
 
 struct CloudFolderSyncDiagnostic: Equatable, Sendable {
@@ -324,6 +326,7 @@ enum CloudFolderSyncEngine {
     private static let manifestFileName = "manifest.json"
     private static let devicesDirectoryName = "devices"
     private static let operationsDirectoryName = "ops"
+    private static let assetsDirectoryName = "assets"
     private static let tombstoneRetentionInterval: TimeInterval = 90 * 24 * 60 * 60
 
     static func packageURL(for folderURL: URL) -> URL {
@@ -337,6 +340,7 @@ enum CloudFolderSyncEngine {
         entitlements: PaidEntitlements,
         historyOriginDeviceID: String? = nil,
         now: Date = Date(),
+        cache: CloudFolderSyncCache? = nil,
         afterFileIO: (@Sendable () async -> Void)? = nil
     ) async throws -> CloudFolderSyncResult {
         guard entitlements.canUseCloudFolderSync else {
@@ -351,6 +355,8 @@ enum CloudFolderSyncEngine {
         let deviceName = Host.current().localizedName
             ?? ProcessInfo.processInfo.hostName
         let fileResult = try await Task.detached(priority: .utility) {
+            // Without a caller-owned cache, a per-sync cache still decodes each file only once.
+            let syncCache = cache ?? CloudFolderSyncCache()
             let packageURL = packageURL(for: folderURL)
             let operationsURL = packageURL
                 .appendingPathComponent(operationsDirectoryName, isDirectory: true)
@@ -379,7 +385,8 @@ enum CloudFolderSyncEngine {
             let assetPreparation = prepareHistoryAssets(
                 in: initialSnapshot,
                 packageURL: packageURL,
-                generation: stateSnapshot.historyGeneration
+                generation: stateSnapshot.historyGeneration,
+                cache: syncCache
             )
             let preparedSnapshot = assetPreparation.snapshot
             let initialRecords = records(from: preparedSnapshot)
@@ -391,9 +398,10 @@ enum CloudFolderSyncEngine {
                 now: now
             )
             try write(localOperations, to: deviceOperationsURL, now: now)
-            pruneExpiredTombstones(in: deviceOperationsURL, now: now)
+            pruneExpiredTombstones(in: deviceOperationsURL, now: now, cache: syncCache)
 
-            let readResult = try readOperations(from: operationsURL)
+            let fingerprint = packageFingerprint(packageURL: packageURL)
+            let readResult = try readOperations(from: operationsURL, cache: syncCache)
             let deviceReadResult = try readDevices(from: devicesURL)
             let winners = winningOperations(from: readResult.operations)
             let mutations = makeMutations(
@@ -409,19 +417,33 @@ enum CloudFolderSyncEngine {
                 readResult: readResult,
                 deviceReadResult: deviceReadResult,
                 mutations: mutations,
-                assetDiagnostics: assetPreparation.diagnostics
+                assetDiagnostics: assetPreparation.diagnostics,
+                packageFingerprint: fingerprint
             )
         }.value
         let operations = fileResult.readResult.operations
         let mutations = fileResult.mutations
 
         await afterFileIO?()
+        // Without applied mutations the exported state is exactly what this sync read, so the
+        // snapshot is only rebuilt when remote changes were applied to the store.
+        var synchronizedRecords = fileResult.initialRecords
         if !mutations.isEmpty {
             try await store.apply(mutations)
+            synchronizedRecords = records(from: await store.snapshot())
+            // Published local audio descriptors only exist in the prepared snapshot. Keep them
+            // exported while their history item survives, or the next sync would republish them.
+            for (key, record) in fileResult.initialRecords
+            where record.historyComponent == .audio && synchronizedRecords[key] == nil {
+                let contentKey = UserDataSyncIdentity.historyStateKey(
+                    itemID: record.itemID,
+                    component: .content
+                )
+                if synchronizedRecords[contentKey] != nil {
+                    synchronizedRecords[key] = record
+                }
+            }
         }
-
-        let finalSnapshot = await store.snapshot()
-        let synchronizedRecords = records(from: finalSnapshot)
         state.knownLocalItemIDs = Set(synchronizedRecords.keys)
         state.exportedItemVersions = synchronizedRecords.mapValues(\.version)
         for operation in fileResult.localOperations {
@@ -449,7 +471,8 @@ enum CloudFolderSyncEngine {
             diagnostics: fileResult.readResult.diagnostics
                 + fileResult.deviceReadResult.diagnostics
                 + fileResult.assetDiagnostics,
-            devices: fileResult.deviceReadResult.devices
+            devices: fileResult.deviceReadResult.devices,
+            packageFingerprint: fileResult.packageFingerprint
         )
     }
 
@@ -742,10 +765,9 @@ enum CloudFolderSyncEngine {
                 && $0.historyGeneration == historyGeneration
                 && !appliedOperationIDs.contains($0.operationId)
         }
-        let historyItemIDs = Set(historyOperations.map(\.itemId))
-        for itemID in historyItemIDs.sorted() {
+        let historyOperationsByItemID = Dictionary(grouping: historyOperations, by: \.itemId)
+        for (itemID, itemOperations) in historyOperationsByItemID.sorted(by: { $0.key < $1.key }) {
             guard let recordID = UserDataSyncIdentity.historyRecordID(from: itemID) else { continue }
-            let itemOperations = historyOperations.filter { $0.itemId == itemID }
             let deletion = itemOperations.first(where: { $0.kind == .delete })
             let localComponents = UserDataSyncHistoryComponent.allCases.compactMap {
                 localRecords[UserDataSyncIdentity.historyStateKey(itemID: itemID, component: $0)]
@@ -794,9 +816,11 @@ enum CloudFolderSyncEngine {
     private static func prepareHistoryAssets(
         in snapshot: UserDataSyncSnapshot,
         packageURL: URL,
-        generation: String
+        generation: String,
+        cache: CloudFolderSyncCache
     ) -> (snapshot: UserDataSyncSnapshot, diagnostics: [CloudFolderSyncDiagnostic]) {
         var diagnostics: [CloudFolderSyncDiagnostic] = []
+        var publishedPaths = Set<String>()
         let historyRecords = snapshot.historyRecords.map { record in
             guard record.audioEligible, let sourceURL = record.localAudioFileURL else {
                 return record
@@ -808,8 +832,11 @@ enum CloudFolderSyncEngine {
                     generation: generation,
                     recordID: record.content.recordID,
                     updatedAt: record.audio?.updatedAt ?? record.content.updatedAt,
-                    durationSeconds: record.content.durationSeconds
+                    durationSeconds: record.content.durationSeconds,
+                    digestCache: cache
                 )
+                publishedPaths.insert(sourceURL.path)
+                publishedPaths.insert(packageURL.appendingPathComponent(audio.relativeAssetPath).path)
                 return UserDataSyncHistoryRecord(
                     content: record.content,
                     inbox: record.inbox,
@@ -831,6 +858,7 @@ enum CloudFolderSyncEngine {
                 )
             }
         }
+        cache.retainDigests(atPaths: publishedPaths)
         return (
             UserDataSyncSnapshot(
                 dictionaryEntries: snapshot.dictionaryEntries,
@@ -1004,7 +1032,8 @@ enum CloudFolderSyncEngine {
     }
 
     static func readOperations(
-        from operationsURL: URL
+        from operationsURL: URL,
+        cache: CloudFolderSyncCache? = nil
     ) throws -> (operations: [CloudFolderSyncOperation], diagnostics: [CloudFolderSyncDiagnostic]) {
         let deviceDirectories = try FileManager.default.contentsOfDirectory(
             at: operationsURL,
@@ -1014,6 +1043,7 @@ enum CloudFolderSyncEngine {
 
         var operations: [CloudFolderSyncOperation] = []
         var diagnostics: [CloudFolderSyncDiagnostic] = []
+        var listedPaths = Set<String>()
         for deviceDirectory in deviceDirectories {
             guard (try? deviceDirectory.resourceValues(forKeys: [.isDirectoryKey]).isDirectory) == true else {
                 continue
@@ -1022,7 +1052,7 @@ enum CloudFolderSyncEngine {
             do {
                 files = try FileManager.default.contentsOfDirectory(
                     at: deviceDirectory,
-                    includingPropertiesForKeys: nil,
+                    includingPropertiesForKeys: Array(CloudFolderSyncFileStamp.resourceKeys),
                     options: [.skipsHiddenFiles]
                 )
             } catch {
@@ -1031,40 +1061,117 @@ enum CloudFolderSyncEngine {
             }
 
             for file in files where file.pathExtension == "json" {
-                guard let data = try? Data(contentsOf: file) else {
-                    diagnostics.append(.init(kind: .unreadableFile, fileName: file.lastPathComponent))
-                    continue
-                }
-                guard let envelope = try? decoder.decode(CloudFolderSyncSchemaEnvelope.self, from: data) else {
-                    diagnostics.append(.init(kind: .malformedOperation, fileName: file.lastPathComponent))
-                    continue
-                }
-                guard envelope.schemaVersion == 1 else {
+                listedPaths.insert(file.path)
+                switch operationFileContents(at: file, cache: cache) {
+                case .operation(let operation) where operation.schemaVersion == 1:
+                    operations.append(operation)
+                case .operation, .unsupportedSchema:
                     diagnostics.append(.init(kind: .unsupportedSchema, fileName: file.lastPathComponent))
-                    continue
-                }
-                guard let operation = try? decoder.decode(CloudFolderSyncOperation.self, from: data) else {
+                case .malformed:
                     diagnostics.append(.init(kind: .malformedOperation, fileName: file.lastPathComponent))
-                    continue
+                case .unreadable:
+                    diagnostics.append(.init(kind: .unreadableFile, fileName: file.lastPathComponent))
                 }
-                operations.append(operation)
             }
         }
+        cache?.retainOperations(atPaths: listedPaths)
         return (operations, diagnostics)
     }
 
-    private static func pruneExpiredTombstones(in deviceOperationsURL: URL, now: Date) {
+    private enum OperationFileContents {
+        case operation(CloudFolderSyncOperation)
+        case unsupportedSchema
+        case malformed
+        case unreadable
+    }
+
+    /// Decodes an operation file once and reuses the result while the file is unchanged.
+    /// Operation files are write-once, so an unchanged size and modification date means
+    /// unchanged contents.
+    private static func operationFileContents(
+        at file: URL,
+        cache: CloudFolderSyncCache?
+    ) -> OperationFileContents {
+        let stamp = (try? file.resourceValues(forKeys: CloudFolderSyncFileStamp.resourceKeys))
+            .flatMap { CloudFolderSyncFileStamp($0) }
+        if let operation = cache?.operation(atPath: file.path, stamp: stamp) {
+            return .operation(operation)
+        }
+        guard let data = try? Data(contentsOf: file) else {
+            return .unreadable
+        }
+        if let operation = try? decoder.decode(CloudFolderSyncOperation.self, from: data) {
+            cache?.storeOperation(operation, atPath: file.path, stamp: stamp, byteCount: data.count)
+            return .operation(operation)
+        }
+        // The schema envelope only distinguishes future schemas from malformed files.
+        guard let envelope = try? decoder.decode(CloudFolderSyncSchemaEnvelope.self, from: data),
+              envelope.schemaVersion != 1 else {
+            return .malformed
+        }
+        return .unsupportedSchema
+    }
+
+    /// Lists the sync package without reading file contents. Manifest and device files are
+    /// rewritten by every sync, so only device file names take part in the comparison.
+    static func packageFingerprint(folderURL: URL) -> CloudFolderSyncPackageFingerprint? {
+        packageFingerprint(packageURL: packageURL(for: folderURL))
+    }
+
+    private static func packageFingerprint(packageURL: URL) -> CloudFolderSyncPackageFingerprint? {
+        let fileManager = FileManager.default
+        let operationsURL = packageURL.appendingPathComponent(operationsDirectoryName, isDirectory: true)
+        guard fileManager.fileExists(atPath: operationsURL.path) else { return nil }
+
+        let resourceKeys = CloudFolderSyncFileStamp.resourceKeys.union([.isRegularFileKey])
+        var files: [String: CloudFolderSyncFileStamp?] = [:]
+        for directoryURL in [
+            operationsURL,
+            packageURL.appendingPathComponent(assetsDirectoryName, isDirectory: true),
+        ] {
+            guard let enumerator = fileManager.enumerator(
+                at: directoryURL,
+                includingPropertiesForKeys: Array(resourceKeys),
+                options: [.skipsHiddenFiles]
+            ) else {
+                continue
+            }
+            for case let file as URL in enumerator {
+                guard let values = try? file.resourceValues(forKeys: resourceKeys),
+                      values.isRegularFile == true else {
+                    continue
+                }
+                files.updateValue(CloudFolderSyncFileStamp(values), forKey: file.path)
+            }
+        }
+
+        let devicesURL = packageURL.appendingPathComponent(devicesDirectoryName, isDirectory: true)
+        let deviceFileNames = (try? fileManager.contentsOfDirectory(
+            at: devicesURL,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ))?.filter { $0.pathExtension == "json" }.map(\.lastPathComponent) ?? []
+        return CloudFolderSyncPackageFingerprint(
+            files: files,
+            deviceFileNames: Set(deviceFileNames)
+        )
+    }
+
+    private static func pruneExpiredTombstones(
+        in deviceOperationsURL: URL,
+        now: Date,
+        cache: CloudFolderSyncCache
+    ) {
         guard let files = try? FileManager.default.contentsOfDirectory(
             at: deviceOperationsURL,
-            includingPropertiesForKeys: nil,
+            includingPropertiesForKeys: Array(CloudFolderSyncFileStamp.resourceKeys),
             options: [.skipsHiddenFiles]
         ) else {
             return
         }
 
         for file in files where file.pathExtension == "json" {
-            guard let data = try? Data(contentsOf: file),
-                  let operation = try? decoder.decode(CloudFolderSyncOperation.self, from: data),
+            guard case .operation(let operation) = operationFileContents(at: file, cache: cache),
                   operation.kind == .delete,
                   let deletedAt = operation.deletedAt,
                   now.timeIntervalSince(deletedAt) > tombstoneRetentionInterval else {
@@ -1123,21 +1230,11 @@ enum CloudFolderSyncEngine {
     }
 
     private static func iso8601String(from date: Date) -> String {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter.string(from: date)
+        CloudFolderSyncDateFormatters.shared.string(from: date)
     }
 
     private static func iso8601Date(from string: String) -> Date? {
-        let fractionalFormatter = ISO8601DateFormatter()
-        fractionalFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        if let date = fractionalFormatter.date(from: string) {
-            return date
-        }
-
-        let wholeSecondFormatter = ISO8601DateFormatter()
-        wholeSecondFormatter.formatOptions = [.withInternetDateTime]
-        return wholeSecondFormatter.date(from: string)
+        CloudFolderSyncDateFormatters.shared.date(from: string)
     }
 
     private static let encoder: JSONEncoder = {
@@ -1170,6 +1267,141 @@ enum CloudFolderSyncEngine {
 
 private struct CloudFolderSyncSchemaEnvelope: Decodable {
     let schemaVersion: Int
+}
+
+/// Shared ISO 8601 formatters for sync payloads. Creating a formatter per date dominated
+/// snapshot conversion; ISO8601DateFormatter wraps a CFDateFormatter, which is not
+/// thread-safe, so the shared instances are only used under the lock.
+private final class CloudFolderSyncDateFormatters: @unchecked Sendable {
+    static let shared = CloudFolderSyncDateFormatters()
+
+    private let lock = NSLock()
+    private let fractionalFormatter: ISO8601DateFormatter
+    private let wholeSecondFormatter: ISO8601DateFormatter
+
+    private init() {
+        fractionalFormatter = ISO8601DateFormatter()
+        fractionalFormatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        wholeSecondFormatter = ISO8601DateFormatter()
+        wholeSecondFormatter.formatOptions = [.withInternetDateTime]
+    }
+
+    func string(from date: Date) -> String {
+        lock.withLock { fractionalFormatter.string(from: date) }
+    }
+
+    func date(from string: String) -> Date? {
+        lock.withLock {
+            fractionalFormatter.date(from: string) ?? wholeSecondFormatter.date(from: string)
+        }
+    }
+}
+
+/// Size and modification date of a file, used to reuse work for files that did not change.
+struct CloudFolderSyncFileStamp: Equatable, Sendable {
+    static let resourceKeys: Set<URLResourceKey> = [.fileSizeKey, .contentModificationDateKey]
+
+    let byteCount: Int
+    let modificationDate: Date
+
+    init?(_ values: URLResourceValues) {
+        guard let byteCount = values.fileSize,
+              let modificationDate = values.contentModificationDate else {
+            return nil
+        }
+        self.byteCount = byteCount
+        self.modificationDate = modificationDate
+    }
+
+    /// Reads fresh metadata instead of values cached on a long-lived URL.
+    init?(fileAt url: URL) {
+        guard let attributes = try? FileManager.default.attributesOfItem(atPath: url.path),
+              let byteCount = (attributes[.size] as? NSNumber)?.intValue,
+              let modificationDate = attributes[.modificationDate] as? Date else {
+            return nil
+        }
+        self.byteCount = byteCount
+        self.modificationDate = modificationDate
+    }
+}
+
+struct CloudFolderSyncPackageFingerprint: Equatable, Sendable {
+    let files: [String: CloudFolderSyncFileStamp?]
+    let deviceFileNames: Set<String>
+}
+
+/// Caches owned by the sync controller so repeated syncs skip unchanged files. Entries are
+/// keyed by path and only reused while the file keeps the stamp it had when it was read.
+final class CloudFolderSyncCache: @unchecked Sendable {
+    private struct CachedOperation {
+        let stamp: CloudFolderSyncFileStamp
+        let operation: CloudFolderSyncOperation
+    }
+
+    private struct CachedDigest {
+        let stamp: CloudFolderSyncFileStamp
+        let sha256: String
+        let byteCount: Int64
+    }
+
+    private let lock = NSLock()
+    private var operations: [String: CachedOperation] = [:]
+    private var digests: [String: CachedDigest] = [:]
+
+    func operation(atPath path: String, stamp: CloudFolderSyncFileStamp?) -> CloudFolderSyncOperation? {
+        guard let stamp else { return nil }
+        return lock.withLock {
+            guard let cached = operations[path], cached.stamp == stamp else { return nil }
+            return cached.operation
+        }
+    }
+
+    func storeOperation(
+        _ operation: CloudFolderSyncOperation,
+        atPath path: String,
+        stamp: CloudFolderSyncFileStamp?,
+        byteCount: Int
+    ) {
+        guard let stamp, stamp.byteCount == byteCount else { return }
+        lock.withLock {
+            operations[path] = CachedOperation(stamp: stamp, operation: operation)
+        }
+    }
+
+    func retainOperations(atPaths paths: Set<String>) {
+        lock.withLock {
+            operations = operations.filter { paths.contains($0.key) }
+        }
+    }
+
+    func digest(
+        of url: URL,
+        compute: (URL) throws -> (sha256: String, byteCount: Int64)
+    ) rethrows -> (sha256: String, byteCount: Int64) {
+        let path = url.path
+        let stamp = CloudFolderSyncFileStamp(fileAt: url)
+        if let stamp,
+           let cached = lock.withLock({ digests[path] }),
+           cached.stamp == stamp {
+            return (cached.sha256, cached.byteCount)
+        }
+        let digest = try compute(url)
+        // Only remember digests of files that did not change while they were hashed.
+        if let stamp,
+           Int64(stamp.byteCount) == digest.byteCount,
+           CloudFolderSyncFileStamp(fileAt: url) == stamp {
+            lock.withLock {
+                digests[path] = CachedDigest(stamp: stamp, sha256: digest.sha256, byteCount: digest.byteCount)
+            }
+        }
+        return digest
+    }
+
+    func retainDigests(atPaths paths: Set<String>) {
+        lock.withLock {
+            digests = digests.filter { paths.contains($0.key) }
+        }
+    }
 }
 
 struct CloudFolderSyncRecord: Equatable, Sendable {
