@@ -226,6 +226,73 @@ final class MLXPluginModelStorageTests: XCTestCase {
     }
 
     @MainActor
+    func testExplicitLoadCancelsAndBlocksGenericRestorationInEveryMLXEngine() async throws {
+        let qwen = Qwen3Plugin()
+        let granite = GranitePlugin()
+        let voxtral = VoxtralPlugin()
+        let canary = CanaryPlugin()
+        try await assertGenericRestoreIsSuperseded(qwen, gate: qwen.modelLoadGate,
+            genericTask: { qwen.genericModelLoadTask }, explicitTask: { qwen.explicitModelLoadTask })
+        try await assertGenericRestoreIsSuperseded(granite, gate: granite.modelLoadGate,
+            genericTask: { granite.genericModelLoadTask }, explicitTask: { granite.explicitModelLoadTask })
+        try await assertGenericRestoreIsSuperseded(voxtral, gate: voxtral.modelLoadGate,
+            genericTask: { voxtral.genericModelLoadTask }, explicitTask: { voxtral.explicitModelLoadTask })
+        try await assertGenericRestoreIsSuperseded(canary, gate: canary.modelLoadGate,
+            genericTask: { canary.genericModelLoadTask }, explicitTask: { canary.explicitModelLoadTask })
+    }
+
+    @MainActor
+    private func assertGenericRestoreIsSuperseded<P: NSObject & TranscriptionEnginePlugin>(
+        _ plugin: P, gate: PluginLocalInferenceGate,
+        genericTask: @escaping @MainActor @Sendable () -> Task<Void, Never>?,
+        explicitTask: @escaping @MainActor @Sendable () -> Task<Void, Never>?
+    ) async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let ids = (0..<2).map { _ in "custom-" + UUID().uuidString.lowercased() }
+        for id in ids {
+            let folder = fixture.root.appendingPathComponent("custom-models/" + id)
+            try fixture.writeModel(at: folder, requiredFiles: [
+                "config.json", "tokenizer.json", "tokenizer.model", "tekken.json", "vocab.json", "merges.txt",
+            ])
+            try JSONSerialization.data(withJSONObject: [
+                "id": id, "displayName": id, "modelType": "fixture", "origin": id, "bytes": 0,
+            ]).write(to: folder.appendingPathComponent("typewhisper-import.json"))
+        }
+        let host = MockHostServices(pluginDataDirectory: fixture.root)
+        host.setUserDefault(ids[0], forKey: "loadedModel")
+        plugin.activate(host: host)
+        defer { plugin.deactivate() }
+        try await gate.withLock {
+            let previous = await MainActor.run {
+                _ = plugin.perform(NSSelectorFromString("triggerRestoreModel"))
+                return genericTask()
+            }
+            XCTAssertNotNil(previous)
+            for _ in 0..<10 { await Task.yield() }
+            let latest = await MainActor.run {
+                _ = plugin.perform(NSSelectorFromString("triggerRestoreModelForModel:"), with: ids[1] as NSString)
+                XCTAssertTrue(previous?.isCancelled == true)
+                XCTAssertNil(genericTask())
+                // A generic restore arriving after the explicit request must
+                // not resurrect the old persisted model either.
+                _ = plugin.perform(NSSelectorFromString("triggerRestoreModel"))
+                XCTAssertNil(genericTask())
+                let latest = explicitTask()
+                XCTAssertNotNil(latest)
+                latest?.cancel()
+                return latest
+            }
+            await previous?.value
+            await latest?.value
+            await MainActor.run {
+                XCTAssertEqual(plugin.selectedModelId, ids[1])
+                XCTAssertFalse(plugin.isConfigured)
+            }
+        }
+    }
+
+    @MainActor
     func testFreshCanaryAcceptsExplicitBuiltInLoadWithoutPersistedLoadedModel() async throws {
         let canary = CanaryPlugin()
         try await assertExplicitLoadRequest(

@@ -1,5 +1,6 @@
 import XCTest
 import MLX
+import TypeWhisperPluginSDK
 #if SWIFT_PACKAGE
 @testable import CanaryPlugin
 #else
@@ -11,6 +12,35 @@ final class CanaryPluginTests: XCTestCase {
     // These native MLX layout checks run in the Xcode app-test target, which
     // bundles Metal resources. MLX initializes its Metal device even when
     // creating a CPU stream; the SwiftPM CLI test bundle has no metallib.
+    @MainActor
+    func testUnloadAndDeactivationClearCacheOnlyAfterInferenceIsIdle() async throws {
+        let plugin = CanaryPlugin()
+        let previousLimit = Memory.cacheLimit
+        Memory.cacheLimit = 64 * 1024 * 1024
+        defer { Memory.cacheLimit = previousLimit }
+        for deactivate in [false, true] {
+            let cleanup = try await PluginLocalInferenceGate.shared.withLock {
+                Memory.clearCache()
+                autoreleasepool {
+                    let allocation = MLXArray.ones([4 * 1024 * 1024], stream: .gpu)
+                    eval(allocation)
+                }
+                Stream.gpu.synchronize()
+                XCTAssertGreaterThan(Memory.cacheMemory, 0)
+                let task = await MainActor.run {
+                    if deactivate { plugin.deactivate() } else { plugin.unloadModel() }
+                    return plugin.runtimeCacheClearTask
+                }
+                XCTAssertNotNil(task)
+                for _ in 0..<10 { await Task.yield() }
+                XCTAssertGreaterThan(Memory.cacheMemory, 0, "Cleanup must wait for active inference")
+                return task
+            }
+            await cleanup?.value
+            XCTAssertEqual(Memory.cacheMemory, 0)
+        }
+    }
+
     func testNemoSubsamplingConvolutionsUseMLXLayout() {
         Stream.withNewDefaultStream(device: .cpu) {
             let weights = [

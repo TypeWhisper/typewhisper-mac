@@ -70,7 +70,9 @@ configuration, required files, indexed shards and safetensors headers, then
 records a stable custom model ID. The engine performs final loader validation,
 rolls back failures, and handles its usual selection/restoration notifications.
 Unloading or a newer explicit load request invalidates pending imports, so they
-cannot later replace the requested engine state. Incomplete imported copies remain
+cannot later replace the requested engine state. Generic restoration is cancelled
+when an explicit load takes over. Canary releases the MLX allocator cache after
+inference becomes idle when unloading or deactivating. Incomplete imported copies remain
 listed for removal through the model manager.
 
 ## Verification

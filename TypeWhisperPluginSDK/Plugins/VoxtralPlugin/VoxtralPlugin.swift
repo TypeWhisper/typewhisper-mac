@@ -53,6 +53,7 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
     private let passiveRestoreController = PluginPassiveModelRestoreController()
     let modelLoadGate = PluginLocalInferenceGate()
     private(set) var explicitModelLoadTask: Task<Void, Never>?
+    private(set) var genericModelLoadTask: Task<Void, Never>?
 
     func requestPassiveModelRestore() {
         passiveRestoreController.request { [weak self] in
@@ -82,6 +83,8 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
     }
 
     func deactivate() {
+        genericModelLoadTask?.cancel()
+        genericModelLoadTask = nil
         explicitModelLoadTask?.cancel()
         explicitModelLoadTask = nil
         passiveRestoreController.cancel()
@@ -392,7 +395,15 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
     }
 
     @objc func triggerAutoUnload() { unloadModel(clearPersistence: false) }
-    @objc func triggerRestoreModel() { Task { await restoreLoadedModel(allowDownloads: true) } }
+    @objc func triggerRestoreModel() {
+        guard !isConfigured, modelState != .loading, explicitModelLoadTask == nil else { return }
+        genericModelLoadTask?.cancel()
+        let generation = activationID
+        genericModelLoadTask = Task {
+            guard !Task.isCancelled, generation == activationID, host != nil else { return }
+            await restoreLoadedModel(allowDownloads: true, expectedGeneration: generation)
+        }
+    }
     @objc(triggerRestoreModelForModel:)
     func triggerRestoreModel(forModel modelId: NSString?) {
         guard let modelId = modelId.map(String.init),
@@ -405,18 +416,23 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
         _selectedModelId = modelId
         host?.setUserDefault(modelId, forKey: "selectedModel")
         // Supersede the previous request synchronously, before either task runs.
+        genericModelLoadTask?.cancel()
+        genericModelLoadTask = nil
         explicitModelLoadTask?.cancel()
         activationID = UUID()
         let generation = activationID
         explicitModelLoadTask = Task {
+            defer { if generation == activationID { explicitModelLoadTask = nil } }
             guard !Task.isCancelled, generation == activationID, host != nil else { return }
-            try? await loadModel(modelDef)
+            try? await loadModel(modelDef, expectedGeneration: generation)
         }
     }
 
     func unloadModel(clearPersistence: Bool = true) {
         // Reject pending imports and loads before they can repopulate an unloaded engine.
         activationID = UUID()
+        genericModelLoadTask?.cancel()
+        genericModelLoadTask = nil
         explicitModelLoadTask?.cancel()
         explicitModelLoadTask = nil
         model = nil
@@ -441,8 +457,9 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
         )
     }
 
-    func restoreLoadedModel(allowDownloads: Bool = true, passively: Bool = false) async {
-        guard !Task.isCancelled else { return }
+    func restoreLoadedModel(allowDownloads: Bool = true, passively: Bool = false, expectedGeneration: UUID? = nil) async {
+        let generation = expectedGeneration ?? activationID
+        guard !Task.isCancelled, generation == activationID else { return }
         if passively {
             guard host?.shouldRestoreLoadedModelsPassively == true, !isConfigured else { return }
         }
@@ -451,7 +468,7 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
             return
         }
         guard allowDownloads || hasDownloadedModel(modelDef) else { return }
-        try? await loadModel(modelDef, passively: passively)
+        try? await loadModel(modelDef, passively: passively, expectedGeneration: generation)
     }
 
     private func hasDownloadedModel(_ modelDef: VoxtralModelDef) -> Bool {

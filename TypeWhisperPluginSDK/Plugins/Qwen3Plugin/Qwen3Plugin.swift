@@ -54,6 +54,7 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
     private let passiveRestoreController = PluginPassiveModelRestoreController()
     let modelLoadGate = PluginLocalInferenceGate()
     private(set) var explicitModelLoadTask: Task<Void, Never>?
+    private(set) var genericModelLoadTask: Task<Void, Never>?
 
     func requestPassiveModelRestore() {
         passiveRestoreController.request { [weak self] in
@@ -82,6 +83,8 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
     }
 
     func deactivate() {
+        genericModelLoadTask?.cancel()
+        genericModelLoadTask = nil
         explicitModelLoadTask?.cancel()
         explicitModelLoadTask = nil
         passiveRestoreController.cancel()
@@ -259,7 +262,8 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
             return
         }
 
-        Task { await restoreLoadedModel(allowDownloads: false, preferredModelId: modelId) }
+        let generation = activationID
+        Task { await restoreLoadedModel(allowDownloads: false, preferredModelId: modelId, expectedGeneration: generation) }
     }
 
     var supportsTranslation: Bool { false }
@@ -427,7 +431,15 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
     }
 
     @objc func triggerAutoUnload() { unloadModel(clearPersistence: false) }
-    @objc func triggerRestoreModel() { Task { await restoreLoadedModel(allowDownloads: false) } }
+    @objc func triggerRestoreModel() {
+        guard !isConfigured, modelState != .loading, explicitModelLoadTask == nil else { return }
+        genericModelLoadTask?.cancel()
+        let generation = activationID
+        genericModelLoadTask = Task {
+            guard !Task.isCancelled, generation == activationID, host != nil else { return }
+            await restoreLoadedModel(allowDownloads: false, expectedGeneration: generation)
+        }
+    }
     @objc(triggerRestoreModelForModel:) func triggerRestoreModel(forModel modelId: NSString?) {
         guard let preferredModelId = modelId.map(String.init),
               allModelDefinitions.contains(where: { $0.id == preferredModelId }) else {
@@ -439,18 +451,23 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
         _selectedModelId = preferredModelId
         host?.setUserDefault(preferredModelId, forKey: "selectedModel")
         // Supersede the previous request synchronously, before either task runs.
+        genericModelLoadTask?.cancel()
+        genericModelLoadTask = nil
         explicitModelLoadTask?.cancel()
         activationID = UUID()
         let generation = activationID
         explicitModelLoadTask = Task {
+            defer { if generation == activationID { explicitModelLoadTask = nil } }
             guard !Task.isCancelled, generation == activationID, host != nil else { return }
-            await restoreLoadedModel(allowDownloads: true, preferredModelId: preferredModelId)
+            await restoreLoadedModel(allowDownloads: true, preferredModelId: preferredModelId, expectedGeneration: generation)
         }
     }
 
     func unloadModel(clearPersistence: Bool = true) {
         // Reject pending imports and loads before they can repopulate an unloaded engine.
         activationID = UUID()
+        genericModelLoadTask?.cancel()
+        genericModelLoadTask = nil
         explicitModelLoadTask?.cancel()
         explicitModelLoadTask = nil
         model = nil
@@ -475,16 +492,19 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
         )
     }
 
-    func restoreLoadedModel(allowDownloads: Bool = false, passively: Bool = false) async {
-        guard !Task.isCancelled else { return }
+    func restoreLoadedModel(allowDownloads: Bool = false, passively: Bool = false, expectedGeneration: UUID? = nil) async {
+        let generation = expectedGeneration ?? activationID
+        guard !Task.isCancelled, generation == activationID else { return }
         if passively {
             guard host?.shouldRestoreLoadedModelsPassively == true, !isConfigured else { return }
         }
-        await restoreLoadedModel(allowDownloads: allowDownloads, preferredModelId: nil, passively: passively)
+        await restoreLoadedModel(allowDownloads: allowDownloads, preferredModelId: nil, passively: passively, expectedGeneration: generation)
     }
 
-    func restoreLoadedModel(allowDownloads: Bool = false, preferredModelId: String?, passively: Bool = false) async {
-        guard !Task.isCancelled else { return }
+    func restoreLoadedModel(allowDownloads: Bool = false, preferredModelId: String?, passively: Bool = false,
+                            expectedGeneration: UUID? = nil) async {
+        let generation = expectedGeneration ?? activationID
+        guard !Task.isCancelled, generation == activationID else { return }
         for modelId in restoreCandidateModelIds(
             preferredModelId: preferredModelId,
             allowDownloads: allowDownloads
@@ -492,8 +512,9 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
             guard let modelDef = allModelDefinitions.first(where: { $0.id == modelId }) else {
                 continue
             }
+            guard !Task.isCancelled, generation == activationID else { return }
             do {
-                try await loadModel(modelDef, passively: passively)
+                try await loadModel(modelDef, passively: passively, expectedGeneration: generation)
                 return
             } catch {
                 continue

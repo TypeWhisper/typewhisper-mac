@@ -39,6 +39,7 @@ final class CanaryPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
     private let passiveRestoreController = PluginPassiveModelRestoreController()
     let modelLoadGate = PluginLocalInferenceGate()
     private(set) var explicitModelLoadTask: Task<Void, Never>?
+    private(set) var genericModelLoadTask: Task<Void, Never>?
 
     func requestPassiveModelRestore() {
         passiveRestoreController.request { [weak self] in
@@ -68,6 +69,8 @@ final class CanaryPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
     }
 
     func deactivate() {
+        genericModelLoadTask?.cancel()
+        genericModelLoadTask = nil
         explicitModelLoadTask?.cancel()
         explicitModelLoadTask = nil
         passiveRestoreController.cancel()
@@ -75,6 +78,7 @@ final class CanaryPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
         model = nil
         loadedModelId = nil
         modelState = .notLoaded
+        scheduleRuntimeCacheClearWhenInferenceIsIdle()
         host = nil
     }
 
@@ -240,25 +244,27 @@ final class CanaryPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
         audio: AudioData, language: String?, translate: Bool, prompt: String?,
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> PluginTranscriptionResult {
-        guard let model else { throw PluginTranscriptionError.notConfigured }
-        let sourceLanguage = try Self.sourceLanguage(language)
-        guard !translate else { throw PluginTranscriptionError.apiError("Canary translation is not available in this engine.") }
-        var chunks: [String] = []
-        // Use the same low-energy boundary search as Qwen instead of fixed cuts.
-        // Each chunk still gets its own decoding budget and bounded encoder memory.
-        for chunk in Self.transcriptionChunks(audio.samples) {
-            try Task.checkCancellation()
-            let output = model.generate(audio: chunk, generationParameters: STTGenerateParameters(
-                maxTokens: 512, temperature: 0, language: sourceLanguage
-            ))
-            try Task.checkCancellation()
-            guard output.generationTokens < 512 else {
-                throw PluginTranscriptionError.apiError("Canary reached its transcription limit. Retry with a shorter recording.")
+        try await PluginLocalInferenceGate.shared.withLock { [self] in
+            guard let model else { throw PluginTranscriptionError.notConfigured }
+            let sourceLanguage = try Self.sourceLanguage(language)
+            guard !translate else { throw PluginTranscriptionError.apiError("Canary translation is not available in this engine.") }
+            var chunks: [String] = []
+            // Use the same low-energy boundary search as Qwen instead of fixed cuts.
+            // Each chunk still gets its own decoding budget and bounded encoder memory.
+            for chunk in Self.transcriptionChunks(audio.samples) {
+                try Task.checkCancellation()
+                let output = model.generate(audio: chunk, generationParameters: STTGenerateParameters(
+                    maxTokens: 512, temperature: 0, language: sourceLanguage
+                ))
+                try Task.checkCancellation()
+                guard output.generationTokens < 512 else {
+                    throw PluginTranscriptionError.apiError("Canary reached its transcription limit. Retry with a shorter recording.")
+                }
+                chunks.append(Self.normalizeTranscript(output.text, language: sourceLanguage))
+                guard onProgress(chunks.joined(separator: " ")) else { throw CancellationError() }
             }
-            chunks.append(Self.normalizeTranscript(output.text, language: sourceLanguage))
-            guard onProgress(chunks.joined(separator: " ")) else { throw CancellationError() }
+            return PluginTranscriptionResult(text: chunks.joined(separator: " "), detectedLanguage: sourceLanguage)
         }
-        return PluginTranscriptionResult(text: chunks.joined(separator: " "), detectedLanguage: sourceLanguage)
     }
 
     static func transcriptionChunks(_ samples: [Float]) -> [MLXArray] {
@@ -430,7 +436,15 @@ final class CanaryPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
     }
 
     @objc func triggerAutoUnload() { unloadModel(clearPersistence: false) }
-    @objc func triggerRestoreModel() { Task { await restoreLoadedModel(allowDownloads: true) } }
+    @objc func triggerRestoreModel() {
+        guard !isConfigured, modelState != .loading, explicitModelLoadTask == nil else { return }
+        genericModelLoadTask?.cancel()
+        let generation = activationID
+        genericModelLoadTask = Task {
+            guard !Task.isCancelled, generation == activationID, host != nil else { return }
+            await restoreLoadedModel(allowDownloads: true, expectedGeneration: generation)
+        }
+    }
 
     @objc(triggerRestoreModelForModel:)
     func triggerRestoreModel(forModel modelId: NSString?) {
@@ -444,28 +458,45 @@ final class CanaryPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
         _selectedModelId = modelId
         host?.setUserDefault(modelId, forKey: "selectedModel")
         // Supersede the previous request synchronously, before either task runs.
+        genericModelLoadTask?.cancel()
+        genericModelLoadTask = nil
         explicitModelLoadTask?.cancel()
         activationID = UUID()
         let generation = activationID
         explicitModelLoadTask = Task {
+            defer { if generation == activationID { explicitModelLoadTask = nil } }
             guard !Task.isCancelled, generation == activationID, host != nil else { return }
-            try? await loadModel(modelDef)
+            try? await loadModel(modelDef, expectedGeneration: generation)
         }
     }
 
     func unloadModel(clearPersistence: Bool = true) {
         // Reject pending imports and loads before they can repopulate an unloaded engine.
         activationID = UUID()
+        genericModelLoadTask?.cancel()
+        genericModelLoadTask = nil
         explicitModelLoadTask?.cancel()
         explicitModelLoadTask = nil
         passiveRestoreController.cancel()
         model = nil
         loadedModelId = nil
         modelState = .notLoaded
+        scheduleRuntimeCacheClearWhenInferenceIsIdle()
         if clearPersistence {
             host?.setUserDefault(nil, forKey: "loadedModel")
         }
         host?.notifyCapabilitiesChanged()
+    }
+
+    private(set) var runtimeCacheClearTask: Task<Void, Never>?
+
+    private func scheduleRuntimeCacheClearWhenInferenceIsIdle() {
+        runtimeCacheClearTask = Task {
+            try? await PluginLocalInferenceGate.shared.withLock {
+                Stream.gpu.synchronize()
+                Memory.clearCache()
+            }
+        }
     }
 
     fileprivate func deleteModelFiles(_ modelDef: CanaryModelDef) throws {
@@ -480,8 +511,9 @@ final class CanaryPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
         )
     }
 
-    func restoreLoadedModel(allowDownloads: Bool = true, passively: Bool = false) async {
-        guard !Task.isCancelled else { return }
+    func restoreLoadedModel(allowDownloads: Bool = true, passively: Bool = false, expectedGeneration: UUID? = nil) async {
+        let generation = expectedGeneration ?? activationID
+        guard !Task.isCancelled, generation == activationID else { return }
         if passively {
             guard host?.shouldRestoreLoadedModelsPassively == true, !isConfigured else { return }
         }
@@ -490,7 +522,7 @@ final class CanaryPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
             return
         }
         guard allowDownloads || hasDownloadedModel(modelDef) else { return }
-        try? await loadModel(modelDef, passively: passively)
+        try? await loadModel(modelDef, passively: passively, expectedGeneration: generation)
     }
 
     private func hasDownloadedModel(_ modelDef: CanaryModelDef) -> Bool {
