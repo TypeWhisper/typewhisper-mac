@@ -161,7 +161,7 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
     private func validateImportedModel(_ imported: PluginCustomModelStore.Model, generation: UUID) async throws {
         try Task.checkCancellation()
         guard generation == activationID, host != nil else { throw CancellationError() }
-        try await loadModel(Self.importedDefinition(imported), notifyHost: false)
+        try await loadModel(Self.importedDefinition(imported), notifyHost: false, expectedGeneration: generation)
         guard generation == activationID, host != nil else { throw CancellationError() }
     }
 
@@ -336,8 +336,9 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
 
     // MARK: - Model Management
 
-    fileprivate func loadModel(_ modelDef: Qwen3ModelDef, passively: Bool = false, notifyHost: Bool = true) async throws {
-        let generation = activationID
+    fileprivate func loadModel(_ modelDef: Qwen3ModelDef, passively: Bool = false,
+                               notifyHost: Bool = true, expectedGeneration: UUID? = nil) async throws {
+        let generation = expectedGeneration ?? activationID
         try await modelLoadGate.withLock { [self] in
             try Task.checkCancellation()
             guard generation == activationID, host != nil else { throw CancellationError() }
@@ -345,12 +346,14 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
                 guard host?.shouldRestoreLoadedModelsPassively == true, !isConfigured else { return }
             }
             guard !(isConfigured && loadedModelId == modelDef.id) else { return }
-            try await performModelLoad(modelDef, allowDownloads: !passively, notifyHost: notifyHost)
+            try await performModelLoad(modelDef, allowDownloads: !passively, notifyHost: notifyHost, generation: generation)
         }
     }
 
-    private func performModelLoad(_ modelDef: Qwen3ModelDef, allowDownloads: Bool, notifyHost: Bool) async throws {
-        let generation = activationID
+    private func performModelLoad(_ modelDef: Qwen3ModelDef, allowDownloads: Bool,
+                                  notifyHost: Bool, generation: UUID) async throws {
+        try Task.checkCancellation()
+        guard generation == activationID, host != nil else { throw CancellationError() }
         modelState = .loading
         do {
             let modelsDir = host?.pluginDataDirectory.appendingPathComponent("models")
