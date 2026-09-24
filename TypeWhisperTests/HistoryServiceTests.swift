@@ -1170,6 +1170,76 @@ final class HistoryServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testHistoryViewModelDoesNotPageWhileReloadIsDeferredForUnsavedDraft() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "HistoryDeferredPaging")
+        defer { TestSupport.remove(appSupportDirectory) }
+        let historyService = HistoryService(appSupportDirectory: appSupportDirectory)
+        let baseDate = Date(timeIntervalSince1970: 1_800_000_000)
+        for index in 0..<125 {
+            historyService.addRecord(
+                timestamp: baseDate.addingTimeInterval(Double(index)),
+                rawText: "Paged \(index)",
+                finalText: "Paged \(index)",
+                appName: nil,
+                appBundleIdentifier: nil,
+                durationSeconds: 1,
+                language: "en",
+                engineUsed: "test"
+            )
+        }
+        let viewModel = HistoryViewModel(
+            historyService: historyService,
+            textDiffService: TextDiffService(),
+            dictionaryService: DictionaryService(appSupportDirectory: appSupportDirectory)
+        )
+        viewModel.activate()
+        let newestID = try XCTUnwrap(viewModel.records.first?.id)
+        viewModel.requestRecordSelection([newestID])
+        viewModel.editedText = "Edited but unsaved"
+
+        // The sort change is deferred, so the list still holds the newest-first page.
+        viewModel.requestSortOrder(.oldest)
+        viewModel.loadMoreRecords()
+
+        XCTAssertEqual(viewModel.records.count, 100)
+        XCTAssertEqual(viewModel.records.first?.id, newestID)
+        XCTAssertTrue(viewModel.hasMoreRecords)
+
+        viewModel.discardEditing()
+        await viewModel.waitForPendingWork()
+        XCTAssertEqual(viewModel.records.first?.finalText, "Paged 0")
+        viewModel.loadMoreRecords()
+        XCTAssertEqual(viewModel.records.count, 125)
+        XCTAssertFalse(viewModel.hasMoreRecords)
+    }
+
+    @MainActor
+    func testBackgroundDomainScanStopsWhenCancelled() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "HistoryDomainCancel")
+        defer { TestSupport.remove(appSupportDirectory) }
+        let historyService = HistoryService(appSupportDirectory: appSupportDirectory)
+        historyService.addRecord(
+            rawText: "Issue triage",
+            finalText: "Issue triage",
+            appName: "Safari",
+            appBundleIdentifier: "com.apple.Safari",
+            appURL: "https://github.com/TypeWhisper",
+            durationSeconds: 1,
+            language: "en",
+            engineUsed: "test"
+        )
+        let domains = await historyService.uniqueDomainsInBackground()
+        XCTAssertEqual(domains, ["github.com"])
+
+        // The task is cancelled before it starts, so the cancellation reaches the detached
+        // scan as soon as it is awaited, and the scan stops at its first record.
+        let cancelledScan = Task { await historyService.uniqueDomainsInBackground() }
+        cancelledScan.cancel()
+        let cancelledDomains = await cancelledScan.value
+        XCTAssertEqual(cancelledDomains, [])
+    }
+
+    @MainActor
     func testHistoryViewModelReloadsSearchDroppedForUnsavedDraftAfterDiscard() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "HistoryDeferredSearch")
         defer { TestSupport.remove(appSupportDirectory) }

@@ -2679,7 +2679,8 @@ final class WorkflowWebsiteSuggestionStore: ObservableObject {
 
     @Published private(set) var domains: [String] = []
     private let loadDomains: @MainActor () async -> [String]
-    private var hasRequestedDomains = false
+    private var hasLoadedDomains = false
+    private var loadGeneration = 0
 
     init(
         loadDomains: @escaping @MainActor () async -> [String] = {
@@ -2691,10 +2692,16 @@ final class WorkflowWebsiteSuggestionStore: ObservableObject {
         self.loadDomains = loadDomains
     }
 
+    /// Loads the domains unless an earlier load finished. A load whose task was cancelled, such
+    /// as when the editor disappears, stops its scan and leaves the next appearance to load again.
     func loadIfNeeded() async {
-        guard !hasRequestedDomains else { return }
-        hasRequestedDomains = true
-        domains = await loadDomains()
+        guard !hasLoadedDomains else { return }
+        loadGeneration &+= 1
+        let generation = loadGeneration
+        let loaded = await loadDomains()
+        guard !Task.isCancelled, generation == loadGeneration else { return }
+        hasLoadedDomains = true
+        domains = loaded
     }
 
     func suggestions(for input: String, excluding websitePatterns: [String]) -> [String] {

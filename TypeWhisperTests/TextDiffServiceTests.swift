@@ -80,6 +80,38 @@ final class TextDiffServiceTests: XCTestCase {
         XCTAssertEqual(checks, 3, "The comparison must stop at the first failed check")
     }
 
+    func testBoundedWordDiffChecksCancellationWithinWideRow() {
+        // One word against many forms a single table row, which must not run unchecked.
+        let wordCount = 300_000
+        let processed = (0..<wordCount).map { "b\($0)" }.joined(separator: " ")
+
+        var checks = 0
+        let segments = TextDiffService.wordDiff(
+            original: "a",
+            processed: processed,
+            maxComparisonCells: .max,
+            checkCancellation: { checks += 1 }
+        )
+        XCTAssertEqual(segments?.count, wordCount + 1)
+        XCTAssertEqual(checks, 1 + wordCount / TextDiffService.cancellationCheckInterval)
+
+        checks = 0
+        XCTAssertThrowsError(
+            try TextDiffService.wordDiff(
+                original: "a",
+                processed: processed,
+                maxComparisonCells: .max,
+                checkCancellation: {
+                    checks += 1
+                    if checks == 3 { throw CancellationError() }
+                }
+            )
+        ) { error in
+            XCTAssertTrue(error is CancellationError)
+        }
+        XCTAssertEqual(checks, 3)
+    }
+
     func testExtractCorrectionsFindsLocalizedWordReplacement() {
         let service = TextDiffService()
 

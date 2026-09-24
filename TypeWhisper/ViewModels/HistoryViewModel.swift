@@ -381,6 +381,9 @@ final class HistoryViewModel: ObservableObject {
 
     func loadMoreRecords() {
         guard isActive, hasMoreRecords, !isLoadingMore else { return }
+        // Until a reload deferred by the unsaved draft runs, the records belong to an older
+        // query, so their count is no valid offset into the current one.
+        guard deferredReload == nil else { return }
         guard queryTask == nil else {
             // A reload is still searching; continue paging once its first page is shown.
             loadMoreAfterQuery = true

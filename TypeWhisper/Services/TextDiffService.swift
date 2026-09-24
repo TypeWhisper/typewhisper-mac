@@ -28,8 +28,9 @@ final class TextDiffService {
     }
 
     /// Like `wordDiff(original:processed:maxComparisonCells:)`, but runs `checkCancellation`
-    /// before the table is built and after every `cancellationCheckInterval` cells, so a
-    /// background caller can abandon the comparison by throwing.
+    /// before the table is built and after every `cancellationCheckInterval` compared cells,
+    /// also within a single wide row, so a background caller can abandon the comparison by
+    /// throwing. The remaining work outside the table is linear in the word count.
     static func wordDiff(
         original: String,
         processed: String,
@@ -61,16 +62,16 @@ final class TextDiffService {
         var row = Array(repeating: 0, count: n + 1)
         var directions = Array(repeating: UInt8(0), count: m * n)
         if m > 0 && n > 0 {
-            var cellsSinceCancellationCheck = 0
+            var cellsUntilCancellationCheck = cancellationCheckInterval
             for i in 1...m {
-                cellsSinceCancellationCheck += n
-                if cellsSinceCancellationCheck >= cancellationCheckInterval {
-                    cellsSinceCancellationCheck = 0
-                    try checkCancellation()
-                }
                 var diagonal = 0
                 let rowOffset = (i - 1) * n
                 for j in 1...n {
+                    cellsUntilCancellationCheck -= 1
+                    if cellsUntilCancellationCheck == 0 {
+                        cellsUntilCancellationCheck = cancellationCheckInterval
+                        try checkCancellation()
+                    }
                     let above = row[j]
                     if origWords[i - 1] == procWords[j - 1] {
                         row[j] = diagonal + 1

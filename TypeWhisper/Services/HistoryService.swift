@@ -654,7 +654,7 @@ final class HistoryService: ObservableObject {
 
     func uniqueDomains(limit: Int = 50) -> [String] {
         do {
-            return try Self.computeUniqueDomains(in: modelContainer, limit: limit)
+            return try Self.computeUniqueDomains(in: modelContainer, limit: limit, checksCancellation: false)
         } catch {
             logger.error("Failed to enumerate history domains: \(error.localizedDescription)")
             return []
@@ -662,15 +662,22 @@ final class HistoryService: ObservableObject {
     }
 
     /// Same result as `uniqueDomains(limit:)`, computed on a private context off the main actor.
+    /// Cancelling the caller stops the scan; it then returns an empty list.
     func uniqueDomainsInBackground(limit: Int = 50) async -> [String] {
         let container = modelContainer
-        let result = await Task.detached(priority: .userInitiated) {
-            try Self.computeUniqueDomains(in: container, limit: limit)
-        }.result
+        let scan = Task.detached(priority: .userInitiated) {
+            try Self.computeUniqueDomains(in: container, limit: limit, checksCancellation: true)
+        }
+        let result = await withTaskCancellationHandler {
+            await scan.result
+        } onCancel: {
+            scan.cancel()
+        }
         switch result {
         case .success(let domains):
             return domains
         case .failure(let error):
+            if error is CancellationError { return [] }
             logger.error("Failed to enumerate history domains: \(error.localizedDescription)")
             return []
         }
@@ -678,14 +685,18 @@ final class HistoryService: ObservableObject {
 
     nonisolated private static func computeUniqueDomains(
         in modelContainer: ModelContainer,
-        limit: Int
+        limit: Int,
+        checksCancellation: Bool
     ) throws -> [String] {
         guard limit > 0 else { return [] }
         var counts: [String: Int] = [:]
+        var visitedCount = 0
         let context = ModelContext(modelContainer)
         var descriptor = FetchDescriptor<TranscriptionRecord>()
         descriptor.propertiesToFetch = [\TranscriptionRecord.appURL]
         try context.enumerate(descriptor, batchSize: 500) { record in
+            if checksCancellation, visitedCount.isMultiple(of: 500) { try Task.checkCancellation() }
+            visitedCount += 1
             guard let domain = record.appDomain else { return }
             let cleaned = domain.hasPrefix("www.") ? String(domain.dropFirst(4)) : domain
             guard !cleaned.isEmpty else { return }
