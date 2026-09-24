@@ -352,7 +352,7 @@ final class WorkflowIncrementalPostProcessingSession {
 
         let text = WorkflowTextSegmenter.join(
             leadingWhitespace: leadingWhitespace,
-            pieces: zip(outputs, entries).map { (output: $0, separator: $1.separator) }
+            pieces: zip(outputs, entries).map { (input: $1.input, output: $0, separator: $1.separator) }
         )
         return .processed(
             text: text,

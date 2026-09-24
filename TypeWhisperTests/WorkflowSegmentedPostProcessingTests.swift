@@ -329,18 +329,64 @@ final class WorkflowSegmentedPostProcessingTests: XCTestCase {
         let joined = WorkflowTextSegmenter.join(
             leadingWhitespace: "",
             pieces: [
-                (output: " One. \n", separator: " "),
-                (output: "   ", separator: "\n\n"),
-                (output: "Three.", separator: "")
+                (input: "One.", output: " One. \n", separator: " "),
+                (input: "Two.", output: "   ", separator: "\n\n"),
+                (input: "Three.", output: "Three.", separator: "")
             ]
         )
         XCTAssertEqual(joined, "One. Three.")
 
         let allEmpty = WorkflowTextSegmenter.join(
             leadingWhitespace: " ",
-            pieces: [(output: "", separator: " "), (output: "\n", separator: "")]
+            pieces: [(input: "One.", output: "", separator: " "), (input: "Two.", output: "\n", separator: "")]
         )
         XCTAssertEqual(allEmpty, "")
+    }
+
+    func testJoinAdaptsSentenceSpacingWhenTranslationChangesScript() {
+        let chinese = String(repeating: "今天我们讨论了项目的进度和下一步的计划。", count: 6)
+        let segmentation = WorkflowTextSegmenter.segment(chinese, policy: smallPolicy)
+        XCTAssertEqual(segmentation.segments.count, 3)
+        XCTAssertEqual(segmentation.segments.dropLast().map(\.separator), ["", ""])
+
+        // Unspaced source translated into English: sentences need a space.
+        XCTAssertEqual(
+            segmentation.joined(outputs: ["We discussed the plan.", "Next steps.", "(Done.)"]),
+            "We discussed the plan. Next steps. (Done.)"
+        )
+        // Unchanged outputs keep the source spacing exactly.
+        XCTAssertEqual(segmentation.joined(outputs: segmentation.segments.map(\.text)), chinese)
+        // A mixed boundary keeps the source separator.
+        XCTAssertEqual(
+            segmentation.joined(outputs: ["我们讨论了。", "Swift 很好。", "完成。"]),
+            "我们讨论了。Swift 很好。完成。"
+        )
+
+        // Spaced source translated into Japanese: no space between sentences.
+        let english = [firstSentence, secondSentence, thirdSentence].joined(separator: " ")
+        let englishSegmentation = WorkflowTextSegmenter.segment(english, policy: smallPolicy)
+        XCTAssertEqual(englishSegmentation.segments.count, 3)
+        XCTAssertEqual(
+            englishSegmentation.joined(outputs: ["最初の文です。", "次の文です。", "三番目の文です。"]),
+            "最初の文です。次の文です。三番目の文です。"
+        )
+
+        // Unspaced source whose ASR output has spaces keeps them when cleaned.
+        let spacedJapanese = ["最初", "二番目", "三番目", "四番目", "五番目"]
+            .map { "これは\($0)の長い文章でございます。" }
+            .joined(separator: " ")
+        let spacedSegmentation = WorkflowTextSegmenter.segment(spacedJapanese, policy: smallPolicy)
+        XCTAssertGreaterThan(spacedSegmentation.segments.count, 1)
+        XCTAssertEqual(spacedSegmentation.joined(outputs: spacedSegmentation.segments.map(\.text)), spacedJapanese)
+
+        // Paragraph breaks are always kept.
+        XCTAssertEqual(
+            WorkflowTextSegmenter.join(
+                leadingWhitespace: "",
+                pieces: [(input: "One.", output: "一。", separator: "\n\n"), (input: "Two.", output: "二。", separator: "")]
+            ),
+            "一。\n\n二。"
+        )
     }
 
     func testStablePrefixWaitsForTargetLengthAndMargin() throws {
