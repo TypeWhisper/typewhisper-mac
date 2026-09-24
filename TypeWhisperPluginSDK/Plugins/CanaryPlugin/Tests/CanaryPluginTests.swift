@@ -35,6 +35,18 @@ final class CanaryPluginTests: XCTestCase {
         }
     }
 
+    func testLongAudioUsesNearbySilenceAndPreservesEverySample() {
+        Stream.withNewDefaultStream(device: .cpu) {
+            var samples = [Float](repeating: 0.2, count: 24 * 16_000)
+            let silence = (18 * 16_000)..<(19 * 16_000)
+            samples.replaceSubrange(silence, with: repeatElement(Float(0), count: silence.count))
+            let chunks = CanaryPlugin.transcriptionChunks(samples)
+            XCTAssertEqual(chunks.count, 2)
+            let boundary = chunks[0].size
+            XCTAssertTrue(silence.contains(boundary), "Split must move from 20 seconds into the nearby pause")
+            XCTAssertEqual(chunks.flatMap { $0.asArray(Float.self) }, samples)
+        }
+    }
     #endif
 
     func testOnlyKnownDerivedPreprocessingBuffersAreExcluded() {

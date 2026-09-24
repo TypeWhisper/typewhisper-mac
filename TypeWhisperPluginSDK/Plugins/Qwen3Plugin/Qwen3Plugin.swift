@@ -418,6 +418,8 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
     }
 
     func unloadModel(clearPersistence: Bool = true) {
+        // Reject pending imports and loads before they can repopulate an unloaded engine.
+        activationID = UUID()
         explicitModelLoadTask?.cancel()
         explicitModelLoadTask = nil
         model = nil

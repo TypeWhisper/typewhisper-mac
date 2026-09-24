@@ -99,6 +99,80 @@ final class MLXPluginModelStorageTests: XCTestCase {
     }
 
     @MainActor
+    func testAutoUnloadInvalidatesPendingImportInEveryMLXEngine() async throws {
+        let qwen = Qwen3Plugin()
+        let granite = GranitePlugin()
+        let voxtral = VoxtralPlugin()
+        let canary = CanaryPlugin()
+        try await assertAutoUnloadCancelsImport(qwen, gate: qwen.modelLoadGate)
+        try await assertAutoUnloadCancelsImport(granite, gate: granite.modelLoadGate)
+        try await assertAutoUnloadCancelsImport(voxtral, gate: voxtral.modelLoadGate)
+        try await assertAutoUnloadCancelsImport(canary, gate: canary.modelLoadGate)
+    }
+
+    @MainActor
+    private func assertAutoUnloadCancelsImport<P: NSObject & PluginCustomModelImporting>(
+        _ plugin: P, gate: PluginLocalInferenceGate
+    ) async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let source = fixture.root.appendingPathComponent("source")
+        try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
+        let modelType = try XCTUnwrap(plugin.supportedImportModelTypes.first)
+        try JSONSerialization.data(withJSONObject: ["model_type": modelType])
+            .write(to: source.appendingPathComponent("config.json"))
+        for name in ["tokenizer.json", "tekken.json", "tokenizer.model", "vocab.json", "merges.txt"] {
+            try Data("{}".utf8).write(to: source.appendingPathComponent(name))
+        }
+        let header = Data(#"{"weight":{"dtype":"F32","shape":[1],"data_offsets":[0,4]}}"#.utf8)
+        var size = UInt64(header.count).littleEndian
+        var weights = withUnsafeBytes(of: &size) { Data($0) }
+        weights.append(header)
+        weights.append(Data(repeating: 0, count: 4))
+        try weights.write(to: source.appendingPathComponent("model.safetensors"))
+        let candidate = try await PluginModelImportCandidate.inspect(.folder(source))
+        let host = MockHostServices(pluginDataDirectory: fixture.root)
+        plugin.activate(host: host)
+        defer { plugin.deactivate() }
+        let store = fixture.root.appendingPathComponent("custom-models")
+        // Hold the native loader until the copy has been published, then fire
+        // the real host auto-unload selector before letting the loader proceed.
+        let pending = try await gate.withLock {
+            let task = await MainActor.run {
+                Task { try await plugin.importModel(candidate, token: nil) }
+            }
+            var published = false
+            for _ in 0..<500 {
+                let entries = (try? FileManager.default.contentsOfDirectory(atPath: store.path)) ?? []
+                if entries.contains(where: { $0.hasPrefix("custom-") }) {
+                    published = true
+                    break
+                }
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            await MainActor.run {
+                XCTAssertTrue(published, "Import must reach the held native loader")
+                if published {
+                    _ = plugin.perform(NSSelectorFromString("triggerAutoUnload"))
+                } else {
+                    plugin.deactivate()
+                }
+            }
+            return task
+        }
+        do {
+            _ = try await pending.value
+            XCTFail("Auto-unloaded import must not restore a model")
+        } catch is CancellationError {
+            // Expected: the unload invalidated this import's activation.
+        }
+        XCTAssertFalse(plugin.isConfigured)
+        XCTAssertNil(host.userDefault(forKey: "loadedModel"))
+        let entries = try FileManager.default.contentsOfDirectory(atPath: store.path)
+        XCTAssertFalse(entries.contains(where: { $0.hasPrefix("custom-") || $0.hasPrefix(".import-") }))
+    }
+
+    @MainActor
     func testFreshCanaryAcceptsExplicitBuiltInLoadWithoutPersistedLoadedModel() async throws {
         let canary = CanaryPlugin()
         try await assertExplicitLoadRequest(

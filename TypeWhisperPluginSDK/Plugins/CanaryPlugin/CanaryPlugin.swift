@@ -217,11 +217,11 @@ final class CanaryPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
         let sourceLanguage = try Self.sourceLanguage(language)
         guard !translate else { throw PluginTranscriptionError.apiError("Canary translation is not available in this engine.") }
         var chunks: [String] = []
-        // Bound encoder memory and give each chunk its own decoding budget.
-        for start in stride(from: 0, to: audio.samples.count, by: 320_000) {
+        // Use the same low-energy boundary search as Qwen instead of fixed cuts.
+        // Each chunk still gets its own decoding budget and bounded encoder memory.
+        for chunk in Self.transcriptionChunks(audio.samples) {
             try Task.checkCancellation()
-            let samples = Array(audio.samples[start..<min(start + 320_000, audio.samples.count)])
-            let output = model.generate(audio: MLXArray(samples), generationParameters: STTGenerateParameters(
+            let output = model.generate(audio: chunk, generationParameters: STTGenerateParameters(
                 maxTokens: 512, temperature: 0, language: sourceLanguage
             ))
             try Task.checkCancellation()
@@ -232,6 +232,14 @@ final class CanaryPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
             guard onProgress(chunks.joined(separator: " ")) else { throw CancellationError() }
         }
         return PluginTranscriptionResult(text: chunks.joined(separator: " "), detectedLanguage: sourceLanguage)
+    }
+
+    static func transcriptionChunks(_ samples: [Float]) -> [MLXArray] {
+        guard !samples.isEmpty else { return [] }
+        return splitAudioIntoChunks(
+            MLXArray(samples), sampleRate: 16_000, chunkDuration: 20,
+            minChunkDuration: 1, searchExpandSec: 5, minWindowMs: 100
+        ).map(\.0)
     }
 
     static func sourceLanguage(_ language: String?) throws -> String {
@@ -415,6 +423,8 @@ final class CanaryPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
     }
 
     func unloadModel(clearPersistence: Bool = true) {
+        // Reject pending imports and loads before they can repopulate an unloaded engine.
+        activationID = UUID()
         explicitModelLoadTask?.cancel()
         explicitModelLoadTask = nil
         passiveRestoreController.cancel()

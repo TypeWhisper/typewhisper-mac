@@ -377,6 +377,8 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
     }
 
     func unloadModel(clearPersistence: Bool = true) {
+        // Reject pending imports and loads before they can repopulate an unloaded engine.
+        activationID = UUID()
         explicitModelLoadTask?.cancel()
         explicitModelLoadTask = nil
         model = nil

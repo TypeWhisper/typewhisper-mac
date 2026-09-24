@@ -322,8 +322,14 @@ public struct PluginCustomModelStore: Sendable {
         try JSONEncoder().encode(model).write(to: staging.appendingPathComponent(Self.metadataName), options: .atomic)
         try Task.checkCancellation()
         let destination = directory.appendingPathComponent(id)
-        try FileManager.default.moveItem(at: staging, to: destination)
-        try? FileManager.default.removeItem(at: destination.appendingPathComponent(".lease"))
+        try withStagingLock(createDirectory: false) {
+            try Task.checkCancellation()
+            guard !models().contains(where: { $0.origin == origin && $0.revision == candidate.revision }) else {
+                throw PluginModelImportError.duplicate
+            }
+            try FileManager.default.moveItem(at: staging, to: destination)
+            try? FileManager.default.removeItem(at: destination.appendingPathComponent(".lease"))
+        }
         return model
     }
 

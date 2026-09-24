@@ -296,6 +296,46 @@ final class PluginCustomModelImportTests: XCTestCase, @unchecked Sendable {
         }
     }
 
+    func testConcurrentImportsPublishOnlyOneCopyOfSameRevision() async throws {
+        let source = try fixture()
+        let store = store()
+        let requirements = requirements
+        let candidate = try await remoteCandidate()
+        let barrier = ImportDownloadBarrier()
+        defer { try? FileManager.default.removeItem(at: source); try? FileManager.default.removeItem(at: store.directory) }
+        let outcomes = await withTaskGroup(of: Int.self, returning: [Int].self) { group in
+            for _ in 0..<2 {
+                group.addTask {
+                    let independentStore = PluginCustomModelStore(directory: store.directory)
+                    do {
+                        _ = try await independentStore.add(candidate, supportedTypes: ["qwen3_asr"], requirements: requirements) { request in
+                            let url = request.url!
+                            // Both imports must pass the early duplicate check before
+                            // either can finish downloading and publish its model.
+                            if url.lastPathComponent == "config.json" { await barrier.meet() }
+                            let downloaded = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+                            try FileManager.default.copyItem(at: source.appendingPathComponent(url.lastPathComponent), to: downloaded)
+                            return (downloaded, HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+                        }
+                        return 1
+                    } catch PluginModelImportError.duplicate {
+                        return 0
+                    } catch {
+                        XCTFail("Unexpected import error: \(error)")
+                        return -1
+                    }
+                }
+            }
+            var outcomes: [Int] = []
+            for await outcome in group { outcomes.append(outcome) }
+            return outcomes.sorted()
+        }
+        XCTAssertEqual(outcomes, [0, 1])
+        XCTAssertEqual(store.models().count, 1)
+        XCTAssertFalse(try FileManager.default.contentsOfDirectory(atPath: store.directory.path)
+            .contains { $0.hasPrefix(".import-") })
+    }
+
     func testRemoteImportDownloadsOnlyDataAtPinnedRevision() async throws {
         let source = try fixture()
         let store = store()
@@ -348,4 +388,16 @@ private final class ImportMetadataURLProtocol: URLProtocol, @unchecked Sendable 
         client?.urlProtocolDidFinishLoading(self)
     }
     override func stopLoading() { }
+}
+
+private actor ImportDownloadBarrier {
+    private var waiting: CheckedContinuation<Void, Never>?
+    func meet() async {
+        if let waiting {
+            self.waiting = nil
+            waiting.resume()
+        } else {
+            await withCheckedContinuation { waiting = $0 }
+        }
+    }
 }

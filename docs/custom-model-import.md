@@ -25,7 +25,8 @@ Canary, including `KIEFERSA/Sophea-Canary-ASR-mlx`, is supported by the Canary A
 plugin. Select an explicit source language in Dictation settings: **Greek** for
 Greek Sophea audio and **English** for English audio. The Canary plugin does not
 automatically detect languages or expose translation. Core ML WhisperKit/Parakeet
-models cannot use this MLX import path.
+models cannot use this MLX import path. Longer Canary recordings use roughly
+20-second chunks, searching nearby low-energy pauses for boundaries.
 
 On success, the model is loaded and appears in the plugin's model list. Select the
 engine in Dictation settings to use it for dictation. The imported entry survives
@@ -35,7 +36,8 @@ Integrations when it is no longer needed.
 Remote repository metadata and configurations are limited to 4 MiB while streaming,
 including responses without a Content-Length header. Abandoned staging folders
 are recovered in the background when a plugin activates; operating-system file leases protect active
-imports, including imports in another process.
+imports, including imports in another process. Duplicate detection and final publication
+share the same lock, so concurrent imports cannot publish the same revision twice.
 
 Local files are copied in cancellable chunks into the plugin's `custom-models` directory. Removing an
 import deletes only that copy. Hugging Face imports pin configuration and data
@@ -62,6 +64,7 @@ The shared `PluginCustomModelStore` stages copies/downloads, checks the model
 configuration, required files, indexed shards and safetensors headers, then
 records a stable custom model ID. The engine performs final loader validation,
 rolls back failures, and handles its usual selection/restoration notifications.
+Unloading invalidates pending imports and loads, so they cannot later reload the engine.
 
 ## Verification
 
@@ -71,6 +74,8 @@ weights, Git LFS pointers, symlinked snapshots, duplicate imports, cancellation,
 HTTP authentication failures, pinned remote downloads, interrupted downloads and
 cancellation during a large local file copy. Explicit model-load entry points are
 covered for imported models in all four engines and for a fresh Canary install.
+Regression tests also cover simultaneous duplicate imports, auto-unload while an
+import waits for native loading, and Canary chunk boundaries without lost samples.
 
 ```sh
 swift test --package-path TypeWhisperPluginSDK --filter PluginCustomModelImportTests
@@ -82,7 +87,8 @@ Native validation on Apple Silicon also exercised Qwen3-ASR-1.7B-4bit from a loc
 snapshot and Qwen3-ASR-0.6B-4bit from Hugging Face: import, model loading, a synthetic
 English transcription, plugin restart/restoration, repeated transcription and
 removal while preserving the local source. Sophea Canary was validated with its
-BF16 weights, synthetic Greek and English speech, explicit-language validation,
+BF16 weights, synthetic Greek and English speech (including a 61-second English
+recording spanning multiple chunks), explicit-language validation,
 plugin restart/restoration and repeated Greek transcription. Both Qwen3 and
 Sophea were also exercised through the explicit model-load entry point after
 auto-unload and with deactivation from the load-completion notification; the
