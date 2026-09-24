@@ -1,5 +1,6 @@
 import AppKit
 import Carbon.HIToolbox
+import Combine
 import CoreAudio
 import Foundation
 import XCTest
@@ -6365,6 +6366,52 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testCancelledInsertionKeepsVerifyingPasteBeforeClipboardRestore() async throws {
+        let harness = ClipboardRestoreHarness(verifiesPaste: true)
+        harness.service.pasteVerificationAttempts = 10_000
+        var isCancelled = false
+        var readsAfterCancellation = 0
+        // A cancelled verification reads the field twice more and gives up. The paste lands
+        // on the third read, which only a verification that keeps polling reaches.
+        harness.service.focusedTextStateOverride = { _ in
+            if isCancelled {
+                readsAfterCancellation += 1
+            }
+            let landed = readsAfterCancellation >= 3
+            return (
+                value: landed ? "Hello" : "",
+                selectedText: nil,
+                selectedRange: NSRange(location: landed ? 5 : 0, length: 0)
+            )
+        }
+        let (pasted, pastedContinuation) = AsyncStream<Void>.makeStream()
+        harness.service.pasteSimulatorOverride = { [weak harness] in
+            harness?.pasteCount += 1
+            pastedContinuation.yield()
+        }
+        harness.setClipboard("Existing")
+
+        let insertion = Task { @MainActor in
+            try await harness.service.insertText(
+                "Hello",
+                preserveClipboard: true,
+                awaitPasteVerification: true
+            )
+        }
+        var pastes = pasted.makeAsyncIterator()
+        _ = await pastes.next()
+        insertion.cancel()
+        isCancelled = true
+
+        let restoreVerification = await harness.service.waitForPendingClipboardRestore()
+        let result = try await insertion.value
+
+        XCTAssertEqual(restoreVerification, .verified)
+        XCTAssertEqual(result, .pasted(verification: .verified))
+        XCTAssertEqual(harness.pasteboard.string(forType: .string), "Existing")
+    }
+
+    @MainActor
     func testApiStartRecording_startsAudioBeforeContextAndDeferredSelectedTextCapture() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         let liveFieldKey = UserDefaultsKeys.liveFieldTranscriptEnabled
@@ -7175,13 +7222,29 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     @MainActor
     func testTerminationFlushPersistsDictationStillWaitingForBrowserURL() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let historyEnabledKey = UserDefaultsKeys.historyEnabled
+        let saveAudioKey = UserDefaultsKeys.saveAudioWithHistory
+        let originalHistoryEnabled = UserDefaults.standard.object(forKey: historyEnabledKey)
+        let originalSaveAudio = UserDefaults.standard.object(forKey: saveAudioKey)
         var dictationContext: DictationContext?
         defer {
             MockTranscriptionPlugin.reset()
             dictationContext = nil
+            if let originalHistoryEnabled {
+                UserDefaults.standard.set(originalHistoryEnabled, forKey: historyEnabledKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: historyEnabledKey)
+            }
+            if let originalSaveAudio {
+                UserDefaults.standard.set(originalSaveAudio, forKey: saveAudioKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: saveAudioKey)
+            }
             TestSupport.remove(appSupportDirectory)
         }
 
+        UserDefaults.standard.set(true, forKey: historyEnabledKey)
+        UserDefaults.standard.set(true, forKey: saveAudioKey)
         MockTranscriptionPlugin.reset()
         MockTranscriptionPlugin.setResponseText("transcribed")
         let urlRequested = expectation(description: "Browser lookup started")
@@ -7210,15 +7273,23 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
         }
 
+        // A sink sees every state change, unlike an AsyncPublisher that can miss one on slow runners.
+        let inserted = expectation(description: "Dictation inserted")
+        inserted.assertForOverFulfill = false
+        let stateObservation = context.dictationViewModel.$state.sink { state in
+            if state == .inserting {
+                inserted.fulfill()
+            }
+        }
+        defer { stateObservation.cancel() }
+
         let sessionID = context.dictationViewModel.apiStartRecording()
         await context.dictationViewModel.testingWaitForRecordingStart()
-        await fulfillment(of: [urlRequested], timeout: 1)
+        await fulfillment(of: [urlRequested], timeout: 10)
         _ = context.dictationViewModel.apiStopRecording()
 
         // Inserted, with persistence still waiting for the blocked URL lookup.
-        for await state in context.dictationViewModel.$state.values where state == .inserting {
-            break
-        }
+        await fulfillment(of: [inserted], timeout: 30)
         XCTAssertEqual(pasteboard.string(forType: .string), "transcribed")
         XCTAssertEqual(context.historyService.totalRecords, 0)
         XCTAssertNotEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.status, .completed)

@@ -1144,13 +1144,11 @@ final class TextInsertionService {
             )
         }
 
+        // Cancelling the caller does not cancel the verification: the pending restore still
+        // waits for the paste to land (bounded by the polling attempts) before restoring.
         let verification: PasteVerification
         if let verificationTask {
-            verification = await withTaskCancellationHandler {
-                await verificationTask.value
-            } onCancel: {
-                verificationTask.cancel()
-            }
+            verification = await verificationTask.value
         } else {
             verification = .notAwaited
         }
