@@ -255,6 +255,17 @@ final class CanaryPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
             }
             _selectedModelId = modelId
             host?.setUserDefault(modelId, forKey: "selectedModel")
+            guard loadedModelId != modelId, modelState != .loading,
+                  let definition = allModelDefinitions.first(where: { $0.id == modelId }),
+                  hasDownloadedModel(definition) else { return }
+            // Override cleanup restores selection synchronously. Advertise the
+            // cached restore immediately so a generic request cannot replace it.
+            modelState = .loading
+            let generation = activationID
+            genericModelLoadTask = Task {
+                guard !Task.isCancelled, generation == activationID, host != nil else { return }
+                try? await loadModel(definition, expectedGeneration: generation)
+            }
         }
     }
 

@@ -343,6 +343,48 @@ final class MLXPluginModelStorageTests: XCTestCase {
     }
 
     @MainActor
+    func testSelectingCachedModelStartsRestoreAndGenericRequestDoesNotCancelIt() async throws {
+        let granite = GranitePlugin()
+        let voxtral = VoxtralPlugin()
+        let canary = CanaryPlugin()
+        try await assertSelectionRestoresCachedModel(granite, gate: granite.modelLoadGate) { granite.genericModelLoadTask }
+        try await assertSelectionRestoresCachedModel(voxtral, gate: voxtral.modelLoadGate) { voxtral.genericModelLoadTask }
+        try await assertSelectionRestoresCachedModel(canary, gate: canary.modelLoadGate) { canary.genericModelLoadTask }
+    }
+
+    @MainActor
+    private func assertSelectionRestoresCachedModel<P: NSObject & TranscriptionEnginePlugin & PluginSettingsActivityReporting>(
+        _ plugin: P, gate: PluginLocalInferenceGate,
+        task: @escaping @MainActor @Sendable () -> Task<Void, Never>?
+    ) async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let id = "custom-" + UUID().uuidString.lowercased()
+        let folder = fixture.root.appendingPathComponent("custom-models/" + id)
+        try fixture.writeModel(at: folder, requiredFiles: [
+            "config.json", "tokenizer.json", "tokenizer.model", "tekken.json", "vocab.json", "merges.txt",
+        ])
+        try JSONSerialization.data(withJSONObject: [
+            "id": id, "displayName": id, "modelType": "fixture", "origin": id, "bytes": 0,
+        ]).write(to: folder.appendingPathComponent("typewhisper-import.json"))
+        plugin.activate(host: MockHostServices(pluginDataDirectory: fixture.root))
+        try await gate.withLock {
+            let pending = await MainActor.run {
+                plugin.selectModel(id)
+                let pending = task()
+                XCTAssertNotNil(pending, "Restoring an override selection must start loading its cached model")
+                XCTAssertNotNil(plugin.currentSettingsActivity)
+                _ = plugin.perform(NSSelectorFromString("triggerRestoreModel"))
+                XCTAssertFalse(pending?.isCancelled ?? true, "Generic restore must preserve the selection restore")
+                plugin.deactivate()
+                XCTAssertTrue(pending?.isCancelled == true)
+                return pending
+            }
+            await pending?.value
+        }
+    }
+
+    @MainActor
     func testDeletingModelCancelsQueuedExplicitAndGenericLoads() async throws {
         for explicit in [true, false] {
             let qwen = Qwen3Plugin()

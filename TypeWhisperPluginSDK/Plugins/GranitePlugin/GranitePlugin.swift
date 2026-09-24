@@ -253,6 +253,17 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
             }
             _selectedModelId = modelId
             host?.setUserDefault(modelId, forKey: "selectedModel")
+            guard loadedModelId != modelId, modelState != .loading,
+                  let definition = allModelDefinitions.first(where: { $0.id == modelId }),
+                  hasDownloadedModel(definition) else { return }
+            // Override cleanup restores selection synchronously. Advertise the
+            // cached restore immediately so a generic request cannot replace it.
+            modelState = .loading
+            let generation = activationID
+            genericModelLoadTask = Task {
+                guard !Task.isCancelled, generation == activationID, host != nil else { return }
+                try? await loadModel(definition, expectedGeneration: generation)
+            }
         }
     }
 
@@ -310,12 +321,12 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
             )
 
             var accumulated = ""
-            for try await generation in stream {
+            generationLoop: for try await generation in stream {
                 switch generation {
                 case .token(let token):
                     accumulated += token
                     let shouldContinue = onProgress(Self.normalizeTranscript(accumulated))
-                    if !shouldContinue { break }
+                    if !shouldContinue { break generationLoop }
                 case .info:
                     break
                 case .result(let output):
