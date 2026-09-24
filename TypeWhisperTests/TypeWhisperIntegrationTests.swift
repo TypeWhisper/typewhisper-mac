@@ -16407,6 +16407,38 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
     }
 
     @MainActor
+    func testHybridModifierHoldReportsPressTimeAsRequestTimestamp() async throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        service.hybridModifierHoldActivationDelay = 0.02
+
+        service.setHotkeyForTesting(controlModifierHotkey(), for: .hybrid)
+        service.modifierFlagsStateProvider = { .control }
+
+        var requestTimestamps: [UInt64] = []
+        let started = expectation(description: "hybrid modifier hold starts after delay")
+        service.onDictationStart = { timestamp in
+            requestTimestamps.append(timestamp)
+            started.fulfill()
+        }
+
+        let keyDown = try makeControlModifierEvent(isDown: true)
+
+        let beforePress = DispatchTime.now().uptimeNanoseconds
+        XCTAssertFalse(service.processEventForTesting(keyDown, source: .monitor))
+        // Activation runs on the main queue, so it cannot happen before this synchronous read.
+        let afterPress = DispatchTime.now().uptimeNanoseconds
+        XCTAssertTrue(requestTimestamps.isEmpty)
+
+        await fulfillment(of: [started], timeout: 1.0)
+        XCTAssertEqual(requestTimestamps.count, 1)
+        let timestamp = try XCTUnwrap(requestTimestamps.first)
+        XCTAssertGreaterThanOrEqual(timestamp, beforePress)
+        XCTAssertLessThanOrEqual(timestamp, afterPress)
+        XCTAssertEqual(service.currentMode, .pushToTalk)
+    }
+
+    @MainActor
     func testHybridModifierDoubleTapStillTogglesDictation() throws {
         let service = HotkeyService()
         service.suspendMonitoring()

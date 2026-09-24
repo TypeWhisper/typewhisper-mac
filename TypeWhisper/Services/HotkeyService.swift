@@ -1395,9 +1395,11 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         pendingHybridModifierHoldGeneration &+= 1
         let generation = pendingHybridModifierHoldGeneration
         pendingHybridModifierHoldHotkey = hotkey
+        // Report the physical press time so start latency logs include the hold delay.
+        let requestTimestamp = Self.requestTimestamp()
 
         let workItem = DispatchWorkItem { [weak self] in
-            self?.activatePendingHybridModifierHold(generation: generation)
+            self?.activatePendingHybridModifierHold(generation: generation, requestTimestamp: requestTimestamp)
         }
         pendingHybridModifierHoldWorkItem = workItem
         DispatchQueue.main.asyncAfter(
@@ -1406,7 +1408,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         )
     }
 
-    private func activatePendingHybridModifierHold(generation: UInt64) {
+    private func activatePendingHybridModifierHold(generation: UInt64, requestTimestamp: UInt64) {
         guard generation == pendingHybridModifierHoldGeneration,
               let hotkey = pendingHybridModifierHoldHotkey else {
             return
@@ -1430,7 +1432,12 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         pushToTalkInterruptionSignaled = false
         activeDelayedHybridModifierHold = true
         currentMode = .pushToTalk
-        onDictationStart?(Self.requestTimestamp())
+        let now = Self.requestTimestamp()
+        let pressToActivationMs = Double(now >= requestTimestamp ? now - requestTimestamp : 0) / 1_000_000
+        logger.info(
+            "Hybrid modifier hold confirmed: pressToActivationMs=\(String(format: "%.1f", pressToActivationMs), privacy: .public)"
+        )
+        onDictationStart?(requestTimestamp)
     }
 
     private func cancelPendingHybridModifierHoldIfInterrupted(by event: NSEvent) {
