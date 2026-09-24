@@ -37,7 +37,9 @@ Remote repository metadata and configurations are limited to 4 MiB while streami
 including responses without a Content-Length header. Safetensors index JSON is read
 through a bounded reader and limited to 16 MiB. Abandoned staging folders
 are recovered in the background when a plugin activates; operating-system file leases protect active
-imports, including imports in another process. Duplicate detection and final publication
+imports, including imports in another process. Imports stay hidden and marked pending
+until native validation finishes, so recovery also removes abandoned validation attempts.
+Duplicate detection and final publication
 share the same lock, so concurrent imports cannot publish the same revision twice.
 
 Local files are copied in cancellable chunks into the plugin's `custom-models` directory. Removing an
@@ -67,7 +69,9 @@ The shared `PluginCustomModelStore` stages copies/downloads, checks the model
 configuration, required files, indexed shards and safetensors headers, then
 records a stable custom model ID. The engine performs final loader validation,
 rolls back failures, and handles its usual selection/restoration notifications.
-Unloading invalidates pending imports and loads, so they cannot later reload the engine.
+Unloading or a newer explicit load request invalidates pending imports, so they
+cannot later replace the requested engine state. Incomplete imported copies remain
+listed for removal through the model manager.
 
 ## Verification
 
@@ -78,7 +82,8 @@ HTTP authentication failures, pinned remote downloads, interrupted downloads and
 cancellation during a large local file copy. Explicit model-load entry points are
 covered for imported models in all four engines and for a fresh Canary install.
 Regression tests also cover simultaneous duplicate imports, auto-unload while an
-import waits for native loading, and Canary chunk boundaries without lost samples.
+import waits for native loading, superseding explicit requests, interrupted native
+validation, removal of incomplete imports, and Canary chunk boundaries without lost samples.
 
 ```sh
 swift test --package-path TypeWhisperPluginSDK --filter PluginCustomModelImportTests
@@ -94,7 +99,7 @@ BF16 weights, synthetic Greek and English speech (including a 61-second English
 recording spanning multiple chunks), explicit-language validation,
 plugin restart/restoration and repeated Greek transcription. Both Qwen3 and
 Sophea were also exercised through the explicit model-load entry point after
-auto-unload and with deactivation from the load-completion notification; the
+auto-unload and with deactivation from the import-completion notification; the
 interrupted import returned cancellation and removed its files. The Canary loader
 handles NeMo preprocessing buffers and subsampling convolution layouts, and checks
 that all model parameters are present with the expected shapes. Regression tests

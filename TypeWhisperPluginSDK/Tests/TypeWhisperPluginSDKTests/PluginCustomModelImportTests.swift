@@ -42,6 +42,56 @@ final class PluginCustomModelImportTests: XCTestCase, @unchecked Sendable {
         XCTAssertFalse(FileManager.default.fileExists(atPath: active.path))
     }
 
+    func testNativeValidationRemainsHiddenAndLeasedUntilSuccess() async throws {
+        let source = try fixture()
+        let store = store()
+        defer { try? FileManager.default.removeItem(at: source); try? FileManager.default.removeItem(at: store.directory) }
+        let candidate = try await PluginModelImportCandidate.inspect(.folder(source))
+        let model = try await store.add(candidate, supportedTypes: ["qwen3_asr"], requirements: requirements,
+            validation: { model in
+                XCTAssertTrue(store.models().isEmpty)
+                let pending = try XCTUnwrap(store.modelDirectory(for: model.id))
+                XCTAssertTrue(FileManager.default.fileExists(atPath: pending.appendingPathComponent(".pending-validation").path))
+                try PluginCustomModelStore(directory: store.directory).recoverAbandonedImports()
+                XCTAssertTrue(FileManager.default.fileExists(atPath: pending.path))
+            })
+        XCTAssertEqual(store.models().map(\.id), [model.id])
+        XCTAssertFalse(FileManager.default.fileExists(atPath: store.modelDirectory(for: model.id)!.appendingPathComponent(".pending-validation").path))
+    }
+
+    func testNativeValidationFailureRemovesPendingModel() async throws {
+        let source = try fixture()
+        let store = store()
+        defer { try? FileManager.default.removeItem(at: source); try? FileManager.default.removeItem(at: store.directory) }
+        let candidate = try await PluginModelImportCandidate.inspect(.folder(source))
+        do {
+            _ = try await store.add(candidate, supportedTypes: ["qwen3_asr"], requirements: requirements,
+                validation: { _ in throw CancellationError() })
+            XCTFail("Accepted failed native validation")
+        } catch is CancellationError {}
+        XCTAssertTrue(store.models().isEmpty)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: store.directory.path), [".staging.lock"])
+    }
+
+    func testRecoveryRemovesPendingFinalDirectoryAfterLeaseIsReleased() throws {
+        let store = store()
+        defer { try? FileManager.default.removeItem(at: store.directory) }
+        let (stage, lease) = try store.createStagingDirectory()
+        let id = "custom-" + UUID().uuidString.lowercased()
+        let pending = try XCTUnwrap(store.modelDirectory(for: id))
+        try JSONSerialization.data(withJSONObject: [
+            "id": id, "displayName": "Interrupted", "modelType": "qwen3_asr", "origin": "fixture", "bytes": 0,
+        ]).write(to: stage.appendingPathComponent("typewhisper-import.json"))
+        try Data().write(to: stage.appendingPathComponent(".pending-validation"))
+        try FileManager.default.moveItem(at: stage, to: pending)
+        XCTAssertTrue(store.models().isEmpty)
+        try store.recoverAbandonedImports()
+        XCTAssertTrue(FileManager.default.fileExists(atPath: pending.path))
+        close(lease) // The OS releases this lease on process termination.
+        try store.recoverAbandonedImports()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: pending.path))
+    }
+
     func testRemoteMetadataLimitRejectsOversizedContentLength() async throws {
         try await assertMetadataRejected(path: "declared")
     }

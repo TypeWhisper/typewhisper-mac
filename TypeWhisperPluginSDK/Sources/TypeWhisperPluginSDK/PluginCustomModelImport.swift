@@ -184,6 +184,7 @@ public struct PluginCustomModelStore: Sendable {
 
     public let directory: URL
     private static let metadataName = "typewhisper-import.json"
+    private static let pendingName = ".pending-validation"
     // Only data files consumed by local engines. Never import or execute repository code.
     private static let extensions: Set<String> = ["safetensors", "json", "txt", "model", "tiktoken", "wav"]
 
@@ -213,8 +214,11 @@ public struct PluginCustomModelStore: Sendable {
         let children = (try? FileManager.default.contentsOfDirectory(
             at: directory, includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey])) ?? []
         for child in children {
-            guard child.lastPathComponent.hasPrefix(".import-"),
-                  UUID(uuidString: String(child.lastPathComponent.dropFirst(8))) != nil,
+            let isStage = child.lastPathComponent.hasPrefix(".import-")
+                && UUID(uuidString: String(child.lastPathComponent.dropFirst(8))) != nil
+            let isPending = Self.isModelID(child.lastPathComponent)
+                && FileManager.default.fileExists(atPath: child.appendingPathComponent(Self.pendingName).path)
+            guard isStage || isPending,
                   let values = try? child.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey]),
                   values.isDirectory == true, values.isSymbolicLink != true else { continue }
             let fd = open(child.appendingPathComponent(".lease").path, O_CREAT | O_RDWR | O_NOFOLLOW, 0o600)
@@ -245,10 +249,13 @@ public struct PluginCustomModelStore: Sendable {
         }
     }
 
-    public func models() -> [Model] {
+    public func models() -> [Model] { storedModels(includePending: false) }
+
+    private func storedModels(includePending: Bool) -> [Model] {
         let children = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
         return children.compactMap { child in
             guard Self.isModelID(child.lastPathComponent),
+                  includePending || !FileManager.default.fileExists(atPath: child.appendingPathComponent(Self.pendingName).path),
                   let data = try? Data(contentsOf: child.appendingPathComponent(Self.metadataName)),
                   let model = try? JSONDecoder().decode(Model.self, from: data),
                   model.id == child.lastPathComponent else { return nil }
@@ -266,7 +273,7 @@ public struct PluginCustomModelStore: Sendable {
         if FileManager.default.fileExists(atPath: path.path) { try FileManager.default.removeItem(at: path) }
     }
 
-    /// Stage a private copy and publish its metadata only when all required files are present.
+    /// Keep a leased, hidden import until file checks and native validation both succeed.
     public func add(
         _ candidate: PluginModelImportCandidate,
         supportedTypes: Set<String>,
@@ -274,7 +281,8 @@ public struct PluginCustomModelStore: Sendable {
         token: String? = nil,
         download: @escaping @Sendable (URLRequest) async throws -> (URL, URLResponse) = { request in
             try await URLSession.shared.download(for: request)
-        }
+        },
+        validation: @escaping @Sendable (Model) async throws -> Void = { _ in }
     ) async throws -> Model {
         guard supportedTypes.contains(candidate.modelType) else {
             throw PluginModelImportError.unsupportedArchitecture(candidate.modelType)
@@ -284,7 +292,7 @@ public struct PluginCustomModelStore: Sendable {
         case .folder(let url): origin = url.resolvingSymlinksInPath().path
         case .huggingFace(let repo): origin = "https://huggingface.co/\(repo)"
         }
-        guard !models().contains(where: { $0.origin == origin && $0.revision == candidate.revision }) else {
+        guard !storedModels(includePending: true).contains(where: { $0.origin == origin && $0.revision == candidate.revision }) else {
             throw PluginModelImportError.duplicate
         }
         let id = "custom-" + UUID().uuidString.lowercased()
@@ -321,13 +329,26 @@ public struct PluginCustomModelStore: Sendable {
                           origin: origin, revision: candidate.revision, bytes: bytes)
         try JSONEncoder().encode(model).write(to: staging.appendingPathComponent(Self.metadataName), options: .atomic)
         try Task.checkCancellation()
+        try Data().write(to: staging.appendingPathComponent(Self.pendingName))
         let destination = directory.appendingPathComponent(id)
+        var completed = false
+        defer {
+            if !completed { try? FileManager.default.removeItem(at: destination) }
+        }
         try withStagingLock(createDirectory: false) {
             try Task.checkCancellation()
-            guard !models().contains(where: { $0.origin == origin && $0.revision == candidate.revision }) else {
+            guard !storedModels(includePending: true).contains(where: { $0.origin == origin && $0.revision == candidate.revision }) else {
                 throw PluginModelImportError.duplicate
             }
             try FileManager.default.moveItem(at: staging, to: destination)
+        }
+        try await validation(model)
+        // Recovery must not observe a pending marker and then acquire the lease
+        // after this model has already committed successfully.
+        try withStagingLock(createDirectory: false) {
+            try Task.checkCancellation()
+            try FileManager.default.removeItem(at: destination.appendingPathComponent(Self.pendingName))
+            completed = true
             try? FileManager.default.removeItem(at: destination.appendingPathComponent(".lease"))
         }
         return model

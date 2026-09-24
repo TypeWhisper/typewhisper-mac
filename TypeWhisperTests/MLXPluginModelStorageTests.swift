@@ -104,15 +104,60 @@ final class MLXPluginModelStorageTests: XCTestCase {
         let granite = GranitePlugin()
         let voxtral = VoxtralPlugin()
         let canary = CanaryPlugin()
-        try await assertAutoUnloadCancelsImport(qwen, gate: qwen.modelLoadGate)
-        try await assertAutoUnloadCancelsImport(granite, gate: granite.modelLoadGate)
-        try await assertAutoUnloadCancelsImport(voxtral, gate: voxtral.modelLoadGate)
-        try await assertAutoUnloadCancelsImport(canary, gate: canary.modelLoadGate)
+        try await assertSupersededImport(qwen, gate: qwen.modelLoadGate)
+        try await assertSupersededImport(granite, gate: granite.modelLoadGate)
+        try await assertSupersededImport(voxtral, gate: voxtral.modelLoadGate)
+        try await assertSupersededImport(canary, gate: canary.modelLoadGate)
     }
 
     @MainActor
-    private func assertAutoUnloadCancelsImport<P: NSObject & PluginCustomModelImporting>(
-        _ plugin: P, gate: PluginLocalInferenceGate
+    func testExplicitLoadInvalidatesPendingImportInEveryMLXEngine() async throws {
+        let qwen = Qwen3Plugin()
+        let granite = GranitePlugin()
+        let voxtral = VoxtralPlugin()
+        let canary = CanaryPlugin()
+        try await assertSupersededImport(qwen, gate: qwen.modelLoadGate,
+            replacementID: Qwen3Plugin.availableModels[0].id, currentTask: { qwen.explicitModelLoadTask })
+        try await assertSupersededImport(granite, gate: granite.modelLoadGate,
+            replacementID: GranitePlugin.availableModels[0].id, currentTask: { granite.explicitModelLoadTask })
+        try await assertSupersededImport(voxtral, gate: voxtral.modelLoadGate,
+            replacementID: VoxtralPlugin.availableModels[0].id, currentTask: { voxtral.explicitModelLoadTask })
+        try await assertSupersededImport(canary, gate: canary.modelLoadGate,
+            replacementID: CanaryPlugin.availableModels[0].id, currentTask: { canary.explicitModelLoadTask })
+    }
+
+    @MainActor
+    func testIncompleteImportsRemainRemovableInEveryMLXEngine() async throws {
+        try await assertIncompleteImportIsRemovable(Qwen3Plugin())
+        try await assertIncompleteImportIsRemovable(GranitePlugin())
+        try await assertIncompleteImportIsRemovable(VoxtralPlugin())
+        try await assertIncompleteImportIsRemovable(CanaryPlugin())
+    }
+
+    @MainActor
+    private func assertIncompleteImportIsRemovable<P: NSObject & PluginCustomModelImporting & PluginDownloadedModelManaging>(
+        _ plugin: P
+    ) async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let id = "custom-" + UUID().uuidString.lowercased()
+        let folder = fixture.root.appendingPathComponent("custom-models/" + id)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try JSONSerialization.data(withJSONObject: [
+            "id": id, "displayName": "Incomplete", "modelType": "fixture", "origin": "fixture", "bytes": 0,
+        ]).write(to: folder.appendingPathComponent("typewhisper-import.json"))
+        plugin.activate(host: MockHostServices(pluginDataDirectory: fixture.root))
+        defer { plugin.deactivate() }
+        XCTAssertTrue(plugin.downloadedModels.contains(where: { $0.id == id }))
+        try await plugin.deleteDownloadedModel(id)
+        XCTAssertFalse(plugin.downloadedModels.contains(where: { $0.id == id }))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: folder.path))
+    }
+
+    @MainActor
+    private func assertSupersededImport<P: NSObject & PluginCustomModelImporting>(
+        _ plugin: P, gate: PluginLocalInferenceGate, replacementID: String? = nil,
+        currentTask: @escaping @MainActor @Sendable () -> Task<Void, Never>? = { nil }
     ) async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
@@ -135,8 +180,8 @@ final class MLXPluginModelStorageTests: XCTestCase {
         plugin.activate(host: host)
         defer { plugin.deactivate() }
         let store = fixture.root.appendingPathComponent("custom-models")
-        // Hold the native loader until the copy has been published, then fire
-        // the real host auto-unload selector before letting the loader proceed.
+        // Hold the native loader until the pending copy exists, then fire
+        // the host selector before letting native loading proceed.
         let pending = try await gate.withLock {
             let task = await MainActor.run {
                 Task { try await plugin.importModel(candidate, token: nil) }
@@ -153,7 +198,15 @@ final class MLXPluginModelStorageTests: XCTestCase {
             await MainActor.run {
                 XCTAssertTrue(published, "Import must reach the held native loader")
                 if published {
-                    _ = plugin.perform(NSSelectorFromString("triggerAutoUnload"))
+                    if let replacementID {
+                        _ = plugin.perform(NSSelectorFromString("triggerRestoreModelForModel:"), with: replacementID as NSString)
+                        // Prevent the replacement from needing real weights; cancelling
+                        // its task does not change the activation generation.
+                        XCTAssertNotNil(currentTask())
+                        currentTask()?.cancel()
+                    } else {
+                        _ = plugin.perform(NSSelectorFromString("triggerAutoUnload"))
+                    }
                 } else {
                     plugin.deactivate()
                 }
@@ -162,9 +215,9 @@ final class MLXPluginModelStorageTests: XCTestCase {
         }
         do {
             _ = try await pending.value
-            XCTFail("Auto-unloaded import must not restore a model")
+            XCTFail("Superseded import must not restore a model")
         } catch is CancellationError {
-            // Expected: the unload invalidated this import's activation.
+            // Expected: the host action invalidated this import's activation.
         }
         XCTAssertFalse(plugin.isConfigured)
         XCTAssertNil(host.userDefault(forKey: "loadedModel"))
