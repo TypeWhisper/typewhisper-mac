@@ -455,8 +455,10 @@ jobs:
               exit 1
             fi
 
-            TARGET_REGISTRY=$(python3 << PYEOF
-          import json, os
+            TARGET_REGISTRIES=$(python3 << PYEOF
+          import json, os, sys
+          sys.path.insert(0, os.path.join("$GITHUB_WORKSPACE", "scripts"))
+          from plugin_registry_metadata import official_registry_targets
 
           manifest_path = "$MANIFEST_PATH"
           src_manifest = os.path.join("$GITHUB_WORKSPACE", manifest_path) if manifest_path else ""
@@ -465,14 +467,9 @@ jobs:
           sdk_compat = manifest.get("sdkCompatibilityVersion")
           if not sdk_compat:
               raise SystemExit("manifest.json is missing sdkCompatibilityVersion")
-          print(f"plugins-{sdk_compat}.json")
+          print(" ".join(official_registry_targets(sdk_compat)))
           PYEOF
             )
-
-            TARGET_REGISTRIES="$TARGET_REGISTRY"
-            if [[ "$TARGET_REGISTRY" =~ ^plugins-(v[0-9]+)\.json$ ]]; then
-              TARGET_REGISTRIES="$TARGET_REGISTRIES plugins-community-${BASH_REMATCH[1]}.json"
-            fi
           fi
 
           export COMMUNITY_METADATA_PATH

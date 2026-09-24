@@ -394,7 +394,14 @@ public struct PluginCustomModelStore: Sendable {
         let index = folder.appendingPathComponent("model.safetensors.index.json")
         if FileManager.default.fileExists(atPath: index.path) {
             struct Index: Decodable { let weight_map: [String: String] }
-            let shards = try JSONDecoder().decode(Index.self, from: Data(contentsOf: index)).weight_map.values
+            let handle = try FileHandle(forReadingFrom: index)
+            defer { try? handle.close() }
+            let limit = 16 * 1024 * 1024
+            let data = try handle.read(upToCount: limit + 1) ?? Data()
+            guard !data.isEmpty, data.count <= limit else {
+                throw PluginModelImportError.invalidModel("Weight index exceeds the 16 MiB limit or is empty")
+            }
+            let shards = try JSONDecoder().decode(Index.self, from: data).weight_map.values
             for shard in Set(shards) {
                 guard Self.isImportableFile(shard), shard.hasSuffix(".safetensors"),
                       FileManager.default.fileExists(atPath: folder.appendingPathComponent(shard).path) else {

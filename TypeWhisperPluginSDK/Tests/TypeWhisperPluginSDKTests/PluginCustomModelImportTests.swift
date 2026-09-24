@@ -151,6 +151,32 @@ final class PluginCustomModelImportTests: XCTestCase, @unchecked Sendable {
         XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: store.directory.path), [".staging.lock"])
     }
 
+    func testWeightIndexAcceptsValidShardsButRejectsOversizedJSON() async throws {
+        let source = try fixture()
+        let store = store()
+        defer { try? FileManager.default.removeItem(at: source); try? FileManager.default.removeItem(at: store.directory) }
+        let index = source.appendingPathComponent("model.safetensors.index.json")
+        let json = Data(#"{"weight_map":{"weight":"model.safetensors"}}"#.utf8)
+        try json.write(to: index)
+        let candidate = try await PluginModelImportCandidate.inspect(.folder(source))
+        let imported = try await store.add(candidate, supportedTypes: ["qwen3_asr"], requirements: requirements)
+        try store.remove(imported.id)
+
+        // Whitespace keeps this valid JSON: rejection must be the size bound,
+        // not a decoding failure that would also occur without the guard.
+        var oversized = json
+        oversized.append(Data(repeating: 32, count: 16 * 1024 * 1024))
+        try oversized.write(to: index)
+        do {
+            _ = try await store.add(candidate, supportedTypes: ["qwen3_asr"], requirements: requirements)
+            XCTFail("Accepted oversized weight index")
+        } catch PluginModelImportError.invalidModel(let message) {
+            XCTAssertTrue(message.contains("16 MiB"))
+        }
+        XCTAssertTrue(store.models().isEmpty)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: store.directory.path), [".staging.lock"])
+    }
+
     func testMissingWeightShardIsRejected() async throws {
         let source = try fixture()
         let store = store()

@@ -34,7 +34,8 @@ restarts and unloading. Remove it from the plugin's downloaded-model list in
 Integrations when it is no longer needed.
 
 Remote repository metadata and configurations are limited to 4 MiB while streaming,
-including responses without a Content-Length header. Abandoned staging folders
+including responses without a Content-Length header. Safetensors index JSON is read
+through a bounded reader and limited to 16 MiB. Abandoned staging folders
 are recovered in the background when a plugin activates; operating-system file leases protect active
 imports, including imports in another process. Duplicate detection and final publication
 share the same lock, so concurrent imports cannot publish the same revision twice.
@@ -58,7 +59,9 @@ this change accepts both this marker and existing `v1` plugins. Older hosts only
 accept `v1`, so they neither offer nor load the new bundles even when their
 marketing version is also 1.7.0. Publish the updated plugins only after that host
 is available and the release workflow validates their symbols against its SDK
-with `allow_prerelease_host`. The stable host minimum remains 1.7.0.
+with `allow_prerelease_host`. Official capability releases also enter the combined
+`plugins-community-v1.json` feed read by the app; older compatible releases remain
+available there. The stable host minimum remains 1.7.0.
 
 The shared `PluginCustomModelStore` stages copies/downloads, checks the model
 configuration, required files, indexed shards and safetensors headers, then

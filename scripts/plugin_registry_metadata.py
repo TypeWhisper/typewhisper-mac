@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 from typing import Any
@@ -19,6 +20,17 @@ TOP_LEVEL_RELEASE_FIELDS = {
     "size",
     "downloadURL",
 }
+
+
+def official_registry_targets(sdk_compatibility: str) -> list[str]:
+    """Publish capability releases to the combined feed read by their host line."""
+    match = re.fullmatch(r"(v[0-9]+)(?:-model-import)?", sdk_compatibility)
+    if match is None:
+        raise ValueError(f"Unsupported SDK compatibility: {sdk_compatibility!r}")
+    return [
+        f"plugins-{sdk_compatibility}.json",
+        f"plugins-community-{match.group(1)}.json",
+    ]
 
 
 def _release_metadata_finding(plugin: dict[str, Any], index: int) -> dict[str, Any] | None:
