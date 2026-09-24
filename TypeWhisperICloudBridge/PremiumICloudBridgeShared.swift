@@ -122,6 +122,9 @@ enum PremiumICloudBridgeError: LocalizedError, Equatable, Sendable {
 
 enum PremiumICloudBridgeFileMirror {
     private static let modificationDateTolerance: TimeInterval = 0.001
+    /// Package directories whose files get new names instead of being rewritten: operations
+    /// are named by timestamp and ID, assets by their SHA-256 digest.
+    private static let writeOnceDirectoryNames: Set<String> = ["ops", "assets"]
 
     static func synchronize(
         localRoot: URL,
@@ -150,6 +153,7 @@ enum PremiumICloudBridgeFileMirror {
             try mergeDirectory(
                 from: localPackage,
                 to: remotePackage,
+                isPackageRoot: true,
                 fileManager: fileManager
             )
         }
@@ -157,6 +161,7 @@ enum PremiumICloudBridgeFileMirror {
             try mergeDirectory(
                 from: remotePackage,
                 to: localPackage,
+                isPackageRoot: true,
                 fileManager: fileManager
             )
         }
@@ -181,6 +186,8 @@ enum PremiumICloudBridgeFileMirror {
     private static func mergeDirectory(
         from source: URL,
         to destination: URL,
+        isPackageRoot: Bool = false,
+        isWriteOnce: Bool = false,
         fileManager: FileManager
     ) throws {
         try fileManager.createDirectory(
@@ -212,12 +219,15 @@ enum PremiumICloudBridgeFileMirror {
                 try mergeDirectory(
                     from: child,
                     to: destinationChild,
+                    isWriteOnce: isWriteOnce
+                        || (isPackageRoot && writeOnceDirectoryNames.contains(child.lastPathComponent)),
                     fileManager: fileManager
                 )
             } else {
                 try copyNewerFile(
                     from: child,
                     to: destinationChild,
+                    isWriteOnce: isWriteOnce,
                     fileManager: fileManager
                 )
             }
@@ -227,6 +237,7 @@ enum PremiumICloudBridgeFileMirror {
     private static func copyNewerFile(
         from source: URL,
         to destination: URL,
+        isWriteOnce: Bool,
         fileManager: FileManager
     ) throws {
         let sourceValues = try? source.resourceValues(forKeys: [
@@ -247,10 +258,12 @@ enum PremiumICloudBridgeFileMirror {
             if let sourceSize = sourceValues?.fileSize,
                let destinationSize = destinationValues.fileSize {
                 sizesDiffer = sourceSize != destinationSize
-                // Copies keep the source modification date, so a mirrored pair has matching
-                // metadata and neither side needs to be downloaded or read. The tolerance only
-                // absorbs the precision lost when the date is written back to the file system.
-                if !sizesDiffer,
+                // Copies keep the source modification date, so a mirrored pair of write-once
+                // files has matching metadata and neither side needs to be downloaded or read.
+                // The tolerance only absorbs the precision lost when the date is written back.
+                // Manifest and device files are rewritten in place and always compare contents.
+                if isWriteOnce,
+                   !sizesDiffer,
                    let sourceDate,
                    let destinationDate,
                    abs(sourceDate.timeIntervalSince(destinationDate)) < modificationDateTolerance {

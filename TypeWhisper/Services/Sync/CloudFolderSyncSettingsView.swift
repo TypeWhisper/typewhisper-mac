@@ -929,18 +929,23 @@ final class CloudFolderSyncController: ObservableObject {
                 cache: syncCache
             )
             setState(syncState, for: syncMode)
-            synchronizedPackage = (syncMode, folderURL, result.packageFingerprint)
             if syncMode == .automaticICloud {
                 try await automaticICloudBridge.synchronize()
             }
             let audioDiagnostics = await installPendingSynchronizedAudio(in: folderURL)
             guard mode == syncMode else { return }
+            let diagnostics = result.diagnostics + audioDiagnostics
+            // Later checks only skip an unchanged package when nothing is left to retry. Files
+            // that become readable or finish downloading often keep their size and date, and a
+            // requested republish does not change the package either.
+            if !result.requiresFollowUpSync, !diagnostics.contains(where: \.isTransient) {
+                synchronizedPackage = (syncMode, folderURL, result.packageFingerprint)
+            }
             lastSyncDate = result.syncedAt
             pendingChanges = 0
             devices = result.devices
             deviceCount = devices.count
             let synchronizedChanges = result.operationsWritten + result.mutationsApplied
-            let diagnostics = result.diagnostics + audioDiagnostics
             if diagnostics.isEmpty {
                 statusMessage = String.localizedStringWithFormat(
                     String(localized: "Synced %lld changes."), Int64(synchronizedChanges)

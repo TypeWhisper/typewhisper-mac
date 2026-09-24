@@ -1114,6 +1114,117 @@ final class CloudFolderSyncTests: XCTestCase {
     }
 
     @MainActor
+    func testIdlePollRetriesPackageAfterTransientReadFailure() async throws {
+        let suiteName = "PremiumSyncTransientRead-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let folder = try TestSupport.makeTemporaryDirectory(prefix: "PremiumSyncTransientRead")
+        defer { TestSupport.remove(folder) }
+        let store = InMemoryUserDataSyncStore(dictionaryEntries: [
+            Self.dictionaryEntry(original: "Launch", updatedAt: Self.date(10)),
+        ])
+        let controller = try Self.makeAutomaticSyncController(
+            suiteName: suiteName,
+            defaults: defaults,
+            folder: folder,
+            store: store
+        )
+        defer { controller.deactivate() }
+        try await XCTUnwrap(controller.initialSyncTask).value
+
+        let remoteStore = InMemoryUserDataSyncStore(dictionaryEntries: [
+            Self.dictionaryEntry(original: "Remote", updatedAt: Self.date(20)),
+        ])
+        var remoteState = CloudFolderSyncState(deviceId: "mac-remote")
+        _ = try await CloudFolderSyncEngine.sync(
+            folderURL: folder,
+            store: remoteStore,
+            state: &remoteState,
+            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
+            now: Self.date(200)
+        )
+        let remoteFiles = try FileManager.default.contentsOfDirectory(
+            at: CloudFolderSyncEngine.packageURL(for: folder)
+                .appendingPathComponent("ops/mac-remote", isDirectory: true),
+            includingPropertiesForKeys: nil
+        )
+        XCTAssertFalse(remoteFiles.isEmpty)
+        func setPermissions(_ permissions: Int) throws {
+            for file in remoteFiles {
+                try FileManager.default.setAttributes(
+                    [.posixPermissions: NSNumber(value: permissions)],
+                    ofItemAtPath: file.path
+                )
+            }
+        }
+        defer { try? setPermissions(0o600) }
+
+        // The remote operation is not readable yet, so the poll cannot import it.
+        try setPermissions(0)
+        await controller.automaticPollTick()
+        XCTAssertEqual(store.dictionaryEntries.map(\.original), ["Launch"])
+
+        // Restoring access keeps size and modification date, so only a retry imports it.
+        try setPermissions(0o600)
+        await controller.automaticPollTick()
+        XCTAssertEqual(store.dictionaryEntries.map(\.original).sorted(), ["Launch", "Remote"])
+    }
+
+    @MainActor
+    func testIdlePollRunsRequestedLegacyDictionaryRepublish() async throws {
+        let suiteName = "PremiumSyncLegacyRepublish-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let folder = try TestSupport.makeTemporaryDirectory(prefix: "PremiumSyncLegacyRepublish")
+        defer { TestSupport.remove(folder) }
+        let itemID = UserDataSyncIdentity.dictionaryItemID(
+            entryType: UserDataSyncDictionaryEntryType.term,
+            original: "TypeWhisper"
+        )
+        try Self.writeLegacyOperation(
+            CloudFolderSyncOperation.upsertDictionary(
+                Self.dictionaryEntry(
+                    original: "TypeWhisper",
+                    updatedAt: Self.date(20),
+                    ctcMinSimilarityFieldPresent: false
+                ),
+                itemID: itemID,
+                deviceId: "legacy-ios",
+                operationId: "legacy"
+            ),
+            to: folder
+        )
+        let store = InMemoryUserDataSyncStore(dictionaryEntries: [
+            Self.dictionaryEntry(
+                original: "TypeWhisper",
+                updatedAt: Self.date(10),
+                ctcMinSimilarity: 0.8
+            ),
+        ])
+        let controller = try Self.makeAutomaticSyncController(
+            suiteName: suiteName,
+            defaults: defaults,
+            folder: folder,
+            store: store
+        )
+        defer { controller.deactivate() }
+        func exportedVersion() throws -> String? {
+            let data = try XCTUnwrap(defaults.data(forKey: "premiumSync.iCloudState"))
+            return try Self.stateDecoder.decode(CloudFolderSyncState.self, from: data)
+                .exportedItemVersions[itemID]
+        }
+
+        // The launch sync applies the legacy operation and asks for a republish.
+        try await XCTUnwrap(controller.initialSyncTask).value
+        XCTAssertEqual(store.dictionaryEntries.first?.ctcMinSimilarity, 0.8)
+        XCTAssertNil(try exportedVersion())
+
+        // The package is unchanged, but the next poll still publishes the explicit field.
+        await controller.automaticPollTick()
+        XCTAssertNotNil(try exportedVersion())
+    }
+
+    @MainActor
     func testNoICloudBuildHidesAutomaticModeWithoutOverwritingStoredChoice() async throws {
         let suiteName = "PremiumSyncNoICloud-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
@@ -1295,6 +1406,43 @@ final class CloudFolderSyncTests: XCTestCase {
         try PremiumICloudBridgeFileMirror.synchronize(localRoot: localRoot, remoteRoot: remoteRoot)
         XCTAssertEqual(try Data(contentsOf: remoteFile), Data("operation-v2".utf8))
         XCTAssertEqual(try Data(contentsOf: localFile), Data("operation-v2".utf8))
+    }
+
+    func testICloudBridgeComparesContentsOfRewrittenMetadata() throws {
+        let localRoot = try TestSupport.makeTemporaryDirectory(prefix: "ICloudBridgeRewrittenLocal")
+        let remoteRoot = try TestSupport.makeTemporaryDirectory(prefix: "ICloudBridgeRewrittenRemote")
+        defer {
+            TestSupport.remove(localRoot)
+            TestSupport.remove(remoteRoot)
+        }
+
+        // Manifest and device files are rewritten in place, so equal size and date do not
+        // prove equal contents.
+        for relativePath in ["typewhisper-sync/manifest.json", "typewhisper-sync/devices/mac.json"] {
+            let localFile = localRoot.appendingPathComponent(relativePath)
+            let remoteFile = remoteRoot.appendingPathComponent(relativePath)
+            for (file, contents) in [(localFile, "metadata-a"), (remoteFile, "metadata-b")] {
+                try FileManager.default.createDirectory(
+                    at: file.deletingLastPathComponent(),
+                    withIntermediateDirectories: true
+                )
+                try Data(contents.utf8).write(to: file)
+                try FileManager.default.setAttributes(
+                    [.modificationDate: Self.date(10)],
+                    ofItemAtPath: file.path
+                )
+            }
+        }
+
+        try PremiumICloudBridgeFileMirror.synchronize(localRoot: localRoot, remoteRoot: remoteRoot)
+
+        for relativePath in ["typewhisper-sync/manifest.json", "typewhisper-sync/devices/mac.json"] {
+            XCTAssertEqual(
+                try Data(contentsOf: localRoot.appendingPathComponent(relativePath)),
+                try Data(contentsOf: remoteRoot.appendingPathComponent(relativePath)),
+                relativePath
+            )
+        }
     }
 
     func testICloudBridgeUsesConfiguredContainerIdentifier() {
@@ -1747,6 +1895,77 @@ final class CloudFolderSyncTests: XCTestCase {
             ],
             CloudFolderSyncEngine.records(from: store.snapshot()).values.first?.version
         )
+    }
+
+    @MainActor
+    func testConcurrentLocalChangesRemainPendingWhenRemoteChangesAreApplied() async throws {
+        let folder = try TestSupport.makeTemporaryDirectory(prefix: "CloudFolderSyncConcurrentMerge")
+        defer { TestSupport.remove(folder) }
+
+        let store = InMemoryUserDataSyncStore(dictionaryEntries: [
+            Self.dictionaryEntry(original: "Edited", updatedAt: Self.date(10)),
+            Self.dictionaryEntry(original: "Deleted", updatedAt: Self.date(10)),
+        ])
+        var state = CloudFolderSyncState(deviceId: "mac-a")
+        _ = try await CloudFolderSyncEngine.sync(
+            folderURL: folder,
+            store: store,
+            state: &state,
+            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
+            now: Self.date(20)
+        )
+        let remoteStore = InMemoryUserDataSyncStore(dictionaryEntries: [
+            Self.dictionaryEntry(original: "Remote", updatedAt: Self.date(30)),
+        ])
+        var remoteState = CloudFolderSyncState(deviceId: "mac-b")
+        _ = try await CloudFolderSyncEngine.sync(
+            folderURL: folder,
+            store: remoteStore,
+            state: &remoteState,
+            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
+            now: Self.date(40)
+        )
+
+        // Unrelated local edits land while the remote entry is being read.
+        let editDuringFileIO: @Sendable () async -> Void = {
+            await MainActor.run {
+                store.dictionaryEntries = [
+                    Self.dictionaryEntry(original: "Edited", updatedAt: Self.date(50)),
+                ]
+            }
+        }
+        let merged = try await CloudFolderSyncEngine.sync(
+            folderURL: folder,
+            store: store,
+            state: &state,
+            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
+            now: Self.date(60),
+            afterFileIO: editDuringFileIO
+        )
+        let followUp = try await CloudFolderSyncEngine.sync(
+            folderURL: folder,
+            store: store,
+            state: &state,
+            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
+            now: Self.date(70)
+        )
+
+        XCTAssertEqual(merged.mutationsApplied, 1)
+        XCTAssertEqual(store.dictionaryEntries.map(\.original).sorted(), ["Edited", "Remote"])
+        XCTAssertEqual(followUp.operationsWritten, 2)
+        let published = try CloudFolderSyncEngine.readOperations(
+            from: CloudFolderSyncEngine.packageURL(for: folder)
+                .appendingPathComponent("ops", isDirectory: true)
+        ).operations.filter { $0.deviceId == "mac-a" }
+        XCTAssertTrue(published.contains {
+            $0.kind == .upsert && $0.dictionary?.updatedAt == Self.date(50)
+        })
+        XCTAssertTrue(published.contains {
+            $0.kind == .delete && $0.itemId == UserDataSyncIdentity.dictionaryItemID(
+                entryType: UserDataSyncDictionaryEntryType.term,
+                original: "Deleted"
+            )
+        })
     }
 
     @MainActor
@@ -3320,6 +3539,35 @@ final class CloudFolderSyncTests: XCTestCase {
             audio: nil,
             localAudioFileURL: nil,
             audioEligible: false
+        )
+    }
+
+    @MainActor
+    private static func makeAutomaticSyncController(
+        suiteName: String,
+        defaults: UserDefaults,
+        folder: URL,
+        store: InMemoryUserDataSyncStore
+    ) throws -> CloudFolderSyncController {
+        let privateKey = P256.Signing.PrivateKey()
+        defaults.set(
+            try entitlementEncoder.encode(signedEntitlement(privateKey: privateKey)),
+            forKey: "premium.account.cachedEntitlement"
+        )
+        defaults.set(PremiumSyncMode.automaticICloud.rawValue, forKey: "premiumSync.mode")
+        let account = PremiumAccountService(
+            defaults: defaults,
+            keychainService: suiteName,
+            entitlementPublicKeyBase64: privateKey.publicKey.rawRepresentation.base64EncodedString(),
+            isSignedInOverride: true,
+            automaticallyRefresh: false
+        )
+        return CloudFolderSyncController(
+            premiumAccountService: account,
+            syncStore: store,
+            defaults: defaults,
+            automaticICloudBridge: RecordingPremiumICloudBridge(localFolderURL: folder),
+            automaticICloudAvailable: true
         )
     }
 

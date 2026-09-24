@@ -100,6 +100,9 @@ struct CloudFolderSyncResult: Equatable, Sendable {
     let devices: [CloudFolderSyncDeviceRecord]
     /// Package listing taken before the operations were read, so later remote changes differ from it.
     let packageFingerprint: CloudFolderSyncPackageFingerprint?
+    /// Set when applied remote changes must be republished by another sync, even though the
+    /// package did not change since this one.
+    let requiresFollowUpSync: Bool
 }
 
 struct CloudFolderSyncDiagnostic: Equatable, Sendable {
@@ -112,6 +115,12 @@ struct CloudFolderSyncDiagnostic: Equatable, Sendable {
     }
     let kind: Kind
     let fileName: String
+
+    /// Failures that can clear up while the file keeps its size and modification date, such as
+    /// restored permissions or a cloud placeholder that finished downloading.
+    var isTransient: Bool {
+        kind == .unreadableFile || kind == .audioTransferFailed
+    }
 }
 
 struct CloudFolderSyncManifest: Codable, Equatable, Sendable {
@@ -430,7 +439,14 @@ enum CloudFolderSyncEngine {
         var synchronizedRecords = fileResult.initialRecords
         if !mutations.isEmpty {
             try await store.apply(mutations)
-            synchronizedRecords = records(from: await store.snapshot())
+            // Local edits and deletions made while the files were processed are not exported
+            // yet. Only items changed by the applied mutations take their state from the store,
+            // so those edits stay pending for the next sync.
+            let mutatedKeys = stateKeys(changedBy: mutations)
+            synchronizedRecords = synchronizedRecords.filter { !mutatedKeys.contains($0.key) }
+            for (key, record) in records(from: await store.snapshot()) where mutatedKeys.contains(key) {
+                synchronizedRecords[key] = record
+            }
             // Published local audio descriptors only exist in the prepared snapshot. Keep them
             // exported while their history item survives, or the next sync would republish them.
             for (key, record) in fileResult.initialRecords
@@ -455,9 +471,10 @@ enum CloudFolderSyncEngine {
                 state.exportedItemVersions[key] = record.version
             }
         }
-        for itemID in dictionaryItemIDsRequiringRepublish(
+        let republishedItemIDs = dictionaryItemIDsRequiringRepublish(
             afterApplying: mutations
-        ) {
+        )
+        for itemID in republishedItemIDs {
             state.exportedItemVersions.removeValue(forKey: itemID)
         }
         state.appliedOperationIDs.formUnion(operations.map(\.operationId))
@@ -472,7 +489,8 @@ enum CloudFolderSyncEngine {
                 + fileResult.deviceReadResult.diagnostics
                 + fileResult.assetDiagnostics,
             devices: fileResult.deviceReadResult.devices,
-            packageFingerprint: fileResult.packageFingerprint
+            packageFingerprint: fileResult.packageFingerprint,
+            requiresFollowUpSync: !republishedItemIDs.isEmpty
         )
     }
 
@@ -1211,6 +1229,42 @@ enum CloudFolderSyncEngine {
             return nil
         }
         return candidate?.ctcMinSimilarityFieldPresent == true
+    }
+
+    /// State keys whose records an applied mutation can change. A history mutation can add
+    /// placeholder components or remove the whole item, so it covers every component.
+    private static func stateKeys(changedBy mutations: [UserDataSyncMutation]) -> Set<String> {
+        var keys = Set<String>()
+        for mutation in mutations {
+            let historyRecordID: UUID
+            switch mutation {
+            case .upsertDictionary(let entry):
+                keys.insert(UserDataSyncIdentity.dictionaryItemID(
+                    entryType: entry.entryType,
+                    original: entry.original
+                ))
+                continue
+            case .deleteDictionary(let itemID), .deleteSnippet(let itemID):
+                keys.insert(itemID)
+                continue
+            case .upsertSnippet(let snippet):
+                keys.insert(UserDataSyncIdentity.snippetItemID(trigger: snippet.trigger))
+                continue
+            case .upsertHistoryContent(let content):
+                historyRecordID = content.recordID
+            case .upsertHistoryInbox(let inbox):
+                historyRecordID = inbox.recordID
+            case .upsertHistoryAudio(let audio):
+                historyRecordID = audio.recordID
+            case .deleteHistory(let recordID):
+                historyRecordID = recordID
+            }
+            let itemID = UserDataSyncIdentity.historyItemID(recordID: historyRecordID)
+            for component in UserDataSyncHistoryComponent.allCases {
+                keys.insert(UserDataSyncIdentity.historyStateKey(itemID: itemID, component: component))
+            }
+        }
+        return keys
     }
 
     private static func dictionaryItemIDsRequiringRepublish(
