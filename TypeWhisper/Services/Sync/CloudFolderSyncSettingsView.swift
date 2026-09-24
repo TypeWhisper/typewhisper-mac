@@ -1108,8 +1108,13 @@ final class CloudFolderSyncController: ObservableObject {
             }
         }
         let accessed = syncMode == .cloudFolder && folderURL.startAccessingSecurityScopedResource()
-        let fingerprint = await Task.detached(priority: .utility) {
-            CloudFolderSyncEngine.packageFingerprint(folderURL: folderURL)
+        // Device files are rewritten in place by every sync of their device, so they are read
+        // directly instead of being part of the fingerprint.
+        let (fingerprint, packageDevices) = await Task.detached(priority: .utility) {
+            (
+                CloudFolderSyncEngine.packageFingerprint(folderURL: folderURL),
+                CloudFolderSyncEngine.devices(folderURL: folderURL)
+            )
         }.value
         if accessed {
             folderURL.stopAccessingSecurityScopedResource()
@@ -1125,6 +1130,10 @@ final class CloudFolderSyncController: ObservableObject {
               fingerprint == self.synchronizedPackage?.fingerprint else {
             await syncNow()
             return true
+        }
+        if let packageDevices, packageDevices != devices {
+            devices = packageDevices
+            deviceCount = packageDevices.count
         }
         return false
     }
@@ -1220,7 +1229,15 @@ final class CloudFolderSyncController: ObservableObject {
               let historyService else {
             return []
         }
-        let pending = historyService.recordsWithSynchronizedAudio().compactMap { record -> (UUID, UserDataSyncHistoryAudioV1)? in
+        let records: [TranscriptionRecord]
+        do {
+            records = try historyService.recordsWithSynchronizedAudio()
+        } catch {
+            // Reported as a transient failure so the package is not recorded as synchronized
+            // while received audio may still be waiting to be installed.
+            return [.init(kind: .audioTransferFailed, fileName: "history")]
+        }
+        let pending = records.compactMap { record -> (UUID, UserDataSyncHistoryAudioV1)? in
             guard historyService.audioFileURL(for: record) == nil,
                   let descriptor = historyService.synchronizedAudioDescriptor(for: record),
                   historySyncPreferences.shouldReceiveSynchronizedAudio(

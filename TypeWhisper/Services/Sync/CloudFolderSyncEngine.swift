@@ -1001,6 +1001,13 @@ enum CloudFolderSyncEngine {
         try writeJSON(device, to: devicesURL.appendingPathComponent("\(deviceId).json"))
     }
 
+    /// Reads the device catalog of a package without syncing; nil when it cannot be listed.
+    static func devices(folderURL: URL) -> [CloudFolderSyncDeviceRecord]? {
+        let devicesURL = packageURL(for: folderURL)
+            .appendingPathComponent(devicesDirectoryName, isDirectory: true)
+        return try? readDevices(from: devicesURL).devices
+    }
+
     static func readDevices(
         from devicesURL: URL
     ) throws -> (devices: [CloudFolderSyncDeviceRecord], diagnostics: [CloudFolderSyncDiagnostic]) {

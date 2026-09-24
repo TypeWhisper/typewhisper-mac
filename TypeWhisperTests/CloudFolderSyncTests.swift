@@ -1225,6 +1225,55 @@ final class CloudFolderSyncTests: XCTestCase {
     }
 
     @MainActor
+    func testIdlePollRefreshesRewrittenDeviceRecords() async throws {
+        let suiteName = "PremiumSyncDeviceRefresh-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let folder = try TestSupport.makeTemporaryDirectory(prefix: "PremiumSyncDeviceRefresh")
+        defer { TestSupport.remove(folder) }
+        let store = InMemoryUserDataSyncStore(dictionaryEntries: [
+            Self.dictionaryEntry(original: "Launch", updatedAt: Self.date(10)),
+        ])
+        let controller = try Self.makeAutomaticSyncController(
+            suiteName: suiteName,
+            defaults: defaults,
+            folder: folder,
+            store: store
+        )
+        defer { controller.deactivate() }
+        try await XCTUnwrap(controller.initialSyncTask).value
+
+        var remoteState = CloudFolderSyncState(deviceId: "mac-remote")
+        _ = try await CloudFolderSyncEngine.sync(
+            folderURL: folder,
+            store: InMemoryUserDataSyncStore(),
+            state: &remoteState,
+            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
+            now: Self.date(200)
+        )
+        await controller.automaticPollTick()
+        XCTAssertTrue(controller.devices.contains { $0.deviceId == "mac-remote" })
+        let snapshotCount = store.snapshotCount
+
+        // The other Mac rewrites its device file in place without publishing an operation.
+        try Self.entitlementEncoder.encode(CloudFolderSyncDeviceRecord(
+            deviceId: "mac-remote",
+            platform: "macOS",
+            appVersion: "1.7.0",
+            updatedAt: Self.date(300),
+            name: "Renamed Mac"
+        )).write(to: CloudFolderSyncEngine.packageURL(for: folder)
+            .appendingPathComponent("devices/mac-remote.json"))
+        await controller.automaticPollTick()
+
+        XCTAssertEqual(store.snapshotCount, snapshotCount)
+        XCTAssertEqual(
+            controller.devices.first { $0.deviceId == "mac-remote" }?.name,
+            "Renamed Mac"
+        )
+    }
+
+    @MainActor
     func testNoICloudBuildHidesAutomaticModeWithoutOverwritingStoredChoice() async throws {
         let suiteName = "PremiumSyncNoICloud-\(UUID().uuidString)"
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
