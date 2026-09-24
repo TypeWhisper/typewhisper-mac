@@ -9,7 +9,7 @@ import MLXAudioSTT
 // MARK: - Plugin Entry Point
 
 @objc(GranitePlugin)
-final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding, DictionaryTermsCapabilityProviding, DictionaryTermsBudgetProviding, PluginSettingsActivityReporting, PluginDownloadedModelManaging, PassiveModelRestoreProviding, @unchecked Sendable {
+final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding, PluginCustomModelImporting, DictionaryTermsCapabilityProviding, DictionaryTermsBudgetProviding, PluginSettingsActivityReporting, PluginDownloadedModelManaging, PassiveModelRestoreProviding, @unchecked Sendable {
     static let pluginId = "com.typewhisper.granite"
     static let pluginName = "Granite Speech"
 
@@ -17,6 +17,13 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
     fileprivate var _selectedModelId: String?
     fileprivate var model: GraniteSpeechModel?
     fileprivate var loadedModelId: String?
+    private let activationLock = NSRecursiveLock()
+    private var _activationID = UUID()
+    private var activationID: UUID {
+        get { activationLock.withLock { _activationID } }
+        set { activationLock.withLock { _activationID = newValue } }
+    }
+    @MainActor private var isImportingModel = false
     fileprivate var _hfToken: String?
 
     fileprivate var modelState: GraniteModelState = .notLoaded
@@ -28,7 +35,17 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
     private static let modelDownloadPatterns = ["*.safetensors", "*.json", "*.txt", "*.wav"]
 
     private let passiveRestoreController = PluginPassiveModelRestoreController()
-    private let modelLoadGate = PluginLocalInferenceGate()
+    let modelLoadGate = PluginLocalInferenceGate()
+    private var _explicitModelLoadTask: Task<Void, Never>?
+    private(set) var explicitModelLoadTask: Task<Void, Never>? {
+        get { activationLock.withLock { _explicitModelLoadTask } }
+        set { activationLock.withLock { _explicitModelLoadTask = newValue } }
+    }
+    private var _genericModelLoadTask: Task<Void, Never>?
+    private(set) var genericModelLoadTask: Task<Void, Never>? {
+        get { activationLock.withLock { _genericModelLoadTask } }
+        set { activationLock.withLock { _genericModelLoadTask = newValue } }
+    }
 
     func requestPassiveModelRestore() {
         passiveRestoreController.request { [weak self] in
@@ -42,23 +59,108 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
     }
 
     func activate(host: HostServices) {
-        self.host = host
-        _selectedModelId = host.userDefault(forKey: "selectedModel") as? String
-            ?? Self.availableModels.first?.id
-        _hfToken = PluginHuggingFaceTokenHelper.loadToken(from: host)
-        cleanupRedundantModelCopies()
+        activationLock.withLock {
+            activationID = UUID()
+            self.host = host
+            if let store = customModelStore {
+                Task.detached(priority: .utility) { try? store.recoverAbandonedImports() }
+            }
+            _selectedModelId = host.userDefault(forKey: "selectedModel") as? String
+                ?? allModelDefinitions.first?.id
+            _hfToken = PluginHuggingFaceTokenHelper.loadToken(from: host)
+            cleanupRedundantModelCopies()
 
-        if shouldRestoreLoadedModelsPassively {
-            requestPassiveModelRestore()
+            if shouldRestoreLoadedModelsPassively {
+                requestPassiveModelRestore()
+            }
         }
     }
 
     func deactivate() {
-        passiveRestoreController.cancel()
-        model = nil
-        loadedModelId = nil
-        modelState = .notLoaded
-        host = nil
+        activationLock.withLock {
+            genericModelLoadTask?.cancel()
+            genericModelLoadTask = nil
+            explicitModelLoadTask?.cancel()
+            explicitModelLoadTask = nil
+            passiveRestoreController.cancel()
+            activationID = UUID()
+            model = nil
+            loadedModelId = nil
+            modelState = .notLoaded
+            host = nil
+        }
+    }
+
+    // Imported files are owned by this plugin, separate from the built-in model cache.
+    fileprivate var customModelStore: PluginCustomModelStore? {
+        host.map { PluginCustomModelStore(directory: $0.pluginDataDirectory.appendingPathComponent("custom-models")) }
+    }
+
+    fileprivate var allModelDefinitions: [GraniteModelDef] {
+        Self.availableModels + (customModelStore?.models() ?? []).map(Self.importedDefinition)
+    }
+
+    private static func importedDefinition(_ model: PluginCustomModelStore.Model) -> GraniteModelDef {
+        GraniteModelDef(id: model.id, displayName: model.displayName, repoId: model.id,
+            sizeDescription: model.sizeDescription, ramRequirement: "—")
+    }
+
+    var supportedImportModelTypes: Set<String> { ["granite_speech"] }
+
+    @MainActor
+    func importModel(_ candidate: PluginModelImportCandidate, token: String?) async throws -> PluginModelInfo {
+        guard !isImportingModel, modelState != .loading else { throw PluginModelImportError.busy }
+        guard let store = customModelStore else { throw PluginTranscriptionError.notConfigured }
+        isImportingModel = true
+        let previousState = modelState
+        let previousLoadedModelID = loadedModelId
+        let previousSelectedModelID = _selectedModelId
+        let previousPersistedLoadedID = host?.userDefault(forKey: "loadedModel") as? String
+        let previousPersistedSelectedID = host?.userDefault(forKey: "selectedModel") as? String
+        let generation = activationID
+        modelState = .loading
+        defer { isImportingModel = false }
+        var importedID: String?
+        do {
+            let imported = try await store.add(candidate, supportedTypes: supportedImportModelTypes,
+                requirements: Self.modelRequirements, token: token ?? _hfToken,
+                validation: { [self] imported in
+                    try await validateImportedModel(imported, generation: generation)
+                })
+            importedID = imported.id
+            host?.notifyCapabilitiesChanged()
+            try Task.checkCancellation()
+            guard generation == activationID, host != nil else { throw CancellationError() }
+            return PluginModelInfo(id: imported.id, displayName: imported.displayName,
+                sizeDescription: imported.sizeDescription, downloaded: true, loaded: true)
+        } catch {
+            if let importedID { try? store.remove(importedID) }
+            if generation == activationID {
+                if loadedModelId != previousLoadedModelID {
+                    // Validation released the old runtime or loaded a model
+                    // whose files rolled back. Leave the engine unloaded.
+                    model = nil
+                    loadedModelId = nil
+                    host?.setUserDefault(nil, forKey: "loadedModel")
+                    modelState = .notLoaded
+                } else {
+                    host?.setUserDefault(previousPersistedLoadedID, forKey: "loadedModel")
+                    modelState = previousState
+                }
+                _selectedModelId = previousSelectedModelID
+                host?.setUserDefault(previousPersistedSelectedID, forKey: "selectedModel")
+                host?.notifyCapabilitiesChanged()
+            }
+            throw error
+        }
+    }
+
+    @MainActor
+    private func validateImportedModel(_ imported: PluginCustomModelStore.Model, generation: UUID) async throws {
+        try Task.checkCancellation()
+        guard generation == activationID, host != nil else { throw CancellationError() }
+        try await loadModel(Self.importedDefinition(imported), notifyHost: false, expectedGeneration: generation)
+        guard generation == activationID, host != nil else { throw CancellationError() }
     }
 
     // MARK: - TranscriptionEnginePlugin
@@ -76,13 +178,13 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
 
     var transcriptionModels: [PluginModelInfo] {
         guard let loadedModelId else { return [] }
-        return Self.availableModels
+        return allModelDefinitions
             .filter { $0.id == loadedModelId }
             .map { PluginModelInfo(id: $0.id, displayName: $0.displayName) }
     }
 
     var availableModels: [PluginModelInfo] {
-        Self.availableModels.map { def in
+        allModelDefinitions.map { def in
             PluginModelInfo(
                 id: def.id,
                 displayName: def.displayName,
@@ -94,8 +196,8 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
     }
 
     var downloadedModels: [PluginModelInfo] {
-        Self.availableModels
-            .filter { hasDownloadedModel($0) }
+        allModelDefinitions
+            .filter { $0.id.hasPrefix("custom-") || hasDownloadedModel($0) }
             .map { def in
                 PluginModelInfo(
                     id: def.id,
@@ -108,21 +210,34 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
     }
 
     func deleteDownloadedModel(_ modelId: String) async throws {
-        guard let modelDef = Self.availableModels.first(where: { $0.id == modelId }) else { return }
+        try activationLock.withLock {
+            guard modelState != .loading else { throw PluginModelImportError.busy }
+            guard let modelDef = allModelDefinitions.first(where: { $0.id == modelId }) else { return }
 
-        if loadedModelId == modelId {
-            unloadModel(clearPersistence: true)
-        }
-        if _selectedModelId == modelId {
-            _selectedModelId = nil
-            host?.setUserDefault(nil, forKey: "selectedModel")
-        }
-        if host?.userDefault(forKey: "loadedModel") as? String == modelId {
-            host?.setUserDefault(nil, forKey: "loadedModel")
-        }
+            if _selectedModelId == modelId || host?.userDefault(forKey: "loadedModel") as? String == modelId {
+                // A task queued on modelLoadGate has not set .loading yet.
+                // Invalidate it before removing files it could redownload.
+                activationID = UUID()
+                genericModelLoadTask?.cancel()
+                genericModelLoadTask = nil
+                explicitModelLoadTask?.cancel()
+                explicitModelLoadTask = nil
+                passiveRestoreController.cancel()
+            }
+            if loadedModelId == modelId {
+                unloadModel(clearPersistence: true)
+            }
+            if _selectedModelId == modelId {
+                _selectedModelId = nil
+                host?.setUserDefault(nil, forKey: "selectedModel")
+            }
+            if host?.userDefault(forKey: "loadedModel") as? String == modelId {
+                host?.setUserDefault(nil, forKey: "loadedModel")
+            }
 
-        try deleteModelFiles(modelDef)
-        host?.notifyCapabilitiesChanged()
+            try deleteModelFiles(modelDef)
+            host?.notifyCapabilitiesChanged()
+        }
     }
 
     var supportedLanguages: [String] {
@@ -132,8 +247,24 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
     var selectedModelId: String? { _selectedModelId }
 
     func selectModel(_ modelId: String) {
-        _selectedModelId = modelId
-        host?.setUserDefault(modelId, forKey: "selectedModel")
+        activationLock.withLock {
+            if _selectedModelId != modelId || (loadedModelId != nil && loadedModelId != modelId) {
+                unloadModel(clearPersistence: true)
+            }
+            _selectedModelId = modelId
+            host?.setUserDefault(modelId, forKey: "selectedModel")
+            guard loadedModelId != modelId, modelState != .loading,
+                  let definition = allModelDefinitions.first(where: { $0.id == modelId }),
+                  hasDownloadedModel(definition) else { return }
+            // Override cleanup restores selection synchronously. Advertise the
+            // cached restore immediately so a generic request cannot replace it.
+            modelState = .loading
+            let generation = activationID
+            genericModelLoadTask = Task {
+                guard !Task.isCancelled, generation == activationID, host != nil else { return }
+                try? await loadModel(definition, expectedGeneration: generation)
+            }
+        }
     }
 
     var supportsTranslation: Bool { true }
@@ -147,22 +278,24 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
         translate: Bool,
         prompt: String?
     ) async throws -> PluginTranscriptionResult {
-        guard let model else {
-            throw PluginTranscriptionError.notConfigured
+        try await PluginLocalInferenceGate.shared.withLock { [self] in
+            guard let model else {
+                throw PluginTranscriptionError.notConfigured
+            }
+
+            let audioArray = MLXArray(audio.samples)
+            let resolvedPrompt = Self.resolvePrompt(translate: translate, language: language, prompt: prompt)
+            let output = model.generate(
+                audio: audioArray,
+                maxTokens: 4096,
+                temperature: 0.0,
+                prompt: resolvedPrompt,
+                language: translate ? (language ?? "en") : nil
+            )
+            let text = Self.normalizeTranscript(output.text)
+
+            return PluginTranscriptionResult(text: text, detectedLanguage: language)
         }
-
-        let audioArray = MLXArray(audio.samples)
-        let resolvedPrompt = Self.resolvePrompt(translate: translate, language: language, prompt: prompt)
-        let output = model.generate(
-            audio: audioArray,
-            maxTokens: 4096,
-            temperature: 0.0,
-            prompt: resolvedPrompt,
-            language: translate ? (language ?? "en") : nil
-        )
-        let text = Self.normalizeTranscript(output.text)
-
-        return PluginTranscriptionResult(text: text, detectedLanguage: language)
     }
 
     func transcribe(
@@ -172,53 +305,63 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
         prompt: String?,
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> PluginTranscriptionResult {
-        guard let model else {
-            throw PluginTranscriptionError.notConfigured
-        }
-
-        let audioArray = MLXArray(audio.samples)
-        let resolvedPrompt = Self.resolvePrompt(translate: translate, language: language, prompt: prompt)
-        let stream = model.generateStream(
-            audio: audioArray,
-            maxTokens: 4096,
-            temperature: 0.0,
-            prompt: resolvedPrompt,
-            language: translate ? (language ?? "en") : nil
-        )
-
-        var accumulated = ""
-        for try await generation in stream {
-            switch generation {
-            case .token(let token):
-                accumulated += token
-                let shouldContinue = onProgress(Self.normalizeTranscript(accumulated))
-                if !shouldContinue { break }
-            case .info:
-                break
-            case .result(let output):
-                accumulated = output.text
+        try await PluginLocalInferenceGate.shared.withLock { [self] in
+            guard let model else {
+                throw PluginTranscriptionError.notConfigured
             }
-        }
 
-        let text = Self.normalizeTranscript(accumulated)
-        return PluginTranscriptionResult(text: text, detectedLanguage: language)
+            let audioArray = MLXArray(audio.samples)
+            let resolvedPrompt = Self.resolvePrompt(translate: translate, language: language, prompt: prompt)
+            let stream = model.generateStream(
+                audio: audioArray,
+                maxTokens: 4096,
+                temperature: 0.0,
+                prompt: resolvedPrompt,
+                language: translate ? (language ?? "en") : nil
+            )
+
+            var accumulated = ""
+            generationLoop: for try await generation in stream {
+                switch generation {
+                case .token(let token):
+                    accumulated += token
+                    let shouldContinue = onProgress(Self.normalizeTranscript(accumulated))
+                    if !shouldContinue { break generationLoop }
+                case .info:
+                    break
+                case .result(let output):
+                    accumulated = output.text
+                }
+            }
+
+            let text = Self.normalizeTranscript(accumulated)
+            return PluginTranscriptionResult(text: text, detectedLanguage: language)
+        }
     }
 
     // MARK: - Model Management
 
-    fileprivate func loadModel(_ modelDef: GraniteModelDef, passively: Bool = false) async throws {
+    fileprivate func loadModel(_ modelDef: GraniteModelDef, passively: Bool = false,
+                               notifyHost: Bool = true, expectedGeneration: UUID? = nil) async throws {
+        let generation = expectedGeneration ?? activationID
         try await modelLoadGate.withLock { [self] in
-            guard host != nil else { return }
+            try Task.checkCancellation()
+            guard generation == activationID, host != nil else { throw CancellationError() }
             if passively {
                 guard host?.shouldRestoreLoadedModelsPassively == true, !isConfigured else { return }
             }
             guard !(isConfigured && loadedModelId == modelDef.id) else { return }
-            try await performModelLoad(modelDef, allowDownloads: !passively)
+            try await performModelLoad(modelDef, allowDownloads: !passively, notifyHost: notifyHost, generation: generation)
         }
     }
 
-    private func performModelLoad(_ modelDef: GraniteModelDef, allowDownloads: Bool) async throws {
-        modelState = .loading
+    private func performModelLoad(_ modelDef: GraniteModelDef, allowDownloads: Bool,
+                                  notifyHost: Bool, generation: UUID) async throws {
+        try activationLock.withLock {
+            try Task.checkCancellation()
+            guard generation == activationID, host != nil else { throw CancellationError() }
+            modelState = .loading
+        }
         do {
             let modelsDir = host?.pluginDataDirectory.appendingPathComponent("models")
                 ?? FileManager.default.temporaryDirectory
@@ -231,6 +374,9 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
                 guard allowDownloads else {
                     modelState = .notLoaded
                     return
+                }
+                guard !modelDef.id.hasPrefix("custom-") else {
+                    throw PluginModelImportError.invalidModel("Imported files are missing. Remove and import the model again.")
                 }
                 removeIncompleteModelIfNeeded(modelDef, modelsDirectory: modelsDir)
                 guard let repoID = Repo.ID(rawValue: modelDef.repoId) else {
@@ -265,55 +411,118 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
                     throw error
                 }
             }
+            // Release the previous runtime before constructing its replacement.
+            // Keep its files and selection so a failed import can be retried.
+            try activationLock.withLock {
+                try Task.checkCancellation()
+                guard generation == activationID, host != nil else { throw CancellationError() }
+                model = nil
+                loadedModelId = nil
+            }
+            try await PluginLocalInferenceGate.shared.withLock {
+                try Task.checkCancellation()
+                Stream.gpu.synchronize()
+                Memory.clearCache()
+            }
+            try Task.checkCancellation()
+            guard generation == activationID, host != nil else { throw CancellationError() }
             let loaded = try await GraniteSpeechModel.fromModelDirectory(modelDirectory)
 
-            try Task.checkCancellation()
-            guard host != nil else { return }
-            model = loaded
-            loadedModelId = modelDef.id
-            _selectedModelId = modelDef.id
-            host?.setUserDefault(modelDef.id, forKey: "selectedModel")
-            host?.setUserDefault(modelDef.id, forKey: "loadedModel")
-            modelState = .ready(modelDef.id)
-            host?.notifyCapabilitiesChanged()
+            try activationLock.withLock {
+                try Task.checkCancellation()
+                guard generation == activationID, host != nil else { throw CancellationError() }
+                model = loaded
+                loadedModelId = modelDef.id
+                _selectedModelId = modelDef.id
+                host?.setUserDefault(modelDef.id, forKey: "selectedModel")
+                host?.setUserDefault(modelDef.id, forKey: "loadedModel")
+                modelState = .ready(modelDef.id)
+                if notifyHost { host?.notifyCapabilitiesChanged() }
+            }
         } catch is CancellationError {
-            if host != nil {
+            if generation == activationID, host != nil {
                 modelState = loadedModelId.map { .ready($0) } ?? .notLoaded
             }
             throw CancellationError()
         } catch {
-            modelState = .error("\(error)")
+            if generation == activationID { modelState = .error(error.localizedDescription) }
             throw error
         }
     }
 
     @objc func triggerAutoUnload() { unloadModel(clearPersistence: false) }
-    @objc func triggerRestoreModel() { Task { await restoreLoadedModel(allowDownloads: true) } }
+    @objc func triggerRestoreModel() {
+        activationLock.withLock {
+            guard !isConfigured, modelState != .loading, explicitModelLoadTask == nil else { return }
+            genericModelLoadTask?.cancel()
+            let generation = activationID
+            genericModelLoadTask = Task {
+                guard !Task.isCancelled, generation == activationID, host != nil else { return }
+                await restoreLoadedModel(allowDownloads: true, expectedGeneration: generation)
+            }
+        }
+    }
     @objc(triggerRestoreModelForModel:)
     func triggerRestoreModel(forModel modelId: NSString?) {
-        guard let modelId = modelId.map(String.init),
-              let modelDef = Self.availableModels.first(where: { $0.id == modelId }) else {
-            return
+        activationLock.withLock {
+            guard let modelId = modelId.map(String.init),
+                  let modelDef = allModelDefinitions.first(where: { $0.id == modelId }) else {
+                return
+            }
+            if loadedModelId != nil, loadedModelId != modelId {
+                unloadModel(clearPersistence: true)
+            }
+            if loadedModelId == nil,
+               host?.userDefault(forKey: "loadedModel") as? String != modelId {
+                host?.setUserDefault(nil, forKey: "loadedModel")
+            }
+            _selectedModelId = modelId
+            host?.setUserDefault(modelId, forKey: "selectedModel")
+            // Supersede the previous request synchronously, before either task runs.
+            genericModelLoadTask?.cancel()
+            genericModelLoadTask = nil
+            explicitModelLoadTask?.cancel()
+            activationID = UUID()
+            if isConfigured, loadedModelId == modelId {
+                // Superseding an import can keep this already-loaded runtime.
+                modelState = .ready(modelId)
+            }
+            let generation = activationID
+            explicitModelLoadTask = Task {
+                defer {
+                    activationLock.withLock {
+                        if generation == activationID { explicitModelLoadTask = nil }
+                    }
+                }
+                guard !Task.isCancelled, generation == activationID, host != nil else { return }
+                try? await loadModel(modelDef, expectedGeneration: generation)
+            }
         }
-        if loadedModelId != nil, loadedModelId != modelId {
-            unloadModel(clearPersistence: true)
-        }
-        _selectedModelId = modelId
-        host?.setUserDefault(modelId, forKey: "selectedModel")
-        Task { try? await loadModel(modelDef) }
     }
 
     func unloadModel(clearPersistence: Bool = true) {
-        model = nil
-        loadedModelId = nil
-        modelState = .notLoaded
-        if clearPersistence {
-            host?.setUserDefault(nil, forKey: "loadedModel")
+        activationLock.withLock {
+            // Reject pending imports and loads before they can repopulate an unloaded engine.
+            activationID = UUID()
+            genericModelLoadTask?.cancel()
+            genericModelLoadTask = nil
+            explicitModelLoadTask?.cancel()
+            explicitModelLoadTask = nil
+            model = nil
+            loadedModelId = nil
+            modelState = .notLoaded
+            if clearPersistence {
+                host?.setUserDefault(nil, forKey: "loadedModel")
+            }
+            host?.notifyCapabilitiesChanged()
         }
-        host?.notifyCapabilitiesChanged()
     }
 
     fileprivate func deleteModelFiles(_ modelDef: GraniteModelDef) throws {
+        if modelDef.id.hasPrefix("custom-") {
+            try customModelStore?.remove(modelDef.id)
+            return
+        }
         guard let modelsDir = host?.pluginDataDirectory.appendingPathComponent("models") else { return }
         try PluginHuggingFaceModelStore(modelsDirectory: modelsDir).deleteModelFiles(
             for: modelDef.repoId,
@@ -321,17 +530,18 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
         )
     }
 
-    func restoreLoadedModel(allowDownloads: Bool = true, passively: Bool = false) async {
-        guard !Task.isCancelled else { return }
+    func restoreLoadedModel(allowDownloads: Bool = true, passively: Bool = false, expectedGeneration: UUID? = nil) async {
+        let generation = expectedGeneration ?? activationID
+        guard !Task.isCancelled, generation == activationID else { return }
         if passively {
             guard host?.shouldRestoreLoadedModelsPassively == true, !isConfigured else { return }
         }
         guard let savedId = host?.userDefault(forKey: "loadedModel") as? String,
-              let modelDef = Self.availableModels.first(where: { $0.id == savedId }) else {
+              let modelDef = allModelDefinitions.first(where: { $0.id == savedId }) else {
             return
         }
         guard allowDownloads || hasDownloadedModel(modelDef) else { return }
-        try? await loadModel(modelDef, passively: passively)
+        try? await loadModel(modelDef, passively: passively, expectedGeneration: generation)
     }
 
     private func hasDownloadedModel(_ modelDef: GraniteModelDef) -> Bool {
@@ -340,7 +550,13 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
     }
 
     private func usableModelDirectory(for modelDef: GraniteModelDef, modelsDirectory: URL) -> URL? {
-        PluginHuggingFaceModelStore(modelsDirectory: modelsDirectory).usableModelDirectory(
+        if modelDef.id.hasPrefix("custom-") {
+            guard let directory = customModelStore?.modelDirectory(for: modelDef.id),
+                  PluginHuggingFaceModelStore(modelsDirectory: directory).isUsableModelDirectory(
+                    directory, requirements: Self.modelRequirements) else { return nil }
+            return directory
+        }
+        return PluginHuggingFaceModelStore(modelsDirectory: modelsDirectory).usableModelDirectory(
             for: modelDef.repoId,
             legacyDirectories: [legacyModelDirectory(for: modelDef, modelsDirectory: modelsDirectory)],
             requirements: Self.modelRequirements
@@ -587,11 +803,16 @@ private struct GraniteSettingsView: View {
             Divider()
 
             VStack(alignment: .leading, spacing: 8) {
-                Text("Model", bundle: bundle)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
+                HStack {
+                    Text("Model", bundle: bundle)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    Spacer()
+                    PluginModelImportButton(importer: plugin, bundle: bundle)
+                        .disabled(modelState == .loading)
+                }
 
-                ForEach(GranitePlugin.availableModels) { modelDef in
+                ForEach(plugin.allModelDefinitions) { modelDef in
                     modelRow(modelDef)
                 }
             }
@@ -609,7 +830,7 @@ private struct GraniteSettingsView: View {
         .padding()
         .onAppear {
             modelState = plugin.modelState
-            selectedModelId = plugin.selectedModelId ?? GranitePlugin.availableModels.first?.id ?? ""
+            selectedModelId = plugin.selectedModelId ?? plugin.allModelDefinitions.first?.id ?? ""
             if let token = plugin._hfToken, !token.isEmpty {
                 hfTokenInput = token
             }
@@ -623,7 +844,11 @@ private struct GraniteSettingsView: View {
             }
         }
         .onReceive(pollTimer) { _ in
-            guard isPolling else { return }
+            guard isPolling else {
+                modelState = plugin.modelState
+                selectedModelId = plugin.selectedModelId ?? selectedModelId
+                return
+            }
             let pluginState = plugin.modelState
             if pluginState != .notLoaded {
                 modelState = pluginState
@@ -661,14 +886,16 @@ private struct GraniteSettingsView: View {
                         .foregroundStyle(.green)
                     Button(String(localized: "Unload", bundle: bundle)) {
                         plugin.unloadModel()
-                        try? plugin.deleteModelFiles(modelDef)
+                        if !modelDef.id.hasPrefix("custom-") {
+                            try? plugin.deleteModelFiles(modelDef)
+                        }
                         modelState = plugin.modelState
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                 }
             } else {
-                Button(String(localized: "Download & Load", bundle: bundle)) {
+                Button(modelDef.id.hasPrefix("custom-") ? String(localized: "Load", bundle: bundle) : String(localized: "Download & Load", bundle: bundle)) {
                     selectedModelId = modelDef.id
                     modelState = .loading
                     isPolling = true

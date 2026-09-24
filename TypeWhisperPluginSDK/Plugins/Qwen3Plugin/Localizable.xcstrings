@@ -1,90 +1,24 @@
 {
   "sourceLanguage": "en",
   "strings": {
-    "Download & Load": {
+    "32 GB quality": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Laden & Aktivieren"
+            "value": "32-GB-Qualität"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "読み込み & 有効化"
+            "value": "32-GB-品質"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "下载并加载"
-          }
-        }
-      }
-    },
-    "Local Qwen3-ASR speech-to-text powered by MLX on Apple Silicon. 30 languages plus Chinese dialect coverage, no API key required.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Lokale Qwen3-ASR-Spracherkennung mit MLX auf Apple Silicon. 30 Sprachen plus chinesische Dialektabdeckung, kein API-Schlüssel nötig."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Apple Silicon用MLXによるローカルQwen3-ASR音声認識。30言語＋中国語方言対応、APIキー不要。"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "基于 Apple Silicon 上 MLX 的本地 Qwen3-ASR 语音转文字。支持 30 种语言及中文方言，无需 API 密钥。"
-          }
-        }
-      }
-    },
-    "Model": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Modell"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "モデル"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "模型"
-          }
-        }
-      }
-    },
-    "Quick picks": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Schnellauswahl"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "クイック選択"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "快速选择"
+            "value": "32 GB 品质"
           }
         }
       }
@@ -111,68 +45,47 @@
         }
       }
     },
-    "Recommended": {
+    "A token is only needed for private or gated models. It is used for this import and is not saved.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Empfohlen"
+            "value": "Ein Token ist nur für private oder zugangsbeschränkte Modelle nötig. Es wird für diesen Import verwendet und nicht gespeichert."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "推奨"
+            "value": "非公開またはアクセス制限のあるモデルにのみトークンが必要です。このインポートにのみ使用され、保存されません。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "推荐"
+            "value": "仅私有或受限模型需要令牌。令牌仅用于此次导入，不会保存。"
           }
         }
       }
     },
-    "32 GB quality": {
+    "Add a model compatible with this plugin. The model is checked and loaded before the import completes.": {
+      "extractionState": "manual",
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "32-GB-Qualität"
+            "value": "Füge ein mit diesem Plugin kompatibles Spracherkennungsmodell hinzu. Das Modell wird vor Abschluss des Imports geprüft und geladen."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "32-GB-品質"
+            "value": "このプラグインに対応したモデルを追加します。インポートが完了する前に、モデルの検証と読み込みが行われます。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "32 GB 品质"
-          }
-        }
-      }
-    },
-    "Fast / 8 GB": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Schnell / 8 GB"
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "高速 / 8 GB"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "快速 / 8 GB"
+            "value": "添加与此插件兼容的语音识别模型。导入完成前会检查并加载模型。"
           }
         }
       }
@@ -199,68 +112,222 @@
         }
       }
     },
-    "Quality / 32 GB": {
+    "Best default for most 16 GB+ Macs.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Qualität / 32 GB"
+            "value": "Beste Vorgabe für die meisten Macs mit 16 GB+."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "品質 / 32 GB"
+            "value": "16 GB以上のMacのほとんどに最適な設定。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "品质 / 32 GB"
+            "value": "大多数 16 GB 以上 Mac 的最佳默认选择。"
           }
         }
       }
     },
-    "Smallest download; use when memory matters more than quality.": {
+    "Canary needs an explicit source language. Choose Greek or English for Sophea in Dictation settings.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Kleinster Download; nutze es, wenn Speicher wichtiger als Qualität ist."
+            "value": "Canary braucht eine konkrete Ausgangssprache. Wähle für Sophea Griechisch oder Englisch in den Diktateinstellungen."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "最小のダウンロード；保存容量が品質より重要である場合に使用。"
+            "value": "Canaryでは入力言語の指定が必要です。Sopheaを使う場合は、音声入力設定でギリシャ語または英語を選択してください。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "最小下载量；当内存比质量更重要时使用。"
+            "value": "Canary 需要明确指定源语言。使用 Sophea 时，请在听写设置中选择希腊语或英语。"
           }
         }
       }
     },
-    "Slightly more precision than 4-bit with a similar footprint.": {
+    "Cancel": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Etwas mehr Präzision als 4-bit bei ähnlichem Speicherbedarf."
+            "value": "Abbrechen"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "4-bitと同等のメモリ使用量で少し正確性が向上。"
+            "value": "キャンセル"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "比 4 位略高精度，占用空间相似。"
+            "value": "取消"
+          }
+        }
+      }
+    },
+    "Cancelling…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wird abgebrochen …"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "キャンセル中…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在取消…"
+          }
+        }
+      }
+    },
+    "Checking model compatibility…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modellkompatibilität wird geprüft …"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "モデルの互換性を確認中…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在检查模型兼容性…"
+          }
+        }
+      }
+    },
+    "Choose Folder…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ordner auswählen …"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "フォルダを選択…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "选择文件夹…"
+          }
+        }
+      }
+    },
+    "Choose the folder containing config.json, tokenizer files and weights. TypeWhisper keeps its own copy; your original files are not changed.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wähle den Ordner mit config.json, Tokenizer-Dateien und Gewichten. TypeWhisper erstellt eine eigene Kopie; deine Originaldateien bleiben unverändert."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "config.json、トークナイザー、重みを含むフォルダを選択してください。TypeWhisperはコピーを保存し、元のファイルは変更しません。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "选择包含 config.json、分词器文件和权重的文件夹。TypeWhisper 会保存副本，不会修改原始文件。"
+          }
+        }
+      }
+    },
+    "Done": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fertig"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "完了"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "完成"
+          }
+        }
+      }
+    },
+    "Download & Load": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Laden & Aktivieren"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "読み込み & 有効化"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下载并加载"
+          }
+        }
+      }
+    },
+    "Fast / 8 GB": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schnell / 8 GB"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "高速 / 8 GB"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "快速 / 8 GB"
           }
         }
       }
@@ -309,94 +376,6 @@
         }
       }
     },
-    "Unquantized small model; useful for comparison or validation.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Unquantisiertes kleines Modell; nützlich für Vergleich oder Validierung."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "非量子化された小さなモデル；比較や検証に有用。"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "未量化的小模型；用于比较或验证。"
-          }
-        }
-      }
-    },
-    "Smallest 1.7B option; use when 6-bit is too heavy.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Kleinste 1.7B-Option; nutze sie, wenn 6-bit zu schwer ist."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "最小の1.7Bオプション；6-bitが重すぎる場合に使用。"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "最小的 1.7B 选项；当 6 位过重时使用。"
-          }
-        }
-      }
-    },
-    "Middle ground if the default 6-bit model is tight on memory.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Mittelweg, wenn das 6-bit-Standardmodell knapp im Speicher wird."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "6-bit標準モデルがメモリ不足になる場合に中間選択。"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "默认 6 位模型内存紧张时的折中选择。"
-          }
-        }
-      }
-    },
-    "Best default for most 16 GB+ Macs.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Beste Vorgabe für die meisten Macs mit 16 GB+."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "16 GB以上のMacのほとんどに最適な設定。"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "大多数 16 GB 以上 Mac 的最佳默认选择。"
-          }
-        }
-      }
-    },
     "Higher-quality pick for 32 GB+ Macs.": {
       "localizations": {
         "de": {
@@ -419,24 +398,46 @@
         }
       }
     },
-    "Largest unquantized model; use for max-fidelity validation.": {
+    "Hugging Face model URL": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Größtes unquantisiertes Modell; für Validierung mit maximaler Wiedergabetreue."
+            "value": "Hugging-Face-Modell-URL"
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "最大の非量子化モデル；最大の再生精度を求める検証に最適。"
+            "value": "Hugging FaceモデルのURL"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "最大的未量化模型；用于最高保真度验证。"
+            "value": "Hugging Face 模型网址"
+          }
+        }
+      }
+    },
+    "Hugging Face token (optional)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hugging-Face-Token (optional)"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hugging Faceトークン（任意）"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hugging Face 令牌（可选）"
           }
         }
       }
@@ -463,6 +464,138 @@
         }
       }
     },
+    "Import": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Importieren"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "インポート"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "导入"
+          }
+        }
+      }
+    },
+    "Import Model…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modell importieren …"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "モデルをインポート…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "导入模型…"
+          }
+        }
+      }
+    },
+    "Import Speech Model": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spracherkennungsmodell importieren"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "音声認識モデルをインポート"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "导入语音识别模型"
+          }
+        }
+      }
+    },
+    "Imported and loaded: %@": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Importiert und geladen: %@"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "インポート・読み込み完了：%@"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已导入并加载：%@"
+          }
+        }
+      }
+    },
+    "Imported model": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Importiertes Modell"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "インポートしたモデル"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已导入的模型"
+          }
+        }
+      }
+    },
+    "Importing and loading with %@…": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Importieren und Laden mit %@ …"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@でインポート・読み込み中…"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在使用 %@ 导入并加载…"
+          }
+        }
+      }
+    },
     "Invalid HuggingFace Token": {
       "localizations": {
         "de": {
@@ -485,6 +618,154 @@
         }
       }
     },
+    "Largest unquantized model; use for max-fidelity validation.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Größtes unquantisiertes Modell; für Validierung mit maximaler Wiedergabetreue."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最大の非量子化モデル；最大の再生精度を求める検証に最適。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最大的未量化模型；用于最高保真度验证。"
+          }
+        }
+      }
+    },
+    "Load": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Laden"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "読み込む"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "加载"
+          }
+        }
+      }
+    },
+    "Local Folder": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lokaler Ordner"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ローカルフォルダ"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "本地文件夹"
+          }
+        }
+      }
+    },
+    "Local Qwen3-ASR speech-to-text powered by MLX on Apple Silicon. 30 languages plus Chinese dialect coverage, no API key required.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lokale Qwen3-ASR-Spracherkennung mit MLX auf Apple Silicon. 30 Sprachen plus chinesische Dialektabdeckung, kein API-Schlüssel nötig."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Silicon用MLXによるローカルQwen3-ASR音声認識。30言語＋中国語方言対応、APIキー不要。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "基于 Apple Silicon 上 MLX 的本地 Qwen3-ASR 语音转文字。支持 30 种语言及中文方言，无需 API 密钥。"
+          }
+        }
+      }
+    },
+    "Middle ground if the default 6-bit model is tight on memory.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mittelweg, wenn das 6-bit-Standardmodell knapp im Speicher wird."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "6-bit標準モデルがメモリ不足になる場合に中間選択。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "默认 6 位模型内存紧张时的折中选择。"
+          }
+        }
+      }
+    },
+    "Model": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modell"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "モデル"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型"
+          }
+        }
+      }
+    },
+    "No folder selected": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kein Ordner ausgewählt"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未选择文件夹"
+          }
+        }
+      }
+    },
     "Optional. Increases download rate limits. Free at huggingface.co/settings/tokens": {
       "localizations": {
         "de": {
@@ -503,6 +784,72 @@
           "stringUnit": {
             "state": "translated",
             "value": "可选。提高下载速率限制。在 huggingface.co/settings/tokens 免费获取。"
+          }
+        }
+      }
+    },
+    "Quality / 32 GB": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Qualität / 32 GB"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "品質 / 32 GB"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "品质 / 32 GB"
+          }
+        }
+      }
+    },
+    "Quick picks": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Schnellauswahl"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "クイック選択"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "快速选择"
+          }
+        }
+      }
+    },
+    "Recommended": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Empfohlen"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "推奨"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "推荐"
           }
         }
       }
@@ -551,6 +898,162 @@
         }
       }
     },
+    "Slightly more precision than 4-bit with a similar footprint.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Etwas mehr Präzision als 4-bit bei ähnlichem Speicherbedarf."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "4-bitと同等のメモリ使用量で少し正確性が向上。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "比 4 位略高精度，占用空间相似。"
+          }
+        }
+      }
+    },
+    "Smallest 1.7B option; use when 6-bit is too heavy.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kleinste 1.7B-Option; nutze sie, wenn 6-bit zu schwer ist."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最小の1.7Bオプション；6-bitが重すぎる場合に使用。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最小的 1.7B 选项；当 6 位过重时使用。"
+          }
+        }
+      }
+    },
+    "Smallest download; use when memory matters more than quality.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kleinster Download; nutze es, wenn Speicher wichtiger als Qualität ist."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最小のダウンロード；保存容量が品質より重要である場合に使用。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最小下载量；当内存比质量更重要时使用。"
+          }
+        }
+      }
+    },
+    "Source": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quelle"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ソース"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "来源"
+          }
+        }
+      }
+    },
+    "This model architecture is not supported by this plugin. Open the settings of a compatible plugin to import it.": {
+      "extractionState": "manual",
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Modellarchitektur wird von diesem Plugin nicht unterstützt. Öffne zum Importieren die Einstellungen eines kompatiblen Plugins."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "このプラグインはこのモデルアーキテクチャに対応していません。対応するプラグインの設定を開いてインポートしてください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此插件不支持该模型架构。请打开兼容插件的设置进行导入。"
+          }
+        }
+      }
+    },
+    "Unload": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Deaktivieren"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無効化"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "卸载"
+          }
+        }
+      }
+    },
+    "Unquantized small model; useful for comparison or validation.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unquantisiertes kleines Modell; nützlich für Vergleich oder Validierung."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "非量子化された小さなモデル；比較や検証に有用。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未量化的小模型；用于比较或验证。"
+          }
+        }
+      }
+    },
     "Valid HuggingFace Token": {
       "localizations": {
         "de": {
@@ -595,24 +1098,24 @@
         }
       }
     },
-    "Unload": {
+    "You can select the engine in Dictation settings and manage the model in Integrations.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Deaktivieren"
+            "value": "Du kannst die Engine in den Diktateinstellungen auswählen und das Modell unter Integrationen verwalten."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "無効化"
+            "value": "音声入力設定でエンジンを選択し、連携でモデルを管理できます。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "卸载"
+            "value": "你可以在听写设置中选择引擎，在集成中管理模型。"
           }
         }
       }

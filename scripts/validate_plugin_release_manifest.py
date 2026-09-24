@@ -34,9 +34,9 @@ def validate_manifest(manifest: dict, expected_version: str | None = None) -> No
         )
 
     sdk_version = manifest.get("sdkCompatibilityVersion")
-    if sdk_version != "v1":
+    if sdk_version not in ("v1", "v1-model-import"):
         raise ValueError(
-            f"manifest sdkCompatibilityVersion {sdk_version!r} must be 'v1'"
+            f"manifest sdkCompatibilityVersion {sdk_version!r} must be 'v1' or 'v1-model-import'"
         )
 
 

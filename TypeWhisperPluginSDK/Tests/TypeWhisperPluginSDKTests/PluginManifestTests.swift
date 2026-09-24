@@ -6,6 +6,14 @@ final class PluginManifestTests: XCTestCase {
         XCTAssertEqual(PluginSDKCompatibility.currentVersion, "v1")
     }
 
+    func testModelImportMarkerIsAdditiveAndDistinctFromOlderHosts() {
+        XCTAssertNotEqual(PluginSDKCompatibility.modelImportVersion, "v1")
+        XCTAssertTrue(PluginSDKCompatibility.isCompatible(manifestVersion: "v1", isBundled: false))
+        XCTAssertTrue(PluginSDKCompatibility.isCompatible(manifestVersion: "v1-model-import", isBundled: false))
+        XCTAssertNil(PluginSDKCompatibility.incompatibilityReason(manifestVersion: "v1-model-import", isBundled: false))
+        XCTAssertFalse(PluginSDKCompatibility.isCompatible(manifestVersion: "v2", isBundled: false))
+    }
+
     func testPluginManifestDecodesOptionalCompatibilityFields() throws {
         let data = Data(
             """

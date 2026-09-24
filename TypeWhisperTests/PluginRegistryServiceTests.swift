@@ -329,6 +329,51 @@ final class PluginRegistryServiceTests: XCTestCase {
         XCTAssertTrue(plugin15.supportsCapability(.sourceFootageProgress))
     }
 
+    func testRegistrySelectsImportCapabilityReleaseForUpdatedHost() throws {
+        let data = Data(
+            """
+            {
+              "schemaVersion": 2,
+              "plugins": [
+                {
+                  "id": "com.typewhisper.multi",
+                  "name": "Multi Plugin",
+                  "author": "TypeWhisper",
+                  "description": "Multi-release entry",
+                  "category": "transcription",
+                  "releases": [
+                    {
+                      "version": "1.0.6",
+                      "minHostVersion": "1.7.0",
+                      "sdkCompatibilityVersion": "v1-model-import",
+                      "size": 12,
+                      "downloadURL": "https://example.com/model-import.zip"
+                    },
+                    {
+                      "version": "1.0.5",
+                      "minHostVersion": "1.7.0",
+                      "sdkCompatibilityVersion": "v1",
+                      "size": 10,
+                      "downloadURL": "https://example.com/legacy-v1.zip"
+                    }
+                  ]
+                }
+              ]
+            }
+            """.utf8
+        )
+
+        let response = try JSONDecoder().decode(PluginRegistryResponse.self, from: data)
+        let plugins = response.resolvedPlugins(
+            appVersion: "1.7.0",
+            sdkCompatibilityVersion: sdkCompatibilityVersion
+        )
+
+        XCTAssertEqual(plugins.count, 1)
+        XCTAssertEqual(plugins.first?.version, "1.0.6")
+        XCTAssertEqual(plugins.first?.downloadURL, "https://example.com/model-import.zip")
+    }
+
     func testMultiReleaseRegistryRejectsReleaseWithMismatchedSDKCompatibilityVersionAtSameHostVersion() throws {
         let data = Data(
             """

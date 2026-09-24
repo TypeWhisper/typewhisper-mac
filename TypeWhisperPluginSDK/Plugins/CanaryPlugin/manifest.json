@@ -1,0 +1,20 @@
+{
+    "id": "com.typewhisper.canary",
+    "name": "Canary ASR",
+    "version": "1.0.0",
+    "minHostVersion": "1.7.0",
+    "sdkCompatibilityVersion": "v1-model-import",
+    "minOSVersion": "14.0",
+    "supportedArchitectures": [
+        "arm64"
+    ],
+    "author": "TypeWhisper",
+    "description": "Local Canary speech recognition on Apple Silicon. Supports Sophea for Greek and English and compatible imported models.",
+    "descriptions": {
+        "de": "Lokale Canary-Spracherkennung auf Apple Silicon. Unterstützt Sophea für Griechisch und Englisch sowie kompatible importierte Modelle.",
+        "ja": "Apple Siliconで動作するローカルCanary音声認識。ギリシャ語と英語のSopheaや互換モデルに対応。"
+    },
+    "category": "transcription",
+    "iconSystemName": "cpu",
+    "principalClass": "CanaryPlugin"
+}

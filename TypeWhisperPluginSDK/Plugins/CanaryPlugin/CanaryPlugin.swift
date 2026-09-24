@@ -2,20 +2,21 @@ import Foundation
 import SwiftUI
 import HuggingFace
 import MLX
+import MLXNN
 import MLXAudioCore
 import MLXAudioSTT
 @_spi(FirstPartyPlugins) import TypeWhisperPluginSDK
 
 // MARK: - Plugin Entry Point
 
-@objc(VoxtralPlugin)
-final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding, PluginCustomModelImporting, DictionaryTermsCapabilityProviding, PluginSettingsActivityReporting, PluginDownloadedModelManaging, PassiveModelRestoreProviding, @unchecked Sendable {
-    static let pluginId = "com.typewhisper.voxtral"
-    static let pluginName = "Voxtral"
+@objc(CanaryPlugin)
+final class CanaryPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding, PluginCustomModelImporting, DictionaryTermsCapabilityProviding, PluginSettingsActivityReporting, PluginDownloadedModelManaging, PassiveModelRestoreProviding, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.canary"
+    static let pluginName = "Canary Speech"
 
     fileprivate var host: HostServices?
     fileprivate var _selectedModelId: String?
-    fileprivate var model: VoxtralRealtimeModel?
+    fileprivate var model: CanaryModel?
     fileprivate var loadedModelId: String?
     private let activationLock = NSRecursiveLock()
     private var _activationID = UUID()
@@ -26,29 +27,14 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
     @MainActor private var isImportingModel = false
     fileprivate var _hfToken: String?
 
-    fileprivate var modelState: VoxtralModelState = .notLoaded
-
-    private static let defaultParams = STTGenerateParameters(
-        maxTokens: 4096,
-        temperature: 0.0,
-        language: "en",
-        chunkDuration: 1200.0,
-        minChunkDuration: 1.0
-    )
-
-    private static let fallbackParams = STTGenerateParameters(
-        maxTokens: 2048,
-        temperature: 0.0,
-        language: "en",
-        chunkDuration: 600.0,
-        minChunkDuration: 1.0
-    )
+    fileprivate var modelState: CanaryModelState = .notLoaded
 
     private static let modelRequirements = PluginHuggingFaceModelStore.Requirements(
-        requiredFiles: ["config.json", "tekken.json"],
+        requiredFiles: ["config.json"],
+        alternativeFileGroups: [["tokenizer.model"], ["tokenizer.json"]],
         weightFileExtensions: ["safetensors"]
     )
-    private static let modelDownloadPatterns = ["*.safetensors", "*.json", "*.txt", "*.wav"]
+    private static let modelDownloadPatterns = ["*.safetensors", "*.json", "*.txt", "*.model"]
 
     private let passiveRestoreController = PluginPassiveModelRestoreController()
     let modelLoadGate = PluginLocalInferenceGate()
@@ -103,6 +89,7 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
             model = nil
             loadedModelId = nil
             modelState = .notLoaded
+            scheduleRuntimeCacheClearWhenInferenceIsIdle()
             host = nil
         }
     }
@@ -112,16 +99,16 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
         host.map { PluginCustomModelStore(directory: $0.pluginDataDirectory.appendingPathComponent("custom-models")) }
     }
 
-    fileprivate var allModelDefinitions: [VoxtralModelDef] {
+    fileprivate var allModelDefinitions: [CanaryModelDef] {
         Self.availableModels + (customModelStore?.models() ?? []).map(Self.importedDefinition)
     }
 
-    private static func importedDefinition(_ model: PluginCustomModelStore.Model) -> VoxtralModelDef {
-        VoxtralModelDef(id: model.id, displayName: model.displayName, repoId: model.id,
+    private static func importedDefinition(_ model: PluginCustomModelStore.Model) -> CanaryModelDef {
+        CanaryModelDef(id: model.id, displayName: model.displayName, repoId: model.id,
             sizeDescription: model.sizeDescription, ramRequirement: "—")
     }
 
-    var supportedImportModelTypes: Set<String> { ["voxtral_realtime"] }
+    var supportedImportModelTypes: Set<String> { ["canary"] }
 
     @MainActor
     func importModel(_ candidate: PluginModelImportCandidate, token: String?) async throws -> PluginModelInfo {
@@ -181,8 +168,8 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
 
     // MARK: - TranscriptionEnginePlugin
 
-    var providerId: String { "voxtral" }
-    var providerDisplayName: String { "Voxtral (MLX)" }
+    var providerId: String { "canary" }
+    var providerDisplayName: String { "Canary Speech (MLX)" }
 
     var isConfigured: Bool {
         model != nil && loadedModelId != nil
@@ -257,18 +244,23 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
     }
 
     var supportedLanguages: [String] {
-        [
-            "en", "fr", "es", "pt", "de", "nl", "it", "hi",
-            "pl", "tr", "ru", "ar", "zh", "ja", "ko",
-        ]
+        languageCapabilities(for: selectedModelId)
     }
+
+    private func languageCapabilities(for modelId: String?) -> [String] {
+        allModelDefinitions.first(where: { $0.id == modelId })?.supportedLanguages
+            ?? CanaryConfig.defaultSupportedLanguages
+    }
+
 
     var selectedModelId: String? { _selectedModelId }
 
     func selectModel(_ modelId: String) {
         activationLock.withLock {
             if _selectedModelId != modelId || (loadedModelId != nil && loadedModelId != modelId) {
-                unloadModel(clearPersistence: true)
+                // A metadata-only selection must not initialize the GPU merely
+                // to clear an empty cache. Pending loads still get invalidated.
+                unloadModel(clearPersistence: true, clearRuntimeCache: model != nil || modelState == .loading)
             }
             _selectedModelId = modelId
             host?.setUserDefault(modelId, forKey: "selectedModel")
@@ -287,69 +279,64 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
     }
 
     var supportsTranslation: Bool { false }
-    var supportsStreaming: Bool { true }
+    var supportsStreaming: Bool { false }
     var dictionaryTermsSupport: DictionaryTermsSupport { .unsupported }
 
     func transcribe(
-        audio: AudioData,
-        language: String?,
-        translate: Bool,
-        prompt: String?
+        audio: AudioData, language: String?, translate: Bool, prompt: String?
     ) async throws -> PluginTranscriptionResult {
-        try await PluginLocalInferenceGate.shared.withLock { [self] in
-            guard let model else {
-                throw PluginTranscriptionError.notConfigured
-            }
-
-            let audioArray = MLXArray(audio.samples)
-            let params = Self.makeParams(Self.defaultParams, language: language ?? "en")
-
-            let output = model.generate(audio: audioArray, generationParameters: params)
-            let text = Self.normalizeTranscript(output.text)
-
-            return PluginTranscriptionResult(text: text, detectedLanguage: language)
-        }
+        try await transcribe(audio: audio, language: language, translate: translate, prompt: prompt,
+                             onProgress: { _ in true })
     }
 
     func transcribe(
-        audio: AudioData,
-        language: String?,
-        translate: Bool,
-        prompt: String?,
+        audio: AudioData, language: String?, translate: Bool, prompt: String?,
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> PluginTranscriptionResult {
         try await PluginLocalInferenceGate.shared.withLock { [self] in
-            guard let model else {
-                throw PluginTranscriptionError.notConfigured
-            }
-
-            let audioArray = MLXArray(audio.samples)
-            let params = Self.makeParams(Self.defaultParams, language: language ?? "en")
-
-            var accumulated = ""
-            let stream = model.generateStream(audio: audioArray, generationParameters: params)
-
-            generationLoop: for try await generation in stream {
-                switch generation {
-                case .token(let token):
-                    accumulated += token
-                    let shouldContinue = onProgress(Self.normalizeTranscript(accumulated))
-                    if !shouldContinue { break generationLoop }
-                case .info:
-                    break
-                case .result(let output):
-                    accumulated = output.text
+            guard let model else { throw PluginTranscriptionError.notConfigured }
+            let sourceLanguage = try Self.sourceLanguage(language, supportedLanguages: languageCapabilities(for: loadedModelId))
+            guard !translate else { throw PluginTranscriptionError.apiError("Canary translation is not available in this engine.") }
+            var chunks: [String] = []
+            // Use the same low-energy boundary search as Qwen instead of fixed cuts.
+            // Each chunk still gets its own decoding budget and bounded encoder memory.
+            for chunk in Self.transcriptionChunks(audio.samples) {
+                try Task.checkCancellation()
+                let output = model.generate(audio: chunk, generationParameters: STTGenerateParameters(
+                    maxTokens: 512, temperature: 0, language: sourceLanguage
+                ))
+                try Task.checkCancellation()
+                guard output.generationTokens < 512 else {
+                    throw PluginTranscriptionError.apiError("Canary reached its transcription limit. Retry with a shorter recording.")
                 }
+                let text = Self.normalizeTranscript(output.text, language: sourceLanguage)
+                if !text.isEmpty { chunks.append(text) }
+                guard onProgress(chunks.joined(separator: " ")) else { throw CancellationError() }
             }
-
-            let text = Self.normalizeTranscript(accumulated)
-            return PluginTranscriptionResult(text: text, detectedLanguage: language)
+            return PluginTranscriptionResult(text: chunks.joined(separator: " "), detectedLanguage: sourceLanguage)
         }
+    }
+
+    static func transcriptionChunks(_ samples: [Float]) -> [MLXArray] {
+        guard !samples.isEmpty else { return [] }
+        return splitAudioIntoChunks(
+            MLXArray(samples), sampleRate: 16_000, chunkDuration: 20,
+            minChunkDuration: 1, searchExpandSec: 5, minWindowMs: 100
+        ).map(\.0)
+    }
+
+    static func sourceLanguage(
+        _ language: String?, supportedLanguages: [String] = CanaryConfig.defaultSupportedLanguages
+    ) throws -> String {
+        guard let language = language?.lowercased(), supportedLanguages.contains(language) else {
+            throw PluginTranscriptionError.apiError("Select a source language, such as Greek or English, in Dictation settings. Canary does not detect the language automatically.")
+        }
+        return language
     }
 
     // MARK: - Model Management
 
-    fileprivate func loadModel(_ modelDef: VoxtralModelDef, passively: Bool = false,
+    fileprivate func loadModel(_ modelDef: CanaryModelDef, passively: Bool = false,
                                notifyHost: Bool = true, expectedGeneration: UUID? = nil) async throws {
         let generation = expectedGeneration ?? activationID
         try await modelLoadGate.withLock { [self] in
@@ -363,7 +350,7 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
         }
     }
 
-    private func performModelLoad(_ modelDef: VoxtralModelDef, allowDownloads: Bool,
+    private func performModelLoad(_ modelDef: CanaryModelDef, allowDownloads: Bool,
                                   notifyHost: Bool, generation: UUID) async throws {
         try activationLock.withLock {
             try Task.checkCancellation()
@@ -389,7 +376,8 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
                 removeIncompleteModelIfNeeded(modelDef, modelsDirectory: modelsDir)
                 guard let repoID = Repo.ID(rawValue: modelDef.repoId) else {
                     throw NSError(
-                        domain: "VoxtralPlugin", code: 1,
+                        domain: "CanaryPlugin",
+                        code: 1,
                         userInfo: [NSLocalizedDescriptionKey: "Invalid repository ID: \(modelDef.repoId)"]
                     )
                 }
@@ -408,7 +396,8 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
                         requirements: Self.modelRequirements
                     ) else {
                         throw NSError(
-                            domain: "VoxtralPlugin", code: 2,
+                            domain: "CanaryPlugin",
+                            code: 2,
                             userInfo: [NSLocalizedDescriptionKey: "Downloaded model is incomplete: \(modelDef.repoId)"]
                         )
                     }
@@ -417,7 +406,6 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
                     throw error
                 }
             }
-
             // Release the previous runtime before constructing its replacement.
             // Keep its files and selection so a failed import can be retried.
             try activationLock.withLock {
@@ -433,7 +421,10 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
             }
             try Task.checkCancellation()
             guard generation == activationID, host != nil else { throw CancellationError() }
-            let loaded = try VoxtralRealtimeModel.fromDirectory(modelDirectory)
+            let loaded = try Self.loadCanaryModel(from: modelDirectory)
+            guard loaded.tokenizer != nil else {
+                throw PluginModelImportError.invalidModel("Canary tokenizer could not be loaded")
+            }
 
             try activationLock.withLock {
                 try Task.checkCancellation()
@@ -457,6 +448,74 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
         }
     }
 
+    // NeMo exports retain these deterministic preprocessing buffers. MLXAudio
+    // computes the Hann window and mel filter bank from config at inference time.
+    // Keep every other key so incompatible weights still fail validation.
+    static func isDerivedPreprocessingBuffer(_ key: String) -> Bool {
+        key == "preprocessor.featurizer.fb" || key == "preprocessor.featurizer.window"
+    }
+
+    static func sanitizeCanaryWeights(_ weights: [String: MLXArray]) -> [String: MLXArray] {
+        var sanitized = CanaryModel.sanitize(weights: weights)
+        let isNemo = !weights.keys.contains { $0.hasPrefix("decoder.blocks.") || $0.hasPrefix("transf_decoder.layers.") }
+            && weights["head.classifier.weight"] == nil
+        if isNemo {
+            // Upstream remaps these Conv2d names before checking for "conv";
+            // their NeMo OIHW layout therefore misses the conversion to OHWI.
+            for (key, value) in sanitized where value.ndim == 4 && key.hasSuffix(".weight")
+                && (key.hasPrefix("encoder.conformer.pre_encode.depthwise_layers.")
+                    || key.hasPrefix("encoder.conformer.pre_encode.pointwise_layers.")) {
+                sanitized[key] = value.transposed(0, 2, 3, 1)
+            }
+        }
+        return sanitized
+    }
+
+    private static func loadCanaryModel(from directory: URL) throws -> CanaryModel {
+        try Task.checkCancellation()
+        let config = try JSONDecoder().decode(
+            CanaryConfig.self, from: Data(contentsOf: directory.appendingPathComponent("config.json")))
+        let tokenizer = try CanaryTokenizer.fromModelDirectory(directory, config: config)
+        let model = CanaryModel(config: config, tokenizer: tokenizer)
+        let files = try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)
+            .filter { $0.pathExtension == "safetensors" }
+            .sorted { $0.lastPathComponent < $1.lastPathComponent }
+        guard !files.isEmpty else {
+            throw PluginModelImportError.invalidModel("No Canary safetensors weights found")
+        }
+        var weights: [String: MLXArray] = [:]
+        for file in files {
+            try Task.checkCancellation()
+            // MLX reads the header here and creates lazy Load arrays; tensor
+            // payloads are materialized individually below.
+            for (key, value) in try MLX.loadArrays(url: file) where !isDerivedPreprocessingBuffer(key) {
+                try Task.checkCancellation()
+                guard weights.updateValue(value, forKey: key) == nil else {
+                    throw PluginModelImportError.invalidModel("Duplicate Canary weight: \(key)")
+                }
+            }
+        }
+        try Task.checkCancellation()
+        let sanitized = Self.sanitizeCanaryWeights(weights)
+        if config.quantization != nil || config.perLayerQuantization != nil {
+            quantize(model: model) { path, _ in
+                guard sanitized["\(path).scales"] != nil else { return nil }
+                if let layer = config.perLayerQuantization?.quantization(layer: path) {
+                    return layer.asTuple
+                }
+                return config.quantization?.asTuple
+            }
+        }
+        try model.update(parameters: ModuleParameters.unflattened(sanitized), verify: .all)
+        model.train(false)
+        for (_, parameter) in model.parameters().flattened() {
+            try Task.checkCancellation()
+            eval(parameter)
+        }
+        try Task.checkCancellation()
+        return model
+    }
+
     @objc func triggerAutoUnload() { unloadModel(clearPersistence: false) }
     @objc func triggerRestoreModel() {
         activationLock.withLock {
@@ -469,6 +528,7 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
             }
         }
     }
+
     @objc(triggerRestoreModelForModel:)
     func triggerRestoreModel(forModel modelId: NSString?) {
         activationLock.withLock {
@@ -507,7 +567,7 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
         }
     }
 
-    func unloadModel(clearPersistence: Bool = true) {
+    func unloadModel(clearPersistence: Bool = true, clearRuntimeCache: Bool = true) {
         activationLock.withLock {
             // Reject pending imports and loads before they can repopulate an unloaded engine.
             activationID = UUID()
@@ -515,9 +575,11 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
             genericModelLoadTask = nil
             explicitModelLoadTask?.cancel()
             explicitModelLoadTask = nil
+            passiveRestoreController.cancel()
             model = nil
             loadedModelId = nil
             modelState = .notLoaded
+            if clearRuntimeCache { scheduleRuntimeCacheClearWhenInferenceIsIdle() }
             if clearPersistence {
                 host?.setUserDefault(nil, forKey: "loadedModel")
             }
@@ -525,7 +587,18 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
         }
     }
 
-    fileprivate func deleteModelFiles(_ modelDef: VoxtralModelDef) throws {
+    private(set) var runtimeCacheClearTask: Task<Void, Never>?
+
+    private func scheduleRuntimeCacheClearWhenInferenceIsIdle() {
+        runtimeCacheClearTask = Task {
+            try? await PluginLocalInferenceGate.shared.withLock {
+                Stream.gpu.synchronize()
+                Memory.clearCache()
+            }
+        }
+    }
+
+    fileprivate func deleteModelFiles(_ modelDef: CanaryModelDef) throws {
         if modelDef.id.hasPrefix("custom-") {
             try customModelStore?.remove(modelDef.id)
             return
@@ -533,8 +606,7 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
         guard let modelsDir = host?.pluginDataDirectory.appendingPathComponent("models") else { return }
         try PluginHuggingFaceModelStore(modelsDirectory: modelsDir).deleteModelFiles(
             for: modelDef.repoId,
-            legacyDirectories: [legacyModelDirectory(for: modelDef, modelsDirectory: modelsDir)],
-            additionalCacheRoots: [historicalCacheRoot(modelsDirectory: modelsDir)]
+            legacyDirectories: [legacyModelDirectory(for: modelDef, modelsDirectory: modelsDir)]
         )
     }
 
@@ -552,62 +624,39 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
         try? await loadModel(modelDef, passively: passively, expectedGeneration: generation)
     }
 
-    private func hasDownloadedModel(_ modelDef: VoxtralModelDef) -> Bool {
+    private func hasDownloadedModel(_ modelDef: CanaryModelDef) -> Bool {
         guard let modelsDir = host?.pluginDataDirectory.appendingPathComponent("models") else { return false }
         return usableModelDirectory(for: modelDef, modelsDirectory: modelsDir) != nil
     }
 
-    private func usableModelDirectory(for modelDef: VoxtralModelDef, modelsDirectory: URL) -> URL? {
+    private func usableModelDirectory(for modelDef: CanaryModelDef, modelsDirectory: URL) -> URL? {
         if modelDef.id.hasPrefix("custom-") {
             guard let directory = customModelStore?.modelDirectory(for: modelDef.id),
                   PluginHuggingFaceModelStore(modelsDirectory: directory).isUsableModelDirectory(
                     directory, requirements: Self.modelRequirements) else { return nil }
             return directory
         }
-        let store = PluginHuggingFaceModelStore(modelsDirectory: modelsDirectory)
-        if let current = store.usableModelDirectory(
+        return PluginHuggingFaceModelStore(modelsDirectory: modelsDirectory).usableModelDirectory(
             for: modelDef.repoId,
             legacyDirectories: [legacyModelDirectory(for: modelDef, modelsDirectory: modelsDirectory)],
-            requirements: Self.modelRequirements
-        ) {
-            return current
-        }
-        return store.snapshotDirectory(
-            for: modelDef.repoId,
-            cacheRoot: historicalCacheRoot(modelsDirectory: modelsDirectory),
             requirements: Self.modelRequirements
         )
     }
 
-    private func legacyModelDirectory(for modelDef: VoxtralModelDef, modelsDirectory: URL) -> URL {
+    private func legacyModelDirectory(for modelDef: CanaryModelDef, modelsDirectory: URL) -> URL {
         modelsDirectory
             .appendingPathComponent("mlx-audio")
             .appendingPathComponent(modelDef.repoId.replacingOccurrences(of: "/", with: "_"))
     }
 
-    private func historicalCacheRoot(modelsDirectory: URL) -> URL {
-        modelsDirectory
-            .appendingPathComponent("huggingface", isDirectory: true)
-            .appendingPathComponent("hub", isDirectory: true)
-    }
-
-    private func removeIncompleteModelIfNeeded(_ modelDef: VoxtralModelDef, modelsDirectory: URL) {
+    private func removeIncompleteModelIfNeeded(_ modelDef: CanaryModelDef, modelsDirectory: URL) {
         let store = PluginHuggingFaceModelStore(modelsDirectory: modelsDirectory)
         let legacyDirectories = [legacyModelDirectory(for: modelDef, modelsDirectory: modelsDirectory)]
-        let additionalCacheRoots = [historicalCacheRoot(modelsDirectory: modelsDirectory)]
         guard usableModelDirectory(for: modelDef, modelsDirectory: modelsDirectory) == nil,
-              store.hasCachedModelFiles(
-                for: modelDef.repoId,
-                legacyDirectories: legacyDirectories,
-                additionalCacheRoots: additionalCacheRoots
-              ) else {
+              store.hasCachedModelFiles(for: modelDef.repoId, legacyDirectories: legacyDirectories) else {
             return
         }
-        try? store.deleteModelFiles(
-            for: modelDef.repoId,
-            legacyDirectories: legacyDirectories,
-            additionalCacheRoots: additionalCacheRoots
-        )
+        try? store.deleteModelFiles(for: modelDef.repoId, legacyDirectories: legacyDirectories)
     }
 
     private func cleanupRedundantModelCopies() {
@@ -636,7 +685,7 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
     }
 
     var settingsView: AnyView? {
-        AnyView(VoxtralSettingsView(plugin: self))
+        AnyView(CanarySettingsView(plugin: self))
     }
 
     func setHuggingFaceToken(_ token: String) {
@@ -657,59 +706,41 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
 
     // MARK: - Model Definitions
 
-    static let availableModels: [VoxtralModelDef] = [
-        VoxtralModelDef(
-            id: "voxtral-mini-4b-2602-4bit",
-            displayName: "Mini 4B (4-bit)",
-            repoId: "mlx-community/Voxtral-Mini-4B-Realtime-2602-4bit",
-            sizeDescription: "~2.5 GB",
-            ramRequirement: "8 GB+"
-        ),
-        VoxtralModelDef(
-            id: "voxtral-mini-4b-2602-fp16",
-            displayName: "Mini 4B (fp16)",
-            repoId: "mlx-community/Voxtral-Mini-4B-Realtime-2602-fp16",
-            sizeDescription: "~8 GB",
-            ramRequirement: "16 GB+"
+    static let availableModels: [CanaryModelDef] = [
+        CanaryModelDef(
+            id: "sophea-canary-bf16", displayName: "Sophea Canary (Greek / English)",
+            repoId: "KIEFERSA/Sophea-Canary-ASR-mlx", sizeDescription: "~1.9 GB", ramRequirement: "8 GB+",
+            supportedLanguages: ["el", "en"]
         ),
     ]
 
     // MARK: - Helpers
 
-    private static func makeParams(_ base: STTGenerateParameters, language: String) -> STTGenerateParameters {
-        STTGenerateParameters(
-            maxTokens: base.maxTokens,
-            temperature: base.temperature,
-            language: language,
-            chunkDuration: base.chunkDuration,
-            minChunkDuration: base.minChunkDuration
-        )
-    }
-
-    fileprivate static func normalizeTranscript(_ text: String) -> String {
-        text
-            .replacingOccurrences(of: "\\s+", with: " ", options: .regularExpression)
-            .trimmingCharacters(in: .whitespacesAndNewlines)
+    static func normalizeTranscript(_ text: String, language: String) -> String {
+        let text = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Canary's Greek tokenizer uses medial sigma at the end of words.
+        return language == "el" ? text.replacingOccurrences(of: "σ\\b", with: "ς", options: .regularExpression) : text
     }
 }
 
 // MARK: - Model Types
 
-struct VoxtralModelDef: Identifiable {
+struct CanaryModelDef: Identifiable {
     let id: String
     let displayName: String
     let repoId: String
     let sizeDescription: String
     let ramRequirement: String
+    var supportedLanguages: [String]? = nil
 }
 
-enum VoxtralModelState: Equatable {
+enum CanaryModelState: Equatable {
     case notLoaded
     case loading
     case ready(String)
     case error(String)
 
-    static func == (lhs: VoxtralModelState, rhs: VoxtralModelState) -> Bool {
+    static func == (lhs: CanaryModelState, rhs: CanaryModelState) -> Bool {
         switch (lhs, rhs) {
         case (.notLoaded, .notLoaded): true
         case (.loading, .loading): true
@@ -722,10 +753,10 @@ enum VoxtralModelState: Equatable {
 
 // MARK: - Settings View
 
-private struct VoxtralSettingsView: View {
-    let plugin: VoxtralPlugin
-    private let bundle = Bundle(for: VoxtralPlugin.self)
-    @State private var modelState: VoxtralModelState = .notLoaded
+private struct CanarySettingsView: View {
+    let plugin: CanaryPlugin
+    private let bundle = Bundle(for: CanaryPlugin.self)
+    @State private var modelState: CanaryModelState = .notLoaded
     @State private var selectedModelId: String = ""
     @State private var isPolling = false
     @State private var hfTokenInput = ""
@@ -749,10 +780,10 @@ private struct VoxtralSettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Voxtral (MLX)")
+            Text("Canary Speech (MLX)")
                 .font(.headline)
 
-            Text("Local speech-to-text by Mistral, powered by MLX on Apple Silicon. 15 languages, no API key required.", bundle: bundle)
+            Text("Local Canary speech recognition on Apple Silicon, including Sophea for Greek and English. Select an explicit source language in Dictation settings.", bundle: bundle)
                 .font(.callout)
                 .foregroundStyle(.secondary)
 
@@ -890,7 +921,7 @@ private struct VoxtralSettingsView: View {
     }
 
     @ViewBuilder
-    private func modelRow(_ modelDef: VoxtralModelDef) -> some View {
+    private func modelRow(_ modelDef: CanaryModelDef) -> some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text(modelDef.displayName)
