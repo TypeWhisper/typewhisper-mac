@@ -92,6 +92,35 @@ final class PluginCustomModelImportTests: XCTestCase, @unchecked Sendable {
         XCTAssertFalse(FileManager.default.fileExists(atPath: pending.path))
     }
 
+    func testImmediateRetryRecoversAbandonedPendingDuplicateButPreservesActiveLease() async throws {
+        let source = try fixture()
+        let store = store()
+        defer { try? FileManager.default.removeItem(at: source); try? FileManager.default.removeItem(at: store.directory) }
+        let candidate = try await PluginModelImportCandidate.inspect(.folder(source))
+        let (stage, lease) = try store.createStagingDirectory()
+        var leaseOpen = true
+        defer { if leaseOpen { close(lease) } }
+        let id = "custom-" + UUID().uuidString.lowercased()
+        let pending = try XCTUnwrap(store.modelDirectory(for: id))
+        try JSONSerialization.data(withJSONObject: [
+            "id": id, "displayName": "Interrupted", "modelType": "qwen3_asr",
+            "origin": source.resolvingSymlinksInPath().path, "bytes": 0,
+        ]).write(to: stage.appendingPathComponent("typewhisper-import.json"))
+        try Data().write(to: stage.appendingPathComponent(".pending-validation"))
+        try FileManager.default.moveItem(at: stage, to: pending)
+        do {
+            _ = try await store.add(candidate, supportedTypes: ["qwen3_asr"], requirements: requirements)
+            XCTFail("Accepted a duplicate while native validation is still active")
+        } catch { XCTAssertEqual(error as? PluginModelImportError, .duplicate) }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: pending.path))
+        close(lease)
+        leaseOpen = false // Simulate a crash, without activation recovery running yet.
+        let reopened = PluginCustomModelStore(directory: store.directory)
+        let imported = try await reopened.add(candidate, supportedTypes: ["qwen3_asr"], requirements: requirements)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: pending.path))
+        XCTAssertEqual(reopened.models().map(\.id), [imported.id])
+    }
+
     func testRemoteMetadataLimitRejectsOversizedContentLength() async throws {
         try await assertMetadataRejected(path: "declared")
     }

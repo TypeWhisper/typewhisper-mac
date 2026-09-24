@@ -292,14 +292,16 @@ public struct PluginCustomModelStore: Sendable {
         case .folder(let url): origin = url.resolvingSymlinksInPath().path
         case .huggingFace(let repo): origin = "https://huggingface.co/\(repo)"
         }
-        guard !storedModels(includePending: true).contains(where: { $0.origin == origin && $0.revision == candidate.revision }) else {
-            throw PluginModelImportError.duplicate
-        }
         let id = "custom-" + UUID().uuidString.lowercased()
         let (staging, lease) = try createStagingDirectory()
         defer {
             try? FileManager.default.removeItem(at: staging)
             close(lease)
+        }
+        // Stage creation recovers abandoned pending imports before duplicate
+        // detection, while active native validations retain their leases.
+        guard !storedModels(includePending: true).contains(where: { $0.origin == origin && $0.revision == candidate.revision }) else {
+            throw PluginModelImportError.duplicate
         }
 
         switch candidate.source {
