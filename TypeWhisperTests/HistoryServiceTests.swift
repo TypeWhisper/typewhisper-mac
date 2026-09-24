@@ -1,3 +1,5 @@
+import Combine
+import SwiftData
 import XCTest
 import TypeWhisperPluginSDK
 @testable import TypeWhisper
@@ -715,7 +717,7 @@ final class HistoryServiceTests: XCTestCase {
     }
 
     @MainActor
-    func testHistoryViewModelLoadsAdditionalPagesAndReleasesThemWhenInactive() throws {
+    func testHistoryViewModelLoadsAdditionalPagesAndReleasesThemWhenInactive() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory(
             prefix: "HistoryViewPagination"
         )
@@ -761,6 +763,7 @@ final class HistoryServiceTests: XCTestCase {
             language: "en",
             engineUsed: "test"
         )
+        await viewModel.waitForPendingWork()
         XCTAssertEqual(viewModel.records.count, 125)
         XCTAssertEqual(viewModel.totalMatchingRecordCount, 126)
         XCTAssertTrue(viewModel.hasMoreRecords)
@@ -768,5 +771,400 @@ final class HistoryServiceTests: XCTestCase {
 
         viewModel.deactivate()
         XCTAssertEqual(viewModel.records.count, HistoryService.recentRecordsLimit)
+    }
+
+    @MainActor
+    func testBatchInboxUpdatesSaveAndPublishOnce() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "HistoryBatchInbox")
+        defer { TestSupport.remove(appSupportDirectory) }
+        let historyService = HistoryService(appSupportDirectory: appSupportDirectory)
+        let ids = [UUID(), UUID(), UUID()]
+        for (index, id) in ids.enumerated() {
+            historyService.addRecord(
+                id: id,
+                rawText: "Inbox \(index)",
+                finalText: "Inbox \(index)",
+                appName: nil,
+                appBundleIdentifier: nil,
+                durationSeconds: 1,
+                language: "en",
+                engineUsed: "test"
+            )
+        }
+        let records = try ids.map { try XCTUnwrap(historyService.record(withID: $0)) }
+        records[0].inboxState = .open
+        records[1].inboxState = .open
+        // Persist the inbox fixture before counting saves.
+        historyService.updateRecord(records[2], finalText: records[2].finalText)
+
+        let viewModel = HistoryViewModel(
+            historyService: historyService,
+            textDiffService: TextDiffService(),
+            dictionaryService: DictionaryService(appSupportDirectory: appSupportDirectory)
+        )
+        let syncStore = TypeWhisperUserDataSyncStore(
+            dictionaryService: DictionaryService(appSupportDirectory: appSupportDirectory),
+            snippetService: SnippetService(appSupportDirectory: appSupportDirectory),
+            historyService: historyService
+        )
+        var syncNotifications = 0
+        syncStore.observeLocalChanges { syncNotifications += 1 }
+        var publishes = 0
+        var saves = 0
+        let historyStorePath = appSupportDirectory.standardizedFileURL.path
+        var cancellables = Set<AnyCancellable>()
+        historyService.$recentRecords
+            .dropFirst()
+            .sink { _ in publishes += 1 }
+            .store(in: &cancellables)
+        NotificationCenter.default.publisher(for: ModelContext.didSave)
+            .sink { notification in
+                guard let context = notification.object as? ModelContext,
+                      context.container.configurations.contains(where: {
+                          $0.url.standardizedFileURL.path.hasPrefix(historyStorePath)
+                      }) else { return }
+                saves += 1
+            }
+            .store(in: &cancellables)
+
+        viewModel.markComplete(records)
+
+        XCTAssertEqual(records.map(\.inboxState), [.completed, .completed, CaptureInboxState.none])
+        XCTAssertNotNil(records[0].inboxCompletedAt)
+        XCTAssertEqual(records[0].inboxUpdatedAt, records[1].inboxUpdatedAt)
+        XCTAssertEqual(saves, 1)
+        XCTAssertEqual(publishes, 1)
+        XCTAssertEqual(syncNotifications, 1)
+
+        viewModel.reopen(records)
+
+        XCTAssertEqual(records.map(\.inboxState), [.open, .open, CaptureInboxState.none])
+        XCTAssertNil(records[0].inboxCompletedAt)
+        XCTAssertNil(records[1].inboxCompletedAt)
+        XCTAssertEqual(saves, 2)
+        XCTAssertEqual(publishes, 2)
+        XCTAssertEqual(syncNotifications, 2)
+
+        historyService.reopenInbox(records)
+
+        XCTAssertEqual(saves, 2)
+        XCTAssertEqual(publishes, 2)
+        XCTAssertEqual(syncNotifications, 2)
+    }
+
+    @MainActor
+    func testSearchStaysCaseInsensitiveAndDiacriticSensitiveInForegroundAndBackground() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "HistorySearchSemantics")
+        defer { TestSupport.remove(appSupportDirectory) }
+        let service = HistoryService(appSupportDirectory: appSupportDirectory)
+        let baseDate = Date(timeIntervalSince1970: 1_800_000_000)
+
+        func addRecord(
+            _ rawText: String,
+            finalText: String? = nil,
+            appName: String? = nil,
+            appURL: String? = nil,
+            offset: TimeInterval
+        ) -> UUID {
+            let id = UUID()
+            service.addRecord(
+                id: id,
+                timestamp: baseDate.addingTimeInterval(offset),
+                rawText: rawText,
+                finalText: finalText ?? rawText,
+                appName: appName,
+                appBundleIdentifier: nil,
+                appURL: appURL,
+                durationSeconds: 1,
+                language: "de",
+                engineUsed: "test"
+            )
+            return id
+        }
+
+        let meeting = addRecord("Treffen mit Herrn Müller", appName: "Mail", offset: 4)
+        let cafe = addRecord("Kaffee bestellen", finalText: "Café bestellen", offset: 3)
+        let website = addRecord("Draft", appName: "Safari", appURL: "https://Docs.Example.com/page", offset: 2)
+        let watch = addRecord("Erinnerung", offset: 1)
+        let watchRecord = try XCTUnwrap(service.record(withID: watch))
+        watchRecord.source = .appleWatch
+        service.updateRecord(watchRecord, finalText: watchRecord.finalText)
+
+        let expectations: [(searchText: String, ids: [UUID])] = [
+            ("MÜLLER", [meeting]),
+            ("müller", [meeting]),
+            ("Muller", []),
+            ("CAFÉ", [cafe]),
+            ("cafe", []),
+            ("  herrn  ", [meeting]),
+            ("MAIL", [meeting]),
+            ("docs.example", [website]),
+            (RecordingSource.appleWatch.displayName.uppercased(), [watch]),
+            ("e", [meeting, cafe, website, watch]),
+        ]
+
+        for expectation in expectations {
+            let query = HistoryQuery(searchText: expectation.searchText)
+            let foreground = service.fetchPage(query: query, offset: 0, limit: 100)
+            let background = await service.fetchPageInBackground(query: query, offset: 0, limit: 100)
+
+            XCTAssertEqual(foreground.records.map(\.id), expectation.ids, expectation.searchText)
+            XCTAssertEqual(background?.records.map(\.id), expectation.ids, expectation.searchText)
+            XCTAssertEqual(background?.totalCount, foreground.totalCount, expectation.searchText)
+        }
+
+        let pagedQuery = HistoryQuery(searchText: "e", sortOrder: .oldest)
+        let foregroundPage = service.fetchPage(query: pagedQuery, offset: 1, limit: 2)
+        let backgroundPage = await service.fetchPageInBackground(query: pagedQuery, offset: 1, limit: 2)
+        XCTAssertEqual(foregroundPage.records.map(\.id), [website, cafe])
+        XCTAssertEqual(backgroundPage?.records.map(\.id), [website, cafe])
+        XCTAssertEqual(backgroundPage?.totalCount, 4)
+        XCTAssertEqual(backgroundPage?.hasMore, true)
+    }
+
+    @MainActor
+    func testHistoryViewModelDropsStaleBackgroundSearchResults() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "HistoryStaleSearch")
+        defer { TestSupport.remove(appSupportDirectory) }
+        let historyService = HistoryService(appSupportDirectory: appSupportDirectory)
+        for text in ["Alpha note", "Beta note"] {
+            historyService.addRecord(
+                rawText: text,
+                finalText: text,
+                appName: nil,
+                appBundleIdentifier: nil,
+                durationSeconds: 1,
+                language: "en",
+                engineUsed: "test"
+            )
+        }
+        let loader = ControlledHistoryPageLoader(historyService: historyService)
+        loader.holdsRequests = true
+        let viewModel = HistoryViewModel(
+            historyService: historyService,
+            textDiffService: TextDiffService(),
+            dictionaryService: DictionaryService(appSupportDirectory: appSupportDirectory),
+            backgroundPageLoader: { await loader.load($0, offset: $1, limit: $2) }
+        )
+        viewModel.activate()
+        XCTAssertEqual(viewModel.records.count, 2)
+        XCTAssertTrue(loader.requests.isEmpty)
+
+        let alphaRequested = loader.expectation(forRequestCount: 1, in: self)
+        viewModel.searchQuery = "alpha"
+        await fulfillment(of: [alphaRequested], timeout: 5)
+        let betaRequested = loader.expectation(forRequestCount: 2, in: self)
+        viewModel.searchQuery = "beta"
+        await fulfillment(of: [betaRequested], timeout: 5)
+
+        let betaShown = expectation(description: "newer search result shown")
+        var cancellables = Set<AnyCancellable>()
+        viewModel.$records
+            .sink { records in
+                if records.map(\.finalText) == ["Beta note"] { betaShown.fulfill() }
+            }
+            .store(in: &cancellables)
+        loader.releaseRequest(searchText: "beta")
+        await fulfillment(of: [betaShown], timeout: 5)
+
+        loader.releaseRequest(searchText: "alpha")
+        await viewModel.waitForPendingWork()
+
+        XCTAssertEqual(viewModel.records.map(\.finalText), ["Beta note"])
+        XCTAssertEqual(viewModel.totalMatchingRecordCount, 1)
+    }
+
+    @MainActor
+    func testHistoryViewModelCoalescesHistoryPublishesIntoOneReload() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "HistoryCoalescedReload")
+        defer { TestSupport.remove(appSupportDirectory) }
+        let historyService = HistoryService(appSupportDirectory: appSupportDirectory)
+        func addNote(_ text: String) {
+            historyService.addRecord(
+                rawText: text,
+                finalText: text,
+                appName: nil,
+                appBundleIdentifier: nil,
+                durationSeconds: 1,
+                language: "en",
+                engineUsed: "test"
+            )
+        }
+        addNote("First note")
+        addNote("Second note")
+        let loader = ControlledHistoryPageLoader(historyService: historyService)
+        let viewModel = HistoryViewModel(
+            historyService: historyService,
+            textDiffService: TextDiffService(),
+            dictionaryService: DictionaryService(appSupportDirectory: appSupportDirectory),
+            historyRefreshDelay: .milliseconds(10),
+            backgroundPageLoader: { await loader.load($0, offset: $1, limit: $2) }
+        )
+        viewModel.activate()
+        let searched = loader.expectation(forRequestCount: 1, in: self)
+        viewModel.searchQuery = "note"
+        await fulfillment(of: [searched], timeout: 5)
+        await viewModel.waitForPendingWork()
+        XCTAssertEqual(viewModel.records.count, 2)
+
+        addNote("Third note")
+        addNote("Fourth note")
+        addNote("Fifth note")
+        XCTAssertEqual(viewModel.records.count, 2)
+
+        await viewModel.waitForPendingWork()
+
+        XCTAssertEqual(loader.requests.count, 2)
+        XCTAssertEqual(viewModel.records.count, 5)
+        XCTAssertEqual(viewModel.totalMatchingRecordCount, 5)
+    }
+
+    @MainActor
+    func testHistoryViewModelRemovesDeletedRecordsBeforeCoalescedReload() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "HistoryDeletedBeforeReload")
+        defer { TestSupport.remove(appSupportDirectory) }
+        let historyService = HistoryService(appSupportDirectory: appSupportDirectory)
+        let keptID = UUID()
+        let deletedID = UUID()
+        for (id, text) in [(keptID, "Kept"), (deletedID, "Deleted elsewhere")] {
+            historyService.addRecord(
+                id: id,
+                rawText: text,
+                finalText: text,
+                appName: nil,
+                appBundleIdentifier: nil,
+                durationSeconds: 1,
+                language: "en",
+                engineUsed: "test"
+            )
+        }
+        let viewModel = HistoryViewModel(
+            historyService: historyService,
+            textDiffService: TextDiffService(),
+            dictionaryService: DictionaryService(appSupportDirectory: appSupportDirectory),
+            historyRefreshDelay: .seconds(60)
+        )
+        viewModel.activate()
+        XCTAssertEqual(viewModel.records.count, 2)
+
+        XCTAssertTrue(historyService.deleteRecord(withID: deletedID))
+
+        XCTAssertEqual(viewModel.records.map(\.id), [keptID])
+        XCTAssertEqual(viewModel.totalMatchingRecordCount, 1)
+        viewModel.deactivate()
+        await viewModel.waitForPendingWork()
+    }
+
+    @MainActor
+    func testHistoryDiffCacheInvalidatesWhenRecordContentChanges() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "HistoryDiffCache")
+        defer { TestSupport.remove(appSupportDirectory) }
+        let historyService = HistoryService(appSupportDirectory: appSupportDirectory)
+        func addRecord(raw: String, final: String) throws -> TranscriptionRecord {
+            let id = UUID()
+            historyService.addRecord(
+                id: id,
+                rawText: raw,
+                finalText: final,
+                appName: nil,
+                appBundleIdentifier: nil,
+                durationSeconds: 1,
+                language: "en",
+                engineUsed: "test"
+            )
+            return try XCTUnwrap(historyService.record(withID: id))
+        }
+        let viewModel = HistoryViewModel(
+            historyService: historyService,
+            textDiffService: TextDiffService(),
+            dictionaryService: DictionaryService(appSupportDirectory: appSupportDirectory)
+        )
+
+        let short = try addRecord(raw: "hello world", final: "hello brave world")
+        XCTAssertEqual(
+            viewModel.diffPresentation(for: short),
+            .segments([.unchanged("hello"), .added("brave"), .unchanged("world")])
+        )
+        historyService.updateRecord(short, finalText: "hello world again")
+        XCTAssertEqual(
+            viewModel.diffPresentation(for: short),
+            .segments([.unchanged("hello"), .unchanged("world"), .added("again")])
+        )
+
+        let longText = (0..<600).map { "word\($0)" }.joined(separator: " ")
+        XCTAssertGreaterThan(longText.utf8.count * 2, HistoryViewModel.inlineDiffInputLimit)
+        let long = try addRecord(raw: longText, final: longText + " tail")
+        XCTAssertNil(viewModel.diffPresentation(for: long))
+        await viewModel.loadDiffPresentation(for: long)
+        guard case .segments(let segments) = viewModel.diffPresentation(for: long) else {
+            return XCTFail("Expected a cached background diff")
+        }
+        XCTAssertEqual(segments.last, .added("tail"))
+
+        historyService.updateRecord(long, finalText: longText + " changed")
+        XCTAssertNil(viewModel.diffPresentation(for: long))
+        await viewModel.loadDiffPresentation(for: long)
+        guard case .segments(let updatedSegments) = viewModel.diffPresentation(for: long) else {
+            return XCTFail("Expected a recomputed background diff")
+        }
+        XCTAssertEqual(updatedSegments.last, .added("changed"))
+
+        let wordCount = Int(Double(HistoryViewModel.maxDiffComparisonCells).squareRoot()) + 1
+        let oversized = try addRecord(
+            raw: (0..<wordCount).map { "a\($0)" }.joined(separator: " "),
+            final: (0..<wordCount).map { "b\($0)" }.joined(separator: " ")
+        )
+        await viewModel.loadDiffPresentation(for: oversized)
+        XCTAssertEqual(viewModel.diffPresentation(for: oversized), .tooLarge)
+    }
+}
+
+/// Stands in for the background search so tests control when each result arrives.
+@MainActor
+private final class ControlledHistoryPageLoader {
+    private struct HeldRequest {
+        let searchText: String
+        let continuation: CheckedContinuation<Void, Never>
+    }
+
+    var holdsRequests = false
+    private(set) var requests: [HistoryQuery] = []
+    private let historyService: HistoryService
+    private var heldRequests: [HeldRequest] = []
+    private var requestExpectation: (count: Int, expectation: XCTestExpectation)?
+
+    init(historyService: HistoryService) {
+        self.historyService = historyService
+    }
+
+    func load(_ query: HistoryQuery, offset: Int, limit: Int) async -> HistoryPage? {
+        requests.append(query)
+        if let pending = requestExpectation, requests.count >= pending.count {
+            requestExpectation = nil
+            pending.expectation.fulfill()
+        }
+        if holdsRequests {
+            await withCheckedContinuation { continuation in
+                heldRequests.append(HeldRequest(searchText: query.searchText, continuation: continuation))
+            }
+        }
+        return historyService.fetchPage(query: query, offset: offset, limit: limit)
+    }
+
+    func expectation(forRequestCount count: Int, in testCase: XCTestCase) -> XCTestExpectation {
+        let expectation = testCase.expectation(description: "History page request \(count)")
+        if requests.count >= count {
+            expectation.fulfill()
+        } else {
+            requestExpectation = (count, expectation)
+        }
+        return expectation
+    }
+
+    func releaseRequest(searchText: String) {
+        guard let index = heldRequests.firstIndex(where: { $0.searchText == searchText }) else {
+            return XCTFail("No held history request for \(searchText)")
+        }
+        heldRequests.remove(at: index).continuation.resume()
     }
 }

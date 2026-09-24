@@ -27,6 +27,26 @@ final class TextDiffServiceTests: XCTestCase {
         XCTAssertEqual(service.computeWordDiff(original: text, processed: text), Array(repeating: .unchanged("word"), count: 10_000))
     }
 
+    func testBoundedWordDiffMatchesUnboundedDiffAndRejectsOversizedTables() {
+        let service = TextDiffService()
+        XCTAssertEqual(
+            TextDiffService.wordDiff(
+                original: "the quick brown fox",
+                processed: "the slow brown fox jumps",
+                maxComparisonCells: 20
+            ),
+            service.computeWordDiff(original: "the quick brown fox", processed: "the slow brown fox jumps")
+        )
+        // The shared suffix is excluded before the bound is checked.
+        XCTAssertEqual(
+            TextDiffService.wordDiff(original: "a b c", processed: "x b c", maxComparisonCells: 1),
+            [.removed("a"), .added("x"), .unchanged("b"), .unchanged("c")]
+        )
+        XCTAssertNil(TextDiffService.wordDiff(original: "a b c", processed: "x y z", maxComparisonCells: 8))
+        XCTAssertNotNil(TextDiffService.wordDiff(original: "a b c", processed: "x y z", maxComparisonCells: 9))
+        XCTAssertEqual(TextDiffService.wordDiff(original: "", processed: "new", maxComparisonCells: 0), [.added("new")])
+    }
+
     func testExtractCorrectionsFindsLocalizedWordReplacement() {
         let service = TextDiffService()
 

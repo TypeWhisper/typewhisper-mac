@@ -6,7 +6,7 @@ struct CorrectionSuggestion: Identifiable {
     let replacement: String
 }
 
-enum DiffSegment: Equatable {
+enum DiffSegment: Equatable, Sendable {
     case unchanged(String)
     case removed(String)
     case added(String)
@@ -15,6 +15,13 @@ enum DiffSegment: Equatable {
 final class TextDiffService {
 
     func computeWordDiff(original: String, processed: String) -> [DiffSegment] {
+        Self.wordDiff(original: original, processed: processed, maxComparisonCells: .max) ?? []
+    }
+
+    /// Computes the same word diff as `computeWordDiff`, but returns `nil` instead of
+    /// building an LCS table with more than `maxComparisonCells` cells. The table costs
+    /// O(m·n) time and one byte per cell, so callers can present a fallback for very long texts.
+    static func wordDiff(original: String, processed: String, maxComparisonCells: Int) -> [DiffSegment]? {
         let origWords = original.split(omittingEmptySubsequences: true, whereSeparator: \.isWhitespace).map(String.init)
         let procWords = processed.split(omittingEmptySubsequences: true, whereSeparator: \.isWhitespace).map(String.init)
 
@@ -30,6 +37,9 @@ final class TextDiffService {
             m -= 1
             n -= 1
         }
+
+        let (cellCount, overflow) = m.multipliedReportingOverflow(by: n)
+        guard !overflow, cellCount <= maxComparisonCells else { return nil }
 
         // Keep only the current LCS row and one byte per backtracking direction,
         // rather than an Int for every cell in a nested copy-on-write array.
