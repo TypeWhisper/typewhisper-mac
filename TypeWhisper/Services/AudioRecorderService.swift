@@ -1199,7 +1199,8 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         let session = try micInputCaptureFactory.startInputOnlyCapture(
             deviceID: deviceID,
             label: "recorder-mic",
-            bufferSize: 4096
+            bufferSize: 4096,
+            deliveryQueue: nil
         ) { [weak self] buffer in
             guard let self,
                   let writeBuffer = AudioInputBufferNormalizer.monoFloatBuffer(from: buffer) else { return }

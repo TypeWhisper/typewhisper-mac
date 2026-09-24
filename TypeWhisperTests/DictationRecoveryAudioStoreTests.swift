@@ -459,6 +459,62 @@ final class DictationRecoveryAudioStoreTests: XCTestCase {
         XCTAssertFalse(fileTranscriptionViewModel.showFilePickerFromMenu)
     }
 
+    func testBatchedAppendsPreserveByteIdenticalWav() throws {
+        let directory = makeTemporaryDirectory()
+        let store = DictationRecoveryAudioStore(directory: directory)
+        let chunks = makeRecoveryTestChunks(
+            totalSampleCount: DictationRecoveryAudioStore.writeBatchSampleCount * 3 + 1_234
+        )
+
+        store.startNewRecording()
+        for chunk in chunks {
+            store.append(chunk)
+        }
+        let url = try XCTUnwrap(store.preserveActiveRecording())
+
+        let samples = chunks.flatMap { $0 }
+        XCTAssertEqual(try Data(contentsOf: url), legacyRecoveryWavData(for: samples))
+    }
+
+    func testAppendsAreBatchedAndRemainderIsFlushedOnPreserve() throws {
+        let directory = makeTemporaryDirectory()
+        let store = DictationRecoveryAudioStore(directory: directory)
+        let activeURL = directory.appendingPathComponent("active-dictation-recovery.wav")
+        let batch = DictationRecoveryAudioStore.writeBatchSampleCount
+        let chunks = makeRecoveryTestChunks(totalSampleCount: batch + 3_000, chunkSize: 1_000)
+
+        store.startNewRecording()
+        for chunk in chunks {
+            store.append(chunk)
+        }
+        // `recoveryURLs` runs on the store queue, so every queued append has finished.
+        _ = store.recoveryURLs
+
+        // One write for the first full batch; the rest is still pending in memory.
+        let flushedSampleCount = ((batch + 999) / 1_000) * 1_000
+        let activeSize = try XCTUnwrap(
+            try FileManager.default.attributesOfItem(atPath: activeURL.path)[.size] as? NSNumber
+        ).intValue
+        XCTAssertEqual(activeSize, 44 + flushedSampleCount * 2)
+
+        let url = try XCTUnwrap(store.preserveActiveRecording())
+        XCTAssertEqual(try Data(contentsOf: url), legacyRecoveryWavData(for: chunks.flatMap { $0 }))
+    }
+
+    func testDiscardDropsPendingBatchBeforeNextRecording() throws {
+        let directory = makeTemporaryDirectory()
+        let store = DictationRecoveryAudioStore(directory: directory)
+
+        store.startNewRecording()
+        store.append([0.9, -0.9, 0.3])
+        store.discardActiveRecording()
+        store.startNewRecording()
+        store.append([0.25])
+        let url = try XCTUnwrap(store.preserveActiveRecording())
+
+        XCTAssertEqual(try Data(contentsOf: url), legacyRecoveryWavData(for: [0.25]))
+    }
+
     private func makeTemporaryDirectory() -> URL {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("DictationRecoveryAudioStoreTests-\(UUID().uuidString)", isDirectory: true)
@@ -479,6 +535,59 @@ final class DictationRecoveryAudioStoreTests: XCTestCase {
         try Data([1, 2, 3]).write(to: url)
         try FileManager.default.setAttributes([.modificationDate: date], ofItemAtPath: url.path)
         return url
+    }
+
+    /// Deterministic samples covering clipping, both signs, zero, and tiny values.
+    private func makeRecoveryTestChunks(totalSampleCount: Int, chunkSize: Int? = nil) -> [[Float]] {
+        let samples = (0..<totalSampleCount).map { index -> Float in
+            switch index % 7 {
+            case 0: return 0
+            case 1: return 1.5
+            case 2: return -1.5
+            case 3: return 1e-6
+            default: return sin(Float(index) * 0.013) * 0.97
+            }
+        }
+        var chunks: [[Float]] = []
+        var start = 0
+        var chunkIndex = 0
+        while start < samples.count {
+            let size = chunkSize ?? [171, 512, 1, 3_333, 160][chunkIndex % 5]
+            let end = min(start + size, samples.count)
+            chunks.append(Array(samples[start..<end]))
+            start = end
+            chunkIndex += 1
+        }
+        return chunks
+    }
+
+    /// The WAV bytes the store produced before writes were batched.
+    private func legacyRecoveryWavData(for samples: [Float]) -> Data {
+        func appendLittleEndian<T: FixedWidthInteger>(_ value: T, to data: inout Data) {
+            var littleEndian = value.littleEndian
+            withUnsafeBytes(of: &littleEndian) { data.append(contentsOf: $0) }
+        }
+
+        let dataByteCount = UInt32(samples.count * 2)
+        var data = Data()
+        data.append(contentsOf: "RIFF".utf8)
+        appendLittleEndian(UInt32(36) + dataByteCount, to: &data)
+        data.append(contentsOf: "WAVE".utf8)
+        data.append(contentsOf: "fmt ".utf8)
+        appendLittleEndian(UInt32(16), to: &data)
+        appendLittleEndian(UInt16(1), to: &data)
+        appendLittleEndian(UInt16(1), to: &data)
+        appendLittleEndian(UInt32(16_000), to: &data)
+        appendLittleEndian(UInt32(32_000), to: &data)
+        appendLittleEndian(UInt16(2), to: &data)
+        appendLittleEndian(UInt16(16), to: &data)
+        data.append(contentsOf: "data".utf8)
+        appendLittleEndian(dataByteCount, to: &data)
+        for sample in samples {
+            let clamped = max(-1, min(1, sample))
+            appendLittleEndian(Int16(clamped * Float(Int16.max)), to: &data)
+        }
+        return data
     }
 
     private func readUInt32(_ data: Data, at offset: Int) -> UInt32 {
