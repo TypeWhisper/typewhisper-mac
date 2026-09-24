@@ -266,8 +266,13 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
     var selectedModelId: String? { _selectedModelId }
 
     func selectModel(_ modelId: String) {
-        _selectedModelId = modelId
-        host?.setUserDefault(modelId, forKey: "selectedModel")
+        activationLock.withLock {
+            if _selectedModelId != modelId || (loadedModelId != nil && loadedModelId != modelId) {
+                unloadModel(clearPersistence: true)
+            }
+            _selectedModelId = modelId
+            host?.setUserDefault(modelId, forKey: "selectedModel")
+        }
     }
 
     var supportsTranslation: Bool { false }
@@ -280,17 +285,19 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
         translate: Bool,
         prompt: String?
     ) async throws -> PluginTranscriptionResult {
-        guard let model else {
-            throw PluginTranscriptionError.notConfigured
+        try await PluginLocalInferenceGate.shared.withLock { [self] in
+            guard let model else {
+                throw PluginTranscriptionError.notConfigured
+            }
+
+            let audioArray = MLXArray(audio.samples)
+            let params = Self.makeParams(Self.defaultParams, language: language ?? "en")
+
+            let output = model.generate(audio: audioArray, generationParameters: params)
+            let text = Self.normalizeTranscript(output.text)
+
+            return PluginTranscriptionResult(text: text, detectedLanguage: language)
         }
-
-        let audioArray = MLXArray(audio.samples)
-        let params = Self.makeParams(Self.defaultParams, language: language ?? "en")
-
-        let output = model.generate(audio: audioArray, generationParameters: params)
-        let text = Self.normalizeTranscript(output.text)
-
-        return PluginTranscriptionResult(text: text, detectedLanguage: language)
     }
 
     func transcribe(
@@ -300,31 +307,33 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
         prompt: String?,
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> PluginTranscriptionResult {
-        guard let model else {
-            throw PluginTranscriptionError.notConfigured
-        }
-
-        let audioArray = MLXArray(audio.samples)
-        let params = Self.makeParams(Self.defaultParams, language: language ?? "en")
-
-        var accumulated = ""
-        let stream = model.generateStream(audio: audioArray, generationParameters: params)
-
-        for try await generation in stream {
-            switch generation {
-            case .token(let token):
-                accumulated += token
-                let shouldContinue = onProgress(Self.normalizeTranscript(accumulated))
-                if !shouldContinue { break }
-            case .info:
-                break
-            case .result(let output):
-                accumulated = output.text
+        try await PluginLocalInferenceGate.shared.withLock { [self] in
+            guard let model else {
+                throw PluginTranscriptionError.notConfigured
             }
-        }
 
-        let text = Self.normalizeTranscript(accumulated)
-        return PluginTranscriptionResult(text: text, detectedLanguage: language)
+            let audioArray = MLXArray(audio.samples)
+            let params = Self.makeParams(Self.defaultParams, language: language ?? "en")
+
+            var accumulated = ""
+            let stream = model.generateStream(audio: audioArray, generationParameters: params)
+
+            for try await generation in stream {
+                switch generation {
+                case .token(let token):
+                    accumulated += token
+                    let shouldContinue = onProgress(Self.normalizeTranscript(accumulated))
+                    if !shouldContinue { break }
+                case .info:
+                    break
+                case .result(let output):
+                    accumulated = output.text
+                }
+            }
+
+            let text = Self.normalizeTranscript(accumulated)
+            return PluginTranscriptionResult(text: text, detectedLanguage: language)
+        }
     }
 
     // MARK: - Model Management

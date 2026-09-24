@@ -249,8 +249,13 @@ final class CanaryPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
     var selectedModelId: String? { _selectedModelId }
 
     func selectModel(_ modelId: String) {
-        _selectedModelId = modelId
-        host?.setUserDefault(modelId, forKey: "selectedModel")
+        activationLock.withLock {
+            if _selectedModelId != modelId || (loadedModelId != nil && loadedModelId != modelId) {
+                unloadModel(clearPersistence: true)
+            }
+            _selectedModelId = modelId
+            host?.setUserDefault(modelId, forKey: "selectedModel")
+        }
     }
 
     var supportsTranslation: Bool { false }

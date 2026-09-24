@@ -264,26 +264,21 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
     var selectedModelId: String? { _selectedModelId }
 
     func selectModel(_ modelId: String) {
-        let previousLoadedModelId = loadedModelId
-        let shouldClearLoadedModel = previousLoadedModelId != nil && previousLoadedModelId != modelId
-        _selectedModelId = modelId
-        host?.setUserDefault(modelId, forKey: "selectedModel")
+        activationLock.withLock {
+            let previousLoadedModelId = loadedModelId
+            if _selectedModelId != modelId || (previousLoadedModelId != nil && previousLoadedModelId != modelId) {
+                unloadModel(clearPersistence: true)
+            }
+            _selectedModelId = modelId
+            host?.setUserDefault(modelId, forKey: "selectedModel")
 
-        if shouldClearLoadedModel {
-            model = nil
-            loadedModelId = nil
-            modelState = .notLoaded
-            host?.setUserDefault(nil, forKey: "loadedModel")
-            Self.scheduleRuntimeCacheClearWhenInferenceIsIdle()
-            host?.notifyCapabilitiesChanged()
+            guard shouldRestoreDownloadedSelection(modelId, previousLoadedModelId: previousLoadedModelId) else {
+                return
+            }
+
+            let generation = activationID
+            Task { await restoreLoadedModel(allowDownloads: false, preferredModelId: modelId, expectedGeneration: generation) }
         }
-
-        guard shouldRestoreDownloadedSelection(modelId, previousLoadedModelId: previousLoadedModelId) else {
-            return
-        }
-
-        let generation = activationID
-        Task { await restoreLoadedModel(allowDownloads: false, preferredModelId: modelId, expectedGeneration: generation) }
     }
 
     var supportsTranslation: Bool { false }

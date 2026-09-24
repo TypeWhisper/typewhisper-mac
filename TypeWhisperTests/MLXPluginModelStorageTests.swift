@@ -30,24 +30,57 @@ final class MLXPluginModelStorageTests: XCTestCase {
     }
 
     @MainActor
-    private func assertSupersededExplicitRequests(allowFirstTaskToStart: Bool) async throws {
+    func testSelectingAnotherModelInvalidatesPendingExplicitLoad() async throws {
+        try await assertSupersededExplicitRequests(allowFirstTaskToStart: true, selectionOnly: true)
+    }
+
+    func testGraniteAndVoxtralTranscriptionWaitsForSharedInferenceGate() async throws {
+        let engines: [any TranscriptionEnginePlugin] = [GranitePlugin(), VoxtralPlugin()]
+        for engine in engines {
+            for streaming in [false, true] {
+                try await PluginLocalInferenceGate.shared.withLock {
+                    let transcription = Task {
+                        let audio = AudioData(samples: [], wavData: Data(), duration: 0)
+                        if streaming {
+                            return try await engine.transcribe(audio: audio, language: "en", translate: false,
+                                prompt: nil, onProgress: { _ in true })
+                        }
+                        return try await engine.transcribe(audio: audio, language: "en", translate: false, prompt: nil)
+                    }
+                    for _ in 0..<10 { await Task.yield() }
+                    transcription.cancel()
+                    do {
+                        _ = try await transcription.value
+                        XCTFail("Transcription must wait for the held inference gate")
+                    } catch is CancellationError {
+                        // The gate must reject cancellation before accessing the native runtime.
+                    } catch {
+                        XCTFail("Native runtime was accessed before acquiring the gate: \(error)")
+                    }
+                }
+            }
+        }
+    }
+
+    @MainActor
+    private func assertSupersededExplicitRequests(allowFirstTaskToStart: Bool, selectionOnly: Bool = false) async throws {
         let qwen = Qwen3Plugin()
         let granite = GranitePlugin()
         let voxtral = VoxtralPlugin()
         let canary = CanaryPlugin()
         try await assertSupersededRequests(qwen, gate: qwen.modelLoadGate,
-            allowFirstTaskToStart: allowFirstTaskToStart, currentTask: { qwen.explicitModelLoadTask })
+            allowFirstTaskToStart: allowFirstTaskToStart, selectionOnly: selectionOnly, currentTask: { qwen.explicitModelLoadTask })
         try await assertSupersededRequests(granite, gate: granite.modelLoadGate,
-            allowFirstTaskToStart: allowFirstTaskToStart, currentTask: { granite.explicitModelLoadTask })
+            allowFirstTaskToStart: allowFirstTaskToStart, selectionOnly: selectionOnly, currentTask: { granite.explicitModelLoadTask })
         try await assertSupersededRequests(voxtral, gate: voxtral.modelLoadGate,
-            allowFirstTaskToStart: allowFirstTaskToStart, currentTask: { voxtral.explicitModelLoadTask })
+            allowFirstTaskToStart: allowFirstTaskToStart, selectionOnly: selectionOnly, currentTask: { voxtral.explicitModelLoadTask })
         try await assertSupersededRequests(canary, gate: canary.modelLoadGate,
-            allowFirstTaskToStart: allowFirstTaskToStart, currentTask: { canary.explicitModelLoadTask })
+            allowFirstTaskToStart: allowFirstTaskToStart, selectionOnly: selectionOnly, currentTask: { canary.explicitModelLoadTask })
     }
 
     @MainActor
     private func assertSupersededRequests<P: NSObject & TranscriptionEnginePlugin>(
-        _ plugin: P, gate: PluginLocalInferenceGate, allowFirstTaskToStart: Bool,
+        _ plugin: P, gate: PluginLocalInferenceGate, allowFirstTaskToStart: Bool, selectionOnly: Bool,
         currentTask: @escaping @MainActor @Sendable () -> Task<Void, Never>?
     ) async throws {
         let fixture = try Fixture()
@@ -81,6 +114,12 @@ final class MLXPluginModelStorageTests: XCTestCase {
                     }
                 }
                 latest = await MainActor.run {
+                    if selectionOnly {
+                        let pending = currentTask()
+                        plugin.selectModel(ids[1])
+                        XCTAssertTrue(pending?.isCancelled == true)
+                        return currentTask()
+                    }
                     _ = plugin.perform(NSSelectorFromString("triggerRestoreModelForModel:"), with: ids[1] as NSString)
                     return currentTask()
                 }
@@ -101,7 +140,8 @@ final class MLXPluginModelStorageTests: XCTestCase {
                 XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, ids[1])
                 XCTAssertNil(host.userDefault(forKey: "loadedModel"))
                 plugin.deactivate()
-                XCTAssertTrue(latest?.isCancelled == true)
+                if selectionOnly { XCTAssertNil(latest) }
+                else { XCTAssertTrue(latest?.isCancelled == true) }
             }
             await latest?.value
         }

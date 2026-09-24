@@ -247,8 +247,13 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
     var selectedModelId: String? { _selectedModelId }
 
     func selectModel(_ modelId: String) {
-        _selectedModelId = modelId
-        host?.setUserDefault(modelId, forKey: "selectedModel")
+        activationLock.withLock {
+            if _selectedModelId != modelId || (loadedModelId != nil && loadedModelId != modelId) {
+                unloadModel(clearPersistence: true)
+            }
+            _selectedModelId = modelId
+            host?.setUserDefault(modelId, forKey: "selectedModel")
+        }
     }
 
     var supportsTranslation: Bool { true }
@@ -262,22 +267,24 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
         translate: Bool,
         prompt: String?
     ) async throws -> PluginTranscriptionResult {
-        guard let model else {
-            throw PluginTranscriptionError.notConfigured
+        try await PluginLocalInferenceGate.shared.withLock { [self] in
+            guard let model else {
+                throw PluginTranscriptionError.notConfigured
+            }
+
+            let audioArray = MLXArray(audio.samples)
+            let resolvedPrompt = Self.resolvePrompt(translate: translate, language: language, prompt: prompt)
+            let output = model.generate(
+                audio: audioArray,
+                maxTokens: 4096,
+                temperature: 0.0,
+                prompt: resolvedPrompt,
+                language: translate ? (language ?? "en") : nil
+            )
+            let text = Self.normalizeTranscript(output.text)
+
+            return PluginTranscriptionResult(text: text, detectedLanguage: language)
         }
-
-        let audioArray = MLXArray(audio.samples)
-        let resolvedPrompt = Self.resolvePrompt(translate: translate, language: language, prompt: prompt)
-        let output = model.generate(
-            audio: audioArray,
-            maxTokens: 4096,
-            temperature: 0.0,
-            prompt: resolvedPrompt,
-            language: translate ? (language ?? "en") : nil
-        )
-        let text = Self.normalizeTranscript(output.text)
-
-        return PluginTranscriptionResult(text: text, detectedLanguage: language)
     }
 
     func transcribe(
@@ -287,36 +294,38 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
         prompt: String?,
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> PluginTranscriptionResult {
-        guard let model else {
-            throw PluginTranscriptionError.notConfigured
-        }
-
-        let audioArray = MLXArray(audio.samples)
-        let resolvedPrompt = Self.resolvePrompt(translate: translate, language: language, prompt: prompt)
-        let stream = model.generateStream(
-            audio: audioArray,
-            maxTokens: 4096,
-            temperature: 0.0,
-            prompt: resolvedPrompt,
-            language: translate ? (language ?? "en") : nil
-        )
-
-        var accumulated = ""
-        for try await generation in stream {
-            switch generation {
-            case .token(let token):
-                accumulated += token
-                let shouldContinue = onProgress(Self.normalizeTranscript(accumulated))
-                if !shouldContinue { break }
-            case .info:
-                break
-            case .result(let output):
-                accumulated = output.text
+        try await PluginLocalInferenceGate.shared.withLock { [self] in
+            guard let model else {
+                throw PluginTranscriptionError.notConfigured
             }
-        }
 
-        let text = Self.normalizeTranscript(accumulated)
-        return PluginTranscriptionResult(text: text, detectedLanguage: language)
+            let audioArray = MLXArray(audio.samples)
+            let resolvedPrompt = Self.resolvePrompt(translate: translate, language: language, prompt: prompt)
+            let stream = model.generateStream(
+                audio: audioArray,
+                maxTokens: 4096,
+                temperature: 0.0,
+                prompt: resolvedPrompt,
+                language: translate ? (language ?? "en") : nil
+            )
+
+            var accumulated = ""
+            for try await generation in stream {
+                switch generation {
+                case .token(let token):
+                    accumulated += token
+                    let shouldContinue = onProgress(Self.normalizeTranscript(accumulated))
+                    if !shouldContinue { break }
+                case .info:
+                    break
+                case .result(let output):
+                    accumulated = output.text
+                }
+            }
+
+            let text = Self.normalizeTranscript(accumulated)
+            return PluginTranscriptionResult(text: text, detectedLanguage: language)
+        }
     }
 
     // MARK: - Model Management
