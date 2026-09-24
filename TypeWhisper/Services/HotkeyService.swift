@@ -1389,14 +1389,12 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         return Self.modifierFlagForKeyCode(hotkey.keyCode) == .control
     }
 
-    private func scheduleDelayedHybridModifierHoldStart(for hotkey: UnifiedHotkey) {
+    private func scheduleDelayedHybridModifierHoldStart(for hotkey: UnifiedHotkey, requestTimestamp: UInt64) {
         cancelPendingHybridModifierHold()
 
         pendingHybridModifierHoldGeneration &+= 1
         let generation = pendingHybridModifierHoldGeneration
         pendingHybridModifierHoldHotkey = hotkey
-        // Report the physical press time so start latency logs include the hold delay.
-        let requestTimestamp = Self.requestTimestamp()
 
         let workItem = DispatchWorkItem { [weak self] in
             self?.activatePendingHybridModifierHold(generation: generation, requestTimestamp: requestTimestamp)
@@ -1522,8 +1520,10 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             if source != .eventTap {
                 logFallbackMatchIfNeeded(hotkey: hotkey, source: source)
             }
+            // Capture the press time before the event-tap main-queue hop so start latency includes it.
+            let requestTimestamp = Self.requestTimestamp()
             performHotkeyAction(source: source) { [weak self] in
-                self?.handleKeyDown(slotType: slotType, hotkey: hotkey)
+                self?.handleKeyDown(slotType: slotType, hotkey: hotkey, requestTimestamp: requestTimestamp)
             }
         } else if keyUp, shouldDispatch(
             target: .slot(slotType),
@@ -2130,7 +2130,11 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
 
     // MARK: - Key Down / Up (Global Slots)
 
-    private func handleKeyDown(slotType: HotkeySlotType, hotkey: UnifiedHotkey) {
+    private func handleKeyDown(
+        slotType: HotkeySlotType,
+        hotkey: UnifiedHotkey,
+        requestTimestamp: UInt64 = HotkeyService.requestTimestamp()
+    ) {
         if slotType == .promptPalette {
             onPromptPaletteToggle?()
             return
@@ -2153,7 +2157,8 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         }
 
         if !isActive, shouldDelayHybridModifierHold(for: slotType, hotkey: hotkey) {
-            scheduleDelayedHybridModifierHoldStart(for: hotkey)
+            // Report the physical press time so start latency logs include the hold delay.
+            scheduleDelayedHybridModifierHoldStart(for: hotkey, requestTimestamp: requestTimestamp)
             return
         }
 
@@ -2170,7 +2175,6 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             activeDelayedHybridModifierHold = false
             onDictationStop?()
         } else {
-            let requestTimestamp = Self.requestTimestamp()
             activeSlotType = slotType
             activeGlobalHotkey = hotkey
             activeProfileId = nil

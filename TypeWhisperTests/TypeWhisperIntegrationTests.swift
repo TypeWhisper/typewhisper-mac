@@ -16425,8 +16425,9 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         let keyDown = try makeControlModifierEvent(isDown: true)
 
         let beforePress = DispatchTime.now().uptimeNanoseconds
-        XCTAssertFalse(service.processEventForTesting(keyDown, source: .monitor))
-        // Activation runs on the main queue, so it cannot happen before this synchronous read.
+        // The event-tap path queues key handling on the main queue, which this test occupies,
+        // so the timestamp must be captured before that hop to fall inside this window.
+        XCTAssertFalse(service.processEventForTesting(keyDown, source: .eventTap))
         let afterPress = DispatchTime.now().uptimeNanoseconds
         XCTAssertTrue(requestTimestamps.isEmpty)
 
