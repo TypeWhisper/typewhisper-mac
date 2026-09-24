@@ -1,0 +1,264 @@
+import Foundation
+import XCTest
+@_spi(FirstPartyPlugins) @testable import TypeWhisperPluginSDK
+
+final class PluginCustomModelImportTests: XCTestCase, @unchecked Sendable {
+    private let requirements = PluginHuggingFaceModelStore.Requirements(
+        requiredFiles: ["config.json", "tokenizer.json"], weightFileExtensions: ["safetensors"])
+
+    private func fixture(type: String = "qwen3_asr") throws -> URL {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try Data("{\"model_type\":\"\(type)\"}".utf8).write(to: folder.appendingPathComponent("config.json"))
+        try Data("{}".utf8).write(to: folder.appendingPathComponent("tokenizer.json"))
+        let header = Data(#"{"weight":{"dtype":"F32","shape":[1],"data_offsets":[0,4]}}"#.utf8)
+        var size = UInt64(header.count).littleEndian
+        var weights = withUnsafeBytes(of: &size) { Data($0) }
+        weights.append(header)
+        weights.append(Data(repeating: 0, count: 4))
+        try weights.write(to: folder.appendingPathComponent("model.safetensors"))
+        return folder
+    }
+
+    private func store() -> PluginCustomModelStore {
+        PluginCustomModelStore(directory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString))
+    }
+
+    func testAcceptsRepositoryIDAndURLButRejectsOtherHostsAndPaths() throws {
+        XCTAssertEqual(try PluginModelImportSource.huggingFaceInput(" owner/model "), .huggingFace("owner/model"))
+        XCTAssertEqual(try PluginModelImportSource.huggingFaceInput("https://huggingface.co/owner/model/"), .huggingFace("owner/model"))
+        for input in ["https://evil.test/owner/model", "http://huggingface.co/owner/model", "https://huggingface.co@evil.test/a/b",
+                      "https://huggingface.co/owner/model/tree/main", "a/../b", "../model", "a//b", "a/b?x=y",
+                      "https://huggingface.co/a/b?download=true", "https://huggingface.co/a%2Fb/c", "file:///tmp/model"] {
+            XCTAssertThrowsError(try PluginModelImportSource.huggingFaceInput(input), input)
+        }
+    }
+
+    func testLocalImportPersistsAndRemovalPreservesSource() async throws {
+        let source = try fixture()
+        let store = store()
+        defer { try? FileManager.default.removeItem(at: source); try? FileManager.default.removeItem(at: store.directory) }
+        let candidate = try await PluginModelImportCandidate.inspect(.folder(source))
+        let model = try await store.add(candidate, supportedTypes: ["qwen3_asr"], requirements: requirements)
+        let reopened = PluginCustomModelStore(directory: store.directory)
+        XCTAssertEqual(reopened.models().map(\.id), [model.id])
+        XCTAssertEqual(reopened.models().first?.modelType, "qwen3_asr")
+        let imported = try XCTUnwrap(reopened.modelDirectory(for: model.id))
+        XCTAssertEqual(try Data(contentsOf: imported.appendingPathComponent("model.safetensors")),
+                       try Data(contentsOf: source.appendingPathComponent("model.safetensors")))
+        try reopened.remove(model.id)
+        XCTAssertTrue(reopened.models().isEmpty)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: source.appendingPathComponent("model.safetensors").path))
+        XCTAssertNil(reopened.modelDirectory(for: "../../original"))
+        XCTAssertThrowsError(try reopened.remove("../original"))
+    }
+
+    func testUnsupportedCanaryIsRejectedWithoutImportingFiles() async throws {
+        let source = try fixture(type: "canary")
+        let store = store()
+        defer { try? FileManager.default.removeItem(at: source); try? FileManager.default.removeItem(at: store.directory) }
+        let candidate = try await PluginModelImportCandidate.inspect(.folder(source))
+        XCTAssertEqual(candidate.suggestedPluginName, "Canary ASR")
+        do {
+            _ = try await store.add(candidate, supportedTypes: ["qwen3_asr"], requirements: requirements)
+            XCTFail("Accepted Canary in the Qwen engine")
+        } catch { XCTAssertEqual(error as? PluginModelImportError, .unsupportedArchitecture("canary")) }
+        XCTAssertFalse(FileManager.default.fileExists(atPath: store.directory.path))
+    }
+
+    func testMissingTokenizerDoesNotPublishOrLeaveStagingDirectory() async throws {
+        let source = try fixture()
+        let store = store()
+        defer { try? FileManager.default.removeItem(at: source); try? FileManager.default.removeItem(at: store.directory) }
+        try FileManager.default.removeItem(at: source.appendingPathComponent("tokenizer.json"))
+        let candidate = try await PluginModelImportCandidate.inspect(.folder(source))
+        do {
+            _ = try await store.add(candidate, supportedTypes: ["qwen3_asr"], requirements: requirements)
+            XCTFail("Accepted incomplete model")
+        } catch { XCTAssertTrue(error is PluginModelImportError) }
+        XCTAssertTrue(store.models().isEmpty)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: store.directory.path), [])
+    }
+
+    func testMissingWeightShardIsRejected() async throws {
+        let source = try fixture()
+        let store = store()
+        defer { try? FileManager.default.removeItem(at: source); try? FileManager.default.removeItem(at: store.directory) }
+        try Data(#"{"weight_map":{"weight":"missing.safetensors"}}"#.utf8)
+            .write(to: source.appendingPathComponent("model.safetensors.index.json"))
+        let candidate = try await PluginModelImportCandidate.inspect(.folder(source))
+        do {
+            _ = try await store.add(candidate, supportedTypes: ["qwen3_asr"], requirements: requirements)
+            XCTFail("Accepted missing shard")
+        } catch { XCTAssertTrue(error is PluginModelImportError) }
+        XCTAssertTrue(store.models().isEmpty)
+    }
+
+    func testLFSPointersAreNotAcceptedAsWeights() async throws {
+        let source = try fixture()
+        let store = store()
+        defer { try? FileManager.default.removeItem(at: source); try? FileManager.default.removeItem(at: store.directory) }
+        try Data("version https://git-lfs.github.com/spec/v1\noid sha256:123\nsize 123".utf8)
+            .write(to: source.appendingPathComponent("model.safetensors"))
+        let candidate = try await PluginModelImportCandidate.inspect(.folder(source))
+        do {
+            _ = try await store.add(candidate, supportedTypes: ["qwen3_asr"], requirements: requirements)
+            XCTFail("Accepted Git LFS pointer")
+        } catch { XCTAssertTrue(error is PluginModelImportError) }
+        XCTAssertTrue(store.models().isEmpty)
+    }
+
+    func testConfigIsRecheckedAfterInspection() async throws {
+        let source = try fixture()
+        let store = store()
+        defer { try? FileManager.default.removeItem(at: source); try? FileManager.default.removeItem(at: store.directory) }
+        let candidate = try await PluginModelImportCandidate.inspect(.folder(source))
+        try Data(#"{"model_type":"canary"}"#.utf8).write(to: source.appendingPathComponent("config.json"))
+        do {
+            _ = try await store.add(candidate, supportedTypes: ["qwen3_asr"], requirements: requirements)
+            XCTFail("Accepted changed architecture")
+        } catch { XCTAssertEqual(error as? PluginModelImportError, .unsupportedArchitecture("canary")) }
+        XCTAssertTrue(store.models().isEmpty)
+    }
+
+    func testCopiesSymlinkedWeightsAndExcludesExecutableCode() async throws {
+        let source = try fixture()
+        let store = store()
+        let blob = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer {
+            try? FileManager.default.removeItem(at: source)
+            try? FileManager.default.removeItem(at: store.directory)
+            try? FileManager.default.removeItem(at: blob)
+        }
+        try FileManager.default.moveItem(at: source.appendingPathComponent("model.safetensors"), to: blob)
+        try FileManager.default.createSymbolicLink(at: source.appendingPathComponent("model.safetensors"), withDestinationURL: blob)
+        try Data("raise RuntimeError('must never run')".utf8).write(to: source.appendingPathComponent("model.py"))
+        let candidate = try await PluginModelImportCandidate.inspect(.folder(source))
+        let model = try await store.add(candidate, supportedTypes: ["qwen3_asr"], requirements: requirements)
+        let imported = try XCTUnwrap(store.modelDirectory(for: model.id))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: imported.appendingPathComponent("model.py").path))
+        try FileManager.default.removeItem(at: blob)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: imported.appendingPathComponent("model.safetensors").path))
+    }
+
+    func testDuplicateImportDoesNotCreateSecondCopy() async throws {
+        let source = try fixture()
+        let store = store()
+        defer { try? FileManager.default.removeItem(at: source); try? FileManager.default.removeItem(at: store.directory) }
+        let candidate = try await PluginModelImportCandidate.inspect(.folder(source))
+        _ = try await store.add(candidate, supportedTypes: ["qwen3_asr"], requirements: requirements)
+        do {
+            _ = try await store.add(candidate, supportedTypes: ["qwen3_asr"], requirements: requirements)
+            XCTFail("Imported duplicate")
+        } catch { XCTAssertEqual(error as? PluginModelImportError, .duplicate) }
+        XCTAssertEqual(store.models().count, 1)
+    }
+
+    func testCancelledImportDoesNotPublishModel() async throws {
+        let source = try fixture()
+        let store = store()
+        defer { try? FileManager.default.removeItem(at: source); try? FileManager.default.removeItem(at: store.directory) }
+        let candidate = try await PluginModelImportCandidate.inspect(.folder(source))
+        let requirements = requirements
+        let task = Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            return try await store.add(candidate, supportedTypes: ["qwen3_asr"], requirements: requirements)
+        }
+        do { _ = try await task.value; XCTFail("Published cancelled import") }
+        catch { XCTAssertTrue(error is CancellationError) }
+        XCTAssertTrue(store.models().isEmpty)
+    }
+
+    func testRemoteInspectionPinsConfigToCommitAndUsesToken() async throws {
+        let sha = String(repeating: "a", count: 40)
+        let candidate = try await PluginModelImportCandidate.inspect(.huggingFace("owner/model"), token: "secret") { request in
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer secret")
+            let url = try XCTUnwrap(request.url)
+            let data: Data
+            if url.path == "/api/models/owner/model" {
+                data = Data("{\"sha\":\"\(sha)\",\"siblings\":[{\"rfilename\":\"config.json\"}]}".utf8)
+            } else {
+                XCTAssertEqual(url.path, "/owner/model/resolve/\(sha)/config.json")
+                data = Data(#"{"model_type":"qwen3_asr"}"#.utf8)
+            }
+            return (data, HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        }
+        XCTAssertEqual(candidate.revision, sha)
+        XCTAssertEqual(candidate.modelType, "qwen3_asr")
+        XCTAssertEqual(candidate.suggestedPluginName, "Qwen3 ASR")
+    }
+
+    func testRemoteAuthorizationFailureIsActionable() async {
+        do {
+            _ = try await PluginModelImportCandidate.inspect(.huggingFace("owner/model")) { request in
+                (Data(), HTTPURLResponse(url: request.url!, statusCode: 401, httpVersion: nil, headerFields: nil)!)
+            }
+            XCTFail("Accepted unauthorized response")
+        } catch { XCTAssertEqual(error as? PluginModelImportError, .http(401)) }
+    }
+    func testTruncatedTensorPayloadIsRejected() async throws {
+        let source = try fixture()
+        let store = store()
+        defer { try? FileManager.default.removeItem(at: source); try? FileManager.default.removeItem(at: store.directory) }
+        let weights = source.appendingPathComponent("model.safetensors")
+        var data = try Data(contentsOf: weights)
+        data.removeLast(2)
+        try data.write(to: weights)
+        let candidate = try await PluginModelImportCandidate.inspect(.folder(source))
+        do {
+            _ = try await store.add(candidate, supportedTypes: ["qwen3_asr"], requirements: requirements)
+            XCTFail("Accepted truncated tensor")
+        } catch { XCTAssertTrue(error is PluginModelImportError) }
+        XCTAssertTrue(store.models().isEmpty)
+    }
+
+    private func remoteCandidate() async throws -> PluginModelImportCandidate {
+        try await PluginModelImportCandidate.inspect(.huggingFace("owner/model")) { request in
+            let data: Data
+            if request.url!.path.hasPrefix("/api/") {
+                let files = ["config.json", "tokenizer.json", "model.safetensors", "model.py", "../escape.json", "subdir/config.json"]
+                data = try JSONSerialization.data(withJSONObject: [
+                    "sha": String(repeating: "a", count: 40), "siblings": files.map { ["rfilename": $0] }
+                ])
+            } else { data = Data(#"{"model_type":"qwen3_asr"}"#.utf8) }
+            return (data, HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        }
+    }
+
+    func testRemoteImportDownloadsOnlyDataAtPinnedRevision() async throws {
+        let source = try fixture()
+        let store = store()
+        defer { try? FileManager.default.removeItem(at: source); try? FileManager.default.removeItem(at: store.directory) }
+        let candidate = try await remoteCandidate()
+        let model = try await store.add(candidate, supportedTypes: ["qwen3_asr"], requirements: requirements, token: "secret") { request in
+            let url = request.url!
+            XCTAssertTrue(url.path.hasPrefix("/owner/model/resolve/" + String(repeating: "a", count: 40) + "/"))
+            XCTAssertEqual(request.value(forHTTPHeaderField: "Authorization"), "Bearer secret")
+            XCTAssertTrue(["config.json", "tokenizer.json", "model.safetensors"].contains(url.lastPathComponent))
+            let downloaded = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+            try FileManager.default.copyItem(at: source.appendingPathComponent(url.lastPathComponent), to: downloaded)
+            return (downloaded, HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+        }
+        XCTAssertEqual(model.origin, "https://huggingface.co/owner/model")
+        XCTAssertEqual(model.revision, String(repeating: "a", count: 40))
+        XCTAssertEqual(store.models().map(\.id), [model.id])
+    }
+
+    func testDownloadFailureRollsBackFilesAlreadyDownloaded() async throws {
+        let store = store()
+        defer { try? FileManager.default.removeItem(at: store.directory) }
+        let candidate = try await remoteCandidate()
+        do {
+            _ = try await store.add(candidate, supportedTypes: ["qwen3_asr"], requirements: requirements) { request in
+                if request.url!.lastPathComponent != "config.json" { throw URLError(.networkConnectionLost) }
+                let downloaded = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+                try Data(#"{"model_type":"qwen3_asr"}"#.utf8).write(to: downloaded)
+                return (downloaded, HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: nil, headerFields: nil)!)
+            }
+            XCTFail("Accepted interrupted download")
+        } catch { XCTAssertEqual((error as? URLError)?.code, .networkConnectionLost) }
+        XCTAssertTrue(store.models().isEmpty)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: store.directory.path), [])
+    }
+
+}

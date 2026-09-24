@@ -23,28 +23,6 @@
         }
       }
     },
-    "Local speech-to-text by Mistral, powered by MLX on Apple Silicon. 15 languages, no API key required.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Lokale Spracherkennung von Mistral mit MLX auf Apple Silicon. 15 Sprachen, kein API-Schlüssel nötig."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Apple Silicon向けMLXによるMistralのローカル音声認識。15言語対応。APIキー不要。"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Mistral 本地语音转文字，基于 Apple Silicon 上的 MLX。支持 15 种语言，无需 API 密钥。"
-          }
-        }
-      }
-    },
     "Model": {
       "localizations": {
         "de": {
@@ -122,7 +100,7 @@
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "オプション。ダウンロードレート制限を解除します。huggingface.co/settings/tokensで無料で取得可能です。"
+            "value": "オプション。ダウンロードレート制限を引き上げます。huggingface.co/settings/tokensで無料で取得可能です。"
           }
         },
         "zh-Hans": {
@@ -283,6 +261,28 @@
           "stringUnit": {
             "state": "translated",
             "value": "已导入的模型"
+          }
+        }
+      }
+    },
+    "Local Canary speech recognition on Apple Silicon, including Sophea for Greek and English. Select an explicit source language in Dictation settings.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lokale Canary-Spracherkennung auf Apple Silicon, einschließlich Sophea für Griechisch und Englisch. Wähle in den Diktateinstellungen eine konkrete Ausgangssprache."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Siliconで動作するローカルCanary音声認識。ギリシャ語と英語のSopheaに対応します。音声入力設定で入力言語を指定してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 Apple Silicon 上运行本地 Canary 语音识别，包括支持希腊语和英语的 Sophea。请在听写设置中选择具体的源语言。"
           }
         }
       }

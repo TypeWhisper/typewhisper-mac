@@ -8,7 +8,7 @@ import MLXAudioSTT
 // MARK: - Plugin Entry Point
 
 @objc(Qwen3Plugin)
-final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding, DictionaryTermsCapabilityProviding, PluginSettingsActivityReporting, PluginDownloadedModelManaging, PluginRuntimeMemoryDiagnosticsReporting, PassiveModelRestoreProviding, @unchecked Sendable {
+final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding, PluginCustomModelImporting, DictionaryTermsCapabilityProviding, PluginSettingsActivityReporting, PluginDownloadedModelManaging, PluginRuntimeMemoryDiagnosticsReporting, PassiveModelRestoreProviding, @unchecked Sendable {
     static let pluginId = "com.typewhisper.qwen3"
     static let pluginName = "Qwen3 ASR"
 
@@ -16,6 +16,13 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
     fileprivate var _selectedModelId: String?
     fileprivate var model: Qwen3ASRModel?
     fileprivate var loadedModelId: String?
+    private let activationLock = NSLock()
+    private var _activationID = UUID()
+    private var activationID: UUID {
+        get { activationLock.withLock { _activationID } }
+        set { activationLock.withLock { _activationID = newValue } }
+    }
+    @MainActor private var isImportingModel = false
     fileprivate var _hfToken: String?
 
     // Observable state for settings UI
@@ -59,6 +66,7 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
     }
 
     func activate(host: HostServices) {
+        activationID = UUID()
         self.host = host
         _selectedModelId = host.userDefault(forKey: "selectedModel") as? String
         _hfToken = PluginHuggingFaceTokenHelper.loadToken(from: host)
@@ -71,11 +79,56 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
 
     func deactivate() {
         passiveRestoreController.cancel()
+        activationID = UUID()
         model = nil
         loadedModelId = nil
         modelState = .notLoaded
         Self.scheduleRuntimeCacheClearWhenInferenceIsIdle()
         host = nil
+    }
+
+    // Imported files are owned by this plugin, separate from the built-in model cache.
+    fileprivate var customModelStore: PluginCustomModelStore? {
+        host.map { PluginCustomModelStore(directory: $0.pluginDataDirectory.appendingPathComponent("custom-models")) }
+    }
+
+    fileprivate var allModelDefinitions: [Qwen3ModelDef] {
+        Self.availableModels + (customModelStore?.models() ?? []).map { model in
+            Qwen3ModelDef(id: model.id, displayName: model.displayName, repoId: model.id,
+                sizeDescription: model.sizeDescription, ramRequirement: "—", usageHint: "Imported model")
+        }
+    }
+
+    var supportedImportModelTypes: Set<String> { ["qwen3_asr"] }
+
+    @MainActor
+    func importModel(_ candidate: PluginModelImportCandidate, token: String?) async throws -> PluginModelInfo {
+        guard !isImportingModel, modelState != .loading else { throw PluginModelImportError.busy }
+        guard let store = customModelStore else { throw PluginTranscriptionError.notConfigured }
+        isImportingModel = true
+        let previousState = modelState
+        let generation = activationID
+        modelState = .loading
+        defer { isImportingModel = false }
+        var importedID: String?
+        do {
+            let imported = try await store.add(candidate, supportedTypes: supportedImportModelTypes,
+                requirements: Self.modelRequirements, token: token ?? _hfToken)
+            importedID = imported.id
+            try Task.checkCancellation()
+            guard generation == activationID, host != nil else { throw CancellationError() }
+            guard let definition = allModelDefinitions.first(where: { $0.id == imported.id }) else {
+                throw PluginModelImportError.invalidModel("Imported model is unavailable")
+            }
+            // Use the real engine loader to validate the weights before accepting the import.
+            try await loadModel(definition)
+            return PluginModelInfo(id: imported.id, displayName: imported.displayName,
+                sizeDescription: imported.sizeDescription, downloaded: true, loaded: true)
+        } catch {
+            if let importedID { try? store.remove(importedID) }
+            if generation == activationID { modelState = previousState }
+            throw error
+        }
     }
 
     // MARK: - TranscriptionEnginePlugin
@@ -93,13 +146,13 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
 
     var transcriptionModels: [PluginModelInfo] {
         guard let loadedModelId else { return [] }
-        return Self.availableModels
+        return allModelDefinitions
             .filter { $0.id == loadedModelId }
             .map { PluginModelInfo(id: $0.id, displayName: $0.displayName) }
     }
 
     var availableModels: [PluginModelInfo] {
-        Self.availableModels.map { def in
+        allModelDefinitions.map { def in
             PluginModelInfo(
                 id: def.id,
                 displayName: def.displayName,
@@ -111,7 +164,7 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
     }
 
     var downloadedModels: [PluginModelInfo] {
-        Self.availableModels
+        allModelDefinitions
             .filter { hasDownloadedModel($0) }
             .map { def in
                 PluginModelInfo(
@@ -125,7 +178,8 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
     }
 
     func deleteDownloadedModel(_ modelId: String) async throws {
-        guard let modelDef = Self.availableModels.first(where: { $0.id == modelId }) else { return }
+        guard modelState != .loading else { throw PluginModelImportError.busy }
+        guard let modelDef = allModelDefinitions.first(where: { $0.id == modelId }) else { return }
 
         if loadedModelId == modelId {
             model = nil
@@ -249,8 +303,9 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
     // MARK: - Model Management
 
     fileprivate func loadModel(_ modelDef: Qwen3ModelDef, passively: Bool = false) async throws {
+        let generation = activationID
         try await modelLoadGate.withLock { [self] in
-            guard host != nil else { return }
+            guard generation == activationID, host != nil else { throw CancellationError() }
             if passively {
                 guard host?.shouldRestoreLoadedModelsPassively == true, !isConfigured else { return }
             }
@@ -260,6 +315,7 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
     }
 
     private func performModelLoad(_ modelDef: Qwen3ModelDef, allowDownloads: Bool) async throws {
+        let generation = activationID
         modelState = .loading
         do {
             let modelsDir = host?.pluginDataDirectory.appendingPathComponent("models")
@@ -273,6 +329,9 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
                 guard allowDownloads else {
                     modelState = .notLoaded
                     return
+                }
+                guard !modelDef.id.hasPrefix("custom-") else {
+                    throw PluginModelImportError.invalidModel("Imported files are missing. Remove and import the model again.")
                 }
                 removeIncompleteModelIfNeeded(modelDef, modelsDirectory: modelsDir)
                 guard let repoID = Repo.ID(rawValue: modelDef.repoId) else {
@@ -310,7 +369,7 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
             let loaded = try await Qwen3ASRModel.fromModelDirectory(modelDirectory)
 
             try Task.checkCancellation()
-            guard host != nil else { return }
+            guard generation == activationID, host != nil else { throw CancellationError() }
             model = loaded
             loadedModelId = modelDef.id
             _selectedModelId = modelDef.id
@@ -319,12 +378,12 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
             modelState = .ready(modelDef.id)
             host?.notifyCapabilitiesChanged()
         } catch is CancellationError {
-            if host != nil {
+            if generation == activationID, host != nil {
                 modelState = loadedModelId.map { .ready($0) } ?? .notLoaded
             }
             throw CancellationError()
         } catch {
-            modelState = .error("\(error)")
+            if generation == activationID { modelState = .error("\(error)") }
             throw error
         }
     }
@@ -356,6 +415,10 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
     }
 
     fileprivate func deleteModelFiles(_ modelDef: Qwen3ModelDef) throws {
+        if modelDef.id.hasPrefix("custom-") {
+            try customModelStore?.remove(modelDef.id)
+            return
+        }
         guard let modelsDir = host?.pluginDataDirectory.appendingPathComponent("models") else { return }
         try PluginHuggingFaceModelStore(modelsDirectory: modelsDir).deleteModelFiles(
             for: modelDef.repoId,
@@ -377,7 +440,7 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
             preferredModelId: preferredModelId,
             allowDownloads: allowDownloads
         ) {
-            guard let modelDef = Self.availableModels.first(where: { $0.id == modelId }) else {
+            guard let modelDef = allModelDefinitions.first(where: { $0.id == modelId }) else {
                 continue
             }
             do {
@@ -397,7 +460,7 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
 
         func appendCandidate(_ modelId: String?) {
             guard let modelId, !modelId.isEmpty else { return }
-            guard Self.availableModels.contains(where: { $0.id == modelId }) else { return }
+            guard allModelDefinitions.contains(where: { $0.id == modelId }) else { return }
             guard !candidateIds.contains(modelId) else { return }
             candidateIds.append(modelId)
         }
@@ -414,7 +477,7 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
         guard !allowDownloads else { return candidateIds }
 
         return candidateIds.filter { modelId in
-            guard let modelDef = Self.availableModels.first(where: { $0.id == modelId }) else {
+            guard let modelDef = allModelDefinitions.first(where: { $0.id == modelId }) else {
                 return false
             }
             return hasDownloadedModel(modelDef)
@@ -426,7 +489,7 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
         previousLoadedModelId: String?
     ) -> Bool {
         guard previousLoadedModelId != modelId else { return false }
-        guard let modelDef = Self.availableModels.first(where: { $0.id == modelId }) else {
+        guard let modelDef = allModelDefinitions.first(where: { $0.id == modelId }) else {
             return false
         }
         return hasDownloadedModel(modelDef)
@@ -438,7 +501,13 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
     }
 
     private func usableModelDirectory(for modelDef: Qwen3ModelDef, modelsDirectory: URL) -> URL? {
-        PluginHuggingFaceModelStore(modelsDirectory: modelsDirectory).usableModelDirectory(
+        if modelDef.id.hasPrefix("custom-") {
+            guard let directory = customModelStore?.modelDirectory(for: modelDef.id),
+                  PluginHuggingFaceModelStore(modelsDirectory: directory).isUsableModelDirectory(
+                    directory, requirements: Self.modelRequirements) else { return nil }
+            return directory
+        }
+        return PluginHuggingFaceModelStore(modelsDirectory: modelsDirectory).usableModelDirectory(
             for: modelDef.repoId,
             legacyDirectories: [legacyModelDirectory(for: modelDef, modelsDirectory: modelsDirectory)],
             requirements: Self.modelRequirements
@@ -1162,7 +1231,7 @@ private struct Qwen3SettingsView: View {
 
                 quickPickGuide
 
-                ForEach(Qwen3Plugin.availableModels) { modelDef in
+                ForEach(plugin.allModelDefinitions) { modelDef in
                     modelRow(modelDef)
                 }
             }
@@ -1180,7 +1249,7 @@ private struct Qwen3SettingsView: View {
         .padding()
         .onAppear {
             modelState = plugin.modelState
-            selectedModelId = plugin.selectedModelId ?? Qwen3Plugin.availableModels.first?.id ?? ""
+            selectedModelId = plugin.selectedModelId ?? plugin.allModelDefinitions.first?.id ?? ""
             if let token = plugin._hfToken, !token.isEmpty {
                 hfTokenInput = token
             }
@@ -1195,7 +1264,11 @@ private struct Qwen3SettingsView: View {
             }
         }
         .onReceive(pollTimer) { _ in
-            guard isPolling else { return }
+            guard isPolling else {
+                modelState = plugin.modelState
+                selectedModelId = plugin.selectedModelId ?? selectedModelId
+                return
+            }
             let pluginState = plugin.modelState
             if pluginState != .notLoaded {
                 modelState = pluginState
@@ -1275,14 +1348,16 @@ private struct Qwen3SettingsView: View {
                         .foregroundStyle(.green)
                     Button(String(localized: "Unload", bundle: bundle)) {
                         plugin.unloadModel()
-                        try? plugin.deleteModelFiles(modelDef)
+                        if !modelDef.id.hasPrefix("custom-") {
+                            try? plugin.deleteModelFiles(modelDef)
+                        }
                         modelState = plugin.modelState
                     }
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                 }
             } else {
-                Button(String(localized: "Download & Load", bundle: bundle)) {
+                Button(modelDef.id.hasPrefix("custom-") ? String(localized: "Load", bundle: bundle) : String(localized: "Download & Load", bundle: bundle)) {
                     selectedModelId = modelDef.id
                     modelState = .loading
                     isPolling = true
@@ -1382,7 +1457,7 @@ private struct Qwen3SettingsView: View {
         case "qwen3-asr-1.7b-bf16":
             String(localized: "Largest unquantized model; use for max-fidelity validation.", bundle: bundle)
         default:
-            modelDef.usageHint
+            modelDef.id.hasPrefix("custom-") ? String(localized: "Imported model", bundle: bundle) : modelDef.usageHint
         }
     }
 

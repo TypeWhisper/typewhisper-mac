@@ -1,6 +1,7 @@
 import AppKit
 import SwiftUI
 import TypeWhisperPluginSDK
+import UniformTypeIdentifiers
 
 struct PluginScreenshotPagination {
     static let overlap: CGFloat = 48
@@ -375,6 +376,7 @@ struct PluginSettingsView: View {
     @ObservedObject private var pluginManager = PluginManager.shared
     @ObservedObject private var registryService = PluginRegistryService.shared
     @AppStorage(UserDefaultsKeys.selectedIntegrationTab) private var selectedTab: IntegrationTab = .discover
+    @State private var showModelImport = false
     @State private var showUninstallAlert = false
     @State private var pluginToUninstall: LoadedPlugin?
     @State private var pendingBoundaryUpgradePlugin: RegistryPlugin?
@@ -410,6 +412,9 @@ struct PluginSettingsView: View {
             }
         }
         .frame(minWidth: 560, minHeight: 420)
+        .sheet(isPresented: $showModelImport) {
+            CustomModelImportSheet()
+        }
         .onChange(of: selectedTab) { _, _ in
             normalizeDiscoverState()
         }
@@ -539,6 +544,15 @@ struct PluginSettingsView: View {
 
     private func integrationHeaderActions(showLabels: Bool) -> some View {
         HStack(spacing: showLabels ? 12 : 8) {
+            Button { showModelImport = true } label: {
+                if showLabels {
+                    Label(String(localized: "Import Model…"), systemImage: "square.and.arrow.down")
+                } else {
+                    Image(systemName: "square.and.arrow.down")
+                }
+            }
+            .help(String(localized: "Import a local speech model"))
+            .accessibilityLabel(String(localized: "Import Model…"))
             if registryService.availableUpdatesCount > 0 || registryService.isBulkUpdating {
                 bulkUpdateControl
             }
@@ -2448,6 +2462,150 @@ private struct PluginSettingsActivityView: View {
                     .font(.caption)
                     .foregroundStyle(activity.isError ? .red : .secondary)
                     .lineLimit(1)
+            }
+        }
+    }
+}
+
+
+/// One entry point for local folders and Hugging Face repositories. Engine selection
+/// is based on config.json, never the repository name or the file extension alone.
+struct CustomModelImportSheet: View {
+    @Environment(\.dismiss) private var dismiss
+    @ObservedObject private var pluginManager = PluginManager.shared
+    @State private var repository = ""
+    @State private var token = ""
+    @State private var folder: URL?
+    @State private var useFolder = false
+    @State private var showFolderPicker = false
+    @State private var importTask: Task<Void, Never>?
+    @State private var status = ""
+    @State private var error: String?
+    @State private var importedName: String?
+    @State private var importedModelHint: String?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text(String(localized: "Import Speech Model"))
+                .font(.title2.bold())
+            Text(String(localized: "Add a model compatible with an installed local engine. The model is checked and loaded before the import completes."))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+
+            if let importedName {
+                Label(String(localized: "Imported and loaded: \(importedName)"), systemImage: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                Text(String(localized: "You can select the engine in Dictation settings and manage the model in Integrations."))
+                    .foregroundStyle(.secondary)
+                if let importedModelHint {
+                    Text(importedModelHint).foregroundStyle(.secondary)
+                }
+            } else {
+                Picker(String(localized: "Source"), selection: $useFolder) {
+                    Text("Hugging Face").tag(false)
+                    Text(String(localized: "Local Folder")).tag(true)
+                }
+                .pickerStyle(.segmented)
+                .disabled(importTask != nil)
+
+                if useFolder {
+                    HStack {
+                        Text(folder?.lastPathComponent ?? String(localized: "No folder selected"))
+                            .lineLimit(1).truncationMode(.middle)
+                        Spacer()
+                        Button(String(localized: "Choose Folder…")) { showFolderPicker = true }
+                            .disabled(importTask != nil)
+                    }
+                    Text(String(localized: "Choose the folder containing config.json, tokenizer files and weights. TypeWhisper keeps its own copy; your original files are not changed."))
+                        .font(.caption).foregroundStyle(.secondary)
+                } else {
+                    TextField("https://huggingface.co/owner/model", text: $repository)
+                        .textFieldStyle(.roundedBorder)
+                        .accessibilityLabel(String(localized: "Hugging Face model URL"))
+                        .disabled(importTask != nil)
+                    SecureField(String(localized: "Hugging Face token (optional)"), text: $token)
+                        .textFieldStyle(.roundedBorder)
+                        .disabled(importTask != nil)
+                    Text(String(localized: "A token is only needed for private or gated models. It is used for this import and is not saved."))
+                        .font(.caption).foregroundStyle(.secondary)
+                }
+
+                if importTask != nil {
+                    HStack {
+                        ProgressView().controlSize(.small)
+                        Text(status).foregroundStyle(.secondary)
+                    }
+                }
+                if let error {
+                    Text(error).foregroundStyle(.red)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            HStack {
+                Spacer()
+                Button(importedName == nil ? String(localized: "Cancel") : String(localized: "Done")) {
+                    if let importTask {
+                        importTask.cancel()
+                        status = String(localized: "Cancelling…")
+                    } else { dismiss() }
+                }
+                .keyboardShortcut(.cancelAction)
+                if importedName == nil {
+                    Button(String(localized: "Import"), action: startImport)
+                        .keyboardShortcut(.defaultAction)
+                        .disabled(importTask != nil || (useFolder ? folder == nil : repository.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))
+                }
+            }
+        }
+        .padding(24)
+        .frame(width: 520)
+        .interactiveDismissDisabled(importTask != nil)
+        .fileImporter(isPresented: $showFolderPicker, allowedContentTypes: [.folder]) { result in
+            do { folder = try result.get(); error = nil }
+            catch { self.error = error.localizedDescription }
+        }
+        .onDisappear { importTask?.cancel() }
+    }
+
+    private func startImport() {
+        error = nil
+        status = String(localized: "Checking model compatibility…")
+        let source: PluginModelImportSource
+        do {
+            if useFolder, let folder { source = .folder(folder) }
+            else { source = try .huggingFaceInput(repository) }
+        } catch { self.error = error.localizedDescription; return }
+        let importToken = token.trimmingCharacters(in: .whitespacesAndNewlines)
+        importTask = Task { @MainActor in
+            let scopedURL: URL? = if case .folder(let url) = source { url } else { nil }
+            let hasScope = scopedURL?.startAccessingSecurityScopedResource() ?? false
+            defer {
+                if hasScope { scopedURL?.stopAccessingSecurityScopedResource() }
+                importTask = nil
+            }
+            do {
+                let candidate = try await PluginModelImportCandidate.inspect(source, token: importToken)
+                try Task.checkCancellation()
+                let importers = pluginManager.transcriptionEngines.compactMap { $0 as? any PluginCustomModelImporting }
+                guard let importer = importers.first(where: { $0.supportedImportModelTypes.contains(candidate.modelType) }) else {
+                    if let name = candidate.suggestedPluginName { throw PluginModelImportError.missingEngine(name) }
+                    throw PluginModelImportError.unsupportedArchitecture(candidate.modelType)
+                }
+                status = String(localized: "Importing and loading with \(importer.providerDisplayName)…")
+                let result = try await importer.importModel(candidate, token: importToken)
+                importedName = result.displayName
+                if candidate.modelType == "canary" {
+                    importedModelHint = String(localized: "Canary needs an explicit source language. Choose Greek or English for Sophea in Dictation settings.")
+                }
+                token = ""
+            } catch is CancellationError {
+                status = ""
+            } catch let failure as URLError where failure.code == .cancelled {
+                status = ""
+            } catch {
+                self.error = error.localizedDescription
             }
         }
     }

@@ -726,6 +726,7 @@ struct RecordingSettingsView: View {
     @ObservedObject private var audioDevice = ServiceContainer.shared.audioDeviceService
     @ObservedObject private var pluginManager = PluginManager.shared
     @ObservedObject private var modelManager = ServiceContainer.shared.modelManagerService
+    @State private var showModelImport = false
     @State private var selectedProvider: String?
     @State private var customSounds: [String] = SoundChoice.installedCustomSounds()
     @State private var draggedInputDevicePriorityItem: AudioInputDevicePriorityItem?
@@ -1002,6 +1003,12 @@ struct RecordingSettingsView: View {
                     }
 
                 }
+                Button {
+                    showModelImport = true
+                } label: {
+                    Label(String(localized: "Import Model…"), systemImage: "square.and.arrow.down")
+                }
+                .sheet(isPresented: $showModelImport) { CustomModelImportSheet() }
             }
 
                 Section(String(localized: "Microphone")) {
