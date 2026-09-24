@@ -16,7 +16,7 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
     fileprivate var _selectedModelId: String?
     fileprivate var model: Qwen3ASRModel?
     fileprivate var loadedModelId: String?
-    private let activationLock = NSLock()
+    private let activationLock = NSRecursiveLock()
     private var _activationID = UUID()
     private var activationID: UUID {
         get { activationLock.withLock { _activationID } }
@@ -53,8 +53,16 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
 
     private let passiveRestoreController = PluginPassiveModelRestoreController()
     let modelLoadGate = PluginLocalInferenceGate()
-    private(set) var explicitModelLoadTask: Task<Void, Never>?
-    private(set) var genericModelLoadTask: Task<Void, Never>?
+    private var _explicitModelLoadTask: Task<Void, Never>?
+    private(set) var explicitModelLoadTask: Task<Void, Never>? {
+        get { activationLock.withLock { _explicitModelLoadTask } }
+        set { activationLock.withLock { _explicitModelLoadTask = newValue } }
+    }
+    private var _genericModelLoadTask: Task<Void, Never>?
+    private(set) var genericModelLoadTask: Task<Void, Never>? {
+        get { activationLock.withLock { _genericModelLoadTask } }
+        set { activationLock.withLock { _genericModelLoadTask = newValue } }
+    }
 
     func requestPassiveModelRestore() {
         passiveRestoreController.request { [weak self] in
@@ -68,32 +76,36 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
     }
 
     func activate(host: HostServices) {
-        activationID = UUID()
-        self.host = host
-        if let store = customModelStore {
-            Task.detached(priority: .utility) { try? store.recoverAbandonedImports() }
-        }
-        _selectedModelId = host.userDefault(forKey: "selectedModel") as? String
-        _hfToken = PluginHuggingFaceTokenHelper.loadToken(from: host)
-        cleanupRedundantModelCopies()
+        activationLock.withLock {
+            activationID = UUID()
+            self.host = host
+            if let store = customModelStore {
+                Task.detached(priority: .utility) { try? store.recoverAbandonedImports() }
+            }
+            _selectedModelId = host.userDefault(forKey: "selectedModel") as? String
+            _hfToken = PluginHuggingFaceTokenHelper.loadToken(from: host)
+            cleanupRedundantModelCopies()
 
-        if shouldRestoreLoadedModelsPassively {
-            requestPassiveModelRestore()
+            if shouldRestoreLoadedModelsPassively {
+                requestPassiveModelRestore()
+            }
         }
     }
 
     func deactivate() {
-        genericModelLoadTask?.cancel()
-        genericModelLoadTask = nil
-        explicitModelLoadTask?.cancel()
-        explicitModelLoadTask = nil
-        passiveRestoreController.cancel()
-        activationID = UUID()
-        model = nil
-        loadedModelId = nil
-        modelState = .notLoaded
-        Self.scheduleRuntimeCacheClearWhenInferenceIsIdle()
-        host = nil
+        activationLock.withLock {
+            genericModelLoadTask?.cancel()
+            genericModelLoadTask = nil
+            explicitModelLoadTask?.cancel()
+            explicitModelLoadTask = nil
+            passiveRestoreController.cancel()
+            activationID = UUID()
+            model = nil
+            loadedModelId = nil
+            modelState = .notLoaded
+            Self.scheduleRuntimeCacheClearWhenInferenceIsIdle()
+            host = nil
+        }
     }
 
     // Imported files are owned by this plugin, separate from the built-in model cache.
@@ -142,8 +154,8 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
             if let importedID { try? store.remove(importedID) }
             if generation == activationID {
                 if loadedModelId != previousLoadedModelID {
-                    // Native loading succeeded but committing or returning the
-                    // import failed. Do not retain a model whose files rolled back.
+                    // Validation released the old runtime or loaded a model
+                    // whose files rolled back. Leave the engine unloaded.
                     model = nil
                     loadedModelId = nil
                     host?.setUserDefault(nil, forKey: "loadedModel")
@@ -408,17 +420,35 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
                     throw error
                 }
             }
-            let loaded = try await Qwen3ASRModel.fromModelDirectory(modelDirectory)
-
+            // Release the previous runtime before constructing its replacement.
+            // Keep its files and selection so a failed import can be retried.
+            try activationLock.withLock {
+                try Task.checkCancellation()
+                guard generation == activationID, host != nil else { throw CancellationError() }
+                model = nil
+                loadedModelId = nil
+                host?.setUserDefault(nil, forKey: "loadedModel")
+            }
+            try await PluginLocalInferenceGate.shared.withLock {
+                try Task.checkCancellation()
+                Stream.gpu.synchronize()
+                Memory.clearCache()
+            }
             try Task.checkCancellation()
             guard generation == activationID, host != nil else { throw CancellationError() }
-            model = loaded
-            loadedModelId = modelDef.id
-            _selectedModelId = modelDef.id
-            host?.setUserDefault(modelDef.id, forKey: "selectedModel")
-            host?.setUserDefault(modelDef.id, forKey: "loadedModel")
-            modelState = .ready(modelDef.id)
-            if notifyHost { host?.notifyCapabilitiesChanged() }
+            let loaded = try await Qwen3ASRModel.fromModelDirectory(modelDirectory)
+
+            try activationLock.withLock {
+                try Task.checkCancellation()
+                guard generation == activationID, host != nil else { throw CancellationError() }
+                model = loaded
+                loadedModelId = modelDef.id
+                _selectedModelId = modelDef.id
+                host?.setUserDefault(modelDef.id, forKey: "selectedModel")
+                host?.setUserDefault(modelDef.id, forKey: "loadedModel")
+                modelState = .ready(modelDef.id)
+                if notifyHost { host?.notifyCapabilitiesChanged() }
+            }
         } catch is CancellationError {
             if generation == activationID, host != nil {
                 modelState = loadedModelId.map { .ready($0) } ?? .notLoaded
@@ -432,52 +462,62 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
 
     @objc func triggerAutoUnload() { unloadModel(clearPersistence: false) }
     @objc func triggerRestoreModel() {
-        guard !isConfigured, modelState != .loading, explicitModelLoadTask == nil else { return }
-        genericModelLoadTask?.cancel()
-        let generation = activationID
-        genericModelLoadTask = Task {
-            guard !Task.isCancelled, generation == activationID, host != nil else { return }
-            await restoreLoadedModel(allowDownloads: false, expectedGeneration: generation)
+        activationLock.withLock {
+            guard !isConfigured, modelState != .loading, explicitModelLoadTask == nil else { return }
+            genericModelLoadTask?.cancel()
+            let generation = activationID
+            genericModelLoadTask = Task {
+                guard !Task.isCancelled, generation == activationID, host != nil else { return }
+                await restoreLoadedModel(allowDownloads: false, expectedGeneration: generation)
+            }
         }
     }
     @objc(triggerRestoreModelForModel:) func triggerRestoreModel(forModel modelId: NSString?) {
-        guard let preferredModelId = modelId.map(String.init),
-              allModelDefinitions.contains(where: { $0.id == preferredModelId }) else {
-            return
-        }
-        if loadedModelId != nil, loadedModelId != preferredModelId {
-            unloadModel(clearPersistence: true)
-        }
-        _selectedModelId = preferredModelId
-        host?.setUserDefault(preferredModelId, forKey: "selectedModel")
-        // Supersede the previous request synchronously, before either task runs.
-        genericModelLoadTask?.cancel()
-        genericModelLoadTask = nil
-        explicitModelLoadTask?.cancel()
-        activationID = UUID()
-        let generation = activationID
-        explicitModelLoadTask = Task {
-            defer { if generation == activationID { explicitModelLoadTask = nil } }
-            guard !Task.isCancelled, generation == activationID, host != nil else { return }
-            await restoreLoadedModel(allowDownloads: true, preferredModelId: preferredModelId, expectedGeneration: generation)
+        activationLock.withLock {
+            guard let preferredModelId = modelId.map(String.init),
+                  allModelDefinitions.contains(where: { $0.id == preferredModelId }) else {
+                return
+            }
+            if loadedModelId != nil, loadedModelId != preferredModelId {
+                unloadModel(clearPersistence: true)
+            }
+            _selectedModelId = preferredModelId
+            host?.setUserDefault(preferredModelId, forKey: "selectedModel")
+            // Supersede the previous request synchronously, before either task runs.
+            genericModelLoadTask?.cancel()
+            genericModelLoadTask = nil
+            explicitModelLoadTask?.cancel()
+            activationID = UUID()
+            let generation = activationID
+            explicitModelLoadTask = Task {
+                defer {
+                    activationLock.withLock {
+                        if generation == activationID { explicitModelLoadTask = nil }
+                    }
+                }
+                guard !Task.isCancelled, generation == activationID, host != nil else { return }
+                await restoreLoadedModel(allowDownloads: true, preferredModelId: preferredModelId, expectedGeneration: generation)
+            }
         }
     }
 
     func unloadModel(clearPersistence: Bool = true) {
-        // Reject pending imports and loads before they can repopulate an unloaded engine.
-        activationID = UUID()
-        genericModelLoadTask?.cancel()
-        genericModelLoadTask = nil
-        explicitModelLoadTask?.cancel()
-        explicitModelLoadTask = nil
-        model = nil
-        loadedModelId = nil
-        modelState = .notLoaded
-        Self.scheduleRuntimeCacheClearWhenInferenceIsIdle()
-        if clearPersistence {
-            host?.setUserDefault(nil, forKey: "loadedModel")
+        activationLock.withLock {
+            // Reject pending imports and loads before they can repopulate an unloaded engine.
+            activationID = UUID()
+            genericModelLoadTask?.cancel()
+            genericModelLoadTask = nil
+            explicitModelLoadTask?.cancel()
+            explicitModelLoadTask = nil
+            model = nil
+            loadedModelId = nil
+            modelState = .notLoaded
+            Self.scheduleRuntimeCacheClearWhenInferenceIsIdle()
+            if clearPersistence {
+                host?.setUserDefault(nil, forKey: "loadedModel")
+            }
+            host?.notifyCapabilitiesChanged()
         }
-        host?.notifyCapabilitiesChanged()
     }
 
     fileprivate func deleteModelFiles(_ modelDef: Qwen3ModelDef) throws {

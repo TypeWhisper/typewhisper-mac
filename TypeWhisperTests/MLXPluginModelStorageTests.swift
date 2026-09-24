@@ -71,6 +71,15 @@ final class MLXPluginModelStorageTests: XCTestCase {
                 }
                 // The held load gate prevents native loading while A starts.
                 for _ in 0..<10 { await Task.yield() }
+                // Competing callers and cancelled-task cleanup must not erase
+                // the handle for a newer request while native loading is blocked.
+                await withTaskGroup(of: Void.self) { group in
+                    for _ in 0..<20 {
+                        group.addTask {
+                            _ = plugin.perform(NSSelectorFromString("triggerRestoreModelForModel:"), with: ids[0] as NSString)
+                        }
+                    }
+                }
                 latest = await MainActor.run {
                     _ = plugin.perform(NSSelectorFromString("triggerRestoreModelForModel:"), with: ids[1] as NSString)
                     return currentTask()

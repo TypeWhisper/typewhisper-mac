@@ -20,7 +20,11 @@ architecture before downloading weights. The current import providers are:
 The files must be compatible with the plugin's MLX loader. The engine loads the
 model before accepting the import, so matching `model_type` alone does not
 establish compatibility. A failed import is removed and the previous model stays
-available. Importing a model does not add support for a new architecture.
+available. Before native validation, the previous runtime is unloaded to avoid
+holding two large models in memory. If validation fails, select/load the previous
+model again. Canary checks cancellation between shards and individual tensor
+loads; an in-progress native tensor read must finish before cancellation returns.
+Importing a model does not add support for a new architecture.
 Canary, including `KIEFERSA/Sophea-Canary-ASR-mlx`, is supported by the Canary ASR
 plugin. Select an explicit source language in Dictation settings: **Greek** for
 Greek Sophea audio and **English** for English audio. The Canary plugin does not

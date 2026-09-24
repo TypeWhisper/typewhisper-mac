@@ -18,7 +18,7 @@ final class CanaryPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
     fileprivate var _selectedModelId: String?
     fileprivate var model: CanaryModel?
     fileprivate var loadedModelId: String?
-    private let activationLock = NSLock()
+    private let activationLock = NSRecursiveLock()
     private var _activationID = UUID()
     private var activationID: UUID {
         get { activationLock.withLock { _activationID } }
@@ -38,8 +38,16 @@ final class CanaryPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
 
     private let passiveRestoreController = PluginPassiveModelRestoreController()
     let modelLoadGate = PluginLocalInferenceGate()
-    private(set) var explicitModelLoadTask: Task<Void, Never>?
-    private(set) var genericModelLoadTask: Task<Void, Never>?
+    private var _explicitModelLoadTask: Task<Void, Never>?
+    private(set) var explicitModelLoadTask: Task<Void, Never>? {
+        get { activationLock.withLock { _explicitModelLoadTask } }
+        set { activationLock.withLock { _explicitModelLoadTask = newValue } }
+    }
+    private var _genericModelLoadTask: Task<Void, Never>?
+    private(set) var genericModelLoadTask: Task<Void, Never>? {
+        get { activationLock.withLock { _genericModelLoadTask } }
+        set { activationLock.withLock { _genericModelLoadTask = newValue } }
+    }
 
     func requestPassiveModelRestore() {
         passiveRestoreController.request { [weak self] in
@@ -53,33 +61,37 @@ final class CanaryPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
     }
 
     func activate(host: HostServices) {
-        activationID = UUID()
-        self.host = host
-        if let store = customModelStore {
-            Task.detached(priority: .utility) { try? store.recoverAbandonedImports() }
-        }
-        _selectedModelId = host.userDefault(forKey: "selectedModel") as? String
-            ?? allModelDefinitions.first?.id
-        _hfToken = PluginHuggingFaceTokenHelper.loadToken(from: host)
-        cleanupRedundantModelCopies()
+        activationLock.withLock {
+            activationID = UUID()
+            self.host = host
+            if let store = customModelStore {
+                Task.detached(priority: .utility) { try? store.recoverAbandonedImports() }
+            }
+            _selectedModelId = host.userDefault(forKey: "selectedModel") as? String
+                ?? allModelDefinitions.first?.id
+            _hfToken = PluginHuggingFaceTokenHelper.loadToken(from: host)
+            cleanupRedundantModelCopies()
 
-        if shouldRestoreLoadedModelsPassively {
-            requestPassiveModelRestore()
+            if shouldRestoreLoadedModelsPassively {
+                requestPassiveModelRestore()
+            }
         }
     }
 
     func deactivate() {
-        genericModelLoadTask?.cancel()
-        genericModelLoadTask = nil
-        explicitModelLoadTask?.cancel()
-        explicitModelLoadTask = nil
-        passiveRestoreController.cancel()
-        activationID = UUID()
-        model = nil
-        loadedModelId = nil
-        modelState = .notLoaded
-        scheduleRuntimeCacheClearWhenInferenceIsIdle()
-        host = nil
+        activationLock.withLock {
+            genericModelLoadTask?.cancel()
+            genericModelLoadTask = nil
+            explicitModelLoadTask?.cancel()
+            explicitModelLoadTask = nil
+            passiveRestoreController.cancel()
+            activationID = UUID()
+            model = nil
+            loadedModelId = nil
+            modelState = .notLoaded
+            scheduleRuntimeCacheClearWhenInferenceIsIdle()
+            host = nil
+        }
     }
 
     // Imported files are owned by this plugin, separate from the built-in model cache.
@@ -128,8 +140,8 @@ final class CanaryPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
             if let importedID { try? store.remove(importedID) }
             if generation == activationID {
                 if loadedModelId != previousLoadedModelID {
-                    // Native loading succeeded but committing or returning the
-                    // import failed. Do not retain a model whose files rolled back.
+                    // Validation released the old runtime or loaded a model
+                    // whose files rolled back. Leave the engine unloaded.
                     model = nil
                     loadedModelId = nil
                     host?.setUserDefault(nil, forKey: "loadedModel")
@@ -260,7 +272,8 @@ final class CanaryPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
                 guard output.generationTokens < 512 else {
                     throw PluginTranscriptionError.apiError("Canary reached its transcription limit. Retry with a shorter recording.")
                 }
-                chunks.append(Self.normalizeTranscript(output.text, language: sourceLanguage))
+                let text = Self.normalizeTranscript(output.text, language: sourceLanguage)
+                if !text.isEmpty { chunks.append(text) }
                 guard onProgress(chunks.joined(separator: " ")) else { throw CancellationError() }
             }
             return PluginTranscriptionResult(text: chunks.joined(separator: " "), detectedLanguage: sourceLanguage)
@@ -352,20 +365,38 @@ final class CanaryPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
                     throw error
                 }
             }
+            // Release the previous runtime before constructing its replacement.
+            // Keep its files and selection so a failed import can be retried.
+            try activationLock.withLock {
+                try Task.checkCancellation()
+                guard generation == activationID, host != nil else { throw CancellationError() }
+                model = nil
+                loadedModelId = nil
+                host?.setUserDefault(nil, forKey: "loadedModel")
+            }
+            try await PluginLocalInferenceGate.shared.withLock {
+                try Task.checkCancellation()
+                Stream.gpu.synchronize()
+                Memory.clearCache()
+            }
+            try Task.checkCancellation()
+            guard generation == activationID, host != nil else { throw CancellationError() }
             let loaded = try Self.loadCanaryModel(from: modelDirectory)
             guard loaded.tokenizer != nil else {
                 throw PluginModelImportError.invalidModel("Canary tokenizer could not be loaded")
             }
 
-            try Task.checkCancellation()
-            guard generation == activationID, host != nil else { throw CancellationError() }
-            model = loaded
-            loadedModelId = modelDef.id
-            _selectedModelId = modelDef.id
-            host?.setUserDefault(modelDef.id, forKey: "selectedModel")
-            host?.setUserDefault(modelDef.id, forKey: "loadedModel")
-            modelState = .ready(modelDef.id)
-            if notifyHost { host?.notifyCapabilitiesChanged() }
+            try activationLock.withLock {
+                try Task.checkCancellation()
+                guard generation == activationID, host != nil else { throw CancellationError() }
+                model = loaded
+                loadedModelId = modelDef.id
+                _selectedModelId = modelDef.id
+                host?.setUserDefault(modelDef.id, forKey: "selectedModel")
+                host?.setUserDefault(modelDef.id, forKey: "loadedModel")
+                modelState = .ready(modelDef.id)
+                if notifyHost { host?.notifyCapabilitiesChanged() }
+            }
         } catch is CancellationError {
             if generation == activationID, host != nil {
                 modelState = loadedModelId.map { .ready($0) } ?? .notLoaded
@@ -401,6 +432,7 @@ final class CanaryPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
     }
 
     private static func loadCanaryModel(from directory: URL) throws -> CanaryModel {
+        try Task.checkCancellation()
         let config = try JSONDecoder().decode(
             CanaryConfig.self, from: Data(contentsOf: directory.appendingPathComponent("config.json")))
         let tokenizer = try CanaryTokenizer.fromModelDirectory(directory, config: config)
@@ -413,12 +445,17 @@ final class CanaryPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
         }
         var weights: [String: MLXArray] = [:]
         for file in files {
+            try Task.checkCancellation()
+            // MLX reads the header here and creates lazy Load arrays; tensor
+            // payloads are materialized individually below.
             for (key, value) in try MLX.loadArrays(url: file) where !isDerivedPreprocessingBuffer(key) {
+                try Task.checkCancellation()
                 guard weights.updateValue(value, forKey: key) == nil else {
                     throw PluginModelImportError.invalidModel("Duplicate Canary weight: \(key)")
                 }
             }
         }
+        try Task.checkCancellation()
         let sanitized = Self.sanitizeCanaryWeights(weights)
         if config.quantization != nil || config.perLayerQuantization != nil {
             quantize(model: model) { path, _ in
@@ -431,61 +468,75 @@ final class CanaryPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
         }
         try model.update(parameters: ModuleParameters.unflattened(sanitized), verify: .all)
         model.train(false)
-        eval(model)
+        for (_, parameter) in model.parameters().flattened() {
+            try Task.checkCancellation()
+            eval(parameter)
+        }
+        try Task.checkCancellation()
         return model
     }
 
     @objc func triggerAutoUnload() { unloadModel(clearPersistence: false) }
     @objc func triggerRestoreModel() {
-        guard !isConfigured, modelState != .loading, explicitModelLoadTask == nil else { return }
-        genericModelLoadTask?.cancel()
-        let generation = activationID
-        genericModelLoadTask = Task {
-            guard !Task.isCancelled, generation == activationID, host != nil else { return }
-            await restoreLoadedModel(allowDownloads: true, expectedGeneration: generation)
+        activationLock.withLock {
+            guard !isConfigured, modelState != .loading, explicitModelLoadTask == nil else { return }
+            genericModelLoadTask?.cancel()
+            let generation = activationID
+            genericModelLoadTask = Task {
+                guard !Task.isCancelled, generation == activationID, host != nil else { return }
+                await restoreLoadedModel(allowDownloads: true, expectedGeneration: generation)
+            }
         }
     }
 
     @objc(triggerRestoreModelForModel:)
     func triggerRestoreModel(forModel modelId: NSString?) {
-        guard let modelId = modelId.map(String.init),
-              let modelDef = allModelDefinitions.first(where: { $0.id == modelId }) else {
-            return
-        }
-        if loadedModelId != nil, loadedModelId != modelId {
-            unloadModel(clearPersistence: true)
-        }
-        _selectedModelId = modelId
-        host?.setUserDefault(modelId, forKey: "selectedModel")
-        // Supersede the previous request synchronously, before either task runs.
-        genericModelLoadTask?.cancel()
-        genericModelLoadTask = nil
-        explicitModelLoadTask?.cancel()
-        activationID = UUID()
-        let generation = activationID
-        explicitModelLoadTask = Task {
-            defer { if generation == activationID { explicitModelLoadTask = nil } }
-            guard !Task.isCancelled, generation == activationID, host != nil else { return }
-            try? await loadModel(modelDef, expectedGeneration: generation)
+        activationLock.withLock {
+            guard let modelId = modelId.map(String.init),
+                  let modelDef = allModelDefinitions.first(where: { $0.id == modelId }) else {
+                return
+            }
+            if loadedModelId != nil, loadedModelId != modelId {
+                unloadModel(clearPersistence: true)
+            }
+            _selectedModelId = modelId
+            host?.setUserDefault(modelId, forKey: "selectedModel")
+            // Supersede the previous request synchronously, before either task runs.
+            genericModelLoadTask?.cancel()
+            genericModelLoadTask = nil
+            explicitModelLoadTask?.cancel()
+            activationID = UUID()
+            let generation = activationID
+            explicitModelLoadTask = Task {
+                defer {
+                    activationLock.withLock {
+                        if generation == activationID { explicitModelLoadTask = nil }
+                    }
+                }
+                guard !Task.isCancelled, generation == activationID, host != nil else { return }
+                try? await loadModel(modelDef, expectedGeneration: generation)
+            }
         }
     }
 
     func unloadModel(clearPersistence: Bool = true) {
-        // Reject pending imports and loads before they can repopulate an unloaded engine.
-        activationID = UUID()
-        genericModelLoadTask?.cancel()
-        genericModelLoadTask = nil
-        explicitModelLoadTask?.cancel()
-        explicitModelLoadTask = nil
-        passiveRestoreController.cancel()
-        model = nil
-        loadedModelId = nil
-        modelState = .notLoaded
-        scheduleRuntimeCacheClearWhenInferenceIsIdle()
-        if clearPersistence {
-            host?.setUserDefault(nil, forKey: "loadedModel")
+        activationLock.withLock {
+            // Reject pending imports and loads before they can repopulate an unloaded engine.
+            activationID = UUID()
+            genericModelLoadTask?.cancel()
+            genericModelLoadTask = nil
+            explicitModelLoadTask?.cancel()
+            explicitModelLoadTask = nil
+            passiveRestoreController.cancel()
+            model = nil
+            loadedModelId = nil
+            modelState = .notLoaded
+            scheduleRuntimeCacheClearWhenInferenceIsIdle()
+            if clearPersistence {
+                host?.setUserDefault(nil, forKey: "loadedModel")
+            }
+            host?.notifyCapabilitiesChanged()
         }
-        host?.notifyCapabilitiesChanged()
     }
 
     private(set) var runtimeCacheClearTask: Task<Void, Never>?
