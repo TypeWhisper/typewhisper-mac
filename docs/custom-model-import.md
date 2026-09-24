@@ -31,7 +31,7 @@ engine in Dictation settings to use it for dictation. The imported entry survive
 restarts and unloading. Remove it from the plugin's downloaded-model list in
 Integrations when it is no longer needed.
 
-Local files are copied into the plugin's `custom-models` directory. Removing an
+Local files are copied in cancellable chunks into the plugin's `custom-models` directory. Removing an
 import deletes only that copy. Hugging Face imports pin configuration and data
 files to the same repository commit. Repository scripts are neither downloaded
 nor executed. A repository root is required; links to branches, individual files
@@ -54,7 +54,9 @@ rolls back failures, and handles its usual selection/restoration notifications.
 The SDK regression suite includes local copy ownership, reopening and removal,
 architecture mismatch, changed configurations, missing tokenizer/shards, truncated
 weights, Git LFS pointers, symlinked snapshots, duplicate imports, cancellation,
-HTTP authentication failures, pinned remote downloads and interrupted downloads.
+HTTP authentication failures, pinned remote downloads, interrupted downloads and
+cancellation during a large local file copy. Explicit model-load entry points are
+covered for imported models in all four engines and for a fresh Canary install.
 
 ```sh
 swift test --package-path TypeWhisperPluginSDK --filter PluginCustomModelImportTests
@@ -67,7 +69,10 @@ snapshot and Qwen3-ASR-0.6B-4bit from Hugging Face: import, model loading, a syn
 English transcription, plugin restart/restoration, repeated transcription and
 removal while preserving the local source. Sophea Canary was validated with its
 BF16 weights, synthetic Greek and English speech, explicit-language validation,
-plugin restart/restoration and repeated Greek transcription. The Canary loader
+plugin restart/restoration and repeated Greek transcription. Both Qwen3 and
+Sophea were also exercised through the explicit model-load entry point after
+auto-unload and with deactivation from the load-completion notification; the
+interrupted import returned cancellation and removed its files. The Canary loader
 handles NeMo preprocessing buffers and subsampling convolution layouts, and checks
 that all model parameters are present with the expected shapes. Regression tests
 cover those conversions without changing already-native MLX layouts. The dev app's

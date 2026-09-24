@@ -8,23 +8,29 @@ import MLX
 
 final class CanaryPluginTests: XCTestCase {
     func testNemoSubsamplingConvolutionsUseMLXLayout() {
-        let weights = [
-            "encoder.pre_encode.conv.0.weight": MLXArray.zeros([8, 1, 3, 3]),
-            "encoder.pre_encode.conv.2.weight": MLXArray.zeros([8, 1, 3, 3]),
-            "encoder.pre_encode.conv.3.weight": MLXArray.zeros([8, 8, 1, 1]),
-        ]
-        let converted = CanaryPlugin.sanitizeCanaryWeights(weights)
-        XCTAssertEqual(converted["encoder.conformer.pre_encode.conv0.weight"]?.shape, [8, 3, 3, 1])
-        XCTAssertEqual(converted["encoder.conformer.pre_encode.depthwise_layers.0.weight"]?.shape, [8, 3, 3, 1])
-        XCTAssertEqual(converted["encoder.conformer.pre_encode.pointwise_layers.0.weight"]?.shape, [8, 1, 1, 8])
+        // SwiftPM CI does not bundle Metal kernels; these are CPU layout checks.
+        Device.withDefaultDevice(.cpu) {
+            let weights = [
+                "encoder.pre_encode.conv.0.weight": MLXArray.zeros([8, 1, 3, 3]),
+                "encoder.pre_encode.conv.2.weight": MLXArray.zeros([8, 1, 3, 3]),
+                "encoder.pre_encode.conv.3.weight": MLXArray.zeros([8, 8, 1, 1]),
+            ]
+            let converted = CanaryPlugin.sanitizeCanaryWeights(weights)
+            XCTAssertEqual(converted["encoder.conformer.pre_encode.conv0.weight"]?.shape, [8, 3, 3, 1])
+            XCTAssertEqual(converted["encoder.conformer.pre_encode.depthwise_layers.0.weight"]?.shape, [8, 3, 3, 1])
+            XCTAssertEqual(converted["encoder.conformer.pre_encode.pointwise_layers.0.weight"]?.shape, [8, 1, 1, 8])
+        }
     }
 
     func testNativeWeightsAreNotTransposedAgain() {
-        let converted = CanaryPlugin.sanitizeCanaryWeights([
-            "decoder.blocks.0.placeholder": MLXArray.zeros([1]),
-            "encoder.conformer.pre_encode.pointwise_layers.0.weight": MLXArray.zeros([8, 1, 1, 8]),
-        ])
-        XCTAssertEqual(converted["encoder.conformer.pre_encode.pointwise_layers.0.weight"]?.shape, [8, 1, 1, 8])
+        // SwiftPM CI does not bundle Metal kernels; these are CPU layout checks.
+        Device.withDefaultDevice(.cpu) {
+            let converted = CanaryPlugin.sanitizeCanaryWeights([
+                "decoder.blocks.0.placeholder": MLXArray.zeros([1]),
+                "encoder.conformer.pre_encode.pointwise_layers.0.weight": MLXArray.zeros([8, 1, 1, 8]),
+            ])
+            XCTAssertEqual(converted["encoder.conformer.pre_encode.pointwise_layers.0.weight"]?.shape, [8, 1, 1, 8])
+        }
     }
 
     func testOnlyKnownDerivedPreprocessingBuffersAreExcluded() {

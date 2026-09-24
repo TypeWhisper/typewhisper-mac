@@ -7,6 +7,63 @@ import TypeWhisperPluginSDK
 final class MLXPluginModelStorageTests: XCTestCase {
     private let commit = String(repeating: "b", count: 40)
 
+    @MainActor
+    func testExplicitLoadHandlerAcceptsImportedModelIDs() async throws {
+        let qwen = Qwen3Plugin()
+        let granite = GranitePlugin()
+        let voxtral = VoxtralPlugin()
+        let canary = CanaryPlugin()
+        try await assertExplicitLoadRequest(qwen, gate: qwen.modelLoadGate)
+        try await assertExplicitLoadRequest(granite, gate: granite.modelLoadGate)
+        try await assertExplicitLoadRequest(voxtral, gate: voxtral.modelLoadGate)
+        try await assertExplicitLoadRequest(canary, gate: canary.modelLoadGate)
+    }
+
+    @MainActor
+    func testFreshCanaryAcceptsExplicitBuiltInLoadWithoutPersistedLoadedModel() async throws {
+        let canary = CanaryPlugin()
+        try await assertExplicitLoadRequest(
+            canary, gate: canary.modelLoadGate, builtInID: CanaryPlugin.availableModels[0].id)
+    }
+
+    @MainActor
+    private func assertExplicitLoadRequest<P: NSObject & TranscriptionEnginePlugin>(
+        _ plugin: P, gate: PluginLocalInferenceGate, builtInID: String? = nil
+    ) async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let modelID = builtInID ?? "custom-" + UUID().uuidString.lowercased()
+        if builtInID == nil {
+            let folder = fixture.root.appendingPathComponent("custom-models/" + modelID)
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let metadata: [String: Any] = [
+                "id": modelID, "displayName": "Imported fixture", "modelType": "fixture",
+                "origin": "fixture", "bytes": 0,
+            ]
+            try JSONSerialization.data(withJSONObject: metadata)
+                .write(to: folder.appendingPathComponent("typewhisper-import.json"))
+        }
+        let host = MockHostServices(pluginDataDirectory: fixture.root)
+        plugin.activate(host: host)
+        // Hold actual loading while checking the host's Objective-C entry point.
+        // Deactivate before releasing the gate so this routing test never needs
+        // real weights or a network download.
+        try await gate.withLock {
+            await MainActor.run {
+                let selector = NSSelectorFromString("triggerRestoreModelForModel:")
+                guard plugin.responds(to: selector) else {
+                    XCTFail("Missing explicit model-load entry point")
+                    plugin.deactivate()
+                    return
+                }
+                XCTAssertNil(host.userDefault(forKey: "loadedModel"))
+                _ = plugin.perform(selector, with: modelID as NSString)
+                XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, modelID)
+                plugin.deactivate()
+            }
+        }
+    }
+
     func testGemma4SourceAvoidsSDKSymbolsUnavailableInHost16() throws {
         let pluginDirectory = TestSupport.repoRoot.appendingPathComponent(
             "TypeWhisperPluginSDK/Plugins/Gemma4Plugin"

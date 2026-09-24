@@ -35,7 +35,7 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
     private static let modelDownloadPatterns = ["*.safetensors", "*.json", "*.txt", "*.wav"]
 
     private let passiveRestoreController = PluginPassiveModelRestoreController()
-    private let modelLoadGate = PluginLocalInferenceGate()
+    let modelLoadGate = PluginLocalInferenceGate()
 
     func requestPassiveModelRestore() {
         passiveRestoreController.request { [weak self] in
@@ -105,6 +105,7 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
             }
             // Use the real engine loader to validate the weights before accepting the import.
             try await loadModel(definition)
+            guard generation == activationID, host != nil else { throw CancellationError() }
             return PluginModelInfo(id: imported.id, displayName: imported.displayName,
                 sizeDescription: imported.sizeDescription, downloaded: true, loaded: true)
         } catch {
@@ -341,7 +342,7 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
             }
             throw CancellationError()
         } catch {
-            if generation == activationID { modelState = .error("\(error)") }
+            if generation == activationID { modelState = .error(error.localizedDescription) }
             throw error
         }
     }
@@ -351,7 +352,7 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
     @objc(triggerRestoreModelForModel:)
     func triggerRestoreModel(forModel modelId: NSString?) {
         guard let modelId = modelId.map(String.init),
-              let modelDef = Self.availableModels.first(where: { $0.id == modelId }) else {
+              let modelDef = allModelDefinitions.first(where: { $0.id == modelId }) else {
             return
         }
         if loadedModelId != nil, loadedModelId != modelId {

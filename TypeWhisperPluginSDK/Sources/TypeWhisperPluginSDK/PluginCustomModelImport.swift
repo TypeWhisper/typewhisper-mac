@@ -265,8 +265,39 @@ public struct PluginCustomModelStore: Sendable {
             // Hugging Face snapshots commonly symlink files into their blob cache. Copy the resolved file.
             let resolved = file.resolvingSymlinksInPath()
             guard try resolved.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true else { continue }
-            try FileManager.default.copyItem(at: resolved, to: destination.appendingPathComponent(file.lastPathComponent))
+            try Self.copyFile(from: resolved, to: destination.appendingPathComponent(file.lastPathComponent))
         }
+    }
+
+    // Keep cancellation latency bounded even when copying multi-GB shards from
+    // another volume, where copyItem cannot use a fast APFS clone.
+    static func copyFile(
+        from source: URL, to destination: URL,
+        checkCancellation: () throws -> Void = { try Task.checkCancellation() }
+    ) throws {
+        try checkCancellation()
+        let input = try FileHandle(forReadingFrom: source)
+        defer { try? input.close() }
+        guard FileManager.default.createFile(atPath: destination.path, contents: nil) else {
+            throw CocoaError(.fileWriteUnknown)
+        }
+        var completed = false
+        defer {
+            if !completed { try? FileManager.default.removeItem(at: destination) }
+        }
+        let output = try FileHandle(forWritingTo: destination)
+        defer { try? output.close() }
+        while true {
+            let copied = try autoreleasepool {
+                try checkCancellation()
+                guard let data = try input.read(upToCount: 1024 * 1024), !data.isEmpty else { return false }
+                try output.write(contentsOf: data)
+                return true
+            }
+            if !copied { break }
+        }
+        try checkCancellation()
+        completed = true
     }
 
     private func validateFiles(in folder: URL, requirements: PluginHuggingFaceModelStore.Requirements) throws {

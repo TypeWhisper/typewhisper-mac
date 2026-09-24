@@ -336,7 +336,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ein lokales Sprachmodell importieren"
+            "value" : "Ein lokales Spracherkennungsmodell importieren"
           }
         },
         "ja" : {
@@ -348,7 +348,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "导入本地语音模型"
+            "value" : "导入本地语音识别模型"
           }
         }
       }

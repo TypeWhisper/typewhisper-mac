@@ -24,6 +24,27 @@ final class PluginCustomModelImportTests: XCTestCase, @unchecked Sendable {
         PluginCustomModelStore(directory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString))
     }
 
+    func testLargeFileCopyCancellationRemovesPartialDestination() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let source = folder.appendingPathComponent("source.safetensors")
+        let destination = folder.appendingPathComponent("copy.safetensors")
+        let contents = Data(repeating: 42, count: 3 * 1024 * 1024)
+        try contents.write(to: source)
+        var checks = 0
+        XCTAssertThrowsError(try PluginCustomModelStore.copyFile(from: source, to: destination) {
+            checks += 1
+            if checks == 3 {
+                XCTAssertEqual(try destination.resourceValues(forKeys: [.fileSizeKey]).fileSize, 1024 * 1024)
+                throw CancellationError()
+            }
+        }) { XCTAssertTrue($0 is CancellationError) }
+        XCTAssertEqual(checks, 3)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: destination.path))
+        XCTAssertEqual(try Data(contentsOf: source), contents)
+    }
+
     func testAcceptsRepositoryIDAndURLButRejectsOtherHostsAndPaths() throws {
         XCTAssertEqual(try PluginModelImportSource.huggingFaceInput(" owner/model "), .huggingFace("owner/model"))
         XCTAssertEqual(try PluginModelImportSource.huggingFaceInput("https://huggingface.co/owner/model/"), .huggingFace("owner/model"))
