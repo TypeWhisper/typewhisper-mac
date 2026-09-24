@@ -13361,12 +13361,12 @@
         }
       }
     },
-    "Speeds up long dictations by processing the text in parts. With a streaming engine and live preview, finished sentences are processed while you speak; otherwise the parts run in parallel after recording. Uses more requests. Not suitable for workflows that need the whole text at once, such as summaries or JSON." : {
+    "Speeds up long dictations by processing the text in parts. With a streaming engine and live preview, finished sentences are processed while you speak; otherwise, with cloud providers, the parts run in parallel after recording. Uses more requests. Not suitable for workflows that need the whole text at once, such as summaries or JSON." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Beschleunigt lange Diktate, indem der Text in Abschnitten verarbeitet wird. Mit einer Streaming-Engine und Live-Vorschau werden fertige Sätze schon während des Sprechens verarbeitet, sonst laufen die Abschnitte nach der Aufnahme parallel. Verursacht mehr Anfragen. Nicht geeignet für Workflows, die den ganzen Text auf einmal brauchen, etwa Zusammenfassungen oder JSON."
+            "value" : "Beschleunigt lange Diktate, indem der Text in Abschnitten verarbeitet wird. Mit einer Streaming-Engine und Live-Vorschau werden fertige Sätze schon während des Sprechens verarbeitet, sonst laufen die Abschnitte bei Cloud-Anbietern nach der Aufnahme parallel. Verursacht mehr Anfragen. Nicht geeignet für Workflows, die den ganzen Text auf einmal brauchen, etwa Zusammenfassungen oder JSON."
           }
         }
       }

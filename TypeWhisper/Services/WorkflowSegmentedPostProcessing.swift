@@ -136,7 +136,7 @@ final class WorkflowIncrementalPostProcessingSession {
     }
 
     let request: WorkflowLLMRequest
-    private let policy: WorkflowSegmentationPolicy
+    let policy: WorkflowSegmentationPolicy
     private let limiter: WorkflowSegmentRequestLimiter
     private let prepareInput: @MainActor (String) -> String
     private let processor: WorkflowSegmentProcessor
@@ -231,7 +231,12 @@ final class WorkflowIncrementalPostProcessingSession {
         state = .finishing
         let reusedSegmentCount = entries.count
         let segmentsCompletedBeforeStop = completedSegmentCount
-        let tailSegmentation = WorkflowTextSegmenter.segment(tail, policy: policy)
+        // A local provider would work through tail chunks one by one anyway.
+        let tailSegmentation = WorkflowTextSegmenter.segment(
+            tail,
+            policy: policy,
+            allowsSplitting: !policy.isLocalProvider
+        )
         appendWhitespace(tailSegmentation.leadingWhitespace)
         for segment in tailSegmentation.segments {
             enqueue(input: segment.text, separator: segment.separator)
@@ -364,8 +369,9 @@ final class WorkflowIncrementalPostProcessingSession {
 }
 
 /// Runs a workflow LLM step with segmentation: reuses incremental results when
-/// they are still valid, otherwise splits the final input into concurrent chunks,
-/// and falls back to the whole-text request when any segment fails.
+/// they are still valid, otherwise splits the final input into concurrent chunks
+/// (whole text for local providers), and falls back to the whole-text request
+/// when any segment fails.
 @MainActor
 struct WorkflowSegmentedPostProcessor {
     enum Mode: String, Sendable {
@@ -383,9 +389,10 @@ struct WorkflowSegmentedPostProcessor {
         var tailLength = 0
         var incrementalDiscardReason: WorkflowIncrementalPostProcessingSession.DiscardReason?
         var fellBackToWholeText = false
+        var localProvider = false
 
         var logDescription: String {
-            "mode=\(mode.rawValue), inputLength=\(inputLength), segments=\(segmentCount), reusedSegments=\(reusedSegmentCount), segmentsDoneBeforeStop=\(segmentsCompletedBeforeStop), tailLength=\(tailLength), incrementalDiscard=\(incrementalDiscardReason?.rawValue ?? "none"), wholeTextFallback=\(fellBackToWholeText)"
+            "mode=\(mode.rawValue), inputLength=\(inputLength), segments=\(segmentCount), reusedSegments=\(reusedSegmentCount), segmentsDoneBeforeStop=\(segmentsCompletedBeforeStop), tailLength=\(tailLength), incrementalDiscard=\(incrementalDiscardReason?.rawValue ?? "none"), wholeTextFallback=\(fellBackToWholeText), localProvider=\(localProvider)"
         }
     }
 
@@ -420,7 +427,8 @@ struct WorkflowSegmentedPostProcessor {
                         segmentCount: statistics.reusedSegmentCount + statistics.tailSegmentCount,
                         reusedSegmentCount: statistics.reusedSegmentCount,
                         segmentsCompletedBeforeStop: statistics.segmentsCompletedBeforeStop,
-                        tailLength: statistics.tailLength
+                        tailLength: statistics.tailLength,
+                        localProvider: incrementalSession.policy.isLocalProvider
                     ))
                 case .notReusable(let reason):
                     discardReason = reason
@@ -432,7 +440,12 @@ struct WorkflowSegmentedPostProcessor {
             }
         }
 
-        let segmentation = WorkflowTextSegmenter.segment(text, policy: policy)
+        // Local providers process one request at a time, so chunks only cost context.
+        let segmentation = WorkflowTextSegmenter.segment(
+            text,
+            policy: policy,
+            allowsSplitting: !policy.isLocalProvider
+        )
         guard segmentation.segments.count > 1 else {
             var result = try await wholeText(text, wholeTextProcessor, fellBack: false)
             result.report.incrementalDiscardReason = discardReason
@@ -449,7 +462,8 @@ struct WorkflowSegmentedPostProcessor {
                 mode: .chunked,
                 inputLength: text.count,
                 segmentCount: segmentation.segments.count,
-                incrementalDiscardReason: discardReason
+                incrementalDiscardReason: discardReason,
+                localProvider: policy.isLocalProvider
             ))
         } catch {
             if Task.isCancelled || isPostProcessingCancellation(error) { throw error }
@@ -470,7 +484,8 @@ struct WorkflowSegmentedPostProcessor {
             mode: .wholeText,
             inputLength: text.count,
             segmentCount: 1,
-            fellBackToWholeText: fellBack
+            fellBackToWholeText: fellBack,
+            localProvider: policy.isLocalProvider
         ))
     }
 }

@@ -112,6 +112,34 @@ private struct ProviderFailure: LocalizedError {
     var errorDescription: String? { "Provider unavailable" }
 }
 
+/// LLM provider plugin that only reports whether it needs external credentials.
+private final class LocalityTestLLMPlugin: LLMProviderPlugin, LLMProviderSetupStatusProviding, Sendable {
+    static var pluginId: String { "com.typewhisper.tests.segmentation-locality" }
+    static var pluginName: String { "Segmentation Locality" }
+
+    let providerName: String
+    let requiresExternalCredentials: Bool
+    var unavailableReason: String? { nil }
+    var isAvailable: Bool { true }
+    var supportedModels: [PluginModelInfo] { [] }
+
+    init(providerName: String, requiresExternalCredentials: Bool) {
+        self.providerName = providerName
+        self.requiresExternalCredentials = requiresExternalCredentials
+    }
+
+    required convenience init() {
+        self.init(providerName: "Unused", requiresExternalCredentials: true)
+    }
+
+    func activate(host: HostServices) {}
+    func deactivate() {}
+
+    func process(systemPrompt: String, userText: String, model: String?) async throws -> String {
+        userText
+    }
+}
+
 @MainActor
 final class WorkflowSegmentedPostProcessingTests: XCTestCase {
     private let smallPolicy = WorkflowSegmentationPolicy(
@@ -743,6 +771,198 @@ final class WorkflowSegmentedPostProcessingTests: XCTestCase {
             outcome.text,
             FakeSegmentLLM.output(for: firstSentence) + " " + FakeSegmentLLM.output(for: secondSentence)
         )
+    }
+
+    // MARK: - Provider locality
+
+    func testLocalProviderSendsLongTextAsOneRequestAfterStop() async throws {
+        let llm = FakeSegmentLLM(respondsImmediately: true)
+        let wholeTextCalls = CallRecorder()
+        let text = [firstSentence, secondSentence, thirdSentence].joined(separator: " ")
+        XCTAssertEqual(WorkflowTextSegmenter.segment(text, policy: smallPolicy).segments.count, 3)
+
+        let outcome = try await WorkflowSegmentedPostProcessor(
+            policy: smallPolicy.forLLMProvider(isLocal: true)
+        ).process(
+            text: text,
+            incrementalSession: nil,
+            incrementalRequest: nil,
+            segmentProcessor: llm.processor,
+            wholeTextProcessor: {
+                wholeTextCalls.record(text)
+                return "whole"
+            }
+        )
+
+        XCTAssertEqual(outcome.text, "whole")
+        XCTAssertEqual(outcome.report.mode, .wholeText)
+        XCTAssertEqual(outcome.report.segmentCount, 1)
+        XCTAssertFalse(outcome.report.fellBackToWholeText)
+        XCTAssertTrue(outcome.report.localProvider)
+        XCTAssertTrue(outcome.report.logDescription.contains("localProvider=true"))
+        XCTAssertEqual(wholeTextCalls.inputs, [text])
+        XCTAssertTrue(llm.receivedInputs.isEmpty)
+    }
+
+    func testLocalProviderRunsIncrementalSegmentsOneAtATimeAndSendsTheTailWhole() async throws {
+        let llm = FakeSegmentLLM()
+        let localPolicy = smallPolicy.forLLMProvider(isLocal: true)
+        let session = WorkflowIncrementalPostProcessingSession(
+            request: request,
+            policy: localPolicy,
+            prepareInput: { $0 },
+            processor: llm.processor
+        )
+        let sentences = (1...5).map { "Sentence \($0) has enough words to fill a segment." }
+        let confirmed = sentences.joined(separator: " ")
+        session.ingest(confirmedText: confirmed)
+        XCTAssertEqual(session.committedSegmentCount, 4)
+
+        await llm.waitForCalls(1)
+        for _ in 0..<20 { await Task.yield() }
+        XCTAssertEqual(llm.receivedInputs.count, 1)
+        llm.complete(llm.receivedInputs[0])
+        await llm.waitForCalls(2)
+        llm.complete(llm.receivedInputs[1])
+        await llm.waitForCalls(3)
+
+        // Long enough that the cloud policy would split it into several chunks.
+        let tail = [sentences[4], firstSentence, secondSentence].joined(separator: " ")
+        XCTAssertGreaterThan(WorkflowTextSegmenter.segment(tail, policy: smallPolicy).segments.count, 1)
+        let finalInput = sentences.prefix(4).joined(separator: " ") + " " + tail
+        let processing = Task {
+            try await WorkflowSegmentedPostProcessor(policy: localPolicy).process(
+                text: finalInput,
+                incrementalSession: session,
+                incrementalRequest: request,
+                segmentProcessor: { _ in
+                    XCTFail("The tail belongs to the incremental session")
+                    return ""
+                },
+                wholeTextProcessor: {
+                    XCTFail("Valid incremental results must not use the whole-text request")
+                    return ""
+                }
+            )
+        }
+
+        llm.complete(llm.receivedInputs[2])
+        await llm.waitForCalls(4)
+        llm.complete(llm.receivedInputs[3])
+        await llm.waitForCalls(5)
+        XCTAssertEqual(llm.receivedInputs[4], tail)
+        llm.complete(tail)
+
+        let outcome = try await processing.value
+        XCTAssertEqual(outcome.report.mode, .incremental)
+        XCTAssertEqual(outcome.report.reusedSegmentCount, 4)
+        XCTAssertEqual(outcome.report.segmentCount, 5)
+        XCTAssertTrue(outcome.report.localProvider)
+        XCTAssertEqual(llm.receivedInputs.count, 5)
+        XCTAssertEqual(llm.peakInFlightCount, 1)
+        XCTAssertEqual(
+            outcome.text,
+            (Array(sentences.prefix(4)) + [tail]).map(FakeSegmentLLM.output(for:)).joined(separator: " ")
+        )
+    }
+
+    func testCloudProviderKeepsConcurrentChunks() async throws {
+        XCTAssertEqual(WorkflowSegmentationPolicy.default.forLLMProvider(isLocal: false), .default)
+        XCTAssertEqual(WorkflowSegmentationPolicy.default.maximumConcurrentRequests, 4)
+        var cloudPolicy = smallPolicy
+        cloudPolicy.maximumConcurrentRequests = 4
+        XCTAssertEqual(cloudPolicy.forLLMProvider(isLocal: false), cloudPolicy)
+
+        let llm = FakeSegmentLLM()
+        let sentences = (1...6).map { "Sentence \($0) has enough words to fill a segment." }
+        let text = sentences.joined(separator: " ")
+        let processing = Task {
+            try await WorkflowSegmentedPostProcessor(policy: cloudPolicy.forLLMProvider(isLocal: false)).process(
+                text: text,
+                incrementalSession: nil,
+                incrementalRequest: nil,
+                segmentProcessor: llm.processor,
+                wholeTextProcessor: {
+                    XCTFail("Chunked processing should not need the whole-text request")
+                    return ""
+                }
+            )
+        }
+
+        await llm.waitForCalls(4)
+        for _ in 0..<20 { await Task.yield() }
+        XCTAssertEqual(llm.receivedInputs.count, 4)
+        XCTAssertEqual(llm.inFlightCount, 4)
+        for input in llm.receivedInputs {
+            llm.complete(input)
+        }
+        await llm.waitForCalls(6)
+        llm.complete(llm.receivedInputs[4])
+        llm.complete(llm.receivedInputs[5])
+
+        let outcome = try await processing.value
+        XCTAssertEqual(outcome.report.mode, .chunked)
+        XCTAssertEqual(outcome.report.segmentCount, 6)
+        XCTAssertFalse(outcome.report.localProvider)
+        XCTAssertTrue(outcome.report.logDescription.contains("localProvider=false"))
+        XCTAssertEqual(llm.peakInFlightCount, 4)
+        XCTAssertEqual(outcome.text, sentences.map(FakeSegmentLLM.output(for:)).joined(separator: " "))
+    }
+
+    func testWorkflowProviderLocalityResolution() throws {
+        let previousPluginManager = PluginManager.shared
+        let directory = try TestSupport.makeTemporaryDirectory()
+        addTeardownBlock {
+            PluginManager.shared = previousPluginManager
+            TestSupport.remove(directory)
+        }
+        let pluginManager = PluginManager(appSupportDirectory: directory)
+        pluginManager.loadedPlugins = [
+            ("com.typewhisper.tests.local-llm", LocalityTestLLMPlugin(providerName: "Local Gemma", requiresExternalCredentials: false)),
+            ("com.typewhisper.tests.cloud-llm", LocalityTestLLMPlugin(providerName: "Cloud Groq", requiresExternalCredentials: true))
+        ].map { id, plugin in
+            LoadedPlugin(
+                manifest: PluginManifest(id: id, name: plugin.providerName, version: "1.0.0", principalClass: "LocalityTestLLMPlugin"),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: directory,
+                isEnabled: true
+            )
+        }
+        PluginManager.shared = pluginManager
+
+        let suiteName = "WorkflowSegmentedPostProcessingTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(
+            try JSONEncoder().encode([
+                LLMFallbackPriorityItem(providerId: "Local Gemma"),
+                LLMFallbackPriorityItem(providerId: "Cloud Groq")
+            ]),
+            forKey: UserDefaultsKeys.llmFallbackPriorityList
+        )
+        let service = PromptProcessingService(userDefaults: defaults)
+
+        // A workflow override decides.
+        XCTAssertTrue(service.workflowUsesLocalLLMProvider(providerOverride: PromptProcessingService.appleIntelligenceId))
+        XCTAssertTrue(service.workflowUsesLocalLLMProvider(providerOverride: " Local Gemma "))
+        XCTAssertFalse(service.workflowUsesLocalLLMProvider(providerOverride: "Cloud Groq"))
+        XCTAssertFalse(service.workflowUsesLocalLLMProvider(providerOverride: "Uninstalled Provider"))
+
+        // Without an override, the primary fallback entry decides.
+        XCTAssertTrue(service.workflowUsesLocalLLMProvider(providerOverride: nil))
+        XCTAssertTrue(service.workflowUsesLocalLLMProvider(providerOverride: "  "))
+        service.moveLLMFallbacks(from: IndexSet(integer: 1), to: 0)
+        XCTAssertFalse(service.workflowUsesLocalLLMProvider(providerOverride: nil))
+
+        for item in service.fallbackPriorityList {
+            service.removeLLMFallback(item)
+        }
+        XCTAssertTrue(service.fallbackPriorityList.isEmpty)
+        XCTAssertFalse(service.workflowUsesLocalLLMProvider(providerOverride: nil))
+
+        XCTAssertEqual(WorkflowSegmentationPolicy.default.forLLMProvider(isLocal: true).maximumConcurrentRequests, 1)
+        XCTAssertTrue(WorkflowSegmentationPolicy.default.forLLMProvider(isLocal: true).isLocalProvider)
     }
 
     // MARK: - Workflow model, persistence, and backup

@@ -3588,6 +3588,7 @@ final class DictationViewModel: ObservableObject {
                 configuredLanguage: configuredLanguage,
                 resolvedOutputFormat: resolvedOutputFormat
             )
+        let segmentationPolicy = segmentedRequest.map { workflowSegmentationPolicy(for: $0) } ?? .default
 
         return { text in
             if workflowService.shouldSkipAIProcessingForShortDictation(text: text) {
@@ -3609,7 +3610,7 @@ final class DictationViewModel: ObservableObject {
             }
 
             let llmStart = CFAbsoluteTimeGetCurrent()
-            let outcome = try await WorkflowSegmentedPostProcessor().process(
+            let outcome = try await WorkflowSegmentedPostProcessor(policy: segmentationPolicy).process(
                 text: text,
                 incrementalSession: incrementalPostProcessing,
                 incrementalRequest: incrementalRequest,
@@ -3637,7 +3638,8 @@ final class DictationViewModel: ObservableObject {
         let configuration = incrementalWorkflowPostProcessingConfiguration()
         if !forceRestart,
            let current = incrementalWorkflowPostProcessing,
-           current.request == configuration?.request {
+           current.request == configuration?.request,
+           current.policy == configuration?.policy {
             return
         }
 
@@ -3648,16 +3650,25 @@ final class DictationViewModel: ObservableObject {
         let request = configuration.request
         incrementalWorkflowPostProcessing = WorkflowIncrementalPostProcessingSession(
             request: request,
+            policy: configuration.policy,
             prepareInput: configuration.prepareInput,
             processor: { segment in
                 try await workflowProcessor.process(request: request, text: segment)
             }
         )
-        logger.info("Incremental workflow post-processing armed for this recording")
+        logger.info("Incremental workflow post-processing armed for this recording localProvider=\(configuration.policy.isLocalProvider, privacy: .public)")
+    }
+
+    /// Segmentation tuned for the provider `request` will actually use.
+    private func workflowSegmentationPolicy(for request: WorkflowLLMRequest) -> WorkflowSegmentationPolicy {
+        WorkflowSegmentationPolicy.default.forLLMProvider(
+            isLocal: promptProcessingService.workflowUsesLocalLLMProvider(providerOverride: request.providerId)
+        )
     }
 
     private func incrementalWorkflowPostProcessingConfiguration() -> (
         request: WorkflowLLMRequest,
+        policy: WorkflowSegmentationPolicy,
         prepareInput: @MainActor (String) -> String
     )? {
         guard let workflow = matchedWorkflow,
@@ -3727,7 +3738,7 @@ final class DictationViewModel: ObservableObject {
                 normalizeNumbers: normalizeNumbers
             )
         }
-        return (request, prepareInput)
+        return (request, workflowSegmentationPolicy(for: request), prepareInput)
     }
 
     private func cancelIncrementalWorkflowPostProcessing() {

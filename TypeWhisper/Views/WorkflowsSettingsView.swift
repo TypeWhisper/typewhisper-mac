@@ -1528,7 +1528,7 @@ private struct WorkflowEditorPage: View {
 
             Text(
                 String(
-                    localized: "Speeds up long dictations by processing the text in parts. With a streaming engine and live preview, finished sentences are processed while you speak; otherwise the parts run in parallel after recording. Uses more requests. Not suitable for workflows that need the whole text at once, such as summaries or JSON."
+                    localized: "Speeds up long dictations by processing the text in parts. With a streaming engine and live preview, finished sentences are processed while you speak; otherwise, with cloud providers, the parts run in parallel after recording. Uses more requests. Not suitable for workflows that need the whole text at once, such as summaries or JSON."
                 )
             )
             .font(.caption)

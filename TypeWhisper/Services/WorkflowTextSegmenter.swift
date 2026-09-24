@@ -13,6 +13,10 @@ struct WorkflowSegmentationPolicy: Equatable, Sendable {
     /// Characters of newer confirmed text required after a sentence boundary before
     /// incremental processing treats the text in front of it as stable.
     var incrementalStabilityMargin: Int
+    /// Whether the workflow LLM runs on this Mac. On-device models work through
+    /// requests one after another, so text still unprocessed at stop is sent as
+    /// one request instead of being split into chunks.
+    var isLocalProvider = false
 
     static let `default` = WorkflowSegmentationPolicy(
         targetSegmentLength: 1_000,
@@ -21,6 +25,17 @@ struct WorkflowSegmentationPolicy: Equatable, Sendable {
         maximumConcurrentRequests: 4,
         incrementalStabilityMargin: 40
     )
+
+    /// The default policy adjusted for the provider that will process the requests.
+    /// Local providers keep incremental segments during recording, which overlap
+    /// with speaking, but run them one at a time.
+    func forLLMProvider(isLocal: Bool) -> WorkflowSegmentationPolicy {
+        guard isLocal else { return self }
+        var policy = self
+        policy.isLocalProvider = true
+        policy.maximumConcurrentRequests = 1
+        return policy
+    }
 }
 
 struct WorkflowTextSegment: Equatable, Sendable {
@@ -67,9 +82,12 @@ enum WorkflowTextSegmenter {
         let consumedText: String
     }
 
+    /// - Parameter allowsSplitting: When false, the content is returned as a single
+    ///   segment regardless of its length.
     static func segment(
         _ text: String,
-        policy: WorkflowSegmentationPolicy = .default
+        policy: WorkflowSegmentationPolicy = .default,
+        allowsSplitting: Bool = true
     ) -> WorkflowTextSegmentation {
         let characters = Array(text)
         var start = 0
@@ -83,7 +101,7 @@ enum WorkflowTextSegmenter {
         }
         let trailingWhitespace = String(characters[end...])
 
-        guard end - start >= policy.minimumSplitLength else {
+        guard allowsSplitting, end - start >= policy.minimumSplitLength else {
             return WorkflowTextSegmentation(
                 leadingWhitespace: leadingWhitespace,
                 segments: [WorkflowTextSegment(text: String(characters[start..<end]), separator: trailingWhitespace)]

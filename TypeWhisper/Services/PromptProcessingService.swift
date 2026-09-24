@@ -400,10 +400,32 @@ class PromptProcessingService: ObservableObject {
     }
 
     static func requiresProcessActivityBudget(for plugin: any LLMProviderPlugin) -> Bool {
+        isLocalLLMProvider(plugin)
+    }
+
+    /// Plugins that need no external credentials run their model on this Mac.
+    static func isLocalLLMProvider(_ plugin: any LLMProviderPlugin) -> Bool {
         guard let setupStatus = plugin as? any LLMProviderSetupStatusProviding else {
             return false
         }
         return !setupStatus.requiresExternalCredentials
+    }
+
+    /// Whether workflow requests with `providerOverride` go to an on-device model.
+    /// Without an override the primary LLM fallback entry handles the request.
+    /// False when that provider cannot be resolved.
+    func workflowUsesLocalLLMProvider(providerOverride: String?) -> Bool {
+        guard let providerId = Self.trimmedOrNil(providerOverride) ?? primaryFallbackItem?.providerId else {
+            return false
+        }
+        let normalizedId = normalizeProviderId(providerId)
+        if normalizedId == Self.appleIntelligenceId {
+            return true
+        }
+        guard let plugin = PluginManager.shared?.llmProvider(for: normalizedId) else {
+            return false
+        }
+        return Self.isLocalLLMProvider(plugin)
     }
 
     func process(
