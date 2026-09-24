@@ -71,6 +71,7 @@ struct PolarValidationResponse: Codable {
 }
 
 struct PolarErrorResponse: Codable {
+    let error: String?
     let detail: String?
     let type: String?
 }
@@ -160,6 +161,7 @@ final class LicenseService: ObservableObject {
     private let keychainServiceName: String
     private let keychainUpdate: (CFDictionary, CFDictionary) -> OSStatus
     private let keychainAdd: (CFDictionary) -> OSStatus
+    private let keychainCopyMatching: (CFDictionary, UnsafeMutablePointer<CFTypeRef?>?) -> OSStatus
 
     // MARK: - Published state (Business)
 
@@ -248,6 +250,9 @@ final class LicenseService: ObservableObject {
         keychainServiceName: String = AppConstants.keychainServicePrefix + "license",
         keychainUpdate: @escaping (CFDictionary, CFDictionary) -> OSStatus = { SecItemUpdate($0, $1) },
         keychainAdd: @escaping (CFDictionary) -> OSStatus = { SecItemAdd($0, nil) },
+        keychainCopyMatching: @escaping (CFDictionary, UnsafeMutablePointer<CFTypeRef?>?) -> OSStatus = {
+            SecItemCopyMatching($0, $1)
+        },
         dataTransport: @escaping LicenseDataTransport = { request in
             try await URLSession.shared.data(for: request)
         }
@@ -256,6 +261,7 @@ final class LicenseService: ObservableObject {
         self.keychainServiceName = keychainServiceName
         self.keychainUpdate = keychainUpdate
         self.keychainAdd = keychainAdd
+        self.keychainCopyMatching = keychainCopyMatching
         self.dataTransport = dataTransport
         self.isLicenseManaged = Self.configuredLicenseKey(defaults: defaults) != nil
 
@@ -520,7 +526,15 @@ final class LicenseService: ObservableObject {
     }
 
     func validateSupporterIfNeeded() async {
-        guard let (key, activationId) = loadSupporterFromKeychain() else {
+        let storedSupporter: (key: String, activationId: String)?
+        do {
+            storedSupporter = try readSupporterFromKeychain()
+        } catch {
+            // A temporarily unavailable Keychain must not erase cached supporter or Discord claim state.
+            logger.warning("Supporter validation deferred because Keychain is unavailable")
+            return
+        }
+        guard let (key, activationId) = storedSupporter else {
             if supporterStatus != .unlicensed || supporterTier != nil {
                 supporterStatus = .unlicensed
                 supporterTier = nil
@@ -771,6 +785,7 @@ final class LicenseService: ObservableObject {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(AppConstants.Polar.apiVersion, forHTTPHeaderField: AppConstants.Polar.apiVersionHeader)
 
         let deviceLabel = Host.current().localizedName ?? "Mac"
         let body: [String: Any] = [
@@ -792,7 +807,8 @@ final class LicenseService: ObservableObject {
         if httpResponse.statusCode == 200 {
             return try JSONDecoder().decode(PolarActivationResponse.self, from: data)
         } else {
-            throw LicenseError.activationFailed(Self.polarErrorDetail(from: data, statusCode: httpResponse.statusCode))
+            let errorResponse = Self.polarErrorResponse(from: data)
+            throw LicenseError.activationFailed(Self.polarErrorDetail(errorResponse, statusCode: httpResponse.statusCode))
         }
     }
 
@@ -801,6 +817,7 @@ final class LicenseService: ObservableObject {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(AppConstants.Polar.apiVersion, forHTTPHeaderField: AppConstants.Polar.apiVersionHeader)
 
         let body: [String: Any] = [
             "key": key,
@@ -817,9 +834,11 @@ final class LicenseService: ObservableObject {
         if httpResponse.statusCode == 200 {
             return try JSONDecoder().decode(PolarValidationResponse.self, from: data)
         } else {
+            let errorResponse = Self.polarErrorResponse(from: data)
             throw LicenseError.validationFailed(
                 statusCode: httpResponse.statusCode,
-                detail: Self.polarErrorDetail(from: data, statusCode: httpResponse.statusCode)
+                detail: Self.polarErrorDetail(errorResponse, statusCode: httpResponse.statusCode),
+                errorCode: errorResponse?.error
             )
         }
     }
@@ -829,6 +848,7 @@ final class LicenseService: ObservableObject {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(AppConstants.Polar.apiVersion, forHTTPHeaderField: AppConstants.Polar.apiVersionHeader)
 
         let body: [String: Any] = [
             "key": key,
@@ -843,9 +863,11 @@ final class LicenseService: ObservableObject {
         }
 
         guard (200 ... 299).contains(httpResponse.statusCode) else {
+            let errorResponse = Self.polarErrorResponse(from: data)
             throw LicenseError.deactivationFailed(
                 statusCode: httpResponse.statusCode,
-                detail: Self.polarErrorDetail(from: data, statusCode: httpResponse.statusCode)
+                detail: Self.polarErrorDetail(errorResponse, statusCode: httpResponse.statusCode),
+                errorCode: errorResponse?.error
             )
         }
     }
@@ -896,15 +918,20 @@ final class LicenseService: ObservableObject {
     }
 
     private func readLicenseFromKeychain() throws -> (key: String, activationId: String)? {
+        try readKeychainPayload(account: "polar-license")
+    }
+
+    /// Returns nil only when no item exists; unreadable items throw so callers keep cached state.
+    private func readKeychainPayload(account: String) throws -> (key: String, activationId: String)? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: keychainService,
-            kSecAttrAccount as String: "polar-license",
+            kSecAttrAccount as String: account,
             kSecReturnData as String: true,
         ]
 
-        var result: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        var result: CFTypeRef?
+        let status = keychainCopyMatching(query as CFDictionary, &result)
         if status == errSecItemNotFound { return nil }
         guard status == errSecSuccess, let data = result as? Data else {
             throw LicenseError.keychainUnavailable
@@ -955,32 +982,11 @@ final class LicenseService: ObservableObject {
     }
 
     private func loadSupporterFromKeychain() -> (key: String, activationId: String)? {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: keychainService,
-            kSecAttrAccount as String: "polar-supporter",
-            kSecReturnData as String: true,
-        ]
+        try? readSupporterFromKeychain()
+    }
 
-        var result: AnyObject?
-        let status = SecItemCopyMatching(query as CFDictionary, &result)
-        guard status == errSecSuccess, let data = result as? Data else {
-            return nil
-        }
-
-        if let payload = try? JSONDecoder().decode(LicenseKeychainPayload.self, from: data) {
-            return (key: payload.key, activationId: payload.activationId)
-        }
-
-        // Fallback for backwards compatibility with previous pipe-separated format
-        if let string = String(data: data, encoding: .utf8) {
-            let parts = string.split(separator: "|", maxSplits: 1)
-            if parts.count == 2 {
-                return (key: String(parts[0]), activationId: String(parts[1]))
-            }
-        }
-
-        return nil
+    private func readSupporterFromKeychain() throws -> (key: String, activationId: String)? {
+        try readKeychainPayload(account: "polar-supporter")
     }
 
     private func removeSupporterFromKeychain() {
@@ -1022,8 +1028,18 @@ final class LicenseService: ObservableObject {
         }
     }
 
-    private static func polarErrorDetail(from data: Data, statusCode: Int) -> String {
-        let errorResponse = try? JSONDecoder().decode(PolarErrorResponse.self, from: data)
+    private static func polarErrorResponse(from data: Data) -> PolarErrorResponse? {
+        try? JSONDecoder().decode(PolarErrorResponse.self, from: data)
+    }
+
+    private static func polarErrorDetail(_ errorResponse: PolarErrorResponse?, statusCode: Int) -> String {
+        if statusCode == 404, errorResponse?.error != LicenseError.polarResourceNotFound {
+            // Polar answers unknown or removed API versions with a bare 404.
+            return localizedAppText(
+                "The license server did not accept this request. Please try again later or update TypeWhisper.",
+                de: "Der Lizenzserver hat diese Anfrage nicht angenommen. Bitte versuche es später erneut oder aktualisiere TypeWhisper."
+            )
+        }
         return errorResponse?.detail ?? errorResponse?.type ?? "HTTP \(statusCode)"
     }
 
@@ -1041,13 +1057,18 @@ enum LicenseError: LocalizedError {
     case keychainUnavailable
     case networkError
     case activationFailed(String)
-    case validationFailed(statusCode: Int, detail: String)
-    case deactivationFailed(statusCode: Int, detail: String)
+    case validationFailed(statusCode: Int, detail: String, errorCode: String?)
+    case deactivationFailed(statusCode: Int, detail: String, errorCode: String?)
 
+    /// Polar's structured error for a missing, revoked, or mismatched license key or activation.
+    static let polarResourceNotFound = "ResourceNotFound"
+
+    /// True only for a confirmed missing license or activation. Removed API versions and routing
+    /// failures also return 404, but without Polar's structured error, so they keep local credentials.
     var isResourceMissing: Bool {
         switch self {
-        case .validationFailed(let statusCode, _), .deactivationFailed(let statusCode, _):
-            statusCode == 404
+        case .validationFailed(let statusCode, _, let errorCode), .deactivationFailed(let statusCode, _, let errorCode):
+            statusCode == 404 && errorCode == Self.polarResourceNotFound
         case .networkError, .activationFailed, .keychainUnavailable:
             false
         }
@@ -1061,9 +1082,9 @@ enum LicenseError: LocalizedError {
             return String(localized: "Network error. Please check your internet connection.")
         case .activationFailed(let detail):
             return String(localized: "Activation failed: \(detail)")
-        case .validationFailed(_, let detail):
+        case .validationFailed(_, let detail, _):
             return String(localized: "Validation failed: \(detail)")
-        case .deactivationFailed(_, let detail):
+        case .deactivationFailed(_, let detail, _):
             if detail.isEmpty {
                 return String(localized: "Deactivation failed. Please try again.")
             }
