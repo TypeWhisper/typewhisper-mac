@@ -94,6 +94,22 @@ final class CanaryPluginTests: XCTestCase {
         XCTAssertThrowsError(try CanaryPlugin.sourceLanguage("xx"))
     }
 
+    func testSopheaLanguageCapabilitiesAndColdSelection() throws {
+        let plugin = CanaryPlugin()
+        let sophea = try XCTUnwrap(CanaryPlugin.availableModels.first)
+        plugin.selectModel(sophea.id)
+        XCTAssertEqual(plugin.supportedLanguages, ["el", "en"])
+        XCTAssertNil(plugin.runtimeCacheClearTask, "Selecting an unloaded model must not initialize Metal")
+        XCTAssertEqual(try CanaryPlugin.sourceLanguage("EL", supportedLanguages: plugin.supportedLanguages), "el")
+        XCTAssertThrowsError(try CanaryPlugin.sourceLanguage("de", supportedLanguages: plugin.supportedLanguages))
+
+        // Imported models without verified capability metadata retain the engine
+        // language list; they must not inherit Sophea's bilingual restriction.
+        plugin.selectModel("custom-unclassified")
+        XCTAssertTrue(plugin.supportedLanguages.contains("de"))
+        XCTAssertNil(plugin.runtimeCacheClearTask)
+    }
+
     func testGreekFinalSigmaIsRestoredOnlyForGreek() {
         XCTAssertEqual(CanaryPlugin.normalizeTranscript("  τησ εποχήσ.  ", language: "el"), "της εποχής.")
         XCTAssertEqual(CanaryPlugin.normalizeTranscript("τησ εποχήσ.", language: "en"), "τησ εποχήσ.")

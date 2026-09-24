@@ -243,7 +243,14 @@ final class CanaryPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
         }
     }
 
-    var supportedLanguages: [String] { CanaryConfig.defaultSupportedLanguages }
+    var supportedLanguages: [String] {
+        languageCapabilities(for: selectedModelId)
+    }
+
+    private func languageCapabilities(for modelId: String?) -> [String] {
+        allModelDefinitions.first(where: { $0.id == modelId })?.supportedLanguages
+            ?? CanaryConfig.defaultSupportedLanguages
+    }
 
 
     var selectedModelId: String? { _selectedModelId }
@@ -251,7 +258,9 @@ final class CanaryPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
     func selectModel(_ modelId: String) {
         activationLock.withLock {
             if _selectedModelId != modelId || (loadedModelId != nil && loadedModelId != modelId) {
-                unloadModel(clearPersistence: true)
+                // A metadata-only selection must not initialize the GPU merely
+                // to clear an empty cache. Pending loads still get invalidated.
+                unloadModel(clearPersistence: true, clearRuntimeCache: model != nil || modelState == .loading)
             }
             _selectedModelId = modelId
             host?.setUserDefault(modelId, forKey: "selectedModel")
@@ -286,7 +295,7 @@ final class CanaryPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
     ) async throws -> PluginTranscriptionResult {
         try await PluginLocalInferenceGate.shared.withLock { [self] in
             guard let model else { throw PluginTranscriptionError.notConfigured }
-            let sourceLanguage = try Self.sourceLanguage(language)
+            let sourceLanguage = try Self.sourceLanguage(language, supportedLanguages: languageCapabilities(for: loadedModelId))
             guard !translate else { throw PluginTranscriptionError.apiError("Canary translation is not available in this engine.") }
             var chunks: [String] = []
             // Use the same low-energy boundary search as Qwen instead of fixed cuts.
@@ -316,8 +325,10 @@ final class CanaryPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
         ).map(\.0)
     }
 
-    static func sourceLanguage(_ language: String?) throws -> String {
-        guard let language = language?.lowercased(), CanaryConfig.defaultSupportedLanguages.contains(language) else {
+    static func sourceLanguage(
+        _ language: String?, supportedLanguages: [String] = CanaryConfig.defaultSupportedLanguages
+    ) throws -> String {
+        guard let language = language?.lowercased(), supportedLanguages.contains(language) else {
             throw PluginTranscriptionError.apiError("Select a source language, such as Greek or English, in Dictation settings. Canary does not detect the language automatically.")
         }
         return language
@@ -556,7 +567,7 @@ final class CanaryPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
         }
     }
 
-    func unloadModel(clearPersistence: Bool = true) {
+    func unloadModel(clearPersistence: Bool = true, clearRuntimeCache: Bool = true) {
         activationLock.withLock {
             // Reject pending imports and loads before they can repopulate an unloaded engine.
             activationID = UUID()
@@ -568,7 +579,7 @@ final class CanaryPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
             model = nil
             loadedModelId = nil
             modelState = .notLoaded
-            scheduleRuntimeCacheClearWhenInferenceIsIdle()
+            if clearRuntimeCache { scheduleRuntimeCacheClearWhenInferenceIsIdle() }
             if clearPersistence {
                 host?.setUserDefault(nil, forKey: "loadedModel")
             }
@@ -698,7 +709,8 @@ final class CanaryPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
     static let availableModels: [CanaryModelDef] = [
         CanaryModelDef(
             id: "sophea-canary-bf16", displayName: "Sophea Canary (Greek / English)",
-            repoId: "KIEFERSA/Sophea-Canary-ASR-mlx", sizeDescription: "~1.9 GB", ramRequirement: "8 GB+"
+            repoId: "KIEFERSA/Sophea-Canary-ASR-mlx", sizeDescription: "~1.9 GB", ramRequirement: "8 GB+",
+            supportedLanguages: ["el", "en"]
         ),
     ]
 
@@ -719,6 +731,7 @@ struct CanaryModelDef: Identifiable {
     let repoId: String
     let sizeDescription: String
     let ramRequirement: String
+    var supportedLanguages: [String]? = nil
 }
 
 enum CanaryModelState: Equatable {

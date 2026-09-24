@@ -267,7 +267,9 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
         activationLock.withLock {
             let previousLoadedModelId = loadedModelId
             if _selectedModelId != modelId || (previousLoadedModelId != nil && previousLoadedModelId != modelId) {
-                unloadModel(clearPersistence: true)
+                // A metadata-only selection must not initialize the GPU merely
+                // to clear an empty cache. Pending loads still get invalidated.
+                unloadModel(clearPersistence: true, clearRuntimeCache: model != nil || modelState == .loading)
             }
             _selectedModelId = modelId
             host?.setUserDefault(modelId, forKey: "selectedModel")
@@ -513,7 +515,7 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
         }
     }
 
-    func unloadModel(clearPersistence: Bool = true) {
+    func unloadModel(clearPersistence: Bool = true, clearRuntimeCache: Bool = true) {
         activationLock.withLock {
             // Reject pending imports and loads before they can repopulate an unloaded engine.
             activationID = UUID()
@@ -524,7 +526,7 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
             model = nil
             loadedModelId = nil
             modelState = .notLoaded
-            Self.scheduleRuntimeCacheClearWhenInferenceIsIdle()
+            if clearRuntimeCache { Self.scheduleRuntimeCacheClearWhenInferenceIsIdle() }
             if clearPersistence {
                 host?.setUserDefault(nil, forKey: "loadedModel")
             }
