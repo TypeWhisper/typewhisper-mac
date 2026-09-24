@@ -8,8 +8,8 @@ import MLX
 
 final class CanaryPluginTests: XCTestCase {
     func testNemoSubsamplingConvolutionsUseMLXLayout() {
-        // SwiftPM CI does not bundle Metal kernels; these are CPU layout checks.
-        Device.withDefaultDevice(.cpu) {
+        // Avoid initializing MLX's GPU-backed default device in SwiftPM CI.
+        Stream.withNewDefaultStream(device: .cpu) {
             let weights = [
                 "encoder.pre_encode.conv.0.weight": MLXArray.zeros([8, 1, 3, 3]),
                 "encoder.pre_encode.conv.2.weight": MLXArray.zeros([8, 1, 3, 3]),
@@ -23,8 +23,8 @@ final class CanaryPluginTests: XCTestCase {
     }
 
     func testNativeWeightsAreNotTransposedAgain() {
-        // SwiftPM CI does not bundle Metal kernels; these are CPU layout checks.
-        Device.withDefaultDevice(.cpu) {
+        // Avoid initializing MLX's GPU-backed default device in SwiftPM CI.
+        Stream.withNewDefaultStream(device: .cpu) {
             let converted = CanaryPlugin.sanitizeCanaryWeights([
                 "decoder.blocks.0.placeholder": MLXArray.zeros([1]),
                 "encoder.conformer.pre_encode.pointwise_layers.0.weight": MLXArray.zeros([8, 1, 1, 8]),

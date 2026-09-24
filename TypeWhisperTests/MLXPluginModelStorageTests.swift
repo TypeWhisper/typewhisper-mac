@@ -20,6 +20,85 @@ final class MLXPluginModelStorageTests: XCTestCase {
     }
 
     @MainActor
+    func testNewExplicitRequestCancelsPreviousRequestBeforeTasksStart() async throws {
+        try await assertSupersededExplicitRequests(allowFirstTaskToStart: false)
+    }
+
+    @MainActor
+    func testNewExplicitRequestCancelsPreviousRequestWaitingForLoadGate() async throws {
+        try await assertSupersededExplicitRequests(allowFirstTaskToStart: true)
+    }
+
+    @MainActor
+    private func assertSupersededExplicitRequests(allowFirstTaskToStart: Bool) async throws {
+        let qwen = Qwen3Plugin()
+        let granite = GranitePlugin()
+        let voxtral = VoxtralPlugin()
+        let canary = CanaryPlugin()
+        try await assertSupersededRequests(qwen, gate: qwen.modelLoadGate,
+            allowFirstTaskToStart: allowFirstTaskToStart, currentTask: { qwen.explicitModelLoadTask })
+        try await assertSupersededRequests(granite, gate: granite.modelLoadGate,
+            allowFirstTaskToStart: allowFirstTaskToStart, currentTask: { granite.explicitModelLoadTask })
+        try await assertSupersededRequests(voxtral, gate: voxtral.modelLoadGate,
+            allowFirstTaskToStart: allowFirstTaskToStart, currentTask: { voxtral.explicitModelLoadTask })
+        try await assertSupersededRequests(canary, gate: canary.modelLoadGate,
+            allowFirstTaskToStart: allowFirstTaskToStart, currentTask: { canary.explicitModelLoadTask })
+    }
+
+    @MainActor
+    private func assertSupersededRequests<P: NSObject & TranscriptionEnginePlugin>(
+        _ plugin: P, gate: PluginLocalInferenceGate, allowFirstTaskToStart: Bool,
+        currentTask: @escaping @MainActor @Sendable () -> Task<Void, Never>?
+    ) async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let ids = (0..<2).map { _ in "custom-" + UUID().uuidString.lowercased() }
+        for id in ids {
+            let folder = fixture.root.appendingPathComponent("custom-models/" + id)
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try JSONSerialization.data(withJSONObject: [
+                "id": id, "displayName": id, "modelType": "fixture", "origin": "fixture", "bytes": 0,
+            ]).write(to: folder.appendingPathComponent("typewhisper-import.json"))
+        }
+        let host = MockHostServices(pluginDataDirectory: fixture.root)
+        plugin.activate(host: host)
+        try await gate.withLock {
+            let (first, latest): (Task<Void, Never>?, Task<Void, Never>?)
+            if allowFirstTaskToStart {
+                first = await MainActor.run {
+                    _ = plugin.perform(NSSelectorFromString("triggerRestoreModelForModel:"), with: ids[0] as NSString)
+                    return currentTask()
+                }
+                // The held load gate prevents native loading while A starts.
+                for _ in 0..<10 { await Task.yield() }
+                latest = await MainActor.run {
+                    _ = plugin.perform(NSSelectorFromString("triggerRestoreModelForModel:"), with: ids[1] as NSString)
+                    return currentTask()
+                }
+            } else {
+                // No suspension between requests: both tasks start only afterward.
+                (first, latest) = await MainActor.run {
+                    _ = plugin.perform(NSSelectorFromString("triggerRestoreModelForModel:"), with: ids[0] as NSString)
+                    let first = currentTask()
+                    _ = plugin.perform(NSSelectorFromString("triggerRestoreModelForModel:"), with: ids[1] as NSString)
+                    return (first, currentTask())
+                }
+            }
+            XCTAssertNotNil(first)
+            XCTAssertTrue(first?.isCancelled == true)
+            // A must finish even though the load gate is still held.
+            await first?.value
+            await MainActor.run {
+                XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, ids[1])
+                XCTAssertNil(host.userDefault(forKey: "loadedModel"))
+                plugin.deactivate()
+                XCTAssertTrue(latest?.isCancelled == true)
+            }
+            await latest?.value
+        }
+    }
+
+    @MainActor
     func testFreshCanaryAcceptsExplicitBuiltInLoadWithoutPersistedLoadedModel() async throws {
         let canary = CanaryPlugin()
         try await assertExplicitLoadRequest(

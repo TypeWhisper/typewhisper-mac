@@ -53,6 +53,7 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
 
     private let passiveRestoreController = PluginPassiveModelRestoreController()
     let modelLoadGate = PluginLocalInferenceGate()
+    private(set) var explicitModelLoadTask: Task<Void, Never>?
 
     func requestPassiveModelRestore() {
         passiveRestoreController.request { [weak self] in
@@ -78,6 +79,8 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
     }
 
     func deactivate() {
+        explicitModelLoadTask?.cancel()
+        explicitModelLoadTask = nil
         passiveRestoreController.cancel()
         activationID = UUID()
         model = nil
@@ -306,6 +309,7 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
     fileprivate func loadModel(_ modelDef: Qwen3ModelDef, passively: Bool = false) async throws {
         let generation = activationID
         try await modelLoadGate.withLock { [self] in
+            try Task.checkCancellation()
             guard generation == activationID, host != nil else { throw CancellationError() }
             if passively {
                 guard host?.shouldRestoreLoadedModelsPassively == true, !isConfigured else { return }
@@ -401,10 +405,18 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
         }
         _selectedModelId = preferredModelId
         host?.setUserDefault(preferredModelId, forKey: "selectedModel")
-        Task { await restoreLoadedModel(allowDownloads: true, preferredModelId: preferredModelId) }
+        // Supersede the previous request synchronously, before either task runs.
+        explicitModelLoadTask?.cancel()
+        let generation = activationID
+        explicitModelLoadTask = Task {
+            guard !Task.isCancelled, generation == activationID, host != nil else { return }
+            await restoreLoadedModel(allowDownloads: true, preferredModelId: preferredModelId)
+        }
     }
 
     func unloadModel(clearPersistence: Bool = true) {
+        explicitModelLoadTask?.cancel()
+        explicitModelLoadTask = nil
         model = nil
         loadedModelId = nil
         modelState = .notLoaded
@@ -1226,9 +1238,14 @@ private struct Qwen3SettingsView: View {
 
             // Model Selection
             VStack(alignment: .leading, spacing: 8) {
-                Text("Model", bundle: bundle)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
+                HStack {
+                    Text("Model", bundle: bundle)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    Spacer()
+                    PluginModelImportButton(importer: plugin, bundle: bundle)
+                        .disabled(modelState == .loading)
+                }
 
                 quickPickGuide
 

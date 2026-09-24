@@ -52,6 +52,7 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
 
     private let passiveRestoreController = PluginPassiveModelRestoreController()
     let modelLoadGate = PluginLocalInferenceGate()
+    private(set) var explicitModelLoadTask: Task<Void, Never>?
 
     func requestPassiveModelRestore() {
         passiveRestoreController.request { [weak self] in
@@ -78,6 +79,8 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
     }
 
     func deactivate() {
+        explicitModelLoadTask?.cancel()
+        explicitModelLoadTask = nil
         passiveRestoreController.cancel()
         activationID = UUID()
         model = nil
@@ -272,6 +275,7 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
     fileprivate func loadModel(_ modelDef: VoxtralModelDef, passively: Bool = false) async throws {
         let generation = activationID
         try await modelLoadGate.withLock { [self] in
+            try Task.checkCancellation()
             guard generation == activationID, host != nil else { throw CancellationError() }
             if passively {
                 guard host?.shouldRestoreLoadedModelsPassively == true, !isConfigured else { return }
@@ -367,10 +371,18 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
         }
         _selectedModelId = modelId
         host?.setUserDefault(modelId, forKey: "selectedModel")
-        Task { try? await loadModel(modelDef) }
+        // Supersede the previous request synchronously, before either task runs.
+        explicitModelLoadTask?.cancel()
+        let generation = activationID
+        explicitModelLoadTask = Task {
+            guard !Task.isCancelled, generation == activationID, host != nil else { return }
+            try? await loadModel(modelDef)
+        }
     }
 
     func unloadModel(clearPersistence: Bool = true) {
+        explicitModelLoadTask?.cancel()
+        explicitModelLoadTask = nil
         model = nil
         loadedModelId = nil
         modelState = .notLoaded
@@ -682,9 +694,14 @@ private struct VoxtralSettingsView: View {
             Divider()
 
             VStack(alignment: .leading, spacing: 8) {
-                Text("Model", bundle: bundle)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
+                HStack {
+                    Text("Model", bundle: bundle)
+                        .font(.subheadline)
+                        .fontWeight(.medium)
+                    Spacer()
+                    PluginModelImportButton(importer: plugin, bundle: bundle)
+                        .disabled(modelState == .loading)
+                }
 
                 ForEach(plugin.allModelDefinitions) { modelDef in
                     modelRow(modelDef)

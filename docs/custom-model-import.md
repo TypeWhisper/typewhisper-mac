@@ -1,13 +1,14 @@
 # Importing local speech models
 
-Open **Settings → Dictation → Import Model…** or **Integrations → Import Model…**.
+Open **Settings → Integrations → Installed → your plugin → Settings → Import Model…**.
+The import button is next to the model list in the plugin settings window.
 Choose either a Hugging Face model repository (`owner/model` or its HTTPS URL) or a
 local folder containing `config.json`, tokenizer assets and `.safetensors` weights.
 For private or gated repositories, supply a Hugging Face token with access to the
 model. The import dialog does not save the token.
 
-TypeWhisper reads the configuration and chooses an enabled engine that supports
-that architecture. The current import providers are:
+The selected plugin reads the configuration and checks that it supports the model
+architecture before downloading weights. The current import providers are:
 
 | Model architecture (`model_type`) | Plugin |
 | --- | --- |
@@ -38,6 +39,10 @@ nor executed. A repository root is required; links to branches, individual files
 or subfolders are not accepted.
 
 ## Plugin integration
+
+`PluginModelImportButton(importer:bundle:)` provides the shared dialog inside
+each plugin’s own settings view. It validates against that plugin’s supported
+architectures and uses the plugin bundle for its UI translations.
 
 `PluginCustomModelImporting` is an optional SDK protocol. Existing plugins need
 no changes unless they want to provide import support. New import-capable bundles
