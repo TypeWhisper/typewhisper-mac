@@ -10,7 +10,7 @@ import MLXAudioSTT
 // MARK: - Plugin Entry Point
 
 @objc(CanaryPlugin)
-final class CanaryPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding, PluginCustomModelImporting, DictionaryTermsCapabilityProviding, PluginSettingsActivityReporting, PluginDownloadedModelManaging, @unchecked Sendable {
+final class CanaryPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionModelCatalogProviding, PluginCustomModelImporting, DictionaryTermsCapabilityProviding, PluginSettingsActivityReporting, PluginDownloadedModelManaging, PassiveModelRestoreProviding, @unchecked Sendable {
     static let pluginId = "com.typewhisper.canary"
     static let pluginName = "Canary Speech"
 
@@ -36,6 +36,16 @@ final class CanaryPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
     )
     private static let modelDownloadPatterns = ["*.safetensors", "*.json", "*.txt", "*.model"]
 
+    private let passiveRestoreController = PluginPassiveModelRestoreController()
+    private let modelLoadGate = PluginLocalInferenceGate()
+
+    func requestPassiveModelRestore() {
+        passiveRestoreController.request { [weak self] in
+            guard let self else { return }
+            await self.restoreLoadedModel(allowDownloads: false, passively: true)
+        }
+    }
+
     required override init() {
         super.init()
     }
@@ -49,11 +59,12 @@ final class CanaryPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
         cleanupRedundantModelCopies()
 
         if shouldRestoreLoadedModelsPassively {
-            Task { await restoreLoadedModel(allowDownloads: false) }
+            requestPassiveModelRestore()
         }
     }
 
     func deactivate() {
+        passiveRestoreController.cancel()
         activationID = UUID()
         model = nil
         loadedModelId = nil
@@ -225,7 +236,19 @@ final class CanaryPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
 
     // MARK: - Model Management
 
-    fileprivate func loadModel(_ modelDef: CanaryModelDef) async throws {
+    fileprivate func loadModel(_ modelDef: CanaryModelDef, passively: Bool = false) async throws {
+        let generation = activationID
+        try await modelLoadGate.withLock { [self] in
+            guard generation == activationID, host != nil else { throw CancellationError() }
+            if passively {
+                guard host?.shouldRestoreLoadedModelsPassively == true, !isConfigured else { return }
+            }
+            guard !(isConfigured && loadedModelId == modelDef.id) else { return }
+            try await performModelLoad(modelDef, allowDownloads: !passively)
+        }
+    }
+
+    private func performModelLoad(_ modelDef: CanaryModelDef, allowDownloads: Bool) async throws {
         let generation = activationID
         modelState = .loading
         do {
@@ -237,6 +260,10 @@ final class CanaryPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
             if let existing = usableModelDirectory(for: modelDef, modelsDirectory: modelsDir) {
                 modelDirectory = existing
             } else {
+                guard allowDownloads else {
+                    modelState = .notLoaded
+                    return
+                }
                 guard !modelDef.id.hasPrefix("custom-") else {
                     throw PluginModelImportError.invalidModel("Imported files are missing. Remove and import the model again.")
                 }
@@ -287,6 +314,11 @@ final class CanaryPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
             host?.setUserDefault(modelDef.id, forKey: "loadedModel")
             modelState = .ready(modelDef.id)
             host?.notifyCapabilitiesChanged()
+        } catch is CancellationError {
+            if generation == activationID, host != nil {
+                modelState = loadedModelId.map { .ready($0) } ?? .notLoaded
+            }
+            throw CancellationError()
         } catch {
             if generation == activationID { modelState = .error("\(error)") }
             throw error
@@ -355,6 +387,7 @@ final class CanaryPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
     @objc func triggerRestoreModel() { Task { await restoreLoadedModel(allowDownloads: true) } }
 
     func unloadModel(clearPersistence: Bool = true) {
+        passiveRestoreController.cancel()
         model = nil
         loadedModelId = nil
         modelState = .notLoaded
@@ -376,13 +409,17 @@ final class CanaryPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
         )
     }
 
-    func restoreLoadedModel(allowDownloads: Bool = true) async {
+    func restoreLoadedModel(allowDownloads: Bool = true, passively: Bool = false) async {
+        guard !Task.isCancelled else { return }
+        if passively {
+            guard host?.shouldRestoreLoadedModelsPassively == true, !isConfigured else { return }
+        }
         guard let savedId = host?.userDefault(forKey: "loadedModel") as? String,
               let modelDef = allModelDefinitions.first(where: { $0.id == savedId }) else {
             return
         }
         guard allowDownloads || hasDownloadedModel(modelDef) else { return }
-        try? await loadModel(modelDef)
+        try? await loadModel(modelDef, passively: passively)
     }
 
     private func hasDownloadedModel(_ modelDef: CanaryModelDef) -> Bool {
