@@ -453,6 +453,10 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
             genericModelLoadTask = nil
             explicitModelLoadTask?.cancel()
             activationID = UUID()
+            if isConfigured, loadedModelId == modelId {
+                // Superseding an import can keep this already-loaded runtime.
+                modelState = .ready(modelId)
+            }
             let generation = activationID
             explicitModelLoadTask = Task {
                 defer {

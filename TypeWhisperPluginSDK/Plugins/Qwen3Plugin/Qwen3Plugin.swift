@@ -488,6 +488,10 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
             genericModelLoadTask = nil
             explicitModelLoadTask?.cancel()
             activationID = UUID()
+            if isConfigured, loadedModelId == preferredModelId {
+                // Superseding an import can keep this already-loaded runtime.
+                modelState = .ready(preferredModelId)
+            }
             let generation = activationID
             explicitModelLoadTask = Task {
                 defer {

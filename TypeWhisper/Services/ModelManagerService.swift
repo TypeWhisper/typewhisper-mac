@@ -301,7 +301,9 @@ final class ModelManagerService: ObservableObject {
             throw ModelLifecycleError.modelNotFound(engineId: providerId, modelId: modelId)
         }
 
-        if pluginConfiguredState(
+        // A configured runtime can coexist with an import. Still deliver an
+        // explicit request so the plugin can supersede that pending operation.
+        if pluginSettingsActivity(plugin) == nil, pluginConfiguredState(
             plugin,
             selectedModelId: modelId,
             stopOnMismatchedSelection: true
