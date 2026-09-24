@@ -717,7 +717,7 @@ private struct CanarySettingsView: View {
         .task {
             if case .notLoaded = plugin.modelState, plugin.shouldRestoreLoadedModelsPassively {
                 isPolling = true
-                await plugin.restoreLoadedModel(allowDownloads: false)
+                await plugin.restoreLoadedModel(allowDownloads: false, passively: true)
                 isPolling = false
                 modelState = plugin.modelState
             }

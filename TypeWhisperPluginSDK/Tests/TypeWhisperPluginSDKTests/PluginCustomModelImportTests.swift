@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 import XCTest
 @_spi(FirstPartyPlugins) @testable import TypeWhisperPluginSDK
 
@@ -22,6 +23,53 @@ final class PluginCustomModelImportTests: XCTestCase, @unchecked Sendable {
 
     private func store() -> PluginCustomModelStore {
         PluginCustomModelStore(directory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString))
+    }
+
+    func testStoreReopeningRecoversAbandonedStagesWithoutRemovingActiveImport() throws {
+        let store = store()
+        defer { try? FileManager.default.removeItem(at: store.directory) }
+        let (active, lease) = try store.createStagingDirectory()
+        let abandoned = store.directory.appendingPathComponent(".import-" + UUID().uuidString)
+        try FileManager.default.createDirectory(at: abandoned, withIntermediateDirectories: true)
+        try Data([1, 2, 3]).write(to: abandoned.appendingPathComponent("partial.safetensors"))
+        _ = PluginCustomModelStore(directory: store.directory)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: abandoned.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: active.path))
+        close(lease) // Simulate the OS releasing the lease after process termination.
+        _ = PluginCustomModelStore(directory: store.directory)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: active.path))
+    }
+
+    func testRemoteMetadataLimitRejectsOversizedContentLength() async throws {
+        try await assertMetadataRejected(path: "declared")
+    }
+
+    func testRemoteMetadataLimitRejectsChunkedBodyWhileReading() async throws {
+        try await assertMetadataRejected(path: "chunked")
+    }
+
+    func testRemoteMetadataWithinLimitIsReturned() async throws {
+        let session = metadataSession()
+        defer { session.invalidateAndCancel() }
+        let (data, _) = try await PluginModelImportCandidate.fetchMetadata(
+            URLRequest(url: URL(string: "https://metadata.test/valid")!), session: session, limit: 16)
+        XCTAssertEqual(data, Data(repeating: 42, count: 16))
+    }
+
+    private func metadataSession() -> URLSession {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.protocolClasses = [ImportMetadataURLProtocol.self]
+        return URLSession(configuration: configuration)
+    }
+
+    private func assertMetadataRejected(path: String) async throws {
+        let session = metadataSession()
+        defer { session.invalidateAndCancel() }
+        do {
+            _ = try await PluginModelImportCandidate.fetchMetadata(
+                URLRequest(url: URL(string: "https://metadata.test/" + path)!), session: session, limit: 16)
+            XCTFail("Oversized metadata must be rejected")
+        } catch PluginModelImportError.invalidModel { }
     }
 
     func testLargeFileCopyCancellationRemovesPartialDestination() throws {
@@ -98,7 +146,7 @@ final class PluginCustomModelImportTests: XCTestCase, @unchecked Sendable {
             XCTFail("Accepted incomplete model")
         } catch { XCTAssertTrue(error is PluginModelImportError) }
         XCTAssertTrue(store.models().isEmpty)
-        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: store.directory.path), [])
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: store.directory.path), [".staging.lock"])
     }
 
     func testMissingWeightShardIsRejected() async throws {
@@ -279,7 +327,23 @@ final class PluginCustomModelImportTests: XCTestCase, @unchecked Sendable {
             XCTFail("Accepted interrupted download")
         } catch { XCTAssertEqual((error as? URLError)?.code, .networkConnectionLost) }
         XCTAssertTrue(store.models().isEmpty)
-        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: store.directory.path), [])
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: store.directory.path), [".staging.lock"])
     }
 
+}
+
+private final class ImportMetadataURLProtocol: URLProtocol, @unchecked Sendable {
+    override class func canInit(with request: URLRequest) -> Bool { true }
+    override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
+    override func startLoading() {
+        let path = request.url!.lastPathComponent
+        let headers = path == "declared" ? ["Content-Length": "17"] : [:]
+        let response = HTTPURLResponse(url: request.url!, statusCode: 200, httpVersion: "HTTP/1.1", headerFields: headers)!
+        client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
+        // An oversized Content-Length is rejected even when the body is tiny.
+        let count = path == "declared" ? 1 : path == "valid" ? 16 : 17
+        client?.urlProtocol(self, didLoad: Data(repeating: 42, count: count))
+        client?.urlProtocolDidFinishLoading(self)
+    }
+    override func stopLoading() { }
 }

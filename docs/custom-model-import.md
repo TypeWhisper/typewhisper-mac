@@ -32,6 +32,11 @@ engine in Dictation settings to use it for dictation. The imported entry survive
 restarts and unloading. Remove it from the plugin's downloaded-model list in
 Integrations when it is no longer needed.
 
+Remote repository metadata and configurations are limited to 4 MiB while streaming,
+including responses without a Content-Length header. Abandoned staging folders
+are recovered when the store reopens; operating-system file leases protect active
+imports, including imports in another process.
+
 Local files are copied in cancellable chunks into the plugin's `custom-models` directory. Removing an
 import deletes only that copy. Hugging Face imports pin configuration and data
 files to the same repository commit. Repository scripts are neither downloaded

@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 /// Optional capability; existing transcription engines remain binary compatible.
 public protocol PluginCustomModelImporting: TranscriptionEnginePlugin {
@@ -82,7 +83,7 @@ public struct PluginModelImportCandidate: Sendable {
     public static func inspect(
         _ source: PluginModelImportSource,
         token: String? = nil,
-        fetch: @escaping @Sendable (URLRequest) async throws -> (Data, URLResponse) = PluginHTTPClient.data
+        fetch: @escaping @Sendable (URLRequest) async throws -> (Data, URLResponse) = { try await Self.fetchMetadata($0, session: .shared, limit: 4 * 1024 * 1024) }
     ) async throws -> Self {
         switch source {
         case .folder(let folder):
@@ -113,6 +114,26 @@ public struct PluginModelImportCandidate: Sendable {
                         displayName: repository.split(separator: "/").last.map(String.init) ?? repository,
                         revision: repo.sha, files: repo.siblings.map(\.rfilename))
         }
+    }
+
+    @usableFromInline
+    static func fetchMetadata(_ request: URLRequest, session: URLSession, limit: Int) async throws -> (Data, URLResponse) {
+        try PluginHTTPClient.ensureNetworkAccessIsAllowed()
+        let (bytes, response) = try await session.bytes(for: request)
+        defer { bytes.task.cancel() }
+        try checkResponse(response)
+        guard response.expectedContentLength <= limit else {
+            throw PluginModelImportError.invalidModel("Model metadata exceeds the 4 MiB limit")
+        }
+        var data = Data()
+        for try await byte in bytes {
+            try Task.checkCancellation()
+            guard data.count < limit else {
+                throw PluginModelImportError.invalidModel("Model metadata exceeds the 4 MiB limit")
+            }
+            data.append(byte)
+        }
+        return (data, response)
     }
 
     static func readConfig(in directory: URL) throws -> Data {
@@ -166,7 +187,59 @@ public struct PluginCustomModelStore: Sendable {
     // Only data files consumed by local engines. Never import or execute repository code.
     private static let extensions: Set<String> = ["safetensors", "json", "txt", "model", "tiktoken", "wav"]
 
-    public init(directory: URL) { self.directory = directory }
+    public init(directory: URL) {
+        self.directory = directory
+        if FileManager.default.fileExists(atPath: directory.path) {
+            try? withStagingLock { cleanupAbandonedStaging() }
+        }
+    }
+
+    // A short store lock makes stage creation and recovery atomic across processes.
+    // Each import holds its own lease until completion; the OS releases it on crash.
+    private func withStagingLock<T>(_ body: () throws -> T) throws -> T {
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let fd = open(directory.appendingPathComponent(".staging.lock").path, O_CREAT | O_RDWR, 0o600)
+        guard fd >= 0 else { throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno)) }
+        defer { close(fd) }
+        guard flock(fd, LOCK_EX) == 0 else { throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno)) }
+        return try body()
+    }
+
+    private func cleanupAbandonedStaging() {
+        let children = (try? FileManager.default.contentsOfDirectory(
+            at: directory, includingPropertiesForKeys: [.isDirectoryKey, .isSymbolicLinkKey])) ?? []
+        for child in children {
+            guard child.lastPathComponent.hasPrefix(".import-"),
+                  UUID(uuidString: String(child.lastPathComponent.dropFirst(8))) != nil,
+                  let values = try? child.resourceValues(forKeys: [.isDirectoryKey, .isSymbolicLinkKey]),
+                  values.isDirectory == true, values.isSymbolicLink != true else { continue }
+            let fd = open(child.appendingPathComponent(".lease").path, O_CREAT | O_RDWR | O_NOFOLLOW, 0o600)
+            guard fd >= 0 else { continue }
+            defer { close(fd) }
+            guard flock(fd, LOCK_EX | LOCK_NB) == 0 else { continue }
+            try? FileManager.default.removeItem(at: child)
+        }
+    }
+
+    func createStagingDirectory() throws -> (URL, Int32) {
+        try withStagingLock {
+            cleanupAbandonedStaging()
+            let staging = directory.appendingPathComponent(".import-" + UUID().uuidString)
+            try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
+            let fd = open(staging.appendingPathComponent(".lease").path, O_CREAT | O_RDWR, 0o600)
+            guard fd >= 0 else {
+                try? FileManager.default.removeItem(at: staging)
+                throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
+            }
+            guard flock(fd, LOCK_EX | LOCK_NB) == 0 else {
+                let error = NSError(domain: NSPOSIXErrorDomain, code: Int(errno))
+                close(fd)
+                try? FileManager.default.removeItem(at: staging)
+                throw error
+            }
+            return (staging, fd)
+        }
+    }
 
     public func models() -> [Model] {
         let children = (try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil)) ?? []
@@ -211,9 +284,11 @@ public struct PluginCustomModelStore: Sendable {
             throw PluginModelImportError.duplicate
         }
         let id = "custom-" + UUID().uuidString.lowercased()
-        let staging = directory.appendingPathComponent(".import-" + UUID().uuidString)
-        try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: staging) }
+        let (staging, lease) = try createStagingDirectory()
+        defer {
+            try? FileManager.default.removeItem(at: staging)
+            close(lease)
+        }
 
         switch candidate.source {
         case .folder(let source):
@@ -242,7 +317,9 @@ public struct PluginCustomModelStore: Sendable {
                           origin: origin, revision: candidate.revision, bytes: bytes)
         try JSONEncoder().encode(model).write(to: staging.appendingPathComponent(Self.metadataName), options: .atomic)
         try Task.checkCancellation()
-        try FileManager.default.moveItem(at: staging, to: directory.appendingPathComponent(id))
+        let destination = directory.appendingPathComponent(id)
+        try FileManager.default.moveItem(at: staging, to: destination)
+        try? FileManager.default.removeItem(at: destination.appendingPathComponent(".lease"))
         return model
     }
 
