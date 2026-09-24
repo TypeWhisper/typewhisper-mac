@@ -52,6 +52,9 @@ final class GranitePlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
     func activate(host: HostServices) {
         activationID = UUID()
         self.host = host
+        if let store = customModelStore {
+            Task.detached(priority: .utility) { try? store.recoverAbandonedImports() }
+        }
         _selectedModelId = host.userDefault(forKey: "selectedModel") as? String
             ?? allModelDefinitions.first?.id
         _hfToken = PluginHuggingFaceTokenHelper.loadToken(from: host)

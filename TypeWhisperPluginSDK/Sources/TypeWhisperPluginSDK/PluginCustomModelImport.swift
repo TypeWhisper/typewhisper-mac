@@ -187,17 +187,21 @@ public struct PluginCustomModelStore: Sendable {
     // Only data files consumed by local engines. Never import or execute repository code.
     private static let extensions: Set<String> = ["safetensors", "json", "txt", "model", "tiktoken", "wav"]
 
-    public init(directory: URL) {
-        self.directory = directory
-        if FileManager.default.fileExists(atPath: directory.path) {
-            try? withStagingLock { cleanupAbandonedStaging() }
-        }
+    public init(directory: URL) { self.directory = directory }
+
+    /// Run once off the UI executor when activating a plugin. Store construction
+    /// and model-list reads stay free of blocking recovery work.
+    public func recoverAbandonedImports() throws {
+        guard FileManager.default.fileExists(atPath: directory.path) else { return }
+        try withStagingLock(createDirectory: false) { cleanupAbandonedStaging() }
     }
 
     // A short store lock makes stage creation and recovery atomic across processes.
     // Each import holds its own lease until completion; the OS releases it on crash.
-    private func withStagingLock<T>(_ body: () throws -> T) throws -> T {
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    private func withStagingLock<T>(createDirectory: Bool = true, _ body: () throws -> T) throws -> T {
+        if createDirectory {
+            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        }
         let fd = open(directory.appendingPathComponent(".staging.lock").path, O_CREAT | O_RDWR, 0o600)
         guard fd >= 0 else { throw NSError(domain: NSPOSIXErrorDomain, code: Int(errno)) }
         defer { close(fd) }

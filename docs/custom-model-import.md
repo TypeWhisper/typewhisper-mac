@@ -34,7 +34,7 @@ Integrations when it is no longer needed.
 
 Remote repository metadata and configurations are limited to 4 MiB while streaming,
 including responses without a Content-Length header. Abandoned staging folders
-are recovered when the store reopens; operating-system file leases protect active
+are recovered in the background when a plugin activates; operating-system file leases protect active
 imports, including imports in another process.
 
 Local files are copied in cancellable chunks into the plugin's `custom-models` directory. Removing an

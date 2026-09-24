@@ -25,18 +25,20 @@ final class PluginCustomModelImportTests: XCTestCase, @unchecked Sendable {
         PluginCustomModelStore(directory: FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString))
     }
 
-    func testStoreReopeningRecoversAbandonedStagesWithoutRemovingActiveImport() throws {
+    func testExplicitRecoveryRemovesAbandonedStagesWithoutRemovingActiveImport() throws {
         let store = store()
         defer { try? FileManager.default.removeItem(at: store.directory) }
         let (active, lease) = try store.createStagingDirectory()
         let abandoned = store.directory.appendingPathComponent(".import-" + UUID().uuidString)
         try FileManager.default.createDirectory(at: abandoned, withIntermediateDirectories: true)
         try Data([1, 2, 3]).write(to: abandoned.appendingPathComponent("partial.safetensors"))
-        _ = PluginCustomModelStore(directory: store.directory)
+        let reopened = PluginCustomModelStore(directory: store.directory)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: abandoned.path))
+        try reopened.recoverAbandonedImports()
         XCTAssertFalse(FileManager.default.fileExists(atPath: abandoned.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: active.path))
         close(lease) // Simulate the OS releasing the lease after process termination.
-        _ = PluginCustomModelStore(directory: store.directory)
+        try reopened.recoverAbandonedImports()
         XCTAssertFalse(FileManager.default.fileExists(atPath: active.path))
     }
 

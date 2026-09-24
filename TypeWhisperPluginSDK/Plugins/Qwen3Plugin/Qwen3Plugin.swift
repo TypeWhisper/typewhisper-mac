@@ -69,6 +69,9 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
     func activate(host: HostServices) {
         activationID = UUID()
         self.host = host
+        if let store = customModelStore {
+            Task.detached(priority: .utility) { try? store.recoverAbandonedImports() }
+        }
         _selectedModelId = host.userDefault(forKey: "selectedModel") as? String
         _hfToken = PluginHuggingFaceTokenHelper.loadToken(from: host)
         cleanupRedundantModelCopies()
