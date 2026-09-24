@@ -374,19 +374,34 @@ final class SoundServiceTests: XCTestCase {
     }
 
     @MainActor
-    func testOneShotPlayerPreparesNewCueWhenDefaultOutputDeviceChanges() async {
+    func testOneShotPlayerPreparesNewCueWhenOutputDeviceConfigurationChanges() async {
         let factory = FakeSoundCuePlayerFactory(duration: 0.4)
         let player = makeOneShotPlayer(factory: factory)
         let url = URL(fileURLWithPath: "/tmp/cue.wav")
 
         player.preparePlayback(for: [url])
         await player.waitForPendingPreparationsForTesting()
-        player.handleDefaultOutputDeviceChange()
+        player.handleOutputDeviceConfigurationChange()
         await player.waitForPendingPreparationsForTesting()
 
         XCTAssertTrue(player.play(url: url))
         XCTAssertEqual(factory.players.map(\.playCount), [0, 1])
         XCTAssertEqual(factory.players.map(\.createdOnMainThread), [false, false])
+    }
+
+    @MainActor
+    func testOneShotPlayerDiscardsPreparationStartedBeforeOutputConfigurationChange() async {
+        let factory = FakeSoundCuePlayerFactory(duration: 0.4)
+        let player = makeOneShotPlayer(factory: factory)
+        let url = URL(fileURLWithPath: "/tmp/cue.wav")
+
+        // E.g. a Bluetooth headset switching to HFP while the replacement cue is being primed.
+        player.preparePlayback(for: [url])
+        player.handleOutputDeviceConfigurationChange()
+        await player.waitForPendingPreparationsForTesting()
+
+        XCTAssertTrue(player.play(url: url))
+        XCTAssertEqual(factory.players.map(\.playCount), [0, 1])
     }
 
     @MainActor

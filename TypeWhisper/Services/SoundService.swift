@@ -144,36 +144,95 @@ private final class PreparedSoundCue: @unchecked Sendable {
     }
 }
 
-/// Calls `onChange` on the main queue whenever the system default output device changes.
-private final class DefaultOutputDeviceObserver: @unchecked Sendable {
-    private let listener: AudioObjectPropertyListenerBlock
-    private var address = AudioObjectPropertyAddress(
+/// Calls `onChange` on the main queue when the default output device changes, or when the
+/// current default output device changes its sample rate or output channel configuration.
+/// The latter covers devices that keep their ID while reconfiguring, such as a Bluetooth
+/// headset switching from A2DP to HFP when its microphone starts.
+private final class OutputDeviceConfigurationObserver: @unchecked Sendable {
+    // Mutable state is only touched from init, deinit and listener callbacks, which CoreAudio
+    // delivers on the main queue.
+    private static let systemObjectID = AudioObjectID(kAudioObjectSystemObject)
+    private static let defaultOutputDeviceAddress = AudioObjectPropertyAddress(
         mSelector: kAudioHardwarePropertyDefaultOutputDevice,
         mScope: kAudioObjectPropertyScopeGlobal,
         mElement: kAudioObjectPropertyElementMain
     )
+    private static let deviceConfigurationAddresses = [
+        AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyNominalSampleRate,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        ),
+        AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyStreamConfiguration,
+            mScope: kAudioDevicePropertyScopeOutput,
+            mElement: kAudioObjectPropertyElementMain
+        )
+    ]
+
+    private let onChange: @MainActor @Sendable () -> Void
+    private var defaultDeviceListener: AudioObjectPropertyListenerBlock?
+    private var deviceConfigurationListener: AudioObjectPropertyListenerBlock?
+    private var observedDeviceID: AudioObjectID?
 
     init(onChange: @escaping @MainActor @Sendable () -> Void) {
-        listener = { _, _ in
-            MainActor.assumeIsolated {
-                onChange()
-            }
+        self.onChange = onChange
+        let defaultDeviceListener: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
+            self?.defaultOutputDeviceChanged()
         }
-        AudioObjectAddPropertyListenerBlock(
-            AudioObjectID(kAudioObjectSystemObject),
-            &address,
-            DispatchQueue.main,
-            listener
-        )
+        self.defaultDeviceListener = defaultDeviceListener
+        deviceConfigurationListener = { [weak self] _, _ in
+            self?.notifyChange()
+        }
+
+        var address = Self.defaultOutputDeviceAddress
+        AudioObjectAddPropertyListenerBlock(Self.systemObjectID, &address, DispatchQueue.main, defaultDeviceListener)
+        observeConfiguration(of: Self.defaultOutputDeviceID())
     }
 
     deinit {
-        AudioObjectRemovePropertyListenerBlock(
-            AudioObjectID(kAudioObjectSystemObject),
-            &address,
-            DispatchQueue.main,
-            listener
-        )
+        observeConfiguration(of: nil)
+        if let defaultDeviceListener {
+            var address = Self.defaultOutputDeviceAddress
+            AudioObjectRemovePropertyListenerBlock(Self.systemObjectID, &address, DispatchQueue.main, defaultDeviceListener)
+        }
+    }
+
+    private func defaultOutputDeviceChanged() {
+        observeConfiguration(of: Self.defaultOutputDeviceID())
+        notifyChange()
+    }
+
+    private func notifyChange() {
+        MainActor.assumeIsolated {
+            onChange()
+        }
+    }
+
+    private func observeConfiguration(of deviceID: AudioObjectID?) {
+        guard deviceID != observedDeviceID, let listener = deviceConfigurationListener else { return }
+        if let observedDeviceID {
+            for initialAddress in Self.deviceConfigurationAddresses {
+                var address = initialAddress
+                AudioObjectRemovePropertyListenerBlock(observedDeviceID, &address, DispatchQueue.main, listener)
+            }
+        }
+        observedDeviceID = deviceID
+        guard let deviceID else { return }
+        for initialAddress in Self.deviceConfigurationAddresses {
+            var address = initialAddress
+            guard AudioObjectHasProperty(deviceID, &address) else { continue }
+            AudioObjectAddPropertyListenerBlock(deviceID, &address, DispatchQueue.main, listener)
+        }
+    }
+
+    private static func defaultOutputDeviceID() -> AudioObjectID? {
+        var deviceID = AudioObjectID(0)
+        var size = UInt32(MemoryLayout<AudioObjectID>.size)
+        var address = defaultOutputDeviceAddress
+        let status = AudioObjectGetPropertyData(systemObjectID, &address, 0, nil, &size, &deviceID)
+        guard status == noErr, deviceID != kAudioObjectUnknown else { return nil }
+        return deviceID
     }
 }
 
@@ -195,7 +254,7 @@ final class AVAudioOneShotSoundPlayer: OneShotSoundPlaying {
 
     private let makePlayer: PlayerFactory
     private let preparationQueue: DispatchQueue
-    private var outputDeviceObserver: DefaultOutputDeviceObserver?
+    private var outputDeviceObserver: OutputDeviceConfigurationObserver?
     private var playbackURLs: Set<URL> = []
     private var cachedPlayers: [URL: CachedPlayer] = [:]
     private var durations: [URL: TimeInterval] = [:]
@@ -211,8 +270,8 @@ final class AVAudioOneShotSoundPlayer: OneShotSoundPlaying {
         self.makePlayer = makePlayer
         self.preparationQueue = preparationQueue
         if observesOutputDeviceChanges {
-            outputDeviceObserver = DefaultOutputDeviceObserver { [weak self] in
-                self?.handleDefaultOutputDeviceChange()
+            outputDeviceObserver = OutputDeviceConfigurationObserver { [weak self] in
+                self?.handleOutputDeviceConfigurationChange()
             }
         }
     }
@@ -259,7 +318,9 @@ final class AVAudioOneShotSoundPlayer: OneShotSoundPlaying {
         preparePlayer(for: url)
     }
 
-    func handleDefaultOutputDeviceChange() {
+    /// Prepared players are primed for the output format at preparation time, so they are
+    /// replaced whenever the output device or its format changes.
+    func handleOutputDeviceConfigurationChange() {
         let urls = playbackURLs.union(cachedPlayers.keys)
         for url in urls {
             discardCachedPlayer(for: url)
