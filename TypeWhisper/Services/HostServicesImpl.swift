@@ -97,7 +97,12 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, @
         }
 
         let scopedService = "\(pluginId).\(key)"
-        return KeychainService.load(service: scopedService)
+        // Plugins read credentials synchronously in activate(host:), so keychain
+        // latency is part of launch. The interval carries no key or value.
+        let signposter = LaunchSignposts.signposter
+        return signposter.withIntervalSignpost("Plugin.loadSecret", id: signposter.makeSignpostID()) {
+            KeychainService.load(service: scopedService)
+        }
     }
 
     // MARK: - UserDefaults (plugin-scoped)
