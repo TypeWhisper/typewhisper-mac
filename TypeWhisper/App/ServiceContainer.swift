@@ -13,11 +13,11 @@ enum LaunchSignposts {
     )
 
     @MainActor private static var launchState: OSSignpostIntervalState?
-    @MainActor private static var firstFrameObserver: CFRunLoopObserver?
+    @MainActor private static var firstIdleObserver: CFRunLoopObserver?
 
     /// Opens the whole-launch interval and closes it at the first time the main run
-    /// loop is about to wait. Core Animation commits in that same phase, so the
-    /// `Launch.firstFrame` event approximates the first rendered frame.
+    /// loop is about to wait, marked by the `Launch.firstIdle` event. This can happen
+    /// before the delayed initial window opens, so it is not a rendered-frame marker.
     @MainActor
     static func beginLaunch() {
         guard launchState == nil else { return }
@@ -34,13 +34,13 @@ enum LaunchSignposts {
             }
         }
         CFRunLoopAddObserver(CFRunLoopGetMain(), observer, .commonModes)
-        firstFrameObserver = observer
+        firstIdleObserver = observer
     }
 
     @MainActor
     private static func finishLaunch() {
-        firstFrameObserver = nil
-        signposter.emitEvent("Launch.firstFrame")
+        firstIdleObserver = nil
+        signposter.emitEvent("Launch.firstIdle")
         if let launchState {
             signposter.endInterval("Launch", launchState)
         }
