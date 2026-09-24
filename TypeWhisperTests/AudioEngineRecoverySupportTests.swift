@@ -670,6 +670,34 @@ final class AudioEngineRecoverySupportTests: XCTestCase {
         XCTAssertEqual(try recoveryFileNames(in: directory), [existingRecovery.lastPathComponent])
     }
 
+    @MainActor
+    func testBackgroundRecoveryPublicationDoesNotRepopulateDiscardedRecordings() async throws {
+        let directory = makeRecoveryTestDirectory()
+        let store = DictationRecoveryAudioStore(directory: directory)
+        let service = AudioRecordingService(recoveryAudioStore: store)
+        service.hasMicrophonePermissionOverride = true
+        service.startRecordingOverride = {}
+        service.stopRecordingOverride = { _ in service.getCurrentBuffer() }
+
+        try service.startRecording()
+        service.testingProcessConvertedSamples([0.25, -0.25])
+        _ = await service.stopRecording(policy: .immediate)
+        service.preserveActiveRecoveryRecordingInBackground(successful: true)
+        // The preservation has finished and queued its publication on the main queue.
+        service.waitForPendingRecoveryPreservation()
+        XCTAssertEqual(service.recoveryRecordingURLs.count, 1)
+
+        // The user deletes the recovery files before that publication runs.
+        service.discardAllRecoveryRecordings()
+        await withCheckedContinuation { continuation in
+            DispatchQueue.main.async { continuation.resume() }
+        }
+
+        XCTAssertTrue(service.recoverableRecordingURLs.isEmpty)
+        XCTAssertNil(service.recoverableRecordingURL)
+        XCTAssertTrue(try recoveryFileNames(in: directory).isEmpty)
+    }
+
     func testTranscriptionFailureCanPreserveStoppedRecoveryAudio() async throws {
         let directory = makeRecoveryTestDirectory()
         let store = DictationRecoveryAudioStore(directory: directory)

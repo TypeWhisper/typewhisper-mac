@@ -1,4 +1,5 @@
 import Foundation
+import os
 import XCTest
 @testable import TypeWhisper
 
@@ -99,6 +100,27 @@ final class DictationRecoveryAudioStoreTests: XCTestCase {
         XCTAssertEqual(store.recoveryURLs.count, 1)
         XCTAssertTrue(DictationRecoveryAudioStore.isRecentSuccessfulRecording(url))
         XCTAssertEqual(readUInt32(try Data(contentsOf: url), at: 40), 6)
+    }
+
+    func testWaitForPendingOperationsFinalizesQueuedBackgroundPreservation() throws {
+        let directory = makeTemporaryDirectory()
+        let store = DictationRecoveryAudioStore(directory: directory)
+        store.startNewRecording()
+        store.append([0.1, 0.2, 0.3])
+        let completionURLs = OSAllocatedUnfairLock<[URL]?>(initialState: nil)
+
+        store.preserveActiveRecordingResultInBackground(successful: true) { _, urls in
+            completionURLs.withLock { $0 = urls }
+        }
+        store.waitForPendingOperations()
+
+        // Checked without going through the store queue, as after the app terminated.
+        let urls = completionURLs.withLock { $0 }
+        let preservedURL = try XCTUnwrap(urls?.first)
+        XCTAssertEqual(urls?.count, 1)
+        XCTAssertEqual(try fileNames(in: directory), [preservedURL.lastPathComponent])
+        XCTAssertTrue(DictationRecoveryAudioStore.isRecentSuccessfulRecording(preservedURL))
+        XCTAssertEqual(readUInt32(try Data(contentsOf: preservedURL), at: 40), 6)
     }
 
     func testPreserveWritesWavWithExpectedHeaderAndSamples() throws {

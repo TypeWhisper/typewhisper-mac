@@ -417,6 +417,9 @@ final class DictationViewModel: ObservableObject {
     /// Persists completed dictations (history, completion events, usage statistics) after the
     /// text was inserted. Chained so records keep their completion order.
     private var postInsertionPersistenceTask: Task<Void, Never>?
+    /// Inserted dictations that `postInsertionPersistenceTask` has not persisted yet, in completion
+    /// order. `flushPendingPostInsertionPersistence()` persists them when the app terminates first.
+    private var pendingPostInsertionDictations: [CompletedDictation] = []
     var pasteboardProvider: () -> NSPasteboard = { .general }
     /// Snapshot of the streaming params used in the most recent `streamingHandler.start(...)`.
     /// Used to detect when an on-the-fly rule refinement (e.g. browser URL resolution)
@@ -981,7 +984,7 @@ final class DictationViewModel: ObservableObject {
         let finalText: String
         let appName: String?
         let appBundleIdentifier: String?
-        let appURL: String?
+        var appURL: String?
         let durationSeconds: Double
         let language: String?
         let detectedLanguage: String?
@@ -1001,15 +1004,51 @@ final class DictationViewModel: ObservableObject {
         _ dictation: CompletedDictation,
         pendingURLResolution: Task<String?, Never>?
     ) {
+        let dictationID = dictation.transcriptionID
+        pendingPostInsertionDictations.append(dictation)
         let previousTask = postInsertionPersistenceTask
         postInsertionPersistenceTask = Task { @MainActor [weak self] in
             await previousTask?.value
-            self?.saveDeferredPostProcessingUsageCounts()
-            var appURL = dictation.appURL
-            if appURL == nil, let pendingURLResolution {
-                appURL = await pendingURLResolution.value
+            guard let self else { return }
+            saveDeferredPostProcessingUsageCounts()
+            // After each wait, stop if the termination flush already persisted the dictation.
+            if dictation.appURL == nil, let pendingURLResolution {
+                let resolvedURL = await pendingURLResolution.value
+                guard let index = pendingPostInsertionDictationIndex(id: dictationID) else { return }
+                pendingPostInsertionDictations[index].appURL = resolvedURL
             }
-            await self?.persistCompletedDictation(dictation, appURL: appURL)
+            var historyAudioFileName: String?
+            if dictation.historyEnabled, let audioSamples = dictation.audioSamples {
+                historyAudioFileName = await historyService.writeAudioFileInBackground(
+                    audioSamples,
+                    forRecordID: dictationID
+                )
+            }
+            guard let index = pendingPostInsertionDictationIndex(id: dictationID) else { return }
+            let pendingDictation = pendingPostInsertionDictations.remove(at: index)
+            persistCompletedDictation(pendingDictation, historyAudioFileName: historyAudioFileName)
+        }
+    }
+
+    private func pendingPostInsertionDictationIndex(id: UUID) -> Int? {
+        pendingPostInsertionDictations.firstIndex { $0.transcriptionID == id }
+    }
+
+    /// Synchronously persists dictations still waiting for the optional browser URL lookup or
+    /// the background history audio write, for example before the app terminates. They are
+    /// persisted with the metadata known at this point.
+    func flushPendingPostInsertionPersistence() {
+        guard !pendingPostInsertionDictations.isEmpty else { return }
+        let dictations = pendingPostInsertionDictations
+        pendingPostInsertionDictations.removeAll()
+        saveDeferredPostProcessingUsageCounts()
+        for dictation in dictations {
+            let historyAudioFileName = dictation.historyEnabled
+                ? dictation.audioSamples.flatMap {
+                    historyService.writeAudioFile($0, forRecordID: dictation.transcriptionID)
+                }
+                : nil
+            persistCompletedDictation(dictation, historyAudioFileName: historyAudioFileName)
         }
     }
 
@@ -1019,9 +1058,10 @@ final class DictationViewModel: ObservableObject {
         dictionaryService.saveDeferredUsageCounts()
     }
 
-    private func persistCompletedDictation(_ dictation: CompletedDictation, appURL: String?) async {
+    private func persistCompletedDictation(_ dictation: CompletedDictation, historyAudioFileName: String?) {
+        let appURL = dictation.appURL
         if dictation.historyEnabled {
-            await historyService.addRecordWritingAudioInBackground(
+            historyService.addRecord(
                 id: dictation.transcriptionID,
                 timestamp: dictation.timestamp,
                 rawText: dictation.rawText,
@@ -1033,7 +1073,7 @@ final class DictationViewModel: ObservableObject {
                 language: dictation.language,
                 engineUsed: dictation.engineUsed,
                 modelUsed: dictation.modelUsed,
-                audioSamples: dictation.audioSamples,
+                audioFileName: historyAudioFileName,
                 pipelineSteps: dictation.pipelineSteps
             )
         }

@@ -149,12 +149,52 @@ final class HistoryService: ObservableObject {
             return false
         }
 
-        var audioFileName: String?
-        if let samples = audioSamples, !samples.isEmpty {
-            let fileName = Self.audioFileName(for: id)
-            if Self.writeAudioFile(samples, to: audioDirectory.appendingPathComponent(fileName)) {
-                audioFileName = fileName
+        insertRecord(
+            id: id,
+            timestamp: timestamp,
+            rawText: texts.rawText,
+            finalText: texts.finalText,
+            appName: appName,
+            appBundleIdentifier: appBundleIdentifier,
+            appURL: appURL,
+            durationSeconds: durationSeconds,
+            language: language,
+            engineUsed: engineUsed,
+            modelUsed: modelUsed,
+            audioFileName: audioSamples.flatMap { writeAudioFile($0, forRecordID: id) },
+            pipelineSteps: pipelineSteps
+        )
+        return true
+    }
+
+    /// Adds a record whose audio file was already written with `writeAudioFile(_:forRecordID:)`
+    /// or `writeAudioFileInBackground(_:forRecordID:)`. If the record is rejected, that audio
+    /// file is removed so it is not left behind without a record.
+    @discardableResult
+    func addRecord(
+        id: UUID,
+        timestamp: Date = Date(),
+        rawText: String,
+        finalText: String,
+        appName: String?,
+        appBundleIdentifier: String?,
+        appURL: String? = nil,
+        durationSeconds: Double,
+        language: String?,
+        engineUsed: String,
+        modelUsed: String? = nil,
+        audioFileName: String?,
+        pipelineSteps: [String]? = nil
+    ) -> Bool {
+        guard let texts = Self.validatedRecordTexts(
+            rawText: rawText,
+            finalText: finalText,
+            durationSeconds: durationSeconds
+        ) else {
+            if let audioFileName {
+                try? FileManager.default.removeItem(at: audioDirectory.appendingPathComponent(audioFileName))
             }
+            return false
         }
 
         insertRecord(
@@ -175,60 +215,23 @@ final class HistoryService: ObservableObject {
         return true
     }
 
-    /// Adds a record like `addRecord`, but encodes and writes the audio file off the main
-    /// actor. The SwiftData insert and save still run on the main actor.
-    @discardableResult
-    func addRecordWritingAudioInBackground(
-        id: UUID = UUID(),
-        timestamp: Date = Date(),
-        rawText: String,
-        finalText: String,
-        appName: String?,
-        appBundleIdentifier: String?,
-        appURL: String? = nil,
-        durationSeconds: Double,
-        language: String?,
-        engineUsed: String,
-        modelUsed: String? = nil,
-        audioSamples: [Float]? = nil,
-        pipelineSteps: [String]? = nil
-    ) async -> Bool {
-        guard let texts = Self.validatedRecordTexts(
-            rawText: rawText,
-            finalText: finalText,
-            durationSeconds: durationSeconds
-        ) else {
-            return false
-        }
+    /// Encodes and writes a record's audio file. Returns the file name for
+    /// `addRecord(id:audioFileName:)`, or nil if nothing was written.
+    func writeAudioFile(_ samples: [Float], forRecordID id: UUID) -> String? {
+        guard !samples.isEmpty else { return nil }
+        let fileName = Self.audioFileName(for: id)
+        return Self.writeAudioFile(samples, to: audioDirectory.appendingPathComponent(fileName)) ? fileName : nil
+    }
 
-        var audioFileName: String?
-        if let samples = audioSamples, !samples.isEmpty {
-            let fileName = Self.audioFileName(for: id)
-            let fileURL = audioDirectory.appendingPathComponent(fileName)
-            let didWriteAudio = await Task.detached(priority: .utility) {
-                Self.writeAudioFile(samples, to: fileURL)
-            }.value
-            if didWriteAudio {
-                audioFileName = fileName
-            }
-        }
-
-        insertRecord(
-            id: id,
-            timestamp: timestamp,
-            rawText: texts.rawText,
-            finalText: texts.finalText,
-            appName: appName,
-            appBundleIdentifier: appBundleIdentifier,
-            appURL: appURL,
-            durationSeconds: durationSeconds,
-            language: language,
-            engineUsed: engineUsed,
-            modelUsed: modelUsed,
-            audioFileName: audioFileName,
-            pipelineSteps: pipelineSteps
-        )
-        return true
+    /// Like `writeAudioFile(_:forRecordID:)`, but encodes and writes off the main actor.
+    func writeAudioFileInBackground(_ samples: [Float], forRecordID id: UUID) async -> String? {
+        guard !samples.isEmpty else { return nil }
+        let fileName = Self.audioFileName(for: id)
+        let fileURL = audioDirectory.appendingPathComponent(fileName)
+        let didWriteAudio = await Task.detached(priority: .utility) {
+            Self.writeAudioFile(samples, to: fileURL)
+        }.value
+        return didWriteAudio ? fileName : nil
     }
 
     private static func validatedRecordTexts(

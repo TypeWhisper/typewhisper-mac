@@ -923,6 +923,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
         }
 
         guard !AppConstants.isRunningTests else { return }
+        DictationViewModel._shared?.flushPendingPostInsertionPersistence()
+        ServiceContainer.shared.audioRecordingService.waitForPendingRecoveryPreservation()
         ServiceContainer.shared.textInsertionService.flushPendingClipboardRestore()
         ServiceContainer.shared.snippetService.saveDeferredUsageCounts()
         ServiceContainer.shared.dictionaryService.saveDeferredUsageCounts()

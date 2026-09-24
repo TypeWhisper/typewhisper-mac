@@ -6322,6 +6322,49 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testInsertionDuringPasteVerificationRestoresTheOriginalClipboard() async throws {
+        let harness = ClipboardRestoreHarness(verifiesPaste: true)
+        // The first paste lands only together with the second one, so the first insertion keeps
+        // polling until the second insertion has run.
+        harness.service.pasteVerificationAttempts = 10_000
+        harness.service.focusedTextStateOverride = { [weak harness] _ in
+            let landedPastes = (harness?.pasteCount ?? 0) >= 2 ? 2 : 0
+            return (
+                value: String(repeating: "x", count: landedPastes),
+                selectedText: nil,
+                selectedRange: NSRange(location: landedPastes, length: 0)
+            )
+        }
+        let (firstPasted, firstPastedContinuation) = AsyncStream<Void>.makeStream()
+        harness.service.pasteSimulatorOverride = { [weak harness] in
+            harness?.pasteCount += 1
+            firstPastedContinuation.yield()
+        }
+        harness.setClipboard("Existing")
+
+        let firstInsertion = Task { @MainActor in
+            try await harness.service.insertText(
+                "First dictation",
+                preserveClipboard: true,
+                awaitPasteVerification: true
+            )
+        }
+        var pastes = firstPasted.makeAsyncIterator()
+        _ = await pastes.next()
+        XCTAssertEqual(harness.pasteboard.string(forType: .string), "First dictation")
+        XCTAssertTrue(harness.service.hasPendingClipboardRestore)
+
+        _ = try await harness.service.insertText("Second dictation", preserveClipboard: true)
+        let firstResult = try await firstInsertion.value
+        await harness.service.waitForPendingClipboardRestore()
+
+        XCTAssertEqual(firstResult, .pasted(verification: .verified))
+        XCTAssertEqual(harness.pasteCount, 2)
+        XCTAssertFalse(harness.service.hasPendingClipboardRestore)
+        XCTAssertEqual(harness.pasteboard.string(forType: .string), "Existing")
+    }
+
+    @MainActor
     func testApiStartRecording_startsAudioBeforeContextAndDeferredSelectedTextCapture() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         let liveFieldKey = UserDefaultsKeys.liveFieldTranscriptEnabled
@@ -7127,6 +7170,76 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(session.status, .completed)
         XCTAssertEqual(session.transcription?.appURL, "https://example.com/page")
         XCTAssertEqual(context.historyService.recentRecords.first?.appURL, "https://example.com/page")
+    }
+
+    @MainActor
+    func testTerminationFlushPersistsDictationStillWaitingForBrowserURL() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            MockTranscriptionPlugin.reset()
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        MockTranscriptionPlugin.setResponseText("transcribed")
+        let urlRequested = expectation(description: "Browser lookup started")
+        let urlGate = DispatchSemaphore(value: 0)
+        defer { urlGate.signal() }
+        let resolver = BrowserURLResolver { _, _ in
+            urlRequested.fulfill()
+            urlGate.wait()
+            return BrowserResolution(url: URL(string: "https://example.com/page"), title: nil)
+        }
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory, browserURLResolver: resolver)
+        let context = try XCTUnwrap(dictationContext)
+        context.dictationViewModel.preserveClipboard = false
+
+        let pasteboard = NSPasteboard.withUniqueName()
+        context.textInsertionService.pasteboardProvider = { pasteboard }
+        context.textInsertionService.captureActiveAppOverride = { ("Chrome", "com.google.Chrome", nil) }
+        context.textInsertionService.accessibilityGrantedOverride = true
+        context.textInsertionService.selectedTextOverride = { nil }
+        context.textInsertionService.focusedTextElementOverride = { nil }
+        context.textInsertionService.pasteSimulatorOverride = {}
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { _ in
+            Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
+        }
+
+        let sessionID = context.dictationViewModel.apiStartRecording()
+        await context.dictationViewModel.testingWaitForRecordingStart()
+        await fulfillment(of: [urlRequested], timeout: 1)
+        _ = context.dictationViewModel.apiStopRecording()
+
+        // Inserted, with persistence still waiting for the blocked URL lookup.
+        for await state in context.dictationViewModel.$state.values where state == .inserting {
+            break
+        }
+        XCTAssertEqual(pasteboard.string(forType: .string), "transcribed")
+        XCTAssertEqual(context.historyService.totalRecords, 0)
+        XCTAssertNotEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.status, .completed)
+
+        // The app terminates before the lookup finishes.
+        context.dictationViewModel.flushPendingPostInsertionPersistence()
+
+        XCTAssertEqual(context.historyService.totalRecords, 1)
+        let record = try XCTUnwrap(context.historyService.recentRecords.first)
+        XCTAssertEqual(record.finalText, "transcribed")
+        XCTAssertNil(record.appURL)
+        XCTAssertNotNil(context.historyService.audioFileURL(for: record))
+        let session = try XCTUnwrap(context.dictationViewModel.apiDictationSession(id: sessionID))
+        XCTAssertEqual(session.status, .completed)
+        XCTAssertEqual(session.transcription?.text, "transcribed")
+
+        // The persistence task resuming later must not store the dictation a second time.
+        urlGate.signal()
+        await context.dictationViewModel.testingWaitForPostInsertionPersistence()
+        XCTAssertEqual(context.historyService.totalRecords, 1)
+        XCTAssertEqual(context.historyService.recentRecords.first?.id, record.id)
     }
 
     @MainActor

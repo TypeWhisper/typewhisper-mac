@@ -633,7 +633,7 @@ final class TextInsertionService {
         _ savedItems: ClipboardSnapshot,
         to pasteboard: NSPasteboard,
         ownedChangeCount: Int,
-        knownVerification: PasteVerification?,
+        verificationTask: Task<PasteVerification, Never>?,
         verificationState: PasteVerificationState,
         isTerminalApp: Bool,
         requiresPasteboardInsertion: Bool,
@@ -641,10 +641,10 @@ final class TextInsertionService {
     ) {
         let id = UUID()
         let task = Task { @MainActor [weak self] () -> PasteVerification in
-            guard let self else { return knownVerification ?? .notAwaited }
+            guard let self else { return .notAwaited }
             let verification: PasteVerification
-            if let knownVerification {
-                verification = knownVerification
+            if let verificationTask {
+                verification = await verificationTask.value
             } else {
                 verification = await waitForPasteVerification(using: verificationState)
                 logPasteVerification(verification, bundleId: bundleId)
@@ -1117,25 +1117,42 @@ final class TextInsertionService {
         )
         simulatePaste()
 
-        let verification: PasteVerification
+        // One verification serves both this call and the clipboard restore.
+        var verificationTask: Task<PasteVerification, Never>?
         if verifiesBeforeReturning, let pasteVerificationState {
-            verification = await waitForPasteVerification(using: pasteVerificationState)
-            logPasteVerification(verification, bundleId: bundleId)
-        } else {
-            verification = .notAwaited
+            verificationTask = Task { @MainActor [weak self] () -> PasteVerification in
+                guard let self else { return .unverified(.focusedTextStateUnavailable) }
+                let verification = await waitForPasteVerification(using: pasteVerificationState)
+                logPasteVerification(verification, bundleId: bundleId)
+                return verification
+            }
         }
 
+        // Register the restore before waiting for verification. An insertion or selection copy
+        // that runs meanwhile then takes over the user's original clipboard instead of saving
+        // this insertion's payload as the clipboard to restore.
         if preserveClipboard, let pasteVerificationState {
             schedulePendingClipboardRestore(
                 savedItems,
                 to: pasteboard,
                 ownedChangeCount: ownedChangeCount,
-                knownVerification: verifiesBeforeReturning ? verification : nil,
+                verificationTask: verificationTask,
                 verificationState: pasteVerificationState,
                 isTerminalApp: isTerminalApp,
                 requiresPasteboardInsertion: requiresPasteboardInsertion,
                 bundleId: bundleId
             )
+        }
+
+        let verification: PasteVerification
+        if let verificationTask {
+            verification = await withTaskCancellationHandler {
+                await verificationTask.value
+            } onCancel: {
+                verificationTask.cancel()
+            }
+        } else {
+            verification = .notAwaited
         }
 
         if autoEnter {

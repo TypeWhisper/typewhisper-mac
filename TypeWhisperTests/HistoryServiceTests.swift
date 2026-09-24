@@ -4,13 +4,17 @@ import TypeWhisperPluginSDK
 
 final class HistoryServiceTests: XCTestCase {
     @MainActor
-    func testAddRecordWritingAudioInBackgroundStoresRecordAndAudioFile() async throws {
+    func testAudioWrittenInBackgroundIsStoredWithRecordOrRemovedWithRejectedRecord() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
         let service = HistoryService(appSupportDirectory: appSupportDirectory)
+        let rejectedID = UUID()
         let id = UUID()
 
-        let didAddEmptyRecord = await service.addRecordWritingAudioInBackground(
+        let writtenRejectedAudioFileName = await service.writeAudioFileInBackground([0.1], forRecordID: rejectedID)
+        let rejectedAudioFileName = try XCTUnwrap(writtenRejectedAudioFileName)
+        let didAddEmptyRecord = service.addRecord(
+            id: rejectedID,
             rawText: "\0",
             finalText: "",
             appName: nil,
@@ -18,9 +22,10 @@ final class HistoryServiceTests: XCTestCase {
             durationSeconds: 1,
             language: "en",
             engineUsed: "test",
-            audioSamples: [0.1]
+            audioFileName: rejectedAudioFileName
         )
-        let didAddRecord = await service.addRecordWritingAudioInBackground(
+        let audioFileName = await service.writeAudioFileInBackground([0.1, 0.2], forRecordID: id)
+        let didAddRecord = service.addRecord(
             id: id,
             rawText: "raw",
             finalText: "final",
@@ -30,7 +35,7 @@ final class HistoryServiceTests: XCTestCase {
             durationSeconds: 1,
             language: "en",
             engineUsed: "test",
-            audioSamples: [0.1, 0.2]
+            audioFileName: audioFileName
         )
 
         XCTAssertFalse(didAddEmptyRecord)
@@ -43,6 +48,12 @@ final class HistoryServiceTests: XCTestCase {
         let audioURL = try XCTUnwrap(service.audioFileURL(for: record))
         XCTAssertEqual(audioURL.lastPathComponent, "\(id.uuidString).wav")
         XCTAssertEqual(try Data(contentsOf: audioURL).count, 44 + 2 * 2)
+        // The rejected record's audio file was removed.
+        XCTAssertEqual(
+            try FileManager.default.contentsOfDirectory(atPath: audioURL.deletingLastPathComponent().path),
+            [audioURL.lastPathComponent]
+        )
+        XCTAssertNotEqual(rejectedAudioFileName, audioURL.lastPathComponent)
     }
 
     @MainActor

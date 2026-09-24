@@ -177,6 +177,12 @@ final class DictationRecoveryAudioStore: @unchecked Sendable {
         }
     }
 
+    /// Blocks until every operation queued before this call, such as a background
+    /// preservation, has finished.
+    func waitForPendingOperations() {
+        queue.sync {}
+    }
+
     private func preserveActiveRecordingResultOnQueue(successful: Bool) -> DictationRecoveryPreservationResult {
         guard retentionPolicy.keepsRecoveryFiles else {
             closeActiveHandle()
