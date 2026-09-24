@@ -2589,6 +2589,17 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         return result
     }
 
+    /// Preserves the active recovery recording without blocking the caller. The recovery
+    /// store's serial queue still runs it before a later recording start or discard.
+    func preserveActiveRecoveryRecordingInBackground(successful: Bool = false) {
+        recoveryAudioStore.preserveActiveRecordingResultInBackground(successful: successful) { [weak self] result, urls in
+            logger.info(
+                "Recovery audio preserved in background: successful=\(successful, privacy: .public), retained=\(result.newlyPreservedURL != nil, privacy: .public)"
+            )
+            self?.publishRecoverableRecordingURLs(urls)
+        }
+    }
+
     func discardActiveRecoveryRecording() {
         discardActiveRecoveryRecording(keepingLatest: true)
     }

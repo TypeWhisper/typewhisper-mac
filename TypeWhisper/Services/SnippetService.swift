@@ -11,6 +11,7 @@ final class SnippetService: ObservableObject {
     private var modelContext: ModelContext?
 
     @Published private(set) var snippets: [Snippet] = []
+    private var hasDeferredUsageCountChanges = false
 
     var enabledSnippetsCount: Int {
         snippets.filter { $0.isEnabled }.count
@@ -116,8 +117,11 @@ final class SnippetService: ObservableObject {
         }
     }
 
-    /// Apply all enabled snippets to the given text
-    func applySnippets(to text: String) -> String {
+    /// Apply all enabled snippets to the given text.
+    ///
+    /// With `deferUsageCountSave`, usage counters stay unsaved until `saveDeferredUsageCounts()`
+    /// so the dictation pipeline does not block insertion on a SwiftData save.
+    func applySnippets(to text: String, deferUsageCountSave: Bool = false) -> String {
         var result = text
         var needsSave = false
 
@@ -144,14 +148,29 @@ final class SnippetService: ObservableObject {
         }
 
         if needsSave {
-            do {
-                try modelContext?.save()
-            } catch {
-                logger.error("Failed to update usage count: \(error.localizedDescription)")
+            if deferUsageCountSave {
+                hasDeferredUsageCountChanges = true
+            } else {
+                saveUsageCounts()
             }
         }
 
         return result
+    }
+
+    /// Saves usage counters left unsaved by `applySnippets(to:deferUsageCountSave:)`.
+    func saveDeferredUsageCounts() {
+        guard hasDeferredUsageCountChanges else { return }
+        saveUsageCounts()
+    }
+
+    private func saveUsageCounts() {
+        hasDeferredUsageCountChanges = false
+        do {
+            try modelContext?.save()
+        } catch {
+            logger.error("Failed to update usage count: \(error.localizedDescription)")
+        }
     }
 
     func userDataSyncSnippets() -> [UserDataSyncSnippet] {

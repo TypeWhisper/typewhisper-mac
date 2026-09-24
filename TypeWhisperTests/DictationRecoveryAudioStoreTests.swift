@@ -79,6 +79,28 @@ final class DictationRecoveryAudioStoreTests: XCTestCase {
         XCTAssertNil(store.preserveActiveRecordingResult(successful: true).newlyPreservedURL)
     }
 
+    func testBackgroundPreservationRunsBeforeTheNextRecordingStarts() throws {
+        let directory = makeTemporaryDirectory()
+        let store = DictationRecoveryAudioStore(directory: directory)
+        store.startNewRecording()
+        store.append([0.1, 0.2, 0.3])
+        let preserved = expectation(description: "background preservation finished")
+
+        store.preserveActiveRecordingResultInBackground(successful: true) { result, urls in
+            XCTAssertNotNil(result.newlyPreservedURL)
+            XCTAssertEqual(urls.count, 1)
+            preserved.fulfill()
+        }
+        // Requested afterwards, so it must not replace the finished recording first.
+        store.startNewRecording()
+        wait(for: [preserved], timeout: 1)
+
+        let url = try XCTUnwrap(store.recoveryURLs.first)
+        XCTAssertEqual(store.recoveryURLs.count, 1)
+        XCTAssertTrue(DictationRecoveryAudioStore.isRecentSuccessfulRecording(url))
+        XCTAssertEqual(readUInt32(try Data(contentsOf: url), at: 40), 6)
+    }
+
     func testPreserveWritesWavWithExpectedHeaderAndSamples() throws {
         let directory = makeTemporaryDirectory()
         let store = DictationRecoveryAudioStore(directory: directory)

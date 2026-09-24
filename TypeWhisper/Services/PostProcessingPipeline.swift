@@ -52,7 +52,8 @@ final class PostProcessingPipeline {
         outputFormat: String? = nil,
         llmStepName: String? = nil,
         normalizeNumbers: Bool? = nil,
-        llmFailureFallbackText: String? = nil
+        llmFailureFallbackText: String? = nil,
+        deferUsageCountSaves: Bool = false
     ) async throws -> PostProcessingResult {
         // Collect plugin processors with their priorities
         let plugins = PluginManager.shared.postProcessors
@@ -148,9 +149,15 @@ final class PostProcessingPipeline {
                 case -1:
                     result = try await llmHandler!(result)
                 case -2:
-                    result = snippetService.applySnippets(to: result)
+                    result = snippetService.applySnippets(
+                        to: result,
+                        deferUsageCountSave: deferUsageCountSaves
+                    )
                 case -3:
-                    result = dictionaryService.applyCorrections(to: result)
+                    result = dictionaryService.applyCorrections(
+                        to: result,
+                        deferUsageCountSave: deferUsageCountSaves
+                    )
                 default:
                     result = try await plugins[step.id].process(text: result, context: context)
                 }

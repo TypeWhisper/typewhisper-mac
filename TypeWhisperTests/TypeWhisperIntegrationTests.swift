@@ -5317,7 +5317,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             pasteCount += 1
         }
 
-        let result = try await service.insertText("Hello")
+        let result = try await service.insertText("Hello", awaitPasteVerification: true)
 
         XCTAssertEqual(result, .pasted(verification: .unverified(.focusedTextStateUnavailable)))
         XCTAssertEqual(pasteCount, 1)
@@ -5352,7 +5352,11 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(pasteboard.string(forType: .string), "Hello")
 
         let result = try await insertionTask.value
-        XCTAssertEqual(result, .pasted(verification: .unverified(.focusedTextStateUnavailable)))
+        XCTAssertEqual(result, .pasted(verification: .notAwaited))
+        XCTAssertEqual(pasteboard.string(forType: .string), "Hello")
+
+        let restoreVerification = await service.waitForPendingClipboardRestore()
+        XCTAssertEqual(restoreVerification, .unverified(.focusedTextStateUnavailable))
         XCTAssertEqual(pasteboard.string(forType: .string), "Existing")
     }
 
@@ -5397,7 +5401,9 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             deferredClipboardRestore: copiedSelection.deferredClipboardRestore
         )
 
-        XCTAssertEqual(result, .pasted(verification: .verified))
+        XCTAssertEqual(result, .pasted(verification: .notAwaited))
+        let restoreVerification = await service.waitForPendingClipboardRestore()
+        XCTAssertEqual(restoreVerification, .verified)
         XCTAssertEqual(pasteboard.string(forType: .string), "Existing")
     }
 
@@ -5459,10 +5465,12 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         pasteboard.setString("Existing", forType: .string)
 
         let result = try await service.insertText("Hello", preserveClipboard: true)
+        let restoreVerification = await service.waitForPendingClipboardRestore()
 
         XCTAssertFalse(didAttemptDirectAXInsertion)
         XCTAssertEqual(pasteCount, 1)
-        XCTAssertEqual(result, .pasted(verification: .verified))
+        XCTAssertEqual(result, .pasted(verification: .notAwaited))
+        XCTAssertEqual(restoreVerification, .verified)
         XCTAssertEqual(pasteboard.string(forType: .string), "Existing")
     }
 
@@ -5507,13 +5515,15 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             pasteboard.setString("Existing", forType: .string)
 
             let result = try await service.insertText("Hello", preserveClipboard: true)
+            let restoreVerification = await service.waitForPendingClipboardRestore()
 
             XCTAssertFalse(
                 didAttemptDirectAXInsertion,
                 "\(application.name) should bypass direct AX insertion"
             )
             XCTAssertEqual(pasteCount, 1, "\(application.name) should paste exactly once")
-            XCTAssertEqual(result, .pasted(verification: .verified))
+            XCTAssertEqual(result, .pasted(verification: .notAwaited))
+            XCTAssertEqual(restoreVerification, .verified)
             XCTAssertEqual(pasteboard.string(forType: .string), "Existing")
         }
     }
@@ -5585,7 +5595,9 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(pasteboard.string(forType: .string), "Hello")
 
         let result = try await insertionTask.value
-        XCTAssertEqual(result, .pasted(verification: .verified))
+        XCTAssertEqual(result, .pasted(verification: .notAwaited))
+        let restoreVerification = await service.waitForPendingClipboardRestore()
+        XCTAssertEqual(restoreVerification, .verified)
         XCTAssertEqual(pasteboard.string(forType: .string), "Existing")
     }
 
@@ -5628,7 +5640,9 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(pasteboard.string(forType: .string), "Hello")
 
         let result = try await insertionTask.value
-        XCTAssertEqual(result, .pasted(verification: .verified))
+        XCTAssertEqual(result, .pasted(verification: .notAwaited))
+        let restoreVerification = await service.waitForPendingClipboardRestore()
+        XCTAssertEqual(restoreVerification, .verified)
         XCTAssertEqual(pasteboard.string(forType: .string), "Existing")
     }
 
@@ -5662,10 +5676,12 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         pasteboard.setString("Existing", forType: .string)
 
         let result = try await service.insertText("Hello", preserveClipboard: true)
+        let restoreVerification = await service.waitForPendingClipboardRestore()
 
         XCTAssertTrue(didAttemptDirectAXInsertion)
         XCTAssertEqual(pasteCount, 1)
-        XCTAssertEqual(result, .pasted(verification: .unverified(.focusedTextUnchanged)))
+        XCTAssertEqual(result, .pasted(verification: .notAwaited))
+        XCTAssertEqual(restoreVerification, .unverified(.focusedTextUnchanged))
         XCTAssertEqual(pasteboard.string(forType: .string), "Existing")
     }
 
@@ -5706,10 +5722,12 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         pasteboard.setString("Existing", forType: .string)
 
         let result = try await service.insertText("Hello", preserveClipboard: true)
+        let restoreVerification = await service.waitForPendingClipboardRestore()
 
         XCTAssertEqual(insertedText, "Hello")
         XCTAssertEqual(pasteCount, 1)
-        XCTAssertEqual(result, .pasted(verification: .verified))
+        XCTAssertEqual(result, .pasted(verification: .notAwaited))
+        XCTAssertEqual(restoreVerification, .verified)
         XCTAssertEqual(pasteboard.string(forType: .string), "Existing")
     }
 
@@ -5867,6 +5885,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         pasteboard.setString("Existing", forType: .string)
 
         _ = try await service.insertText("Hello", preserveClipboard: true)
+        await service.waitForPendingClipboardRestore()
 
         XCTAssertTrue(didSimulatePaste)
         XCTAssertEqual(pasteboard.string(forType: .string), "Existing")
@@ -5970,6 +5989,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         service.pasteboardProvider = { pasteboard }
         service.focusedTextElementOverride = { element }
         service.defaultPasteFallbackRestoreDelay = .milliseconds(1)
+        service.richTextPasteFallbackRestoreDelay = .milliseconds(1)
         service.pasteVerificationAttempts = 0
         service.focusedTextStateOverride = { _ in
             (value: "", selectedText: nil, selectedRange: NSRange(location: 0, length: 0))
@@ -5992,6 +6012,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         pasteboard.setString("Existing", forType: .string)
 
         _ = try await service.insertText("**Hello**", preserveClipboard: true, outputFormat: "rtf")
+        await service.waitForPendingClipboardRestore()
 
         XCTAssertNil(insertedText)
         XCTAssertTrue(didSimulatePaste)
@@ -5999,6 +6020,305 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertTrue(pasteboardTypesAtPaste.contains(.init("org.nspasteboard.AutoGeneratedType")))
         XCTAssertTrue(pasteboardTypesAtPaste.contains(.init("com.typewhisper.SpeechTranscription")))
         XCTAssertEqual(pasteboard.string(forType: .string), "Existing")
+    }
+
+    @MainActor
+    private final class ClipboardRestoreHarness {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        var events: [String] = []
+        var pasteCount = 0
+        var stateReadCount = 0
+
+        init(bundleIdentifier: String = "com.apple.Notes", verifiesPaste: Bool) {
+            let element = AXUIElementCreateSystemWide()
+            service.accessibilityGrantedOverride = true
+            service.pasteboardProvider = { [pasteboard] in pasteboard }
+            service.captureActiveAppOverride = { ("Target", bundleIdentifier, nil) }
+            service.pasteVerificationAttempts = 2
+            service.pasteVerificationPollingDelay = .milliseconds(1)
+            service.verifiedRestoreGraceDelay = .milliseconds(1)
+            service.defaultPasteFallbackRestoreDelay = .milliseconds(1)
+            service.terminalPasteFallbackRestoreDelay = .milliseconds(1)
+            service.richTextPasteFallbackRestoreDelay = .milliseconds(1)
+            service.autoEnterDelay = .zero
+            service.copySelectionRetryDelay = .milliseconds(1)
+            service.copySelectionReadSettleDelay = .milliseconds(1)
+            // Direct AX insertion reports failure so preserve-clipboard insertions paste.
+            service.insertTextAtOverride = { _, _ in false }
+            if verifiesPaste {
+                service.focusedTextElementOverride = { element }
+                service.focusedTextStateOverride = { [weak self] _ in
+                    guard let self, pasteCount > 0 else {
+                        return (value: "", selectedText: nil, selectedRange: NSRange(location: 0, length: 0))
+                    }
+                    stateReadCount += 1
+                    events.append("verify")
+                    return (value: "Hello", selectedText: nil, selectedRange: NSRange(location: 5, length: 0))
+                }
+            } else {
+                service.focusedTextElementOverride = { nil }
+            }
+            service.pasteSimulatorOverride = { [weak self] in
+                self?.pasteCount += 1
+                self?.events.append("paste")
+            }
+            service.returnSimulatorOverride = { [weak self] in
+                guard let self else { return }
+                events.append("return:\(pasteboard.string(forType: .string) ?? "nil")")
+            }
+        }
+
+        func setClipboard(_ string: String) {
+            pasteboard.clearContents()
+            pasteboard.setString(string, forType: .string)
+        }
+    }
+
+    @MainActor
+    func testPlainSyntheticPasteReturnsWithoutPasteVerificationWhenNothingNeedsIt() async throws {
+        let harness = ClipboardRestoreHarness(verifiesPaste: true)
+        // Any verification poll would stall this test for seconds.
+        harness.service.pasteVerificationAttempts = 10
+        harness.service.pasteVerificationPollingDelay = .seconds(5)
+        var baselineReads = 0
+        harness.service.focusedTextStateOverride = { _ in
+            baselineReads += 1
+            return (value: "", selectedText: nil, selectedRange: NSRange(location: 0, length: 0))
+        }
+
+        let result = try await harness.service.insertText("Hello")
+
+        XCTAssertEqual(result, .pasted(verification: .notAwaited))
+        XCTAssertEqual(harness.pasteCount, 1)
+        XCTAssertEqual(baselineReads, 0)
+        XCTAssertFalse(harness.service.hasPendingClipboardRestore)
+        XCTAssertEqual(harness.pasteboard.string(forType: .string), "Hello")
+    }
+
+    @MainActor
+    func testAwaitPasteVerificationReturnsOnlyAfterPasteLanded() async throws {
+        let harness = ClipboardRestoreHarness(verifiesPaste: true)
+
+        let result = try await harness.service.insertText("Hello", awaitPasteVerification: true)
+
+        XCTAssertEqual(result, .pasted(verification: .verified))
+        XCTAssertEqual(harness.events, ["paste", "verify"])
+        XCTAssertFalse(harness.service.hasPendingClipboardRestore)
+    }
+
+    @MainActor
+    func testPreserveClipboardReturnsBeforeRestoreAndRestoresAllOriginalRepresentations() async throws {
+        let harness = ClipboardRestoreHarness(verifiesPaste: true)
+        harness.service.verifiedRestoreGraceDelay = .seconds(60)
+        let customType = NSPasteboard.PasteboardType("com.typewhisper.tests.custom")
+        let rtfData = Data("{\\rtf1\\ansi Existing}".utf8)
+        let imageData = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+        let firstItem = NSPasteboardItem()
+        firstItem.setString("Existing", forType: .string)
+        firstItem.setData(rtfData, forType: .rtf)
+        firstItem.setData(Data([1, 2, 3]), forType: customType)
+        let secondItem = NSPasteboardItem()
+        secondItem.setData(imageData, forType: .png)
+        harness.pasteboard.clearContents()
+        harness.pasteboard.writeObjects([firstItem, secondItem])
+
+        let result = try await harness.service.insertText("Hello", preserveClipboard: true)
+
+        // The restore delay is 60 s, so returning here proves insertText did not wait for it.
+        XCTAssertEqual(result, .pasted(verification: .notAwaited))
+        XCTAssertTrue(harness.service.hasPendingClipboardRestore)
+        XCTAssertEqual(harness.pasteboard.string(forType: .string), "Hello")
+
+        harness.service.flushPendingClipboardRestore()
+
+        XCTAssertFalse(harness.service.hasPendingClipboardRestore)
+        let items = try XCTUnwrap(harness.pasteboard.pasteboardItems)
+        XCTAssertEqual(items.count, 2)
+        XCTAssertEqual(items[0].string(forType: .string), "Existing")
+        XCTAssertEqual(items[0].data(forType: .rtf), rtfData)
+        XCTAssertEqual(items[0].data(forType: customType), Data([1, 2, 3]))
+        XCTAssertEqual(items[1].data(forType: .png), imageData)
+    }
+
+    @MainActor
+    func testPreserveClipboardRestoresOriginallyEmptyClipboardAfterReturn() async throws {
+        let harness = ClipboardRestoreHarness(verifiesPaste: false)
+        harness.pasteboard.clearContents()
+
+        let result = try await harness.service.insertText("Hello", preserveClipboard: true)
+        XCTAssertEqual(result, .pasted(verification: .notAwaited))
+        XCTAssertEqual(harness.pasteboard.string(forType: .string), "Hello")
+
+        let restoreVerification = await harness.service.waitForPendingClipboardRestore()
+
+        XCTAssertEqual(restoreVerification, .unverified(.focusedTextStateUnavailable))
+        XCTAssertNil(harness.pasteboard.string(forType: .string))
+        XCTAssertTrue(harness.pasteboard.pasteboardItems?.isEmpty ?? true)
+    }
+
+    @MainActor
+    func testClipboardRestoreKeepsContentCopiedAfterInsertion() async throws {
+        enum ClipboardWriter: CaseIterable {
+            case newPlainText
+            case identicalText
+            case richTextAndImage
+        }
+        let targets: [(name: String, bundleIdentifier: String, verifiesPaste: Bool, outputFormat: String?)] = [
+            ("verified", "com.apple.Notes", true, nil),
+            ("unverified", "com.apple.Notes", false, nil),
+            ("terminal", "com.apple.Terminal", true, nil),
+            ("rich text", "com.apple.Notes", false, "rtf")
+        ]
+        let imageData = Data([0x89, 0x50, 0x4E, 0x47])
+
+        for target in targets {
+            for writer in ClipboardWriter.allCases {
+                let label = "\(target.name), \(writer)"
+                let harness = ClipboardRestoreHarness(
+                    bundleIdentifier: target.bundleIdentifier,
+                    verifiesPaste: target.verifiesPaste
+                )
+                harness.setClipboard("Existing")
+
+                _ = try await harness.service.insertText(
+                    target.outputFormat == nil ? "Hello" : "**Hello**",
+                    preserveClipboard: true,
+                    outputFormat: target.outputFormat
+                )
+                XCTAssertEqual(harness.pasteboard.string(forType: .string), "Hello", label)
+
+                // Another writer takes the clipboard while the restore is still waiting.
+                switch writer {
+                case .newPlainText:
+                    harness.setClipboard("User copy")
+                case .identicalText:
+                    harness.setClipboard("Hello")
+                case .richTextAndImage:
+                    let item = NSPasteboardItem()
+                    item.setData(Data("{\\rtf1 User}".utf8), forType: .rtf)
+                    item.setData(imageData, forType: .png)
+                    harness.pasteboard.clearContents()
+                    harness.pasteboard.writeObjects([item])
+                }
+                let changeCountAfterUserWrite = harness.pasteboard.changeCount
+
+                let restoreVerification = await harness.service.waitForPendingClipboardRestore()
+
+                XCTAssertEqual(
+                    restoreVerification,
+                    target.verifiesPaste ? .verified : .unverified(.focusedTextStateUnavailable),
+                    label
+                )
+                XCTAssertEqual(harness.pasteboard.changeCount, changeCountAfterUserWrite, label)
+                switch writer {
+                case .newPlainText:
+                    XCTAssertEqual(harness.pasteboard.string(forType: .string), "User copy", label)
+                case .identicalText:
+                    XCTAssertEqual(harness.pasteboard.string(forType: .string), "Hello", label)
+                case .richTextAndImage:
+                    XCTAssertEqual(harness.pasteboard.data(forType: .png), imageData, label)
+                    XCTAssertNotEqual(harness.pasteboard.string(forType: .string), "Existing", label)
+                }
+            }
+        }
+    }
+
+    @MainActor
+    func testOverlappingInsertionsRestoreTheOriginalClipboard() async throws {
+        let harness = ClipboardRestoreHarness(verifiesPaste: false)
+        harness.service.defaultPasteFallbackRestoreDelay = .seconds(60)
+        harness.setClipboard("Existing")
+
+        _ = try await harness.service.insertText("First dictation", preserveClipboard: true)
+        XCTAssertEqual(harness.pasteboard.string(forType: .string), "First dictation")
+
+        harness.service.defaultPasteFallbackRestoreDelay = .milliseconds(1)
+        _ = try await harness.service.insertText("Second dictation", preserveClipboard: true)
+        XCTAssertEqual(harness.pasteboard.string(forType: .string), "Second dictation")
+
+        await harness.service.waitForPendingClipboardRestore()
+
+        XCTAssertEqual(harness.pasteboard.string(forType: .string), "Existing")
+        XCTAssertEqual(harness.pasteCount, 2)
+    }
+
+    @MainActor
+    func testOverlappingInsertionKeepsClipboardCopiedBetweenInsertions() async throws {
+        let harness = ClipboardRestoreHarness(verifiesPaste: false)
+        harness.service.defaultPasteFallbackRestoreDelay = .seconds(60)
+        harness.setClipboard("Existing")
+
+        _ = try await harness.service.insertText("First dictation", preserveClipboard: true)
+        harness.setClipboard("User copy")
+
+        harness.service.defaultPasteFallbackRestoreDelay = .milliseconds(1)
+        _ = try await harness.service.insertText("Second dictation", preserveClipboard: true)
+        await harness.service.waitForPendingClipboardRestore()
+
+        XCTAssertEqual(harness.pasteboard.string(forType: .string), "User copy")
+    }
+
+    @MainActor
+    func testSelectionCopyTakesOverPendingRestoreFromEarlierInsertion() async throws {
+        let harness = ClipboardRestoreHarness(verifiesPaste: false)
+        harness.service.defaultPasteFallbackRestoreDelay = .seconds(60)
+        harness.setClipboard("Existing")
+        harness.service.copySimulatorOverride = { [weak harness] in
+            harness?.setClipboard("Selected source")
+        }
+
+        _ = try await harness.service.insertText("Dictated", preserveClipboard: true)
+        let copiedSelection = await harness.service.getTextSelectionViaCopy()
+
+        XCTAssertEqual(copiedSelection, "Selected source")
+        XCTAssertFalse(harness.service.hasPendingClipboardRestore)
+        XCTAssertEqual(harness.pasteboard.string(forType: .string), "Existing")
+    }
+
+    @MainActor
+    func testDeferredSelectionCopyRestoreRequiresClipboardOwnership() async throws {
+        let harness = ClipboardRestoreHarness(verifiesPaste: false)
+        harness.service.copySimulatorOverride = { [weak harness] in
+            harness?.setClipboard("Selected source")
+        }
+
+        harness.setClipboard("Existing")
+        let ownedCopy = await harness.service.getTextSelectionViaCopyPreservingClipboardForInsertion()
+        harness.service.restoreClipboardIfNeeded(try XCTUnwrap(ownedCopy).deferredClipboardRestore)
+        XCTAssertEqual(harness.pasteboard.string(forType: .string), "Existing")
+
+        let replacedCopy = await harness.service.getTextSelectionViaCopyPreservingClipboardForInsertion()
+        harness.setClipboard("User copy")
+        harness.service.restoreClipboardIfNeeded(try XCTUnwrap(replacedCopy).deferredClipboardRestore)
+        XCTAssertEqual(harness.pasteboard.string(forType: .string), "User copy")
+
+        harness.setClipboard("Existing")
+        let insertionCopy = await harness.service.getTextSelectionViaCopyPreservingClipboardForInsertion()
+        harness.setClipboard("User copy")
+        _ = try await harness.service.insertText(
+            "Processed result",
+            preserveClipboard: true,
+            deferredClipboardRestore: try XCTUnwrap(insertionCopy).deferredClipboardRestore
+        )
+        await harness.service.waitForPendingClipboardRestore()
+        XCTAssertEqual(harness.pasteboard.string(forType: .string), "User copy")
+    }
+
+    @MainActor
+    func testAutoEnterFollowsPasteVerificationBeforeClipboardRestore() async throws {
+        let harness = ClipboardRestoreHarness(verifiesPaste: true)
+        harness.service.verifiedRestoreGraceDelay = .seconds(60)
+        harness.setClipboard("Existing")
+
+        let result = try await harness.service.insertText("Hello", preserveClipboard: true, autoEnter: true)
+
+        XCTAssertEqual(result, .pasted(verification: .verified))
+        XCTAssertEqual(harness.events, ["paste", "verify", "return:Hello"])
+        XCTAssertTrue(harness.service.hasPendingClipboardRestore)
+
+        harness.service.flushPendingClipboardRestore()
+        XCTAssertEqual(harness.pasteboard.string(forType: .string), "Existing")
     }
 
     @MainActor
@@ -6747,6 +7067,140 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(session.status, .completed)
         XCTAssertEqual(session.transcription?.text, "Ready to send press enter.")
         XCTAssertEqual(returnCount, 1)
+    }
+
+    @MainActor
+    func testDictationInsertsBeforeUnusedBrowserURLResolvesAndAddsURLToHistoryLater() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            MockTranscriptionPlugin.reset()
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        MockTranscriptionPlugin.setResponseText("transcribed")
+        let urlRequested = expectation(description: "Browser lookup started")
+        let urlGate = DispatchSemaphore(value: 0)
+        defer { urlGate.signal() }
+        let resolver = BrowserURLResolver { _, _ in
+            urlRequested.fulfill()
+            urlGate.wait()
+            return BrowserResolution(url: URL(string: "https://example.com/page"), title: nil)
+        }
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory, browserURLResolver: resolver)
+        let context = try XCTUnwrap(dictationContext)
+        context.dictationViewModel.preserveClipboard = false
+
+        let pasteboard = NSPasteboard.withUniqueName()
+        let pasted = expectation(description: "Text pasted")
+        context.textInsertionService.pasteboardProvider = { pasteboard }
+        context.textInsertionService.captureActiveAppOverride = { ("Chrome", "com.google.Chrome", nil) }
+        context.textInsertionService.accessibilityGrantedOverride = true
+        context.textInsertionService.selectedTextOverride = { nil }
+        context.textInsertionService.focusedTextElementOverride = { nil }
+        context.textInsertionService.pasteSimulatorOverride = { pasted.fulfill() }
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { _ in
+            Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
+        }
+
+        let sessionID = context.dictationViewModel.apiStartRecording()
+        await context.dictationViewModel.testingWaitForRecordingStart()
+        await fulfillment(of: [urlRequested], timeout: 1)
+        _ = context.dictationViewModel.apiStopRecording()
+
+        // Nothing before insertion depends on the URL, so the blocked lookup cannot delay it.
+        await fulfillment(of: [pasted], timeout: 2)
+        XCTAssertEqual(pasteboard.string(forType: .string), "transcribed")
+        XCTAssertNotEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.status, .completed)
+
+        urlGate.signal()
+        for _ in 0..<80 {
+            if context.dictationViewModel.apiDictationSession(id: sessionID)?.status == .completed { break }
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        let session = try XCTUnwrap(context.dictationViewModel.apiDictationSession(id: sessionID))
+        XCTAssertEqual(session.status, .completed)
+        XCTAssertEqual(session.transcription?.appURL, "https://example.com/page")
+        XCTAssertEqual(context.historyService.recentRecords.first?.appURL, "https://example.com/page")
+    }
+
+    @MainActor
+    func testDictationWaitsForBrowserURLWhenWebsiteWorkflowCanMatch() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            MockTranscriptionPlugin.reset()
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        MockTranscriptionPlugin.reset()
+        MockTranscriptionPlugin.setResponseText("transcribed")
+        let urlRequested = expectation(description: "Browser lookup started")
+        let urlGate = DispatchSemaphore(value: 0)
+        defer { urlGate.signal() }
+        let resolver = BrowserURLResolver { _, _ in
+            urlRequested.fulfill()
+            urlGate.wait()
+            return BrowserResolution(url: URL(string: "https://example.com/chat"), title: nil)
+        }
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory, browserURLResolver: resolver)
+        let context = try XCTUnwrap(dictationContext)
+        context.dictationViewModel.preserveClipboard = false
+        _ = context.workflowService.addWorkflow(
+            name: "Website Workflow",
+            template: .dictation,
+            trigger: .website("example.com"),
+            output: WorkflowOutput(autoEnterMode: .never)
+        )
+
+        let pasteboard = NSPasteboard.withUniqueName()
+        var urlReleased = false
+        let pastedBeforeURL = expectation(description: "Text pasted before URL resolution")
+        pastedBeforeURL.isInverted = true
+        let pasted = expectation(description: "Text pasted")
+        context.textInsertionService.pasteboardProvider = { pasteboard }
+        context.textInsertionService.captureActiveAppOverride = { ("Chrome", "com.google.Chrome", nil) }
+        context.textInsertionService.accessibilityGrantedOverride = true
+        context.textInsertionService.selectedTextOverride = { nil }
+        context.textInsertionService.focusedTextElementOverride = { nil }
+        context.textInsertionService.pasteSimulatorOverride = {
+            if !urlReleased {
+                pastedBeforeURL.fulfill()
+            }
+            pasted.fulfill()
+        }
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { _ in
+            Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
+        }
+
+        let sessionID = context.dictationViewModel.apiStartRecording()
+        await context.dictationViewModel.testingWaitForRecordingStart()
+        await fulfillment(of: [urlRequested], timeout: 1)
+        _ = context.dictationViewModel.apiStopRecording()
+
+        await fulfillment(of: [pastedBeforeURL], timeout: 0.3)
+        XCTAssertEqual(context.dictationViewModel.state, .processing)
+
+        urlReleased = true
+        urlGate.signal()
+        await fulfillment(of: [pasted], timeout: 2)
+        for _ in 0..<80 {
+            if context.dictationViewModel.apiDictationSession(id: sessionID)?.status == .completed { break }
+            try await Task.sleep(for: .milliseconds(25))
+        }
+        let session = try XCTUnwrap(context.dictationViewModel.apiDictationSession(id: sessionID))
+        XCTAssertEqual(session.status, .completed)
+        XCTAssertEqual(session.transcription?.appURL, "https://example.com/chat")
+        XCTAssertEqual(pasteboard.string(forType: .string), "transcribed")
     }
 
     @MainActor

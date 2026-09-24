@@ -141,37 +141,150 @@ final class HistoryService: ObservableObject {
         audioSamples: [Float]? = nil,
         pipelineSteps: [String]? = nil
     ) -> Bool {
-        let sanitizedRaw = Self.sanitize(rawText)
-        let sanitizedFinal = Self.sanitize(finalText)
-        guard !sanitizedRaw.isEmpty, !sanitizedFinal.isEmpty else {
-            logger.warning("Skipping history record: empty text after sanitization")
+        guard let texts = Self.validatedRecordTexts(
+            rawText: rawText,
+            finalText: finalText,
+            durationSeconds: durationSeconds
+        ) else {
             return false
         }
-        guard durationSeconds.isFinite, durationSeconds >= 0 else {
-            logger.warning("Skipping history record: invalid duration \(durationSeconds)")
-            return false
-        }
-        let recordId = id
-        var audioFileName: String?
 
+        var audioFileName: String?
         if let samples = audioSamples, !samples.isEmpty {
-            let fileName = "\(recordId.uuidString).wav"
-            let fileURL = audioDirectory.appendingPathComponent(fileName)
-            let wavData = WavEncoder.encode(samples)
-            do {
-                try wavData.write(to: fileURL, options: .atomic)
+            let fileName = Self.audioFileName(for: id)
+            if Self.writeAudioFile(samples, to: audioDirectory.appendingPathComponent(fileName)) {
                 audioFileName = fileName
-                logger.info("Saved audio file: \(fileName)")
-            } catch {
-                logger.error("Failed to save audio file: \(error.localizedDescription)")
             }
         }
 
-        let record = TranscriptionRecord(
-            id: recordId,
+        insertRecord(
+            id: id,
             timestamp: timestamp,
-            rawText: sanitizedRaw,
-            finalText: sanitizedFinal,
+            rawText: texts.rawText,
+            finalText: texts.finalText,
+            appName: appName,
+            appBundleIdentifier: appBundleIdentifier,
+            appURL: appURL,
+            durationSeconds: durationSeconds,
+            language: language,
+            engineUsed: engineUsed,
+            modelUsed: modelUsed,
+            audioFileName: audioFileName,
+            pipelineSteps: pipelineSteps
+        )
+        return true
+    }
+
+    /// Adds a record like `addRecord`, but encodes and writes the audio file off the main
+    /// actor. The SwiftData insert and save still run on the main actor.
+    @discardableResult
+    func addRecordWritingAudioInBackground(
+        id: UUID = UUID(),
+        timestamp: Date = Date(),
+        rawText: String,
+        finalText: String,
+        appName: String?,
+        appBundleIdentifier: String?,
+        appURL: String? = nil,
+        durationSeconds: Double,
+        language: String?,
+        engineUsed: String,
+        modelUsed: String? = nil,
+        audioSamples: [Float]? = nil,
+        pipelineSteps: [String]? = nil
+    ) async -> Bool {
+        guard let texts = Self.validatedRecordTexts(
+            rawText: rawText,
+            finalText: finalText,
+            durationSeconds: durationSeconds
+        ) else {
+            return false
+        }
+
+        var audioFileName: String?
+        if let samples = audioSamples, !samples.isEmpty {
+            let fileName = Self.audioFileName(for: id)
+            let fileURL = audioDirectory.appendingPathComponent(fileName)
+            let didWriteAudio = await Task.detached(priority: .utility) {
+                Self.writeAudioFile(samples, to: fileURL)
+            }.value
+            if didWriteAudio {
+                audioFileName = fileName
+            }
+        }
+
+        insertRecord(
+            id: id,
+            timestamp: timestamp,
+            rawText: texts.rawText,
+            finalText: texts.finalText,
+            appName: appName,
+            appBundleIdentifier: appBundleIdentifier,
+            appURL: appURL,
+            durationSeconds: durationSeconds,
+            language: language,
+            engineUsed: engineUsed,
+            modelUsed: modelUsed,
+            audioFileName: audioFileName,
+            pipelineSteps: pipelineSteps
+        )
+        return true
+    }
+
+    private static func validatedRecordTexts(
+        rawText: String,
+        finalText: String,
+        durationSeconds: Double
+    ) -> (rawText: String, finalText: String)? {
+        let sanitizedRaw = sanitize(rawText)
+        let sanitizedFinal = sanitize(finalText)
+        guard !sanitizedRaw.isEmpty, !sanitizedFinal.isEmpty else {
+            logger.warning("Skipping history record: empty text after sanitization")
+            return nil
+        }
+        guard durationSeconds.isFinite, durationSeconds >= 0 else {
+            logger.warning("Skipping history record: invalid duration \(durationSeconds)")
+            return nil
+        }
+        return (sanitizedRaw, sanitizedFinal)
+    }
+
+    private nonisolated static func audioFileName(for recordID: UUID) -> String {
+        "\(recordID.uuidString).wav"
+    }
+
+    private nonisolated static func writeAudioFile(_ samples: [Float], to fileURL: URL) -> Bool {
+        let wavData = WavEncoder.encode(samples)
+        do {
+            try wavData.write(to: fileURL, options: .atomic)
+            logger.info("Saved audio file: \(fileURL.lastPathComponent)")
+            return true
+        } catch {
+            logger.error("Failed to save audio file: \(error.localizedDescription)")
+            return false
+        }
+    }
+
+    private func insertRecord(
+        id: UUID,
+        timestamp: Date,
+        rawText: String,
+        finalText: String,
+        appName: String?,
+        appBundleIdentifier: String?,
+        appURL: String?,
+        durationSeconds: Double,
+        language: String?,
+        engineUsed: String,
+        modelUsed: String?,
+        audioFileName: String?,
+        pipelineSteps: [String]?
+    ) {
+        let record = TranscriptionRecord(
+            id: id,
+            timestamp: timestamp,
+            rawText: rawText,
+            finalText: finalText,
             appName: appName.flatMap { let s = Self.sanitize($0); return s.isEmpty ? nil : s },
             appBundleIdentifier: appBundleIdentifier,
             appURL: appURL,
@@ -191,7 +304,6 @@ final class HistoryService: ObservableObject {
         modelContext.insert(record)
         save()
         refreshRecentRecords()
-        return true
     }
 
     func audioFileURL(for record: TranscriptionRecord) -> URL? {

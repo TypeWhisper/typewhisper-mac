@@ -4,6 +4,48 @@ import TypeWhisperPluginSDK
 
 final class HistoryServiceTests: XCTestCase {
     @MainActor
+    func testAddRecordWritingAudioInBackgroundStoresRecordAndAudioFile() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let service = HistoryService(appSupportDirectory: appSupportDirectory)
+        let id = UUID()
+
+        let didAddEmptyRecord = await service.addRecordWritingAudioInBackground(
+            rawText: "\0",
+            finalText: "",
+            appName: nil,
+            appBundleIdentifier: nil,
+            durationSeconds: 1,
+            language: "en",
+            engineUsed: "test",
+            audioSamples: [0.1]
+        )
+        let didAddRecord = await service.addRecordWritingAudioInBackground(
+            id: id,
+            rawText: "raw",
+            finalText: "final",
+            appName: "Chrome",
+            appBundleIdentifier: "com.google.Chrome",
+            appURL: "https://example.com/page",
+            durationSeconds: 1,
+            language: "en",
+            engineUsed: "test",
+            audioSamples: [0.1, 0.2]
+        )
+
+        XCTAssertFalse(didAddEmptyRecord)
+        XCTAssertTrue(didAddRecord)
+        XCTAssertEqual(service.totalRecords, 1)
+        let record = try XCTUnwrap(service.recentRecords.first)
+        XCTAssertEqual(record.id, id)
+        XCTAssertEqual(record.finalText, "final")
+        XCTAssertEqual(record.appURL, "https://example.com/page")
+        let audioURL = try XCTUnwrap(service.audioFileURL(for: record))
+        XCTAssertEqual(audioURL.lastPathComponent, "\(id.uuidString).wav")
+        XCTAssertEqual(try Data(contentsOf: audioURL).count, 44 + 2 * 2)
+    }
+
+    @MainActor
     func testRemoteHistoryKeepsStructuredDocumentAndInboxMetadata() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory(
             prefix: "HistoryRemoteStructured"

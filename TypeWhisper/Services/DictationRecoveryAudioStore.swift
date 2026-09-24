@@ -160,58 +160,75 @@ final class DictationRecoveryAudioStore: @unchecked Sendable {
 
     func preserveActiveRecordingResult(successful: Bool = false) -> DictationRecoveryPreservationResult {
         queue.sync {
-            guard retentionPolicy.keepsRecoveryFiles else {
-                closeActiveHandle()
-                activeSampleCount = 0
-                hasActiveRecording = false
-                removeItemIfExists(at: activeFileURL)
-                removeStoredRecoveries()
-                return DictationRecoveryPreservationResult(
-                    latestRecoveryURL: nil,
-                    newlyPreservedURL: nil
-                )
-            }
+            preserveActiveRecordingResultOnQueue(successful: successful)
+        }
+    }
 
-            guard hasActiveRecording else {
-                return DictationRecoveryPreservationResult(
-                    latestRecoveryURL: storedRecoveryURLs().first,
-                    newlyPreservedURL: nil
-                )
-            }
+    /// Preserves the active recording without blocking the caller. The store's serial queue
+    /// runs it before any operation requested later, including the next `startNewRecording`,
+    /// so the finished recording cannot be replaced before it is preserved.
+    func preserveActiveRecordingResultInBackground(
+        successful: Bool = false,
+        completion: @escaping @Sendable (DictationRecoveryPreservationResult, [URL]) -> Void
+    ) {
+        queue.async { [self] in
+            let result = preserveActiveRecordingResultOnQueue(successful: successful)
+            completion(result, storedRecoveryURLs())
+        }
+    }
 
+    private func preserveActiveRecordingResultOnQueue(successful: Bool) -> DictationRecoveryPreservationResult {
+        guard retentionPolicy.keepsRecoveryFiles else {
             closeActiveHandle()
+            activeSampleCount = 0
             hasActiveRecording = false
+            removeItemIfExists(at: activeFileURL)
+            removeStoredRecoveries()
+            return DictationRecoveryPreservationResult(
+                latestRecoveryURL: nil,
+                newlyPreservedURL: nil
+            )
+        }
 
-            guard activeSampleCount > 0 else {
-                activeSampleCount = 0
-                removeItemIfExists(at: activeFileURL)
-                return DictationRecoveryPreservationResult(
-                    latestRecoveryURL: storedRecoveryURLs().first,
-                    newlyPreservedURL: nil
-                )
-            }
+        guard hasActiveRecording else {
+            return DictationRecoveryPreservationResult(
+                latestRecoveryURL: storedRecoveryURLs().first,
+                newlyPreservedURL: nil
+            )
+        }
 
-            finalizeActiveWavHeader(sampleCount: activeSampleCount)
-            let recoveryURL = makeUniqueRecoveryFileURL(successful: successful)
+        closeActiveHandle()
+        hasActiveRecording = false
 
-            do {
-                try fileManager.moveItem(at: activeFileURL, to: recoveryURL)
-                activeSampleCount = 0
-                applyRetentionPolicy()
-                let canonicalRecoveryURL = canonicalFileURL(recoveryURL)
-                let retained = isStoredRecoveryFile(recoveryURL)
-                return DictationRecoveryPreservationResult(
-                    latestRecoveryURL: retained ? canonicalRecoveryURL : storedRecoveryURLs().first,
-                    newlyPreservedURL: retained ? canonicalRecoveryURL : nil
-                )
-            } catch {
-                activeSampleCount = 0
-                removeItemIfExists(at: activeFileURL)
-                return DictationRecoveryPreservationResult(
-                    latestRecoveryURL: storedRecoveryURLs().first,
-                    newlyPreservedURL: nil
-                )
-            }
+        guard activeSampleCount > 0 else {
+            activeSampleCount = 0
+            removeItemIfExists(at: activeFileURL)
+            return DictationRecoveryPreservationResult(
+                latestRecoveryURL: storedRecoveryURLs().first,
+                newlyPreservedURL: nil
+            )
+        }
+
+        finalizeActiveWavHeader(sampleCount: activeSampleCount)
+        let recoveryURL = makeUniqueRecoveryFileURL(successful: successful)
+
+        do {
+            try fileManager.moveItem(at: activeFileURL, to: recoveryURL)
+            activeSampleCount = 0
+            applyRetentionPolicy()
+            let canonicalRecoveryURL = canonicalFileURL(recoveryURL)
+            let retained = isStoredRecoveryFile(recoveryURL)
+            return DictationRecoveryPreservationResult(
+                latestRecoveryURL: retained ? canonicalRecoveryURL : storedRecoveryURLs().first,
+                newlyPreservedURL: retained ? canonicalRecoveryURL : nil
+            )
+        } catch {
+            activeSampleCount = 0
+            removeItemIfExists(at: activeFileURL)
+            return DictationRecoveryPreservationResult(
+                latestRecoveryURL: storedRecoveryURLs().first,
+                newlyPreservedURL: nil
+            )
         }
     }
 
