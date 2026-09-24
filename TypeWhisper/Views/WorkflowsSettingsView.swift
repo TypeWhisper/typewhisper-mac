@@ -1269,6 +1269,12 @@ private struct WorkflowEditorPage: View {
 
                                 Divider()
 
+                                if draft.supportsSegmentedPostProcessing {
+                                    workflowSegmentedPostProcessingSection
+
+                                    Divider()
+                                }
+
                                 VStack(alignment: .leading, spacing: 6) {
                                     Text(localizedAppText("Output Format", de: "Ausgabeformat"))
                                         .font(.subheadline.weight(.semibold))
@@ -1511,6 +1517,31 @@ private struct WorkflowEditorPage: View {
             .foregroundStyle(.secondary)
             .fixedSize(horizontal: false, vertical: true)
         }
+    }
+
+    private var workflowSegmentedPostProcessingSection: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Toggle(
+                String(localized: "Process long dictations in segments"),
+                isOn: workflowSegmentedPostProcessingBinding
+            )
+
+            Text(
+                String(
+                    localized: "Speeds up long dictations by processing the text in parts. With a streaming engine and live preview, finished sentences are processed while you speak; otherwise the parts run in parallel after recording. Uses more requests. Not suitable for workflows that need the whole text at once, such as summaries or JSON."
+                )
+            )
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private var workflowSegmentedPostProcessingBinding: Binding<Bool> {
+        Binding(
+            get: { draft.segmentedPostProcessingEnabled ?? false },
+            set: { draft.segmentedPostProcessingEnabled = $0 }
+        )
     }
 
     private var workflowInlineCommandsBinding: Binding<Bool> {
@@ -2701,6 +2732,7 @@ struct WorkflowDraft {
     var transcriptionModelId: String?
     var microphoneBoostOverride: Bool?
     var inlineCommandsEnabled: Bool?
+    var segmentedPostProcessingEnabled: Bool?
 
     private var preservedBehaviorSettings: [String: String]
     var providerId: String?
@@ -2736,6 +2768,7 @@ struct WorkflowDraft {
         self.transcriptionModelId = nil
         self.microphoneBoostOverride = nil
         self.inlineCommandsEnabled = nil
+        self.segmentedPostProcessingEnabled = nil
         self.preservedBehaviorSettings = [:]
         self.providerId = nil
         self.cloudModel = nil
@@ -2770,6 +2803,7 @@ struct WorkflowDraft {
         self.transcriptionModelId = workflow.template == .dictation ? behavior.transcriptionModelId : nil
         self.microphoneBoostOverride = behavior.microphoneBoostOverride
         self.inlineCommandsEnabled = workflow.template == .dictation ? behavior.inlineCommandsEnabled : nil
+        self.segmentedPostProcessingEnabled = behavior.segmentedPostProcessingEnabled
         self.hotkeyBehavior = .startDictation
         self.preservedBehaviorSettings = behavior.settings
         self.providerId = behavior.providerId
@@ -2831,6 +2865,12 @@ struct WorkflowDraft {
 
     var usesLLMProcessing: Bool {
         !usesAppleTranslate && (template != .dictation || inlineCommandsEnabled == true)
+    }
+
+    /// Mirrors `Workflow.supportsSegmentedPostProcessing`: a prompt-based LLM step
+    /// that is not an Inline Commands pass.
+    var supportsSegmentedPostProcessing: Bool {
+        !usesAppleTranslate && template != .dictation
     }
 
     var reviewText: String {
@@ -3117,7 +3157,10 @@ struct WorkflowDraft {
             microphoneBoostOverride: microphoneBoostOverride,
             inlineCommandsEnabled: template == .dictation ? inlineCommandsEnabled : nil,
             temperatureModeRaw: temperatureModeRaw,
-            temperatureValue: temperatureValue
+            temperatureValue: temperatureValue,
+            segmentedPostProcessingEnabled: supportsSegmentedPostProcessing && segmentedPostProcessingEnabled == true
+                ? true
+                : nil
         )
     }
 

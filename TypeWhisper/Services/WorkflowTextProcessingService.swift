@@ -7,6 +7,17 @@ private let workflowTextProcessingLogger = Logger(
     category: "WorkflowTextProcessingService"
 )
 
+/// A fully resolved workflow LLM request. Segmented post-processing sends every
+/// segment with the same request, and compares requests to decide whether results
+/// computed during recording still match the configuration at stop.
+struct WorkflowLLMRequest: Equatable, Sendable {
+    let systemPrompt: String
+    let providerId: String?
+    let cloudModel: String?
+    let temperatureDirective: PluginLLMTemperatureDirective
+    let effortId: String?
+}
+
 @MainActor
 struct WorkflowTextProcessingService {
     typealias PromptProcessor = (
@@ -127,7 +138,8 @@ struct WorkflowTextProcessingService {
             )
         }
 
-        guard let systemPrompt = workflow.systemPrompt(
+        guard let request = Self.promptRequest(
+            workflow: workflow,
             fallbackTranslationTarget: fallbackTranslationTarget,
             detectedLanguage: detectedLanguage,
             configuredLanguage: configuredLanguage,
@@ -136,23 +148,73 @@ struct WorkflowTextProcessingService {
             return text
         }
 
-        let behavior = workflow.behavior
+        return try await process(request: request, text: text)
+    }
+
+    /// Sends `text` through the same provider path as whole-text workflow processing,
+    /// including per-workflow overrides and the global LLM fallback list.
+    func process(request: WorkflowLLMRequest, text: String) async throws -> String {
         if let effortPromptProcessor {
             return try await effortPromptProcessor(
-                systemPrompt,
+                request.systemPrompt,
                 text,
-                Self.trimmedOrNil(behavior.providerId),
-                Self.trimmedOrNil(behavior.cloudModel),
-                behavior.temperatureDirective,
-                Self.trimmedOrNil(behavior.effortId)
+                request.providerId,
+                request.cloudModel,
+                request.temperatureDirective,
+                request.effortId
             )
         }
         return try await promptProcessor(
-            systemPrompt,
+            request.systemPrompt,
             text,
-            Self.trimmedOrNil(behavior.providerId),
-            Self.trimmedOrNil(behavior.cloudModel),
-            behavior.temperatureDirective
+            request.providerId,
+            request.cloudModel,
+            request.temperatureDirective
+        )
+    }
+
+    /// The prompt request used for segmented processing, or nil when the workflow
+    /// has no segmentable LLM step (see `Workflow.supportsSegmentedPostProcessing`).
+    func segmentedPromptRequest(
+        workflow: Workflow,
+        fallbackTranslationTarget: String? = nil,
+        detectedLanguage: String? = nil,
+        configuredLanguage: String? = nil,
+        resolvedOutputFormat: String? = nil
+    ) -> WorkflowLLMRequest? {
+        guard workflow.supportsSegmentedPostProcessing else { return nil }
+        return Self.promptRequest(
+            workflow: workflow,
+            fallbackTranslationTarget: fallbackTranslationTarget,
+            detectedLanguage: detectedLanguage,
+            configuredLanguage: configuredLanguage,
+            resolvedOutputFormat: resolvedOutputFormat
+        )
+    }
+
+    private static func promptRequest(
+        workflow: Workflow,
+        fallbackTranslationTarget: String?,
+        detectedLanguage: String?,
+        configuredLanguage: String?,
+        resolvedOutputFormat: String?
+    ) -> WorkflowLLMRequest? {
+        guard let systemPrompt = workflow.systemPrompt(
+            fallbackTranslationTarget: fallbackTranslationTarget,
+            detectedLanguage: detectedLanguage,
+            configuredLanguage: configuredLanguage,
+            resolvedOutputFormat: resolvedOutputFormat
+        ) else {
+            return nil
+        }
+
+        let behavior = workflow.behavior
+        return WorkflowLLMRequest(
+            systemPrompt: systemPrompt,
+            providerId: trimmedOrNil(behavior.providerId),
+            cloudModel: trimmedOrNil(behavior.cloudModel),
+            temperatureDirective: behavior.temperatureDirective,
+            effortId: trimmedOrNil(behavior.effortId)
         )
     }
 

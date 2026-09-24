@@ -92,6 +92,7 @@
 		D20000000000000000000007 /* onnxruntime in Frameworks */ = {isa = PBXBuildFile; productRef = D20700000000000000000002 /* onnxruntime */; };
 		A10000000000000000000005 /* SpeechFeedbackServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000004 /* SpeechFeedbackServiceTests.swift */; };
 		A10000000000000000000006 /* WorkflowServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000005 /* WorkflowServiceTests.swift */; };
+		A1000000000000000A123603 /* WorkflowSegmentedPostProcessingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B1000000000000000A123603 /* WorkflowSegmentedPostProcessingTests.swift */; };
 		AA00000000000000000350 /* ObjCExceptionCatcher.m in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000351 /* ObjCExceptionCatcher.m */; };
 		C85600000000000000000001 /* CoreAudioHALCallbackContext.c in Sources */ = {isa = PBXBuildFile; fileRef = C85600000000000000000003 /* CoreAudioHALCallbackContext.c */; };
 		AA00000000000000000353 /* PostUpdatePromptCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000353 /* PostUpdatePromptCoordinator.swift */; };
@@ -104,6 +105,8 @@
 		AA00000000000000000357 /* WorkflowService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000357 /* WorkflowService.swift */; };
 		AA00000000000000000359 /* WorkflowsSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000359 /* WorkflowsSettingsView.swift */; };
 		AA00000000000000000360 /* WorkflowTextProcessingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000360 /* WorkflowTextProcessingService.swift */; };
+		AA000000000000000A123601 /* WorkflowTextSegmenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000000000000000A123601 /* WorkflowTextSegmenter.swift */; };
+		AA000000000000000A123602 /* WorkflowSegmentedPostProcessing.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000000000000000A123602 /* WorkflowSegmentedPostProcessing.swift */; };
 		C23000000000000000000001 /* OpenAIPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000139 /* OpenAIPlugin.swift */; };
 		C23000000000000000000002 /* Qwen3ContextBiasFormatter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000321 /* Qwen3ContextBiasFormatter.swift */; };
 		C23000000000000000000003 /* Gemma4Plugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000295 /* Gemma4Plugin.swift */; };
@@ -731,6 +734,7 @@
 		A1F000000000000000000101 /* PostUpdatePromptCoordinatorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PostUpdatePromptCoordinatorTests.swift; sourceTree = "<group>"; };
 		B10000000000000000000004 /* SpeechFeedbackServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SpeechFeedbackServiceTests.swift; sourceTree = "<group>"; };
 		B10000000000000000000005 /* WorkflowServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WorkflowServiceTests.swift; sourceTree = "<group>"; };
+		B1000000000000000A123603 /* WorkflowSegmentedPostProcessingTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WorkflowSegmentedPostProcessingTests.swift; sourceTree = "<group>"; };
 		BB00000000000000000001 /* TypeWhisperApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TypeWhisperApp.swift; sourceTree = "<group>"; };
 		BB00000000000000000002 /* ServiceContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceContainer.swift; sourceTree = "<group>"; };
 		BB00000000000000000005 /* TranscriptionResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionResult.swift; sourceTree = "<group>"; };
@@ -777,6 +781,8 @@
 		BB00000000000000000357 /* WorkflowService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkflowService.swift; sourceTree = "<group>"; };
 		BB00000000000000000359 /* WorkflowsSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkflowsSettingsView.swift; sourceTree = "<group>"; };
 		BB00000000000000000360 /* WorkflowTextProcessingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkflowTextProcessingService.swift; sourceTree = "<group>"; };
+		BB000000000000000A123601 /* WorkflowTextSegmenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkflowTextSegmenter.swift; sourceTree = "<group>"; };
+		BB000000000000000A123602 /* WorkflowSegmentedPostProcessing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkflowSegmentedPostProcessing.swift; sourceTree = "<group>"; };
 		BB00000000000000000040 /* HTTPResponse.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPResponse.swift; sourceTree = "<group>"; };
 		BB00000000000000000041 /* HTTPRequestParser.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HTTPRequestParser.swift; sourceTree = "<group>"; };
 		BB00000000000000000042 /* APIRouter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = APIRouter.swift; sourceTree = "<group>"; };
@@ -1861,6 +1867,8 @@
 				BB00000000000000000066 /* ProfileService.swift */,
 				BB00000000000000000357 /* WorkflowService.swift */,
 				BB00000000000000000360 /* WorkflowTextProcessingService.swift */,
+				BB000000000000000A123601 /* WorkflowTextSegmenter.swift */,
+				BB000000000000000A123602 /* WorkflowSegmentedPostProcessing.swift */,
 				BB00000000000000000073 /* TranslationService.swift */,
 				BB00000000000000000074 /* AudioDuckingService.swift */,
 				BB00000000000000000273 /* MediaPlaybackService.swift */,
@@ -2853,6 +2861,7 @@
 				2A7B3C4D5E6F708192A3B4C6 /* PromptWizardInferenceServiceTests.swift */,
 				F41BD305007A3A158038C75C /* ProfileServiceTests.swift */,
 				B10000000000000000000005 /* WorkflowServiceTests.swift */,
+				B1000000000000000A123603 /* WorkflowSegmentedPostProcessingTests.swift */,
 				B10000000000000000000004 /* SpeechFeedbackServiceTests.swift */,
 				7D2E4F50617283946C1F7A8B /* SoundServiceTests.swift */,
 				BE6B6611B899F649B097A726 /* SnippetServiceTests.swift */,
@@ -4713,6 +4722,7 @@
 				86F4253D3CDE30E859D0F219 /* ProfileServiceTests.swift in Sources */,
 				C50700000000000000000001 /* MemoryServiceTests.swift in Sources */,
 				A10000000000000000000006 /* WorkflowServiceTests.swift in Sources */,
+				A1000000000000000A123603 /* WorkflowSegmentedPostProcessingTests.swift in Sources */,
 				A10000000000000000000005 /* SpeechFeedbackServiceTests.swift in Sources */,
 				6C1F7A8B9D2E4F5061728394 /* SoundServiceTests.swift in Sources */,
 				A47BC06842DCB0BB47A2D938 /* SnippetServiceTests.swift in Sources */,
@@ -4832,6 +4842,8 @@
 				AA00000000000000000066 /* ProfileService.swift in Sources */,
 				AA00000000000000000357 /* WorkflowService.swift in Sources */,
 				AA00000000000000000360 /* WorkflowTextProcessingService.swift in Sources */,
+				AA000000000000000A123601 /* WorkflowTextSegmenter.swift in Sources */,
+				AA000000000000000A123602 /* WorkflowSegmentedPostProcessing.swift in Sources */,
 				AA00000000000000000067 /* ProfilesViewModel.swift in Sources */,
 				AA00000000000000000068 /* ProfilesSettingsView.swift in Sources */,
 				AA00000000000000000070 /* UpdateChecker.swift in Sources */,

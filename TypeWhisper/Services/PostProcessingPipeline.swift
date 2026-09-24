@@ -4,7 +4,7 @@ import os.log
 
 private let logger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "TypeWhisper", category: "PostProcessingPipeline")
 
-private func isPostProcessingCancellation(_ error: Error) -> Bool {
+func isPostProcessingCancellation(_ error: Error) -> Bool {
     if error is CancellationError { return true }
     if let urlError = error as? URLError, urlError.code == .cancelled { return true }
     let nsError = error as NSError
@@ -56,30 +56,11 @@ final class PostProcessingPipeline {
     ) async throws -> PostProcessingResult {
         // Collect plugin processors with their priorities
         let plugins = PluginManager.shared.postProcessors
-
-        // Build priority-ordered step list: (priority, id)
-        // IDs: -1 = LLM, -2 = snippets, -3 = dictionary, -4 = app formatter, -5 = punctuation, -6 = normalization, 0+ = plugin index
-        var steps: [(priority: Int, id: Int)] = []
-
-        steps.append((100, -6))
-
-        // App formatter at priority 150 (before LLM at 300)
-        let formattingEnabled = UserDefaults.standard.bool(forKey: UserDefaultsKeys.appFormattingEnabled)
-        if formattingEnabled, outputFormat != nil, appFormatterService != nil {
-            steps.append((150, -4))
-        }
-
-        steps.append((200, -5))
-
-        if llmHandler != nil {
-            steps.append((300, -1))
-        }
-        for (index, plugin) in plugins.enumerated() {
-            steps.append((plugin.priority, index))
-        }
-        steps.append((500, -2))
-        steps.append((600, -3))
-        steps.sort { $0.priority < $1.priority }
+        let steps = orderedSteps(
+            includesLLMStep: llmHandler != nil,
+            outputFormat: outputFormat,
+            plugins: plugins
+        )
 
         var result = text
         var appliedSteps: [String] = []
@@ -102,55 +83,17 @@ final class PostProcessingPipeline {
             let stepStart = ContinuousClock.now
             do {
                 switch step.id {
-                case -6:
-                    let languages = TranscriptionNormalizationService.normalizationLanguages(
-                        task: .transcribe,
-                        detectedLanguage: dictationContext?.detectedLanguage ?? context.language,
-                        configuredLanguage: dictationContext?.configuredLanguage ?? context.language,
-                        configuredLanguageCandidates: dictationContext?.configuredLanguageCandidates ?? []
-                    )
-                    result = TranscriptionNormalizationService.normalizeText(
-                        result,
-                        languages: languages,
-                        normalizeNumbers: normalizeNumbers
-                    )
-                case -4:
-                    result = appFormatterService!.format(
-                        text: result,
-                        bundleId: context.bundleIdentifier,
-                        url: context.url,
-                        outputFormat: outputFormat
-                    )
-                case -5:
-                    if let resolvedStrategy = punctuationStrategyResolver.resolve(
-                        engineId: dictationContext?.engineId,
-                        modelId: dictationContext?.modelId,
-                        configuredLanguage: dictationContext?.configuredLanguage,
-                        detectedLanguage: dictationContext?.detectedLanguage ?? context.language
-                    ) {
-                        switch resolvedStrategy.strategy {
-                        case .nativeOnly:
-                            break
-                        case .automatic:
-                            result = speechPunctuationService.normalize(
-                                text: result,
-                                language: resolvedStrategy.languageCode,
-                                mode: .selectiveFallback
-                            )
-                        case .fallbackOnly:
-                            result = speechPunctuationService.normalize(
-                                text: result,
-                                language: resolvedStrategy.languageCode,
-                                mode: .fullFallback
-                            )
-                        }
-                    }
                 case -1:
                     result = try await llmHandler!(result)
-                case -2:
-                    result = snippetService.applySnippets(to: result)
-                case -3:
-                    result = dictionaryService.applyCorrections(to: result)
+                case let id where id < 0:
+                    result = applyBuiltInStep(
+                        id,
+                        to: result,
+                        context: context,
+                        dictationContext: dictationContext,
+                        outputFormat: outputFormat,
+                        normalizeNumbers: normalizeNumbers
+                    )
                 default:
                     result = try await plugins[step.id].process(text: result, context: context)
                 }
@@ -184,5 +127,131 @@ final class PostProcessingPipeline {
         }
 
         return PostProcessingResult(text: result, appliedSteps: appliedSteps, fallback: nil)
+    }
+
+    /// Whether an installed post-processor plugin can run before the LLM step. Its
+    /// output for a partial transcript can't be reproduced ahead of the final pass.
+    var hasPluginStepsBeforeLLMStep: Bool {
+        PluginManager.shared.postProcessors.contains { $0.priority <= Self.llmStepPriority }
+    }
+
+    /// Applies the built-in steps that `process` runs before the LLM step, so text
+    /// confirmed during recording can be prepared exactly like the final LLM input.
+    /// Plugin post-processors are not applied; see `hasPluginStepsBeforeLLMStep`.
+    func textBeforeLLMStep(
+        _ text: String,
+        context: PostProcessingContext,
+        dictationContext: DictationRuntimeContext?,
+        outputFormat: String?,
+        normalizeNumbers: Bool?
+    ) -> String {
+        let steps = orderedSteps(includesLLMStep: false, outputFormat: outputFormat, plugins: [])
+        var result = text
+        for step in steps where step.priority < Self.llmStepPriority {
+            result = applyBuiltInStep(
+                step.id,
+                to: result,
+                context: context,
+                dictationContext: dictationContext,
+                outputFormat: outputFormat,
+                normalizeNumbers: normalizeNumbers
+            )
+        }
+        return result
+    }
+
+    private static let llmStepPriority = 300
+
+    /// Builds the priority-ordered step list: (priority, id).
+    /// IDs: -1 = LLM, -2 = snippets, -3 = dictionary, -4 = app formatter, -5 = punctuation, -6 = normalization, 0+ = plugin index
+    private func orderedSteps(
+        includesLLMStep: Bool,
+        outputFormat: String?,
+        plugins: [PostProcessorPlugin]
+    ) -> [(priority: Int, id: Int)] {
+        var steps: [(priority: Int, id: Int)] = []
+
+        steps.append((100, -6))
+
+        // App formatter at priority 150 (before LLM at 300)
+        let formattingEnabled = UserDefaults.standard.bool(forKey: UserDefaultsKeys.appFormattingEnabled)
+        if formattingEnabled, outputFormat != nil, appFormatterService != nil {
+            steps.append((150, -4))
+        }
+
+        steps.append((200, -5))
+
+        if includesLLMStep {
+            steps.append((Self.llmStepPriority, -1))
+        }
+        for (index, plugin) in plugins.enumerated() {
+            steps.append((plugin.priority, index))
+        }
+        steps.append((500, -2))
+        steps.append((600, -3))
+        steps.sort { $0.priority < $1.priority }
+        return steps
+    }
+
+    private func applyBuiltInStep(
+        _ id: Int,
+        to text: String,
+        context: PostProcessingContext,
+        dictationContext: DictationRuntimeContext?,
+        outputFormat: String?,
+        normalizeNumbers: Bool?
+    ) -> String {
+        switch id {
+        case -6:
+            let languages = TranscriptionNormalizationService.normalizationLanguages(
+                task: .transcribe,
+                detectedLanguage: dictationContext?.detectedLanguage ?? context.language,
+                configuredLanguage: dictationContext?.configuredLanguage ?? context.language,
+                configuredLanguageCandidates: dictationContext?.configuredLanguageCandidates ?? []
+            )
+            return TranscriptionNormalizationService.normalizeText(
+                text,
+                languages: languages,
+                normalizeNumbers: normalizeNumbers
+            )
+        case -4:
+            return appFormatterService!.format(
+                text: text,
+                bundleId: context.bundleIdentifier,
+                url: context.url,
+                outputFormat: outputFormat
+            )
+        case -5:
+            guard let resolvedStrategy = punctuationStrategyResolver.resolve(
+                engineId: dictationContext?.engineId,
+                modelId: dictationContext?.modelId,
+                configuredLanguage: dictationContext?.configuredLanguage,
+                detectedLanguage: dictationContext?.detectedLanguage ?? context.language
+            ) else {
+                return text
+            }
+            switch resolvedStrategy.strategy {
+            case .nativeOnly:
+                return text
+            case .automatic:
+                return speechPunctuationService.normalize(
+                    text: text,
+                    language: resolvedStrategy.languageCode,
+                    mode: .selectiveFallback
+                )
+            case .fallbackOnly:
+                return speechPunctuationService.normalize(
+                    text: text,
+                    language: resolvedStrategy.languageCode,
+                    mode: .fullFallback
+                )
+            }
+        case -2:
+            return snippetService.applySnippets(to: text)
+        case -3:
+            return dictionaryService.applyCorrections(to: text)
+        default:
+            return text
+        }
     }
 }

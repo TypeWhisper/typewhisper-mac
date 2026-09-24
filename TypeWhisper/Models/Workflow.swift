@@ -296,6 +296,10 @@ struct WorkflowBehavior: Codable, Equatable, Sendable {
     var inlineCommandsEnabled: Bool?
     var temperatureModeRaw: String?
     var temperatureValue: Double?
+    /// Opt-in: run the workflow LLM on sentence-aligned segments (during recording
+    /// for streaming engines, concurrently after stop otherwise). `nil` means off,
+    /// so data written by builds without this field decodes unchanged.
+    var segmentedPostProcessingEnabled: Bool?
 
     init(
         settings: [String: String] = [:],
@@ -308,7 +312,8 @@ struct WorkflowBehavior: Codable, Equatable, Sendable {
         microphoneBoostOverride: Bool? = nil,
         inlineCommandsEnabled: Bool? = nil,
         temperatureModeRaw: String? = nil,
-        temperatureValue: Double? = nil
+        temperatureValue: Double? = nil,
+        segmentedPostProcessingEnabled: Bool? = nil
     ) {
         self.settings = settings
         self.fineTuning = fineTuning
@@ -321,6 +326,7 @@ struct WorkflowBehavior: Codable, Equatable, Sendable {
         self.inlineCommandsEnabled = inlineCommandsEnabled
         self.temperatureModeRaw = temperatureModeRaw
         self.temperatureValue = temperatureValue
+        self.segmentedPostProcessingEnabled = segmentedPostProcessingEnabled
     }
 
     var temperatureMode: PluginLLMTemperatureMode {
@@ -707,6 +713,18 @@ extension Workflow {
             }
             behavior = updatedBehavior
         }
+    }
+
+    /// Whether the workflow runs a prompt-based LLM step whose input can be split
+    /// into independent segments. Inline Commands and Apple Translate are excluded:
+    /// an inline instruction applies to the whole dictation, and Apple Translate
+    /// runs on-device without an LLM request.
+    var supportsSegmentedPostProcessing: Bool {
+        !usesInlineCommands && !usesAppleTranslate && systemPrompt() != nil
+    }
+
+    var usesSegmentedPostProcessing: Bool {
+        behavior.segmentedPostProcessingEnabled == true && supportsSegmentedPostProcessing
     }
 
     var isManuallyRunnable: Bool {
