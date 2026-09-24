@@ -282,6 +282,7 @@ final class MLXPluginModelStorageTests: XCTestCase {
             let latest = await MainActor.run {
                 _ = plugin.perform(NSSelectorFromString("triggerRestoreModelForModel:"), with: ids[1] as NSString)
                 XCTAssertTrue(previous?.isCancelled == true)
+                XCTAssertNil(host.userDefault(forKey: "loadedModel"))
                 XCTAssertNil(genericTask())
                 // A generic restore arriving after the explicit request must
                 // not resurrect the old persisted model either.
@@ -299,6 +300,43 @@ final class MLXPluginModelStorageTests: XCTestCase {
                 XCTAssertFalse(plugin.isConfigured)
             }
         }
+    }
+
+    @MainActor
+    func testFailedGenericRestorePreservesPersistedModelAcrossDeactivation() async throws {
+        let qwen = Qwen3Plugin()
+        let granite = GranitePlugin()
+        let voxtral = VoxtralPlugin()
+        let canary = CanaryPlugin()
+        try await assertRestorePersistence(qwen) { await qwen.restoreLoadedModel() }
+        try await assertRestorePersistence(granite) { await granite.restoreLoadedModel() }
+        try await assertRestorePersistence(voxtral) { await voxtral.restoreLoadedModel() }
+        try await assertRestorePersistence(canary) { await canary.restoreLoadedModel() }
+    }
+
+    @MainActor
+    private func assertRestorePersistence<P: TranscriptionEnginePlugin & PluginSettingsActivityReporting>(
+        _ plugin: P, restore: () async -> Void
+    ) async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let id = "custom-" + UUID().uuidString.lowercased()
+        let folder = fixture.root.appendingPathComponent("custom-models/" + id)
+        try fixture.writeModel(at: folder, requiredFiles: [
+            "config.json", "tokenizer.json", "tokenizer.model", "tekken.json", "vocab.json", "merges.txt",
+        ])
+        try fixture.write("invalid native config", to: folder.appendingPathComponent("config.json"))
+        try JSONSerialization.data(withJSONObject: [
+            "id": id, "displayName": id, "modelType": "fixture", "origin": id, "bytes": 0,
+        ]).write(to: folder.appendingPathComponent("typewhisper-import.json"))
+        let host = MockHostServices(pluginDataDirectory: fixture.root, defaults: ["loadedModel": id])
+        plugin.activate(host: host)
+        await restore()
+        XCTAssertFalse(plugin.isConfigured)
+        XCTAssertTrue(plugin.currentSettingsActivity?.isError == true, "Must reach the native loader")
+        XCTAssertEqual(host.userDefault(forKey: "loadedModel") as? String, id)
+        plugin.deactivate()
+        XCTAssertEqual(host.userDefault(forKey: "loadedModel") as? String, id)
     }
 
     @MainActor

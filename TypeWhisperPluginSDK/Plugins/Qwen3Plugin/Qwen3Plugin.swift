@@ -427,7 +427,6 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
                 guard generation == activationID, host != nil else { throw CancellationError() }
                 model = nil
                 loadedModelId = nil
-                host?.setUserDefault(nil, forKey: "loadedModel")
             }
             try await PluginLocalInferenceGate.shared.withLock {
                 try Task.checkCancellation()
@@ -480,6 +479,10 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
             }
             if loadedModelId != nil, loadedModelId != preferredModelId {
                 unloadModel(clearPersistence: true)
+            }
+            if loadedModelId == nil,
+               host?.userDefault(forKey: "loadedModel") as? String != preferredModelId {
+                host?.setUserDefault(nil, forKey: "loadedModel")
             }
             _selectedModelId = preferredModelId
             host?.setUserDefault(preferredModelId, forKey: "selectedModel")

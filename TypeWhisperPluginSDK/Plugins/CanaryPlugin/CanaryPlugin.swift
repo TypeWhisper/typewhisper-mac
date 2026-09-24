@@ -372,7 +372,6 @@ final class CanaryPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
                 guard generation == activationID, host != nil else { throw CancellationError() }
                 model = nil
                 loadedModelId = nil
-                host?.setUserDefault(nil, forKey: "loadedModel")
             }
             try await PluginLocalInferenceGate.shared.withLock {
                 try Task.checkCancellation()
@@ -498,6 +497,10 @@ final class CanaryPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
             }
             if loadedModelId != nil, loadedModelId != modelId {
                 unloadModel(clearPersistence: true)
+            }
+            if loadedModelId == nil,
+               host?.userDefault(forKey: "loadedModel") as? String != modelId {
+                host?.setUserDefault(nil, forKey: "loadedModel")
             }
             _selectedModelId = modelId
             host?.setUserDefault(modelId, forKey: "selectedModel")
