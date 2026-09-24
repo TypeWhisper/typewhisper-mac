@@ -2668,6 +2668,8 @@ private final class CoreAudioHALInputOperationsRenderer {
 final class CoreAudioHALInputCaptureSession: AudioInputCaptureSession, @unchecked Sendable {
     private static let callbackQuiescenceInterval: TimeInterval = 0.3
     private static let callbackDrainRetryInterval: TimeInterval = 0.01
+    private static let admittedCallbackWaitTimeout: TimeInterval = 0.3
+    private static let admittedCallbackPollInterval: TimeInterval = 0.001
     static let defaultDeliveryInterval: DispatchTimeInterval = .milliseconds(10)
 
     /// Owns everything the realtime callback touches (a C render state with preallocated
@@ -2829,7 +2831,12 @@ final class CoreAudioHALInputCaptureSession: AudioInputCaptureSession, @unchecke
             }
 
             isDelivering = true
-            for _ in 0..<Self.maximumSlicesPerDeliveryPass {
+            // Periodic passes are capped so one pass cannot monopolize the delivery queue.
+            // The final pass empties the ring: the gate is closed and admitted callbacks
+            // have left, so the ring cannot grow, and nothing drains it afterwards.
+            var deliveredSlices = 0
+            while isFinal || deliveredSlices < Self.maximumSlicesPerDeliveryPass {
+                deliveredSlices += 1
                 guard !didFinishDelivery else { break }
                 let frameCount = CoreAudioHALInputRenderStatePeekSliceFrameCount(realtimeState)
                 guard frameCount > 0 else { break }
@@ -2943,6 +2950,37 @@ final class CoreAudioHALInputCaptureSession: AudioInputCaptureSession, @unchecke
             operations.stop(audioUnit)
             scheduleFinalization()
         }
+
+        /// Blocks until every callback admitted before the gate closed has left, so the
+        /// final ring drain sees its slice. Returns false if `timeout` elapsed first.
+        /// Must run after `stop()`; the IO thread takes no lock this path could hold.
+        func waitForAdmittedCallbacks(timeout: TimeInterval) -> Bool {
+            let deadline = DispatchTime.now() + timeout
+#if DEBUG
+            var didReportWait = false
+#endif
+            while true {
+                let isDrained = lifecycleLock.withLock { () -> Bool in
+                    // Disposal starts only after the closed context drained once, and the
+                    // context may be destroyed after that, so it must not be read anymore.
+                    guard !disposalStarted else { return true }
+                    return CoreAudioHALCallbackContextIsDrained(callbackContext)
+                }
+                if isDrained { return true }
+                guard DispatchTime.now() < deadline else { return false }
+#if DEBUG
+                if !didReportWait {
+                    didReportWait = true
+                    testingWillWaitForAdmittedCallbacks?()
+                }
+#endif
+                Thread.sleep(forTimeInterval: CoreAudioHALInputCaptureSession.admittedCallbackPollInterval)
+            }
+        }
+
+#if DEBUG
+        var testingWillWaitForAdmittedCallbacks: (() -> Void)?
+#endif
 
         private func scheduleFinalization() {
             Self.teardownQueue.asyncAfter(
@@ -3197,6 +3235,13 @@ final class CoreAudioHALInputCaptureSession: AudioInputCaptureSession, @unchecke
 
     private func teardown(waitForDelivery: Bool) {
         callbackLifetime.stop()
+        // A callback admitted before the gate closed can still be inside the render and
+        // publish its slice after the HAL stop returns. Drain the ring only once it left.
+        if !callbackLifetime.waitForAdmittedCallbacks(timeout: Self.admittedCallbackWaitTimeout) {
+            deviceHelperLogger.warning(
+                "[\(self.label)] HAL input callback still in flight after stop; its slice may be lost"
+            )
+        }
         renderState.finishDelivery(waitUntilDelivered: waitForDelivery)
     }
 
@@ -3921,6 +3966,11 @@ extension CoreAudioHALInputCaptureSession {
 
     static var testingCallbackQuiescenceInterval: TimeInterval {
         callbackQuiescenceInterval
+    }
+
+    /// Runs on the stopping thread when `stop()` first finds an admitted callback in flight.
+    func testingSetWillWaitForAdmittedCallbacksHook(_ hook: (() -> Void)?) {
+        callbackLifetime.testingWillWaitForAdmittedCallbacks = hook
     }
 
     /// Synchronously hands every slice currently in the ring to `onBuffer`.

@@ -3756,6 +3756,57 @@ final class CoreAudioHALInputCaptureSessionTests: XCTestCase {
         XCTAssertEqual(operations.disposeCalls, 1)
     }
 
+    func testStopWaitsForAdmittedCallbackAndDeliversItsSliceBeforeReturning() throws {
+        let operations = FakeCoreAudioHALInputOperations()
+        let format = try XCTUnwrap(AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 48_000,
+            channels: 1,
+            interleaved: false
+        ))
+        let delivered = DeliveredInputSlices()
+        let renderStarted = expectation(description: "render callback started")
+        let callbackFinished = expectation(description: "render callback finished")
+        let disposed = expectation(description: "in-flight session finalizes")
+        let releaseRender = DispatchSemaphore(value: 0)
+        let tail = [Float](repeating: 0.5, count: 64)
+        operations.renderHook = {
+            renderStarted.fulfill()
+            _ = releaseRender.wait(timeout: .now() + 2.0)
+        }
+        operations.renderDataHook = { buffers, _ in
+            fillRenderedChannels(buffers, with: [tail])
+        }
+        operations.disposeHook = { disposed.fulfill() }
+        let session = try CoreAudioHALInputCaptureSession(
+            deviceID: AudioDeviceID(916),
+            format: format,
+            bufferSize: 128,
+            label: "test-hal-in-flight",
+            operations: operations,
+            deliveryInterval: .seconds(3_600)
+        ) { buffer in
+            delivered.record(buffer)
+        }
+        // The callback publishes its slice only once stop() is already past the HAL stop.
+        session.testingSetWillWaitForAdmittedCallbacksHook {
+            releaseRender.signal()
+        }
+
+        DispatchQueue.global().async {
+            _ = operations.invokeStoredCallback(frameCount: 64)
+            callbackFinished.fulfill()
+        }
+        wait(for: [renderStarted], timeout: 1.0)
+
+        session.stop()
+
+        XCTAssertEqual(operations.stopCalls, 1)
+        XCTAssertEqual(delivered.slices, [[tail]])
+        wait(for: [callbackFinished, disposed], timeout: 2.0)
+        XCTAssertEqual(delivered.slices.count, 1)
+    }
+
     func testCallbackRegistrationFailureClosesStoredCallbackBeforeHALStop() throws {
         let operations = FakeCoreAudioHALInputOperations()
         operations.inputCallbackError = CoreAudioHALInputOperationError(
@@ -3946,6 +3997,50 @@ final class CoreAudioHALInputCaptureSessionTests: XCTestCase {
         XCTAssertEqual(operations.invokeStoredCallback(frameCount: 64), noErr)
         session.testingDeliverPendingBuffers()
         XCTAssertEqual(delivered.slices.count, 3)
+        wait(for: [disposed], timeout: 1.0)
+    }
+
+    func testStopDeliversMoreSlicesThanOnePeriodicPassAllows() throws {
+        let operations = FakeCoreAudioHALInputOperations()
+        let format = try XCTUnwrap(AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 96_000,
+            channels: 1,
+            interleaved: false
+        ))
+        let delivered = DeliveredInputSlices()
+        var renderedSliceCount: Float = 0
+        operations.renderDataHook = { buffers, frameCount in
+            renderedSliceCount += 1
+            fillRenderedChannels(buffers, with: [[Float](repeating: renderedSliceCount, count: Int(frameCount))])
+        }
+        let session = try CoreAudioHALInputCaptureSession(
+            deviceID: AudioDeviceID(917),
+            format: format,
+            bufferSize: 32,
+            label: "test-hal-backlog",
+            operations: operations,
+            deliveryInterval: .seconds(3_600)
+        ) { buffer in
+            delivered.record(buffer)
+        }
+
+        // 32-frame slices at 96 kHz: 5,000 slices fit in the two-second ring but exceed
+        // the 4,096 slices one periodic delivery pass hands out.
+        let sliceCount = 5_000
+        for _ in 0..<sliceCount {
+            XCTAssertEqual(operations.invokeStoredCallback(frameCount: 32), noErr)
+        }
+
+        let disposed = expectation(description: "backlogged session finalizes")
+        operations.disposeHook = { disposed.fulfill() }
+        session.stop()
+
+        let slices = delivered.slices
+        XCTAssertEqual(slices.count, sliceCount)
+        XCTAssertEqual(slices.first?[0].first, 1)
+        XCTAssertEqual(slices.last?[0].first, Float(sliceCount))
+        XCTAssertEqual(session.testingCaptureLossTotals().droppedFrames, 0)
         wait(for: [disposed], timeout: 1.0)
     }
 
@@ -4368,6 +4463,60 @@ final class AudioRecordingServiceInputOnlyCaptureTests: XCTestCase {
         let recoveryByteCount = recoveryData[40..<44].reversed().reduce(UInt32(0)) { ($0 << 8) | UInt32($1) }
         XCTAssertEqual(recoveryByteCount, UInt32(expected.count * 2))
         XCTAssertEqual(recoveryData.count, 44 + expected.count * 2)
+    }
+}
+
+final class AudioRecorderServiceInputOnlyCaptureTests: XCTestCase {
+    func testStopCaptureDrainsHALRingIntoMicFileBeforeClosingIt() async throws {
+        let format = try XCTUnwrap(AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 48_000,
+            channels: 1,
+            interleaved: false
+        ))
+        let factory = HALBackedAudioInputCaptureFactory(format: format)
+        let recordingsDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AudioRecorderServiceInputOnlyCaptureTests-\(UUID().uuidString)", isDirectory: true)
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: recordingsDirectory)
+        }
+        let service = AudioRecorderService(
+            inputActivationGuard: FakeAudioInputDeviceActivator(),
+            inputCaptureFactory: factory
+        )
+        service.recordingsDirectoryOverride = recordingsDirectory
+        service.hasMicrophonePermissionOverride = true
+
+        _ = try await service.startRecording(
+            micEnabled: true,
+            systemAudioEnabled: false,
+            format: .wav,
+            microphoneSelection: ResolvedRecordingInputSelection(
+                deviceUID: "usb-mic",
+                deviceID: AudioDeviceID(950),
+                deviceName: "USB Mic",
+                usesBluetoothTransport: false
+            )
+        )
+        XCTAssertEqual(factory.sessionCount, 1)
+
+        factory.operations.renderDataHook = { buffers, frameCount in
+            fillRenderedChannels(buffers, with: [[Float](repeating: 0.25, count: Int(frameCount))])
+        }
+        let frameCounts: [UInt32] = [480, 512, 471, 4_096]
+        for frameCount in frameCounts {
+            XCTAssertEqual(factory.operations.invokeStoredCallback(frameCount: frameCount), noErr)
+        }
+
+        // Periodic delivery is disabled, so only the stop drain can write these slices.
+        let stopped = await service.stopCapture()
+        let micURL = try XCTUnwrap(stopped.micTempURL)
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: micURL)
+        }
+
+        let micFile = try AVAudioFile(forReading: micURL)
+        XCTAssertEqual(micFile.length, AVAudioFramePosition(frameCounts.reduce(0) { $0 + Int($1) }))
     }
 }
 
