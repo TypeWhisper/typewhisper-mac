@@ -84,7 +84,7 @@ struct SetupWizardView: View {
             guard currentWizardStep == .engineAI || currentWizardStep == .finish else { return }
             await preparePreferredSetupEngineIfNeeded()
         }
-        .onReceive(pluginManager.$loadedPlugins) { _ in
+        .onReceive(pluginManager.$registryRevision) { _ in
             guard currentWizardStep == .engineAI || currentWizardStep == .finish else { return }
             Task { await preparePreferredSetupEngineIfNeeded() }
         }

@@ -540,7 +540,10 @@ final class ModelManagerService: ObservableObject {
                 || passiveRestoreSelection?.instance != identity else { return }
         guard canUseForTranscription(engine) else { return }
         passiveRestoreSelection = (providerId, identity)
-        (plugin.instance as? any PassiveModelRestoreProviding)?.requestPassiveModelRestore()
+        if let restoreProvider = plugin.instance as? any PassiveModelRestoreProviding {
+            LaunchSignposts.signposter.emitEvent("Model.passiveRestoreRequested")
+            restoreProvider.requestPassiveModelRestore()
+        }
     }
 
     // MARK: - Transcription

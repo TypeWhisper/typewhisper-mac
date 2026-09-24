@@ -119,6 +119,37 @@ private enum PluginLoadError: LocalizedError {
     }
 }
 
+/// Maps an enabled plugin bundle's executable and resolves its principal class.
+///
+/// Production always uses `.bundleExecutable`. Tests inject in-process classes so the
+/// launch scan, activation order and change publication can be exercised without
+/// compiled plugin bundles.
+struct PluginRuntimeLoader {
+    let principalClass: @MainActor (_ bundle: Bundle, _ manifest: PluginManifest) throws -> TypeWhisperPlugin.Type
+
+    static var bundleExecutable: PluginRuntimeLoader {
+        PluginRuntimeLoader { bundle, manifest in
+            let bundleName = bundle.bundleURL.lastPathComponent
+            do {
+                try bundle.loadAndReturnError()
+            } catch {
+                logger.error("Failed to load bundle \(bundleName): \(error.localizedDescription)")
+                throw error
+            }
+
+            guard let pluginClass = NSClassFromString(manifest.principalClass) as? TypeWhisperPlugin.Type else {
+                let error = PluginLoadError.missingPrincipalClass(
+                    className: manifest.principalClass,
+                    bundleName: bundleName
+                )
+                logger.error("\(error.localizedDescription, privacy: .public)")
+                throw error
+            }
+            return pluginClass
+        }
+    }
+}
+
 // MARK: - Loaded Plugin
 
 private final class UnloadedPluginPlaceholder: NSObject, TypeWhisperPlugin, @unchecked Sendable {
@@ -252,14 +283,25 @@ struct PluginUserInterfaceContribution {
 final class PluginManager: ObservableObject {
     nonisolated(unsafe) static var shared: PluginManager!
 
-    @Published var loadedPlugins: [LoadedPlugin] = []
-    @Published private(set) var incompatibleExternalBundles: [String: IncompatibleExternalBundle] = [:]
+    // Registry mutations publish through `registryRevision` (like `@Published`, but a
+    // bulk scan coalesces them; see `coalescingRegistryChangeNotifications`).
+    var loadedPlugins: [LoadedPlugin] = [] {
+        willSet { publishRegistryChange() }
+    }
+    private(set) var incompatibleExternalBundles: [String: IncompatibleExternalBundle] = [:] {
+        willSet { publishRegistryChange() }
+    }
+    /// Advances whenever `loadedPlugins` or `incompatibleExternalBundles` change.
+    @Published private(set) var registryRevision = 0
     @Published private(set) var readinessRevision = 0
 
     let pluginsDirectory: URL
+    private let runtimeLoader: PluginRuntimeLoader
     private var ruleNamesProvider: @MainActor () -> [String] = { [] }
     private var workflowProvider: @MainActor () -> [PluginWorkflowInfo] = { [] }
     private var deletingModelPluginIds = Set<String>()
+    private var registryNotificationBatchDepth = 0
+    private var registryChangedDuringBatch = false
 
     var userInterfaceContributions: [PluginUserInterfaceContribution] {
         loadedPlugins.compactMap { plugin in
@@ -489,16 +531,60 @@ final class PluginManager: ObservableObject {
         incompatibleExternalBundles.removeValue(forKey: pluginId)
     }
 
-    init(appSupportDirectory: URL = AppConstants.appSupportDirectory) {
+    init(
+        appSupportDirectory: URL = AppConstants.appSupportDirectory,
+        runtimeLoader: PluginRuntimeLoader = .bundleExecutable
+    ) {
         self.pluginsDirectory = appSupportDirectory
             .appendingPathComponent("Plugins", isDirectory: true)
+        self.runtimeLoader = runtimeLoader
 
         try? FileManager.default.createDirectory(at: pluginsDirectory, withIntermediateDirectories: true)
+    }
+
+    // MARK: - Registry Change Publication
+
+    private func publishRegistryChange() {
+        guard registryNotificationBatchDepth == 0 else {
+            registryChangedDuringBatch = true
+            return
+        }
+        registryRevision &+= 1
+    }
+
+    /// Runs `body` with registry change notifications coalesced into at most one
+    /// `registryRevision` step (and so one `objectWillChange`), sent after the batch.
+    ///
+    /// Every `objectWillChange` fans out to the services and view models observing
+    /// this manager, and each of them re-reconciles its engine/LLM selection on the
+    /// main queue. Without coalescing, a launch scan queues one such pass per
+    /// observer for every registry mutation (roughly two per bundle), all of which
+    /// run after the scan and see the same final registry. Mutations still apply in
+    /// place, so `loadedPlugins` is current throughout the batch.
+    func coalescingRegistryChangeNotifications<Result>(_ body: () throws -> Result) rethrows -> Result {
+        registryNotificationBatchDepth += 1
+        defer {
+            registryNotificationBatchDepth -= 1
+            if registryNotificationBatchDepth == 0, registryChangedDuringBatch {
+                registryChangedDuringBatch = false
+                registryRevision &+= 1
+            }
+        }
+        return try body()
     }
 
     // MARK: - Plugin Loading
 
     func scanAndLoadPlugins() {
+        let signposter = LaunchSignposts.signposter
+        let scanState = signposter.beginInterval("Plugin.scan")
+        defer { signposter.endInterval("Plugin.scan", scanState) }
+        coalescingRegistryChangeNotifications {
+            loadAllPluginBundles()
+        }
+    }
+
+    private func loadAllPluginBundles() {
         logger.info("Scanning plugins directory: \(self.pluginsDirectory.path)")
         incompatibleExternalBundles = [:]
 
@@ -689,23 +775,15 @@ final class PluginManager: ObservableObject {
             throw PluginLoadError.failedToCreateBundle(bundleName: url.lastPathComponent)
         }
 
-        do {
-            try bundle.loadAndReturnError()
-        } catch {
-            logger.error("Failed to load bundle \(url.lastPathComponent): \(error.localizedDescription)")
-            throw error
+        // Mapping the executable dominates launch cost for large local-model bundles.
+        let signposter = LaunchSignposts.signposter
+        let instance = try signposter.withIntervalSignpost(
+            "Plugin.load",
+            id: signposter.makeSignpostID(),
+            "\(manifest.id, privacy: .public)"
+        ) {
+            try runtimeLoader.principalClass(bundle, manifest).init()
         }
-
-        guard let pluginClass = NSClassFromString(manifest.principalClass) as? TypeWhisperPlugin.Type else {
-            let error = PluginLoadError.missingPrincipalClass(
-                className: manifest.principalClass,
-                bundleName: url.lastPathComponent
-            )
-            logger.error("\(error.localizedDescription, privacy: .public)")
-            throw error
-        }
-
-        let instance = pluginClass.init()
 
         let loaded = LoadedPlugin(
             manifest: manifest, instance: instance, bundle: bundle, sourceURL: url, isEnabled: isEnabled
@@ -779,6 +857,14 @@ final class PluginManager: ObservableObject {
     }
 
     private func activatePlugin(_ plugin: LoadedPlugin) {
+        let signposter = LaunchSignposts.signposter
+        let activationState = signposter.beginInterval(
+            "Plugin.activate",
+            id: signposter.makeSignpostID(),
+            "\(plugin.manifest.id, privacy: .public)"
+        )
+        defer { signposter.endInterval("Plugin.activate", activationState) }
+
         let host = HostServicesImpl(
             pluginId: plugin.manifest.id,
             eventBus: EventBus.shared,
