@@ -1217,9 +1217,13 @@ public enum PluginSDKCompatibility {
     /// host and marketplace plugins must be rebuilt together against a new SDK contract.
     public static let currentVersion = "v1"
 
+    /// Additive capability marker for hosts exporting the custom model import API.
+    /// Older v1 hosts compare markers exactly and reject these bundles before load.
+    public static let modelImportVersion = "v1-model-import"
+
     public static func isCompatible(manifestVersion: String?, isBundled: Bool) -> Bool {
         guard !isBundled else { return true }
-        return manifestVersion == currentVersion
+        return manifestVersion == currentVersion || manifestVersion == modelImportVersion
     }
 
     public static func incompatibilityReason(manifestVersion: String?, isBundled: Bool) -> String? {
@@ -1227,7 +1231,7 @@ public enum PluginSDKCompatibility {
         guard let manifestVersion else {
             return "missing sdkCompatibilityVersion (expected \(currentVersion))"
         }
-        guard manifestVersion == currentVersion else {
+        guard isCompatible(manifestVersion: manifestVersion, isBundled: false) else {
             return "requires sdkCompatibilityVersion \(currentVersion) (found \(manifestVersion))"
         }
         return nil

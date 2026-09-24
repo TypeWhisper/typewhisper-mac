@@ -38,11 +38,14 @@ final class PluginManifestValidationTests: XCTestCase {
                 .orderedAscending,
                 "\(manifestURL.lastPathComponent) must require TypeWhisper 1.7.0 or newer"
             )
-            XCTAssertEqual(
-                manifest.sdkCompatibilityVersion,
-                PluginSDKCompatibility.currentVersion,
+            XCTAssertTrue(
+                PluginSDKCompatibility.isCompatible(manifestVersion: manifest.sdkCompatibilityVersion, isBundled: false),
                 manifestURL.lastPathComponent
             )
+            let importPlugins = ["com.typewhisper.canary", "com.typewhisper.qwen3", "com.typewhisper.granite", "com.typewhisper.voxtral"]
+            if importPlugins.contains(manifest.id) {
+                XCTAssertEqual(manifest.sdkCompatibilityVersion, PluginSDKCompatibility.modelImportVersion)
+            }
 
             let range = NSRange(location: 0, length: manifest.version.utf16.count)
             XCTAssertEqual(versionPattern.firstMatch(in: manifest.version, range: range)?.range, range, manifest.version)

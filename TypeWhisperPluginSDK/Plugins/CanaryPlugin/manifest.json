@@ -3,7 +3,7 @@
     "name": "Canary ASR",
     "version": "1.0.0",
     "minHostVersion": "1.7.0",
-    "sdkCompatibilityVersion": "v1",
+    "sdkCompatibilityVersion": "v1-model-import",
     "minOSVersion": "14.0",
     "supportedArchitectures": [
         "arm64"

@@ -7,8 +7,11 @@ import MLX
 #endif
 
 final class CanaryPluginTests: XCTestCase {
+    #if !SWIFT_PACKAGE
+    // These native MLX layout checks run in the Xcode app-test target, which
+    // bundles Metal resources. MLX initializes its Metal device even when
+    // creating a CPU stream; the SwiftPM CLI test bundle has no metallib.
     func testNemoSubsamplingConvolutionsUseMLXLayout() {
-        // Avoid initializing MLX's GPU-backed default device in SwiftPM CI.
         Stream.withNewDefaultStream(device: .cpu) {
             let weights = [
                 "encoder.pre_encode.conv.0.weight": MLXArray.zeros([8, 1, 3, 3]),
@@ -23,7 +26,6 @@ final class CanaryPluginTests: XCTestCase {
     }
 
     func testNativeWeightsAreNotTransposedAgain() {
-        // Avoid initializing MLX's GPU-backed default device in SwiftPM CI.
         Stream.withNewDefaultStream(device: .cpu) {
             let converted = CanaryPlugin.sanitizeCanaryWeights([
                 "decoder.blocks.0.placeholder": MLXArray.zeros([1]),
@@ -32,6 +34,8 @@ final class CanaryPluginTests: XCTestCase {
             XCTAssertEqual(converted["encoder.conformer.pre_encode.pointwise_layers.0.weight"]?.shape, [8, 1, 1, 8])
         }
     }
+
+    #endif
 
     func testOnlyKnownDerivedPreprocessingBuffersAreExcluded() {
         XCTAssertTrue(CanaryPlugin.isDerivedPreprocessingBuffer("preprocessor.featurizer.fb"))

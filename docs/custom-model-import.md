@@ -46,8 +46,12 @@ architectures and uses the plugin bundle for its UI translations.
 
 `PluginCustomModelImporting` is an optional SDK protocol. Existing plugins need
 no changes unless they want to provide import support. New import-capable bundles
-require a host that exports this SDK capability; they must not be released for
-older hosts merely because those hosts share the same marketing version.
+declare `sdkCompatibilityVersion: "v1-model-import"`. The next Daily or RC containing
+this change accepts both this marker and existing `v1` plugins. Older hosts only
+accept `v1`, so they neither offer nor load the new bundles even when their
+marketing version is also 1.7.0. Publish the updated plugins only after that host
+is available and the release workflow validates their symbols against its SDK
+with `allow_prerelease_host`. The stable host minimum remains 1.7.0.
 
 The shared `PluginCustomModelStore` stages copies/downloads, checks the model
 configuration, required files, indexed shards and safetensors headers, then
@@ -80,7 +84,9 @@ auto-unload and with deactivation from the load-completion notification; the
 interrupted import returned cancellation and removed its files. The Canary loader
 handles NeMo preprocessing buffers and subsampling convolution layouts, and checks
 that all model parameters are present with the expected shapes. Regression tests
-cover those conversions without changing already-native MLX layouts. The dev app's
+cover those conversions without changing already-native MLX layouts in the Xcode
+app-test target, where Metal resources are bundled. The SwiftPM suite covers the
+remaining Canary checks without initializing the MLX runtime. The dev app's
 Hugging Face import dialog was also exercised with the original Sophea URL
 (revision `1d0827f8f869dfad40f6b6980434cf34b1987963`): it completed with the
 "Imported and loaded" confirmation.

@@ -23,7 +23,7 @@ on:
           - official
           - community
       allow_prerelease_host:
-        description: Allow SDK validation against the latest matching daily host release
+        description: Allow SDK validation against the latest matching daily or RC host release
         required: false
         default: false
         type: boolean
