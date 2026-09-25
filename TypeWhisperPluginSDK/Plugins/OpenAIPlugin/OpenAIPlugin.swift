@@ -2734,7 +2734,7 @@ final class OpenAIPlugin: NSObject,
     private static var chatGPTModelsClientVersion: String {
         let bundle = Bundle(for: OpenAIPlugin.self)
         return bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String
-            ?? "1.3.3"
+            ?? "1.3.4"
     }
 
     fileprivate var ttsInstructions: String { _ttsInstructions }
