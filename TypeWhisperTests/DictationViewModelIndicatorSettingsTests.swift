@@ -1507,6 +1507,9 @@ final class IndicatorPanelInteractionTests: XCTestCase {
             .frame(width: CGFloat(width), height: CGFloat(height))
             .background(.black.opacity(0.84), in: Capsule())
             .clipShape(Capsule())
+            // The progress bar uses the semantic primary color, which the
+            // classic surface resolves in the dark scheme.
+            .environment(\.colorScheme, .dark)
         )
         renderer.proposedSize = ProposedViewSize(
             width: CGFloat(width),

@@ -53,6 +53,7 @@ struct OverlayIndicatorView: View {
     @ObservedObject private var viewModel = DictationViewModel.shared
     @ObservedObject private var recorder = AudioRecorderViewModel.shared
     @ObservedObject private var countdownModel: CalendarMeetingCountdownModel
+    @Environment(\.colorScheme) private var systemColorScheme
     @State private var textExpanded = false
     @State private var dotPulse = false
 
@@ -151,7 +152,9 @@ struct OverlayIndicatorView: View {
         }
         .shadow(color: .black.opacity(0.3 * viewModel.indicatorTheme.shadowOpacityScale), radius: 10, y: 5)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: isTop ? .top : .bottom)
-        .preferredColorScheme(viewModel.indicatorTheme.preferredColorScheme)
+        // Classic and Light pin their scheme so semantic colors match the surface
+        // regardless of the hosting appearance. Glass follows the system.
+        .environment(\.colorScheme, viewModel.indicatorTheme.preferredColorScheme ?? systemColorScheme)
         .onHover { hovered in
             guard hasActionFeedback else { return }
             viewModel.setActionFeedbackHovered(hovered)

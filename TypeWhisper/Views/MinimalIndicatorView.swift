@@ -22,6 +22,7 @@ struct MinimalIndicatorView: View {
     @ObservedObject private var viewModel = DictationViewModel.shared
     @ObservedObject private var recorder = AudioRecorderViewModel.shared
     @ObservedObject private var countdownModel: CalendarMeetingCountdownModel
+    @Environment(\.colorScheme) private var systemColorScheme
     @State private var dotPulse = false
 
     private let sizing: IndicatorSizing = .minimal
@@ -116,7 +117,7 @@ struct MinimalIndicatorView: View {
         content
             .frame(width: currentWidth)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: isTop ? .top : .bottom)
-            .preferredColorScheme(viewModel.indicatorTheme.preferredColorScheme)
+            .environment(\.colorScheme, viewModel.indicatorTheme.preferredColorScheme ?? systemColorScheme)
             .animation(.easeInOut(duration: 0.2), value: currentWidth)
             .animation(.easeInOut(duration: 0.2), value: presentation.state)
             .animation(.easeInOut(duration: 1.0), value: dotPulse)
