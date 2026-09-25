@@ -3514,6 +3514,13 @@ private struct OpenAISettingsView: View {
         }
     }
 
+    /// Offer Remove only while the field shows the stored key (or is empty), so an edited key gets Save and can replace it.
+    private var isShowingStoredApiKey: Bool {
+        let storedKey = plugin._apiKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let inputKey = apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !storedKey.isEmpty && (inputKey.isEmpty || inputKey == storedKey)
+    }
+
     private var apiKeySection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("API Key", bundle: bundle)
@@ -3536,7 +3543,7 @@ private struct OpenAISettingsView: View {
                 }
                 .buttonStyle(.borderless)
 
-                if plugin._apiKey?.isEmpty == false {
+                if isShowingStoredApiKey {
                     Button(String(localized: "Remove", bundle: bundle)) {
                         apiKeyInput = ""
                         validationResult = nil
@@ -3551,7 +3558,7 @@ private struct OpenAISettingsView: View {
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
-                    .disabled(apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    .disabled(apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isValidating)
                 }
             }
 
