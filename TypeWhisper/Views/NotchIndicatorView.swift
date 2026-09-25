@@ -180,8 +180,8 @@ struct NotchIndicatorView: View {
         }
         .animation(.easeOut(duration: 0.22), value: geometry.isPresented)
         // A light spring so the body visibly grows out of the notch instead of sliding.
-        .animation(.spring(response: 0.38, dampingFraction: 0.78), value: currentWidth)
-        .animation(.spring(response: 0.38, dampingFraction: 0.78), value: expandedBodyHeight)
+        .animation(IndicatorMotion.expand, value: currentWidth)
+        .animation(IndicatorMotion.expand, value: expandedBodyHeight)
         .animation(.easeInOut(duration: 0.18), value: presentation.state)
         // Matches the ~30 Hz (33ms) level-publish throttle shared by both
         // audio level sources (AudioRecordingService's dictation pipeline and

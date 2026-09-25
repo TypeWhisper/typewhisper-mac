@@ -99,6 +99,27 @@ extension View {
     }
 }
 
+// MARK: - Motion
+
+enum IndicatorMotion {
+    /// Spring used when an indicator grows, shrinks or pops in.
+    static let expand = Animation.spring(response: 0.38, dampingFraction: 0.78)
+
+    /// Scale an indicator starts from when a recording begins, so it visibly
+    /// unfolds instead of switching content in place.
+    static let revealScale: CGFloat = 0.92
+
+    /// Runs the pop-in: snap to the reveal scale without animation, then spring to 1.
+    static func popIn(_ scale: Binding<CGFloat>) {
+        var snap = Transaction()
+        snap.disablesAnimations = true
+        withTransaction(snap) { scale.wrappedValue = revealScale }
+        DispatchQueue.main.async {
+            withAnimation(expand) { scale.wrappedValue = 1 }
+        }
+    }
+}
+
 // MARK: - Sizing
 
 struct IndicatorSizing {

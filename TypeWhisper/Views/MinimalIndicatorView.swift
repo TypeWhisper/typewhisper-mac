@@ -24,6 +24,7 @@ struct MinimalIndicatorView: View {
     @ObservedObject private var countdownModel: CalendarMeetingCountdownModel
     @Environment(\.colorScheme) private var systemColorScheme
     @State private var dotPulse = false
+    @State private var revealScale: CGFloat = 1
 
     private let sizing: IndicatorSizing = .minimal
     private let idleWidth: CGFloat = 42
@@ -116,13 +117,15 @@ struct MinimalIndicatorView: View {
     var body: some View {
         content
             .frame(width: currentWidth)
+            .scaleEffect(revealScale, anchor: isTop ? .top : .bottom)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: isTop ? .top : .bottom)
             .environment(\.colorScheme, viewModel.indicatorTheme.preferredColorScheme ?? systemColorScheme)
-            .animation(.easeInOut(duration: 0.2), value: currentWidth)
+            .animation(IndicatorMotion.expand, value: currentWidth)
             .animation(.easeInOut(duration: 0.2), value: presentation.state)
             .animation(.easeInOut(duration: 1.0), value: dotPulse)
             .onChange(of: presentation.state) {
                 if presentation.state == .recording {
+                    IndicatorMotion.popIn($revealScale)
                     withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
                         dotPulse = true
                     }

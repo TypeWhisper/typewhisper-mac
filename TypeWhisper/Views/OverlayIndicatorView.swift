@@ -56,6 +56,7 @@ struct OverlayIndicatorView: View {
     @Environment(\.colorScheme) private var systemColorScheme
     @State private var textExpanded = false
     @State private var dotPulse = false
+    @State private var revealScale: CGFloat = 1
 
     private let contentPadding: CGFloat = 20
     private let sizing: IndicatorSizing = .overlay
@@ -151,6 +152,7 @@ struct OverlayIndicatorView: View {
             .frame(width: currentWidth)
         }
         .shadow(color: .black.opacity(0.3 * viewModel.indicatorTheme.shadowOpacityScale), radius: 10, y: 5)
+        .scaleEffect(revealScale, anchor: isTop ? .top : .bottom)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: isTop ? .top : .bottom)
         // Classic and Light pin their scheme so semantic colors match the surface
         // regardless of the hosting appearance. Glass follows the system.
@@ -159,7 +161,8 @@ struct OverlayIndicatorView: View {
             guard hasActionFeedback else { return }
             viewModel.setActionFeedbackHovered(hovered)
         }
-        .animation(.easeInOut(duration: 0.3), value: textExpanded)
+        .animation(IndicatorMotion.expand, value: textExpanded)
+        .animation(IndicatorMotion.expand, value: currentWidth)
         .animation(.easeInOut(duration: 0.2), value: presentation.state)
         // Matches the ~30 Hz (33ms) level-publish throttle shared by both
         // audio level sources (AudioRecordingService's dictation pipeline and
@@ -172,6 +175,7 @@ struct OverlayIndicatorView: View {
         }
         .onChange(of: presentation.state) {
             if presentation.state == .recording {
+                IndicatorMotion.popIn($revealScale)
                 withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {
                     dotPulse = true
                 }
