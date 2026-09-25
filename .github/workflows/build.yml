@@ -10,7 +10,7 @@ on:
       - 'v*'
       - 'plugin-*'
   pull_request:
-    branches: [main]
+    branches: [main, 'release/1.6']
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.ref_name }}

@@ -5,8 +5,8 @@ product path, with stable `1.6.0` as its published baseline.
 
 TypeWhisper `1.x` is a stable direct-download release line for macOS. The Mac
 App Store remains out of scope. The `main` branch is the current `1.7`
-development line. The `release/1.5` branch is retained only for
-explicitly approved legacy backports; it is no longer the stable baseline.
+development line. The `release/1.6` branch starts at the published `v1.6.0` tag
+and is reserved for explicitly approved `1.6.x` hotfixes.
 
 ## Audience
 
@@ -40,8 +40,10 @@ These surfaces remain part of `1.x`, but they are positioned as advanced or auto
 
 - Keep `main` on the current `1.7` version line; daily builds publish
   as `v1.7.0-daily.*`.
-- Treat stable `1.6.0` as the release baseline and `release/1.5` as a legacy
-  backport branch only.
+- Treat stable `1.6.0` as the release baseline and use `release/1.6` only for
+  narrowly scoped `1.6.x` hotfixes.
+- Validate hotfix pull requests against `release/1.6`, tag the resulting
+  `v1.6.x` release from that branch, and forward-port each fix to `main`.
 - Preserve the `1.x` stability contracts for the HTTP API, CLI, plugin SDK, widgets, and watch folders.
 - New plugin release builds require `minHostVersion: "1.7.0"` or newer and use
   the SDK shipped with 1.7 on the current `v1` compatibility line. Preserve published plugin binaries and their historical
