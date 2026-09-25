@@ -172,12 +172,20 @@ struct OverlayIndicatorView: View {
         // tiny stutter instead of a continuous glide.
         .animation(.linear(duration: 0.033), value: presentation.audioLevel)
         .onChange(of: presentation.partialText) {
-            expandTranscriptPreviewIfNeeded()
+            if presentation.source == .preview, presentation.partialText.isEmpty {
+                // The preview loop restarts: collapse so the expand animation replays.
+                withAnimation(IndicatorMotion.expand) {
+                    textExpanded = false
+                }
+            } else {
+                expandTranscriptPreviewIfNeeded()
+            }
         }
         .onChange(of: presentation.source) {
-            // A real session replacing the preview starts with an empty transcript.
+            // A real session replacing the preview starts with an empty
+            // transcript; the preview taking over again shows what it has.
             withAnimation(IndicatorMotion.expand) {
-                textExpanded = false
+                textExpanded = presentation.source == .preview && !presentation.partialText.isEmpty
             }
         }
         .onChange(of: presentation.state) {
