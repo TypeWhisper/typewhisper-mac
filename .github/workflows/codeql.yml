@@ -6,12 +6,12 @@ concurrency:
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'release/1.6']
     tags:
       - "v*"
       - "!v*-daily*"
   pull_request:
-    branches: [main]
+    branches: [main, 'release/1.6']
   schedule:
     - cron: "26 3 * * 1"
 
