@@ -250,7 +250,7 @@ final class WebLinkPluginTests: XCTestCase {
         XCTAssertEqual(plugin.settingsSidebarItems, [
             PluginSettingsSidebarItemDescriptor(
                 id: "web-link-transcription",
-                title: "Web Link Transcription",
+                title: webLinkLocalized("Web Link Transcription"),
                 systemImageName: "link"
             )
         ])

@@ -832,7 +832,7 @@ private struct WebLinkSettingsView: View {
     }
 }
 
-private func webLinkLocalized(_ key: String.LocalizationValue) -> String {
+func webLinkLocalized(_ key: String.LocalizationValue) -> String {
     #if SWIFT_PACKAGE
     String(localized: key, bundle: .module)
     #else
