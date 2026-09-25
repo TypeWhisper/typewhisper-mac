@@ -243,6 +243,64 @@ final class LivePreviewEngineResolutionTests: XCTestCase {
         XCTAssertFalse(modelManager.canPrepareForTranscription(plugin))
     }
 
+    func testReadinessErrorDistinguishesMissingSelectionAndUnavailableEngine() throws {
+        let plugin = LivePreviewReadinessPlugin(
+            isConfigured: true,
+            authAvailable: false
+        )
+        let modelManager = try installReadinessPlugin(plugin)
+
+        guard case .noEngineSelected = modelManager.transcriptionReadinessError(providerId: nil) else {
+            return XCTFail("Expected noEngineSelected")
+        }
+        guard case .engineUnavailable(nil, _) = modelManager.transcriptionReadinessError(
+            providerId: "missing-provider"
+        ) else {
+            return XCTFail("Expected engineUnavailable for a missing engine")
+        }
+        guard case .engineUnavailable(let name, let reason) = modelManager.transcriptionReadinessError(
+            providerId: plugin.providerId
+        ) else {
+            return XCTFail("Expected engineUnavailable for an engine without transcription access")
+        }
+        XCTAssertEqual(name, plugin.providerDisplayName)
+        XCTAssertEqual(reason, "Transcription authentication is unavailable.")
+    }
+
+    func testReadinessErrorIsNilForUsableEngine() throws {
+        let plugin = LivePreviewReadinessPlugin(isConfigured: false)
+        let modelManager = try installReadinessPlugin(plugin)
+
+        XCTAssertNil(modelManager.transcriptionReadinessError(providerId: plugin.providerId))
+    }
+
+    func testTranscribeReportsUnavailableEngineInsteadOfMissingModel() async throws {
+        let plugin = LivePreviewReadinessPlugin(
+            isConfigured: true,
+            authAvailable: false
+        )
+        let modelManager = try installReadinessPlugin(plugin)
+
+        do {
+            _ = try await modelManager.transcribe(
+                audioSamples: [Float](repeating: 0, count: 16_000),
+                language: nil,
+                task: .transcribe,
+                engineOverrideId: plugin.providerId
+            )
+            XCTFail("Expected engineUnavailable")
+        } catch let error as TranscriptionEngineError {
+            guard case .engineUnavailable = error else {
+                return XCTFail("Expected engineUnavailable, got \(error)")
+            }
+            XCTAssertEqual(
+                error.localizedDescription,
+                "Live Preview Readiness is not available. Transcription authentication is unavailable. "
+                    + "Check its setup in Integrations or choose another engine in Settings > Dictation."
+            )
+        }
+    }
+
     // MARK: - Persistence
 
     func testLoadPersistRoundTrip() {

@@ -96,9 +96,9 @@ enum AutomaticRecoveryFallbackErrorPolicy {
 
         if let transcriptionError = error as? TranscriptionEngineError {
             switch transcriptionError {
-            case .unsupportedTask(_):
-                return false
-            case .modelNotLoaded,
+            case .noEngineSelected,
+                 .engineUnavailable(_, _),
+                 .modelNotLoaded,
                  .appleSpeechModelNotLoaded,
                  .transcriptionFailed(_),
                  .modelLoadFailed(_),
@@ -214,6 +214,7 @@ final class DictationViewModel: ObservableObject {
     private enum ActionFeedbackAction {
         case undoLearnedCorrections([LearnedDictionaryCorrection])
         case openDictationRecovery
+        case openSettings(SettingsTab)
 
         var title: String {
             switch self {
@@ -221,6 +222,8 @@ final class DictationViewModel: ObservableObject {
                 String(localized: "Undo")
             case .openDictationRecovery:
                 String(localized: "Open Recovery")
+            case .openSettings:
+                String(localized: "Open Settings")
             }
         }
     }
@@ -1629,10 +1632,16 @@ final class DictationViewModel: ObservableObject {
         beginDictationSession(id: sessionID)
 
         guard canDictate else {
-            let errorMessage = TranscriptionEngineError.modelNotLoaded.localizedDescription
+            let readinessError = modelManager.transcriptionReadinessError(providerId: modelManager.selectedProviderId)
+                ?? .noEngineSelected
+            let errorMessage = readinessError.localizedDescription
             logger.warning("startRecording rejected: canDictate=false; resetting hotkey state")
             failDictationSession(id: sessionID, error: errorMessage)
-            showError(errorMessage, category: "recording")
+            showError(
+                errorMessage,
+                category: "recording",
+                settingsTab: Self.settingsTab(forTranscriptionError: readinessError)
+            )
             // Resync the hotkey toggle: HotkeyService already flipped isActive=true
             // before invoking onDictationStart. Without this, a rejected start leaves
             // the toggle stuck "active", so the next press is consumed as a phantom
@@ -2786,7 +2795,8 @@ final class DictationViewModel: ObservableObject {
                 showError(
                     error.localizedDescription,
                     category: "transcription",
-                    recoveryPreservation: recoveryPreservation
+                    recoveryPreservation: recoveryPreservation,
+                    settingsTab: Self.settingsTab(forTranscriptionError: error)
                 )
                 clearActiveRuleState()
                 capturedActiveApp = nil
@@ -4223,6 +4233,11 @@ final class DictationViewModel: ObservableObject {
             )
         case .openDictationRecovery:
             recoverLastRecording(openSettingsWindow: openRecoverySettingsWindow)
+        case .openSettings(let tab):
+            SettingsNavigationCoordinator.shared?.navigate(to: tab)
+            if openRecoverySettingsWindow {
+                ManagedAppWindowOpener.shared.open(id: "settings")
+            }
         }
     }
 
@@ -4294,7 +4309,8 @@ final class DictationViewModel: ObservableObject {
         duration: TimeInterval,
         isError: Bool = false,
         errorCategory: String = "general",
-        recoveryPreservation: DictationRecoveryPreservationResult
+        recoveryPreservation: DictationRecoveryPreservationResult,
+        fallbackAction: ActionFeedbackAction? = nil
     ) {
         guard recoveryPreservation.newlyPreservedURL != nil else {
             showNotchFeedback(
@@ -4302,7 +4318,8 @@ final class DictationViewModel: ObservableObject {
                 icon: icon,
                 duration: duration,
                 isError: isError,
-                errorCategory: errorCategory
+                errorCategory: errorCategory,
+                action: fallbackAction
             )
             return
         }
@@ -4321,27 +4338,60 @@ final class DictationViewModel: ObservableObject {
     private func showError(
         _ message: String,
         category: String = "general",
-        recoveryPreservation: DictationRecoveryPreservationResult? = nil
+        recoveryPreservation: DictationRecoveryPreservationResult? = nil,
+        settingsTab: SettingsTab? = nil
     ) {
         soundService.play(.error, enabled: soundFeedbackEnabled)
+        let settingsAction = settingsTab.map(ActionFeedbackAction.openSettings)
+        // Setup errors need time to read and reach the button; transient errors stay brief.
+        let duration: TimeInterval = settingsAction == nil ? 3.0 : 8.0
         if let recoveryPreservation {
             showRecoveryAwareFeedback(
                 message: message,
                 icon: "xmark.circle.fill",
-                duration: 3.0,
+                duration: duration,
                 isError: true,
                 errorCategory: category,
-                recoveryPreservation: recoveryPreservation
+                recoveryPreservation: recoveryPreservation,
+                fallbackAction: settingsAction
             )
         } else {
             showNotchFeedback(
                 message: message,
                 icon: "xmark.circle.fill",
-                duration: 3.0,
+                duration: duration,
                 isError: true,
-                errorCategory: category
+                errorCategory: category,
+                action: settingsAction
             )
         }
+    }
+
+    /// Settings page where the user can fix a transcription setup error, or nil for transient failures.
+    static func settingsTab(forTranscriptionError error: Error) -> SettingsTab? {
+        if let transcriptionError = error as? TranscriptionEngineError {
+            switch transcriptionError {
+            case .noEngineSelected, .modelNotLoaded, .modelLoadFailed(_):
+                return .dictation
+            case .engineUnavailable(_, _), .appleSpeechModelNotLoaded:
+                return .integrations
+            case .transcriptionFailed(_), .modelDownloadFailed(_):
+                return nil
+            }
+        }
+
+        if let pluginError = error as? PluginTranscriptionError {
+            switch pluginError {
+            case .notConfigured, .invalidApiKey:
+                return .integrations
+            case .noModelSelected:
+                return .dictation
+            case .rateLimited, .fileTooLarge, .apiError(_), .networkError(_):
+                return nil
+            }
+        }
+
+        return nil
     }
 
     private func startRecordingTimer() {

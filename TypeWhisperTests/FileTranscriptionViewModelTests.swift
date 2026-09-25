@@ -1170,13 +1170,58 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         XCTAssertTrue(AutomaticRecoveryFallbackErrorPolicy.shouldAttempt(after: PluginTranscriptionError.rateLimited))
         XCTAssertTrue(AutomaticRecoveryFallbackErrorPolicy.shouldAttempt(after: PluginTranscriptionError.networkError("offline")))
         XCTAssertTrue(AutomaticRecoveryFallbackErrorPolicy.shouldAttempt(after: TranscriptionEngineError.modelNotLoaded))
+        XCTAssertTrue(AutomaticRecoveryFallbackErrorPolicy.shouldAttempt(after: TranscriptionEngineError.noEngineSelected))
+        XCTAssertTrue(AutomaticRecoveryFallbackErrorPolicy.shouldAttempt(
+            after: TranscriptionEngineError.engineUnavailable(engineName: "Cloud", reason: "API key missing")
+        ))
         XCTAssertTrue(AutomaticRecoveryFallbackErrorPolicy.shouldAttempt(after: URLError(.timedOut)))
     }
 
     func testAutomaticRecoveryFallbackRejectsKnownNonRecoverableAndUnknownErrors() {
         XCTAssertFalse(AutomaticRecoveryFallbackErrorPolicy.shouldAttempt(after: PluginTranscriptionError.fileTooLarge))
-        XCTAssertFalse(AutomaticRecoveryFallbackErrorPolicy.shouldAttempt(after: TranscriptionEngineError.unsupportedTask("translate")))
         XCTAssertFalse(AutomaticRecoveryFallbackErrorPolicy.shouldAttempt(after: UnknownTranscriptionError()))
+    }
+
+    func testTranscriptionReadinessErrorsHaveDistinctActionableMessages() {
+        let errors: [TranscriptionEngineError] = [
+            .noEngineSelected,
+            .engineUnavailable(engineName: "Cloud", reason: "API key missing"),
+            .modelNotLoaded,
+            .modelLoadFailed("Downloaded model is missing"),
+            .transcriptionFailed("Engine crashed"),
+        ]
+        let messages = errors.map(\.localizedDescription)
+
+        XCTAssertEqual(Set(messages).count, messages.count)
+        XCTAssertTrue(messages.allSatisfy { $0.contains("Settings") || $0.contains("try again") })
+        XCTAssertEqual(
+            TranscriptionEngineError.engineUnavailable(engineName: "Cloud", reason: "API key missing").localizedDescription,
+            "Cloud is not available. API key missing. Check its setup in Integrations or choose another engine in Settings > Dictation."
+        )
+        XCTAssertEqual(
+            TranscriptionEngineError.modelLoadFailed("Downloaded model is missing.").localizedDescription,
+            "Failed to load the selected model. Downloaded model is missing. Try again, or choose another model in Settings > Dictation."
+        )
+        XCTAssertEqual(
+            TranscriptionEngineError.engineUnavailable(engineName: nil, reason: nil).localizedDescription,
+            "The selected transcription engine is not available. Check its setup in Integrations or choose another engine in Settings > Dictation."
+        )
+    }
+
+    func testTranscriptionErrorsPointToTheSettingsPageThatFixesThem() {
+        XCTAssertEqual(DictationViewModel.settingsTab(forTranscriptionError: TranscriptionEngineError.noEngineSelected), .dictation)
+        XCTAssertEqual(DictationViewModel.settingsTab(forTranscriptionError: TranscriptionEngineError.modelNotLoaded), .dictation)
+        XCTAssertEqual(DictationViewModel.settingsTab(forTranscriptionError: TranscriptionEngineError.modelLoadFailed("x")), .dictation)
+        XCTAssertEqual(
+            DictationViewModel.settingsTab(
+                forTranscriptionError: TranscriptionEngineError.engineUnavailable(engineName: nil, reason: nil)
+            ),
+            .integrations
+        )
+        XCTAssertEqual(DictationViewModel.settingsTab(forTranscriptionError: PluginTranscriptionError.invalidApiKey), .integrations)
+        XCTAssertNil(DictationViewModel.settingsTab(forTranscriptionError: TranscriptionEngineError.transcriptionFailed("x")))
+        XCTAssertNil(DictationViewModel.settingsTab(forTranscriptionError: PluginTranscriptionError.networkError("offline")))
+        XCTAssertNil(DictationViewModel.settingsTab(forTranscriptionError: UnknownTranscriptionError()))
     }
 
     func testAutomaticRecoveryFallbackRejectsCancellation() {
