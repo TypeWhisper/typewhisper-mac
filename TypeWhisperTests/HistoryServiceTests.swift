@@ -106,6 +106,40 @@ final class HistoryServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testDiscardedAudioFileIsNotLeftBehindByABackgroundWrite() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let service = HistoryService(appSupportDirectory: appSupportDirectory)
+        let audioDirectory = appSupportDirectory.appendingPathComponent("audio", isDirectory: true)
+        let samples = [Float](repeating: 0.1, count: 16_000 * 30)
+
+        // A write already running when the audio is discarded.
+        let runningID = UUID()
+        let runningWrite = Task { @MainActor in
+            await service.writeAudioFileInBackground(samples, forRecordID: runningID)
+        }
+        await Task.yield()
+        service.discardAudioFile(forRecordID: runningID)
+        _ = await runningWrite.value
+
+        // A write that starts after the audio was discarded.
+        let laterID = UUID()
+        service.discardAudioFile(forRecordID: laterID)
+        let laterFileName = await service.writeAudioFileInBackground(samples, forRecordID: laterID)
+
+        // Other records are unaffected.
+        let keptID = UUID()
+        let keptFileName = await service.writeAudioFileInBackground([0.1], forRecordID: keptID)
+
+        XCTAssertNil(laterFileName)
+        XCTAssertEqual(keptFileName, "\(keptID.uuidString).wav")
+        XCTAssertEqual(
+            try FileManager.default.contentsOfDirectory(atPath: audioDirectory.path),
+            ["\(keptID.uuidString).wav"]
+        )
+    }
+
+    @MainActor
     func testRemoteHistoryKeepsStructuredDocumentAndInboxMetadata() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory(
             prefix: "HistoryRemoteStructured"

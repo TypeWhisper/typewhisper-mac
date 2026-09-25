@@ -1051,11 +1051,16 @@ final class DictationViewModel: ObservableObject {
         pendingPostInsertionDictations.removeAll()
         saveDeferredPostProcessingUsageCounts()
         for dictation in dictations {
-            let historyAudioFileName = storesHistoryRecord(for: dictation)
-                ? dictation.audioSamples.flatMap {
+            var historyAudioFileName: String?
+            if storesHistoryRecord(for: dictation) {
+                historyAudioFileName = dictation.audioSamples.flatMap {
                     historyService.writeAudioFile($0, forRecordID: dictation.transcriptionID)
                 }
-                : nil
+            } else if dictation.audioSamples != nil {
+                // History was cleared after insertion, so no record will reference the audio.
+                // Remove a file the background write already created and stop one still running.
+                historyService.discardAudioFile(forRecordID: dictation.transcriptionID)
+            }
             persistCompletedDictation(dictation, historyAudioFileName: historyAudioFileName)
         }
     }

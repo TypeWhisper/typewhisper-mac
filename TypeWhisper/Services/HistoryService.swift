@@ -97,6 +97,7 @@ final class HistoryService: ObservableObject {
     private(set) var clearGeneration = 0
 
     private let audioDirectory: URL
+    private let backgroundAudioWrites = BackgroundAudioWrites()
 
     init(
         appSupportDirectory: URL = AppConstants.appSupportDirectory,
@@ -238,10 +239,24 @@ final class HistoryService: ObservableObject {
         guard !samples.isEmpty else { return nil }
         let fileName = Self.audioFileName(for: id)
         let fileURL = audioDirectory.appendingPathComponent(fileName)
+        let backgroundAudioWrites = backgroundAudioWrites
         let didWriteAudio = await Task.detached(priority: .utility) {
-            Self.writeAudioFile(samples, to: fileURL)
+            backgroundAudioWrites.write(fileName) {
+                Self.writeAudioFile(samples, to: fileURL)
+            }
         }.value
         return didWriteAudio ? fileName : nil
+    }
+
+    /// Removes a record's audio file and keeps a background write still in flight for that
+    /// record from writing it afterwards. Used when a record will never be added, for example
+    /// when history was cleared before a termination flush persisted the dictation.
+    func discardAudioFile(forRecordID id: UUID) {
+        let fileName = Self.audioFileName(for: id)
+        let fileURL = audioDirectory.appendingPathComponent(fileName)
+        backgroundAudioWrites.discard(fileName) {
+            try? FileManager.default.removeItem(at: fileURL)
+        }
     }
 
     private static func validatedRecordTexts(
@@ -1106,4 +1121,25 @@ final class HistoryService: ObservableObject {
         refreshRecentRecords()
     }
     #endif
+}
+
+/// Serializes background history audio writes with `HistoryService.discardAudioFile(forRecordID:)`,
+/// so a discard either prevents a pending write or removes the file after a running write.
+private final class BackgroundAudioWrites: @unchecked Sendable {
+    private let lock = NSLock()
+    private var discardedFileNames: Set<String> = []
+
+    func write(_ fileName: String, _ write: () -> Bool) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !discardedFileNames.contains(fileName) else { return false }
+        return write()
+    }
+
+    func discard(_ fileName: String, _ remove: () -> Void) {
+        lock.lock()
+        defer { lock.unlock() }
+        discardedFileNames.insert(fileName)
+        remove()
+    }
 }
