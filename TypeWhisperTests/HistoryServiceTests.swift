@@ -57,6 +57,55 @@ final class HistoryServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testRecordCapturedBeforeClearAllIsRejectedAndItsAudioRemoved() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let service = HistoryService(appSupportDirectory: appSupportDirectory)
+        let staleID = UUID()
+        let currentID = UUID()
+
+        let staleGeneration = service.clearGeneration
+        // The history is cleared while the captured record's audio is still being written.
+        let writtenStaleAudioFileName = await service.writeAudioFileInBackground([0.1], forRecordID: staleID)
+        service.clearAll()
+        let didAddStaleRecord = service.addRecord(
+            id: staleID,
+            rawText: "raw",
+            finalText: "stale",
+            appName: nil,
+            appBundleIdentifier: nil,
+            durationSeconds: 1,
+            language: "en",
+            engineUsed: "test",
+            audioFileName: try XCTUnwrap(writtenStaleAudioFileName),
+            capturedInClearGeneration: staleGeneration
+        )
+        let didAddCurrentRecord = service.addRecord(
+            id: currentID,
+            rawText: "raw",
+            finalText: "current",
+            appName: nil,
+            appBundleIdentifier: nil,
+            durationSeconds: 1,
+            language: "en",
+            engineUsed: "test",
+            audioFileName: nil,
+            capturedInClearGeneration: service.clearGeneration
+        )
+
+        XCTAssertNotEqual(service.clearGeneration, staleGeneration)
+        XCTAssertFalse(didAddStaleRecord)
+        XCTAssertTrue(didAddCurrentRecord)
+        XCTAssertEqual(service.recentRecords.map(\.id), [currentID])
+        XCTAssertEqual(
+            try FileManager.default.contentsOfDirectory(
+                atPath: appSupportDirectory.appendingPathComponent("audio", isDirectory: true).path
+            ),
+            []
+        )
+    }
+
+    @MainActor
     func testRemoteHistoryKeepsStructuredDocumentAndInboxMetadata() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory(
             prefix: "HistoryRemoteStructured"

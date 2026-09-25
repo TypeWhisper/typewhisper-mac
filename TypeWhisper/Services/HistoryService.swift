@@ -92,6 +92,10 @@ final class HistoryService: ObservableObject {
 
     private(set) var totalRecords: Int = 0
 
+    /// Incremented by `clearAll()`. Records captured before a clear but added afterwards, such
+    /// as dictations persisted after insertion, pass the generation they were captured in.
+    private(set) var clearGeneration = 0
+
     private let audioDirectory: URL
 
     init(
@@ -169,7 +173,8 @@ final class HistoryService: ObservableObject {
 
     /// Adds a record whose audio file was already written with `writeAudioFile(_:forRecordID:)`
     /// or `writeAudioFileInBackground(_:forRecordID:)`. If the record is rejected, that audio
-    /// file is removed so it is not left behind without a record.
+    /// file is removed so it is not left behind without a record. A record captured in an
+    /// earlier `clearGeneration` is rejected, so a cleared history does not repopulate.
     @discardableResult
     func addRecord(
         id: UUID,
@@ -184,9 +189,14 @@ final class HistoryService: ObservableObject {
         engineUsed: String,
         modelUsed: String? = nil,
         audioFileName: String?,
-        pipelineSteps: [String]? = nil
+        pipelineSteps: [String]? = nil,
+        capturedInClearGeneration: Int? = nil
     ) -> Bool {
-        guard let texts = Self.validatedRecordTexts(
+        let wasCleared = capturedInClearGeneration.map { $0 != clearGeneration } ?? false
+        if wasCleared {
+            logger.info("Skipping history record: history was cleared after it was captured")
+        }
+        guard !wasCleared, let texts = Self.validatedRecordTexts(
             rawText: rawText,
             finalText: finalText,
             durationSeconds: durationSeconds
@@ -374,6 +384,7 @@ final class HistoryService: ObservableObject {
     }
 
     func clearAll() {
+        clearGeneration += 1
         do {
             let allRecords = try modelContext.fetch(FetchDescriptor<TranscriptionRecord>())
             historySyncPreferences?.recordExplicitDeletions(allRecords.map(\.id))

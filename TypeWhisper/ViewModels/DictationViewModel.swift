@@ -993,6 +993,8 @@ final class DictationViewModel: ObservableObject {
         let ruleName: String?
         let wordsCount: Int
         let historyEnabled: Bool
+        /// `HistoryService.clearGeneration` at insertion. Clearing history afterwards drops the record.
+        let historyClearGeneration: Int
         let audioSamples: [Float]?
         let pipelineSteps: [String]?
     }
@@ -1018,7 +1020,7 @@ final class DictationViewModel: ObservableObject {
                 pendingPostInsertionDictations[index].appURL = resolvedURL
             }
             var historyAudioFileName: String?
-            if dictation.historyEnabled, let audioSamples = dictation.audioSamples {
+            if storesHistoryRecord(for: dictation), let audioSamples = dictation.audioSamples {
                 historyAudioFileName = await historyService.writeAudioFileInBackground(
                     audioSamples,
                     forRecordID: dictationID
@@ -1034,6 +1036,12 @@ final class DictationViewModel: ObservableObject {
         pendingPostInsertionDictations.firstIndex { $0.transcriptionID == id }
     }
 
+    /// History cleared after insertion drops the record; statistics and the completion event
+    /// are still recorded, as clearing history does not clear them.
+    private func storesHistoryRecord(for dictation: CompletedDictation) -> Bool {
+        dictation.historyEnabled && dictation.historyClearGeneration == historyService.clearGeneration
+    }
+
     /// Synchronously persists dictations still waiting for the optional browser URL lookup or
     /// the background history audio write, for example before the app terminates. They are
     /// persisted with the metadata known at this point.
@@ -1043,7 +1051,7 @@ final class DictationViewModel: ObservableObject {
         pendingPostInsertionDictations.removeAll()
         saveDeferredPostProcessingUsageCounts()
         for dictation in dictations {
-            let historyAudioFileName = dictation.historyEnabled
+            let historyAudioFileName = storesHistoryRecord(for: dictation)
                 ? dictation.audioSamples.flatMap {
                     historyService.writeAudioFile($0, forRecordID: dictation.transcriptionID)
                 }
@@ -1061,6 +1069,8 @@ final class DictationViewModel: ObservableObject {
     private func persistCompletedDictation(_ dictation: CompletedDictation, historyAudioFileName: String?) {
         let appURL = dictation.appURL
         if dictation.historyEnabled {
+            // Also rejects the record, and removes its audio file, if history was cleared
+            // while the audio was written in the background.
             historyService.addRecord(
                 id: dictation.transcriptionID,
                 timestamp: dictation.timestamp,
@@ -1074,7 +1084,8 @@ final class DictationViewModel: ObservableObject {
                 engineUsed: dictation.engineUsed,
                 modelUsed: dictation.modelUsed,
                 audioFileName: historyAudioFileName,
-                pipelineSteps: dictation.pipelineSteps
+                pipelineSteps: dictation.pipelineSteps,
+                capturedInClearGeneration: dictation.historyClearGeneration
             )
         }
 
@@ -2673,6 +2684,7 @@ final class DictationViewModel: ObservableObject {
                         ruleName: self.effectiveRuleName,
                         wordsCount: wordCount,
                         historyEnabled: UserDefaults.standard.object(forKey: UserDefaultsKeys.historyEnabled) as? Bool ?? true,
+                        historyClearGeneration: historyService.clearGeneration,
                         audioSamples: audioSamplesForHistory,
                         pipelineSteps: pipelineSteps.isEmpty ? nil : pipelineSteps
                     ),

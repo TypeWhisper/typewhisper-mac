@@ -7314,6 +7314,102 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testClearingHistoryDropsDictationStillWaitingForBrowserURL() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let historyEnabledKey = UserDefaultsKeys.historyEnabled
+        let saveAudioKey = UserDefaultsKeys.saveAudioWithHistory
+        let originalHistoryEnabled = UserDefaults.standard.object(forKey: historyEnabledKey)
+        let originalSaveAudio = UserDefaults.standard.object(forKey: saveAudioKey)
+        var dictationContext: DictationContext?
+        defer {
+            MockTranscriptionPlugin.reset()
+            dictationContext = nil
+            if let originalHistoryEnabled {
+                UserDefaults.standard.set(originalHistoryEnabled, forKey: historyEnabledKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: historyEnabledKey)
+            }
+            if let originalSaveAudio {
+                UserDefaults.standard.set(originalSaveAudio, forKey: saveAudioKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: saveAudioKey)
+            }
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        UserDefaults.standard.set(true, forKey: historyEnabledKey)
+        UserDefaults.standard.set(true, forKey: saveAudioKey)
+        MockTranscriptionPlugin.reset()
+        MockTranscriptionPlugin.setResponseText("transcribed")
+        let urlRequested = expectation(description: "Browser lookup started")
+        let urlGate = DispatchSemaphore(value: 0)
+        defer { urlGate.signal() }
+        let resolver = BrowserURLResolver { _, _ in
+            urlRequested.fulfill()
+            urlGate.wait()
+            return BrowserResolution(url: URL(string: "https://example.com/page"), title: nil)
+        }
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory, browserURLResolver: resolver)
+        let context = try XCTUnwrap(dictationContext)
+        context.dictationViewModel.preserveClipboard = false
+
+        let pasteboard = NSPasteboard.withUniqueName()
+        context.textInsertionService.pasteboardProvider = { pasteboard }
+        context.textInsertionService.captureActiveAppOverride = { ("Chrome", "com.google.Chrome", nil) }
+        context.textInsertionService.accessibilityGrantedOverride = true
+        context.textInsertionService.selectedTextOverride = { nil }
+        context.textInsertionService.focusedTextElementOverride = { nil }
+        context.textInsertionService.pasteSimulatorOverride = {}
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { _ in
+            Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
+        }
+
+        // A sink sees every state change, unlike an AsyncPublisher that can miss one on slow runners.
+        let inserted = expectation(description: "Dictation inserted")
+        inserted.assertForOverFulfill = false
+        let stateObservation = context.dictationViewModel.$state.sink { state in
+            if state == .inserting {
+                inserted.fulfill()
+            }
+        }
+        defer { stateObservation.cancel() }
+
+        let sessionID = context.dictationViewModel.apiStartRecording()
+        await context.dictationViewModel.testingWaitForRecordingStart()
+        await fulfillment(of: [urlRequested], timeout: 10)
+        _ = context.dictationViewModel.apiStopRecording()
+
+        // Inserted, with persistence still waiting for the blocked URL lookup.
+        await fulfillment(of: [inserted], timeout: 30)
+        XCTAssertEqual(pasteboard.string(forType: .string), "transcribed")
+        XCTAssertEqual(context.historyService.totalRecords, 0)
+        XCTAssertNotEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.status, .completed)
+
+        // The user deletes all history before the lookup finishes.
+        context.historyService.clearAll()
+        urlGate.signal()
+        await context.dictationViewModel.testingWaitForPostInsertionPersistence()
+        // A later termination flush has nothing left to store either.
+        context.dictationViewModel.flushPendingPostInsertionPersistence()
+
+        XCTAssertEqual(context.historyService.totalRecords, 0)
+        XCTAssertEqual(
+            try FileManager.default.contentsOfDirectory(
+                atPath: appSupportDirectory.appendingPathComponent("audio", isDirectory: true).path
+            ),
+            []
+        )
+        // Completion (event, statistics, API session) is still reported.
+        let session = try XCTUnwrap(context.dictationViewModel.apiDictationSession(id: sessionID))
+        XCTAssertEqual(session.status, .completed)
+        XCTAssertEqual(session.transcription?.text, "transcribed")
+        XCTAssertEqual(session.transcription?.appURL, "https://example.com/page")
+    }
+
+    @MainActor
     func testDictationWaitsForBrowserURLWhenWebsiteWorkflowCanMatch() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         var dictationContext: DictationContext?
