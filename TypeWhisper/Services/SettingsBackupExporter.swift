@@ -38,6 +38,7 @@ enum SettingsBackupExporter {
         UserDefaultsKeys.pttHotkeys,
         UserDefaultsKeys.toggleHotkeys,
         UserDefaultsKeys.promptPaletteHotkeys,
+        UserDefaultsKeys.voiceTransformHotkeys,
         UserDefaultsKeys.recentTranscriptionsHotkeys,
         UserDefaultsKeys.copyLastTranscriptionHotkeys,
         UserDefaultsKeys.pasteLastTranscriptionHotkeys,
@@ -71,6 +72,7 @@ enum SettingsBackupExporter {
         let replacement: String
         let caseSensitive: Bool
         let isEnabled: Bool
+        var scopeRawValue: String? = nil
     }
 
     struct PromptActionDTO: Codable {
@@ -466,7 +468,8 @@ enum SettingsBackupExporter {
                 trigger: snippet.trigger,
                 replacement: snippet.replacement,
                 caseSensitive: snippet.caseSensitive,
-                isEnabled: snippet.isEnabled
+                isEnabled: snippet.isEnabled,
+                scopeRawValue: snippet.scopeRawValue
             )
         }
 
@@ -674,11 +677,17 @@ enum SettingsBackupExporter {
         result.dictionarySkipped = backup.dictionaryEntries.count - dictionaryImported
 
         for snippet in backup.snippets {
+            // Future scopes must not silently become dictation expansions.
+            guard snippet.scopeRawValue == nil || snippet.scopeRawValue.flatMap(SnippetScope.init(rawValue:)) != nil else {
+                result.snippetsSkipped += 1
+                continue
+            }
             let beforeCount = snippetService.snippets.count
             snippetService.addSnippet(
                 trigger: snippet.trigger,
                 replacement: snippet.replacement,
-                caseSensitive: snippet.caseSensitive
+                caseSensitive: snippet.caseSensitive,
+                scope: snippet.scopeRawValue.flatMap(SnippetScope.init(rawValue:)) ?? .dictation
             )
             guard snippetService.snippets.count > beforeCount else {
                 result.snippetsSkipped += 1

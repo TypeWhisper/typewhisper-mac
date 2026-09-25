@@ -46,8 +46,9 @@ final class SnippetService: ObservableObject {
         }
     }
 
-    func addSnippet(trigger: String, replacement: String, caseSensitive: Bool = false) {
+    func addSnippet(trigger: String, replacement: String, caseSensitive: Bool = false, scope: SnippetScope = .dictation) {
         guard let context = modelContext else { return }
+        guard transformValidationError(trigger: trigger, replacement: replacement, scope: scope) == nil else { return }
 
         // Check for duplicate trigger
         if snippets.contains(where: { $0.trigger == trigger }) {
@@ -60,7 +61,8 @@ final class SnippetService: ObservableObject {
             replacement: replacement,
             caseSensitive: caseSensitive,
             createdAt: now,
-            updatedAt: now
+            updatedAt: now,
+            scope: scope
         )
 
         context.insert(snippet)
@@ -73,12 +75,16 @@ final class SnippetService: ObservableObject {
         }
     }
 
-    func updateSnippet(_ snippet: Snippet, trigger: String, replacement: String, caseSensitive: Bool) {
+    func updateSnippet(_ snippet: Snippet, trigger: String, replacement: String, caseSensitive: Bool, scope: SnippetScope? = nil) {
         guard let context = modelContext else { return }
+        if let effectiveScope = scope ?? snippet.scope {
+            guard transformValidationError(trigger: trigger, replacement: replacement, scope: effectiveScope, excluding: snippet.id) == nil else { return }
+        }
 
         snippet.trigger = trigger
         snippet.replacement = replacement
         snippet.caseSensitive = caseSensitive
+        if let scope { snippet.scopeRawValue = scope.rawValue }
         snippet.updatedAt = Date()
 
         do {
@@ -121,7 +127,7 @@ final class SnippetService: ObservableObject {
         var result = text
         var needsSave = false
 
-        for snippet in snippets where snippet.isEnabled {
+        for snippet in snippets where snippet.isEnabled && snippet.scope?.includesDictation == true {
             let searchTrigger = snippet.caseSensitive ? snippet.trigger : snippet.trigger.lowercased()
             let searchText = snippet.caseSensitive ? result : result.lowercased()
 
@@ -161,6 +167,7 @@ final class SnippetService: ObservableObject {
                 replacement: snippet.replacement,
                 caseSensitive: snippet.caseSensitive,
                 isEnabled: snippet.isEnabled,
+                scopeRawValue: snippet.scopeRawValue,
                 createdAt: snippet.createdAt,
                 updatedAt: snippet.effectiveUpdatedAt
             )
@@ -205,18 +212,21 @@ final class SnippetService: ObservableObject {
             snippet.replacement = synced.replacement
             snippet.caseSensitive = synced.caseSensitive
             snippet.isEnabled = synced.isEnabled
+            snippet.scopeRawValue = synced.scopeRawValue
             snippet.updatedAt = synced.updatedAt
             return
         }
 
-        context.insert(Snippet(
+        let inserted = Snippet(
             trigger: synced.trigger,
             replacement: synced.replacement,
             caseSensitive: synced.caseSensitive,
             isEnabled: synced.isEnabled,
             createdAt: synced.createdAt,
             updatedAt: synced.updatedAt
-        ))
+        )
+        inserted.scopeRawValue = synced.scopeRawValue
+        context.insert(inserted)
     }
 
     private func deleteSyncedSnippet(itemID: String, context: ModelContext) {

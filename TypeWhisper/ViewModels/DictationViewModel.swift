@@ -238,6 +238,7 @@ final class DictationViewModel: ObservableObject {
         }
     }
     @Published var audioLevel: Float = 0
+    var voiceTransformIsBusy: () -> Bool = { false }
     @Published var recordingDuration: TimeInterval = 0
     @Published var hotkeyMode: HotkeyService.HotkeyMode?
     @Published var partialText: String = ""
@@ -838,7 +839,7 @@ final class DictationViewModel: ObservableObject {
     }
 
     var canStartAPIRecording: Bool {
-        state == .idle
+        state == .idle && !voiceTransformIsBusy()
     }
 
     var activeWorkflowId: UUID? {
@@ -1372,6 +1373,10 @@ final class DictationViewModel: ObservableObject {
         sessionID: UUID = UUID(),
         requestUptimeNanoseconds: UInt64 = DispatchTime.now().uptimeNanoseconds
     ) {
+        guard !voiceTransformIsBusy() else {
+            hotkeyService.cancelDictation()
+            return
+        }
         guard state == .idle else {
             logger.warning("startRecording rejected: state=\(String(describing: self.state), privacy: .public); resetting hotkey state")
             hotkeyService.cancelDictation()
@@ -3634,11 +3639,13 @@ final class DictationViewModel: ObservableObject {
     }
 
     func triggerWorkflowPalette() {
+        guard !voiceTransformIsBusy() else { return }
         recentTranscriptionPaletteHandler.hide()
         promptPaletteHandler.triggerSelection(currentState: state, soundFeedbackEnabled: soundFeedbackEnabled)
     }
 
     func processWorkflowHotkeyText(workflowId: UUID) {
+        guard !voiceTransformIsBusy() else { return }
         recentTranscriptionPaletteHandler.hide()
         promptPaletteHandler.hide()
         guard let workflow = workflowService.workflow(id: workflowId) else { return }

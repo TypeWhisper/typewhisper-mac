@@ -12,6 +12,8 @@ final class Snippet {
     var createdAt: Date
     var updatedAt: Date?
     var usageCount: Int
+    // Optional for lightweight migration of stores created before scopes existed.
+    var scopeRawValue: String?
 
     init(
         id: UUID = UUID(),
@@ -21,7 +23,8 @@ final class Snippet {
         isEnabled: Bool = true,
         createdAt: Date = Date(),
         updatedAt: Date? = nil,
-        usageCount: Int = 0
+        usageCount: Int = 0,
+        scope: SnippetScope = .dictation
     ) {
         self.id = id
         self.trigger = trigger
@@ -31,6 +34,7 @@ final class Snippet {
         self.createdAt = createdAt
         self.updatedAt = updatedAt ?? createdAt
         self.usageCount = usageCount
+        self.scopeRawValue = scope.rawValue
     }
 
     var effectiveUpdatedAt: Date {

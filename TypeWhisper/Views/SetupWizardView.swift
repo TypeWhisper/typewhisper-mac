@@ -1470,6 +1470,7 @@ struct SetupWizardView: View {
         case .pushToTalk: return dictation.pttHotkeyLabel
         case .toggle: return dictation.toggleHotkeyLabel
         case .promptPalette: return dictation.promptPaletteHotkeyLabel
+        case .voiceTransform: return dictation.hotkeys(for: .voiceTransform).map { HotkeyService.displayName(for: $0) }.joined(separator: ", ")
         case .recentTranscriptions: return dictation.recentTranscriptionsHotkeyLabel
         case .copyLastTranscription: return dictation.copyLastTranscriptionHotkeyLabel
         case .pasteLastTranscription: return dictation.pasteLastTranscriptionHotkeyLabel
@@ -1483,6 +1484,7 @@ struct SetupWizardView: View {
         case .pushToTalk: return localizedAppText("Push-to-Talk", de: "Push-to-Talk")
         case .toggle: return localizedAppText("Toggle", de: "Toggle")
         case .promptPalette: return localizedAppText("Workflow Palette", de: "Workflow-Palette")
+        case .voiceTransform: return "Voice Transform"
         case .recentTranscriptions: return String(localized: "Recent Transcriptions")
         case .copyLastTranscription: return String(localized: "Copy Last Transcription")
         case .pasteLastTranscription: return String(localized: "Paste Last Transcription")

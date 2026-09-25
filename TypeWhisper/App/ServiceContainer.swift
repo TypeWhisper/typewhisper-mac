@@ -117,6 +117,9 @@ final class ServiceContainer: ObservableObject {
     let audioRecorderViewModel: AudioRecorderViewModel
     let watchFolderViewModel: WatchFolderViewModel
 
+    lazy var voiceTransformWindow = VoiceTransformWindowController(coordinator: voiceTransformCoordinator)
+    lazy var voiceTransformCoordinator = makeVoiceTransformCoordinator()
+
     private init() {
         // Services
         let inputActivationGuard = AudioInputDeviceActivationGuard()

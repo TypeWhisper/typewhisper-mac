@@ -134,6 +134,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         source.dictionaryService.addEntry(type: .term, original: "Kubernetes")
         source.dictionaryService.addEntry(type: .correction, original: "teh", replacement: "the")
         source.snippetService.addSnippet(trigger: ";sig", replacement: "Best, Alex")
+        source.snippetService.addSnippet(trigger: "my rewrite", replacement: "Be concise", scope: .voiceTransform)
 
         let backup = try SettingsBackupExporter.buildBackup(
             workflowService: source.workflowService,
@@ -168,11 +169,14 @@ final class SettingsBackupExporterTests: XCTestCase {
 
         XCTAssertEqual(result.workflowsImported, 1)
         XCTAssertEqual(result.dictionaryImported, 2)
-        XCTAssertEqual(result.snippetsImported, 1)
+        XCTAssertEqual(result.snippetsImported, 2)
         XCTAssertEqual(destination.workflowService.workflows.first?.name, "Cleanup")
         XCTAssertEqual(destination.workflowService.workflows.first?.output.autoEnterMode, .duringDictation)
         XCTAssertEqual(destination.workflowService.workflows.first?.output.autoEnter, false)
         XCTAssertEqual(destination.snippetService.snippets.first?.trigger, ";sig")
+        XCTAssertEqual(destination.snippetService.snippets.first { $0.trigger == "my rewrite" }?.scope, .voiceTransform)
+        XCTAssertEqual(destination.snippetService.applySnippets(to: "my rewrite"), "my rewrite")
+        XCTAssertEqual(try destination.snippetService.resolveTransformInstruction("my rewrite").resolved, "Be concise")
     }
 
     func testProfilePromptActionIdIsRemappedOnImport() async throws {

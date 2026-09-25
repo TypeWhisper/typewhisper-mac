@@ -6046,6 +6046,17 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testVoiceTransformOwnershipBlocksDictationAPI() throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(directory) }
+        let context = Self.makeDictationContext(appSupportDirectory: directory)
+        context.dictationViewModel.voiceTransformIsBusy = { true }
+        XCTAssertFalse(context.dictationViewModel.canStartAPIRecording)
+        context.dictationViewModel.voiceTransformIsBusy = { false }
+        XCTAssertTrue(context.dictationViewModel.canStartAPIRecording)
+    }
+
+    @MainActor
     func testHotkeyStartDuringInsertingIsBufferedExactlyOnce() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         var dictationContext: DictationContext?
@@ -11196,6 +11207,28 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         XCTAssertEqual(explicit.processCallCount, 1)
         XCTAssertEqual(fallback.processCallCount, 0)
+    }
+
+    @MainActor
+    func testVoiceTransformUsesGlobalFallbacksWithoutCodexRequirement() async throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(directory) }
+        let isolated = Self.makeEmptyLLMFallbackDefaults()
+        defer { isolated.defaults.removePersistentDomain(forName: isolated.suiteName) }
+        let failing = MockLLMProviderPlugin()
+        failing.configuredProviderId = "first-choice-cli"
+        failing.queuedProcessOutcomes = [.apiFailure("Provider unavailable")]
+        let succeeding = MockLLMProviderPlugin()
+        succeeding.configuredProviderId = "local-fallback"
+        succeeding.queuedProcessOutcomes = [.response("Short rewrite")]
+        Self.installLLMFallbackTestProviders([failing, succeeding], appSupportDirectory: directory)
+        let service = PromptProcessingService(userDefaults: isolated.defaults)
+        service.addLLMFallback(providerId: failing.providerId)
+        service.addLLMFallback(providerId: succeeding.providerId)
+        let result = try await service.processVoiceTransform(instruction: "Shorten this", text: "Original selected text")
+        XCTAssertEqual(result, "Short rewrite")
+        XCTAssertEqual(failing.processCallCount, 1)
+        XCTAssertEqual(succeeding.processCallCount, 1)
     }
 
     @MainActor
