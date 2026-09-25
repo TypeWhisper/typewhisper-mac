@@ -3552,6 +3552,7 @@ private struct OpenAISettingsView: View {
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                     .foregroundStyle(.red)
+                    .disabled(isValidating)
                 } else {
                     Button(String(localized: "Save", bundle: bundle)) {
                         saveApiKey()
