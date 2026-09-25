@@ -37,7 +37,15 @@ struct DictationRecoveryPreservationResult: Equatable, Sendable {
 
 /// Persists the active dictation as a temporary 16 kHz mono PCM WAV so the
 /// audio can be recovered after a failure or an apparently successful but incomplete result.
+///
+/// Appended samples are batched in memory and written in chunks of `writeBatchSampleCount`.
+/// Preservation always flushes the remainder first, so preserved files contain every
+/// appended sample. The active file itself is never recoverable after a crash (it is
+/// deleted on launch because its header is only finalized on preservation).
 final class DictationRecoveryAudioStore: @unchecked Sendable {
+    /// About one second of 16 kHz audio (32 KiB of PCM16) per file write.
+    static let writeBatchSampleCount = 16_384
+
     private enum Constants {
         static let sampleRate: UInt32 = 16_000
         static let bitsPerSample: UInt16 = 16
@@ -60,7 +68,9 @@ final class DictationRecoveryAudioStore: @unchecked Sendable {
     private let queue = DispatchQueue(label: "com.typewhisper.dictation-recovery-audio", qos: .utility)
 
     private var activeHandle: FileHandle?
+    /// Samples written to the active file; pending samples are not included.
     private var activeSampleCount = 0
+    private var pendingPCMSamples: [Int16] = []
     private var hasActiveRecording = false
     private var recoverySerialNumber: UInt64 = 0
     private var retentionPolicy: DictationRecoveryRetentionPolicy
@@ -132,6 +142,9 @@ final class DictationRecoveryAudioStore: @unchecked Sendable {
             _ = try? activeHandle?.seekToEnd()
             activeSampleCount = 0
             hasActiveRecording = activeHandle != nil
+            if hasActiveRecording {
+                pendingPCMSamples.reserveCapacity(Self.writeBatchSampleCount + 4_096)
+            }
         }
     }
 
@@ -139,17 +152,34 @@ final class DictationRecoveryAudioStore: @unchecked Sendable {
         guard !samples.isEmpty else { return }
 
         queue.async { [weak self, samples] in
-            guard let self, self.hasActiveRecording, let activeHandle = self.activeHandle else { return }
-            let data = Self.pcm16Data(from: samples)
-            do {
-                try activeHandle.write(contentsOf: data)
-                self.activeSampleCount += samples.count
-            } catch {
-                self.closeActiveHandle()
-                self.removeItemIfExists(at: self.activeFileURL)
-                self.hasActiveRecording = false
-                self.activeSampleCount = 0
+            guard let self, self.hasActiveRecording, self.activeHandle != nil else { return }
+            Self.appendPCM16(from: samples, to: &self.pendingPCMSamples)
+            if self.pendingPCMSamples.count >= Self.writeBatchSampleCount {
+                self.flushPendingSamples()
             }
+        }
+    }
+
+    /// Writes batched samples to the active file. A write failure drops the active
+    /// recording, matching the behavior of the former per-buffer writes.
+    private func flushPendingSamples() {
+        guard !pendingPCMSamples.isEmpty else { return }
+        guard hasActiveRecording, let activeHandle else {
+            pendingPCMSamples.removeAll(keepingCapacity: true)
+            return
+        }
+
+        do {
+            try pendingPCMSamples.withUnsafeBytes { bytes in
+                try activeHandle.write(contentsOf: bytes)
+            }
+            activeSampleCount += pendingPCMSamples.count
+            pendingPCMSamples.removeAll(keepingCapacity: true)
+        } catch {
+            closeActiveHandle()
+            removeItemIfExists(at: activeFileURL)
+            hasActiveRecording = false
+            activeSampleCount = 0
         }
     }
 
@@ -196,6 +226,7 @@ final class DictationRecoveryAudioStore: @unchecked Sendable {
             )
         }
 
+        flushPendingSamples()
         guard hasActiveRecording else {
             return DictationRecoveryPreservationResult(
                 latestRecoveryURL: storedRecoveryURLs().first,
@@ -437,7 +468,9 @@ final class DictationRecoveryAudioStore: @unchecked Sendable {
         }
     }
 
+    /// Drops samples that were not flushed yet; call `flushPendingSamples()` first to keep them.
     private func closeActiveHandle() {
+        pendingPCMSamples.removeAll(keepingCapacity: true)
         try? activeHandle?.synchronize()
         try? activeHandle?.close()
         activeHandle = nil
@@ -448,18 +481,13 @@ final class DictationRecoveryAudioStore: @unchecked Sendable {
         try? fileManager.removeItem(at: url)
     }
 
-    private static func pcm16Data(from samples: [Float]) -> Data {
-        var data = Data()
-        data.reserveCapacity(samples.count * Constants.bytesPerSample)
-
+    /// Appends little-endian PCM16 values so the buffer's bytes can be written as-is.
+    private static func appendPCM16(from samples: [Float], to pcmSamples: inout [Int16]) {
         for sample in samples {
             let clamped = max(-1, min(1, sample))
             let scaled = Int16(clamped * Float(Int16.max))
-            var littleEndian = scaled.littleEndian
-            withUnsafeBytes(of: &littleEndian) { data.append(contentsOf: $0) }
+            pcmSamples.append(scaled.littleEndian)
         }
-
-        return data
     }
 
     private static func wavHeader(sampleCount: Int) -> Data {

@@ -112,6 +112,13 @@ def list_releases(repository: str) -> list[dict[str, Any]]:
     return [release for release in releases if isinstance(release, dict)]
 
 
+def matches_prerelease_tag(tag: str, minimum_host_version: str) -> bool:
+    prefix = f"v{minimum_host_version}"
+    return tag.startswith(f"{prefix}-daily.") or bool(
+        re.fullmatch(re.escape(prefix) + r"-rc[0-9]+", tag)
+    )
+
+
 def validate_release(
     release: dict[str, Any],
     minimum_host_version: str,
@@ -120,7 +127,6 @@ def validate_release(
 ) -> None:
     tag = release.get("tagName")
     stable_tag = f"v{minimum_host_version}"
-    daily_prefix = f"{stable_tag}-daily."
 
     if release.get("isDraft") is not False:
         raise ReleaseResolutionError(f"host release {tag!r} must be published")
@@ -129,14 +135,14 @@ def validate_release(
             raise ReleaseResolutionError(
                 f"host release {stable_tag} must be stable, not a prerelease"
             )
-    elif expected_kind == "daily":
+    elif expected_kind == "prerelease":
         if (
             not isinstance(tag, str)
-            or not tag.startswith(daily_prefix)
+            or not matches_prerelease_tag(tag, minimum_host_version)
             or release.get("isPrerelease") is not True
         ):
             raise ReleaseResolutionError(
-                f"daily host release {tag!r} must match {daily_prefix}* and be a prerelease"
+                f"host release {tag!r} must be a matching daily or RC prerelease"
             )
     else:
         raise ReleaseResolutionError(f"unknown host release kind: {expected_kind}")
@@ -174,25 +180,24 @@ def resolve_host_release(
             f"{minimum_host_version} ({stable_tag})"
         )
 
-    daily_prefix = f"{stable_tag}-daily."
     candidates = [
         release
         for release in list_releases(repository)
         if release.get("isDraft") is False
         and release.get("isPrerelease") is True
         and isinstance(release.get("tagName"), str)
-        and release["tagName"].startswith(daily_prefix)
+        and matches_prerelease_tag(release["tagName"], minimum_host_version)
         and isinstance(release.get("publishedAt"), str)
     ]
     if not candidates:
         raise ReleaseResolutionError(
-            f"no published daily TypeWhisper release found for minHostVersion "
+            f"no published daily or RC TypeWhisper release found for minHostVersion "
             f"{minimum_host_version}"
         )
 
     selected = max(candidates, key=lambda release: release["publishedAt"])
     release = load_release(repository, selected["tagName"])
-    validate_release(release, minimum_host_version, expected_kind="daily")
+    validate_release(release, minimum_host_version, expected_kind="prerelease")
     return release
 
 

@@ -43,6 +43,17 @@ def release(version: str = "1.0.0", download_url: str = TYPEWHISPER_RELEASE_URL)
 
 
 class CommunityPluginRegistryAssemblyTests(unittest.TestCase):
+    def test_model_import_capability_marker_is_preserved(self) -> None:
+        item = release()
+        item["minHostVersion"] = "1.7.0"
+        item["sdkCompatibilityVersion"] = "v1-model-import"
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "com.example.plugin.json"
+            path.write_text(json.dumps(community_entry(releases=[item])) + "\n")
+            entries, errors = load_community_entries(Path(tmp))
+        self.assertEqual(errors, [])
+        self.assertEqual(entries[0]["releases"][0]["sdkCompatibilityVersion"], "v1-model-import")
+
     def test_source_only_community_entry_validates_without_releases(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "com.example.plugin.json"

@@ -1,4 +1,5 @@
 import Foundation
+import Accelerate
 @preconcurrency import AVFoundation
 import AudioToolbox
 import CoreAudio
@@ -90,14 +91,26 @@ final class MicrophoneBoostProcessor: @unchecked Sendable {
     }
 
     func process(_ samples: [Float], enabled: Bool) -> MicrophoneBoostProcessingResult {
+        var processedSamples = samples
+        let levels = processInPlace(&processedSamples, enabled: enabled)
+        return MicrophoneBoostProcessingResult(
+            samples: processedSamples,
+            inputRMS: levels.inputRMS,
+            outputRMS: levels.outputRMS,
+            gain: levels.gain
+        )
+    }
+
+    /// Applies the boost to `samples` in place so the capture path does not copy each buffer.
+    func processInPlace(_ samples: inout [Float], enabled: Bool) -> (inputRMS: Float, outputRMS: Float, gain: Float) {
         guard !samples.isEmpty else {
-            return MicrophoneBoostProcessingResult(samples: [], inputRMS: 0, outputRMS: 0, gain: 1)
+            return (inputRMS: 0, outputRMS: 0, gain: 1)
         }
 
         let inputRMS = Self.rms(samples)
         guard enabled else {
             reset()
-            return MicrophoneBoostProcessingResult(samples: samples, inputRMS: inputRMS, outputRMS: inputRMS, gain: 1)
+            return (inputRMS: inputRMS, outputRMS: inputRMS, gain: 1)
         }
 
         let inputPeak = samples.reduce(Float.zero) { max($0, abs($1)) }
@@ -130,16 +143,28 @@ final class MicrophoneBoostProcessor: @unchecked Sendable {
         }
 
         guard gain > 1 else {
-            return MicrophoneBoostProcessingResult(samples: samples, inputRMS: inputRMS, outputRMS: inputRMS, gain: 1)
+            return (inputRMS: inputRMS, outputRMS: inputRMS, gain: 1)
         }
 
-        let boosted = samples.map { Self.softLimited($0 * gain) }
-        return MicrophoneBoostProcessingResult(
-            samples: boosted,
-            inputRMS: inputRMS,
-            outputRMS: Self.rms(boosted),
-            gain: gain
-        )
+        Self.applyGain(gain, to: &samples)
+        return (inputRMS: inputRMS, outputRMS: Self.rms(samples), gain: gain)
+    }
+
+    /// Equivalent to `samples.map { softLimited($0 * gain) }` without a new allocation.
+    private static func applyGain(_ gain: Float, to samples: inout [Float]) {
+        samples.withUnsafeMutableBufferPointer { buffer in
+            guard let baseAddress = buffer.baseAddress else { return }
+            let count = vDSP_Length(buffer.count)
+            var gain = gain
+            vDSP_vsmul(baseAddress, 1, &gain, baseAddress, 1, count)
+
+            var peak: Float = 0
+            vDSP_maxmgv(baseAddress, 1, &peak, count)
+            guard peak > limiterKnee else { return }
+            for index in buffer.indices {
+                buffer[index] = softLimited(buffer[index])
+            }
+        }
     }
 
     private static func softLimited(_ sample: Float) -> Float {
@@ -153,6 +178,82 @@ final class MicrophoneBoostProcessor: @unchecked Sendable {
 
     private static func rms(_ samples: [Float]) -> Float {
         sqrt(samples.reduce(0) { $0 + $1 * $1 } / Float(samples.count))
+    }
+}
+
+/// Converts input-only HAL capture slices to mono samples at the target rate on the
+/// delivery queue. Each slice is handled exactly like the former render-thread path: the
+/// strongest channel is selected per slice and the converter output capacity is
+/// `frames * targetRate / inputRate`, so the audio is unchanged. Only the output buffer is
+/// reused; input buffers must stay untouched because the converter may read them again.
+final class AudioInputSliceConverter {
+    private final class PendingInput: @unchecked Sendable {
+        var buffer: AVAudioPCMBuffer?
+    }
+
+    private let converter: AVAudioConverter
+    private let targetFormat: AVAudioFormat
+    private let pendingInput = PendingInput()
+    private var convertedBuffer: AVAudioPCMBuffer?
+
+    init?(inputFormat: AVAudioFormat, targetSampleRate: Double) {
+        guard let monoFormat = AudioInputBufferNormalizer.monoFloatFormat(for: inputFormat),
+              let targetFormat = AVAudioFormat(
+                  commonFormat: .pcmFormatFloat32,
+                  sampleRate: targetSampleRate,
+                  channels: 1,
+                  interleaved: false
+              ),
+              let converter = AVAudioConverter(from: monoFormat, to: targetFormat) else {
+            return nil
+        }
+        self.converter = converter
+        self.targetFormat = targetFormat
+    }
+
+    /// Returns the converted samples for one slice. `buffer` must not be modified afterwards.
+    func convert(_ buffer: AVAudioPCMBuffer) -> [Float]? {
+        guard let monoBuffer = AudioInputBufferNormalizer.monoFloatBuffer(from: buffer) else {
+            return nil
+        }
+        let frameCount = AVAudioFrameCount(
+            Double(monoBuffer.frameLength) * targetFormat.sampleRate / monoBuffer.format.sampleRate
+        )
+        guard frameCount > 0, let outputBuffer = reusableConvertedBuffer(frameCapacity: frameCount) else {
+            return nil
+        }
+        outputBuffer.frameLength = 0
+
+        var error: NSError?
+        pendingInput.buffer = monoBuffer
+        converter.convert(to: outputBuffer, error: &error) { [pendingInput] _, outStatus in
+            guard let input = pendingInput.buffer else {
+                outStatus.pointee = .noDataNow
+                return nil
+            }
+            pendingInput.buffer = nil
+            outStatus.pointee = .haveData
+            return input
+        }
+        pendingInput.buffer = nil
+
+        guard error == nil,
+              outputBuffer.frameLength > 0,
+              let channelData = outputBuffer.floatChannelData?[0] else {
+            return nil
+        }
+        return Array(UnsafeBufferPointer(start: channelData, count: Int(outputBuffer.frameLength)))
+    }
+
+    /// The converter emits at most `frameCapacity` frames per call, so the capacity must
+    /// match the per-slice frame count exactly; it only changes with the slice size.
+    private func reusableConvertedBuffer(frameCapacity: AVAudioFrameCount) -> AVAudioPCMBuffer? {
+        if let convertedBuffer, convertedBuffer.frameCapacity == frameCapacity {
+            return convertedBuffer
+        }
+        let buffer = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: frameCapacity)
+        convertedBuffer = buffer
+        return buffer
     }
 }
 
@@ -2224,8 +2325,9 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         let samples = Array(UnsafeBufferPointer(start: channelData, count: Int(convertedBuffer.frameLength)))
 
         processingQueue.async { [weak self] in
+            var samples = samples
             self?.processConvertedSamples(
-                samples,
+                &samples,
                 bluetoothInputGeneration: bluetoothInputGeneration
             )
         }
@@ -2234,27 +2336,22 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     private func startInputOnlyRecording(deviceID: AudioDeviceID, label: String) throws {
         do {
             let inputFormat = try inputCaptureFactory.inputOnlyCaptureFormat(deviceID: deviceID)
-            guard let monoFormat = AudioInputBufferNormalizer.monoFloatFormat(for: inputFormat),
-                  let targetFormat = AVAudioFormat(
-                      commonFormat: .pcmFormatFloat32,
-                      sampleRate: Self.targetSampleRate,
-                      channels: 1,
-                      interleaved: false
-                  ),
-                  let converter = AVAudioConverter(from: monoFormat, to: targetFormat) else {
+            guard let sliceConverter = AudioInputSliceConverter(
+                inputFormat: inputFormat,
+                targetSampleRate: Self.targetSampleRate
+            ) else {
                 throw AudioRecordingError.engineStartFailed("Cannot create input-only audio converter")
             }
 
+            // Slices arrive on processingQueue, so conversion and downstream processing
+            // stay on one serial queue and off the realtime IO thread.
             let session = try inputCaptureFactory.startInputOnlyCapture(
                 deviceID: deviceID,
                 label: label,
-                bufferSize: Self.captureTapFrames
+                bufferSize: Self.captureTapFrames,
+                deliveryQueue: processingQueue
             ) { [weak self] buffer in
-                guard let self,
-                      let monoBuffer = AudioInputBufferNormalizer.monoFloatBuffer(from: buffer) else {
-                    return
-                }
-                self.processAudioBuffer(monoBuffer, converter: converter, targetFormat: targetFormat)
+                self?.processInputOnlySlice(buffer, converter: sliceConverter)
             }
 
             recoveryCoordinator.transitionToIdle()
@@ -2279,27 +2376,20 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     ) throws -> PreparedUSBInput {
         do {
             let inputFormat = try inputCaptureFactory.inputOnlyCaptureFormat(deviceID: deviceID)
-            guard let monoFormat = AudioInputBufferNormalizer.monoFloatFormat(for: inputFormat),
-                  let targetFormat = AVAudioFormat(
-                      commonFormat: .pcmFormatFloat32,
-                      sampleRate: Self.targetSampleRate,
-                      channels: 1,
-                      interleaved: false
-                  ),
-                  let converter = AVAudioConverter(from: monoFormat, to: targetFormat) else {
+            guard let sliceConverter = AudioInputSliceConverter(
+                inputFormat: inputFormat,
+                targetSampleRate: Self.targetSampleRate
+            ) else {
                 throw AudioRecordingError.engineStartFailed("Cannot create prepared input-only audio converter")
             }
 
             let session = try inputCaptureFactory.prepareInputOnlyCapture(
                 deviceID: deviceID,
                 label: label,
-                bufferSize: Self.captureTapFrames
+                bufferSize: Self.captureTapFrames,
+                deliveryQueue: processingQueue
             ) { [weak self] buffer in
-                guard let self,
-                      let monoBuffer = AudioInputBufferNormalizer.monoFloatBuffer(from: buffer) else {
-                    return
-                }
-                self.processAudioBuffer(monoBuffer, converter: converter, targetFormat: targetFormat)
+                self?.processInputOnlySlice(buffer, converter: sliceConverter)
             }
             return PreparedUSBInput(session: session, deviceID: deviceID)
         } catch let error as SelectedInputDeviceError {
@@ -2341,6 +2431,12 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         }
     }
 
+    /// Runs on processingQueue for every slice delivered by an input-only HAL session.
+    private func processInputOnlySlice(_ buffer: AVAudioPCMBuffer, converter: AudioInputSliceConverter) {
+        guard var samples = converter.convert(buffer) else { return }
+        processConvertedSamples(&samples)
+    }
+
     private func cleanupAfterFailedInputOnlyStart() {
         setRecordingActive(false)
         recoveryCoordinator.transitionToIdle()
@@ -2364,7 +2460,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     }
 
     private func processConvertedSamples(
-        _ samples: [Float],
+        _ samples: inout [Float],
         bluetoothInputGeneration: UInt64? = nil
     ) {
         if let bluetoothInputGeneration,
@@ -2372,8 +2468,8 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             return
         }
 
-        let boostResult = microphoneBoostProcessor.process(samples, enabled: microphoneBoostEnabled)
-        let processedSamples = boostResult.samples
+        let boostResult = microphoneBoostProcessor.processInPlace(&samples, enabled: microphoneBoostEnabled)
+        let processedSamples = samples
         let rms = boostResult.outputRMS
         let normalizedLevel = AudioLevelMeter.normalizedLevel(rms: rms)
         var requestToFirstBufferMs: Double?
@@ -3109,7 +3205,8 @@ extension AudioRecordingService {
     }
 
     func testingProcessConvertedSamples(_ samples: [Float]) {
-        processConvertedSamples(samples)
+        var samples = samples
+        processConvertedSamples(&samples)
     }
 
     func testingMarkAudioLevelPublishedNow() {

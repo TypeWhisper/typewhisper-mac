@@ -292,6 +292,40 @@ final class MicrophoneBoostProcessorTests: XCTestCase {
         XCTAssertEqual(result.samples, roomNoise)
         XCTAssertEqual(result.gain, 1)
     }
+
+    func testInPlaceMicrophoneBoostMatchesScalarReference() {
+        let processor = TypeWhisper.MicrophoneBoostProcessor()
+        var limiterEngaged = false
+
+        for bufferIndex in 0..<24 {
+            // Quiet speech with one transient per buffer, so the gain climbs until the
+            // boosted transient crosses the soft limiter knee.
+            let samples = (0..<256).map { index -> Float in
+                index == 17 ? (bufferIndex.isMultiple(of: 2) ? 0.09 : -0.09) : 0.01 * sin(Float(bufferIndex * 256 + index) * 0.07)
+            }
+            var processed = samples
+            let levels = processor.processInPlace(&processed, enabled: true)
+
+            let expected = levels.gain > 1
+                ? samples.map { referenceSoftLimited($0 * levels.gain) }
+                : samples
+            XCTAssertEqual(processed, expected, "buffer \(bufferIndex)")
+            XCTAssertEqual(levels.outputRMS, sqrt(expected.reduce(0) { $0 + $1 * $1 } / Float(expected.count)))
+            limiterEngaged = limiterEngaged || expected.contains { abs($0) > 0.8 }
+        }
+
+        XCTAssertTrue(limiterEngaged)
+    }
+
+    private func referenceSoftLimited(_ sample: Float) -> Float {
+        let knee: Float = 0.8
+        let ceiling: Float = 0.98
+        let magnitude = abs(sample)
+        guard magnitude > knee else { return sample }
+        let normalizedExcess = (magnitude - knee) / (ceiling - knee)
+        let limitedMagnitude = knee + (ceiling - knee) * tanh(normalizedExcess)
+        return sample < 0 ? -limitedMagnitude : limitedMagnitude
+    }
 }
 
 final class DictationInsertionTextFormatterTests: XCTestCase {

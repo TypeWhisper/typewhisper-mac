@@ -569,6 +569,14 @@
 		AA00000000000000000302 /* WelcomeSheet.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000288 /* WelcomeSheet.swift */; };
 		AA00000000000000000303 /* SupporterBadgeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000289 /* SupporterBadgeView.swift */; };
 		F16000000000000000000001 /* ScreenshotFixtureSeeder.swift in Sources */ = {isa = PBXBuildFile; fileRef = F16000000000000000000002 /* ScreenshotFixtureSeeder.swift */; };
+		80B0A78BAA364082B3BA5123 /* MLXAudioCore in Frameworks */ = {isa = PBXBuildFile; productRef = B79D2F9EDCEE4B15B869AA87 /* MLXAudioCore */; };
+		90BCF178D8E84684B86B5B58 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 905FEC5AAC4941AD9A670CE8 /* manifest.json */; };
+		26E3913BE45D4A84AE22741A /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 47400DA71F7147E6934EA081 /* Localizable.xcstrings */; };
+		E61D0F88F7634B33B29AAF3F /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = 6EDA56F67D3B46DB8675AE5E /* TypeWhisperPluginSDK */; };
+		13C56ED5083C4886B8AE20DB /* MLXAudioSTT in Frameworks */ = {isa = PBXBuildFile; productRef = E49AFCD93B674B64BA195164 /* MLXAudioSTT */; };
+		B41E711A0DF84CA1B8742F6D /* CanaryPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 149CD3C2195E4EF8928ED6A1 /* CanaryPlugin.swift */; };
+		9955C123AB7F4A40A50720CF /* CanaryPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 149CD3C2195E4EF8928ED6A1 /* CanaryPlugin.swift */; };
+		3CDF1305CF9D40B5AA359371 /* CanaryPluginTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A86A9D4D2C54021880E39AD /* CanaryPluginTests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -1205,6 +1213,11 @@
 		BB00000000000000000288 /* WelcomeSheet.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WelcomeSheet.swift; sourceTree = "<group>"; };
 		BB00000000000000000289 /* SupporterBadgeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SupporterBadgeView.swift; sourceTree = "<group>"; };
 		F16000000000000000000002 /* ScreenshotFixtureSeeder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScreenshotFixtureSeeder.swift; sourceTree = "<group>"; };
+		905FEC5AAC4941AD9A670CE8 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
+		9A5C56DC96AE4CD595EEF826 /* CanaryPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = CanaryPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
+		47400DA71F7147E6934EA081 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		149CD3C2195E4EF8928ED6A1 /* CanaryPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CanaryPlugin.swift; sourceTree = "<group>"; };
+		7A86A9D4D2C54021880E39AD /* CanaryPluginTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/CanaryPluginTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -1675,6 +1688,16 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		5B81D548A60D47F789F6E9E4 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E61D0F88F7634B33B29AAF3F /* TypeWhisperPluginSDK in Frameworks */,
+				13C56ED5083C4886B8AE20DB /* MLXAudioSTT in Frameworks */,
+				80B0A78BAA364082B3BA5123 /* MLXAudioCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
@@ -1737,6 +1760,7 @@
 				F48400000000000000000020 /* FileJobScriptPlugin */,
 				CC00000000000000000032 /* LiveTranscriptPlugin */,
 				CC00000000000000000033 /* GranitePlugin */,
+				79F8EC6C4D974ED9A637B4DE /* CanaryPlugin */,
 				CC00000000000000000034 /* CloudflareASRPlugin */,
 				4D4554410000000000000020 /* MetaPlugin */,
 				564552434500000000000020 /* VercelAIGatewayPlugin */,
@@ -2749,6 +2773,7 @@
 				F48400000000000000000012 /* FileJobScriptPlugin.bundle */,
 				BB00000000000000000219 /* LiveTranscriptPlugin.bundle */,
 				BB00000000000000000224 /* GranitePlugin.bundle */,
+				9A5C56DC96AE4CD595EEF826 /* CanaryPlugin.bundle */,
 				BB00000000000000000227 /* CloudflareASRPlugin.bundle */,
 				4D4554410000000000000013 /* MetaPlugin.bundle */,
 				564552434500000000000013 /* VercelAIGatewayPlugin.bundle */,
@@ -2863,6 +2888,18 @@
 			);
 			name = TypeWhisperTests;
 			path = TypeWhisperTests;
+			sourceTree = "<group>";
+		};
+		79F8EC6C4D974ED9A637B4DE /* CanaryPlugin */ = {
+			isa = PBXGroup;
+			children = (
+				7A86A9D4D2C54021880E39AD /* CanaryPluginTests.swift */,
+				149CD3C2195E4EF8928ED6A1 /* CanaryPlugin.swift */,
+				905FEC5AAC4941AD9A670CE8 /* manifest.json */,
+				47400DA71F7147E6934EA081 /* Localizable.xcstrings */,
+			);
+			name = CanaryPlugin;
+			path = TypeWhisperPluginSDK/Plugins/CanaryPlugin;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -4008,6 +4045,28 @@
 			productReference = 5CA4DB761B06383B5B8CF082 /* GoogleCloudSTTPlugin.bundle */;
 			productType = "com.apple.product-type.bundle";
 		};
+		D87EFD213FEC41A1ACFAC052 /* CanaryPlugin */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = FC35290C89344F67990674D9 /* Build configuration list for PBXNativeTarget "CanaryPlugin" */;
+			buildPhases = (
+				EF92386A9CCB4EBA90C929FF /* Sources */,
+				5B81D548A60D47F789F6E9E4 /* Frameworks */,
+				946BDA6B150F486DBC39A4E8 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = CanaryPlugin;
+			packageProductDependencies = (
+				6EDA56F67D3B46DB8675AE5E /* TypeWhisperPluginSDK */,
+				E49AFCD93B674B64BA195164 /* MLXAudioSTT */,
+				B79D2F9EDCEE4B15B869AA87 /* MLXAudioCore */,
+			);
+			productName = CanaryPlugin;
+			productReference = 9A5C56DC96AE4CD595EEF826 /* CanaryPlugin.bundle */;
+			productType = "com.apple.product-type.bundle";
+		};
 /* End PBXNativeTarget section */
 
 /* Begin PBXProject section */
@@ -4096,6 +4155,7 @@
 				F48400000000000000000030 /* FileJobScriptPlugin */,
 				DD00000000000000000020 /* LiveTranscriptPlugin */,
 				DD00000000000000000021 /* GranitePlugin */,
+				D87EFD213FEC41A1ACFAC052 /* CanaryPlugin */,
 				DD00000000000000000022 /* CloudflareASRPlugin */,
 				4D4554410000000000000030 /* MetaPlugin */,
 				564552434500000000000030 /* VercelAIGatewayPlugin */,
@@ -4623,6 +4683,15 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		946BDA6B150F486DBC39A4E8 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				90BCF178D8E84684B86B5B58 /* manifest.json in Resources */,
+				26E3913BE45D4A84AE22741A /* Localizable.xcstrings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
@@ -4692,6 +4761,8 @@
 				C23000000000000000000008 /* Qwen3Plugin.swift in Sources */,
 				C23000000000000000000009 /* VoxtralPlugin.swift in Sources */,
 				C2300000000000000000000A /* GranitePlugin.swift in Sources */,
+				3CDF1305CF9D40B5AA359371 /* CanaryPluginTests.swift in Sources */,
+				9955C123AB7F4A40A50720CF /* CanaryPlugin.swift in Sources */,
 				C2300000000000000000000E /* WhisperKitPlugin.swift in Sources */,
 				C23000000000000000000011 /* ParakeetPlugin.swift in Sources */,
 				C2300000000000000000000F /* SpeechAnalyzerPlugin.swift in Sources */,
@@ -5385,6 +5456,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				E1A000000000000000000001 /* ActionRequestHandler.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		EF92386A9CCB4EBA90C929FF /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				B41E711A0DF84CA1B8742F6D /* CanaryPlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -8272,6 +8351,52 @@
 			};
 			name = Release;
 		};
+		A2F50F68FE784D2CACCF3F9A /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Canary Speech (MLX)";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = CanaryPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.canary;
+				PRODUCT_NAME = CanaryPlugin;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Release;
+		};
+		176D1BDC0A054422B9FE8568 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Canary Speech (MLX)";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = CanaryPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.canary;
+				PRODUCT_NAME = CanaryPlugin;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Debug;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -8788,6 +8913,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		FC35290C89344F67990674D9 /* Build configuration list for PBXNativeTarget "CanaryPlugin" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				176D1BDC0A054422B9FE8568 /* Debug */,
+				A2F50F68FE784D2CACCF3F9A /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 
 /* Begin XCLocalSwiftPackageReference section */
@@ -8827,7 +8961,7 @@
 			repositoryURL = "https://github.com/Blaizzy/mlx-audio-swift.git";
 			requirement = {
 				kind = revision;
-				revision = 2685c640d4079641a01ef3489cacb684c34109fd;
+				revision = 01dec7c9bdce3088a6b6b7ab9f2e403458195efb;
 			};
 		};
 		RR00000000000000000007 /* XCRemoteSwiftPackageReference "mediaremote-adapter" */ = {
@@ -9169,6 +9303,18 @@
 		RESK00000000000000001 /* TypeWhisperPluginSDK */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = TypeWhisperPluginSDK;
+		};
+		6EDA56F67D3B46DB8675AE5E /* TypeWhisperPluginSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = TypeWhisperPluginSDK;
+		};
+		B79D2F9EDCEE4B15B869AA87 /* MLXAudioCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MLXAudioCore;
+		};
+		E49AFCD93B674B64BA195164 /* MLXAudioSTT */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = MLXAudioSTT;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

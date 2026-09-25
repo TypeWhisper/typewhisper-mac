@@ -765,6 +765,394 @@ final class CLISupportTests: XCTestCase {
         XCTAssertNil(Self.loadKeychainValue(service: keychainServiceName, account: "polar-supporter"))
     }
 
+    private actor PolarRequestLog {
+        private(set) var entries: [(path: String, version: String?)] = []
+
+        func record(_ request: URLRequest) {
+            entries.append((request.url?.lastPathComponent ?? "", request.value(forHTTPHeaderField: "Polar-Version")))
+        }
+    }
+
+    /// Bodies Polar can return with HTTP 404 that do not confirm a missing activation.
+    /// `{"detail":"Not Found"}` is what Polar's API-version middleware sends for unknown or removed versions.
+    private static let unconfirmedPolar404Bodies = [
+        #"{"detail":"Not Found"}"#,
+        "",
+        #"{"error":"UnexpectedError","detail":"Not Found"}"#,
+    ]
+
+    @MainActor
+    func testPolarLicenseRequestsPinApiVersionHeader() async throws {
+        let (defaults, suiteName) = try makeIsolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let keychainServiceName = "TypeWhisperTests.PolarVersion.\(UUID().uuidString)"
+        defer {
+            Self.deleteKeychainValue(service: keychainServiceName, account: "polar-license")
+            Self.deleteKeychainValue(service: keychainServiceName, account: "polar-supporter")
+        }
+
+        let log = PolarRequestLog()
+        let service = LicenseService(
+            defaults: defaults,
+            keychainServiceName: keychainServiceName,
+            dataTransport: { request in
+                await log.record(request)
+                switch request.url?.lastPathComponent {
+                case "activate":
+                    return (Data(#"{"id":"activation-123"}"#.utf8), Self.httpResponse(url: request.url!, statusCode: 200))
+                case "validate":
+                    let body = #"{"id":"activation-123","status":"granted","expires_at":null,"benefit_id":"40b82917-f74e-4cc3-8165-937f1f47b294"}"#
+                    return (Data(body.utf8), Self.httpResponse(url: request.url!, statusCode: 200))
+                default:
+                    return (Data(), Self.httpResponse(url: request.url!, statusCode: 204))
+                }
+            }
+        )
+
+        _ = await service.activateAnyKey("TYPEWHISPER-ENT-123")
+        await service.validateLicense()
+        await service.deactivateLicense()
+
+        XCTAssertFalse(service.hasCommercialLicense)
+        let entries = await log.entries
+        XCTAssertEqual(entries.map(\.path), ["activate", "validate", "validate", "deactivate"])
+        XCTAssertEqual(entries.map(\.version), Array(repeating: "2026-04", count: 4))
+    }
+
+    @MainActor
+    func testCommercialValidationClearsLicenseWhenPolarActivationIsMissing() async throws {
+        let (defaults, suiteName) = try makeIsolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let keychainServiceName = "TypeWhisperTests.Commercial.\(UUID().uuidString)"
+        defer { Self.deleteKeychainValue(service: keychainServiceName, account: "polar-license") }
+        Self.storeKeychainValue("license-key|activation-123", service: keychainServiceName, account: "polar-license")
+
+        let service = LicenseService(
+            defaults: defaults,
+            keychainServiceName: keychainServiceName,
+            dataTransport: { request in
+                let body = #"{"error":"ResourceNotFound","detail":"Not found"}"#
+                return (Data(body.utf8), Self.httpResponse(url: request.url!, statusCode: 404))
+            }
+        )
+        service.licenseStatus = .active
+        service.licenseTier = .team
+
+        await service.validateLicense()
+
+        XCTAssertEqual(service.licenseStatus, .unlicensed)
+        XCTAssertNil(service.licenseTier)
+        XCTAssertNil(Self.loadKeychainValue(service: keychainServiceName, account: "polar-license"))
+    }
+
+    @MainActor
+    func testUnconfirmedPolar404KeepsCommercialAndSupporterCredentials() async throws {
+        for body in Self.unconfirmedPolar404Bodies {
+            let (defaults, suiteName) = try makeIsolatedDefaults()
+            defer { defaults.removePersistentDomain(forName: suiteName) }
+
+            let keychainServiceName = "TypeWhisperTests.Unconfirmed404.\(UUID().uuidString)"
+            defer {
+                Self.deleteKeychainValue(service: keychainServiceName, account: "polar-license")
+                Self.deleteKeychainValue(service: keychainServiceName, account: "polar-supporter")
+            }
+            let licenseSecret = "license-key|license-activation"
+            let supporterSecret = "supporter-key|supporter-activation"
+            Self.storeKeychainValue(licenseSecret, service: keychainServiceName, account: "polar-license")
+            Self.storeKeychainValue(supporterSecret, service: keychainServiceName, account: "polar-supporter")
+
+            let log = PolarRequestLog()
+            let service = LicenseService(
+                defaults: defaults,
+                keychainServiceName: keychainServiceName,
+                dataTransport: { request in
+                    await log.record(request)
+                    return (Data(body.utf8), Self.httpResponse(url: request.url!, statusCode: 404))
+                }
+            )
+            service.licenseStatus = .active
+            service.licenseTier = .team
+            service.supporterStatus = .active
+            service.supporterTier = .gold
+            defaults.set(Date.distantPast, forKey: UserDefaultsKeys.lastSupporterValidation)
+
+            await service.validateLicense()
+            await service.validateSupporterIfNeeded()
+            await service.deactivateLicense()
+            await service.deactivateSupporterLicense()
+
+            let paths = await log.entries.map(\.path)
+            XCTAssertEqual(paths, ["validate", "validate", "deactivate", "deactivate"], "body: \(body)")
+            XCTAssertEqual(service.licenseStatus, .active, "body: \(body)")
+            XCTAssertEqual(service.licenseTier, .team, "body: \(body)")
+            XCTAssertEqual(service.supporterStatus, .active, "body: \(body)")
+            XCTAssertEqual(service.supporterTier, .gold, "body: \(body)")
+            XCTAssertNotNil(service.deactivationError, "body: \(body)")
+            XCTAssertNotNil(service.supporterDeactivationError, "body: \(body)")
+            XCTAssertEqual(Self.loadKeychainValue(service: keychainServiceName, account: "polar-license"), licenseSecret, "body: \(body)")
+            XCTAssertEqual(Self.loadKeychainValue(service: keychainServiceName, account: "polar-supporter"), supporterSecret, "body: \(body)")
+        }
+    }
+
+    @MainActor
+    func testSupporterKeychainReadFailureKeepsCachedStateAndDiscordSession() async throws {
+        let (defaults, suiteName) = try makeIsolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set("session-123", forKey: UserDefaultsKeys.supporterDiscordSessionId)
+
+        let previousDiscordService = SupporterDiscordService.shared
+        defer { SupporterDiscordService.shared = previousDiscordService }
+
+        for status in [errSecInteractionNotAllowed, errSecAuthFailed, errSecNotAvailable] {
+            let service = LicenseService(
+                defaults: defaults,
+                keychainServiceName: "TypeWhisperTests.UnavailableKeychain.\(UUID().uuidString)",
+                keychainCopyMatching: { _, _ in status },
+                dataTransport: { request in
+                    XCTFail("Validation must be skipped while Keychain is unavailable")
+                    return (Data(), Self.httpResponse(url: request.url!, statusCode: 500))
+                }
+            )
+            SupporterDiscordService.shared = SupporterDiscordService(licenseService: service, defaults: defaults)
+            service.supporterStatus = .active
+            service.supporterTier = .silver
+            defaults.set(Date.distantPast, forKey: UserDefaultsKeys.lastSupporterValidation)
+
+            await service.validateSupporterIfNeeded()
+
+            XCTAssertEqual(service.supporterStatus, .active, "status: \(status)")
+            XCTAssertEqual(service.supporterTier, .silver, "status: \(status)")
+            XCTAssertEqual(defaults.string(forKey: UserDefaultsKeys.supporterDiscordSessionId), "session-123", "status: \(status)")
+        }
+
+        // Only a confirmed missing item still resets supporter and Discord state.
+        let missingService = LicenseService(
+            defaults: defaults,
+            keychainServiceName: "TypeWhisperTests.MissingKeychain.\(UUID().uuidString)",
+            keychainCopyMatching: { _, _ in errSecItemNotFound },
+            dataTransport: { request in
+                XCTFail("A missing supporter record must not be validated")
+                return (Data(), Self.httpResponse(url: request.url!, statusCode: 500))
+            }
+        )
+        SupporterDiscordService.shared = SupporterDiscordService(licenseService: missingService, defaults: defaults)
+
+        await missingService.validateSupporterIfNeeded()
+
+        XCTAssertEqual(missingService.supporterStatus, .unlicensed)
+        XCTAssertNil(missingService.supporterTier)
+        XCTAssertNil(defaults.string(forKey: UserDefaultsKeys.supporterDiscordSessionId))
+    }
+
+    @MainActor
+    func testSupporterKeychainReadFailureKeepsDiscordClaimThroughStartupRefresh() async throws {
+        let (defaults, suiteName) = try makeIsolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set("session-123", forKey: UserDefaultsKeys.supporterDiscordSessionId)
+        let linked = SupporterDiscordClaimStatus(
+            state: .linked,
+            discordUsername: "marco#1234",
+            linkedRoles: ["Supporter Gold"],
+            errorMessage: nil,
+            sessionId: "session-123",
+            updatedAt: Date()
+        )
+        defaults.set(try JSONEncoder().encode(linked), forKey: UserDefaultsKeys.supporterDiscordClaimStatus)
+
+        let licenseService = LicenseService(
+            defaults: defaults,
+            keychainServiceName: "TypeWhisperTests.UnavailableKeychain.\(UUID().uuidString)",
+            keychainCopyMatching: { _, _ in errSecInteractionNotAllowed },
+            dataTransport: { request in
+                XCTFail("Validation must be skipped while Keychain is unavailable")
+                return (Data(), Self.httpResponse(url: request.url!, statusCode: 500))
+            }
+        )
+        licenseService.supporterStatus = .active
+        licenseService.supporterTier = .gold
+        defaults.set(Date.distantPast, forKey: UserDefaultsKeys.lastSupporterValidation)
+
+        // Uses the production claim-proof provider backed by the failing Keychain read.
+        let discordService = SupporterDiscordService(
+            licenseService: licenseService,
+            defaults: defaults,
+            transport: { request in
+                XCTFail("Discord claim status must not be requested without a readable proof")
+                return (Data(), Self.httpResponse(url: request.url!, statusCode: 500))
+            }
+        )
+        let previousDiscordService = SupporterDiscordService.shared
+        SupporterDiscordService.shared = discordService
+        defer { SupporterDiscordService.shared = previousDiscordService }
+
+        // Same order as ServiceContainer startup, plus the callback-driven refresh.
+        await licenseService.validateSupporterIfNeeded()
+        await discordService.refreshStatusIfNeeded()
+        await discordService.refreshClaimStatus()
+
+        XCTAssertThrowsError(try licenseService.readSupporterClaimProof())
+        XCTAssertEqual(licenseService.supporterStatus, .active)
+        XCTAssertEqual(licenseService.supporterTier, .gold)
+        XCTAssertEqual(discordService.claimStatus.state, .linked)
+        XCTAssertEqual(discordService.claimStatus.sessionId, "session-123")
+        XCTAssertEqual(discordService.claimStatus.discordUsername, "marco#1234")
+        XCTAssertEqual(defaults.string(forKey: UserDefaultsKeys.supporterDiscordSessionId), "session-123")
+
+        // A user-started claim fails visibly but still keeps the linked session.
+        let persistedStatus = defaults.data(forKey: UserDefaultsKeys.supporterDiscordClaimStatus)
+        let claimURL = await discordService.createClaimSession()
+        XCTAssertNil(claimURL)
+        XCTAssertEqual(discordService.claimStatus.state, .linked)
+        XCTAssertNotNil(discordService.claimStatus.errorMessage)
+        XCTAssertEqual(defaults.data(forKey: UserDefaultsKeys.supporterDiscordClaimStatus), persistedStatus)
+        XCTAssertEqual(defaults.string(forKey: UserDefaultsKeys.supporterDiscordSessionId), "session-123")
+    }
+
+    @MainActor
+    func testSupporterDiscordReconnectKeepsClaimWhenKeychainReadFails() async throws {
+        for state in [SupporterDiscordClaimStatus.State.linked, .pending] {
+            let (defaults, suiteName) = try makeIsolatedDefaults()
+            defer { defaults.removePersistentDomain(forName: suiteName) }
+            let existing = SupporterDiscordClaimStatus(
+                state: state,
+                discordUsername: state == .linked ? "marco#1234" : nil,
+                linkedRoles: state == .linked ? ["Supporter Gold"] : [],
+                errorMessage: nil,
+                sessionId: "session-123",
+                updatedAt: Date(timeIntervalSince1970: 1_700_000_000)
+            )
+            let persistedStatus = try JSONEncoder().encode(existing)
+            defaults.set(persistedStatus, forKey: UserDefaultsKeys.supporterDiscordClaimStatus)
+            defaults.set("session-123", forKey: UserDefaultsKeys.supporterDiscordSessionId)
+
+            let licenseService = LicenseService(
+                defaults: defaults,
+                keychainServiceName: "TypeWhisperTests.UnavailableKeychain.\(UUID().uuidString)",
+                keychainCopyMatching: { _, _ in errSecInteractionNotAllowed },
+                dataTransport: { request in
+                    XCTFail("No Polar request expected")
+                    return (Data(), Self.httpResponse(url: request.url!, statusCode: 500))
+                }
+            )
+            licenseService.supporterStatus = .active
+            licenseService.supporterTier = .gold
+            let discordService = SupporterDiscordService(
+                licenseService: licenseService,
+                defaults: defaults,
+                transport: { request in
+                    XCTFail("A claim session must not start without a readable proof")
+                    return (Data(), Self.httpResponse(url: request.url!, statusCode: 500))
+                }
+            )
+
+            let claimURL = await discordService.reconnect()
+
+            XCTAssertNil(claimURL, "state: \(state)")
+            XCTAssertNotNil(discordService.claimStatus.errorMessage, "state: \(state)")
+            XCTAssertEqual(discordService.claimStatus.state, state, "state: \(state)")
+            XCTAssertEqual(discordService.claimStatus.sessionId, "session-123", "state: \(state)")
+            XCTAssertEqual(discordService.claimStatus.discordUsername, existing.discordUsername, "state: \(state)")
+            XCTAssertEqual(discordService.claimStatus.linkedRoles, existing.linkedRoles, "state: \(state)")
+            XCTAssertEqual(defaults.data(forKey: UserDefaultsKeys.supporterDiscordClaimStatus), persistedStatus, "state: \(state)")
+            XCTAssertEqual(defaults.string(forKey: UserDefaultsKeys.supporterDiscordSessionId), "session-123", "state: \(state)")
+            XCTAssertEqual(licenseService.supporterStatus, .active, "state: \(state)")
+            XCTAssertEqual(licenseService.supporterTier, .gold, "state: \(state)")
+        }
+    }
+
+    @MainActor
+    func testSupporterDiscordReconnectReplacesClaimWhenProofIsReadable() async throws {
+        let (defaults, suiteName) = try makeIsolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let linked = SupporterDiscordClaimStatus(
+            state: .linked,
+            discordUsername: "marco#1234",
+            linkedRoles: ["Supporter Gold"],
+            errorMessage: nil,
+            sessionId: "session-123",
+            updatedAt: Date()
+        )
+        defaults.set(try JSONEncoder().encode(linked), forKey: UserDefaultsKeys.supporterDiscordClaimStatus)
+        defaults.set("session-123", forKey: UserDefaultsKeys.supporterDiscordSessionId)
+
+        let service = SupporterDiscordService(
+            licenseService: LicenseService(defaults: defaults),
+            defaults: defaults,
+            transport: { request in
+                XCTAssertEqual(request.url?.path, "/claims/polar/start")
+                let body = #"{"session_id":"session-456","claim_url":"https://claims.example.test/claims/polar/discord?session_id=session-456"}"#
+                return (Data(body.utf8), Self.httpResponse(url: request.url!, statusCode: 200))
+            },
+            claimProofProvider: {
+                SupporterClaimProof(key: "supporter-key", activationId: "activation-123", tier: .gold)
+            },
+            baseURLProvider: {
+                URL(string: "https://claims.example.test")!
+            }
+        )
+
+        let claimURL = await service.reconnect()
+
+        XCTAssertEqual(claimURL?.absoluteString, "https://claims.example.test/claims/polar/discord?session_id=session-456")
+        XCTAssertEqual(service.claimStatus.state, .pending)
+        XCTAssertNil(service.claimStatus.discordUsername)
+        XCTAssertEqual(defaults.string(forKey: UserDefaultsKeys.supporterDiscordSessionId), "session-456")
+    }
+
+    @MainActor
+    func testSupporterDiscordReconnectWithoutSupporterRecordClearsClaim() async throws {
+        let (defaults, suiteName) = try makeIsolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set("session-123", forKey: UserDefaultsKeys.supporterDiscordSessionId)
+
+        let service = SupporterDiscordService(
+            licenseService: LicenseService(defaults: defaults),
+            defaults: defaults,
+            transport: { request in
+                XCTFail("A claim session must not start without a supporter record")
+                return (Data(), Self.httpResponse(url: request.url!, statusCode: 500))
+            },
+            claimProofProvider: { nil }
+        )
+
+        let claimURL = await service.reconnect()
+
+        XCTAssertNil(claimURL)
+        XCTAssertEqual(service.claimStatus.state, .failed)
+        XCTAssertNil(service.claimStatus.sessionId)
+        XCTAssertNil(defaults.string(forKey: UserDefaultsKeys.supporterDiscordSessionId))
+    }
+
+    @MainActor
+    func testSupporterUnreadablePayloadKeepsCachedStateWithoutValidation() async throws {
+        let (defaults, suiteName) = try makeIsolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        let keychainServiceName = "TypeWhisperTests.SupporterPayload.\(UUID().uuidString)"
+        defer { Self.deleteKeychainValue(service: keychainServiceName, account: "polar-supporter") }
+        Self.storeKeychainValue("invalid payload", service: keychainServiceName, account: "polar-supporter")
+
+        let service = LicenseService(
+            defaults: defaults,
+            keychainServiceName: keychainServiceName,
+            dataTransport: { request in
+                XCTFail("An unreadable supporter record must not be validated")
+                return (Data(), Self.httpResponse(url: request.url!, statusCode: 500))
+            }
+        )
+        service.supporterStatus = .active
+        service.supporterTier = .bronze
+        defaults.set(Date.distantPast, forKey: UserDefaultsKeys.lastSupporterValidation)
+
+        await service.validateSupporterIfNeeded()
+
+        XCTAssertEqual(service.supporterStatus, .active)
+        XCTAssertEqual(service.supporterTier, .bronze)
+        XCTAssertEqual(Self.loadKeychainValue(service: keychainServiceName, account: "polar-supporter"), "invalid payload")
+    }
+
     private actor ManagedLicenseServer {
         var paths: [String] = []
         var activationCount = 0
@@ -772,13 +1160,15 @@ final class CLISupportTests: XCTestCase {
         var revoked = false
         var failValidation = false
         var missingActivation = false
+        var unsupportedAPIVersion = false
         var supporter = false
 
-        func configure(failValidation: Bool = false, failActivation: Bool = false, revoked: Bool = false, missingActivation: Bool = false, supporter: Bool = false) {
+        func configure(failValidation: Bool = false, failActivation: Bool = false, revoked: Bool = false, missingActivation: Bool = false, unsupportedAPIVersion: Bool = false, supporter: Bool = false) {
             self.failActivation = failActivation
             self.failValidation = failValidation
             self.revoked = revoked
             self.missingActivation = missingActivation
+            self.unsupportedAPIVersion = unsupportedAPIVersion
             self.supporter = supporter
         }
 
@@ -799,7 +1189,10 @@ final class CLISupportTests: XCTestCase {
                 if missingActivation {
                     missingActivation = false
                     status = 404
-                    body = #"{"detail":"Not found"}"#
+                    body = #"{"error":"ResourceNotFound","detail":"Not found"}"#
+                } else if unsupportedAPIVersion {
+                    status = 404
+                    body = #"{"detail":"Not Found"}"#
                 } else {
                     let benefit = supporter ? "0c695b7a-2f3a-4797-81c7-1410dbb76cc2" : "40b82917-f74e-4cc3-8165-937f1f47b294"
                     body = "{\"id\":\"license\",\"status\":\"\(revoked ? "revoked" : "granted")\",\"benefit_id\":\"\(benefit)\"}"
@@ -1070,6 +1463,21 @@ final class CLISupportTests: XCTestCase {
         let count = await fixture.server.activationCount
         XCTAssertEqual(count, 2)
         XCTAssertTrue(fixture.service.hasCommercialLicense)
+    }
+
+    @MainActor
+    func testManagedLicenseUnsupportedAPIVersionKeepsActivationWithoutReactivating() async throws {
+        let fixture = try ManagedLicenseFixture()
+        defer { fixture.cleanup() }
+        await fixture.service.validateIfNeeded()
+        let stored = Self.loadKeychainValue(service: fixture.suite, account: "polar-license")
+        fixture.defaults.removeObject(forKey: UserDefaultsKeys.lastLicenseValidation)
+        await fixture.server.configure(unsupportedAPIVersion: true)
+        await fixture.service.validateIfNeeded()
+        XCTAssertTrue(fixture.service.hasCommercialLicense)
+        XCTAssertEqual(Self.loadKeychainValue(service: fixture.suite, account: "polar-license"), stored)
+        let paths = await fixture.server.paths
+        XCTAssertEqual(paths, ["activate", "validate", "validate"])
     }
 
     @MainActor

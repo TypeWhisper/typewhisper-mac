@@ -426,6 +426,22 @@ enum WorkflowAutoEnterResolver {
 
         return WorkflowAutoEnterResolution(text: content, shouldPressEnter: true)
     }
+
+    /// Decides whether Return follows insertion. After an AI post-processing failure the raw
+    /// transcript is inserted instead, so `.always` must not submit it. An explicit
+    /// per-dictation submit (spoken command or physical Enter) still does.
+    static func shouldPressEnterAfterInsertion(
+        mode: WorkflowAutoEnterMode,
+        resolution: WorkflowAutoEnterResolution,
+        insertedText: String,
+        usedRawTranscriptionFallback: Bool
+    ) -> Bool {
+        if mode == .always {
+            return !usedRawTranscriptionFallback
+        }
+        return resolution.shouldPressEnter
+            && !insertedText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 }
 
 struct WorkflowOutput: Codable, Equatable, Sendable {

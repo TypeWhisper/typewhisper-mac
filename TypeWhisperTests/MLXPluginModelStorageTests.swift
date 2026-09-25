@@ -7,6 +7,520 @@ import TypeWhisperPluginSDK
 final class MLXPluginModelStorageTests: XCTestCase {
     private let commit = String(repeating: "b", count: 40)
 
+    @MainActor
+    func testExplicitLoadHandlerAcceptsImportedModelIDs() async throws {
+        let qwen = Qwen3Plugin()
+        let granite = GranitePlugin()
+        let voxtral = VoxtralPlugin()
+        let canary = CanaryPlugin()
+        try await assertExplicitLoadRequest(qwen, gate: qwen.modelLoadGate)
+        try await assertExplicitLoadRequest(granite, gate: granite.modelLoadGate)
+        try await assertExplicitLoadRequest(voxtral, gate: voxtral.modelLoadGate)
+        try await assertExplicitLoadRequest(canary, gate: canary.modelLoadGate)
+    }
+
+    @MainActor
+    func testNewExplicitRequestCancelsPreviousRequestBeforeTasksStart() async throws {
+        try await assertSupersededExplicitRequests(allowFirstTaskToStart: false)
+    }
+
+    @MainActor
+    func testNewExplicitRequestCancelsPreviousRequestWaitingForLoadGate() async throws {
+        try await assertSupersededExplicitRequests(allowFirstTaskToStart: true)
+    }
+
+    @MainActor
+    func testSelectingAnotherModelInvalidatesPendingExplicitLoad() async throws {
+        try await assertSupersededExplicitRequests(allowFirstTaskToStart: true, selectionOnly: true)
+    }
+
+    func testGraniteAndVoxtralTranscriptionWaitsForSharedInferenceGate() async throws {
+        let engines: [any TranscriptionEnginePlugin] = [GranitePlugin(), VoxtralPlugin()]
+        for engine in engines {
+            for streaming in [false, true] {
+                try await PluginLocalInferenceGate.shared.withLock {
+                    let transcription = Task {
+                        let audio = AudioData(samples: [], wavData: Data(), duration: 0)
+                        if streaming {
+                            return try await engine.transcribe(audio: audio, language: "en", translate: false,
+                                prompt: nil, onProgress: { _ in true })
+                        }
+                        return try await engine.transcribe(audio: audio, language: "en", translate: false, prompt: nil)
+                    }
+                    for _ in 0..<10 { await Task.yield() }
+                    transcription.cancel()
+                    do {
+                        _ = try await transcription.value
+                        XCTFail("Transcription must wait for the held inference gate")
+                    } catch is CancellationError {
+                        // The gate must reject cancellation before accessing the native runtime.
+                    } catch {
+                        XCTFail("Native runtime was accessed before acquiring the gate: \(error)")
+                    }
+                }
+            }
+        }
+    }
+
+    @MainActor
+    private func assertSupersededExplicitRequests(allowFirstTaskToStart: Bool, selectionOnly: Bool = false) async throws {
+        let qwen = Qwen3Plugin()
+        let granite = GranitePlugin()
+        let voxtral = VoxtralPlugin()
+        let canary = CanaryPlugin()
+        try await assertSupersededRequests(qwen, gate: qwen.modelLoadGate,
+            allowFirstTaskToStart: allowFirstTaskToStart, selectionOnly: selectionOnly, currentTask: { qwen.explicitModelLoadTask })
+        try await assertSupersededRequests(granite, gate: granite.modelLoadGate,
+            allowFirstTaskToStart: allowFirstTaskToStart, selectionOnly: selectionOnly, currentTask: { granite.explicitModelLoadTask })
+        try await assertSupersededRequests(voxtral, gate: voxtral.modelLoadGate,
+            allowFirstTaskToStart: allowFirstTaskToStart, selectionOnly: selectionOnly, currentTask: { voxtral.explicitModelLoadTask })
+        try await assertSupersededRequests(canary, gate: canary.modelLoadGate,
+            allowFirstTaskToStart: allowFirstTaskToStart, selectionOnly: selectionOnly, currentTask: { canary.explicitModelLoadTask })
+    }
+
+    @MainActor
+    private func assertSupersededRequests<P: NSObject & TranscriptionEnginePlugin>(
+        _ plugin: P, gate: PluginLocalInferenceGate, allowFirstTaskToStart: Bool, selectionOnly: Bool,
+        currentTask: @escaping @MainActor @Sendable () -> Task<Void, Never>?
+    ) async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let ids = (0..<2).map { _ in "custom-" + UUID().uuidString.lowercased() }
+        for id in ids {
+            let folder = fixture.root.appendingPathComponent("custom-models/" + id)
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            try JSONSerialization.data(withJSONObject: [
+                "id": id, "displayName": id, "modelType": "fixture", "origin": "fixture", "bytes": 0,
+            ]).write(to: folder.appendingPathComponent("typewhisper-import.json"))
+        }
+        let host = MockHostServices(pluginDataDirectory: fixture.root)
+        plugin.activate(host: host)
+        try await gate.withLock {
+            let (first, latest): (Task<Void, Never>?, Task<Void, Never>?)
+            if allowFirstTaskToStart {
+                first = await MainActor.run {
+                    _ = plugin.perform(NSSelectorFromString("triggerRestoreModelForModel:"), with: ids[0] as NSString)
+                    return currentTask()
+                }
+                // The held load gate prevents native loading while A starts.
+                for _ in 0..<10 { await Task.yield() }
+                // Competing callers and cancelled-task cleanup must not erase
+                // the handle for a newer request while native loading is blocked.
+                await withTaskGroup(of: Void.self) { group in
+                    for _ in 0..<20 {
+                        group.addTask {
+                            _ = plugin.perform(NSSelectorFromString("triggerRestoreModelForModel:"), with: ids[0] as NSString)
+                        }
+                    }
+                }
+                latest = await MainActor.run {
+                    if selectionOnly {
+                        let pending = currentTask()
+                        plugin.selectModel(ids[1])
+                        XCTAssertTrue(pending?.isCancelled == true)
+                        return currentTask()
+                    }
+                    _ = plugin.perform(NSSelectorFromString("triggerRestoreModelForModel:"), with: ids[1] as NSString)
+                    return currentTask()
+                }
+            } else {
+                // No suspension between requests: both tasks start only afterward.
+                (first, latest) = await MainActor.run {
+                    _ = plugin.perform(NSSelectorFromString("triggerRestoreModelForModel:"), with: ids[0] as NSString)
+                    let first = currentTask()
+                    _ = plugin.perform(NSSelectorFromString("triggerRestoreModelForModel:"), with: ids[1] as NSString)
+                    return (first, currentTask())
+                }
+            }
+            XCTAssertNotNil(first)
+            XCTAssertTrue(first?.isCancelled == true)
+            // A must finish even though the load gate is still held.
+            await first?.value
+            await MainActor.run {
+                XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, ids[1])
+                XCTAssertNil(host.userDefault(forKey: "loadedModel"))
+                plugin.deactivate()
+                if selectionOnly { XCTAssertNil(latest) }
+                else { XCTAssertTrue(latest?.isCancelled == true) }
+            }
+            await latest?.value
+        }
+    }
+
+    @MainActor
+    func testAutoUnloadInvalidatesPendingImportInEveryMLXEngine() async throws {
+        let qwen = Qwen3Plugin()
+        let granite = GranitePlugin()
+        let voxtral = VoxtralPlugin()
+        let canary = CanaryPlugin()
+        try await assertSupersededImport(qwen, gate: qwen.modelLoadGate)
+        try await assertSupersededImport(granite, gate: granite.modelLoadGate)
+        try await assertSupersededImport(voxtral, gate: voxtral.modelLoadGate)
+        try await assertSupersededImport(canary, gate: canary.modelLoadGate)
+    }
+
+    @MainActor
+    func testExplicitLoadInvalidatesPendingImportInEveryMLXEngine() async throws {
+        let qwen = Qwen3Plugin()
+        let granite = GranitePlugin()
+        let voxtral = VoxtralPlugin()
+        let canary = CanaryPlugin()
+        try await assertSupersededImport(qwen, gate: qwen.modelLoadGate,
+            replacementID: Qwen3Plugin.availableModels[0].id, currentTask: { qwen.explicitModelLoadTask })
+        try await assertSupersededImport(granite, gate: granite.modelLoadGate,
+            replacementID: GranitePlugin.availableModels[0].id, currentTask: { granite.explicitModelLoadTask })
+        try await assertSupersededImport(voxtral, gate: voxtral.modelLoadGate,
+            replacementID: VoxtralPlugin.availableModels[0].id, currentTask: { voxtral.explicitModelLoadTask })
+        try await assertSupersededImport(canary, gate: canary.modelLoadGate,
+            replacementID: CanaryPlugin.availableModels[0].id, currentTask: { canary.explicitModelLoadTask })
+    }
+
+    @MainActor
+    func testIncompleteImportsRemainRemovableInEveryMLXEngine() async throws {
+        try await assertIncompleteImportIsRemovable(Qwen3Plugin())
+        try await assertIncompleteImportIsRemovable(GranitePlugin())
+        try await assertIncompleteImportIsRemovable(VoxtralPlugin())
+        try await assertIncompleteImportIsRemovable(CanaryPlugin())
+    }
+
+    @MainActor
+    private func assertIncompleteImportIsRemovable<P: NSObject & PluginCustomModelImporting & PluginDownloadedModelManaging>(
+        _ plugin: P
+    ) async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let id = "custom-" + UUID().uuidString.lowercased()
+        let folder = fixture.root.appendingPathComponent("custom-models/" + id)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try JSONSerialization.data(withJSONObject: [
+            "id": id, "displayName": "Incomplete", "modelType": "fixture", "origin": "fixture", "bytes": 0,
+        ]).write(to: folder.appendingPathComponent("typewhisper-import.json"))
+        plugin.activate(host: MockHostServices(pluginDataDirectory: fixture.root))
+        defer { plugin.deactivate() }
+        XCTAssertTrue(plugin.downloadedModels.contains(where: { $0.id == id }))
+        try await plugin.deleteDownloadedModel(id)
+        XCTAssertFalse(plugin.downloadedModels.contains(where: { $0.id == id }))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: folder.path))
+    }
+
+    @MainActor
+    private func assertSupersededImport<P: NSObject & PluginCustomModelImporting>(
+        _ plugin: P, gate: PluginLocalInferenceGate, replacementID: String? = nil,
+        currentTask: @escaping @MainActor @Sendable () -> Task<Void, Never>? = { nil }
+    ) async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let source = fixture.root.appendingPathComponent("source")
+        try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
+        let modelType = try XCTUnwrap(plugin.supportedImportModelTypes.first)
+        try JSONSerialization.data(withJSONObject: ["model_type": modelType])
+            .write(to: source.appendingPathComponent("config.json"))
+        for name in ["tokenizer.json", "tekken.json", "tokenizer.model", "vocab.json", "merges.txt"] {
+            try Data("{}".utf8).write(to: source.appendingPathComponent(name))
+        }
+        let header = Data(#"{"weight":{"dtype":"F32","shape":[1],"data_offsets":[0,4]}}"#.utf8)
+        var size = UInt64(header.count).littleEndian
+        var weights = withUnsafeBytes(of: &size) { Data($0) }
+        weights.append(header)
+        weights.append(Data(repeating: 0, count: 4))
+        try weights.write(to: source.appendingPathComponent("model.safetensors"))
+        let candidate = try await PluginModelImportCandidate.inspect(.folder(source))
+        let host = MockHostServices(pluginDataDirectory: fixture.root)
+        plugin.activate(host: host)
+        defer { plugin.deactivate() }
+        let store = fixture.root.appendingPathComponent("custom-models")
+        // Hold the native loader until the pending copy exists, then fire
+        // the host selector before letting native loading proceed.
+        let pending = try await gate.withLock {
+            let task = await MainActor.run {
+                Task { try await plugin.importModel(candidate, token: nil) }
+            }
+            var published = false
+            for _ in 0..<500 {
+                let entries = (try? FileManager.default.contentsOfDirectory(atPath: store.path)) ?? []
+                if entries.contains(where: { $0.hasPrefix("custom-") }) {
+                    published = true
+                    break
+                }
+                try await Task.sleep(for: .milliseconds(10))
+            }
+            await MainActor.run {
+                XCTAssertTrue(published, "Import must reach the held native loader")
+                if published {
+                    if let replacementID {
+                        _ = plugin.perform(NSSelectorFromString("triggerRestoreModelForModel:"), with: replacementID as NSString)
+                        // Prevent the replacement from needing real weights; cancelling
+                        // its task does not change the activation generation.
+                        XCTAssertNotNil(currentTask())
+                        currentTask()?.cancel()
+                    } else {
+                        _ = plugin.perform(NSSelectorFromString("triggerAutoUnload"))
+                    }
+                } else {
+                    plugin.deactivate()
+                }
+            }
+            return task
+        }
+        do {
+            _ = try await pending.value
+            XCTFail("Superseded import must not restore a model")
+        } catch is CancellationError {
+            // Expected: the host action invalidated this import's activation.
+        }
+        XCTAssertFalse(plugin.isConfigured)
+        XCTAssertNil(host.userDefault(forKey: "loadedModel"))
+        let entries = try FileManager.default.contentsOfDirectory(atPath: store.path)
+        XCTAssertFalse(entries.contains(where: { $0.hasPrefix("custom-") || $0.hasPrefix(".import-") }))
+    }
+
+    @MainActor
+    func testExplicitLoadCancelsAndBlocksGenericRestorationInEveryMLXEngine() async throws {
+        let qwen = Qwen3Plugin()
+        let granite = GranitePlugin()
+        let voxtral = VoxtralPlugin()
+        let canary = CanaryPlugin()
+        try await assertGenericRestoreIsSuperseded(qwen, gate: qwen.modelLoadGate,
+            genericTask: { qwen.genericModelLoadTask }, explicitTask: { qwen.explicitModelLoadTask })
+        try await assertGenericRestoreIsSuperseded(granite, gate: granite.modelLoadGate,
+            genericTask: { granite.genericModelLoadTask }, explicitTask: { granite.explicitModelLoadTask })
+        try await assertGenericRestoreIsSuperseded(voxtral, gate: voxtral.modelLoadGate,
+            genericTask: { voxtral.genericModelLoadTask }, explicitTask: { voxtral.explicitModelLoadTask })
+        try await assertGenericRestoreIsSuperseded(canary, gate: canary.modelLoadGate,
+            genericTask: { canary.genericModelLoadTask }, explicitTask: { canary.explicitModelLoadTask })
+    }
+
+    @MainActor
+    private func assertGenericRestoreIsSuperseded<P: NSObject & TranscriptionEnginePlugin>(
+        _ plugin: P, gate: PluginLocalInferenceGate,
+        genericTask: @escaping @MainActor @Sendable () -> Task<Void, Never>?,
+        explicitTask: @escaping @MainActor @Sendable () -> Task<Void, Never>?
+    ) async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let ids = (0..<2).map { _ in "custom-" + UUID().uuidString.lowercased() }
+        for id in ids {
+            let folder = fixture.root.appendingPathComponent("custom-models/" + id)
+            try fixture.writeModel(at: folder, requiredFiles: [
+                "config.json", "tokenizer.json", "tokenizer.model", "tekken.json", "vocab.json", "merges.txt",
+            ])
+            try JSONSerialization.data(withJSONObject: [
+                "id": id, "displayName": id, "modelType": "fixture", "origin": id, "bytes": 0,
+            ]).write(to: folder.appendingPathComponent("typewhisper-import.json"))
+        }
+        let host = MockHostServices(pluginDataDirectory: fixture.root)
+        host.setUserDefault(ids[0], forKey: "loadedModel")
+        plugin.activate(host: host)
+        defer { plugin.deactivate() }
+        try await gate.withLock {
+            let previous = await MainActor.run {
+                _ = plugin.perform(NSSelectorFromString("triggerRestoreModel"))
+                return genericTask()
+            }
+            XCTAssertNotNil(previous)
+            for _ in 0..<10 { await Task.yield() }
+            let latest = await MainActor.run {
+                _ = plugin.perform(NSSelectorFromString("triggerRestoreModelForModel:"), with: ids[1] as NSString)
+                XCTAssertTrue(previous?.isCancelled == true)
+                XCTAssertNil(host.userDefault(forKey: "loadedModel"))
+                XCTAssertNil(genericTask())
+                // A generic restore arriving after the explicit request must
+                // not resurrect the old persisted model either.
+                _ = plugin.perform(NSSelectorFromString("triggerRestoreModel"))
+                XCTAssertNil(genericTask())
+                let latest = explicitTask()
+                XCTAssertNotNil(latest)
+                latest?.cancel()
+                return latest
+            }
+            await previous?.value
+            await latest?.value
+            await MainActor.run {
+                XCTAssertEqual(plugin.selectedModelId, ids[1])
+                XCTAssertFalse(plugin.isConfigured)
+            }
+        }
+    }
+
+    @MainActor
+    func testSelectingCachedModelStartsRestoreAndGenericRequestDoesNotCancelIt() async throws {
+        let granite = GranitePlugin()
+        let voxtral = VoxtralPlugin()
+        let canary = CanaryPlugin()
+        try await assertSelectionRestoresCachedModel(granite, gate: granite.modelLoadGate) { granite.genericModelLoadTask }
+        try await assertSelectionRestoresCachedModel(voxtral, gate: voxtral.modelLoadGate) { voxtral.genericModelLoadTask }
+        try await assertSelectionRestoresCachedModel(canary, gate: canary.modelLoadGate) { canary.genericModelLoadTask }
+    }
+
+    @MainActor
+    private func assertSelectionRestoresCachedModel<P: NSObject & TranscriptionEnginePlugin & PluginSettingsActivityReporting>(
+        _ plugin: P, gate: PluginLocalInferenceGate,
+        task: @escaping @MainActor @Sendable () -> Task<Void, Never>?
+    ) async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let id = "custom-" + UUID().uuidString.lowercased()
+        let folder = fixture.root.appendingPathComponent("custom-models/" + id)
+        try fixture.writeModel(at: folder, requiredFiles: [
+            "config.json", "tokenizer.json", "tokenizer.model", "tekken.json", "vocab.json", "merges.txt",
+        ])
+        try JSONSerialization.data(withJSONObject: [
+            "id": id, "displayName": id, "modelType": "fixture", "origin": id, "bytes": 0,
+        ]).write(to: folder.appendingPathComponent("typewhisper-import.json"))
+        plugin.activate(host: MockHostServices(pluginDataDirectory: fixture.root))
+        try await gate.withLock {
+            let pending = await MainActor.run {
+                plugin.selectModel(id)
+                let pending = task()
+                XCTAssertNotNil(pending, "Restoring an override selection must start loading its cached model")
+                XCTAssertNotNil(plugin.currentSettingsActivity)
+                _ = plugin.perform(NSSelectorFromString("triggerRestoreModel"))
+                XCTAssertFalse(pending?.isCancelled ?? true, "Generic restore must preserve the selection restore")
+                plugin.deactivate()
+                XCTAssertTrue(pending?.isCancelled == true)
+                return pending
+            }
+            await pending?.value
+        }
+    }
+
+    @MainActor
+    func testDeletingModelCancelsQueuedExplicitAndGenericLoads() async throws {
+        for explicit in [true, false] {
+            let qwen = Qwen3Plugin()
+            let granite = GranitePlugin()
+            let voxtral = VoxtralPlugin()
+            let canary = CanaryPlugin()
+            try await assertDeletionCancelsQueuedLoad(qwen, gate: qwen.modelLoadGate, explicit: explicit,
+                modelID: Qwen3Plugin.availableModels[0].id, repositoryID: Qwen3Plugin.availableModels[0].repoId,
+                task: { explicit ? qwen.explicitModelLoadTask : qwen.genericModelLoadTask })
+            try await assertDeletionCancelsQueuedLoad(granite, gate: granite.modelLoadGate, explicit: explicit,
+                modelID: GranitePlugin.availableModels[0].id, repositoryID: GranitePlugin.availableModels[0].repoId,
+                task: { explicit ? granite.explicitModelLoadTask : granite.genericModelLoadTask })
+            try await assertDeletionCancelsQueuedLoad(voxtral, gate: voxtral.modelLoadGate, explicit: explicit,
+                modelID: VoxtralPlugin.availableModels[0].id, repositoryID: VoxtralPlugin.availableModels[0].repoId,
+                task: { explicit ? voxtral.explicitModelLoadTask : voxtral.genericModelLoadTask })
+            try await assertDeletionCancelsQueuedLoad(canary, gate: canary.modelLoadGate, explicit: explicit,
+                modelID: CanaryPlugin.availableModels[0].id, repositoryID: CanaryPlugin.availableModels[0].repoId,
+                task: { explicit ? canary.explicitModelLoadTask : canary.genericModelLoadTask })
+        }
+    }
+
+    @MainActor
+    private func assertDeletionCancelsQueuedLoad<P: NSObject & TranscriptionEnginePlugin & PluginDownloadedModelManaging>(
+        _ plugin: P, gate: PluginLocalInferenceGate, explicit: Bool, modelID: String, repositoryID: String,
+        task: @escaping @MainActor @Sendable () -> Task<Void, Never>?
+    ) async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let snapshot = try fixture.writeSnapshot(repositoryID: repositoryID, commit: commit, requiredFiles: [
+            "config.json", "tokenizer.json", "tokenizer.model", "tekken.json", "vocab.json", "merges.txt",
+        ])
+        let host = MockHostServices(pluginDataDirectory: fixture.root, defaults: ["loadedModel": modelID])
+        plugin.activate(host: host)
+        defer { plugin.deactivate() }
+        try await gate.withLock {
+            let pending = await MainActor.run {
+                if explicit {
+                    _ = plugin.perform(NSSelectorFromString("triggerRestoreModelForModel:"), with: modelID as NSString)
+                } else {
+                    _ = plugin.perform(NSSelectorFromString("triggerRestoreModel"))
+                }
+                return task()
+            }
+            XCTAssertNotNil(pending)
+            for _ in 0..<10 { await Task.yield() }
+            try await plugin.deleteDownloadedModel(modelID)
+            XCTAssertTrue(pending?.isCancelled == true, "Deletion must invalidate a load already waiting for its gate")
+            XCTAssertFalse(FileManager.default.fileExists(atPath: snapshot.path))
+            XCTAssertNil(host.userDefault(forKey: "loadedModel"))
+            pending?.cancel() // Keep the failing regression from ever attempting native/network loading.
+            await pending?.value
+        }
+    }
+
+    @MainActor
+    func testFailedGenericRestorePreservesPersistedModelAcrossDeactivation() async throws {
+        let qwen = Qwen3Plugin()
+        let granite = GranitePlugin()
+        let voxtral = VoxtralPlugin()
+        let canary = CanaryPlugin()
+        try await assertRestorePersistence(qwen) { await qwen.restoreLoadedModel() }
+        try await assertRestorePersistence(granite) { await granite.restoreLoadedModel() }
+        try await assertRestorePersistence(voxtral) { await voxtral.restoreLoadedModel() }
+        try await assertRestorePersistence(canary) { await canary.restoreLoadedModel() }
+    }
+
+    @MainActor
+    private func assertRestorePersistence<P: TranscriptionEnginePlugin & PluginSettingsActivityReporting>(
+        _ plugin: P, restore: () async -> Void
+    ) async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let id = "custom-" + UUID().uuidString.lowercased()
+        let folder = fixture.root.appendingPathComponent("custom-models/" + id)
+        try fixture.writeModel(at: folder, requiredFiles: [
+            "config.json", "tokenizer.json", "tokenizer.model", "tekken.json", "vocab.json", "merges.txt",
+        ])
+        try fixture.write("invalid native config", to: folder.appendingPathComponent("config.json"))
+        try JSONSerialization.data(withJSONObject: [
+            "id": id, "displayName": id, "modelType": "fixture", "origin": id, "bytes": 0,
+        ]).write(to: folder.appendingPathComponent("typewhisper-import.json"))
+        let host = MockHostServices(pluginDataDirectory: fixture.root, defaults: ["loadedModel": id])
+        plugin.activate(host: host)
+        await restore()
+        XCTAssertFalse(plugin.isConfigured)
+        XCTAssertTrue(plugin.currentSettingsActivity?.isError == true, "Must reach the native loader")
+        XCTAssertEqual(host.userDefault(forKey: "loadedModel") as? String, id)
+        plugin.deactivate()
+        XCTAssertEqual(host.userDefault(forKey: "loadedModel") as? String, id)
+    }
+
+    @MainActor
+    func testFreshCanaryAcceptsExplicitBuiltInLoadWithoutPersistedLoadedModel() async throws {
+        let canary = CanaryPlugin()
+        try await assertExplicitLoadRequest(
+            canary, gate: canary.modelLoadGate, builtInID: CanaryPlugin.availableModels[0].id)
+    }
+
+    @MainActor
+    private func assertExplicitLoadRequest<P: NSObject & TranscriptionEnginePlugin>(
+        _ plugin: P, gate: PluginLocalInferenceGate, builtInID: String? = nil
+    ) async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let modelID = builtInID ?? "custom-" + UUID().uuidString.lowercased()
+        if builtInID == nil {
+            let folder = fixture.root.appendingPathComponent("custom-models/" + modelID)
+            try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+            let metadata: [String: Any] = [
+                "id": modelID, "displayName": "Imported fixture", "modelType": "fixture",
+                "origin": "fixture", "bytes": 0,
+            ]
+            try JSONSerialization.data(withJSONObject: metadata)
+                .write(to: folder.appendingPathComponent("typewhisper-import.json"))
+        }
+        let host = MockHostServices(pluginDataDirectory: fixture.root)
+        plugin.activate(host: host)
+        // Hold actual loading while checking the host's Objective-C entry point.
+        // Deactivate before releasing the gate so this routing test never needs
+        // real weights or a network download.
+        try await gate.withLock {
+            await MainActor.run {
+                let selector = NSSelectorFromString("triggerRestoreModelForModel:")
+                guard plugin.responds(to: selector) else {
+                    XCTFail("Missing explicit model-load entry point")
+                    plugin.deactivate()
+                    return
+                }
+                XCTAssertNil(host.userDefault(forKey: "loadedModel"))
+                _ = plugin.perform(selector, with: modelID as NSString)
+                XCTAssertEqual(host.userDefault(forKey: "selectedModel") as? String, modelID)
+                plugin.deactivate()
+            }
+        }
+    }
+
     func testGemma4SourceAvoidsSDKSymbolsUnavailableInHost16() throws {
         let pluginDirectory = TestSupport.repoRoot.appendingPathComponent(
             "TypeWhisperPluginSDK/Plugins/Gemma4Plugin"

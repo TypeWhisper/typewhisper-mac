@@ -216,7 +216,9 @@ struct RegistryPluginRelease: Decodable, Equatable {
         architecture: String
     ) -> Bool {
         PluginRegistryService.compareVersions(minHostVersion, appVersion) != .orderedDescending
-            && self.sdkCompatibilityVersion == sdkCompatibilityVersion
+            && (self.sdkCompatibilityVersion == sdkCompatibilityVersion
+                || (sdkCompatibilityVersion == PluginSDKCompatibility.currentVersion
+                    && self.sdkCompatibilityVersion == PluginSDKCompatibility.modelImportVersion))
             && PluginCompatibility.isCompatible(
                 minOSVersion: minOSVersion,
                 supportedArchitectures: supportedArchitectures,

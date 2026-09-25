@@ -492,8 +492,12 @@ struct TypeWhisperApp<WindowConfiguration: ManagedAppWindowSceneConfiguration>: 
     init() {
         guard !AppConstants.isRunningTests else { return }
 
+        LaunchSignposts.beginLaunch()
+
         // Trigger ServiceContainer initialization
-        let serviceContainer = ServiceContainer.shared
+        let serviceContainer = LaunchSignposts.signposter.withIntervalSignpost("Launch.serviceContainer") {
+            ServiceContainer.shared
+        }
         SettingsNavigationCoordinator.shared = SettingsNavigationCoordinator()
         WorkflowsNavigationCoordinator.shared = WorkflowsNavigationCoordinator()
         IOSCompanionPromoCoordinator.shared = IOSCompanionPromoCoordinator()
@@ -792,6 +796,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
             return
         }
 
+        let signposter = LaunchSignposts.signposter
+        let didFinishLaunchingState = signposter.beginInterval("Launch.didFinishLaunching")
+        defer { signposter.endInterval("Launch.didFinishLaunching", didFinishLaunchingState) }
+
         ServiceContainer.shared.calendarMeetingAutomationController
             .installNotificationRouterIfNeeded()
 
@@ -848,11 +856,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
             HomeViewModel.shared.showSetupWizard = true
             NSApp.setActivationPolicy(.regular)
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                self.openSetupWindow()
+                LaunchSignposts.signposter.withIntervalSignpost("Launch.initialWindow") {
+                    self.openSetupWindow()
+                }
             }
         case .settings:
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                self.openSettingsWindow()
+                LaunchSignposts.signposter.withIntervalSignpost("Launch.initialWindow") {
+                    self.openSettingsWindow()
+                }
             }
         case .none:
             break
@@ -907,13 +919,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
             object: nil
         )
 
-        Task { await ServiceContainer.shared.cloudFolderSyncController.syncNow() }
+        // The controller starts the launch sync itself; this only fills in if it has not run.
+        Task { await ServiceContainer.shared.cloudFolderSyncController.syncIfNeeded() }
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
         guard !AppConstants.isRunningTests, !AppConstants.isScreenshotAutomation else { return }
         ServiceContainer.shared.calendarMeetingAutomationController.handleApplicationBecameActive()
-        Task { await ServiceContainer.shared.cloudFolderSyncController.syncNow() }
+        Task { await ServiceContainer.shared.cloudFolderSyncController.handleApplicationDidBecomeActive() }
     }
 
     func applicationWillTerminate(_ notification: Notification) {

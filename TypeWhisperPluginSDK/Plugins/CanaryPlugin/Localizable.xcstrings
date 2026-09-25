@@ -464,6 +464,28 @@
         }
       }
     },
+    "Local Canary speech recognition on Apple Silicon, including Sophea for Greek and English. Select an explicit source language in Dictation settings.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lokale Canary-Spracherkennung auf Apple Silicon, einschließlich Sophea für Griechisch und Englisch. Wähle in den Diktateinstellungen eine konkrete Ausgangssprache."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Apple Siliconで動作するローカルCanary音声認識。ギリシャ語と英語のSopheaに対応します。音声入力設定で入力言語を指定してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在 Apple Silicon 上运行本地 Canary 语音识别，包括支持希腊语和英语的 Sophea。请在听写设置中选择具体的源语言。"
+          }
+        }
+      }
+    },
     "Local Folder": {
       "localizations": {
         "de": {
@@ -482,28 +504,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "本地文件夹"
-          }
-        }
-      }
-    },
-    "Local speech-to-text and translation by IBM, powered by MLX on Apple Silicon. 6 languages with bidirectional translation.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Lokale Spracherkennung und Uebersetzung von IBM mit MLX auf Apple Silicon. 6 Sprachen mit bidirektionaler Uebersetzung."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Apple Silicon向けMLXによるIBMのローカル音声認識および翻訳。6言語に対応し、双方向翻訳が可能です。"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "IBM 本地语音转文字和翻译，基于 Apple Silicon 上的 MLX。支持 6 种语言的双向翻译。"
           }
         }
       }

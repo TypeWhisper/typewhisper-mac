@@ -1,5 +1,51 @@
 import Foundation
 import Combine
+import os
+
+/// Launch-phase signposts for Instruments. They appear in the Points of Interest
+/// lane of the Time Profiler and App Launch templates.
+///
+/// Payloads are content-free: static names, plus the manifest id for per-plugin
+/// intervals. Nothing is recorded unless a signpost-aware tool is capturing.
+enum LaunchSignposts {
+    static let signposter = OSSignposter(
+        logHandle: OSLog(subsystem: AppConstants.loggerSubsystem, category: .pointsOfInterest)
+    )
+
+    @MainActor private static var launchState: OSSignpostIntervalState?
+    @MainActor private static var firstIdleObserver: CFRunLoopObserver?
+
+    /// Opens the whole-launch interval and closes it at the first time the main run
+    /// loop is about to wait, marked by the `Launch.firstIdle` event. This can happen
+    /// before the delayed initial window opens, so it is not a rendered-frame marker.
+    @MainActor
+    static func beginLaunch() {
+        guard launchState == nil else { return }
+        launchState = signposter.beginInterval("Launch")
+
+        let observer = CFRunLoopObserverCreateWithHandler(
+            kCFAllocatorDefault,
+            CFRunLoopActivity.beforeWaiting.rawValue,
+            false,
+            CFIndex.max
+        ) { _, _ in
+            MainActor.assumeIsolated {
+                finishLaunch()
+            }
+        }
+        CFRunLoopAddObserver(CFRunLoopGetMain(), observer, .commonModes)
+        firstIdleObserver = observer
+    }
+
+    @MainActor
+    private static func finishLaunch() {
+        firstIdleObserver = nil
+        signposter.emitEvent("Launch.firstIdle")
+        if let launchState {
+            signposter.endInterval("Launch", launchState)
+        }
+    }
+}
 
 @MainActor
 final class ServiceContainer: ObservableObject {
@@ -356,6 +402,10 @@ final class ServiceContainer: ObservableObject {
     func initialize() async {
         guard !AppConstants.isRunningTests else { return }
 
+        let signposter = LaunchSignposts.signposter
+        let initializeState = signposter.beginInterval("Launch.initialize")
+        defer { signposter.endInterval("Launch.initialize", initializeState) }
+
         calendarMeetingAutomationController.initialize()
 
         hotkeyService.setup()
@@ -380,7 +430,9 @@ final class ServiceContainer: ObservableObject {
 
         // Activation hydrates credentials and custom profiles before selection can settle.
         // Reconciliation also requests passive restore from the final selected engine.
-        modelManagerService.restoreProviderSelection()
+        signposter.withIntervalSignpost("Launch.modelRestore") {
+            modelManagerService.restoreProviderSelection()
+        }
         audioRecorderViewModel.reconcileSelectionWithAvailablePlugins()
         watchFolderViewModel.reconcileSelectionWithAvailablePlugins()
         statisticsViewModel.refresh()

@@ -128,6 +128,12 @@ struct HistoryRecordRow: View {
 }
 
 struct HistoryRecordDetailView: View {
+    private struct DiffInput: Equatable {
+        let recordID: UUID
+        let rawText: String
+        let finalText: String
+    }
+
     let record: TranscriptionRecord
     @ObservedObject var viewModel: HistoryViewModel
 
@@ -272,31 +278,53 @@ struct HistoryRecordDetailView: View {
                     .padding(.bottom, 8)
             }
 
-            if viewModel.detailViewMode == .final {
+            switch viewModel.detailViewMode {
+            case .final:
                 TextEditor(text: $viewModel.editedText)
                     .font(.body)
                     .padding(14)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .disabled(!viewModel.canEditSelectedRecord)
-            } else {
-                ScrollView {
-                    Text(contentText)
-                        .textSelection(.enabled)
-                        .font(.body)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .padding(20)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            case .original:
+                readOnlyText(AttributedString(record.rawText))
+            case .changes:
+                changesContent
+                    .task(id: DiffInput(recordID: record.id, rawText: record.rawText, finalText: record.finalText)) {
+                        await viewModel.loadDiffPresentation(for: record)
+                    }
             }
         }
     }
 
-    private var contentText: AttributedString {
-        switch viewModel.detailViewMode {
-        case .final: AttributedString(record.displayText)
-        case .original: AttributedString(record.rawText)
-        case .changes: diffAttributedString(viewModel.diffSegments(for: record))
+    @ViewBuilder
+    private var changesContent: some View {
+        switch viewModel.diffPresentation(for: record) {
+        case .segments(let segments):
+            readOnlyText(diffAttributedString(segments))
+        case .tooLarge:
+            ContentUnavailableView(
+                String(localized: "Changes Unavailable"),
+                systemImage: "text.badge.xmark",
+                description: Text(String(localized: "This entry is too long to compare word by word. Use Final or Original to read the full text."))
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        case nil:
+            ProgressView()
+                .controlSize(.small)
+                .accessibilityLabel(String(localized: "Loading"))
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+    }
+
+    private func readOnlyText(_ text: AttributedString) -> some View {
+        ScrollView {
+            Text(text)
+                .textSelection(.enabled)
+                .font(.body)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(20)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var sourceImage: String {

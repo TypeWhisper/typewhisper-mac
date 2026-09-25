@@ -91,6 +91,22 @@ class ResolvePluginHostReleaseTests(unittest.TestCase):
         self.assertEqual(release["tagName"], "v1.7.0-daily.20260901")
 
     @patch("resolve_plugin_host_release.run_gh")
+    def test_accepts_latest_matching_rc_and_ignores_other_prereleases(self, mock_run_gh) -> None:
+        tags = ["v1.7.0-daily.20260924", "v1.7.0-rc2", "v1.8.0-rc3", "v1.7.0-beta3"]
+        releases = [
+            {"tagName": tag, "isDraft": False, "isPrerelease": True,
+             "publishedAt": f"2026-09-{24 + index}T10:00:00Z"}
+            for index, tag in enumerate(tags)
+        ]
+        mock_run_gh.side_effect = [
+            gh_result(returncode=1, stdout="HTTP/2.0 404 Not Found\n"),
+            gh_result(stdout=json.dumps(releases)),
+            gh_result(stdout=release_json("v1.7.0-rc2", prerelease=True)),
+        ]
+        result = resolve_host_release("TypeWhisper/typewhisper-mac", "1.7.0", allow_prerelease_host=True)
+        self.assertEqual(result["tagName"], "v1.7.0-rc2")
+
+    @patch("resolve_plugin_host_release.run_gh")
     def test_propagates_non_404_lookup_failure(self, mock_run_gh) -> None:
         mock_run_gh.return_value = gh_result(
             returncode=1,

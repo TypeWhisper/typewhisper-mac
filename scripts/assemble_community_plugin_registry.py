@@ -204,8 +204,8 @@ def validate_release(release: object, filename: str, index: int) -> list[str]:
         errors.append(f"{prefix}: 'minHostVersion' must be semver like 1.4.0")
 
     sdk_version = release.get("sdkCompatibilityVersion")
-    if sdk_version is not None and sdk_version != "v1":
-        errors.append(f"{prefix}: 'sdkCompatibilityVersion' must be 'v1'")
+    if sdk_version is not None and sdk_version not in ("v1", "v1-model-import"):
+        errors.append(f"{prefix}: 'sdkCompatibilityVersion' must be 'v1' or 'v1-model-import'")
 
     size = release.get("size")
     if size is not None and not is_positive_int(size):

@@ -42,6 +42,11 @@ class PluginReleaseManifestTests(unittest.TestCase):
             with self.subTest(sdk=sdk), self.assertRaisesRegex(ValueError, "must be 'v1'"):
                 validate_manifest(manifest)
 
+    def test_accepts_additive_model_import_capability_marker(self):
+        manifest = self.manifest()
+        manifest["sdkCompatibilityVersion"] = "v1-model-import"
+        validate_manifest(manifest)
+
     def test_validation_does_not_rewrite_metadata(self):
         manifest = self.manifest()
         original = copy.deepcopy(manifest)

@@ -10,12 +10,27 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from plugin_registry_metadata import (
+    official_registry_targets,
     find_top_level_release_metadata,
     normalize_registry_release_metadata,
 )
 
 
 class PluginRegistryMetadataTests(unittest.TestCase):
+    def test_official_capability_release_reaches_combined_v1_feed(self) -> None:
+        self.assertEqual(official_registry_targets("v1-model-import"), [
+            "plugins-v1-model-import.json", "plugins-community-v1.json",
+        ])
+
+    def test_existing_official_feed_routing_is_preserved(self) -> None:
+        self.assertEqual(official_registry_targets("v1"), [
+            "plugins-v1.json", "plugins-community-v1.json",
+        ])
+
+    def test_unknown_capabilities_cannot_create_unread_registry_feeds(self) -> None:
+        with self.assertRaises(ValueError):
+            official_registry_targets("v1-unknown")
+
     def test_normalization_removes_stale_top_level_release_metadata(self) -> None:
         registry = {
             "schemaVersion": 1,

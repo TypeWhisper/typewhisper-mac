@@ -315,6 +315,9 @@ enum AppConstants {
     // MARK: - Polar.sh Licensing
     enum Polar {
         static let organizationId = "96de503c-3c8b-4d08-9ded-c7f6e20fdde4"
+        /// Pinned license API contract. Unversioned requests follow Polar's Current version.
+        static let apiVersion = "2026-04"
+        static let apiVersionHeader = "Polar-Version"
         static let checkoutURL = "https://polar.sh/typewhisper"
         static let customerPortalURL = "https://polar.sh/typewhisper/portal"
 
