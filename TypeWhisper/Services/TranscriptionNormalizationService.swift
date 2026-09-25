@@ -51,6 +51,22 @@ enum TranscriptionNormalizationService {
         normalizeNumbers: Bool? = nil,
         defaults: UserDefaults = .standard
     ) -> String {
+        let numberNormalized = normalizeNumberWords(
+            text,
+            languages: languages,
+            normalizeNumbers: normalizeNumbers,
+            defaults: defaults
+        )
+
+        return normalizeTimeNotation(numberNormalized, languages: languages)
+    }
+
+    private static func normalizeNumberWords(
+        _ text: String,
+        languages: [String],
+        normalizeNumbers: Bool?,
+        defaults: UserDefaults
+    ) -> String {
         guard numberNormalizationEnabled(override: normalizeNumbers, defaults: defaults) else {
             return text
         }
@@ -64,6 +80,25 @@ enum TranscriptionNormalizationService {
         }
 
         return text
+    }
+
+    /// Rewrites German clock times that use a period as the hour/minute separator,
+    /// such as `20.45 Uhr`, to the colon form `20:45 Uhr` required by DIN 5008.
+    ///
+    /// Only a time written directly in front of `Uhr` is considered, and only when both
+    /// groups hold a valid hour and minute. Dates (`19.04.2026`), thousands separators
+    /// (`20.450`), version numbers and plain decimals therefore stay unchanged, as does
+    /// anything whose minutes are not spelled with two digits.
+    ///
+    /// This runs independently of the number normalization setting: turning spoken-number
+    /// cleanup off must not restore a separator that DIN 5008 treats as incorrect.
+    static func normalizeTimeNotation(_ text: String, languages: [String]) -> String {
+        guard !text.isEmpty,
+              languages.contains(where: { PunctuationLanguageNormalizer.normalize($0) == "de" }) else {
+            return text
+        }
+
+        return GermanTimeNotation.normalize(text)
     }
 
     static func normalizeResult(
@@ -155,5 +190,31 @@ enum TranscriptionNormalizationService {
         }
 
         return result
+    }
+
+    private enum GermanTimeNotation {
+        /// `HH.MM` that is not part of a longer dotted run and is followed by `Uhr`.
+        /// The hour and minute alternatives keep `24.00 Uhr` and `20.75 Uhr` untouched.
+        private static let expression = try? NSRegularExpression(
+            pattern: #"(?<![\d.])((?:[01]?\d)|(?:2[0-3]))\.([0-5]\d)(?=[ \t]*Uhr)"#,
+            options: [.caseInsensitive]
+        )
+
+        static func normalize(_ text: String) -> String {
+            guard let expression else {
+                return text
+            }
+
+            let mutable = NSMutableString(string: text)
+            let range = NSRange(location: 0, length: mutable.length)
+            let replacements = expression.replaceMatches(
+                in: mutable,
+                options: [],
+                range: range,
+                withTemplate: "$1:$2"
+            )
+
+            return replacements > 0 ? (mutable as String) : text
+        }
     }
 }
