@@ -285,6 +285,27 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertEqual(viewModel.effectiveModelId, "universal-2")
     }
 
+    func testRecorderLanguagesFollowPerFlowDeepgramModel() throws {
+        try preserveStandardDefaults()
+        let defaults = try makeDefaults()
+        let deepgram = setupDeepgramPluginManager(globalModel: "nova-2")
+        UserDefaults.standard.set("deepgram", forKey: UserDefaultsKeys.selectedEngine)
+
+        let viewModel = makeViewModel(defaults: defaults)
+        XCTAssertFalse(viewModel.selectedEngineSupportedLanguages.contains("ar"))
+
+        viewModel.selectedModel = "nova-3"
+        viewModel.languageSelection = .exact("ar")
+        viewModel.reconcileSelectionWithAvailablePlugins()
+
+        XCTAssertTrue(viewModel.selectedEngineSupportedLanguages.contains("ar"))
+        XCTAssertEqual(viewModel.languageSelection, .exact("ar"))
+        XCTAssertEqual(deepgram.selectedModelId, "nova-2")
+
+        viewModel.selectedModel = "nova-2"
+        XCTAssertEqual(viewModel.languageSelection, .auto)
+    }
+
     func testRecorderSelectionClearsMissingSavedEngineAndModel() throws {
         try preserveStandardDefaults()
         let defaults = try makeDefaults()
@@ -1936,6 +1957,34 @@ final class AudioRecorderViewModelTests: XCTestCase {
             )
         ]
         PluginManager.shared = pluginManager
+    }
+
+    private func setupDeepgramPluginManager(globalModel: String) -> DeepgramPlugin {
+        let previousPluginManager = PluginManager.shared
+        addTeardownBlock {
+            PluginManager.shared = previousPluginManager
+        }
+
+        let deepgram = DeepgramPlugin()
+        deepgram.selectModel(globalModel)
+        let appSupportDirectory = makeTemporaryDirectory()
+        let pluginManager = PluginManager(appSupportDirectory: appSupportDirectory)
+        pluginManager.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: DeepgramPlugin.pluginId,
+                    name: DeepgramPlugin.pluginName,
+                    version: "1.0.0",
+                    principalClass: "DeepgramPlugin"
+                ),
+                instance: deepgram,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+        PluginManager.shared = pluginManager
+        return deepgram
     }
 
     private func setupRestorablePluginManager(

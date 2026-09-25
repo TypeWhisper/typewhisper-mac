@@ -644,13 +644,8 @@ final class DeepgramPlugin: NSObject,
     var selectedModelId: String? { _selectedModelId }
 
     func selectModel(_ modelId: String) {
-        let modelChanged = _selectedModelId != modelId
         _selectedModelId = modelId
         host?.setUserDefault(modelId, forKey: "selectedModel")
-        if modelChanged {
-            // Nova-2 and Nova-3 support different languages.
-            host?.notifyCapabilitiesChanged()
-        }
     }
 
     var supportsTranslation: Bool { false }
@@ -659,14 +654,17 @@ final class DeepgramPlugin: NSObject,
     var dictionaryTermsBudget: DictionaryTermsBudget { DictionaryTermsBudget(maxTerms: Self.maxDictionaryTerms) }
 
     var supportedLanguages: [String] {
-        Self.supportedLanguages(forModelId: _selectedModelId)
+        supportedLanguages(forModelId: _selectedModelId)
     }
 
-    static func supportedLanguages(forModelId modelId: String?) -> [String] {
+    // Lets the host resolve languages for a per-flow model override. It is looked up through the
+    // Objective-C runtime, so the plugin stays loadable by hosts that do not know about it.
+    @objc(supportedLanguagesForModelId:)
+    func supportedLanguages(forModelId modelId: String?) -> [String] {
         if modelId?.lowercased().hasPrefix("nova-2") == true {
-            return nova2SupportedLanguages
+            return Self.nova2SupportedLanguages
         }
-        return nova3SupportedLanguages
+        return Self.nova3SupportedLanguages
     }
 
     // Deepgram's documented language codes per model:
@@ -1282,6 +1280,8 @@ private struct DeepgramSettingsView: View {
                     .labelsHidden()
                     .onChange(of: selectedModel) {
                         plugin.selectModel(selectedModel)
+                        // Nova-2 and Nova-3 support different languages.
+                        plugin.host?.notifyCapabilitiesChanged()
                     }
                 }
             }

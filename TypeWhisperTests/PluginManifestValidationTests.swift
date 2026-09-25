@@ -1607,6 +1607,29 @@ final class PluginDictionaryGuardTests: XCTestCase {
         XCTAssertTrue(nova2.isSubset(of: nova3))
     }
 
+    func testDeepgramModelSwitchDoesNotNotifyHost() {
+        // The host switches models temporarily for per-flow overrides. Those switches must not
+        // make observers re-normalize and persist their language selections.
+        let host = TestHostServices()
+        let plugin = DeepgramPlugin()
+        plugin.activate(host: host)
+
+        plugin.selectModel("nova-2")
+        plugin.selectModel("nova-3")
+
+        XCTAssertEqual(host.capabilityChangeCount, 0)
+    }
+
+    func testHostResolvesDeepgramLanguagesForModelOverride() {
+        let plugin = DeepgramPlugin()
+        plugin.selectModel("nova-2")
+        let engine: any TranscriptionEnginePlugin = plugin
+
+        XCTAssertTrue(engine.supportedLanguages(forModel: "nova-3").contains("ar"))
+        XCTAssertFalse(engine.supportedLanguages(forModel: "nova-2").contains("ar"))
+        XCTAssertEqual(engine.supportedLanguages(forModel: nil), DeepgramPlugin.nova2SupportedLanguages)
+    }
+
     func testDeepgramRestoredModelSelectionDeterminesSupportedLanguages() {
         let nova2Plugin = DeepgramPlugin()
         nova2Plugin.activate(host: TestHostServices(userDefaults: ["selectedModel": "nova-2"]))
@@ -2049,7 +2072,11 @@ private final class TestHostServices: HostServices, @unchecked Sendable {
         userDefaults[key] = value
     }
 
-    func notifyCapabilitiesChanged() {}
+    private(set) var capabilityChangeCount = 0
+
+    func notifyCapabilitiesChanged() {
+        capabilityChangeCount += 1
+    }
     func setStreamingDisplayActive(_ active: Bool) {}
 }
 
