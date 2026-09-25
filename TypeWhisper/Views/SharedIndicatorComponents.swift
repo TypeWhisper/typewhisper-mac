@@ -28,14 +28,28 @@ extension IndicatorTheme {
         }
     }
 
-    var strokeColor: Color {
+    /// Hairline around the surface. Glass draws its own rim highlight.
+    var strokeColor: Color? {
         switch self {
         case .classic:
             .white.opacity(0.15)
         case .light:
             .black.opacity(0.1)
         case .glass:
-            Color.primary.opacity(0.08)
+            nil
+        }
+    }
+
+    /// Multiplier for the drop shadow the indicator views draw. Glass ships its
+    /// own shadow, and a SwiftUI shadow would show through the translucent surface.
+    var shadowOpacityScale: Double {
+        switch self {
+        case .classic:
+            1
+        case .light:
+            0.5
+        case .glass:
+            0
         }
     }
 }
@@ -51,10 +65,11 @@ struct IndicatorSurfaceModifier<S: Shape>: ViewModifier {
             // The hosting panel itself is rectangular. Clip all rendered content,
             // especially the feedback progress bar, to the visible surface.
             .clipShape(shape)
-            .overlay(
-                shape
-                    .stroke(strokeColor ?? theme.strokeColor, lineWidth: 1)
-            )
+            .overlay {
+                if let stroke = strokeColor ?? theme.strokeColor {
+                    shape.stroke(stroke, lineWidth: 1)
+                }
+            }
     }
 
     @ViewBuilder
@@ -63,7 +78,7 @@ struct IndicatorSurfaceModifier<S: Shape>: ViewModifier {
         case .classic:
             content.background(.black.opacity(0.85), in: shape)
         case .light:
-            content.background(Color(white: 0.98).opacity(0.94), in: shape)
+            content.background(.regularMaterial, in: shape)
         case .glass:
             if #available(macOS 26.0, *) {
                 content.glassEffect(.clear, in: shape)
@@ -329,7 +344,7 @@ struct IndicatorExpandableText: View {
 
     var body: some View {
         ScrollViewReader { proxy in
-            ScrollView(.vertical, showsIndicators: true) {
+            ScrollView(.vertical, showsIndicators: false) {
                 Text(text)
                     .font(.system(size: fontSize))
                     .foregroundStyle(Color.primary.opacity(0.85))

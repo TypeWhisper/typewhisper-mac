@@ -149,7 +149,7 @@ struct OverlayIndicatorView: View {
             }
             .frame(width: currentWidth)
         }
-        .shadow(color: .black.opacity(0.3), radius: 10, y: 5)
+        .shadow(color: .black.opacity(0.3 * viewModel.indicatorTheme.shadowOpacityScale), radius: 10, y: 5)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: isTop ? .top : .bottom)
         .preferredColorScheme(viewModel.indicatorTheme.preferredColorScheme)
         .onHover { hovered in

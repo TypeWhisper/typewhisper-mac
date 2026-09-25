@@ -109,7 +109,7 @@ struct MinimalIndicatorView: View {
     }
 
     private var shadowColor: Color {
-        errorMessage == nil ? .black.opacity(0.22) : .red.opacity(0.18)
+        errorMessage == nil ? .black.opacity(0.22 * viewModel.indicatorTheme.shadowOpacityScale) : .red.opacity(0.18)
     }
 
     var body: some View {
