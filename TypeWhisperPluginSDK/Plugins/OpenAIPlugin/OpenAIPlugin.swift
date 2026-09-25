@@ -3361,10 +3361,11 @@ struct OpenAIChatGPTModelCache: Codable, Sendable {
 
 enum OpenAIAPIKeyField {
     /// Offer Remove only while the field shows the stored key (or is empty), so an edited key gets Save and can replace it.
-    static func showsRemove(storedKey: String?, input: String) -> Bool {
+    /// A failed validation keeps Save available so the key can be retried.
+    static func showsRemove(storedKey: String?, input: String, validationResult: Bool?) -> Bool {
         let storedKey = storedKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         let input = input.trimmingCharacters(in: .whitespacesAndNewlines)
-        return !storedKey.isEmpty && (input.isEmpty || input == storedKey)
+        return !storedKey.isEmpty && (input.isEmpty || input == storedKey) && validationResult != false
     }
 }
 
@@ -3545,7 +3546,11 @@ private struct OpenAISettingsView: View {
                 }
                 .buttonStyle(.borderless)
 
-                if OpenAIAPIKeyField.showsRemove(storedKey: plugin._apiKey, input: apiKeyInput) {
+                if OpenAIAPIKeyField.showsRemove(
+                    storedKey: plugin._apiKey,
+                    input: apiKeyInput,
+                    validationResult: validationResult
+                ) {
                     Button(String(localized: "Remove", bundle: bundle)) {
                         apiKeyInput = ""
                         validationResult = nil
