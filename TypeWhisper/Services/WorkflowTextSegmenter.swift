@@ -216,12 +216,12 @@ enum WorkflowTextSegmenter {
     }
 
     /// Whether `character` belongs to a script written without spaces between
-    /// words or sentences: Chinese, Japanese, Thai, Lao, Myanmar, and Khmer.
+    /// sentences: Chinese and Japanese. Thai, Lao, Myanmar, and Khmer omit spaces
+    /// between words but separate sentences with a space, so they count as spaced.
     private static func usesUnspacedScript(_ character: Character?) -> Bool {
         guard let scalar = character?.unicodeScalars.first else { return false }
         switch scalar.value {
-        case 0x0E00...0x0EFF, 0x1000...0x109F, 0x1780...0x17FF,
-             0x2E80...0x31FF, 0x3400...0x4DBF, 0x4E00...0x9FFF,
+        case 0x2E80...0x31FF, 0x3400...0x4DBF, 0x4E00...0x9FFF,
              0xF900...0xFAFF, 0xFF00...0xFFEF, 0x20000...0x3FFFF:
             return true
         default:

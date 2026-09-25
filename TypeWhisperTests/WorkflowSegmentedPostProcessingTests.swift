@@ -389,6 +389,34 @@ final class WorkflowSegmentedPostProcessingTests: XCTestCase {
         )
     }
 
+    func testJoinSeparatesThaiSentencesWithSpace() {
+        let thaiOutputs = ["ประโยคแรก", "ประโยคที่สอง", "ประโยคที่สาม"]
+
+        // Thai has no spaces between words but separates sentences with one.
+        let english = [firstSentence, secondSentence, thirdSentence].joined(separator: " ")
+        let englishSegmentation = WorkflowTextSegmenter.segment(english, policy: smallPolicy)
+        XCTAssertEqual(englishSegmentation.segments.count, 3)
+        XCTAssertEqual(
+            englishSegmentation.joined(outputs: thaiOutputs),
+            "ประโยคแรก ประโยคที่สอง ประโยคที่สาม"
+        )
+
+        // Chinese sentences have no separator; the Thai translation needs one.
+        let chinese = String(repeating: "今天我们讨论了项目的进度和下一步的计划。", count: 6)
+        let chineseSegmentation = WorkflowTextSegmenter.segment(chinese, policy: smallPolicy)
+        XCTAssertEqual(chineseSegmentation.segments.dropLast().map(\.separator), ["", ""])
+        XCTAssertEqual(
+            chineseSegmentation.joined(outputs: thaiOutputs),
+            "ประโยคแรก ประโยคที่สอง ประโยคที่สาม"
+        )
+
+        // CJK outputs are still joined without a space.
+        XCTAssertEqual(
+            englishSegmentation.joined(outputs: ["第一句。", "第二句。", "第三句。"]),
+            "第一句。第二句。第三句。"
+        )
+    }
+
     func testStablePrefixWaitsForTargetLengthAndMargin() throws {
         XCTAssertNil(WorkflowTextSegmenter.stablePrefix(in: firstSentence, policy: smallPolicy))
         // The sentence end is too close to the end of the confirmed text.
