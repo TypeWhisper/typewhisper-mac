@@ -121,6 +121,11 @@ enum PremiumICloudBridgeError: LocalizedError, Equatable, Sendable {
 }
 
 enum PremiumICloudBridgeFileMirror {
+    private static let modificationDateTolerance: TimeInterval = 0.001
+    /// Package directories whose files get new names instead of being rewritten: operations
+    /// are named by timestamp and ID, assets by their SHA-256 digest.
+    private static let writeOnceDirectoryNames: Set<String> = ["ops", "assets"]
+
     static func synchronize(
         localRoot: URL,
         remoteRoot: URL,
@@ -148,6 +153,7 @@ enum PremiumICloudBridgeFileMirror {
             try mergeDirectory(
                 from: localPackage,
                 to: remotePackage,
+                isPackageRoot: true,
                 fileManager: fileManager
             )
         }
@@ -155,6 +161,7 @@ enum PremiumICloudBridgeFileMirror {
             try mergeDirectory(
                 from: remotePackage,
                 to: localPackage,
+                isPackageRoot: true,
                 fileManager: fileManager
             )
         }
@@ -179,6 +186,8 @@ enum PremiumICloudBridgeFileMirror {
     private static func mergeDirectory(
         from source: URL,
         to destination: URL,
+        isPackageRoot: Bool = false,
+        isWriteOnce: Bool = false,
         fileManager: FileManager
     ) throws {
         try fileManager.createDirectory(
@@ -190,6 +199,8 @@ enum PremiumICloudBridgeFileMirror {
             includingPropertiesForKeys: [
                 .isDirectoryKey,
                 .isSymbolicLinkKey,
+                .isUbiquitousItemKey,
+                .fileSizeKey,
                 .contentModificationDateKey,
             ],
             options: [.skipsHiddenFiles]
@@ -208,12 +219,15 @@ enum PremiumICloudBridgeFileMirror {
                 try mergeDirectory(
                     from: child,
                     to: destinationChild,
+                    isWriteOnce: isWriteOnce
+                        || (isPackageRoot && writeOnceDirectoryNames.contains(child.lastPathComponent)),
                     fileManager: fileManager
                 )
             } else {
                 try copyNewerFile(
                     from: child,
                     to: destinationChild,
+                    isWriteOnce: isWriteOnce,
                     fileManager: fileManager
                 )
             }
@@ -223,11 +237,43 @@ enum PremiumICloudBridgeFileMirror {
     private static func copyNewerFile(
         from source: URL,
         to destination: URL,
+        isWriteOnce: Bool,
         fileManager: FileManager
     ) throws {
-        let isUbiquitous = (try? source.resourceValues(
-            forKeys: [.isUbiquitousItemKey]
-        ).isUbiquitousItem) == true
+        let sourceValues = try? source.resourceValues(forKeys: [
+            .isUbiquitousItemKey,
+            .fileSizeKey,
+        ])
+        let isUbiquitous = sourceValues?.isUbiquitousItem == true
+        let destinationExists = fileManager.fileExists(atPath: destination.path)
+        var sizesDiffer = false
+        if destinationExists {
+            let sourceDate = try source.resourceValues(
+                forKeys: [.contentModificationDateKey]
+            ).contentModificationDate
+            let destinationValues = try destination.resourceValues(
+                forKeys: [.fileSizeKey, .contentModificationDateKey]
+            )
+            let destinationDate = destinationValues.contentModificationDate
+            if let sourceSize = sourceValues?.fileSize,
+               let destinationSize = destinationValues.fileSize {
+                sizesDiffer = sourceSize != destinationSize
+                // Copies keep the source modification date, so a mirrored pair of write-once
+                // files has matching metadata and neither side needs to be downloaded or read.
+                // The tolerance only absorbs the precision lost when the date is written back.
+                // Manifest and device files are rewritten in place and always compare contents.
+                if isWriteOnce,
+                   !sizesDiffer,
+                   let sourceDate,
+                   let destinationDate,
+                   abs(sourceDate.timeIntervalSince(destinationDate)) < modificationDateTolerance {
+                    return
+                }
+            }
+            // An older source never replaces the destination, whatever its contents are.
+            guard (sourceDate ?? .distantPast) >= (destinationDate ?? .distantPast) else { return }
+        }
+
         if isUbiquitous {
             try? fileManager.startDownloadingUbiquitousItem(at: source)
         }
@@ -240,18 +286,13 @@ enum PremiumICloudBridgeFileMirror {
             // next periodic bridge pass will copy it without blocking uploads.
             return
         }
-        if fileManager.fileExists(atPath: destination.path) {
-            if let destinationData = try? Data(contentsOf: destination),
+        if destinationExists {
+            // Metadata was inconclusive; files of different sizes cannot be equal.
+            if !sizesDiffer,
+               let destinationData = try? Data(contentsOf: destination),
                destinationData == sourceData {
                 return
             }
-            let sourceDate = try source.resourceValues(
-                forKeys: [.contentModificationDateKey]
-            ).contentModificationDate ?? .distantPast
-            let destinationDate = try destination.resourceValues(
-                forKeys: [.contentModificationDateKey]
-            ).contentModificationDate ?? .distantPast
-            guard sourceDate >= destinationDate else { return }
         } else {
             try fileManager.createDirectory(
                 at: destination.deletingLastPathComponent(),

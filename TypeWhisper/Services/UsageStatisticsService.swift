@@ -98,6 +98,9 @@ final class UsageStatisticsService: ObservableObject, UsageStatisticsRecording {
     private let modelContainer: ModelContainer
     private let modelContext: ModelContext
     private var calendar: Calendar
+    /// Set when the last full reload failed, so the next recorded transcription reloads every
+    /// day instead of patching a snapshot that is missing the persisted days.
+    private var needsFullReload = false
 
     init(
         appSupportDirectory: URL = AppConstants.appSupportDirectory,
@@ -143,7 +146,7 @@ final class UsageStatisticsService: ObservableObject, UsageStatisticsRecording {
         }
 
         do {
-            try upsertDay(
+            let statisticsDay = try upsertDay(
                 timestamp: timestamp,
                 wordsCount: wordsCount,
                 durationSeconds: durationSeconds,
@@ -153,7 +156,12 @@ final class UsageStatisticsService: ObservableObject, UsageStatisticsRecording {
                 modelUsed: modelUsed
             )
             save()
-            fetchDays()
+            if needsFullReload {
+                fetchDays()
+            } else {
+                // Only one day changed, so patch it instead of refetching and decoding every day.
+                applySnapshot(Self.snapshot(of: statisticsDay))
+            }
         } catch {
             usageStatisticsLogger.error("Failed to record usage statistics: \(error.localizedDescription)")
         }
@@ -356,6 +364,7 @@ final class UsageStatisticsService: ObservableObject, UsageStatisticsRecording {
         )
     }
 
+    @discardableResult
     private func upsertDay(
         timestamp: Date,
         wordsCount: Int,
@@ -364,7 +373,7 @@ final class UsageStatisticsService: ObservableObject, UsageStatisticsRecording {
         appName: String? = nil,
         engineUsed: String? = nil,
         modelUsed: String? = nil
-    ) throws {
+    ) throws -> UsageStatisticsDay {
         let dayStart = calendar.startOfDay(for: timestamp)
         let statisticsDay: UsageStatisticsDay
         if let existingDay = try findDay(dayStart) {
@@ -383,6 +392,7 @@ final class UsageStatisticsService: ObservableObject, UsageStatisticsRecording {
             modelUsed: modelUsed,
             hour: calendar.component(.hour, from: timestamp)
         )
+        return statisticsDay
     }
 
     private func summarize(_ snapshots: [UsageStatisticsDaySnapshot]) -> UsageStatisticsSummary {
@@ -397,32 +407,50 @@ final class UsageStatisticsService: ObservableObject, UsageStatisticsRecording {
     }
 
     private func findDay(_ day: Date) throws -> UsageStatisticsDay? {
-        let descriptor = FetchDescriptor<UsageStatisticsDay>()
-        let existing = try modelContext.fetch(descriptor)
-        return existing.first { $0.day == day }
+        var descriptor = FetchDescriptor<UsageStatisticsDay>(
+            predicate: #Predicate { $0.day == day }
+        )
+        descriptor.fetchLimit = 1
+        return try modelContext.fetch(descriptor).first
     }
 
+    /// Replaces or inserts one day in `days`, keeping the newest-first order of `fetchDays()`.
+    private func applySnapshot(_ snapshot: UsageStatisticsDaySnapshot) {
+        if let index = days.firstIndex(where: { $0.day == snapshot.day }) {
+            days[index] = snapshot
+        } else {
+            let index = days.firstIndex(where: { $0.day < snapshot.day }) ?? days.endIndex
+            days.insert(snapshot, at: index)
+        }
+    }
+
+    /// Full reload of every day. Reserved for initialization, recovery, backfills, and rebuilds;
+    /// a single recorded transcription uses `applySnapshot(_:)` instead.
     private func fetchDays() {
         let descriptor = FetchDescriptor<UsageStatisticsDay>(
             sortBy: [SortDescriptor(\.day, order: .reverse)]
         )
         do {
-            days = try modelContext.fetch(descriptor).map {
-                UsageStatisticsDaySnapshot(
-                    day: $0.day,
-                    transcriptionCount: $0.transcriptionCount,
-                    totalWords: $0.totalWords,
-                    totalDurationSeconds: $0.totalDurationSeconds,
-                    appBundleIdentifiers: $0.appBundleIdentifiers,
-                    appCounts: $0.appCounts,
-                    modelCounts: $0.modelCounts,
-                    hourCounts: $0.hourCounts
-                )
-            }
+            days = try modelContext.fetch(descriptor).map(Self.snapshot(of:))
+            needsFullReload = false
         } catch {
             usageStatisticsLogger.error("Failed to fetch usage statistics days: \(error.localizedDescription)")
             days = []
+            needsFullReload = true
         }
+    }
+
+    private static func snapshot(of statisticsDay: UsageStatisticsDay) -> UsageStatisticsDaySnapshot {
+        UsageStatisticsDaySnapshot(
+            day: statisticsDay.day,
+            transcriptionCount: statisticsDay.transcriptionCount,
+            totalWords: statisticsDay.totalWords,
+            totalDurationSeconds: statisticsDay.totalDurationSeconds,
+            appBundleIdentifiers: statisticsDay.appBundleIdentifiers,
+            appCounts: statisticsDay.appCounts,
+            modelCounts: statisticsDay.modelCounts,
+            hourCounts: statisticsDay.hourCounts
+        )
     }
 
     private func metadataValue(for key: String) throws -> String? {

@@ -1,5 +1,6 @@
 import AppKit
 import AVFoundation
+import CoreAudio
 import UniformTypeIdentifiers
 
 enum SoundChoice: Hashable, Sendable {
@@ -111,31 +112,281 @@ enum SoundEvent: CaseIterable {
     }
 }
 
+/// The part of `AVAudioPlayer` used for sound cues, so tests can observe player creation.
+protocol SoundCuePlayback: AnyObject {
+    var duration: TimeInterval { get }
+    @discardableResult
+    func prepareToPlay() -> Bool
+    @discardableResult
+    func play() -> Bool
+}
+
+extension AVAudioPlayer: SoundCuePlayback {}
+
 @MainActor
 protocol OneShotSoundPlaying: AnyObject {
     @discardableResult
     func play(url: URL) -> Bool
+    func duration(for url: URL) -> TimeInterval?
+    /// Keeps a prepared player ready for each URL and releases players for URLs no longer listed.
+    func preparePlayback(for urls: Set<URL>)
+    /// Drops cached state for a file whose contents changed or were removed.
+    func invalidate(url: URL)
 }
 
-@MainActor
-final class AVAudioOneShotSoundPlayer: OneShotSoundPlaying {
-    private var activePlayers: [AVAudioPlayer] = []
+/// Hands a player created on the preparation queue over to the main actor.
+/// The preparation queue does not touch the player after handing it over.
+private final class PreparedSoundCue: @unchecked Sendable {
+    let player: any SoundCuePlayback
 
-    @discardableResult
-    func play(url: URL) -> Bool {
-        do {
-            let player = try AVAudioPlayer(contentsOf: url)
-            player.prepareToPlay()
-            guard player.play() else { return false }
-            activePlayers.append(player)
-            release(player, after: player.duration)
-            return true
-        } catch {
-            return false
+    init(player: any SoundCuePlayback) {
+        self.player = player
+    }
+}
+
+/// Calls `onChange` on the main queue when the default output device changes, or when the
+/// current default output device changes its sample rate or output channel configuration.
+/// The latter covers devices that keep their ID while reconfiguring, such as a Bluetooth
+/// headset switching from A2DP to HFP when its microphone starts.
+private final class OutputDeviceConfigurationObserver: @unchecked Sendable {
+    // Mutable state is only touched from init, deinit and listener callbacks, which CoreAudio
+    // delivers on the main queue.
+    private static let systemObjectID = AudioObjectID(kAudioObjectSystemObject)
+    private static let defaultOutputDeviceAddress = AudioObjectPropertyAddress(
+        mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+        mScope: kAudioObjectPropertyScopeGlobal,
+        mElement: kAudioObjectPropertyElementMain
+    )
+    private static let deviceConfigurationAddresses = [
+        AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyNominalSampleRate,
+            mScope: kAudioObjectPropertyScopeGlobal,
+            mElement: kAudioObjectPropertyElementMain
+        ),
+        AudioObjectPropertyAddress(
+            mSelector: kAudioDevicePropertyStreamConfiguration,
+            mScope: kAudioDevicePropertyScopeOutput,
+            mElement: kAudioObjectPropertyElementMain
+        )
+    ]
+
+    private let onChange: @MainActor @Sendable () -> Void
+    private var defaultDeviceListener: AudioObjectPropertyListenerBlock?
+    private var deviceConfigurationListener: AudioObjectPropertyListenerBlock?
+    private var observedDeviceID: AudioObjectID?
+
+    init(onChange: @escaping @MainActor @Sendable () -> Void) {
+        self.onChange = onChange
+        let defaultDeviceListener: AudioObjectPropertyListenerBlock = { [weak self] _, _ in
+            self?.defaultOutputDeviceChanged()
+        }
+        self.defaultDeviceListener = defaultDeviceListener
+        deviceConfigurationListener = { [weak self] _, _ in
+            self?.notifyChange()
+        }
+
+        var address = Self.defaultOutputDeviceAddress
+        AudioObjectAddPropertyListenerBlock(Self.systemObjectID, &address, DispatchQueue.main, defaultDeviceListener)
+        observeConfiguration(of: Self.defaultOutputDeviceID())
+    }
+
+    deinit {
+        observeConfiguration(of: nil)
+        if let defaultDeviceListener {
+            var address = Self.defaultOutputDeviceAddress
+            AudioObjectRemovePropertyListenerBlock(Self.systemObjectID, &address, DispatchQueue.main, defaultDeviceListener)
         }
     }
 
-    private func release(_ player: AVAudioPlayer, after duration: TimeInterval) {
+    private func defaultOutputDeviceChanged() {
+        observeConfiguration(of: Self.defaultOutputDeviceID())
+        notifyChange()
+    }
+
+    private func notifyChange() {
+        MainActor.assumeIsolated {
+            onChange()
+        }
+    }
+
+    private func observeConfiguration(of deviceID: AudioObjectID?) {
+        guard deviceID != observedDeviceID, let listener = deviceConfigurationListener else { return }
+        if let observedDeviceID {
+            for initialAddress in Self.deviceConfigurationAddresses {
+                var address = initialAddress
+                AudioObjectRemovePropertyListenerBlock(observedDeviceID, &address, DispatchQueue.main, listener)
+            }
+        }
+        observedDeviceID = deviceID
+        guard let deviceID else { return }
+        for initialAddress in Self.deviceConfigurationAddresses {
+            var address = initialAddress
+            guard AudioObjectHasProperty(deviceID, &address) else { continue }
+            AudioObjectAddPropertyListenerBlock(deviceID, &address, DispatchQueue.main, listener)
+        }
+    }
+
+    private static func defaultOutputDeviceID() -> AudioObjectID? {
+        var deviceID = AudioObjectID(0)
+        var size = UInt32(MemoryLayout<AudioObjectID>.size)
+        var address = defaultOutputDeviceAddress
+        let status = AudioObjectGetPropertyData(systemObjectID, &address, 0, nil, &size, &deviceID)
+        guard status == noErr, deviceID != kAudioObjectUnknown else { return nil }
+        return deviceID
+    }
+}
+
+/// Plays sound cues from prepared players.
+///
+/// Creating and priming an `AVAudioPlayer` blocks for file I/O, decoder setup and
+/// AudioQueue priming. Each tracked cue therefore keeps one player that was created and
+/// primed on a background queue, so `play(url:)` only starts playback. A played player
+/// is not reused: after playback it would be primed again on the calling thread. Instead,
+/// a replacement is prepared in the background after every play.
+@MainActor
+final class AVAudioOneShotSoundPlayer: OneShotSoundPlaying {
+    typealias PlayerFactory = @Sendable (URL) throws -> any SoundCuePlayback
+
+    private struct CachedPlayer {
+        let player: any SoundCuePlayback
+        let isPrepared: Bool
+    }
+
+    private let makePlayer: PlayerFactory
+    private let preparationQueue: DispatchQueue
+    private var outputDeviceObserver: OutputDeviceConfigurationObserver?
+    private var playbackURLs: Set<URL> = []
+    private var cachedPlayers: [URL: CachedPlayer] = [:]
+    private var durations: [URL: TimeInterval] = [:]
+    private var preparations: [URL: Task<Void, Never>] = [:]
+    private var preparationGenerations: [URL: Int] = [:]
+    private var activePlayers: [any SoundCuePlayback] = []
+
+    init(
+        makePlayer: @escaping PlayerFactory = { try AVAudioPlayer(contentsOf: $0) },
+        preparationQueue: DispatchQueue = DispatchQueue(label: "com.typewhisper.sound-cue-preparation", qos: .utility),
+        observesOutputDeviceChanges: Bool = true
+    ) {
+        self.makePlayer = makePlayer
+        self.preparationQueue = preparationQueue
+        if observesOutputDeviceChanges {
+            outputDeviceObserver = OutputDeviceConfigurationObserver { [weak self] in
+                self?.handleOutputDeviceConfigurationChange()
+            }
+        }
+    }
+
+    @discardableResult
+    func play(url: URL) -> Bool {
+        defer { preparePlayer(for: url) }
+        if let cached = cachedPlayers.removeValue(forKey: url),
+           start(cached.player, needsPreparation: !cached.isPrepared) {
+            return true
+        }
+
+        guard let player = try? makePlayer(url) else { return false }
+        durations[url] = player.duration
+        return start(player, needsPreparation: true)
+    }
+
+    func duration(for url: URL) -> TimeInterval? {
+        if let duration = durations[url] {
+            return duration
+        }
+        guard let player = try? makePlayer(url) else { return nil }
+        durations[url] = player.duration
+        if cachedPlayers[url] == nil {
+            // Keep the player so the next play(url:) does not create another one.
+            cachedPlayers[url] = CachedPlayer(player: player, isPrepared: false)
+        }
+        return player.duration
+    }
+
+    func preparePlayback(for urls: Set<URL>) {
+        for url in playbackURLs.subtracting(urls) {
+            discardCachedPlayer(for: url)
+        }
+        playbackURLs = urls
+        for url in urls {
+            preparePlayer(for: url)
+        }
+    }
+
+    func invalidate(url: URL) {
+        discardCachedPlayer(for: url)
+        durations[url] = nil
+        preparePlayer(for: url)
+    }
+
+    /// Prepared players are primed for the output format at preparation time, so they are
+    /// replaced whenever the output device or its format changes.
+    func handleOutputDeviceConfigurationChange() {
+        let urls = playbackURLs.union(cachedPlayers.keys)
+        for url in urls {
+            discardCachedPlayer(for: url)
+            preparePlayer(for: url)
+        }
+    }
+
+    func waitForPendingPreparationsForTesting() async {
+        while let preparation = preparations.values.first {
+            await preparation.value
+        }
+    }
+
+    private func start(_ player: any SoundCuePlayback, needsPreparation: Bool) -> Bool {
+        if needsPreparation {
+            player.prepareToPlay()
+        }
+        guard player.play() else { return false }
+        activePlayers.append(player)
+        release(player, after: player.duration)
+        return true
+    }
+
+    private func preparePlayer(for url: URL) {
+        guard playbackURLs.contains(url),
+              cachedPlayers[url] == nil,
+              preparations[url] == nil else {
+            return
+        }
+
+        let generation = preparationGenerations[url, default: 0]
+        let makePlayer = makePlayer
+        let preparationQueue = preparationQueue
+        preparations[url] = Task { [weak self] in
+            let cue = await withCheckedContinuation { (continuation: CheckedContinuation<PreparedSoundCue?, Never>) in
+                preparationQueue.async {
+                    continuation.resume(returning: AVAudioOneShotSoundPlayer.makePreparedCue(for: url, using: makePlayer))
+                }
+            }
+            self?.finishPreparation(for: url, generation: generation, cue: cue)
+        }
+    }
+
+    private func finishPreparation(for url: URL, generation: Int, cue: PreparedSoundCue?) {
+        guard preparationGenerations[url, default: 0] == generation else { return }
+        preparations[url] = nil
+        guard let cue else { return }
+        durations[url] = cue.player.duration
+        if cachedPlayers[url]?.isPrepared != true {
+            cachedPlayers[url] = CachedPlayer(player: cue.player, isPrepared: true)
+        }
+    }
+
+    private func discardCachedPlayer(for url: URL) {
+        preparationGenerations[url, default: 0] += 1
+        preparations.removeValue(forKey: url)?.cancel()
+        cachedPlayers[url] = nil
+    }
+
+    private nonisolated static func makePreparedCue(for url: URL, using makePlayer: PlayerFactory) -> PreparedSoundCue? {
+        guard let player = try? makePlayer(url) else { return nil }
+        player.prepareToPlay()
+        return PreparedSoundCue(player: player)
+    }
+
+    private func release(_ player: any SoundCuePlayback, after duration: TimeInterval) {
         let nanoseconds = UInt64(max(duration + 0.5, 0.5) * 1_000_000_000)
         Task { @MainActor [weak self, weak player] in
             try? await Task.sleep(nanoseconds: nanoseconds)
@@ -157,6 +408,7 @@ class SoundService {
         self.oneShotPlayer = oneShotPlayer
         preloadSounds()
         loadChoices()
+        prepareFilePlayback()
     }
 
     @discardableResult
@@ -176,7 +428,7 @@ class SoundService {
         guard enabled else { return nil }
         let choice = choices[event] ?? event.defaultChoice
         if let playbackURL = filePlaybackURL(for: choice),
-           let duration = Self.audioFileDuration(for: playbackURL) {
+           let duration = oneShotPlayer.duration(for: playbackURL) {
             return duration
         }
         return sound(for: choice)?.duration
@@ -189,6 +441,7 @@ class SoundService {
     func updateChoice(for event: SoundEvent, choice: SoundChoice) {
         choices[event] = choice
         UserDefaults.standard.set(choice.storageKey, forKey: event.userDefaultsKey)
+        prepareFilePlayback()
     }
 
     func preview(_ choice: SoundChoice) {
@@ -204,6 +457,7 @@ class SoundService {
         let filename = sourceURL.lastPathComponent
         let destination = dir.appendingPathComponent(filename)
         resolvedSounds[.custom(filename)] = nil
+        defer { oneShotPlayer.invalidate(url: destination) }
         if FileManager.default.fileExists(atPath: destination.path) {
             try FileManager.default.removeItem(at: destination)
         }
@@ -220,6 +474,7 @@ class SoundService {
                 updateChoice(for: event, choice: event.defaultChoice)
             }
         }
+        oneShotPlayer.invalidate(url: path)
     }
 
     func sound(for choice: SoundChoice) -> NSSound? {
@@ -268,9 +523,9 @@ class SoundService {
         }
     }
 
-    private static func audioFileDuration(for url: URL) -> TimeInterval? {
-        guard let player = try? AVAudioPlayer(contentsOf: url) else { return nil }
-        return player.duration
+    private func prepareFilePlayback() {
+        let urls = SoundEvent.allCases.compactMap { filePlaybackURL(for: choice(for: $0)) }
+        oneShotPlayer.preparePlayback(for: Set(urls))
     }
 
     private func preloadSounds() {

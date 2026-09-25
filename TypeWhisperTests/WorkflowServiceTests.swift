@@ -206,6 +206,51 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertEqual(decoded.autoEnterMode, .spokenCommand)
     }
 
+    @MainActor
+    func testWorkflowWebsiteSuggestionsLoadHistoryDomainsOnce() async {
+        var loadCount = 0
+        let store = WorkflowWebsiteSuggestionStore {
+            loadCount += 1
+            return ["github.com", "docs.github.com", "example.com"]
+        }
+        XCTAssertEqual(store.suggestions(for: "", excluding: []), [])
+
+        await store.loadIfNeeded()
+        await store.loadIfNeeded()
+
+        XCTAssertEqual(
+            store.suggestions(for: "", excluding: ["example.com"]),
+            ["github.com", "docs.github.com"]
+        )
+        XCTAssertEqual(
+            store.suggestions(for: " WWW.GitHub ", excluding: []),
+            ["github.com", "docs.github.com"]
+        )
+        XCTAssertEqual(store.suggestions(for: "docs", excluding: ["docs.github.com"]), [])
+        XCTAssertEqual(loadCount, 1)
+    }
+
+    @MainActor
+    func testWorkflowWebsiteSuggestionsReloadAfterCancelledLoad() async {
+        var loadCount = 0
+        let store = WorkflowWebsiteSuggestionStore {
+            loadCount += 1
+            return ["github.com"]
+        }
+
+        // The editor disappeared before its load finished.
+        let cancelledLoad = Task { await store.loadIfNeeded() }
+        cancelledLoad.cancel()
+        await cancelledLoad.value
+        XCTAssertEqual(store.suggestions(for: "", excluding: []), [])
+
+        await store.loadIfNeeded()
+        await store.loadIfNeeded()
+
+        XCTAssertEqual(store.suggestions(for: "", excluding: []), ["github.com"])
+        XCTAssertEqual(loadCount, 2)
+    }
+
     func testWorkflowDraftPreservesSpokenAutoEnterMode() {
         let workflow = Workflow(
             name: "Spoken Submit",
@@ -305,6 +350,37 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertFalse(never.shouldPressEnter)
         XCTAssertEqual(always.text, "  Draft ready  ")
         XCTAssertTrue(always.shouldPressEnter)
+    }
+
+    func testAutoEnterAfterInsertionSkipsAlwaysModeForRawFallbackButKeepsExplicitSubmit() {
+        let always = WorkflowAutoEnterResolver.resolve(text: "Translated text", mode: .always)
+        XCTAssertTrue(WorkflowAutoEnterResolver.shouldPressEnterAfterInsertion(
+            mode: .always, resolution: always, insertedText: "Translated text", usedRawTranscriptionFallback: false
+        ))
+        XCTAssertFalse(WorkflowAutoEnterResolver.shouldPressEnterAfterInsertion(
+            mode: .always, resolution: always, insertedText: "Raw text", usedRawTranscriptionFallback: true
+        ))
+
+        let spoken = WorkflowAutoEnterResolver.resolve(text: "Raw text press enter", mode: .spokenCommand)
+        let physical = WorkflowAutoEnterResolver.resolve(text: "Raw text", mode: .duringDictation, submitRequested: true)
+        for (mode, resolution) in [(WorkflowAutoEnterMode.spokenCommand, spoken), (.duringDictation, physical)] {
+            for usedFallback in [false, true] {
+                XCTAssertTrue(WorkflowAutoEnterResolver.shouldPressEnterAfterInsertion(
+                    mode: mode, resolution: resolution, insertedText: "Raw text", usedRawTranscriptionFallback: usedFallback
+                ), "\(mode) fallback=\(usedFallback)")
+                XCTAssertFalse(WorkflowAutoEnterResolver.shouldPressEnterAfterInsertion(
+                    mode: mode, resolution: resolution, insertedText: "  ", usedRawTranscriptionFallback: usedFallback
+                ), "\(mode) empty fallback=\(usedFallback)")
+            }
+        }
+
+        let unrequested = WorkflowAutoEnterResolver.resolve(text: "Raw text", mode: .duringDictation)
+        let never = WorkflowAutoEnterResolver.resolve(text: "Raw text", mode: .never)
+        for (mode, resolution) in [(WorkflowAutoEnterMode.duringDictation, unrequested), (.never, never)] {
+            XCTAssertFalse(WorkflowAutoEnterResolver.shouldPressEnterAfterInsertion(
+                mode: mode, resolution: resolution, insertedText: "Raw text", usedRawTranscriptionFallback: true
+            ), "\(mode)")
+        }
     }
 
     func testStoredWorkflowTriggerWithoutHotkeyBehaviorDefaultsToStartDictation() throws {

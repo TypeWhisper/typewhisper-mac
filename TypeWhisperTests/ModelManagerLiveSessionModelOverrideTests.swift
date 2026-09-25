@@ -299,6 +299,19 @@ final class ModelManagerLiveSessionModelOverrideTests: XCTestCase {
         XCTAssertFalse(plugin.usedBatchTranscribe)
     }
 
+    func testExplicitLoadOfConfiguredModelSupersedesImportButKeepsIdleFastPath() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let plugin = ConfiguredImportingModelManagerPlugin()
+        let modelManager = installBatchPlugin(plugin, appSupportDirectory: appSupportDirectory)
+        try await modelManager.loadModel(plugin.providerId, modelId: "alpha")
+        XCTAssertEqual(plugin.explicitRequests, ["alpha"])
+        XCTAssertNil(plugin.currentSettingsActivity)
+        // Once idle, requesting the same configured model should remain a no-op.
+        try await modelManager.loadModel(plugin.providerId, modelId: "alpha")
+        XCTAssertEqual(plugin.explicitRequests, ["alpha"])
+    }
+
     private func installLivePlugin(
         _ plugin: LiveModelOverrideTranscriptionPlugin,
         appSupportDirectory: URL
@@ -803,4 +816,30 @@ private actor LiveModelOverrideSession: LiveTranscriptionSession {
     }
 
     func cancel() async {}
+}
+
+private final class ConfiguredImportingModelManagerPlugin: NSObject, TranscriptionEnginePlugin, PluginSettingsActivityReporting, @unchecked Sendable {
+    static let pluginId = "test.configured-import"
+    static let pluginName = "Configured import"
+    var providerId: String { Self.pluginId }
+    var providerDisplayName: String { Self.pluginName }
+    var isConfigured: Bool { true }
+    var selectedModelId: String? { "alpha" }
+    var transcriptionModels: [PluginModelInfo] { [PluginModelInfo(id: "alpha", displayName: "Alpha")] }
+    var supportsTranslation: Bool { false }
+    var supportsStreaming: Bool { false }
+    var supportedLanguages: [String] { ["en"] }
+    var currentSettingsActivity: PluginSettingsActivity? = PluginSettingsActivity(message: "Importing model")
+    var explicitRequests: [String] = []
+    func activate(host: HostServices) {}
+    func deactivate() {}
+    func selectModel(_ modelId: String) {}
+    @objc(triggerRestoreModelForModel:)
+    func triggerRestoreModel(forModel modelId: NSString?) {
+        explicitRequests.append(modelId as String? ?? "")
+        currentSettingsActivity = nil
+    }
+    func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+        PluginTranscriptionResult(text: "")
+    }
 }

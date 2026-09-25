@@ -499,7 +499,7 @@ struct AdvancedSettingsView: View {
             checkCLIInstallation()
             syncSpeechFeedbackAvailability()
         }
-        .onReceive(pluginManager.$loadedPlugins) { _ in
+        .onReceive(pluginManager.$registryRevision) { _ in
             syncSpeechFeedbackAvailability()
         }
         .alert(localizedAppText("Export Failed", de: "Export fehlgeschlagen"), isPresented: $showDiagnosticsExportError) {

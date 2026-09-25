@@ -301,7 +301,9 @@ final class ModelManagerService: ObservableObject {
             throw ModelLifecycleError.modelNotFound(engineId: providerId, modelId: modelId)
         }
 
-        if pluginConfiguredState(
+        // A configured runtime can coexist with an import. Still deliver an
+        // explicit request so the plugin can supersede that pending operation.
+        if pluginSettingsActivity(plugin) == nil, pluginConfiguredState(
             plugin,
             selectedModelId: modelId,
             stopOnMismatchedSelection: true
@@ -538,7 +540,10 @@ final class ModelManagerService: ObservableObject {
                 || passiveRestoreSelection?.instance != identity else { return }
         guard canUseForTranscription(engine) else { return }
         passiveRestoreSelection = (providerId, identity)
-        (plugin.instance as? any PassiveModelRestoreProviding)?.requestPassiveModelRestore()
+        if let restoreProvider = plugin.instance as? any PassiveModelRestoreProviding {
+            LaunchSignposts.signposter.emitEvent("Model.passiveRestoreRequested")
+            restoreProvider.requestPassiveModelRestore()
+        }
     }
 
     // MARK: - Transcription

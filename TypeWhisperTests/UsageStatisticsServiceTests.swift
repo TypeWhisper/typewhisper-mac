@@ -407,6 +407,195 @@ final class UsageStatisticsServiceTests: XCTestCase {
         XCTAssertEqual(current.hourlyCount, 4)
     }
 
+    @MainActor
+    func testRecordingTranscriptionUpdatesExistingDayInPlace() throws {
+        let directory = try TestSupport.makeTemporaryDirectory(prefix: "UsageStatisticsUpdateDay")
+        defer { TestSupport.remove(directory) }
+
+        let calendar = Self.utcCalendar()
+        let service = UsageStatisticsService(appSupportDirectory: directory, calendar: calendar)
+        let morning = Self.date(year: 2026, month: 7, day: 5, hour: 9, calendar: calendar)
+        let evening = Self.date(year: 2026, month: 7, day: 5, hour: 18, calendar: calendar)
+        let yesterday = Self.date(year: 2026, month: 7, day: 4, hour: 12, calendar: calendar)
+
+        service.recordTranscription(timestamp: yesterday, wordsCount: 5, durationSeconds: 2, appBundleIdentifier: "com.example.notes")
+        service.recordTranscription(
+            timestamp: morning,
+            wordsCount: 10,
+            durationSeconds: 4,
+            appBundleIdentifier: "com.example.editor",
+            appName: "Editor",
+            engineUsed: "parakeet",
+            modelUsed: "fast"
+        )
+        service.recordTranscription(
+            timestamp: evening,
+            wordsCount: 20,
+            durationSeconds: 6,
+            appBundleIdentifier: "com.example.mail",
+            appName: "Mail",
+            engineUsed: "whisper",
+            modelUsed: "small"
+        )
+
+        XCTAssertEqual(service.days.count, 2)
+        let today = try XCTUnwrap(service.days.first)
+        XCTAssertEqual(today.day, calendar.startOfDay(for: morning))
+        XCTAssertEqual(today.transcriptionCount, 2)
+        XCTAssertEqual(today.totalWords, 30)
+        XCTAssertEqual(today.totalDurationSeconds, 10, accuracy: 0.001)
+        XCTAssertEqual(today.appBundleIdentifiers, ["com.example.editor", "com.example.mail"])
+        XCTAssertEqual(today.appCounts, [
+            UsageStatisticsKeys.appKey(bundleIdentifier: "com.example.editor", appName: "Editor"): 1,
+            UsageStatisticsKeys.appKey(bundleIdentifier: "com.example.mail", appName: "Mail"): 1
+        ])
+        XCTAssertEqual(today.modelCounts, [
+            UsageStatisticsKeys.modelKey(engineUsed: "parakeet", modelUsed: "fast"): 1,
+            UsageStatisticsKeys.modelKey(engineUsed: "whisper", modelUsed: "small"): 1
+        ])
+        XCTAssertEqual(today.hourCounts[9], 1)
+        XCTAssertEqual(today.hourCounts[18], 1)
+        XCTAssertEqual(service.days.last?.totalWords, 5)
+    }
+
+    @MainActor
+    func testRecordingTranscriptionInsertsNewDaysNewestFirstAndPersistsAcrossRelaunch() throws {
+        let directory = try TestSupport.makeTemporaryDirectory(prefix: "UsageStatisticsInsertDay")
+        defer { TestSupport.remove(directory) }
+
+        let calendar = Self.utcCalendar()
+        let service = UsageStatisticsService(appSupportDirectory: directory, calendar: calendar)
+        let recordedDays = [10, 12, 8, 11, 12, 9, 10]
+
+        for (index, day) in recordedDays.enumerated() {
+            service.recordTranscription(
+                timestamp: Self.date(year: 2026, month: 7, day: day, hour: index + 8, calendar: calendar),
+                wordsCount: day,
+                durationSeconds: 1,
+                appBundleIdentifier: "com.example.app\(index)",
+                appName: "App \(index)",
+                engineUsed: "parakeet",
+                modelUsed: "fast"
+            )
+        }
+
+        let expectedDays = [12, 11, 10, 9, 8].map { Self.date(year: 2026, month: 7, day: $0, hour: 0, calendar: calendar) }
+        XCTAssertEqual(service.days.map(\.day), expectedDays)
+        XCTAssertEqual(service.days.map(\.transcriptionCount), [2, 1, 2, 1, 1])
+        XCTAssertEqual(service.days.map(\.totalWords), [24, 11, 20, 9, 8])
+
+        let relaunchedService = UsageStatisticsService(appSupportDirectory: directory, calendar: calendar)
+        XCTAssertEqual(relaunchedService.days, service.days)
+    }
+
+    @MainActor
+    func testRecordingTranscriptionDoesNotReloadUnrelatedDays() throws {
+        let directory = try TestSupport.makeTemporaryDirectory(prefix: "UsageStatisticsNoFullReload")
+        defer { TestSupport.remove(directory) }
+
+        let calendar = Self.utcCalendar()
+        let service = UsageStatisticsService(appSupportDirectory: directory, calendar: calendar)
+        let today = Self.date(year: 2026, month: 7, day: 5, hour: 12, calendar: calendar)
+        let unrelatedDay = Self.date(year: 2026, month: 7, day: 1, hour: 0, calendar: calendar)
+        service.recordTranscription(timestamp: today, wordsCount: 10, durationSeconds: 5, appBundleIdentifier: nil)
+
+        // Written behind the service's back: only a full reload of every day would surface it.
+        do {
+            let (_, context) = try SwiftDataStoreFactory.create(
+                for: [UsageStatisticsDay.self, UsageStatisticsMetadata.self],
+                storeName: "usage-statistics",
+                in: directory
+            )
+            context.insert(UsageStatisticsDay(day: unrelatedDay, transcriptionCount: 1, totalWords: 3))
+            try context.save()
+        }
+
+        service.recordTranscription(timestamp: today, wordsCount: 10, durationSeconds: 5, appBundleIdentifier: nil)
+
+        XCTAssertEqual(service.days.map(\.day), [calendar.startOfDay(for: today)])
+        XCTAssertEqual(service.days.first?.totalWords, 20)
+
+        let relaunchedService = UsageStatisticsService(appSupportDirectory: directory, calendar: calendar)
+        XCTAssertEqual(relaunchedService.days.map(\.day), [calendar.startOfDay(for: today), unrelatedDay])
+    }
+
+    @MainActor
+    func testRecordingTranscriptionPublishesUpdatedDaysOnce() throws {
+        let directory = try TestSupport.makeTemporaryDirectory(prefix: "UsageStatisticsPublish")
+        defer { TestSupport.remove(directory) }
+
+        let calendar = Self.utcCalendar()
+        let service = UsageStatisticsService(appSupportDirectory: directory, calendar: calendar)
+        let today = Self.date(year: 2026, month: 7, day: 5, hour: 12, calendar: calendar)
+        var publishedDays: [[UsageStatisticsDaySnapshot]] = []
+        let cancellable = service.$days.dropFirst().sink { publishedDays.append($0) }
+        defer { cancellable.cancel() }
+
+        service.recordTranscription(timestamp: today, wordsCount: 10, durationSeconds: 5, appBundleIdentifier: nil)
+        service.recordTranscription(timestamp: today, wordsCount: 15, durationSeconds: 5, appBundleIdentifier: nil)
+
+        XCTAssertEqual(publishedDays.count, 2)
+        XCTAssertEqual(publishedDays.map { $0.map(\.totalWords) }, [[10], [25]])
+        XCTAssertEqual(publishedDays.last, service.days)
+    }
+
+    @MainActor
+    func testHistoryBackfillAggregatesSameDayRecordsAndLaterRecordingsPatchBackfilledDays() throws {
+        let directory = try TestSupport.makeTemporaryDirectory(prefix: "UsageStatisticsBackfillPatch")
+        defer { TestSupport.remove(directory) }
+
+        let calendar = Self.utcCalendar()
+        let records = [
+            (day: 3, hour: 9, text: "one two three"),
+            (day: 1, hour: 10, text: "four five"),
+            (day: 3, hour: 14, text: "six"),
+            (day: 2, hour: 8, text: "seven eight nine ten"),
+            (day: 3, hour: 9, text: "eleven twelve")
+        ].map { entry in
+            TranscriptionRecord(
+                timestamp: Self.date(year: 2026, month: 7, day: entry.day, hour: entry.hour, calendar: calendar),
+                rawText: entry.text,
+                finalText: entry.text,
+                appName: "Editor",
+                appBundleIdentifier: "com.example.editor",
+                durationSeconds: 2,
+                engineUsed: "parakeet",
+                modelUsed: "fast"
+            )
+        }
+
+        let service = UsageStatisticsService(appSupportDirectory: directory, calendar: calendar)
+        service.backfillFromHistoryIfNeeded(records)
+
+        let backfilledDays = [3, 2, 1].map { Self.date(year: 2026, month: 7, day: $0, hour: 0, calendar: calendar) }
+        XCTAssertEqual(service.days.map(\.day), backfilledDays)
+        XCTAssertEqual(service.days.map(\.transcriptionCount), [3, 1, 1])
+        XCTAssertEqual(service.days.map(\.totalWords), [6, 4, 2])
+        XCTAssertEqual(service.days.first?.hourCounts[9], 2)
+        XCTAssertEqual(service.days.first?.hourCounts[14], 1)
+
+        service.recordTranscription(
+            timestamp: Self.date(year: 2026, month: 7, day: 2, hour: 20, calendar: calendar),
+            wordsCount: 6,
+            durationSeconds: 3,
+            appBundleIdentifier: "com.example.mail",
+            appName: "Mail",
+            engineUsed: "whisper",
+            modelUsed: "small"
+        )
+
+        XCTAssertEqual(service.days.map(\.day), backfilledDays)
+        XCTAssertEqual(service.days.map(\.transcriptionCount), [3, 2, 1])
+        XCTAssertEqual(service.days.map(\.totalWords), [6, 10, 2])
+
+        // A second backfill pass must not count the history again.
+        service.backfillFromHistoryIfNeeded(records)
+        XCTAssertEqual(service.days.map(\.transcriptionCount), [3, 2, 1])
+
+        let relaunchedService = UsageStatisticsService(appSupportDirectory: directory, calendar: calendar)
+        XCTAssertEqual(relaunchedService.days, service.days)
+    }
+
     private static func utcCalendar() -> Calendar {
         var calendar = Calendar(identifier: .gregorian)
         calendar.timeZone = TimeZone(secondsFromGMT: 0)!

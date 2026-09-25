@@ -2271,9 +2271,12 @@ final class DictationViewModel: ObservableObject {
                     )
                 }
                 let shouldAutoEnterAfterInsertion = actionPluginId == nil
-                    && (autoEnterMode == .always
-                        || (autoEnterResolution.shouldPressEnter
-                            && !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))
+                    && WorkflowAutoEnterResolver.shouldPressEnterAfterInsertion(
+                        mode: autoEnterMode,
+                        resolution: autoEnterResolution,
+                        insertedText: text,
+                        usedRawTranscriptionFallback: postProcessingFallback != nil
+                    )
                 logger.info("Stop timing: post-processing done elapsedMs=\(stopElapsedMs(), privacy: .public)")
                 let transcriptionID = sessionID ?? UUID()
                 let completionTimestamp = Date()

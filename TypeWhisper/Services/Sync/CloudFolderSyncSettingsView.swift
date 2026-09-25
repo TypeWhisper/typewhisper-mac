@@ -693,6 +693,19 @@ final class CloudFolderSyncController: ObservableObject {
     private var automaticPollTask: Task<Void, Never>?
     private var entitlementCancellable: AnyCancellable?
     private var needsResync = false
+    private var needsChangeCheck = false
+    private var isCheckingForChanges = false
+    private var isInstallingSynchronizedAudio = false
+    private var hasPendingLocalChanges = false
+    private var synchronizedPackage: (
+        mode: PremiumSyncMode,
+        folderURL: URL,
+        fingerprint: CloudFolderSyncPackageFingerprint?
+    )?
+    private let syncCache = CloudFolderSyncCache()
+    private(set) var initialSyncTask: Task<Void, Never>?
+
+    private static let automaticPollInterval: Duration = .seconds(30)
 
     @Published private(set) var mode: PremiumSyncMode
     @Published private(set) var selectedFolderURL: URL?
@@ -755,20 +768,27 @@ final class CloudFolderSyncController: ObservableObject {
         if mode == .automaticICloud { provider = .iCloudDrive }
         installLocalChangeObserver()
         updateICloudObservation()
+        // Entitlement refreshes republish unchanged values; only gaining access starts a sync.
         entitlementCancellable = premiumAccountService.$entitlement
             .combineLatest(premiumAccountService.$isSignedIn)
+            .map { entitlement, isSignedIn in
+                AppConstants.isPremiumSyncSmokeTest
+                    || (isSignedIn && entitlement?.isActive == true)
+            }
+            .removeDuplicates()
             .dropFirst()
-            .sink { [weak self] _, _ in
+            .sink { [weak self] canUseSync in
+                guard canUseSync else { return }
                 Task { @MainActor in
                     guard let self, self.isConfigured, self.canUseSync else { return }
-                    await self.syncNow()
+                    await self.syncIfNeeded()
                 }
             }
         if isConfigured, canUseSync {
-            Task { @MainActor [weak self] in
+            initialSyncTask = Task { @MainActor [weak self] in
                 await Task.yield()
                 guard let self, self.isConfigured, self.canUseSync else { return }
-                await self.syncNow()
+                await self.syncIfNeeded()
             }
         }
     }
@@ -830,6 +850,8 @@ final class CloudFolderSyncController: ObservableObject {
 
     func setHistoryAudioSyncEnabled(_ enabled: Bool) {
         historySyncPreferences?.isAudioEnabled = enabled
+        // The next automatic check installs audio that is now allowed to arrive.
+        if enabled { hasPendingLocalChanges = true }
         objectWillChange.send()
     }
 
@@ -871,6 +893,8 @@ final class CloudFolderSyncController: ObservableObject {
 
         errorMessage = nil
         isSyncing = true
+        hasPendingLocalChanges = false
+        synchronizedPackage = nil
         let accessed = syncMode == .cloudFolder && folderURL.startAccessingSecurityScopedResource()
         defer {
             if accessed {
@@ -879,8 +903,14 @@ final class CloudFolderSyncController: ObservableObject {
             isSyncing = false
             if needsResync {
                 needsResync = false
+                needsChangeCheck = false
                 Task { @MainActor [weak self] in
                     await self?.syncNow()
+                }
+            } else if needsChangeCheck {
+                needsChangeCheck = false
+                Task { @MainActor [weak self] in
+                    await self?.syncIfNeeded()
                 }
             }
         }
@@ -895,7 +925,8 @@ final class CloudFolderSyncController: ObservableObject {
                 store: syncStore,
                 state: &syncState,
                 entitlements: PaidEntitlements(canUseCloudFolderSync: canUseSync),
-                historyOriginDeviceID: historySyncPreferences?.deviceID
+                historyOriginDeviceID: historySyncPreferences?.deviceID,
+                cache: syncCache
             )
             setState(syncState, for: syncMode)
             if syncMode == .automaticICloud {
@@ -903,12 +934,18 @@ final class CloudFolderSyncController: ObservableObject {
             }
             let audioDiagnostics = await installPendingSynchronizedAudio(in: folderURL)
             guard mode == syncMode else { return }
+            let diagnostics = result.diagnostics + audioDiagnostics
+            // Later checks only skip an unchanged package when nothing is left to retry. Files
+            // that become readable or finish downloading often keep their size and date, and a
+            // requested republish does not change the package either.
+            if !result.requiresFollowUpSync, !diagnostics.contains(where: \.isTransient) {
+                synchronizedPackage = (syncMode, folderURL, result.packageFingerprint)
+            }
             lastSyncDate = result.syncedAt
             pendingChanges = 0
             devices = result.devices
             deviceCount = devices.count
             let synchronizedChanges = result.operationsWritten + result.mutationsApplied
-            let diagnostics = result.diagnostics + audioDiagnostics
             if diagnostics.isEmpty {
                 statusMessage = String.localizedStringWithFormat(
                     String(localized: "Synced %lld changes."), Int64(synchronizedChanges)
@@ -985,6 +1022,9 @@ final class CloudFolderSyncController: ObservableObject {
     }
 
     private func scheduleSyncAfterLocalChange() {
+        // Installing received audio only records the local file name, which is not synced.
+        guard !isInstallingSynchronizedAudio else { return }
+        hasPendingLocalChanges = true
         guard isConfigured, canUseSync else { return }
         pendingChanges += 1
         if isSyncing {
@@ -1011,12 +1051,10 @@ final class CloudFolderSyncController: ObservableObject {
         automaticPollTask = Task { [weak self] in
             while !Task.isCancelled {
                 do {
-                    try await Task.sleep(for: .seconds(30))
+                    try await Task.sleep(for: Self.automaticPollInterval)
                     try Task.checkCancellation()
-                    guard let self, self.mode == .automaticICloud, self.canUseSync else {
-                        continue
-                    }
-                    await self.syncNow()
+                    guard let self else { return }
+                    await self.automaticPollTick()
                 } catch is CancellationError {
                     return
                 } catch {
@@ -1026,12 +1064,87 @@ final class CloudFolderSyncController: ObservableObject {
         }
     }
 
+    /// Checks for remote changes; a full sync only runs when the package or local data changed.
+    func automaticPollTick() async {
+        guard mode == .automaticICloud, canUseSync, !isSyncing else { return }
+        await syncIfNeeded()
+    }
+
+    func handleApplicationDidBecomeActive() async {
+        await syncIfNeeded()
+    }
+
+    /// Runs a full sync only when local edits are pending or the sync package changed since
+    /// the last completed sync; otherwise only mirrors iCloud and lists the package.
+    /// Returns false when the check found nothing to synchronize.
+    @discardableResult
+    func syncIfNeeded() async -> Bool {
+        let syncMode = mode
+        guard syncMode != .off else { return false }
+        guard !isSyncing else {
+            needsChangeCheck = true
+            return true
+        }
+        guard !isCheckingForChanges else { return true }
+        guard canUseSync,
+              !hasPendingLocalChanges,
+              let synchronizedPackage,
+              synchronizedPackage.mode == syncMode,
+              let folderURL = activeFolderURL(for: syncMode),
+              synchronizedPackage.folderURL == folderURL else {
+            await syncNow()
+            return true
+        }
+
+        isCheckingForChanges = true
+        defer { isCheckingForChanges = false }
+        if syncMode == .automaticICloud {
+            do {
+                try await automaticICloudBridge.synchronize()
+            } catch {
+                // Let a full sync report the bridge failure, as the unconditional poll did.
+                await syncNow()
+                return true
+            }
+        }
+        let accessed = syncMode == .cloudFolder && folderURL.startAccessingSecurityScopedResource()
+        // Device files are rewritten in place by every sync of their device, so they are read
+        // directly instead of being part of the fingerprint.
+        let (fingerprint, packageDevices) = await Task.detached(priority: .utility) {
+            (
+                CloudFolderSyncEngine.packageFingerprint(folderURL: folderURL),
+                CloudFolderSyncEngine.devices(folderURL: folderURL)
+            )
+        }.value
+        if accessed {
+            folderURL.stopAccessingSecurityScopedResource()
+        }
+        guard mode == syncMode else { return true }
+        guard !isSyncing else {
+            // A sync started meanwhile; compare again once it has recorded its package state.
+            needsChangeCheck = true
+            return true
+        }
+        guard !hasPendingLocalChanges,
+              fingerprint != nil,
+              fingerprint == self.synchronizedPackage?.fingerprint else {
+            await syncNow()
+            return true
+        }
+        if let packageDevices, packageDevices != devices {
+            devices = packageDevices
+            deviceCount = packageDevices.count
+        }
+        return false
+    }
+
     private func stopICloudObservation() {
         automaticPollTask?.cancel()
         automaticPollTask = nil
     }
 
     private func resetCustomSyncState() {
+        synchronizedPackage = nil
         customState = CloudFolderSyncState()
         lastSyncDate = nil
         removeDefault(forKey: Keys.syncState, legacyKey: Keys.legacySyncState)
@@ -1116,7 +1229,15 @@ final class CloudFolderSyncController: ObservableObject {
               let historyService else {
             return []
         }
-        let pending = historyService.allRecords().compactMap { record -> (UUID, UserDataSyncHistoryAudioV1)? in
+        let records: [TranscriptionRecord]
+        do {
+            records = try historyService.recordsWithSynchronizedAudio()
+        } catch {
+            // Reported as a transient failure so the package is not recorded as synchronized
+            // while received audio may still be waiting to be installed.
+            return [.init(kind: .audioTransferFailed, fileName: "history")]
+        }
+        let pending = records.compactMap { record -> (UUID, UserDataSyncHistoryAudioV1)? in
             guard historyService.audioFileURL(for: record) == nil,
                   let descriptor = historyService.synchronizedAudioDescriptor(for: record),
                   historySyncPreferences.shouldReceiveSynchronizedAudio(
@@ -1138,6 +1259,10 @@ final class CloudFolderSyncController: ObservableObject {
                         descriptor: descriptor
                     )
                 }.value
+                // The install runs synchronously on the main actor, so only its own history
+                // refresh is ignored by the local change observer.
+                isInstallingSynchronizedAudio = true
+                defer { isInstallingSynchronizedAudio = false }
                 try historyService.installSynchronizedAudio(
                     recordID: recordID,
                     sourceURL: sourceURL
@@ -1200,6 +1325,7 @@ final class CloudFolderSyncController: ObservableObject {
         scheduledSyncTask?.cancel()
         scheduledSyncTask = nil
         stopICloudObservation()
+        synchronizedPackage = nil
         mode = .off
         defaults.set(mode.rawValue, forKey: Keys.mode)
         pendingChanges = 0

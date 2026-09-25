@@ -1,6 +1,6 @@
 import AudioToolbox
 import AudioUnit
-import AVFoundation
+@preconcurrency import AVFoundation
 import Combine
 import XCTest
 @testable import TypeWhisper
@@ -3539,6 +3539,7 @@ final class CoreAudioHALInputCaptureSessionTests: XCTestCase {
         XCTAssertEqual(operations.renderCalls, [
             .init(busNumber: 1, frameCount: 64)
         ])
+        session.testingDeliverPendingBuffers()
         XCTAssertEqual(receivedBuffers.count, 1)
         XCTAssertEqual(receivedBuffers.first?.format.sampleRate, 96_000)
         XCTAssertEqual(receivedBuffers.first?.format.channelCount, 2)
@@ -3755,6 +3756,57 @@ final class CoreAudioHALInputCaptureSessionTests: XCTestCase {
         XCTAssertEqual(operations.disposeCalls, 1)
     }
 
+    func testStopWaitsForAdmittedCallbackAndDeliversItsSliceBeforeReturning() throws {
+        let operations = FakeCoreAudioHALInputOperations()
+        let format = try XCTUnwrap(AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 48_000,
+            channels: 1,
+            interleaved: false
+        ))
+        let delivered = DeliveredInputSlices()
+        let renderStarted = expectation(description: "render callback started")
+        let callbackFinished = expectation(description: "render callback finished")
+        let disposed = expectation(description: "in-flight session finalizes")
+        let releaseRender = DispatchSemaphore(value: 0)
+        let tail = [Float](repeating: 0.5, count: 64)
+        operations.renderHook = {
+            renderStarted.fulfill()
+            _ = releaseRender.wait(timeout: .now() + 2.0)
+        }
+        operations.renderDataHook = { buffers, _ in
+            fillRenderedChannels(buffers, with: [tail])
+        }
+        operations.disposeHook = { disposed.fulfill() }
+        let session = try CoreAudioHALInputCaptureSession(
+            deviceID: AudioDeviceID(916),
+            format: format,
+            bufferSize: 128,
+            label: "test-hal-in-flight",
+            operations: operations,
+            deliveryInterval: .seconds(3_600)
+        ) { buffer in
+            delivered.record(buffer)
+        }
+        // The callback publishes its slice only once stop() is already past the HAL stop.
+        session.testingSetWillWaitForAdmittedCallbacksHook {
+            releaseRender.signal()
+        }
+
+        DispatchQueue.global().async {
+            _ = operations.invokeStoredCallback(frameCount: 64)
+            callbackFinished.fulfill()
+        }
+        wait(for: [renderStarted], timeout: 1.0)
+
+        session.stop()
+
+        XCTAssertEqual(operations.stopCalls, 1)
+        XCTAssertEqual(delivered.slices, [[tail]])
+        wait(for: [callbackFinished, disposed], timeout: 2.0)
+        XCTAssertEqual(delivered.slices.count, 1)
+    }
+
     func testCallbackRegistrationFailureClosesStoredCallbackBeforeHALStop() throws {
         let operations = FakeCoreAudioHALInputOperations()
         operations.inputCallbackError = CoreAudioHALInputOperationError(
@@ -3902,6 +3954,569 @@ final class CoreAudioHALInputCaptureSessionTests: XCTestCase {
         XCTAssertEqual(failure.formatChannelCount, 1)
         wait(for: [disposed], timeout: 1.0)
         XCTAssertEqual(operations.disposeCalls, 1)
+    }
+
+    func testStopDeliversSlicesStillInRingBeforeReturning() throws {
+        let operations = FakeCoreAudioHALInputOperations()
+        let format = try XCTUnwrap(AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 48_000,
+            channels: 1,
+            interleaved: false
+        ))
+        let delivered = DeliveredInputSlices()
+        var renderedSliceCount: Float = 0
+        operations.renderDataHook = { buffers, frameCount in
+            renderedSliceCount += 1
+            fillRenderedChannels(buffers, with: [[Float](repeating: renderedSliceCount, count: Int(frameCount))])
+        }
+        // Periodic delivery never fires here, so only the stop drain can deliver the slices.
+        let session = try CoreAudioHALInputCaptureSession(
+            deviceID: AudioDeviceID(911),
+            format: format,
+            bufferSize: 128,
+            label: "test-hal-tail",
+            operations: operations,
+            deliveryInterval: .seconds(3_600)
+        ) { buffer in
+            delivered.record(buffer)
+        }
+
+        XCTAssertEqual(operations.invokeStoredCallback(frameCount: 64), noErr)
+        XCTAssertEqual(operations.invokeStoredCallback(frameCount: 128), noErr)
+        XCTAssertEqual(operations.invokeStoredCallback(frameCount: 32), noErr)
+        XCTAssertTrue(delivered.slices.isEmpty)
+
+        let disposed = expectation(description: "tail-drained session finalizes")
+        operations.disposeHook = { disposed.fulfill() }
+        session.stop()
+
+        XCTAssertEqual(delivered.slices.map { $0[0].count }, [64, 128, 32])
+        XCTAssertEqual(delivered.slices.map { $0[0].first }, [1, 2, 3])
+
+        XCTAssertEqual(operations.invokeStoredCallback(frameCount: 64), noErr)
+        session.testingDeliverPendingBuffers()
+        XCTAssertEqual(delivered.slices.count, 3)
+        wait(for: [disposed], timeout: 1.0)
+    }
+
+    func testStopDeliversMoreSlicesThanOnePeriodicPassAllows() throws {
+        let operations = FakeCoreAudioHALInputOperations()
+        let format = try XCTUnwrap(AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 96_000,
+            channels: 1,
+            interleaved: false
+        ))
+        let delivered = DeliveredInputSlices()
+        var renderedSliceCount: Float = 0
+        operations.renderDataHook = { buffers, frameCount in
+            renderedSliceCount += 1
+            fillRenderedChannels(buffers, with: [[Float](repeating: renderedSliceCount, count: Int(frameCount))])
+        }
+        let session = try CoreAudioHALInputCaptureSession(
+            deviceID: AudioDeviceID(917),
+            format: format,
+            bufferSize: 32,
+            label: "test-hal-backlog",
+            operations: operations,
+            deliveryInterval: .seconds(3_600)
+        ) { buffer in
+            delivered.record(buffer)
+        }
+
+        // 32-frame slices at 96 kHz: 5,000 slices fit in the two-second ring but exceed
+        // the 4,096 slices one periodic delivery pass hands out.
+        let sliceCount = 5_000
+        for _ in 0..<sliceCount {
+            XCTAssertEqual(operations.invokeStoredCallback(frameCount: 32), noErr)
+        }
+
+        let disposed = expectation(description: "backlogged session finalizes")
+        operations.disposeHook = { disposed.fulfill() }
+        session.stop()
+
+        let slices = delivered.slices
+        XCTAssertEqual(slices.count, sliceCount)
+        XCTAssertEqual(slices.first?[0].first, 1)
+        XCTAssertEqual(slices.last?[0].first, Float(sliceCount))
+        XCTAssertEqual(session.testingCaptureLossTotals().droppedFrames, 0)
+        wait(for: [disposed], timeout: 1.0)
+    }
+
+    func testDeliveredSlicesMatchRenderedStereoSamplesExactly() throws {
+        let operations = FakeCoreAudioHALInputOperations()
+        let format = try XCTUnwrap(AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 96_000,
+            channels: 2,
+            interleaved: false
+        ))
+        let delivered = DeliveredInputSlices()
+        var renderedSlices: [[[Float]]] = []
+        var deliveredBuffers: [AVAudioPCMBuffer] = []
+        operations.renderDataHook = { buffers, frameCount in
+            let channels = makeSyntheticInputSlice(
+                channelCount: 2,
+                frameCount: Int(frameCount),
+                sliceIndex: renderedSlices.count,
+                startFrame: renderedSlices.count * 1_000
+            )
+            fillRenderedChannels(buffers, with: channels)
+            renderedSlices.append(channels)
+        }
+        let session = try CoreAudioHALInputCaptureSession(
+            deviceID: AudioDeviceID(912),
+            format: format,
+            bufferSize: 256,
+            label: "test-hal-stereo",
+            operations: operations,
+            deliveryInterval: .seconds(3_600)
+        ) { buffer in
+            XCTAssertEqual(buffer.format, format)
+            delivered.record(buffer)
+            deliveredBuffers.append(buffer)
+        }
+
+        for frameCount: UInt32 in [64, 480, 4_096, 1] {
+            XCTAssertEqual(operations.invokeStoredCallback(frameCount: frameCount), noErr)
+        }
+        session.testingDeliverPendingBuffers()
+
+        XCTAssertEqual(delivered.slices, renderedSlices)
+        // Buffers are never reused: AVAudioConverter may still read a slice after later ones arrive.
+        XCTAssertEqual(Set(deliveredBuffers.map(ObjectIdentifier.init)).count, renderedSlices.count)
+        XCTAssertEqual(deliveredBuffers.map { $0.frameCapacity }, [64, 480, 4_096, 1])
+        XCTAssertEqual(deliveredBuffers.map(copyChannels), renderedSlices)
+        let totals = session.testingCaptureLossTotals()
+        XCTAssertEqual(totals.droppedFrames, 0)
+        XCTAssertEqual(totals.renderFailures, 0)
+
+        let disposed = expectation(description: "stereo session finalizes")
+        operations.disposeHook = { disposed.fulfill() }
+        session.stop()
+        wait(for: [disposed], timeout: 1.0)
+    }
+
+    func testOversizedCallbackIsRejectedWithoutRenderingAndCounted() throws {
+        let operations = FakeCoreAudioHALInputOperations()
+        let format = try XCTUnwrap(AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 48_000,
+            channels: 1,
+            interleaved: false
+        ))
+        let delivered = DeliveredInputSlices()
+        let session = try CoreAudioHALInputCaptureSession(
+            deviceID: AudioDeviceID(913),
+            format: format,
+            bufferSize: 256,
+            label: "test-hal-oversized",
+            operations: operations,
+            deliveryInterval: .seconds(3_600)
+        ) { buffer in
+            delivered.record(buffer)
+        }
+
+        XCTAssertEqual(operations.invokeStoredCallback(frameCount: 10_000), kAudioUnitErr_TooManyFramesToProcess)
+        session.testingDeliverPendingBuffers()
+
+        XCTAssertTrue(operations.renderCalls.isEmpty)
+        XCTAssertTrue(delivered.slices.isEmpty)
+        let totals = session.testingCaptureLossTotals()
+        XCTAssertEqual(totals.droppedFrames, 10_000)
+        XCTAssertEqual(totals.renderFailures, 1)
+
+        let disposed = expectation(description: "oversized-slice session finalizes")
+        operations.disposeHook = { disposed.fulfill() }
+        session.stop()
+        wait(for: [disposed], timeout: 1.0)
+    }
+
+    func testReportedMaximumFramesPerSliceSizesRenderBuffers() throws {
+        let operations = FakeCoreAudioHALInputOperations()
+        operations.reportedMaximumFramesPerSlice = 16_384
+        let format = try XCTUnwrap(AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 48_000,
+            channels: 1,
+            interleaved: false
+        ))
+        let delivered = DeliveredInputSlices()
+        let session = try CoreAudioHALInputCaptureSession(
+            deviceID: AudioDeviceID(914),
+            format: format,
+            bufferSize: 256,
+            label: "test-hal-large-slice",
+            operations: operations,
+            deliveryInterval: .seconds(3_600)
+        ) { buffer in
+            delivered.record(buffer)
+        }
+
+        XCTAssertEqual(operations.invokeStoredCallback(frameCount: 10_000), noErr)
+        session.testingDeliverPendingBuffers()
+
+        XCTAssertEqual(delivered.slices.map { $0[0].count }, [10_000])
+        XCTAssertEqual(session.testingCaptureLossTotals().droppedFrames, 0)
+
+        let disposed = expectation(description: "large-slice session finalizes")
+        operations.disposeHook = { disposed.fulfill() }
+        session.stop()
+        wait(for: [disposed], timeout: 1.0)
+    }
+
+    func testRenderFailureIsCountedAndDeliversNothing() throws {
+        let operations = FakeCoreAudioHALInputOperations()
+        operations.renderStatus = OSStatus(-50)
+        let format = try XCTUnwrap(AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 48_000,
+            channels: 1,
+            interleaved: false
+        ))
+        let delivered = DeliveredInputSlices()
+        let session = try CoreAudioHALInputCaptureSession(
+            deviceID: AudioDeviceID(915),
+            format: format,
+            bufferSize: 256,
+            label: "test-hal-render-failure",
+            operations: operations,
+            deliveryInterval: .seconds(3_600)
+        ) { buffer in
+            delivered.record(buffer)
+        }
+
+        XCTAssertEqual(operations.invokeStoredCallback(frameCount: 64), OSStatus(-50))
+        session.testingDeliverPendingBuffers()
+
+        XCTAssertEqual(operations.renderCalls, [.init(busNumber: 1, frameCount: 64)])
+        XCTAssertTrue(delivered.slices.isEmpty)
+        let totals = session.testingCaptureLossTotals()
+        XCTAssertEqual(totals.droppedFrames, 0)
+        XCTAssertEqual(totals.renderFailures, 1)
+
+        let disposed = expectation(description: "render-failure session finalizes")
+        operations.disposeHook = { disposed.fulfill() }
+        session.stop()
+        wait(for: [disposed], timeout: 1.0)
+    }
+}
+
+final class CoreAudioHALInputRingTests: XCTestCase {
+    func testRingKeepsSliceBoundariesAndSamplesAcrossWraparound() throws {
+        let ring = try XCTUnwrap(CoreAudioHALInputTestingRing(
+            channelCount: 2,
+            maximumFramesPerSlice: 8,
+            minimumCapacitySamples: 0
+        ))
+        // Four maximum packets of 1 + 8 * 2 slots round up to 128 slots.
+        XCTAssertEqual(ring.capacitySamples, 128)
+
+        var nextValue: Float = 0
+        for iteration in 0..<500 {
+            var written: [[[Float]]] = []
+            for frameCount in [1 + iteration % 8, 1 + (iteration * 3) % 8] {
+                let slice = makeSequentialRingSlice(channelCount: 2, frameCount: frameCount, nextValue: &nextValue)
+                XCTAssertTrue(ring.write(slice))
+                written.append(slice)
+            }
+            for slice in written {
+                XCTAssertEqual(ring.read(), slice)
+            }
+            XCTAssertNil(ring.read())
+        }
+        XCTAssertEqual(ring.takeDroppedFrames(), 0)
+    }
+
+    func testRingRejectsWholeSliceWhenFullAndCountsDroppedFrames() throws {
+        let ring = try XCTUnwrap(CoreAudioHALInputTestingRing(
+            channelCount: 1,
+            maximumFramesPerSlice: 8,
+            minimumCapacitySamples: 0
+        ))
+        XCTAssertEqual(ring.capacitySamples, 64)
+
+        var nextValue: Float = 0
+        var accepted: [[[Float]]] = []
+        // Seven 8-frame packets use 63 of 64 slots.
+        for _ in 0..<7 {
+            let slice = makeSequentialRingSlice(channelCount: 1, frameCount: 8, nextValue: &nextValue)
+            XCTAssertTrue(ring.write(slice))
+            accepted.append(slice)
+        }
+        XCTAssertFalse(ring.write(makeSequentialRingSlice(channelCount: 1, frameCount: 8, nextValue: &nextValue)))
+        XCTAssertFalse(ring.write(makeSequentialRingSlice(channelCount: 1, frameCount: 1, nextValue: &nextValue)))
+        XCTAssertEqual(ring.takeDroppedFrames(), 9)
+        XCTAssertEqual(ring.takeDroppedFrames(), 0)
+
+        XCTAssertEqual(ring.read(), accepted.removeFirst())
+        let afterRead = makeSequentialRingSlice(channelCount: 1, frameCount: 8, nextValue: &nextValue)
+        XCTAssertTrue(ring.write(afterRead))
+        accepted.append(afterRead)
+        for slice in accepted {
+            XCTAssertEqual(ring.read(), slice)
+        }
+        XCTAssertNil(ring.read())
+    }
+
+    func testRingRejectsOversizedSlicesAndSkipsSlicesTooLargeForReader() throws {
+        let ring = try XCTUnwrap(CoreAudioHALInputTestingRing(
+            channelCount: 2,
+            maximumFramesPerSlice: 4,
+            minimumCapacitySamples: 0
+        ))
+
+        XCTAssertFalse(ring.write([[Float](repeating: 1, count: 5), [Float](repeating: 2, count: 5)]))
+        XCTAssertEqual(ring.takeDroppedFrames(), 5)
+
+        let large: [[Float]] = [[1, 2, 3, 4], [5, 6, 7, 8]]
+        let small: [[Float]] = [[9, 10], [11, 12]]
+        XCTAssertTrue(ring.write(large))
+        XCTAssertTrue(ring.write(small))
+        XCTAssertEqual(ring.read(frameCapacity: 2), small)
+        XCTAssertEqual(ring.takeDroppedFrames(), 4)
+        XCTAssertNil(ring.read())
+    }
+
+    func testConcurrentProducerAndConsumerKeepOrderAndAccountForEveryFrame() throws {
+        let ring = try XCTUnwrap(CoreAudioHALInputTestingRing(
+            channelCount: 2,
+            maximumFramesPerSlice: 64,
+            minimumCapacitySamples: 1_024
+        ))
+        let sliceCount = 20_000
+        let frameCount: @Sendable (Int) -> Int = { 1 + ($0 * 7) % 64 }
+        let state = RingConcurrencyState()
+        let group = DispatchGroup()
+
+        DispatchQueue.global(qos: .userInitiated).async(group: group) {
+            var acceptedSlices = 0
+            for index in 0..<sliceCount {
+                let frames = frameCount(index)
+                let value = Float(index)
+                if ring.write([
+                    [Float](repeating: value, count: frames),
+                    [Float](repeating: -value, count: frames)
+                ]) {
+                    acceptedSlices += 1
+                }
+            }
+            state.finishProducer(acceptedSlices: acceptedSlices)
+        }
+
+        DispatchQueue.global(qos: .userInitiated).async(group: group) {
+            var receivedSlices = 0
+            var receivedFrames = 0
+            var lastIndex = -1
+            var isConsistent = true
+            while true {
+                let producerFinished = state.isProducerFinished
+                guard let slice = ring.read() else {
+                    if producerFinished { break }
+                    continue
+                }
+                let index = Int(slice[0][0])
+                isConsistent = isConsistent
+                    && index > lastIndex
+                    && slice[0].count == frameCount(index)
+                    && slice[0].allSatisfy { $0 == Float(index) }
+                    && slice[1].allSatisfy { $0 == -Float(index) }
+                lastIndex = index
+                receivedSlices += 1
+                receivedFrames += slice[0].count
+            }
+            state.finishConsumer(receivedSlices: receivedSlices, receivedFrames: receivedFrames, isConsistent: isConsistent)
+        }
+
+        XCTAssertEqual(group.wait(timeout: .now() + 60), .success)
+        let totalFrames = (0..<sliceCount).reduce(0) { $0 + frameCount($1) }
+        let result = state.result
+        XCTAssertTrue(result.isConsistent)
+        XCTAssertEqual(result.receivedSlices, result.acceptedSlices)
+        XCTAssertEqual(UInt64(result.receivedFrames) + ring.takeDroppedFrames(), UInt64(totalFrames))
+    }
+}
+
+final class AudioInputSliceConverterTests: XCTestCase {
+    func testSliceConverterMatchesLegacyPerSliceConversion() throws {
+        let formats: [(sampleRate: Double, channels: AVAudioChannelCount)] = [
+            (16_000, 1),
+            (44_100, 1),
+            (48_000, 2),
+            (96_000, 2),
+            (48_000, 4)
+        ]
+        let frameCounts = [512, 480, 471, 4_096, 1, 2, 128, 441, 512, 512]
+
+        for (sampleRate, channels) in formats {
+            // Matches the HAL capture format; more than two channels need an explicit layout.
+            let format: AVAudioFormat
+            if channels <= 2 {
+                format = try XCTUnwrap(AVAudioFormat(
+                    commonFormat: .pcmFormatFloat32,
+                    sampleRate: sampleRate,
+                    channels: channels,
+                    interleaved: false
+                ))
+            } else {
+                let layout = try XCTUnwrap(AVAudioChannelLayout(
+                    layoutTag: kAudioChannelLayoutTag_DiscreteInOrder | AudioChannelLayoutTag(channels)
+                ))
+                format = AVAudioFormat(
+                    commonFormat: .pcmFormatFloat32,
+                    sampleRate: sampleRate,
+                    interleaved: false,
+                    channelLayout: layout
+                )
+            }
+            let converter = try XCTUnwrap(AudioInputSliceConverter(inputFormat: format, targetSampleRate: 16_000))
+            let legacy = try LegacyInputSliceConversion(inputFormat: format)
+            var startFrame = 0
+            var convertedFrameCount = 0
+
+            for (sliceIndex, frameCount) in frameCounts.enumerated() {
+                let slice = makeSyntheticInputSlice(
+                    channelCount: Int(channels),
+                    frameCount: frameCount,
+                    sliceIndex: sliceIndex,
+                    startFrame: startFrame
+                )
+                startFrame += frameCount
+                // One buffer per slice, as delivered by the HAL session.
+                let deliveredBuffer = try XCTUnwrap(AVAudioPCMBuffer(
+                    pcmFormat: format,
+                    frameCapacity: AVAudioFrameCount(frameCount)
+                ))
+                try fill(deliveredBuffer, with: slice)
+
+                let converted = converter.convert(deliveredBuffer) ?? []
+                XCTAssertEqual(
+                    converted,
+                    legacy.convert(slice),
+                    "sampleRate=\(sampleRate) channels=\(channels) slice=\(sliceIndex)"
+                )
+                convertedFrameCount += converted.count
+            }
+            XCTAssertGreaterThan(convertedFrameCount, 0, "sampleRate=\(sampleRate) channels=\(channels)")
+        }
+    }
+}
+
+final class AudioRecordingServiceInputOnlyCaptureTests: XCTestCase {
+    func testInputOnlyRecordingDrainsRingTailOnStopWithUnchangedAudio() async throws {
+        let format = try XCTUnwrap(AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 48_000,
+            channels: 2,
+            interleaved: false
+        ))
+        let factory = HALBackedAudioInputCaptureFactory(format: format)
+        let recoveryDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AudioRecordingServiceInputOnlyCaptureTests-\(UUID().uuidString)", isDirectory: true)
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: recoveryDirectory)
+        }
+        let service = AudioRecordingService(
+            inputActivationGuard: FakeAudioInputDeviceActivator(),
+            inputCaptureFactory: factory,
+            recoveryAudioStore: DictationRecoveryAudioStore(directory: recoveryDirectory)
+        )
+        service.hasMicrophonePermissionOverride = true
+        service.hasExplicitDeviceSelection = true
+        service.selectedDeviceID = AudioDeviceID(940)
+        service.selectedInputDeviceUsesBluetoothTransport = false
+        service.inputAvailabilityOverride = { _ in true }
+
+        try service.startRecording()
+        XCTAssertTrue(service.isRecording)
+        XCTAssertEqual(factory.sessionCount, 1)
+
+        var renderedSlices: [[[Float]]] = []
+        var startFrame = 0
+        factory.operations.renderDataHook = { buffers, frameCount in
+            let slice = makeSyntheticInputSlice(
+                channelCount: 2,
+                frameCount: Int(frameCount),
+                sliceIndex: renderedSlices.count,
+                startFrame: startFrame
+            )
+            startFrame += Int(frameCount)
+            fillRenderedChannels(buffers, with: slice)
+            renderedSlices.append(slice)
+        }
+        for frameCount: UInt32 in [480, 480, 512, 471, 480, 4_096] {
+            XCTAssertEqual(factory.operations.invokeStoredCallback(frameCount: frameCount), noErr)
+        }
+        // Periodic delivery is disabled, so every slice is still in the ring at stop.
+        XCTAssertEqual(service.totalBufferDuration, 0)
+
+        let samples = await service.stopRecording(policy: .immediate)
+
+        let legacy = try LegacyInputSliceConversion(inputFormat: format)
+        let expected = renderedSlices.flatMap { legacy.convert($0) }
+        XCTAssertFalse(expected.isEmpty)
+        XCTAssertEqual(samples, expected)
+
+        let recoveryURL = try XCTUnwrap(service.preserveActiveRecoveryRecording())
+        let recoveryData = try Data(contentsOf: recoveryURL)
+        let recoveryByteCount = recoveryData[40..<44].reversed().reduce(UInt32(0)) { ($0 << 8) | UInt32($1) }
+        XCTAssertEqual(recoveryByteCount, UInt32(expected.count * 2))
+        XCTAssertEqual(recoveryData.count, 44 + expected.count * 2)
+    }
+}
+
+final class AudioRecorderServiceInputOnlyCaptureTests: XCTestCase {
+    func testStopCaptureDrainsHALRingIntoMicFileBeforeClosingIt() async throws {
+        let format = try XCTUnwrap(AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 48_000,
+            channels: 1,
+            interleaved: false
+        ))
+        let factory = HALBackedAudioInputCaptureFactory(format: format)
+        let recordingsDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("AudioRecorderServiceInputOnlyCaptureTests-\(UUID().uuidString)", isDirectory: true)
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: recordingsDirectory)
+        }
+        let service = AudioRecorderService(
+            inputActivationGuard: FakeAudioInputDeviceActivator(),
+            inputCaptureFactory: factory
+        )
+        service.recordingsDirectoryOverride = recordingsDirectory
+        service.hasMicrophonePermissionOverride = true
+
+        _ = try await service.startRecording(
+            micEnabled: true,
+            systemAudioEnabled: false,
+            format: .wav,
+            microphoneSelection: ResolvedRecordingInputSelection(
+                deviceUID: "usb-mic",
+                deviceID: AudioDeviceID(950),
+                deviceName: "USB Mic",
+                usesBluetoothTransport: false
+            )
+        )
+        XCTAssertEqual(factory.sessionCount, 1)
+
+        factory.operations.renderDataHook = { buffers, frameCount in
+            fillRenderedChannels(buffers, with: [[Float](repeating: 0.25, count: Int(frameCount))])
+        }
+        let frameCounts: [UInt32] = [480, 512, 471, 4_096]
+        for frameCount in frameCounts {
+            XCTAssertEqual(factory.operations.invokeStoredCallback(frameCount: frameCount), noErr)
+        }
+
+        // Periodic delivery is disabled, so only the stop drain can write these slices.
+        let stopped = await service.stopCapture()
+        let micURL = try XCTUnwrap(stopped.micTempURL)
+        addTeardownBlock {
+            try? FileManager.default.removeItem(at: micURL)
+        }
+
+        let micFile = try AVAudioFile(forReading: micURL)
+        XCTAssertEqual(micFile.length, AVAudioFramePosition(frameCounts.reduce(0) { $0 + Int($1) }))
     }
 }
 
@@ -4282,6 +4897,7 @@ private final class FakeAudioInputCaptureFactory: AudioInputCaptureFactory, @unc
         deviceID: AudioDeviceID,
         label: String,
         bufferSize: AVAudioFrameCount,
+        deliveryQueue: DispatchQueue?,
         onBuffer: @escaping (AVAudioPCMBuffer) -> Void
     ) throws -> AudioInputCaptureSession {
         let configuration = lock.withLock { () -> (Error?, Error?, (() -> Void)?) in
@@ -4299,6 +4915,7 @@ private final class FakeAudioInputCaptureFactory: AudioInputCaptureFactory, @unc
         deviceID: AudioDeviceID,
         label: String,
         bufferSize: AVAudioFrameCount,
+        deliveryQueue: DispatchQueue?,
         onBuffer: @escaping (AVAudioPCMBuffer) -> Void
     ) throws -> AudioInputCaptureSession {
         let error = lock.withLock { () -> Error? in
@@ -4333,6 +4950,9 @@ private final class FakeCoreAudioHALInputOperations: CoreAudioHALInputOperating,
     var stopHook: (() -> Void)?
     var disposeHook: (() -> Void)?
     var renderHook: (() -> Void)?
+    /// Fills the rendered channels, mimicking `AudioUnitRender` writing input samples.
+    var renderDataHook: ((UnsafeMutableAudioBufferListPointer, UInt32) -> Void)?
+    var reportedMaximumFramesPerSlice: UInt32?
     private(set) var enableIOCalls: [EnableIOCall] = []
     private(set) var currentDeviceCalls: [AudioDeviceID] = []
     private(set) var streamFormatCalls: [AudioStreamBasicDescription] = []
@@ -4406,7 +5026,14 @@ private final class FakeCoreAudioHALInputOperations: CoreAudioHALInputOperating,
     ) -> OSStatus {
         renderHook?()
         renderCalls.append(.init(busNumber: busNumber, frameCount: frameCount))
+        if renderStatus == noErr {
+            renderDataHook?(UnsafeMutableAudioBufferListPointer(data), frameCount)
+        }
         return renderStatus
+    }
+
+    func maximumFramesPerSlice(_ audioUnit: AudioUnit) -> UInt32? {
+        reportedMaximumFramesPerSlice
     }
 
     @discardableResult
@@ -4570,5 +5197,275 @@ private final class FakeIOKitRegistry: IOKitRegistryQuerying, @unchecked Sendabl
         requestedServiceName = serviceName
         requestedPropertyName = propertyName
         return returnedProperty
+    }
+}
+
+private func copyChannels(of buffer: AVAudioPCMBuffer) -> [[Float]] {
+    guard let channels = buffer.floatChannelData else { return [] }
+    let frameCount = Int(buffer.frameLength)
+    return (0..<Int(buffer.format.channelCount)).map { channel in
+        Array(UnsafeBufferPointer(start: channels[channel], count: frameCount))
+    }
+}
+
+private final class DeliveredInputSlices: @unchecked Sendable {
+    private let lock = NSLock()
+    private var _slices: [[[Float]]] = []
+
+    var slices: [[[Float]]] { lock.withLock { _slices } }
+
+    func record(_ buffer: AVAudioPCMBuffer) {
+        let slice = copyChannels(of: buffer)
+        lock.withLock { _slices.append(slice) }
+    }
+}
+
+private final class RingConcurrencyState: @unchecked Sendable {
+    struct Result {
+        var acceptedSlices = 0
+        var receivedSlices = 0
+        var receivedFrames = 0
+        var isConsistent = false
+    }
+
+    private let lock = NSLock()
+    private var producerFinished = false
+    private var _result = Result()
+
+    var isProducerFinished: Bool { lock.withLock { producerFinished } }
+    var result: Result { lock.withLock { _result } }
+
+    func finishProducer(acceptedSlices: Int) {
+        lock.withLock {
+            _result.acceptedSlices = acceptedSlices
+            producerFinished = true
+        }
+    }
+
+    func finishConsumer(receivedSlices: Int, receivedFrames: Int, isConsistent: Bool) {
+        lock.withLock {
+            _result.receivedSlices = receivedSlices
+            _result.receivedFrames = receivedFrames
+            _result.isConsistent = isConsistent
+        }
+    }
+}
+
+/// Builds real `CoreAudioHALInputCaptureSession`s on fake HAL operations with periodic
+/// delivery disabled, so tests control exactly when slices leave the ring.
+private final class HALBackedAudioInputCaptureFactory: AudioInputCaptureFactory, @unchecked Sendable {
+    let format: AVAudioFormat
+    let operations = FakeCoreAudioHALInputOperations()
+    private let lock = NSLock()
+    private var sessions: [CoreAudioHALInputCaptureSession] = []
+
+    var sessionCount: Int { lock.withLock { sessions.count } }
+
+    init(format: AVAudioFormat) {
+        self.format = format
+    }
+
+    func inputOnlyCaptureFormat(deviceID: AudioDeviceID) throws -> AVAudioFormat {
+        format
+    }
+
+    func validateInputOnlyDevice(deviceID: AudioDeviceID, label: String) throws {}
+
+    func prepareInputOnlyCapture(
+        deviceID: AudioDeviceID,
+        label: String,
+        bufferSize: AVAudioFrameCount,
+        deliveryQueue: DispatchQueue?,
+        onBuffer: @escaping (AVAudioPCMBuffer) -> Void
+    ) throws -> AudioInputCaptureSession {
+        try makeSession(
+            deviceID: deviceID,
+            label: label,
+            bufferSize: bufferSize,
+            startsImmediately: false,
+            deliveryQueue: deliveryQueue,
+            onBuffer: onBuffer
+        )
+    }
+
+    func startInputOnlyCapture(
+        deviceID: AudioDeviceID,
+        label: String,
+        bufferSize: AVAudioFrameCount,
+        deliveryQueue: DispatchQueue?,
+        onBuffer: @escaping (AVAudioPCMBuffer) -> Void
+    ) throws -> AudioInputCaptureSession {
+        try makeSession(
+            deviceID: deviceID,
+            label: label,
+            bufferSize: bufferSize,
+            startsImmediately: true,
+            deliveryQueue: deliveryQueue,
+            onBuffer: onBuffer
+        )
+    }
+
+    private func makeSession(
+        deviceID: AudioDeviceID,
+        label: String,
+        bufferSize: AVAudioFrameCount,
+        startsImmediately: Bool,
+        deliveryQueue: DispatchQueue?,
+        onBuffer: @escaping (AVAudioPCMBuffer) -> Void
+    ) throws -> CoreAudioHALInputCaptureSession {
+        let session = try CoreAudioHALInputCaptureSession(
+            deviceID: deviceID,
+            format: format,
+            bufferSize: bufferSize,
+            label: label,
+            operations: operations,
+            startsImmediately: startsImmediately,
+            deliveryQueue: deliveryQueue,
+            deliveryInterval: .seconds(3_600),
+            onBuffer: onBuffer
+        )
+        lock.withLock { sessions.append(session) }
+        return session
+    }
+}
+
+/// The pre-#1027 conversion that ran on the IO thread: fresh buffers per slice, the
+/// strongest channel per slice, and an output capacity of `frames * 16 kHz / inputRate`.
+private final class LegacyInputSliceConversion {
+    private final class ConsumedFlag: @unchecked Sendable {
+        var value = false
+    }
+
+    private let inputFormat: AVAudioFormat
+    private let monoFormat: AVAudioFormat
+    private let targetFormat: AVAudioFormat
+    private let converter: AVAudioConverter
+
+    init(inputFormat: AVAudioFormat) throws {
+        self.inputFormat = inputFormat
+        monoFormat = try XCTUnwrap(AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: inputFormat.sampleRate,
+            channels: 1,
+            interleaved: false
+        ))
+        targetFormat = try XCTUnwrap(AVAudioFormat(
+            commonFormat: .pcmFormatFloat32,
+            sampleRate: 16_000,
+            channels: 1,
+            interleaved: false
+        ))
+        converter = try XCTUnwrap(AVAudioConverter(from: monoFormat, to: targetFormat))
+    }
+
+    static func strongestChannel(of channels: [[Float]]) -> [Float] {
+        var bestChannel = 0
+        var bestEnergy: Float = -1
+        for (index, channel) in channels.enumerated() {
+            var energy: Float = 0
+            for value in channel {
+                energy += value * value
+            }
+            if energy > bestEnergy {
+                bestEnergy = energy
+                bestChannel = index
+            }
+        }
+        return channels[bestChannel]
+    }
+
+    func convert(_ channels: [[Float]]) -> [Float] {
+        let mono = Self.strongestChannel(of: channels)
+        guard !mono.isEmpty,
+              let buffer = AVAudioPCMBuffer(
+                  pcmFormat: channels.count == 1 ? inputFormat : monoFormat,
+                  frameCapacity: AVAudioFrameCount(mono.count)
+              ),
+              let destination = buffer.floatChannelData?[0] else {
+            return []
+        }
+        buffer.frameLength = AVAudioFrameCount(mono.count)
+        mono.withUnsafeBufferPointer { source in
+            destination.update(from: source.baseAddress!, count: mono.count)
+        }
+
+        let frameCount = AVAudioFrameCount(Double(buffer.frameLength) * 16_000 / buffer.format.sampleRate)
+        guard frameCount > 0,
+              let convertedBuffer = AVAudioPCMBuffer(pcmFormat: targetFormat, frameCapacity: frameCount) else {
+            return []
+        }
+
+        var error: NSError?
+        let consumed = ConsumedFlag()
+        converter.convert(to: convertedBuffer, error: &error) { _, outStatus in
+            if consumed.value {
+                outStatus.pointee = .noDataNow
+                return nil
+            }
+            consumed.value = true
+            outStatus.pointee = .haveData
+            return buffer
+        }
+
+        guard error == nil,
+              convertedBuffer.frameLength > 0,
+              let channelData = convertedBuffer.floatChannelData?[0] else {
+            return []
+        }
+        return Array(UnsafeBufferPointer(start: channelData, count: Int(convertedBuffer.frameLength)))
+    }
+}
+
+/// Deterministic multichannel audio whose loudest channel rotates from slice to slice.
+private func makeSyntheticInputSlice(
+    channelCount: Int,
+    frameCount: Int,
+    sliceIndex: Int,
+    startFrame: Int
+) -> [[Float]] {
+    (0..<channelCount).map { channel in
+        let amplitude: Float = (sliceIndex + channel) % channelCount == 0 ? 0.6 : 0.15
+        let step = 0.031 * Float(channel + 1)
+        return (0..<frameCount).map { frame in
+            amplitude * sin(Float(startFrame + frame) * step)
+        }
+    }
+}
+
+private func makeSequentialRingSlice(channelCount: Int, frameCount: Int, nextValue: inout Float) -> [[Float]] {
+    (0..<channelCount).map { _ in
+        (0..<frameCount).map { _ in
+            nextValue += 1
+            return nextValue
+        }
+    }
+}
+
+private func fillRenderedChannels(_ buffers: UnsafeMutableAudioBufferListPointer, with channels: [[Float]]) {
+    for (index, channel) in channels.enumerated() where index < buffers.count {
+        guard let data = buffers[index].mData?.assumingMemoryBound(to: Float.self) else { continue }
+        channel.withUnsafeBufferPointer { source in
+            data.update(from: source.baseAddress!, count: channel.count)
+        }
+    }
+}
+
+private func fill(_ buffer: AVAudioPCMBuffer, with channels: [[Float]]) throws {
+    let frameCount = channels.first?.count ?? 0
+    let channelData = try XCTUnwrap(buffer.floatChannelData)
+    buffer.frameLength = AVAudioFrameCount(frameCount)
+    if buffer.format.isInterleaved {
+        let channelCount = channels.count
+        for frame in 0..<frameCount {
+            for channel in 0..<channelCount {
+                channelData[0][frame * channelCount + channel] = channels[channel][frame]
+            }
+        }
+    } else {
+        for (index, channel) in channels.enumerated() {
+            for frame in 0..<frameCount {
+                channelData[index][frame] = channel[frame]
+            }
+        }
     }
 }
