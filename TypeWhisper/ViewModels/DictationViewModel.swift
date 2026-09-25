@@ -440,6 +440,9 @@ final class DictationViewModel: ObservableObject {
     /// text is display-only and must never be promoted to the final transcription.
     private var lastPreviewFollowsDictationEngine = true
     private var liveFieldTranscriptSession: LiveFieldTranscriptSession?
+    /// Workflow LLM segments processed while recording (opt-in per workflow).
+    /// Belongs to the current recording; the stop path takes ownership of it.
+    private var incrementalWorkflowPostProcessing: WorkflowIncrementalPostProcessingSession?
     private struct PendingLiveFieldCapture {
         let activeApp: (name: String?, bundleId: String?, url: String?)
         let pinnedTarget: TextInsertionService.PinnedInsertionTarget
@@ -652,6 +655,11 @@ final class DictationViewModel: ObservableObject {
             }
             if self.partialText != text {
                 self.partialText = text
+                if self.state == .recording,
+                   !self.isStopInFlight,
+                   self.streamingHandler.hasActiveLiveTranscriptionSession {
+                    self.incrementalWorkflowPostProcessing?.ingest(confirmedText: text)
+                }
                 let elapsed = self.recordingStartTime.map { Date().timeIntervalSince($0) } ?? 0
                 EventBus.shared.emit(.partialTranscriptionUpdate(PartialTranscriptionPayload(
                     text: text,
@@ -1236,6 +1244,7 @@ final class DictationViewModel: ObservableObject {
         metadataCaptureTask = nil
         urlResolutionTask?.cancel()
         urlResolutionTask = nil
+        cancelIncrementalWorkflowPostProcessing()
         lastStreamingParams = nil
         pendingLiveFieldCapture = nil
         pinnedInsertionTarget = nil
@@ -1523,6 +1532,7 @@ final class DictationViewModel: ObservableObject {
             stopFinalizationTask = nil
             streamingHandler.stop()
             lastStreamingParams = nil
+            cancelIncrementalWorkflowPostProcessing()
             transcriptionTask?.cancel()
             transcriptionTask = nil
             endTargetAppAccessibilityObservation()
@@ -1561,6 +1571,7 @@ final class DictationViewModel: ObservableObject {
         }
         transcriptionTask?.cancel()
         transcriptionTask = nil
+        cancelIncrementalWorkflowPostProcessing()
         cancelTargetAppCorrectionLearning()
         clearActionFeedbackAction()
         insertingResetTask?.cancel()
@@ -1886,6 +1897,7 @@ final class DictationViewModel: ObservableObject {
                 || liveFieldTranscriptEnabled
                 || externalStreamingDisplayCount > 0
         )
+        refreshIncrementalWorkflowPostProcessing(forceRestart: true)
         scheduleDeferredRecordingMetadataCapture(
             sessionID: sessionID,
             activeApp: activeApp,
@@ -1991,10 +2003,13 @@ final class DictationViewModel: ObservableObject {
             if let workflowMatch = workflowService.matchWorkflow(bundleIdentifier: bundleId, url: resolvedURL) {
                 logger.info("URL resolution: matched workflow '\(workflowMatch.workflow.name)'")
                 applyWorkflowMatch(workflowMatch, activeApp: capturedActiveApp)
-                refreshLiveStreamingIfParamsChanged()
+                let restartedLiveStreaming = refreshLiveStreamingIfParamsChanged()
+                refreshIncrementalWorkflowPostProcessing(forceRestart: restartedLiveStreaming)
                 return resolvedURL
             }
 
+            // The URL can change the resolved output format of the current workflow.
+            refreshIncrementalWorkflowPostProcessing()
             logger.info("URL resolution: no workflow matched for URL \(resolvedURL)")
             return resolvedURL
         }
@@ -2170,6 +2185,7 @@ final class DictationViewModel: ObservableObject {
             }
             if !didStartTranscriptionTask {
                 endTargetAppAccessibilityObservation()
+                cancelIncrementalWorkflowPostProcessing()
             }
             stopFinalizationTask = nil
         }
@@ -2323,6 +2339,12 @@ final class DictationViewModel: ObservableObject {
         guard !Task.isCancelled else { return }
         let usedLiveSessionResult = liveSessionResult != nil
         let accessibilityObservationLease = targetAppAccessibilityObservationLease
+        // Incremental results are only valid for a final text from the same live session.
+        let incrementalPostProcessing = usedLiveSessionResult ? incrementalWorkflowPostProcessing : nil
+        if !usedLiveSessionResult {
+            incrementalWorkflowPostProcessing?.cancel()
+        }
+        incrementalWorkflowPostProcessing = nil
         transcriptionTask = Task {
             var didTransferAccessibilityObservationLease = false
             defer {
@@ -2331,6 +2353,7 @@ final class DictationViewModel: ObservableObject {
                         accessibilityObservationLease
                     )
                 }
+                incrementalPostProcessing?.cancel()
             }
             do {
                 // Only wait for browser URL resolution when something before insertion depends
@@ -2428,7 +2451,9 @@ final class DictationViewModel: ObservableObject {
                     translationTarget: translationTarget,
                     detectedLanguage: result.detectedLanguage,
                     configuredLanguage: language,
-                    resolvedOutputFormat: resolvedOutputFormat
+                    resolvedOutputFormat: resolvedOutputFormat,
+                    incrementalPostProcessing: incrementalPostProcessing,
+                    stopTimingStart: stopStart
                 )
 
                 guard !Task.isCancelled else { return }
@@ -3277,6 +3302,7 @@ final class DictationViewModel: ObservableObject {
         urlResolutionTask = nil
         metadataCaptureTask?.cancel()
         metadataCaptureTask = nil
+        cancelIncrementalWorkflowPostProcessing()
         lastStreamingParams = nil
         liveFieldTranscriptSession = nil
         pendingLiveFieldCapture = nil
@@ -3558,9 +3584,10 @@ final class DictationViewModel: ObservableObject {
     /// resolution refines the rule, to keep live preview consistent with the final
     /// transcription. No-op when recording already stopped, when live streaming was
     /// disabled, or when no meaningful param changed.
-    private func refreshLiveStreamingIfParamsChanged() {
-        guard state == .recording else { return }
-        guard let previous = lastStreamingParams else { return }
+    @discardableResult
+    private func refreshLiveStreamingIfParamsChanged() -> Bool {
+        guard state == .recording else { return false }
+        guard let previous = lastStreamingParams else { return false }
         let newParams = StreamingParamsSnapshot(
             engineOverrideId: effectiveEngineOverrideId,
             providerId: modelManager.selectedProviderId,
@@ -3569,12 +3596,13 @@ final class DictationViewModel: ObservableObject {
             cloudModelOverride: effectiveCloudModelOverride,
             normalizeNumbers: effectiveNumberNormalizationOverride
         )
-        guard newParams != previous else { return }
+        guard newParams != previous else { return false }
         logger.info("Streaming params changed after URL resolution, restarting live session")
         let allowLive = indicatorTranscriptPreviewEnabled
             || liveFieldTranscriptEnabled
             || externalStreamingDisplayCount > 0
         startLiveStreaming(allowLiveTranscription: allowLive)
+        return true
     }
 
     private func clearActiveRuleState() {
@@ -3659,13 +3687,17 @@ final class DictationViewModel: ObservableObject {
         translationTarget: String?,
         detectedLanguage: String?,
         configuredLanguage: String?,
-        resolvedOutputFormat: String?
+        resolvedOutputFormat: String?,
+        incrementalPostProcessing: WorkflowIncrementalPostProcessingSession? = nil,
+        stopTimingStart: CFAbsoluteTime? = nil
     ) -> ((String) async throws -> String)? {
         if let workflowHandler = buildWorkflowTextProcessingHandler(
             translationTarget: translationTarget,
             detectedLanguage: detectedLanguage,
             configuredLanguage: configuredLanguage,
-            resolvedOutputFormat: resolvedOutputFormat
+            resolvedOutputFormat: resolvedOutputFormat,
+            incrementalPostProcessing: incrementalPostProcessing,
+            stopTimingStart: stopTimingStart
         ) {
             return workflowHandler
         }
@@ -3707,7 +3739,9 @@ final class DictationViewModel: ObservableObject {
         translationTarget: String?,
         detectedLanguage: String?,
         configuredLanguage: String?,
-        resolvedOutputFormat: String?
+        resolvedOutputFormat: String?,
+        incrementalPostProcessing: WorkflowIncrementalPostProcessingSession?,
+        stopTimingStart: CFAbsoluteTime?
     ) -> ((String) async throws -> String)? {
         guard let workflow = matchedWorkflow else { return nil }
 
@@ -3723,21 +3757,183 @@ final class DictationViewModel: ObservableObject {
             return nil
         }
 
-        return { text in
-            if workflowService.shouldSkipAIProcessingForShortDictation(text: text) {
-                logger.info("Skipping workflow AI processing for short dictation")
-                return text
-            }
-
-            return try await workflowProcessor.process(
+        let segmentedRequest = workflow.usesSegmentedPostProcessing
+            ? workflowProcessor.segmentedPromptRequest(
                 workflow: workflow,
-                text: text,
                 fallbackTranslationTarget: translationTarget,
                 detectedLanguage: detectedLanguage,
                 configuredLanguage: configuredLanguage,
                 resolvedOutputFormat: resolvedOutputFormat
             )
+            : nil
+        // Segments sent while recording could not know the detected language yet.
+        let incrementalRequest = segmentedRequest == nil
+            ? nil
+            : workflowProcessor.segmentedPromptRequest(
+                workflow: workflow,
+                fallbackTranslationTarget: translationTarget,
+                detectedLanguage: nil,
+                configuredLanguage: configuredLanguage,
+                resolvedOutputFormat: resolvedOutputFormat
+            )
+        let segmentationPolicy = segmentedRequest.map { workflowSegmentationPolicy(for: $0) } ?? .default
+
+        return { text in
+            if workflowService.shouldSkipAIProcessingForShortDictation(text: text) {
+                incrementalPostProcessing?.cancel()
+                logger.info("Skipping workflow AI processing for short dictation")
+                return text
+            }
+
+            guard let segmentedRequest else {
+                incrementalPostProcessing?.cancel()
+                return try await workflowProcessor.process(
+                    workflow: workflow,
+                    text: text,
+                    fallbackTranslationTarget: translationTarget,
+                    detectedLanguage: detectedLanguage,
+                    configuredLanguage: configuredLanguage,
+                    resolvedOutputFormat: resolvedOutputFormat
+                )
+            }
+
+            let llmStart = CFAbsoluteTimeGetCurrent()
+            let outcome = try await WorkflowSegmentedPostProcessor(policy: segmentationPolicy).process(
+                text: text,
+                incrementalSession: incrementalPostProcessing,
+                incrementalRequest: incrementalRequest,
+                segmentProcessor: { segment in
+                    try await workflowProcessor.process(request: segmentedRequest, text: segment)
+                },
+                // Same request `process(workflow:)` builds for this workflow and text.
+                wholeTextProcessor: {
+                    try await workflowProcessor.process(request: segmentedRequest, text: text)
+                }
+            )
+            let llmMs = String(format: "%.0f", (CFAbsoluteTimeGetCurrent() - llmStart) * 1000)
+            let elapsedMs = stopTimingStart.map { String(format: "%.0f", (CFAbsoluteTimeGetCurrent() - $0) * 1000) } ?? "n/a"
+            logger.info("Stop timing: segmented workflow LLM done elapsedMs=\(elapsedMs, privacy: .public), llmMs=\(llmMs, privacy: .public), \(outcome.report.logDescription, privacy: .public)")
+            return outcome.text
         }
+    }
+
+    /// Arms incremental workflow post-processing for the current recording when the
+    /// matched workflow opted in and the live preview runs on the dictation engine,
+    /// so its confirmed text can become the final transcript.
+    private func refreshIncrementalWorkflowPostProcessing(forceRestart: Bool = false) {
+        guard state == .recording, !isStopInFlight else { return }
+
+        let configuration = incrementalWorkflowPostProcessingConfiguration()
+        if !forceRestart,
+           let current = incrementalWorkflowPostProcessing,
+           current.request == configuration?.request,
+           current.policy == configuration?.policy {
+            return
+        }
+
+        cancelIncrementalWorkflowPostProcessing()
+        guard let configuration else { return }
+
+        let workflowProcessor = workflowTextProcessingService
+        let request = configuration.request
+        incrementalWorkflowPostProcessing = WorkflowIncrementalPostProcessingSession(
+            request: request,
+            policy: configuration.policy,
+            prepareInput: configuration.prepareInput,
+            processor: { segment in
+                try await workflowProcessor.process(request: request, text: segment)
+            }
+        )
+        logger.info("Incremental workflow post-processing armed for this recording localProvider=\(configuration.policy.isLocalProvider, privacy: .public)")
+    }
+
+    /// Segmentation tuned for the provider `request` will actually use. Uses the
+    /// locality snapshotted into the request, so it matches the request identity.
+    private func workflowSegmentationPolicy(for request: WorkflowLLMRequest) -> WorkflowSegmentationPolicy {
+        WorkflowSegmentationPolicy.default.forLLMProvider(
+            isLocal: request.providerResolution?.isLocal
+                ?? promptProcessingService.workflowUsesLocalLLMProvider(providerOverride: request.providerId)
+        )
+    }
+
+    private func incrementalWorkflowPostProcessingConfiguration() -> (
+        request: WorkflowLLMRequest,
+        policy: WorkflowSegmentationPolicy,
+        prepareInput: @MainActor (String) -> String
+    )? {
+        guard let workflow = matchedWorkflow,
+              workflow.usesSegmentedPostProcessing,
+              let streamingParams = lastStreamingParams,
+              lastPreviewFollowsDictationEngine,
+              !postProcessingPipeline.hasPluginStepsBeforeLLMStep else {
+            return nil
+        }
+
+        let activeApp = capturedActiveApp ?? (name: nil, bundleId: nil, url: nil)
+        let outputFormat = WorkflowOutputFormatResolver.resolvedFormat(
+            storedFormat: effectiveOutputFormat,
+            bundleIdentifier: activeApp.bundleId,
+            url: activeApp.url
+        )
+        let languageSelection = streamingParams.languageSelection
+        let configuredLanguage = languageSelection.requestedLanguage
+        guard let request = workflowTextProcessingService.segmentedPromptRequest(
+            workflow: workflow,
+            fallbackTranslationTarget: effectiveTranslationTarget,
+            detectedLanguage: nil,
+            configuredLanguage: configuredLanguage,
+            resolvedOutputFormat: outputFormat
+        ) else {
+            return nil
+        }
+
+        // Mirror what the stop path does to the live result before the LLM step:
+        // number normalization at live-session finish, then the pipeline's built-in
+        // steps. A mismatch is caught by the prefix check at stop.
+        let pipeline = postProcessingPipeline
+        let normalizeNumbers = streamingParams.normalizeNumbers
+        let normalizationLanguages = TranscriptionNormalizationService.normalizationLanguages(
+            task: streamingParams.task,
+            detectedLanguage: nil,
+            configuredLanguage: configuredLanguage,
+            configuredLanguageCandidates: languageSelection.selectedCodes
+        )
+        let context = PostProcessingContext(
+            appName: activeApp.name,
+            bundleIdentifier: activeApp.bundleId,
+            url: activeApp.url,
+            language: configuredLanguage
+        )
+        let dictationContext = DictationRuntimeContext(
+            engineId: streamingParams.engineOverrideId ?? streamingParams.providerId,
+            modelId: modelManager.resolvedModelId(
+                engineOverrideId: streamingParams.engineOverrideId,
+                cloudModelOverride: streamingParams.cloudModelOverride
+            ),
+            configuredLanguage: configuredLanguage,
+            configuredLanguageCandidates: languageSelection.selectedCodes,
+            detectedLanguage: nil
+        )
+        let prepareInput: @MainActor (String) -> String = { text in
+            let normalized = TranscriptionNormalizationService.normalizeText(
+                text,
+                languages: normalizationLanguages,
+                normalizeNumbers: normalizeNumbers
+            )
+            return pipeline.textBeforeLLMStep(
+                normalized,
+                context: context,
+                dictationContext: dictationContext,
+                outputFormat: outputFormat,
+                normalizeNumbers: normalizeNumbers
+            )
+        }
+        return (request, workflowSegmentationPolicy(for: request), prepareInput)
+    }
+
+    private func cancelIncrementalWorkflowPostProcessing() {
+        incrementalWorkflowPostProcessing?.cancel()
+        incrementalWorkflowPostProcessing = nil
     }
 
     /// Executes an action plugin and handles its result (feedback, clipboard URL, events).

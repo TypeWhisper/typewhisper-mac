@@ -7,6 +7,34 @@ private let workflowTextProcessingLogger = Logger(
     category: "WorkflowTextProcessingService"
 )
 
+/// The provider route a workflow LLM request resolved to when it was built.
+struct WorkflowLLMProviderResolution: Equatable, Sendable {
+    struct Attempt: Equatable, Sendable {
+        let providerId: String
+        let modelId: String?
+        let effortId: String?
+    }
+
+    /// The workflow's provider override, or the inherited global fallback list, in order.
+    let attempts: [Attempt]
+    /// Whether any attempt runs on an on-device model.
+    let isLocal: Bool
+}
+
+/// A fully resolved workflow LLM request. Segmented post-processing sends every
+/// segment with the same request, and compares requests to decide whether results
+/// computed during recording still match the configuration at stop.
+struct WorkflowLLMRequest: Equatable, Sendable {
+    let systemPrompt: String
+    let providerId: String?
+    let cloudModel: String?
+    let temperatureDirective: PluginLLMTemperatureDirective
+    let effortId: String?
+    /// Snapshot of the provider settings the request inherits, so a change to the
+    /// global LLM fallback list also changes the request identity.
+    var providerResolution: WorkflowLLMProviderResolution? = nil
+}
+
 @MainActor
 struct WorkflowTextProcessingService {
     typealias PromptProcessor = (
@@ -31,17 +59,26 @@ struct WorkflowTextProcessingService {
         _ targetLanguageCode: String,
         _ sourceLanguageCode: String?
     ) async throws -> String
+
+    typealias ProviderResolver = (
+        _ providerId: String?,
+        _ cloudModel: String?,
+        _ effortId: String?
+    ) -> WorkflowLLMProviderResolution
     private let promptProcessor: PromptProcessor
     private let effortPromptProcessor: EffortPromptProcessor?
     private let appleTranslator: AppleTranslator?
+    private let providerResolver: ProviderResolver?
 
     init(
         promptProcessor: @escaping PromptProcessor,
-        appleTranslator: AppleTranslator?
+        appleTranslator: AppleTranslator?,
+        providerResolver: ProviderResolver? = nil
     ) {
         self.promptProcessor = promptProcessor
         self.effortPromptProcessor = nil
         self.appleTranslator = appleTranslator
+        self.providerResolver = providerResolver
     }
 
     init(promptProcessingService: PromptProcessingService, translationService: AnyObject?, workflowService _: WorkflowService? = nil) {
@@ -61,6 +98,13 @@ struct WorkflowTextProcessingService {
                 providerOverride: providerId,
                 cloudModelOverride: cloudModel,
                 temperatureDirective: temperatureDirective,
+                effortOverride: effortId
+            )
+        }
+        self.providerResolver = { providerId, cloudModel, effortId in
+            promptProcessingService.workflowProviderResolution(
+                providerOverride: providerId,
+                cloudModelOverride: cloudModel,
                 effortOverride: effortId
             )
         }
@@ -127,7 +171,8 @@ struct WorkflowTextProcessingService {
             )
         }
 
-        guard let systemPrompt = workflow.systemPrompt(
+        guard let request = Self.promptRequest(
+            workflow: workflow,
             fallbackTranslationTarget: fallbackTranslationTarget,
             detectedLanguage: detectedLanguage,
             configuredLanguage: configuredLanguage,
@@ -136,23 +181,80 @@ struct WorkflowTextProcessingService {
             return text
         }
 
-        let behavior = workflow.behavior
+        return try await process(request: request, text: text)
+    }
+
+    /// Sends `text` through the same provider path as whole-text workflow processing,
+    /// including per-workflow overrides and the global LLM fallback list.
+    func process(request: WorkflowLLMRequest, text: String) async throws -> String {
         if let effortPromptProcessor {
             return try await effortPromptProcessor(
-                systemPrompt,
+                request.systemPrompt,
                 text,
-                Self.trimmedOrNil(behavior.providerId),
-                Self.trimmedOrNil(behavior.cloudModel),
-                behavior.temperatureDirective,
-                Self.trimmedOrNil(behavior.effortId)
+                request.providerId,
+                request.cloudModel,
+                request.temperatureDirective,
+                request.effortId
             )
         }
         return try await promptProcessor(
-            systemPrompt,
+            request.systemPrompt,
             text,
-            Self.trimmedOrNil(behavior.providerId),
-            Self.trimmedOrNil(behavior.cloudModel),
-            behavior.temperatureDirective
+            request.providerId,
+            request.cloudModel,
+            request.temperatureDirective
+        )
+    }
+
+    /// The prompt request used for segmented processing, or nil when the workflow
+    /// has no segmentable LLM step (see `Workflow.supportsSegmentedPostProcessing`)
+    /// or the resolved output format is not plain text.
+    /// The request includes the provider settings it currently resolves to.
+    func segmentedPromptRequest(
+        workflow: Workflow,
+        fallbackTranslationTarget: String? = nil,
+        detectedLanguage: String? = nil,
+        configuredLanguage: String? = nil,
+        resolvedOutputFormat: String? = nil
+    ) -> WorkflowLLMRequest? {
+        guard workflow.supportsSegmentedPostProcessing,
+              workflow.outputFormatAllowsSegmentation(resolvedOutputFormat: resolvedOutputFormat),
+              var request = Self.promptRequest(
+                  workflow: workflow,
+                  fallbackTranslationTarget: fallbackTranslationTarget,
+                  detectedLanguage: detectedLanguage,
+                  configuredLanguage: configuredLanguage,
+                  resolvedOutputFormat: resolvedOutputFormat
+              ) else {
+            return nil
+        }
+        request.providerResolution = providerResolver?(request.providerId, request.cloudModel, request.effortId)
+        return request
+    }
+
+    private static func promptRequest(
+        workflow: Workflow,
+        fallbackTranslationTarget: String?,
+        detectedLanguage: String?,
+        configuredLanguage: String?,
+        resolvedOutputFormat: String?
+    ) -> WorkflowLLMRequest? {
+        guard let systemPrompt = workflow.systemPrompt(
+            fallbackTranslationTarget: fallbackTranslationTarget,
+            detectedLanguage: detectedLanguage,
+            configuredLanguage: configuredLanguage,
+            resolvedOutputFormat: resolvedOutputFormat
+        ) else {
+            return nil
+        }
+
+        let behavior = workflow.behavior
+        return WorkflowLLMRequest(
+            systemPrompt: systemPrompt,
+            providerId: trimmedOrNil(behavior.providerId),
+            cloudModel: trimmedOrNil(behavior.cloudModel),
+            temperatureDirective: behavior.temperatureDirective,
+            effortId: trimmedOrNil(behavior.effortId)
         )
     }
 
