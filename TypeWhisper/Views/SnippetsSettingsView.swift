@@ -3,11 +3,22 @@ import SwiftUI
 struct SnippetsSettingsView: View {
     @ObservedObject private var viewModel = SnippetsViewModel.shared
 
+    var transformOnly = false
+
+    private var displayedSnippets: [Snippet] {
+        transformOnly ? viewModel.snippets.filter { $0.scope?.includesVoiceTransform == true } : viewModel.snippets
+    }
+
+    private func startCreating() {
+        viewModel.startCreating()
+        if transformOnly { viewModel.editScope = .voiceTransform }
+    }
+
     var body: some View {
         VStack(spacing: 0) {
-            SettingsPageHeader(String(localized: "Snippets")) {
+            SettingsPageHeader(transformOnly ? "Transform Prompts" : String(localized: "Snippets")) {
                 Button {
-                    viewModel.startCreating()
+                    startCreating()
                 } label: {
                     Label(String(localized: "Add Snippet"), systemImage: "plus")
                 }
@@ -16,11 +27,11 @@ struct SnippetsSettingsView: View {
             }
             Divider()
 
-            if viewModel.snippets.isEmpty {
+            if displayedSnippets.isEmpty {
                 emptyState
             } else {
                 HStack {
-                    Text(String(format: String(localized: "%d Snippets"), viewModel.snippets.count))
+                    Text(String(format: String(localized: "%d Snippets"), displayedSnippets.count))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
 
@@ -31,7 +42,7 @@ struct SnippetsSettingsView: View {
 
                 ScrollView {
                     LazyVStack(spacing: SettingsLayoutMetrics.cardSpacing) {
-                        ForEach(viewModel.snippets) { snippet in
+                        ForEach(displayedSnippets) { snippet in
                             SnippetCardView(snippet: snippet, viewModel: viewModel)
                         }
                     }
@@ -61,7 +72,7 @@ struct SnippetsSettingsView: View {
             message: String(localized: "Create snippets to automatically expand short triggers into longer text")
         ) {
             Button(String(localized: "Add Snippet")) {
-                viewModel.startCreating()
+                startCreating()
             }
             .buttonStyle(.borderedProminent)
         }
@@ -196,7 +207,9 @@ private struct SnippetEditorSheet: View {
                                 .focused($focusedField, equals: .replacement)
                         }
 
+                        VoiceTransformSnippetScopePicker(viewModel: viewModel)
                         Toggle(String(localized: "Case sensitive"), isOn: $viewModel.editCaseSensitive)
+                            .disabled(viewModel.editScope == .voiceTransform)
                     }
                     .padding(.vertical, 8)
                 }

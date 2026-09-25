@@ -214,6 +214,7 @@ final class AudioRecorderViewModel: ObservableObject {
     }
 
     @Published var state: RecorderState = .idle
+    var voiceTransformIsBusy: () -> Bool = { false }
     @Published var duration: TimeInterval = 0
     @Published var micLevel: Float = 0
     @Published var systemLevel: Float = 0
@@ -575,6 +576,9 @@ final class AudioRecorderViewModel: ObservableObject {
         preferredBaseName: String?,
         transcriptMetadata: CalendarMeetingTranscriptMetadata?
     ) async throws -> URL {
+        guard !voiceTransformIsBusy() else {
+            throw VoiceTransformError.message("Finish or cancel Voice Transform before starting the recorder.")
+        }
         guard retranscribingRecordingURL == nil else {
             throw RecorderAPIError.retranscribing
         }

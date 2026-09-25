@@ -7,6 +7,14 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A92000000000000000000001 /* VoiceTransformCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = B92000000000000000000001 /* VoiceTransformCoordinator.swift */; };
+		A92300000000000000000003 /* SnippetService+VoiceTransform.swift in Sources */ = {isa = PBXBuildFile; fileRef = B92300000000000000000003 /* SnippetService+VoiceTransform.swift */; };
+		A92300000000000000000002 /* TextInsertionService+VoiceTransform.swift in Sources */ = {isa = PBXBuildFile; fileRef = B92300000000000000000002 /* TextInsertionService+VoiceTransform.swift */; };
+		A92200000000000000000001 /* VoiceTransformPreferences.swift in Sources */ = {isa = PBXBuildFile; fileRef = B92200000000000000000001 /* VoiceTransformPreferences.swift */; };
+		A92000000000000000000002 /* VoiceTransformPanel.swift in Sources */ = {isa = PBXBuildFile; fileRef = B92000000000000000000002 /* VoiceTransformPanel.swift */; };
+		A92100000000000000000001 /* VoiceTransformSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = B92100000000000000000001 /* VoiceTransformSettingsView.swift */; };
+		A92000000000000000000003 /* VoiceTransformCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B92000000000000000000003 /* VoiceTransformCoordinatorTests.swift */; };
+		A92300000000000000000004 /* VoiceTransformSnippetTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B92300000000000000000004 /* VoiceTransformSnippetTests.swift */; };
 		1C1000000000000000000001 /* PremiumICloudBridgeClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C1000000000000000000011 /* PremiumICloudBridgeClient.swift */; };
 		1C1000000000000000000002 /* PremiumICloudBridgeShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C1000000000000000000012 /* PremiumICloudBridgeShared.swift */; };
 		1C1000000000000000000003 /* PremiumICloudBridgeShared.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C1000000000000000000012 /* PremiumICloudBridgeShared.swift */; };
@@ -176,6 +184,7 @@
 		F18A00000000000000000006 /* FillerWordsPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = F18A00000000000000000010 /* FillerWordsPlugin.swift */; };
 		AA00000000000000000001 /* TypeWhisperApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000001 /* TypeWhisperApp.swift */; };
 		AA00000000000000000002 /* ServiceContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000002 /* ServiceContainer.swift */; };
+		A92300000000000000000001 /* ServiceContainer+VoiceTransform.swift in Sources */ = {isa = PBXBuildFile; fileRef = B92300000000000000000001 /* ServiceContainer+VoiceTransform.swift */; };
 		AA00000000000000000005 /* TranscriptionResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000005 /* TranscriptionResult.swift */; };
 		AA00000000000000000009 /* ModelManagerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000009 /* ModelManagerService.swift */; };
 		AA00000000000000000010 /* AudioFileService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000010 /* AudioFileService.swift */; };
@@ -684,6 +693,14 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
+		B92000000000000000000001 /* VoiceTransformCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceTransformCoordinator.swift; sourceTree = "<group>"; };
+		B92300000000000000000003 /* SnippetService+VoiceTransform.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "SnippetService+VoiceTransform.swift"; sourceTree = "<group>"; };
+		B92300000000000000000002 /* TextInsertionService+VoiceTransform.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "TextInsertionService+VoiceTransform.swift"; sourceTree = "<group>"; };
+		B92200000000000000000001 /* VoiceTransformPreferences.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceTransformPreferences.swift; sourceTree = "<group>"; };
+		B92000000000000000000002 /* VoiceTransformPanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceTransformPanel.swift; sourceTree = "<group>"; };
+		B92100000000000000000001 /* VoiceTransformSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceTransformSettingsView.swift; sourceTree = "<group>"; };
+		B92000000000000000000003 /* VoiceTransformCoordinatorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceTransformCoordinatorTests.swift; sourceTree = "<group>"; };
+		B92300000000000000000004 /* VoiceTransformSnippetTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceTransformSnippetTests.swift; sourceTree = "<group>"; };
 		1C1000000000000000000011 /* PremiumICloudBridgeClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PremiumICloudBridgeClient.swift; sourceTree = "<group>"; };
 		1C1000000000000000000012 /* PremiumICloudBridgeShared.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PremiumICloudBridgeShared.swift; sourceTree = "<group>"; };
 		1C1000000000000000000013 /* PremiumICloudBridgeService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PremiumICloudBridgeService.swift; sourceTree = "<group>"; };
@@ -741,6 +758,7 @@
 		B10000000000000000000005 /* WorkflowServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = WorkflowServiceTests.swift; sourceTree = "<group>"; };
 		BB00000000000000000001 /* TypeWhisperApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TypeWhisperApp.swift; sourceTree = "<group>"; };
 		BB00000000000000000002 /* ServiceContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceContainer.swift; sourceTree = "<group>"; };
+		B92300000000000000000001 /* ServiceContainer+VoiceTransform.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = "ServiceContainer+VoiceTransform.swift"; sourceTree = "<group>"; };
 		BB00000000000000000005 /* TranscriptionResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionResult.swift; sourceTree = "<group>"; };
 		BB00000000000000000330 /* DictationPunctuationProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationPunctuationProfile.swift; sourceTree = "<group>"; };
 		BB00000000000000000331 /* PunctuationRules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PunctuationRules.swift; sourceTree = "<group>"; };
@@ -1813,6 +1831,7 @@
 				BB00000000000000000001 /* TypeWhisperApp.swift */,
 				BB00000000000000000352 /* TypeWhisper-Bridging-Header.h */,
 				BB00000000000000000002 /* ServiceContainer.swift */,
+				B92300000000000000000001 /* ServiceContainer+VoiceTransform.swift */,
 				BB00000000000000000070 /* UpdateChecker.swift */,
 				BB00000000000000000119 /* UserDefaultsKeys.swift */,
 				BB00000000000000000147 /* AppConstants.swift */,
@@ -1893,6 +1912,10 @@
 				BB00000000000000000271 /* DictionaryExporter.swift */,
 				8D819323529246BCB5504526 /* SettingsBackupExporter.swift */,
 				BB00000000000000000081 /* SnippetService.swift */,
+				B92000000000000000000001 /* VoiceTransformCoordinator.swift */,
+				B92300000000000000000003 /* SnippetService+VoiceTransform.swift */,
+				B92300000000000000000002 /* TextInsertionService+VoiceTransform.swift */,
+				B92200000000000000000001 /* VoiceTransformPreferences.swift */,
 				C1F000000000000000000001 /* Sync */,
 				BB00000000000000000086 /* SoundService.swift */,
 				BB00000000000000000102 /* AudioDeviceService.swift */,
@@ -2026,6 +2049,8 @@
 				BB00000000000000000117 /* PromptActionsSettingsView.swift */,
 				BB00000000000000000118 /* PromptPalettePanel.swift */,
 				B91F00000000000000000001 /* SelectionPalettePanel.swift */,
+				B92000000000000000000002 /* VoiceTransformPanel.swift */,
+				B92100000000000000000001 /* VoiceTransformSettingsView.swift */,
 				BB00000000000000000120 /* NotchIndicatorPanel.swift */,
 				E5A1B2C3D4F5061728394A5C /* NotchIndicatorLayout.swift */,
 				BB00000000000000000121 /* NotchIndicatorView.swift */,
@@ -2881,6 +2906,8 @@
 				B10000000000000000000004 /* SpeechFeedbackServiceTests.swift */,
 				7D2E4F50617283946C1F7A8B /* SoundServiceTests.swift */,
 				BE6B6611B899F649B097A726 /* SnippetServiceTests.swift */,
+				B92000000000000000000003 /* VoiceTransformCoordinatorTests.swift */,
+				B92300000000000000000004 /* VoiceTransformSnippetTests.swift */,
 				D4A100000000000000000004 /* RecorderTranscriptionBufferTests.swift */,
 				91B4D7E2C5A809F1632E4B7F /* StreamingHandlerTests.swift */,
 				B26D2C342D877030A62CE027 /* Support */,
@@ -4787,6 +4814,8 @@
 				A10000000000000000000005 /* SpeechFeedbackServiceTests.swift in Sources */,
 				6C1F7A8B9D2E4F5061728394 /* SoundServiceTests.swift in Sources */,
 				A47BC06842DCB0BB47A2D938 /* SnippetServiceTests.swift in Sources */,
+				A92000000000000000000003 /* VoiceTransformCoordinatorTests.swift in Sources */,
+				A92300000000000000000004 /* VoiceTransformSnippetTests.swift in Sources */,
 				D4A100000000000000000003 /* RecorderTranscriptionBufferTests.swift in Sources */,
 				91B4D7E2C5A809F1632E4B7E /* StreamingHandlerTests.swift in Sources */,
 				9A584149706C7567496E0100 /* XAIPluginTests.swift in Sources */,
@@ -4837,6 +4866,7 @@
 				CA1E0000000000000000000B /* MeetingAutomationCountdownIndicator.swift in Sources */,
 				AA00000000000000000001 /* TypeWhisperApp.swift in Sources */,
 				AA00000000000000000002 /* ServiceContainer.swift in Sources */,
+				A92300000000000000000001 /* ServiceContainer+VoiceTransform.swift in Sources */,
 				AA00000000000000000005 /* TranscriptionResult.swift in Sources */,
 				AA00000000000000000330 /* DictationPunctuationProfile.swift in Sources */,
 				AA00000000000000000331 /* PunctuationRules.swift in Sources */,
@@ -4916,6 +4946,12 @@
 				A87000000000000000000001 /* DictionaryTrainingService.swift in Sources */,
 				AA00000000000000000080 /* Snippet.swift in Sources */,
 				AA00000000000000000081 /* SnippetService.swift in Sources */,
+				A92000000000000000000001 /* VoiceTransformCoordinator.swift in Sources */,
+				A92300000000000000000003 /* SnippetService+VoiceTransform.swift in Sources */,
+				A92300000000000000000002 /* TextInsertionService+VoiceTransform.swift in Sources */,
+				A92200000000000000000001 /* VoiceTransformPreferences.swift in Sources */,
+				A92000000000000000000002 /* VoiceTransformPanel.swift in Sources */,
+				A92100000000000000000001 /* VoiceTransformSettingsView.swift in Sources */,
 				C1F000000000000000000011 /* UserDataSyncIdentity.swift in Sources */,
 				C1F000000000000000000012 /* TypeWhisperUserDataSyncStore.swift in Sources */,
 				C1F000000000000000000013 /* CloudFolderSyncEngine.swift in Sources */,

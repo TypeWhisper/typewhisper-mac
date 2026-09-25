@@ -120,6 +120,7 @@ struct UserDataSyncSnippet: Codable, Equatable, Sendable {
     let replacement: String
     let caseSensitive: Bool
     let isEnabled: Bool
+    let scopeRawValue: String?
     let tags: [String]
     let createdAt: Date
     let updatedAt: Date
@@ -129,6 +130,7 @@ struct UserDataSyncSnippet: Codable, Equatable, Sendable {
         replacement: String,
         caseSensitive: Bool,
         isEnabled: Bool,
+        scopeRawValue: String? = nil,
         tags: [String] = [],
         createdAt: Date,
         updatedAt: Date
@@ -137,13 +139,14 @@ struct UserDataSyncSnippet: Codable, Equatable, Sendable {
         self.replacement = replacement
         self.caseSensitive = caseSensitive
         self.isEnabled = isEnabled
+        self.scopeRawValue = scopeRawValue
         self.tags = tags
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
 
     private enum CodingKeys: String, CodingKey {
-        case trigger, replacement, caseSensitive, isEnabled, tags, createdAt, updatedAt
+        case trigger, replacement, caseSensitive, isEnabled, scopeRawValue, tags, createdAt, updatedAt
     }
 
     init(from decoder: Decoder) throws {
@@ -152,6 +155,7 @@ struct UserDataSyncSnippet: Codable, Equatable, Sendable {
         replacement = try container.decode(String.self, forKey: .replacement)
         caseSensitive = try container.decode(Bool.self, forKey: .caseSensitive)
         isEnabled = try container.decode(Bool.self, forKey: .isEnabled)
+        scopeRawValue = try container.decodeIfPresent(String.self, forKey: .scopeRawValue)
         tags = try container.decodeIfPresent([String].self, forKey: .tags) ?? []
         createdAt = try container.decode(Date.self, forKey: .createdAt)
         updatedAt = try container.decode(Date.self, forKey: .updatedAt)
