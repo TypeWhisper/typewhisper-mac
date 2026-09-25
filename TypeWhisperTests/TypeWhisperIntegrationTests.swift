@@ -6524,6 +6524,26 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testInsertionWithoutClipboardPreservationWaitsForPendingPaste() async throws {
+        let harness = ClipboardRestoreHarness(verifiesPaste: false)
+        harness.service.pendingPasteSettleWindow = .milliseconds(200)
+        let clock = ContinuousClock()
+        var pasteTimes: [ContinuousClock.Instant] = []
+        harness.service.pasteSimulatorOverride = { [unowned harness] in
+            harness.pasteCount += 1
+            pasteTimes.append(clock.now)
+        }
+
+        // No clipboard restore is pending, but the first paste still has to settle.
+        _ = try await harness.service.insertText("First dictation")
+        XCTAssertFalse(harness.service.hasPendingClipboardRestore)
+        _ = try await harness.service.insertText("Second dictation")
+
+        XCTAssertEqual(pasteTimes.count, 2)
+        XCTAssertGreaterThanOrEqual(pasteTimes[0].duration(to: pasteTimes[1]), .milliseconds(190))
+    }
+
+    @MainActor
     func testDirectAXInsertionWaitsForPendingPasteToLand() async throws {
         let harness = ClipboardRestoreHarness(verifiesPaste: true)
         harness.service.pasteVerificationAttempts = 10_000
