@@ -3827,6 +3827,13 @@ private struct OpenAISettingsView: View {
         let trimmedKey = apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedKey.isEmpty else { return }
 
+        // A first key is stored right away because a key can fail the /v1/models check and still transcribe.
+        // A replacement is stored only once validated so a mistyped paste can't overwrite a working key.
+        let replacesStoredKey = plugin._apiKey?.isEmpty == false
+        if !replacesStoredKey {
+            plugin.setApiKey(trimmedKey)
+        }
+
         func showResult(_ isValid: Bool) {
             isValidating = false
             // A focused field may still take typing while the row is disabled, so only label the key it still shows.
@@ -3838,8 +3845,9 @@ private struct OpenAISettingsView: View {
         Task {
             let isValid = await plugin.validateApiKey(trimmedKey)
             if isValid {
-                // Store only a validated key so a mistyped paste can't replace a working one.
-                plugin.setApiKey(trimmedKey)
+                if replacesStoredKey {
+                    plugin.setApiKey(trimmedKey)
+                }
                 let models = await plugin.refreshFetchedLLMModels()
                 await MainActor.run {
                     showResult(true)
