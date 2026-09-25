@@ -52,6 +52,7 @@ struct OverlayIndicatorSurface<Content: View>: View {
 struct OverlayIndicatorView: View {
     @ObservedObject private var viewModel = DictationViewModel.shared
     @ObservedObject private var recorder = AudioRecorderViewModel.shared
+    @ObservedObject private var preview = IndicatorPreviewSession.shared
     @ObservedObject private var countdownModel: CalendarMeetingCountdownModel
     @Environment(\.colorScheme) private var systemColorScheme
     @State private var textExpanded = false
@@ -67,7 +68,7 @@ struct OverlayIndicatorView: View {
     }
 
     private var presentation: IndicatorPresentationData {
-        IndicatorPresentationData.make(dictation: viewModel, recorder: recorder)
+        IndicatorPresentationData.make(dictation: viewModel, recorder: recorder, preview: preview)
     }
 
     private var countdownPresentation: CalendarMeetingCountdownPresentation? {
@@ -171,7 +172,21 @@ struct OverlayIndicatorView: View {
         // tiny stutter instead of a continuous glide.
         .animation(.linear(duration: 0.033), value: presentation.audioLevel)
         .onChange(of: presentation.partialText) {
-            expandTranscriptPreviewIfNeeded()
+            if presentation.source == .preview, presentation.partialText.isEmpty {
+                // The preview loop restarts: collapse so the expand animation replays.
+                withAnimation(IndicatorMotion.expand) {
+                    textExpanded = false
+                }
+            } else {
+                expandTranscriptPreviewIfNeeded()
+            }
+        }
+        .onChange(of: presentation.source) {
+            // A real session replacing the preview starts with an empty
+            // transcript; the preview taking over again shows what it has.
+            withAnimation(IndicatorMotion.expand) {
+                textExpanded = presentation.source == .preview && !presentation.partialText.isEmpty
+            }
         }
         .onChange(of: presentation.state) {
             if presentation.state == .recording {

@@ -8,6 +8,7 @@ import SwiftUI
 struct NotchIndicatorView: View {
     @ObservedObject private var viewModel = DictationViewModel.shared
     @ObservedObject private var recorder = AudioRecorderViewModel.shared
+    @ObservedObject private var preview = IndicatorPreviewSession.shared
     @ObservedObject private var countdownModel: CalendarMeetingCountdownModel
     @ObservedObject var geometry: NotchGeometry
     @Environment(\.colorScheme) private var systemColorScheme
@@ -28,7 +29,7 @@ struct NotchIndicatorView: View {
     }
 
     private var presentation: IndicatorPresentationData {
-        IndicatorPresentationData.make(dictation: viewModel, recorder: recorder)
+        IndicatorPresentationData.make(dictation: viewModel, recorder: recorder, preview: preview)
     }
 
     private var countdownPresentation: CalendarMeetingCountdownPresentation? {
@@ -190,10 +191,24 @@ struct NotchIndicatorView: View {
         // tiny stutter instead of a continuous glide.
         .animation(.linear(duration: 0.033), value: presentation.audioLevel)
         .onChange(of: presentation.partialText) {
-            if showTranscriptPreview, !presentation.partialText.isEmpty, !textExpanded {
+            if presentation.source == .preview, presentation.partialText.isEmpty {
+                // The preview loop restarts: collapse so the expand animation replays.
+                withAnimation(IndicatorMotion.expand) {
+                    textExpanded = false
+                }
+            } else if showTranscriptPreview, !presentation.partialText.isEmpty, !textExpanded {
                 withAnimation(.easeOut(duration: 0.24)) {
                     textExpanded = true
                 }
+            }
+        }
+        .onChange(of: presentation.source) {
+            // A real session replacing the preview starts with an empty
+            // transcript; the preview taking over again shows what it has.
+            withAnimation(IndicatorMotion.expand) {
+                textExpanded = presentation.source == .preview
+                    && showTranscriptPreview
+                    && !presentation.partialText.isEmpty
             }
         }
         .onChange(of: presentation.state) {

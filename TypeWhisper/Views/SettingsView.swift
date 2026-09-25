@@ -3,7 +3,7 @@ import AppKit
 import TypeWhisperPluginSDK
 
 enum SettingsTab: Hashable {
-    case home, general, dictation, hotkeys, recorder
+    case home, general, appearance, dictation, hotkeys, recorder
     case dictationRecovery, fileTranscription, history, statistics, dictionary, snippets, workflows, profiles, prompts, premium, integrations, advanced, license, about
     case plugin(pluginId: String, itemId: String)
 }
@@ -40,7 +40,8 @@ struct SettingsView: View {
         guard AppConstants.isScreenshotAutomation else { return .home }
 
         switch AppConstants.screenshotState {
-        case "general", "indicator-settings": return .general
+        case "general": return .general
+        case "indicator-settings", "appearance": return .appearance
         case "indicator": return .home
         case "recording": return .dictation
         case "recovery": return .dictationRecovery
@@ -65,6 +66,7 @@ struct SettingsView: View {
         let builtInDestinations = [
             SettingsDestination(tab: .home, title: String(localized: "Home"), systemImage: "house", badge: nil),
             SettingsDestination(tab: .general, title: String(localized: "General"), systemImage: "gear", badge: nil),
+            SettingsDestination(tab: .appearance, title: String(localized: "Appearance"), systemImage: "circle.lefthalf.filled", badge: nil),
             SettingsDestination(tab: .dictation, title: String(localized: "Dictation"), systemImage: "mic.fill", badge: nil),
             SettingsDestination(tab: .hotkeys, title: String(localized: "Hotkeys"), systemImage: "keyboard", badge: nil),
             SettingsDestination(
@@ -155,6 +157,15 @@ struct SettingsView: View {
         .frame(minWidth: 950, idealWidth: 1050, minHeight: 550, idealHeight: 600)
         .onAppear {
             navigateToFileTranscriptionIfNeeded()
+            syncIndicatorPreview()
+        }
+        // The detail view's own onDisappear is not reliable inside the split
+        // view, so the selected tab drives the live indicator preview.
+        .onChange(of: selectedTab) { _, _ in
+            syncIndicatorPreview()
+        }
+        .onDisappear {
+            IndicatorPreviewSession.shared.stop()
         }
         .onChange(of: fileTranscription.showFilePickerFromMenu) { _, _ in
             navigateToFileTranscriptionIfNeeded()
@@ -192,6 +203,14 @@ struct SettingsView: View {
         tab
     }
 
+    private func syncIndicatorPreview() {
+        if selectedTab == .appearance {
+            IndicatorPreviewSession.shared.start()
+        } else {
+            IndicatorPreviewSession.shared.stop()
+        }
+    }
+
     private func navigateToFileTranscriptionIfNeeded() {
         if fileTranscription.showFilePickerFromMenu {
             selectedTab = .fileTranscription
@@ -213,6 +232,8 @@ struct SettingsView: View {
             #endif
         case .general:
             GeneralSettingsView()
+        case .appearance:
+            AppearanceSettingsView()
         case .dictation:
             RecordingSettingsView()
         case .hotkeys:
@@ -566,6 +587,7 @@ private func settingsBadge(_ destinations: [SettingsDestination], _ tab: Setting
 private func settingsDestinationSections(_ destinations: [SettingsDestination]) -> [SettingsDestinationSection] {
     var coreDestinations = [
         settingsDestination(destinations, .general),
+        settingsDestination(destinations, .appearance),
         settingsDestination(destinations, .dictation)
     ]
     if let recoveryDestination = settingsDestinationIfAvailable(destinations, .dictationRecovery) {

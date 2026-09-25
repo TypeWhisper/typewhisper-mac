@@ -45,3 +45,6 @@ CodeSigning.local.xcconfig
 
 # Git worktrees
 .worktrees/
+
+# Python bytecode from the helper scripts
+__pycache__/
