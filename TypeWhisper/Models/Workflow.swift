@@ -111,6 +111,18 @@ enum WorkflowTemplate: String, CaseIterable, Codable, Sendable {
             )
         }
     }
+
+    /// Whether the template's LLM step transforms each sentence on its own, so the
+    /// outputs of independent segments can be joined. Templates that restructure,
+    /// condense, or wrap the whole dictation (and custom instructions) cannot be split.
+    var allowsSegmentedPostProcessing: Bool {
+        switch self {
+        case .cleanedText, .translation:
+            true
+        case .emailReply, .meetingNotes, .checklist, .json, .summary, .dictation, .custom:
+            false
+        }
+    }
 }
 
 struct WorkflowTemplateDefinition: Identifiable, Equatable, Sendable {
@@ -296,6 +308,10 @@ struct WorkflowBehavior: Codable, Equatable, Sendable {
     var inlineCommandsEnabled: Bool?
     var temperatureModeRaw: String?
     var temperatureValue: Double?
+    /// Opt-in: run the workflow LLM on sentence-aligned segments (during recording
+    /// for streaming engines, concurrently after stop otherwise). `nil` means off,
+    /// so data written by builds without this field decodes unchanged.
+    var segmentedPostProcessingEnabled: Bool?
 
     init(
         settings: [String: String] = [:],
@@ -308,7 +324,8 @@ struct WorkflowBehavior: Codable, Equatable, Sendable {
         microphoneBoostOverride: Bool? = nil,
         inlineCommandsEnabled: Bool? = nil,
         temperatureModeRaw: String? = nil,
-        temperatureValue: Double? = nil
+        temperatureValue: Double? = nil,
+        segmentedPostProcessingEnabled: Bool? = nil
     ) {
         self.settings = settings
         self.fineTuning = fineTuning
@@ -321,6 +338,7 @@ struct WorkflowBehavior: Codable, Equatable, Sendable {
         self.inlineCommandsEnabled = inlineCommandsEnabled
         self.temperatureModeRaw = temperatureModeRaw
         self.temperatureValue = temperatureValue
+        self.segmentedPostProcessingEnabled = segmentedPostProcessingEnabled
     }
 
     var temperatureMode: PluginLLMTemperatureMode {
@@ -723,6 +741,42 @@ extension Workflow {
             }
             behavior = updatedBehavior
         }
+    }
+
+    /// Whether the workflow runs a prompt-based LLM step whose input can be split
+    /// into independent segments. Only per-sentence templates qualify (see
+    /// `WorkflowTemplate.allowsSegmentedPostProcessing`), so a stored flag on any
+    /// other template is ignored. Inline Commands and Apple Translate are excluded:
+    /// an inline instruction applies to the whole dictation, and Apple Translate
+    /// runs on-device without an LLM request. Structured output formats also
+    /// disable it (see `outputFormatAllowsSegmentation`).
+    var supportsSegmentedPostProcessing: Bool {
+        template.allowsSegmentedPostProcessing
+            && !usesInlineCommands
+            && !usesAppleTranslate
+            && outputFormatAllowsSegmentation()
+            && systemPrompt() != nil
+    }
+
+    /// Segment outputs are joined as plain text, so only plain-text output can be
+    /// split. Formats such as JSON, HTML, or code describe a single document and
+    /// must come from one request. `resolvedOutputFormat` is the format resolved for
+    /// the target app; without it, "auto" resolves the way `outputInstruction` does.
+    func outputFormatAllowsSegmentation(resolvedOutputFormat: String? = nil) -> Bool {
+        let format = resolvedOutputFormat ?? WorkflowOutputFormatResolver.resolvedFormat(
+            storedFormat: output.format,
+            bundleIdentifier: nil,
+            url: nil
+        )
+        guard let normalizedFormat = WorkflowOutputFormatResolver.normalized(format) else {
+            return true
+        }
+        return normalizedFormat == WorkflowOutputFormatResolver.plainTextFormat
+            || normalizedFormat == "plain text"
+    }
+
+    var usesSegmentedPostProcessing: Bool {
+        behavior.segmentedPostProcessingEnabled == true && supportsSegmentedPostProcessing
     }
 
     var isManuallyRunnable: Bool {
