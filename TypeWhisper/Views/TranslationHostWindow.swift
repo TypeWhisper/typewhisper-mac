@@ -13,6 +13,12 @@ import Translation
 @available(macOS 15, *)
 @MainActor
 final class TranslationHostWindow: NSWindow {
+    /// Normal level on purpose. An ordered-in window below `.minimumWindow`
+    /// makes macOS 27 draw the wallpaper over the menu bar of fullscreen Spaces
+    /// after Mission Control or a Space switch (#1375). Off-screen, alpha 0 and
+    /// `ignoresMouseEvents` already keep this window out of the way.
+    static let offscreenLevel: NSWindow.Level = .normal
+
     private let offscreenRect = NSRect(x: -9999, y: -9999, width: 1, height: 1)
     private var isInteractiveMode = false
 
@@ -32,7 +38,7 @@ final class TranslationHostWindow: NSWindow {
         isOpaque = false
         backgroundColor = .clear
         alphaValue = 0.0
-        level = .init(rawValue: Int(CGWindowLevelForKey(.minimumWindow)) - 1)
+        level = Self.offscreenLevel
         collectionBehavior = [.canJoinAllSpaces, .stationary]
 
         let hostingView = NSHostingView(
@@ -70,7 +76,7 @@ final class TranslationHostWindow: NSWindow {
             let targetFrame = offscreenRect
             ignoresMouseEvents = true
             alphaValue = 0.0
-            level = .init(rawValue: Int(CGWindowLevelForKey(.minimumWindow)) - 1)
+            level = Self.offscreenLevel
             if !frame.equalTo(targetFrame) {
                 setFrame(targetFrame, display: false)
             }

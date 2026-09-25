@@ -1059,6 +1059,17 @@ final class TranslationHostWindowTests: XCTestCase {
 
         XCTAssertEqual(hostingView.sizingOptions, [])
     }
+
+    func testOffscreenHostWindowStaysAtOrAboveMinimumWindowLevel() {
+        let window = TranslationHostWindow(translationService: TranslationService())
+        defer { window.orderOut(nil) }
+
+        XCTAssertGreaterThanOrEqual(
+            window.level.rawValue,
+            Int(CGWindowLevelForKey(.minimumWindow))
+        )
+        XCTAssertTrue(window.isVisible)
+    }
 }
 #endif
 
