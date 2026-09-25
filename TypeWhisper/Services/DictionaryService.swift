@@ -49,6 +49,7 @@ struct DictionaryTrainingCommitResult: Equatable, Sendable {
 final class DictionaryService: ObservableObject {
     private var modelContainer: ModelContainer?
     private var modelContext: ModelContext?
+    private var hasDeferredUsageCountChanges = false
 
     @Published private(set) var entries: [DictionaryEntry] = []
     @Published private(set) var terms: [DictionaryEntry] = []
@@ -571,13 +572,16 @@ final class DictionaryService: ObservableObject {
         return PluginDictionaryTerms.clippedTermHints(from: hints, budget: budget)
     }
 
-    /// Apply all enabled corrections to the given text
-    func applyCorrections(to text: String) -> String {
-        applyCorrections(to: [text]).first ?? text
+    /// Apply all enabled corrections to the given text.
+    ///
+    /// With `deferUsageCountSave`, usage counters stay unsaved until `saveDeferredUsageCounts()`
+    /// so the dictation pipeline does not block insertion on a SwiftData save.
+    func applyCorrections(to text: String, deferUsageCountSave: Bool = false) -> String {
+        applyCorrections(to: [text], deferUsageCountSave: deferUsageCountSave).first ?? text
     }
 
     /// Apply all enabled corrections to related text fields while counting each correction once.
-    func applyCorrections(to texts: [String]) -> [String] {
+    func applyCorrections(to texts: [String], deferUsageCountSave: Bool = false) -> [String] {
         var results = texts
         var needsSave = false
 
@@ -598,14 +602,29 @@ final class DictionaryService: ObservableObject {
         }
 
         if needsSave {
-            do {
-                try modelContext?.save()
-            } catch {
-                logger.error("Failed to update usage count: \(error.localizedDescription)")
+            if deferUsageCountSave {
+                hasDeferredUsageCountChanges = true
+            } else {
+                saveUsageCounts()
             }
         }
 
         return results
+    }
+
+    /// Saves usage counters left unsaved by `applyCorrections(to:deferUsageCountSave:)`.
+    func saveDeferredUsageCounts() {
+        guard hasDeferredUsageCountChanges else { return }
+        saveUsageCounts()
+    }
+
+    private func saveUsageCounts() {
+        hasDeferredUsageCountChanges = false
+        do {
+            try modelContext?.save()
+        } catch {
+            logger.error("Failed to update usage count: \(error.localizedDescription)")
+        }
     }
 
     private func applyCorrection(_ correction: DictionaryEntry, to text: String, replacement: String) -> String {

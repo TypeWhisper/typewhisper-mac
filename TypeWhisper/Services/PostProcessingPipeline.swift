@@ -52,7 +52,8 @@ final class PostProcessingPipeline {
         outputFormat: String? = nil,
         llmStepName: String? = nil,
         normalizeNumbers: Bool? = nil,
-        llmFailureFallbackText: String? = nil
+        llmFailureFallbackText: String? = nil,
+        deferUsageCountSaves: Bool = false
     ) async throws -> PostProcessingResult {
         // Collect plugin processors with their priorities
         let plugins = PluginManager.shared.postProcessors
@@ -92,7 +93,8 @@ final class PostProcessingPipeline {
                         context: context,
                         dictationContext: dictationContext,
                         outputFormat: outputFormat,
-                        normalizeNumbers: normalizeNumbers
+                        normalizeNumbers: normalizeNumbers,
+                        deferUsageCountSave: deferUsageCountSaves
                     )
                 default:
                     result = try await plugins[step.id].process(text: result, context: context)
@@ -199,7 +201,8 @@ final class PostProcessingPipeline {
         context: PostProcessingContext,
         dictationContext: DictationRuntimeContext?,
         outputFormat: String?,
-        normalizeNumbers: Bool?
+        normalizeNumbers: Bool?,
+        deferUsageCountSave: Bool = false
     ) -> String {
         switch id {
         case -6:
@@ -247,9 +250,9 @@ final class PostProcessingPipeline {
                 )
             }
         case -2:
-            return snippetService.applySnippets(to: text)
+            return snippetService.applySnippets(to: text, deferUsageCountSave: deferUsageCountSave)
         case -3:
-            return dictionaryService.applyCorrections(to: text)
+            return dictionaryService.applyCorrections(to: text, deferUsageCountSave: deferUsageCountSave)
         default:
             return text
         }

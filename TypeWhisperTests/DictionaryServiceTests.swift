@@ -114,6 +114,24 @@ final class DictionaryServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testDeferredCorrectionUsageCountsAreSavedOnlyWhenRequested() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.addEntry(type: .correction, original: "teh", replacement: "the")
+
+        XCTAssertEqual(service.applyCorrections(to: "teh", deferUsageCountSave: true), "the")
+        XCTAssertEqual(service.applyCorrections(to: "teh", deferUsageCountSave: true), "the")
+        XCTAssertEqual(service.corrections.first?.usageCount, 2)
+        XCTAssertEqual(DictionaryService(appSupportDirectory: appSupportDirectory).corrections.first?.usageCount, 0)
+
+        service.saveDeferredUsageCounts()
+
+        XCTAssertEqual(DictionaryService(appSupportDirectory: appSupportDirectory).corrections.first?.usageCount, 2)
+    }
+
+    @MainActor
     func testBatchCorrectionsUpdateRelatedTextsAndCountEachCorrectionOnce() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }

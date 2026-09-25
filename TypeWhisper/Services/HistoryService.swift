@@ -167,7 +167,12 @@ final class HistoryService: ObservableObject {
 
     private(set) var totalRecords: Int = 0
 
+    /// Incremented by `clearAll()`. Records captured before a clear but added afterwards, such
+    /// as dictations persisted after insertion, pass the generation they were captured in.
+    private(set) var clearGeneration = 0
+
     private let audioDirectory: URL
+    private let backgroundAudioWrites = BackgroundAudioWrites()
 
     init(
         appSupportDirectory: URL = AppConstants.appSupportDirectory,
@@ -216,37 +221,173 @@ final class HistoryService: ObservableObject {
         audioSamples: [Float]? = nil,
         pipelineSteps: [String]? = nil
     ) -> Bool {
-        let sanitizedRaw = Self.sanitize(rawText)
-        let sanitizedFinal = Self.sanitize(finalText)
+        guard let texts = Self.validatedRecordTexts(
+            rawText: rawText,
+            finalText: finalText,
+            durationSeconds: durationSeconds
+        ) else {
+            return false
+        }
+
+        insertRecord(
+            id: id,
+            timestamp: timestamp,
+            rawText: texts.rawText,
+            finalText: texts.finalText,
+            appName: appName,
+            appBundleIdentifier: appBundleIdentifier,
+            appURL: appURL,
+            durationSeconds: durationSeconds,
+            language: language,
+            engineUsed: engineUsed,
+            modelUsed: modelUsed,
+            audioFileName: audioSamples.flatMap { writeAudioFile($0, forRecordID: id) },
+            pipelineSteps: pipelineSteps
+        )
+        return true
+    }
+
+    /// Adds a record whose audio file was already written with `writeAudioFile(_:forRecordID:)`
+    /// or `writeAudioFileInBackground(_:forRecordID:)`. If the record is rejected, that audio
+    /// file is removed so it is not left behind without a record. A record captured in an
+    /// earlier `clearGeneration` is rejected, so a cleared history does not repopulate.
+    @discardableResult
+    func addRecord(
+        id: UUID,
+        timestamp: Date = Date(),
+        rawText: String,
+        finalText: String,
+        appName: String?,
+        appBundleIdentifier: String?,
+        appURL: String? = nil,
+        durationSeconds: Double,
+        language: String?,
+        engineUsed: String,
+        modelUsed: String? = nil,
+        audioFileName: String?,
+        pipelineSteps: [String]? = nil,
+        capturedInClearGeneration: Int? = nil
+    ) -> Bool {
+        let wasCleared = capturedInClearGeneration.map { $0 != clearGeneration } ?? false
+        if wasCleared {
+            logger.info("Skipping history record: history was cleared after it was captured")
+        }
+        guard !wasCleared, let texts = Self.validatedRecordTexts(
+            rawText: rawText,
+            finalText: finalText,
+            durationSeconds: durationSeconds
+        ) else {
+            if let audioFileName {
+                try? FileManager.default.removeItem(at: audioDirectory.appendingPathComponent(audioFileName))
+            }
+            return false
+        }
+
+        insertRecord(
+            id: id,
+            timestamp: timestamp,
+            rawText: texts.rawText,
+            finalText: texts.finalText,
+            appName: appName,
+            appBundleIdentifier: appBundleIdentifier,
+            appURL: appURL,
+            durationSeconds: durationSeconds,
+            language: language,
+            engineUsed: engineUsed,
+            modelUsed: modelUsed,
+            audioFileName: audioFileName,
+            pipelineSteps: pipelineSteps
+        )
+        return true
+    }
+
+    /// Encodes and writes a record's audio file. Returns the file name for
+    /// `addRecord(id:audioFileName:)`, or nil if nothing was written.
+    func writeAudioFile(_ samples: [Float], forRecordID id: UUID) -> String? {
+        guard !samples.isEmpty else { return nil }
+        let fileName = Self.audioFileName(for: id)
+        return Self.writeAudioFile(samples, to: audioDirectory.appendingPathComponent(fileName)) ? fileName : nil
+    }
+
+    /// Like `writeAudioFile(_:forRecordID:)`, but encodes and writes off the main actor.
+    func writeAudioFileInBackground(_ samples: [Float], forRecordID id: UUID) async -> String? {
+        guard !samples.isEmpty else { return nil }
+        let fileName = Self.audioFileName(for: id)
+        let fileURL = audioDirectory.appendingPathComponent(fileName)
+        let backgroundAudioWrites = backgroundAudioWrites
+        let didWriteAudio = await Task.detached(priority: .utility) {
+            backgroundAudioWrites.write(fileName) {
+                Self.writeAudioFile(samples, to: fileURL)
+            }
+        }.value
+        return didWriteAudio ? fileName : nil
+    }
+
+    /// Removes a record's audio file and keeps a background write still in flight for that
+    /// record from writing it afterwards. Used when a record will never be added, for example
+    /// when history was cleared before a termination flush persisted the dictation.
+    func discardAudioFile(forRecordID id: UUID) {
+        let fileName = Self.audioFileName(for: id)
+        let fileURL = audioDirectory.appendingPathComponent(fileName)
+        backgroundAudioWrites.discard(fileName) {
+            try? FileManager.default.removeItem(at: fileURL)
+        }
+    }
+
+    private static func validatedRecordTexts(
+        rawText: String,
+        finalText: String,
+        durationSeconds: Double
+    ) -> (rawText: String, finalText: String)? {
+        let sanitizedRaw = sanitize(rawText)
+        let sanitizedFinal = sanitize(finalText)
         guard !sanitizedRaw.isEmpty, !sanitizedFinal.isEmpty else {
             logger.warning("Skipping history record: empty text after sanitization")
-            return false
+            return nil
         }
         guard durationSeconds.isFinite, durationSeconds >= 0 else {
             logger.warning("Skipping history record: invalid duration \(durationSeconds)")
+            return nil
+        }
+        return (sanitizedRaw, sanitizedFinal)
+    }
+
+    private nonisolated static func audioFileName(for recordID: UUID) -> String {
+        "\(recordID.uuidString).wav"
+    }
+
+    private nonisolated static func writeAudioFile(_ samples: [Float], to fileURL: URL) -> Bool {
+        let wavData = WavEncoder.encode(samples)
+        do {
+            try wavData.write(to: fileURL, options: .atomic)
+            logger.info("Saved audio file: \(fileURL.lastPathComponent)")
+            return true
+        } catch {
+            logger.error("Failed to save audio file: \(error.localizedDescription)")
             return false
         }
-        let recordId = id
-        var audioFileName: String?
+    }
 
-        if let samples = audioSamples, !samples.isEmpty {
-            let fileName = "\(recordId.uuidString).wav"
-            let fileURL = audioDirectory.appendingPathComponent(fileName)
-            let wavData = WavEncoder.encode(samples)
-            do {
-                try wavData.write(to: fileURL, options: .atomic)
-                audioFileName = fileName
-                logger.info("Saved audio file: \(fileName)")
-            } catch {
-                logger.error("Failed to save audio file: \(error.localizedDescription)")
-            }
-        }
-
+    private func insertRecord(
+        id: UUID,
+        timestamp: Date,
+        rawText: String,
+        finalText: String,
+        appName: String?,
+        appBundleIdentifier: String?,
+        appURL: String?,
+        durationSeconds: Double,
+        language: String?,
+        engineUsed: String,
+        modelUsed: String?,
+        audioFileName: String?,
+        pipelineSteps: [String]?
+    ) {
         let record = TranscriptionRecord(
-            id: recordId,
+            id: id,
             timestamp: timestamp,
-            rawText: sanitizedRaw,
-            finalText: sanitizedFinal,
+            rawText: rawText,
+            finalText: finalText,
             appName: appName.flatMap { let s = Self.sanitize($0); return s.isEmpty ? nil : s },
             appBundleIdentifier: appBundleIdentifier,
             appURL: appURL,
@@ -266,7 +407,6 @@ final class HistoryService: ObservableObject {
         modelContext.insert(record)
         save()
         refreshRecentRecords()
-        return true
     }
 
     func audioFileURL(for record: TranscriptionRecord) -> URL? {
@@ -334,6 +474,7 @@ final class HistoryService: ObservableObject {
     }
 
     func clearAll() {
+        clearGeneration += 1
         do {
             let allRecords = try modelContext.fetch(FetchDescriptor<TranscriptionRecord>())
             historySyncPreferences?.recordExplicitDeletions(allRecords.map(\.id))
@@ -1261,4 +1402,25 @@ final class HistoryService: ObservableObject {
         refreshRecentRecords()
     }
     #endif
+}
+
+/// Serializes background history audio writes with `HistoryService.discardAudioFile(forRecordID:)`,
+/// so a discard either prevents a pending write or removes the file after a running write.
+private final class BackgroundAudioWrites: @unchecked Sendable {
+    private let lock = NSLock()
+    private var discardedFileNames: Set<String> = []
+
+    func write(_ fileName: String, _ write: () -> Bool) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !discardedFileNames.contains(fileName) else { return false }
+        return write()
+    }
+
+    func discard(_ fileName: String, _ remove: () -> Void) {
+        lock.lock()
+        defer { lock.unlock() }
+        discardedFileNames.insert(fileName)
+        remove()
+    }
 }

@@ -6,6 +6,142 @@ import TypeWhisperPluginSDK
 
 final class HistoryServiceTests: XCTestCase {
     @MainActor
+    func testAudioWrittenInBackgroundIsStoredWithRecordOrRemovedWithRejectedRecord() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let service = HistoryService(appSupportDirectory: appSupportDirectory)
+        let rejectedID = UUID()
+        let id = UUID()
+
+        let writtenRejectedAudioFileName = await service.writeAudioFileInBackground([0.1], forRecordID: rejectedID)
+        let rejectedAudioFileName = try XCTUnwrap(writtenRejectedAudioFileName)
+        let didAddEmptyRecord = service.addRecord(
+            id: rejectedID,
+            rawText: "\0",
+            finalText: "",
+            appName: nil,
+            appBundleIdentifier: nil,
+            durationSeconds: 1,
+            language: "en",
+            engineUsed: "test",
+            audioFileName: rejectedAudioFileName
+        )
+        let audioFileName = await service.writeAudioFileInBackground([0.1, 0.2], forRecordID: id)
+        let didAddRecord = service.addRecord(
+            id: id,
+            rawText: "raw",
+            finalText: "final",
+            appName: "Chrome",
+            appBundleIdentifier: "com.google.Chrome",
+            appURL: "https://example.com/page",
+            durationSeconds: 1,
+            language: "en",
+            engineUsed: "test",
+            audioFileName: audioFileName
+        )
+
+        XCTAssertFalse(didAddEmptyRecord)
+        XCTAssertTrue(didAddRecord)
+        XCTAssertEqual(service.totalRecords, 1)
+        let record = try XCTUnwrap(service.recentRecords.first)
+        XCTAssertEqual(record.id, id)
+        XCTAssertEqual(record.finalText, "final")
+        XCTAssertEqual(record.appURL, "https://example.com/page")
+        let audioURL = try XCTUnwrap(service.audioFileURL(for: record))
+        XCTAssertEqual(audioURL.lastPathComponent, "\(id.uuidString).wav")
+        XCTAssertEqual(try Data(contentsOf: audioURL).count, 44 + 2 * 2)
+        // The rejected record's audio file was removed.
+        XCTAssertEqual(
+            try FileManager.default.contentsOfDirectory(atPath: audioURL.deletingLastPathComponent().path),
+            [audioURL.lastPathComponent]
+        )
+        XCTAssertNotEqual(rejectedAudioFileName, audioURL.lastPathComponent)
+    }
+
+    @MainActor
+    func testRecordCapturedBeforeClearAllIsRejectedAndItsAudioRemoved() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let service = HistoryService(appSupportDirectory: appSupportDirectory)
+        let staleID = UUID()
+        let currentID = UUID()
+
+        let staleGeneration = service.clearGeneration
+        // The history is cleared while the captured record's audio is still being written.
+        let writtenStaleAudioFileName = await service.writeAudioFileInBackground([0.1], forRecordID: staleID)
+        service.clearAll()
+        let didAddStaleRecord = service.addRecord(
+            id: staleID,
+            rawText: "raw",
+            finalText: "stale",
+            appName: nil,
+            appBundleIdentifier: nil,
+            durationSeconds: 1,
+            language: "en",
+            engineUsed: "test",
+            audioFileName: try XCTUnwrap(writtenStaleAudioFileName),
+            capturedInClearGeneration: staleGeneration
+        )
+        let didAddCurrentRecord = service.addRecord(
+            id: currentID,
+            rawText: "raw",
+            finalText: "current",
+            appName: nil,
+            appBundleIdentifier: nil,
+            durationSeconds: 1,
+            language: "en",
+            engineUsed: "test",
+            audioFileName: nil,
+            capturedInClearGeneration: service.clearGeneration
+        )
+
+        XCTAssertNotEqual(service.clearGeneration, staleGeneration)
+        XCTAssertFalse(didAddStaleRecord)
+        XCTAssertTrue(didAddCurrentRecord)
+        XCTAssertEqual(service.recentRecords.map(\.id), [currentID])
+        XCTAssertEqual(
+            try FileManager.default.contentsOfDirectory(
+                atPath: appSupportDirectory.appendingPathComponent("audio", isDirectory: true).path
+            ),
+            []
+        )
+    }
+
+    @MainActor
+    func testDiscardedAudioFileIsNotLeftBehindByABackgroundWrite() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let service = HistoryService(appSupportDirectory: appSupportDirectory)
+        let audioDirectory = appSupportDirectory.appendingPathComponent("audio", isDirectory: true)
+        let samples = [Float](repeating: 0.1, count: 16_000 * 30)
+
+        // A write already running when the audio is discarded.
+        let runningID = UUID()
+        let runningWrite = Task { @MainActor in
+            await service.writeAudioFileInBackground(samples, forRecordID: runningID)
+        }
+        await Task.yield()
+        service.discardAudioFile(forRecordID: runningID)
+        _ = await runningWrite.value
+
+        // A write that starts after the audio was discarded.
+        let laterID = UUID()
+        service.discardAudioFile(forRecordID: laterID)
+        let laterFileName = await service.writeAudioFileInBackground(samples, forRecordID: laterID)
+
+        // Other records are unaffected.
+        let keptID = UUID()
+        let keptFileName = await service.writeAudioFileInBackground([0.1], forRecordID: keptID)
+
+        XCTAssertNil(laterFileName)
+        XCTAssertEqual(keptFileName, "\(keptID.uuidString).wav")
+        XCTAssertEqual(
+            try FileManager.default.contentsOfDirectory(atPath: audioDirectory.path),
+            ["\(keptID.uuidString).wav"]
+        )
+    }
+
+    @MainActor
     func testRemoteHistoryKeepsStructuredDocumentAndInboxMetadata() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory(
             prefix: "HistoryRemoteStructured"

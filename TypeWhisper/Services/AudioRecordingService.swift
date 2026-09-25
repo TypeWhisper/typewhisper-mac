@@ -2685,6 +2685,28 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         return result
     }
 
+    /// Preserves the active recovery recording without blocking the caller. The recovery
+    /// store's serial queue still runs it before a later recording start or discard.
+    func preserveActiveRecoveryRecordingInBackground(successful: Bool = false) {
+        recoveryAudioStore.preserveActiveRecordingResultInBackground(successful: successful) { [weak self] result, _ in
+            logger.info(
+                "Recovery audio preserved in background: successful=\(successful, privacy: .public), retained=\(result.newlyPreservedURL != nil, privacy: .public)"
+            )
+            // Re-read the store on the main thread instead of publishing this snapshot: a discard
+            // that runs before this block would otherwise be undone by stale URLs.
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                self.publishRecoverableRecordingURLs(self.recoveryAudioStore.recoveryURLs)
+            }
+        }
+    }
+
+    /// Blocks until queued recovery preservation has finalized its WAV file, for example before
+    /// the app terminates. Otherwise the next launch deletes the unfinished active file.
+    func waitForPendingRecoveryPreservation() {
+        recoveryAudioStore.waitForPendingOperations()
+    }
+
     func discardActiveRecoveryRecording() {
         discardActiveRecoveryRecording(keepingLatest: true)
     }
