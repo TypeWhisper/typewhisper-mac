@@ -411,13 +411,15 @@ class PromptProcessingService: ObservableObject {
         return !setupStatus.requiresExternalCredentials
     }
 
-    /// Whether workflow requests with `providerOverride` go to an on-device model.
-    /// Without an override the primary LLM fallback entry handles the request.
-    /// False when that provider cannot be resolved.
+    /// Whether workflow requests with `providerOverride` can reach an on-device model.
+    /// Without an override any entry of the LLM fallback list may handle the
+    /// request, so one local entry is enough. Unresolvable providers count as remote.
     func workflowUsesLocalLLMProvider(providerOverride: String?) -> Bool {
-        guard let providerId = Self.trimmedOrNil(providerOverride) ?? primaryFallbackItem?.providerId else {
-            return false
-        }
+        candidates(providerOverride: providerOverride, cloudModelOverride: nil, effortOverride: nil)
+            .contains { isLocalLLMProviderId($0.providerId) }
+    }
+
+    private func isLocalLLMProviderId(_ providerId: String) -> Bool {
         let normalizedId = normalizeProviderId(providerId)
         if normalizedId == Self.appleIntelligenceId {
             return true
@@ -453,7 +455,7 @@ class PromptProcessingService: ObservableObject {
         }
         return WorkflowLLMProviderResolution(
             attempts: attempts,
-            isLocal: workflowUsesLocalLLMProvider(providerOverride: providerOverride)
+            isLocal: attempts.contains { isLocalLLMProviderId($0.providerId) }
         )
     }
 

@@ -17,7 +17,7 @@ struct WorkflowLLMProviderResolution: Equatable, Sendable {
 
     /// The workflow's provider override, or the inherited global fallback list, in order.
     let attempts: [Attempt]
-    /// Whether the request runs on an on-device model.
+    /// Whether any attempt runs on an on-device model.
     let isLocal: Bool
 }
 
@@ -207,7 +207,8 @@ struct WorkflowTextProcessingService {
     }
 
     /// The prompt request used for segmented processing, or nil when the workflow
-    /// has no segmentable LLM step (see `Workflow.supportsSegmentedPostProcessing`).
+    /// has no segmentable LLM step (see `Workflow.supportsSegmentedPostProcessing`)
+    /// or the resolved output format is not plain text.
     /// The request includes the provider settings it currently resolves to.
     func segmentedPromptRequest(
         workflow: Workflow,
@@ -217,6 +218,7 @@ struct WorkflowTextProcessingService {
         resolvedOutputFormat: String? = nil
     ) -> WorkflowLLMRequest? {
         guard workflow.supportsSegmentedPostProcessing,
+              workflow.outputFormatAllowsSegmentation(resolvedOutputFormat: resolvedOutputFormat),
               var request = Self.promptRequest(
                   workflow: workflow,
                   fallbackTranslationTarget: fallbackTranslationTarget,

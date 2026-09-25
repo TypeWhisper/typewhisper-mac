@@ -732,12 +732,31 @@ extension Workflow {
     /// `WorkflowTemplate.allowsSegmentedPostProcessing`), so a stored flag on any
     /// other template is ignored. Inline Commands and Apple Translate are excluded:
     /// an inline instruction applies to the whole dictation, and Apple Translate
-    /// runs on-device without an LLM request.
+    /// runs on-device without an LLM request. Structured output formats also
+    /// disable it (see `outputFormatAllowsSegmentation`).
     var supportsSegmentedPostProcessing: Bool {
         template.allowsSegmentedPostProcessing
             && !usesInlineCommands
             && !usesAppleTranslate
+            && outputFormatAllowsSegmentation()
             && systemPrompt() != nil
+    }
+
+    /// Segment outputs are joined as plain text, so only plain-text output can be
+    /// split. Formats such as JSON, HTML, or code describe a single document and
+    /// must come from one request. `resolvedOutputFormat` is the format resolved for
+    /// the target app; without it, "auto" resolves the way `outputInstruction` does.
+    func outputFormatAllowsSegmentation(resolvedOutputFormat: String? = nil) -> Bool {
+        let format = resolvedOutputFormat ?? WorkflowOutputFormatResolver.resolvedFormat(
+            storedFormat: output.format,
+            bundleIdentifier: nil,
+            url: nil
+        )
+        guard let normalizedFormat = WorkflowOutputFormatResolver.normalized(format) else {
+            return true
+        }
+        return normalizedFormat == WorkflowOutputFormatResolver.plainTextFormat
+            || normalizedFormat == "plain text"
     }
 
     var usesSegmentedPostProcessing: Bool {

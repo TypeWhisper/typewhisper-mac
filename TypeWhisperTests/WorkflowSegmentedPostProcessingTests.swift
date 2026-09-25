@@ -1178,12 +1178,19 @@ final class WorkflowSegmentedPostProcessingTests: XCTestCase {
         XCTAssertEqual(overridden.attempts, [.init(providerId: "Cloud Groq", modelId: "fast", effortId: nil)])
         XCTAssertFalse(overridden.isLocal)
 
+        // A local provider later in the fallback list can still receive every chunk.
         service.moveLLMFallbacks(from: IndexSet(integer: 1), to: 0)
-        XCTAssertFalse(service.workflowUsesLocalLLMProvider(providerOverride: nil))
+        XCTAssertTrue(service.workflowUsesLocalLLMProvider(providerOverride: nil))
         let reordered = service.workflowProviderResolution(providerOverride: nil, cloudModelOverride: nil, effortOverride: nil)
         XCTAssertEqual(reordered.attempts.map(\.providerId), ["Cloud Groq", "Local Gemma"])
-        XCTAssertFalse(reordered.isLocal)
+        XCTAssertTrue(reordered.isLocal)
         XCTAssertNotEqual(reordered, inherited)
+
+        // Only cloud providers in the fallback list: not local.
+        service.removeLLMFallback(try XCTUnwrap(service.fallbackPriorityList.last))
+        XCTAssertEqual(service.fallbackPriorityList.map(\.providerId), ["Cloud Groq"])
+        XCTAssertFalse(service.workflowUsesLocalLLMProvider(providerOverride: nil))
+        XCTAssertFalse(service.workflowProviderResolution(providerOverride: nil, cloudModelOverride: nil, effortOverride: nil).isLocal)
         XCTAssertEqual(
             service.workflowProviderResolution(providerOverride: " Cloud Groq ", cloudModelOverride: " fast ", effortOverride: nil),
             overridden
@@ -1239,6 +1246,33 @@ final class WorkflowSegmentedPostProcessingTests: XCTestCase {
             WorkflowTemplate.allCases.filter(\.allowsSegmentedPostProcessing),
             [.cleanedText, .translation]
         )
+    }
+
+    func testStructuredOutputFormatsDisableSegmentation() {
+        let enabled = WorkflowBehavior(segmentedPostProcessingEnabled: true)
+        func cleanup(format: String?) -> Workflow {
+            Workflow(
+                name: "Clean",
+                template: .cleanedText,
+                trigger: .manual(),
+                behavior: enabled,
+                output: WorkflowOutput(format: format)
+            )
+        }
+
+        for format in [nil, "", "plaintext", " Plain Text ", "auto"] {
+            XCTAssertTrue(cleanup(format: format).usesSegmentedPostProcessing, "\(format ?? "nil")")
+        }
+        for format in ["json", "JSON", "html", "markdown", "rtf", "code", "YAML"] {
+            XCTAssertFalse(cleanup(format: format).usesSegmentedPostProcessing, format)
+        }
+
+        // "auto" is decided by the format resolved for the target app.
+        let service = WorkflowTextProcessingService(promptProcessor: { _, text, _, _, _ in text }, appleTranslator: nil)
+        let automatic = cleanup(format: "auto")
+        XCTAssertNotNil(service.segmentedPromptRequest(workflow: automatic, resolvedOutputFormat: "plaintext"))
+        XCTAssertNil(service.segmentedPromptRequest(workflow: automatic, resolvedOutputFormat: "html"))
+        XCTAssertNil(service.segmentedPromptRequest(workflow: cleanup(format: "json")))
     }
 
     func testBehaviorWithoutSegmentationFieldDecodesAsOff() throws {
