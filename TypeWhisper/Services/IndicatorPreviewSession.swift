@@ -42,9 +42,12 @@ final class IndicatorPreviewSession: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] notification in
-            guard let window = notification.object as? NSWindow,
-                  window.identifier?.rawValue.lowercased().contains("settings") == true else { return }
-            Task { @MainActor in self?.stop() }
+            // Delivered on the main queue, so the window can be inspected here.
+            MainActor.assumeIsolated {
+                guard let window = notification.object as? NSWindow,
+                      window.identifier?.rawValue.lowercased().contains("settings") == true else { return }
+                self?.stop()
+            }
         }
         let timer = Timer(timeInterval: Self.tickInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tick() }
