@@ -84,21 +84,6 @@ struct AppearanceSettingsView: View {
             Divider()
 
             Form {
-                Section(String(localized: "Menu Bar & Dock")) {
-                    Picker(String(localized: "App visibility"), selection: Binding(
-                        get: { appVisibilityMode },
-                        set: { appVisibilityMode = $0 }
-                    )) {
-                        Text(String(localized: "Menu bar icon")).tag(AppVisibilityMode.menuBar)
-                        Text(String(localized: "Dock icon")).tag(AppVisibilityMode.dock)
-                        Text(String(localized: "Dock icon only while a window is open")).tag(AppVisibilityMode.dockWhileWindowOpen)
-                    }
-
-                    Text(appVisibilityDescription)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-
                 Section(String(localized: "Indicator")) {
                     Label {
                         Text(String(localized: "While this page is open, the indicator runs as a live preview on your screen."))
@@ -224,6 +209,21 @@ struct AppearanceSettingsView: View {
                     )
 
                     Text(String(localized: "Turn this off to hide the indicator from supported capture apps while keeping it visible on your display."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                Section(String(localized: "Menu Bar & Dock")) {
+                    Picker(String(localized: "App visibility"), selection: Binding(
+                        get: { appVisibilityMode },
+                        set: { appVisibilityMode = $0 }
+                    )) {
+                        Text(String(localized: "Menu bar icon")).tag(AppVisibilityMode.menuBar)
+                        Text(String(localized: "Dock icon")).tag(AppVisibilityMode.dock)
+                        Text(String(localized: "Dock icon only while a window is open")).tag(AppVisibilityMode.dockWhileWindowOpen)
+                    }
+
+                    Text(appVisibilityDescription)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
