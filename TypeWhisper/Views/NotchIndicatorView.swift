@@ -10,6 +10,7 @@ struct NotchIndicatorView: View {
     @ObservedObject private var recorder = AudioRecorderViewModel.shared
     @ObservedObject private var countdownModel: CalendarMeetingCountdownModel
     @ObservedObject var geometry: NotchGeometry
+    @Environment(\.colorScheme) private var systemColorScheme
     @State private var textExpanded = false
     @State private var dotPulse = false
 
@@ -165,7 +166,7 @@ struct NotchIndicatorView: View {
             expandedBody
         }
         .frame(width: currentWidth)
-        .background(.black)
+        .background(alignment: .top) { notchBackground }
         .clipShape(NotchShape(bottomCornerRadius: bottomCornerRadius))
         .mask(alignment: .top) {
             Rectangle()
@@ -179,8 +180,9 @@ struct NotchIndicatorView: View {
             viewModel.setActionFeedbackHovered(hovered)
         }
         .animation(.easeOut(duration: 0.22), value: geometry.isPresented)
-        .animation(.easeOut(duration: 0.24), value: currentWidth)
-        .animation(.easeOut(duration: 0.24), value: expandedBodyHeight)
+        // A light spring so the body visibly grows out of the notch instead of sliding.
+        .animation(.spring(response: 0.38, dampingFraction: 0.78), value: currentWidth)
+        .animation(.spring(response: 0.38, dampingFraction: 0.78), value: expandedBodyHeight)
         .animation(.easeInOut(duration: 0.18), value: presentation.state)
         // Matches the ~30 Hz (33ms) level-publish throttle shared by both
         // audio level sources (AudioRecordingService's dictation pipeline and
@@ -266,8 +268,42 @@ struct NotchIndicatorView: View {
             .frame(maxWidth: .infinity)
     }
 
+    private var theme: IndicatorTheme {
+        viewModel.indicatorTheme
+    }
+
+    /// The cap always extends the hardware notch in black. Classic keeps the
+    /// whole shape black, the other themes draw their surface behind the
+    /// expanded body only.
+    @ViewBuilder
+    private var notchBackground: some View {
+        if theme == .classic {
+            Color.black
+        } else {
+            Color.black.frame(height: geometry.notchHeight)
+        }
+    }
+
+    private var expandedBodyShape: UnevenRoundedRectangle {
+        UnevenRoundedRectangle(
+            bottomLeadingRadius: bottomCornerRadius,
+            bottomTrailingRadius: bottomCornerRadius,
+            style: .continuous
+        )
+    }
+
     @ViewBuilder
     private var expandedBody: some View {
+        if theme == .classic {
+            expandedBodyFrame
+        } else {
+            expandedBodyFrame
+                .indicatorSurface(theme: theme, shape: expandedBodyShape)
+                .environment(\.colorScheme, theme.preferredColorScheme ?? systemColorScheme)
+        }
+    }
+
+    private var expandedBodyFrame: some View {
         expandedBodyContent
             .frame(maxWidth: .infinity, alignment: .topLeading)
             .frame(height: expandedBodyHeight, alignment: .top)
@@ -303,7 +339,7 @@ struct NotchIndicatorView: View {
         } else if hasProcessingPhase {
             Text(presentation.processingPhase ?? "")
                 .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.white.opacity(0.7))
+                .foregroundStyle(Color.primary.opacity(0.7))
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 6)
         } else if hasActionFeedback {

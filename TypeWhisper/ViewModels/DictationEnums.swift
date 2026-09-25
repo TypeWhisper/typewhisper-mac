@@ -39,13 +39,6 @@ enum IndicatorTheme: String, CaseIterable {
     case light
 }
 
-extension IndicatorStyle {
-    /// The notch style extends the hardware notch and always stays black.
-    var supportsTheme: Bool {
-        self != .notch
-    }
-}
-
 extension IndicatorTheme {
     var title: String {
         switch self {

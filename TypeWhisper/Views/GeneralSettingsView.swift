@@ -192,16 +192,20 @@ struct GeneralSettingsView: View {
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
 
-                if dictation.indicatorStyle.supportsTheme {
-                    IndicatorThemePicker()
-                        .listRowInsets(EdgeInsets())
-                        .listRowBackground(Color.clear)
+                IndicatorThemePicker()
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
 
-                    if dictation.indicatorTheme == .glass {
-                        Text(String(localized: "Glass follows your system appearance and uses Liquid Glass on macOS 26. Earlier versions show a translucent material."))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
+                if dictation.indicatorStyle == .notch, dictation.indicatorTheme != .classic {
+                    Text(String(localized: "The notch itself stays black. The theme applies to the area that expands below it."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+
+                if dictation.indicatorTheme == .glass {
+                    Text(String(localized: "Glass follows your system appearance and uses Liquid Glass on macOS 26. Earlier versions show a translucent material."))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
 
                 if supportsTranscriptPreview {

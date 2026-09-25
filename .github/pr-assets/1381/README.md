@@ -8,6 +8,12 @@ Real overlay captures of the dev app built from this branch on 2026-09-25, macOS
 | Glass | ![Glass idle](glass-idle.png) | ![Glass speaking](glass-speaking.png) | ![Glass transcript](glass-transcript.png) |
 | Light | ![Light idle](light-idle.png) | ![Light speaking](light-speaking.png) | ![Light transcript](light-transcript.png) |
 
+Notch style with the transcript expanded, same audio path. The notch cap stays black in every theme, the body below takes the theme:
+
+| Classic | Glass | Light |
+| --- | --- | --- |
+| ![Notch classic](notch-classic-transcript.png) | ![Notch glass](notch-glass-transcript.png) | ![Notch light](notch-light-transcript.png) |
+
 Settings window in `--store-screenshots --screenshot-state indicator-settings` fixture mode (English, dark appearance, 1150 pt wide), cropped to the Indicator section:
 
 | Classic | Glass | Light |

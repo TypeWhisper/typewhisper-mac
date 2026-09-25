@@ -18,10 +18,15 @@ struct IndicatorPreviewView: View {
         dictation.indicatorTranscriptPreviewEnabled && dictation.indicatorStyle.supportsTranscriptPreview
     }
     private var previewTheme: IndicatorTheme {
-        dictation.indicatorStyle.supportsTheme ? dictation.indicatorTheme : .classic
+        dictation.indicatorTheme
     }
-    private var previewColorScheme: ColorScheme {
+    private var themeColorScheme: ColorScheme {
         previewTheme.preferredColorScheme ?? systemColorScheme
+    }
+    /// The notch cap is always black, so the notch preview stays dark and only
+    /// its expanded body takes the theme scheme.
+    private var previewColorScheme: ColorScheme {
+        dictation.indicatorStyle == .notch ? .dark : themeColorScheme
     }
     private var notchClosedWidth: CGFloat {
         NotchIndicatorLayout.recordingClosedWidth(
@@ -121,7 +126,13 @@ struct IndicatorPreviewView: View {
             notchPreviewBody
         }
         .frame(width: notchPreviewWidth)
-        .background(.black)
+        .background(alignment: .top) {
+            if previewTheme == .classic {
+                Color.black
+            } else {
+                Color.black.frame(height: notchHeight)
+            }
+        }
         .clipShape(NotchShape(bottomCornerRadius: notchBottomCornerRadius))
         .frame(maxHeight: .infinity, alignment: .top)
     }
@@ -157,6 +168,11 @@ struct IndicatorPreviewView: View {
             .frame(height: notchPreviewBodyHeight, alignment: .top)
             .clipped()
             .opacity(showTranscriptPreview ? 1 : 0)
+            .modifier(NotchPreviewBodySurface(
+                theme: previewTheme,
+                cornerRadius: notchBottomCornerRadius,
+                colorScheme: themeColorScheme
+            ))
     }
 
     // MARK: - Overlay Preview
@@ -284,6 +300,31 @@ struct ScreenshotIndicatorShowcaseView: View {
     }
 }
 #endif
+
+// MARK: - Notch preview body surface
+
+private struct NotchPreviewBodySurface: ViewModifier {
+    let theme: IndicatorTheme
+    let cornerRadius: CGFloat
+    let colorScheme: ColorScheme
+
+    func body(content: Content) -> some View {
+        if theme == .classic {
+            content
+        } else {
+            content
+                .indicatorSurface(
+                    theme: theme,
+                    shape: UnevenRoundedRectangle(
+                        bottomLeadingRadius: cornerRadius,
+                        bottomTrailingRadius: cornerRadius,
+                        style: .continuous
+                    )
+                )
+                .environment(\.colorScheme, colorScheme)
+        }
+    }
+}
 
 // MARK: - Option Tile
 

@@ -463,6 +463,28 @@
         }
       }
     },
+    "The notch itself stays black. The theme applies to the area that expands below it." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Notch selbst bleibt schwarz. Das Theme gilt für den Bereich, der darunter ausklappt."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ノッチ自体は黒のままです。テーマはその下に展開される領域に適用されます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "刘海本身保持黑色。主题应用于其下方展开的区域。"
+          }
+        }
+      }
+    },
     "Theme" : {
       "localizations" : {
         "de" : {

@@ -140,12 +140,6 @@ final class DictationViewModelIndicatorSettingsTests: XCTestCase {
         XCTAssertEqual(DictationViewModel.loadIndicatorTheme(defaults: defaults), .classic)
     }
 
-    func testOnlyFloatingStylesSupportThemes() {
-        XCTAssertFalse(IndicatorStyle.notch.supportsTheme)
-        XCTAssertTrue(IndicatorStyle.overlay.supportsTheme)
-        XCTAssertTrue(IndicatorStyle.minimal.supportsTheme)
-    }
-
     func testUnknownIndicatorStyleFallsBackToNotch() {
         defaults.set("mystery", forKey: UserDefaultsKeys.indicatorStyle)
 
