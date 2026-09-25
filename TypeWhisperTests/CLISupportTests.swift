@@ -1001,11 +1001,128 @@ final class CLISupportTests: XCTestCase {
         XCTAssertEqual(defaults.string(forKey: UserDefaultsKeys.supporterDiscordSessionId), "session-123")
 
         // A user-started claim fails visibly but still keeps the linked session.
+        let persistedStatus = defaults.data(forKey: UserDefaultsKeys.supporterDiscordClaimStatus)
         let claimURL = await discordService.createClaimSession()
         XCTAssertNil(claimURL)
         XCTAssertEqual(discordService.claimStatus.state, .linked)
         XCTAssertNotNil(discordService.claimStatus.errorMessage)
+        XCTAssertEqual(defaults.data(forKey: UserDefaultsKeys.supporterDiscordClaimStatus), persistedStatus)
         XCTAssertEqual(defaults.string(forKey: UserDefaultsKeys.supporterDiscordSessionId), "session-123")
+    }
+
+    @MainActor
+    func testSupporterDiscordReconnectKeepsClaimWhenKeychainReadFails() async throws {
+        for state in [SupporterDiscordClaimStatus.State.linked, .pending] {
+            let (defaults, suiteName) = try makeIsolatedDefaults()
+            defer { defaults.removePersistentDomain(forName: suiteName) }
+            let existing = SupporterDiscordClaimStatus(
+                state: state,
+                discordUsername: state == .linked ? "marco#1234" : nil,
+                linkedRoles: state == .linked ? ["Supporter Gold"] : [],
+                errorMessage: nil,
+                sessionId: "session-123",
+                updatedAt: Date(timeIntervalSince1970: 1_700_000_000)
+            )
+            let persistedStatus = try JSONEncoder().encode(existing)
+            defaults.set(persistedStatus, forKey: UserDefaultsKeys.supporterDiscordClaimStatus)
+            defaults.set("session-123", forKey: UserDefaultsKeys.supporterDiscordSessionId)
+
+            let licenseService = LicenseService(
+                defaults: defaults,
+                keychainServiceName: "TypeWhisperTests.UnavailableKeychain.\(UUID().uuidString)",
+                keychainCopyMatching: { _, _ in errSecInteractionNotAllowed },
+                dataTransport: { request in
+                    XCTFail("No Polar request expected")
+                    return (Data(), Self.httpResponse(url: request.url!, statusCode: 500))
+                }
+            )
+            licenseService.supporterStatus = .active
+            licenseService.supporterTier = .gold
+            let discordService = SupporterDiscordService(
+                licenseService: licenseService,
+                defaults: defaults,
+                transport: { request in
+                    XCTFail("A claim session must not start without a readable proof")
+                    return (Data(), Self.httpResponse(url: request.url!, statusCode: 500))
+                }
+            )
+
+            let claimURL = await discordService.reconnect()
+
+            XCTAssertNil(claimURL, "state: \(state)")
+            XCTAssertNotNil(discordService.claimStatus.errorMessage, "state: \(state)")
+            XCTAssertEqual(discordService.claimStatus.state, state, "state: \(state)")
+            XCTAssertEqual(discordService.claimStatus.sessionId, "session-123", "state: \(state)")
+            XCTAssertEqual(discordService.claimStatus.discordUsername, existing.discordUsername, "state: \(state)")
+            XCTAssertEqual(discordService.claimStatus.linkedRoles, existing.linkedRoles, "state: \(state)")
+            XCTAssertEqual(defaults.data(forKey: UserDefaultsKeys.supporterDiscordClaimStatus), persistedStatus, "state: \(state)")
+            XCTAssertEqual(defaults.string(forKey: UserDefaultsKeys.supporterDiscordSessionId), "session-123", "state: \(state)")
+            XCTAssertEqual(licenseService.supporterStatus, .active, "state: \(state)")
+            XCTAssertEqual(licenseService.supporterTier, .gold, "state: \(state)")
+        }
+    }
+
+    @MainActor
+    func testSupporterDiscordReconnectReplacesClaimWhenProofIsReadable() async throws {
+        let (defaults, suiteName) = try makeIsolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let linked = SupporterDiscordClaimStatus(
+            state: .linked,
+            discordUsername: "marco#1234",
+            linkedRoles: ["Supporter Gold"],
+            errorMessage: nil,
+            sessionId: "session-123",
+            updatedAt: Date()
+        )
+        defaults.set(try JSONEncoder().encode(linked), forKey: UserDefaultsKeys.supporterDiscordClaimStatus)
+        defaults.set("session-123", forKey: UserDefaultsKeys.supporterDiscordSessionId)
+
+        let service = SupporterDiscordService(
+            licenseService: LicenseService(defaults: defaults),
+            defaults: defaults,
+            transport: { request in
+                XCTAssertEqual(request.url?.path, "/claims/polar/start")
+                let body = #"{"session_id":"session-456","claim_url":"https://claims.example.test/claims/polar/discord?session_id=session-456"}"#
+                return (Data(body.utf8), Self.httpResponse(url: request.url!, statusCode: 200))
+            },
+            claimProofProvider: {
+                SupporterClaimProof(key: "supporter-key", activationId: "activation-123", tier: .gold)
+            },
+            baseURLProvider: {
+                URL(string: "https://claims.example.test")!
+            }
+        )
+
+        let claimURL = await service.reconnect()
+
+        XCTAssertEqual(claimURL?.absoluteString, "https://claims.example.test/claims/polar/discord?session_id=session-456")
+        XCTAssertEqual(service.claimStatus.state, .pending)
+        XCTAssertNil(service.claimStatus.discordUsername)
+        XCTAssertEqual(defaults.string(forKey: UserDefaultsKeys.supporterDiscordSessionId), "session-456")
+    }
+
+    @MainActor
+    func testSupporterDiscordReconnectWithoutSupporterRecordClearsClaim() async throws {
+        let (defaults, suiteName) = try makeIsolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set("session-123", forKey: UserDefaultsKeys.supporterDiscordSessionId)
+
+        let service = SupporterDiscordService(
+            licenseService: LicenseService(defaults: defaults),
+            defaults: defaults,
+            transport: { request in
+                XCTFail("A claim session must not start without a supporter record")
+                return (Data(), Self.httpResponse(url: request.url!, statusCode: 500))
+            },
+            claimProofProvider: { nil }
+        )
+
+        let claimURL = await service.reconnect()
+
+        XCTAssertNil(claimURL)
+        XCTAssertEqual(service.claimStatus.state, .failed)
+        XCTAssertNil(service.claimStatus.sessionId)
+        XCTAssertNil(defaults.string(forKey: UserDefaultsKeys.supporterDiscordSessionId))
     }
 
     @MainActor

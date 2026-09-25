@@ -1238,27 +1238,33 @@ final class SupporterDiscordService: ObservableObject {
 
     @discardableResult
     func createClaimSession() async -> URL? {
-        let proof: SupporterClaimProof?
+        guard let proof = claimProofForNewSession() else { return nil }
+        return await startClaimSession(proof: proof)
+    }
+
+    /// Returns nil after recording why no new claim session can start.
+    private func claimProofForNewSession() -> SupporterClaimProof? {
         do {
-            proof = try claimProofProvider()
+            if let proof = try claimProofProvider() { return proof }
         } catch {
-            // An unreadable Keychain is not a removed entitlement. Keep the existing claim session.
+            // An unreadable Keychain is not a removed entitlement. Show the error without
+            // persisting it, so the stored claim state and session stay exactly as they were.
             claimStatus = Self.status(from: claimStatus, errorMessage: error.localizedDescription)
-            persist()
             logger.warning("Discord claim session deferred because Keychain is unavailable")
             return nil
         }
-        guard let proof else {
-            handleSupporterEntitlementRemoved()
-            claimStatus = Self.status(
-                from: claimStatus,
-                state: .failed,
-                errorMessage: SupporterDiscordServiceError.notEligible.errorDescription
-            )
-            persist()
-            return nil
-        }
 
+        handleSupporterEntitlementRemoved()
+        claimStatus = Self.status(
+            from: claimStatus,
+            state: .failed,
+            errorMessage: SupporterDiscordServiceError.notEligible.errorDescription
+        )
+        persist()
+        return nil
+    }
+
+    private func startClaimSession(proof: SupporterClaimProof) async -> URL? {
         isWorking = true
         defer { isWorking = false }
 
@@ -1299,6 +1305,8 @@ final class SupporterDiscordService: ObservableObject {
 
     @discardableResult
     func reconnect() async -> URL? {
+        // Read the proof before discarding the current claim, so a Keychain failure keeps it.
+        guard let proof = claimProofForNewSession() else { return nil }
         claimStatus = SupporterDiscordClaimStatus(
             state: .unlinked,
             discordUsername: nil,
@@ -1308,7 +1316,7 @@ final class SupporterDiscordService: ObservableObject {
             updatedAt: Date()
         )
         persist()
-        return await createClaimSession()
+        return await startClaimSession(proof: proof)
     }
 
     func refreshStatusIfNeeded() async {
