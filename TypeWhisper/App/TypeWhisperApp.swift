@@ -919,13 +919,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
             object: nil
         )
 
-        Task { await ServiceContainer.shared.cloudFolderSyncController.syncNow() }
+        // The controller starts the launch sync itself; this only fills in if it has not run.
+        Task { await ServiceContainer.shared.cloudFolderSyncController.syncIfNeeded() }
     }
 
     func applicationDidBecomeActive(_ notification: Notification) {
         guard !AppConstants.isRunningTests, !AppConstants.isScreenshotAutomation else { return }
         ServiceContainer.shared.calendarMeetingAutomationController.handleApplicationBecameActive()
-        Task { await ServiceContainer.shared.cloudFolderSyncController.syncNow() }
+        Task { await ServiceContainer.shared.cloudFolderSyncController.handleApplicationDidBecomeActive() }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
