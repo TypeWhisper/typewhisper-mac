@@ -174,7 +174,6 @@ struct NotchIndicatorView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .opacity(presentationOpacity)
-        .preferredColorScheme(.dark)
         .onHover { hovered in
             guard hasActionFeedback else { return }
             viewModel.setActionFeedbackHovered(hovered)
@@ -266,6 +265,8 @@ struct NotchIndicatorView: View {
         statusBar
             .frame(width: currentWidth, height: geometry.notchHeight)
             .frame(maxWidth: .infinity)
+            // The cap is always black, so its content always renders dark.
+            .environment(\.colorScheme, .dark)
     }
 
     private var theme: IndicatorTheme {
@@ -296,9 +297,12 @@ struct NotchIndicatorView: View {
     private var expandedBody: some View {
         if theme == .classic {
             expandedBodyFrame
+                .environment(\.colorScheme, .dark)
         } else {
             expandedBodyFrame
                 .indicatorSurface(theme: theme, shape: expandedBodyShape)
+                // Classic and Light pin their scheme, Glass inherits the system
+                // appearance from the panel.
                 .environment(\.colorScheme, theme.preferredColorScheme ?? systemColorScheme)
         }
     }

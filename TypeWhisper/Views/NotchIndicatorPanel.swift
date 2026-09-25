@@ -203,6 +203,17 @@ class NotchIndicatorPanel: NSPanel {
             }
             .store(in: &cancellables)
 
+        // The cap pins its own dark scheme in the view, so the panel can follow
+        // the theme like the other indicator panels. Glass then inherits the
+        // system appearance for the expanded body.
+        vm.$indicatorTheme
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] theme in
+                self?.appearance = theme.panelAppearance
+            }
+            .store(in: &cancellables)
+
         vm.$indicatorVisibleInScreenCaptures
             .removeDuplicates()
             .receive(on: DispatchQueue.main)
