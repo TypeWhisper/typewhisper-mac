@@ -1246,6 +1246,20 @@ final class IndicatorPresentationStateTests: XCTestCase {
         XCTAssertEqual(IndicatorPreviewSession.transcript(at: cycle + 0.1, text: text), "")
     }
 
+    func testPreviewTranscriptUnfoldsTextWithoutSpacesByCharacter() {
+        let text = "こんにちは"
+        let step = IndicatorPreviewSession.characterInterval
+
+        XCTAssertEqual(IndicatorPreviewSession.transcript(at: 0, text: text), "")
+        XCTAssertEqual(IndicatorPreviewSession.transcript(at: step * 2.5, text: text), "こん")
+        XCTAssertEqual(IndicatorPreviewSession.transcript(at: step * 10, text: text), text)
+    }
+
+    func testPreviewTranscriptTreatsNegativeTimeAsStart() {
+        XCTAssertEqual(IndicatorPreviewSession.transcript(at: -5, text: "one two"), "")
+        XCTAssertEqual(IndicatorPreviewSession.transcript(at: -0.01, text: "one"), "")
+    }
+
     func testBluetoothPreparationUsesSharedPreparingMicrophonePresentation() {
         let preparing = makeRecordingPresentation(isInputReady: false)
         let ready = makeRecordingPresentation(isInputReady: true)

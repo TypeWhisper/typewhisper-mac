@@ -17,6 +17,7 @@ final class IndicatorPreviewSession: ObservableObject {
 
     nonisolated static let tickInterval: TimeInterval = 1.0 / 30.0
     nonisolated static let wordInterval: TimeInterval = 0.35
+    nonisolated static let characterInterval: TimeInterval = 0.12
     nonisolated static let holdDuration: TimeInterval = 5
 
     let activeRuleName = localizedAppText("Polish Dictation", de: "Diktat glätten")
@@ -27,13 +28,14 @@ final class IndicatorPreviewSession: ObservableObject {
     }
 
     private var timer: Timer?
-    private var startedAt: Date?
+    /// Monotonic start time so wall-clock adjustments cannot run the preview backwards.
+    private var startedAt: TimeInterval?
     private var windowCloseObserver: NSObjectProtocol?
 
     func start() {
         guard !isActive else { return }
         isActive = true
-        startedAt = Date()
+        startedAt = ProcessInfo.processInfo.systemUptime
         // Safety net: the preview must never outlive the Settings window.
         windowCloseObserver = NotificationCenter.default.addObserver(
             forName: NSWindow.willCloseNotification,
@@ -69,7 +71,7 @@ final class IndicatorPreviewSession: ObservableObject {
 
     private func tick() {
         guard let startedAt else { return }
-        let elapsed = Date().timeIntervalSince(startedAt)
+        let elapsed = max(0, ProcessInfo.processInfo.systemUptime - startedAt)
         recordingDuration = elapsed
         audioLevel = Self.level(at: elapsed)
         partialText = Self.transcript(at: elapsed, text: sampleText)
@@ -83,14 +85,23 @@ final class IndicatorPreviewSession: ObservableObject {
         return Float(min(1, max(0.05, 0.3 + 0.45 * syllables)))
     }
 
-    /// Reveals the sample sentence word by word, holds it, then starts over so
-    /// the expand animation can be seen again.
+    /// Reveals the sample sentence unit by unit, holds it, then starts over so
+    /// the expand animation can be seen again. Negative times count as zero.
     nonisolated static func transcript(at time: TimeInterval, text: String) -> String {
-        let words = text.split(separator: " ")
-        guard !words.isEmpty else { return "" }
-        let cycle = Double(words.count) * wordInterval + holdDuration
-        let elapsed = time.truncatingRemainder(dividingBy: cycle)
-        let shown = min(words.count, Int(elapsed / wordInterval))
-        return words.prefix(shown).joined(separator: " ")
+        let reveal = revealUnits(of: text)
+        guard !reveal.units.isEmpty else { return "" }
+        let cycle = Double(reveal.units.count) * reveal.interval + holdDuration
+        let elapsed = max(0, time).truncatingRemainder(dividingBy: cycle)
+        let shown = min(reveal.units.count, max(0, Int(elapsed / reveal.interval)))
+        return reveal.units.prefix(shown).joined(separator: reveal.separator)
+    }
+
+    /// Words for languages that separate them with spaces, otherwise single
+    /// characters so the Japanese and Chinese samples still unfold gradually.
+    nonisolated static func revealUnits(of text: String) -> (units: [String], separator: String, interval: TimeInterval) {
+        if text.contains(" ") {
+            return (text.split(separator: " ").map(String.init), " ", wordInterval)
+        }
+        return (text.map { String($0) }, "", characterInterval)
     }
 }

@@ -197,6 +197,12 @@ struct NotchIndicatorView: View {
                 }
             }
         }
+        .onChange(of: presentation.source) {
+            // A real session replacing the preview starts with an empty transcript.
+            withAnimation(IndicatorMotion.expand) {
+                textExpanded = false
+            }
+        }
         .onChange(of: presentation.state) {
             if presentation.state == .recording {
                 withAnimation(.easeInOut(duration: 1.0).repeatForever(autoreverses: true)) {

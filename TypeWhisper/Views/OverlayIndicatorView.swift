@@ -174,6 +174,12 @@ struct OverlayIndicatorView: View {
         .onChange(of: presentation.partialText) {
             expandTranscriptPreviewIfNeeded()
         }
+        .onChange(of: presentation.source) {
+            // A real session replacing the preview starts with an empty transcript.
+            withAnimation(IndicatorMotion.expand) {
+                textExpanded = false
+            }
+        }
         .onChange(of: presentation.state) {
             if presentation.state == .recording {
                 IndicatorMotion.popIn($revealScale)
