@@ -1060,12 +1060,14 @@ final class TranslationHostWindowTests: XCTestCase {
         XCTAssertEqual(hostingView.sizingOptions, [])
     }
 
-    func testOffscreenHostWindowDoesNotJoinAllSpaces() {
+    func testOffscreenHostWindowStaysAtOrAboveMinimumWindowLevel() {
         let window = TranslationHostWindow(translationService: TranslationService())
         defer { window.orderOut(nil) }
 
-        XCTAssertFalse(window.collectionBehavior.contains(.canJoinAllSpaces))
-        XCTAssertFalse(window.collectionBehavior.contains(.fullScreenAuxiliary))
+        XCTAssertGreaterThanOrEqual(
+            window.level.rawValue,
+            Int(CGWindowLevelForKey(.minimumWindow))
+        )
         XCTAssertTrue(window.isVisible)
     }
 }

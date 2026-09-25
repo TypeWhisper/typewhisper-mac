@@ -13,17 +13,11 @@ import Translation
 @available(macOS 15, *)
 @MainActor
 final class TranslationHostWindow: NSWindow {
-    /// Deliberately without `.canJoinAllSpaces`: an all-Spaces window below the
-    /// desktop level also joins the helper Space that hosts the menu bar of
-    /// fullscreen Spaces, and macOS 27 then draws the wallpaper over the menu
-    /// bar after Mission Control (#1375). The window only needs to stay ordered
-    /// in, not visible on the active Space.
-    static let offscreenCollectionBehavior: NSWindow.CollectionBehavior = [.transient, .ignoresCycle]
-    /// Follows the user to the active Space, including fullscreen Spaces, so the
-    /// Translation.framework prompt appears without switching Spaces.
-    static let interactiveCollectionBehavior: NSWindow.CollectionBehavior = [
-        .moveToActiveSpace, .fullScreenAuxiliary, .transient, .ignoresCycle,
-    ]
+    /// Normal level on purpose. An ordered-in window below `.minimumWindow`
+    /// makes macOS 27 draw the wallpaper over the menu bar of fullscreen Spaces
+    /// after Mission Control or a Space switch (#1375). Off-screen, alpha 0 and
+    /// `ignoresMouseEvents` already keep this window out of the way.
+    static let offscreenLevel: NSWindow.Level = .normal
 
     private let offscreenRect = NSRect(x: -9999, y: -9999, width: 1, height: 1)
     private var isInteractiveMode = false
@@ -44,8 +38,8 @@ final class TranslationHostWindow: NSWindow {
         isOpaque = false
         backgroundColor = .clear
         alphaValue = 0.0
-        level = .init(rawValue: Int(CGWindowLevelForKey(.minimumWindow)) - 1)
-        collectionBehavior = Self.offscreenCollectionBehavior
+        level = Self.offscreenLevel
+        collectionBehavior = [.canJoinAllSpaces, .stationary]
 
         let hostingView = NSHostingView(
             rootView: TranslationHostView(translationService: translationService)
@@ -74,7 +68,6 @@ final class TranslationHostWindow: NSWindow {
             ignoresMouseEvents = true
             alphaValue = 0.001
             level = .floating
-            collectionBehavior = Self.interactiveCollectionBehavior
             if !frame.equalTo(targetFrame) {
                 setFrame(targetFrame, display: false)
             }
@@ -83,8 +76,7 @@ final class TranslationHostWindow: NSWindow {
             let targetFrame = offscreenRect
             ignoresMouseEvents = true
             alphaValue = 0.0
-            level = .init(rawValue: Int(CGWindowLevelForKey(.minimumWindow)) - 1)
-            collectionBehavior = Self.offscreenCollectionBehavior
+            level = Self.offscreenLevel
             if !frame.equalTo(targetFrame) {
                 setFrame(targetFrame, display: false)
             }
