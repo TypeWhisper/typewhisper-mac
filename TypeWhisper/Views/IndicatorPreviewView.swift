@@ -1,20 +1,5 @@
 import SwiftUI
 
-/// Wallpaper-like backdrop so translucent themes have something to refract.
-enum IndicatorPreviewBackdrop {
-    static var gradient: LinearGradient {
-        LinearGradient(
-            colors: [
-                Color(red: 0.22, green: 0.30, blue: 0.50),
-                Color(red: 0.52, green: 0.34, blue: 0.50),
-                Color(red: 0.86, green: 0.53, blue: 0.42),
-            ],
-            startPoint: .topLeading,
-            endPoint: .bottomTrailing
-        )
-    }
-}
-
 struct IndicatorPreviewView: View {
     @ObservedObject private var dictation = DictationViewModel.shared
     @Environment(\.colorScheme) private var systemColorScheme
@@ -102,7 +87,7 @@ struct IndicatorPreviewView: View {
     var body: some View {
         ZStack(alignment: .top) {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .fill(IndicatorPreviewBackdrop.gradient)
+                .fill(Color(white: 0.15))
 
             Group {
                 if dictation.indicatorStyle == .notch {
@@ -380,7 +365,7 @@ struct IndicatorThemePicker: View {
         .indicatorSurface(theme: theme, shape: Capsule())
         .environment(\.colorScheme, theme.preferredColorScheme ?? systemColorScheme)
         .padding(6)
-        .background(IndicatorPreviewBackdrop.gradient, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .background(Color(white: 0.15), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
     }
 }
 
