@@ -89,6 +89,58 @@ final class ModelManagerLiveSessionModelOverrideTests: XCTestCase {
         XCTAssertEqual(plugin.selectedModelId, "alpha")
     }
 
+    func testLiveSessionNormalizesLanguageForOverrideModel() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let plugin = LiveModelOverrideTranscriptionPlugin()
+        let modelManager = installLivePlugin(plugin, appSupportDirectory: appSupportDirectory)
+
+        let overrideSession = try await modelManager.createLiveTranscriptionSession(
+            languageSelection: .exact("ar"),
+            task: .transcribe,
+            cloudModelOverride: "beta",
+            onProgress: { _ in true }
+        )
+        XCTAssertEqual(plugin.receivedLanguage, "ar")
+        let overrideHandle = try XCTUnwrap(overrideSession)
+        await modelManager.cancelLiveTranscriptionSession(overrideHandle)
+        XCTAssertEqual(plugin.selectedModelId, "alpha")
+
+        let defaultSession = try await modelManager.createLiveTranscriptionSession(
+            languageSelection: .exact("ar"),
+            task: .transcribe,
+            onProgress: { _ in true }
+        )
+        XCTAssertNil(plugin.receivedLanguage)
+        let defaultHandle = try XCTUnwrap(defaultSession)
+        await modelManager.cancelLiveTranscriptionSession(defaultHandle)
+    }
+
+    func testBatchTranscriptionNormalizesLanguageForOverrideModel() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let plugin = ModelScopedLanguageModelManagerPlugin()
+        let modelManager = installBatchPlugin(plugin, appSupportDirectory: appSupportDirectory)
+
+        _ = try await modelManager.transcribe(
+            audioSamples: [Float](repeating: 0, count: 16_000),
+            languageSelection: .exact("ar"),
+            task: .transcribe,
+            cloudModelOverride: "beta"
+        )
+        XCTAssertEqual(plugin.receivedLanguages, ["ar"])
+        XCTAssertEqual(plugin.selectedModelId, "alpha")
+
+        _ = try await modelManager.transcribe(
+            audioSamples: [Float](repeating: 0, count: 16_000),
+            languageSelection: .exact("ar"),
+            task: .transcribe
+        )
+        XCTAssertEqual(plugin.receivedLanguages, ["ar", nil])
+    }
+
     func testLiveSessionForwardsDictionaryTermHints() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
@@ -729,6 +781,41 @@ private final class LegacyModelManagerTranscriptionPlugin: NSObject, Transcripti
     }
 }
 
+private final class ModelScopedLanguageModelManagerPlugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.mock.model-scoped-language"
+    static let pluginName = "Model Scoped Language Mock"
+
+    private var currentModelId = "alpha"
+    private(set) var receivedLanguages: [String?] = []
+
+    var providerId: String { "mock-model-scoped-language" }
+    var providerDisplayName: String { Self.pluginName }
+    var isConfigured: Bool { true }
+    var selectedModelId: String? { currentModelId }
+    var transcriptionModels: [PluginModelInfo] {
+        [
+            PluginModelInfo(id: "alpha", displayName: "Alpha"),
+            PluginModelInfo(id: "beta", displayName: "Beta")
+        ]
+    }
+    var supportsTranslation: Bool { false }
+    var supportedLanguages: [String] { currentModelId == "beta" ? ["en", "ar"] : ["en"] }
+
+    func activate(host: HostServices) {}
+    func deactivate() {}
+    func selectModel(_ modelId: String) { currentModelId = modelId }
+
+    func transcribe(
+        audio: AudioData,
+        language: String?,
+        translate: Bool,
+        prompt: String?
+    ) async throws -> PluginTranscriptionResult {
+        receivedLanguages.append(language)
+        return PluginTranscriptionResult(text: "done", detectedLanguage: language)
+    }
+}
+
 private final class LiveModelOverrideTranscriptionPlugin: NSObject, TranscriptionModelCatalogProviding, LiveDictionaryTermHintTranscriptionCapablePlugin, @unchecked Sendable {
     static var pluginId: String { "com.typewhisper.mock.live-model-override" }
     static var pluginName: String { "Mock Live Model Override" }
@@ -758,7 +845,8 @@ private final class LiveModelOverrideTranscriptionPlugin: NSObject, Transcriptio
     var transcriptionModels: [PluginModelInfo] { models }
     var supportsTranslation: Bool { false }
     var supportsStreaming: Bool { true }
-    var supportedLanguages: [String] { ["en"] }
+    var supportedLanguages: [String] { currentModelId == "beta" ? ["en", "ar"] : ["en"] }
+    private(set) var receivedLanguage: String?
 
     func activate(host: HostServices) {}
     func deactivate() {}
@@ -784,7 +872,8 @@ private final class LiveModelOverrideTranscriptionPlugin: NSObject, Transcriptio
         prompt: String?,
         onProgress: @Sendable @escaping (String) -> Bool
     ) async throws -> any LiveTranscriptionSession {
-        LiveModelOverrideSession(modelId: currentModelId)
+        receivedLanguage = language
+        return LiveModelOverrideSession(modelId: currentModelId)
     }
 
     func createLiveTranscriptionSession(

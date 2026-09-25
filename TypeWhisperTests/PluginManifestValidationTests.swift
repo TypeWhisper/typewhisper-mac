@@ -1585,6 +1585,79 @@ final class PluginDictionaryGuardTests: XCTestCase {
 
     func testDeepgramSupportedLanguagesIncludeMultilingualCodeSwitchingMode() {
         XCTAssertTrue(DeepgramPlugin().supportedLanguages.contains("multi"))
+        XCTAssertTrue(DeepgramPlugin.nova2SupportedLanguages.contains("multi"))
+    }
+
+    func testDeepgramSupportedLanguagesFollowSelectedModel() {
+        let plugin = DeepgramPlugin()
+
+        plugin.selectModel("nova-3")
+        let nova3 = Set(plugin.supportedLanguages)
+        for code in ["ar", "kk", "en", "de", "en-GB", "zh-TW"] {
+            XCTAssertTrue(nova3.contains(code), "Nova-3 should support \(code)")
+        }
+
+        plugin.selectModel("nova-2")
+        let nova2 = Set(plugin.supportedLanguages)
+        for code in ["en", "de", "en-GB", "de-CH", "nl-BE", "zh-TW"] {
+            XCTAssertTrue(nova2.contains(code), "Nova-2 should support \(code)")
+        }
+        XCTAssertFalse(nova2.contains("ar"))
+        XCTAssertFalse(nova2.contains("kk"))
+        XCTAssertTrue(nova2.isSubset(of: nova3))
+    }
+
+    func testDeepgramRestoredModelSelectionDeterminesSupportedLanguages() {
+        let nova2Plugin = DeepgramPlugin()
+        nova2Plugin.activate(host: TestHostServices(userDefaults: ["selectedModel": "nova-2"]))
+        XCTAssertEqual(nova2Plugin.supportedLanguages, DeepgramPlugin.nova2SupportedLanguages)
+
+        let defaultPlugin = DeepgramPlugin()
+        defaultPlugin.activate(host: TestHostServices())
+        XCTAssertEqual(defaultPlugin.selectedModelId, "nova-3")
+        XCTAssertEqual(defaultPlugin.supportedLanguages, DeepgramPlugin.nova3SupportedLanguages)
+    }
+
+    func testDeepgramExplicitNova3LanguagesSurviveNormalization() throws {
+        let plugin = DeepgramPlugin()
+
+        plugin.selectModel("nova-3")
+        for code in ["ar", "kk", "en", "de"] {
+            XCTAssertEqual(
+                LanguageSelection.exact(code).normalizedForSupportedLanguages(plugin.supportedLanguages),
+                .exact(code)
+            )
+        }
+
+        plugin.selectModel("nova-2")
+        XCTAssertEqual(
+            LanguageSelection.exact("ar").normalizedForSupportedLanguages(plugin.supportedLanguages),
+            .auto
+        )
+        XCTAssertEqual(
+            LanguageSelection.exact("de").normalizedForSupportedLanguages(plugin.supportedLanguages),
+            .exact("de")
+        )
+
+        let restURL = try DeepgramPlugin.restRequestURL(
+            baseURL: "https://api.deepgram.com",
+            modelId: "nova-3",
+            language: "ar",
+            prompt: nil
+        )
+        let streamingURL = try DeepgramPlugin.streamingRequestURL(
+            baseURL: "https://api.deepgram.com",
+            modelId: "nova-3",
+            language: "kk",
+            prompt: nil
+        )
+        func languageValues(in url: URL) -> [String] {
+            (URLComponents(url: url, resolvingAgainstBaseURL: false)?.queryItems ?? [])
+                .filter { $0.name == "language" }
+                .compactMap(\.value)
+        }
+        XCTAssertEqual(languageValues(in: restURL), ["ar"])
+        XCTAssertEqual(languageValues(in: streamingURL), ["kk"])
     }
 
     func testDeepgramAdvertisesLiveDictationTranscription() {
