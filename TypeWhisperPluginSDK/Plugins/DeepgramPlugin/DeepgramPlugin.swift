@@ -654,14 +654,43 @@ final class DeepgramPlugin: NSObject,
     var dictionaryTermsBudget: DictionaryTermsBudget { DictionaryTermsBudget(maxTerms: Self.maxDictionaryTerms) }
 
     var supportedLanguages: [String] {
-        [
-            "bg", "ca", "cs", "da", "de", "de-CH", "el", "en", "en-AU", "en-GB",
-            "en-IN", "en-NZ", "en-US", "es", "es-419", "et", "fi", "fr", "fr-CA",
-            "hi", "hu", "id", "it", "ja", "ko", "lt", "lv", "multi", "ms", "nl",
-            "nl-BE", "no", "pl", "pt", "pt-BR", "ro", "ru", "sk", "sv", "th",
-            "tr", "uk", "vi", "zh", "zh-CN", "zh-TW",
-        ]
+        supportedLanguages(forModelId: _selectedModelId)
     }
+
+    // Lets the host resolve languages for a per-flow model override. It is looked up through the
+    // Objective-C runtime, so the plugin stays loadable by hosts that do not know about it.
+    @objc(supportedLanguagesForModelId:)
+    func supportedLanguages(forModelId modelId: String?) -> [String] {
+        if modelId?.lowercased().hasPrefix("nova-2") == true {
+            return Self.nova2SupportedLanguages
+        }
+        return Self.nova3SupportedLanguages
+    }
+
+    // Deepgram's documented language codes per model:
+    // https://developers.deepgram.com/docs/models-languages-overview
+    static let nova3SupportedLanguages = [
+        "af", "af-ZA", "ar", "ar-AE", "ar-DZ", "ar-EG", "ar-IQ", "ar-IR", "ar-JO", "ar-KW",
+        "ar-LB", "ar-MA", "ar-PS", "ar-QA", "ar-SA", "ar-SD", "ar-SY", "ar-TD", "ar-TN", "as",
+        "as-IN", "be", "bg", "bn", "bs", "ca", "cs", "cs-CZ", "da", "da-DK",
+        "de", "de-CH", "el", "en", "en-AU", "en-GB", "en-IN", "en-NZ", "en-US", "es",
+        "es-419", "et", "fa", "fi", "fr", "fr-CA", "gu", "gu-IN", "he", "hi",
+        "hr", "hu", "hy", "id", "it", "ja", "ka", "ka-GE", "kk", "kk-KZ",
+        "kn", "ko", "ko-KR", "lt", "lv", "mk", "mn", "mr", "ms", "multi",
+        "ne", "nl", "nl-BE", "no", "pa", "pa-IN", "pl", "ps", "ps-AF", "pt",
+        "pt-BR", "pt-PT", "ro", "ru", "sk", "sl", "sr", "sv", "sv-SE", "ta",
+        "te", "th", "th-TH", "tl", "tr", "tr-TR", "uk", "ur", "vi", "zh",
+        "zh-CN", "zh-Hans", "zh-Hant", "zh-HK", "zh-TW",
+    ]
+
+    static let nova2SupportedLanguages = [
+        "bg", "ca", "cs", "da", "da-DK", "de", "de-CH", "el", "en", "en-AU",
+        "en-GB", "en-IN", "en-NZ", "en-US", "es", "es-419", "et", "fi", "fr", "fr-CA",
+        "hi", "hu", "id", "it", "ja", "ko", "ko-KR", "lt", "lv", "ms",
+        "multi", "nl", "nl-BE", "no", "pl", "pt", "pt-BR", "pt-PT", "ro", "ru",
+        "sk", "sv", "sv-SE", "th", "th-TH", "tr", "uk", "vi", "zh", "zh-CN",
+        "zh-Hans", "zh-Hant", "zh-HK", "zh-TW",
+    ]
 
     // MARK: - URL Helpers
 
@@ -1251,6 +1280,8 @@ private struct DeepgramSettingsView: View {
                     .labelsHidden()
                     .onChange(of: selectedModel) {
                         plugin.selectModel(selectedModel)
+                        // Nova-2 and Nova-3 support different languages.
+                        plugin.host?.notifyCapabilitiesChanged()
                     }
                 }
             }

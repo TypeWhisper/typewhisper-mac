@@ -1,3 +1,4 @@
+import AudioToolbox
 import Foundation
 import XCTest
 @_spi(Testing) @testable import TypeWhisperPluginSDK
@@ -127,6 +128,28 @@ final class OpenAITranscriptionHelperTests: XCTestCase {
         XCTAssertNotNil(upload.data.range(of: Data("ftyp".utf8)))
         XCTAssertNotNil(upload.data.range(of: Data("mdat".utf8)))
         XCTAssertNotNil(upload.data.range(of: Data("moov".utf8)))
+    }
+
+    func testCompressedM4AUploadUsesConfiguredBitRate() throws {
+        var generator = SystemRandomNumberGenerator()
+        let samples = (0..<(16_000 * 5)).map { _ in Float.random(in: -0.5...0.5, using: &generator) }
+
+        let upload = try PluginAudioUploadEncoder.compressedM4AUpload(from: samples)
+
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("bitrate-\(UUID().uuidString).m4a")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try upload.data.write(to: url)
+
+        var audioFile: AudioFileID?
+        XCTAssertEqual(AudioFileOpenURL(url as CFURL, .readPermission, 0, &audioFile), noErr)
+        let file = try XCTUnwrap(audioFile)
+        defer { AudioFileClose(file) }
+        var bitRate: UInt32 = 0
+        var size = UInt32(MemoryLayout<UInt32>.size)
+        XCTAssertEqual(AudioFileGetProperty(file, kAudioFilePropertyBitRate, &size, &bitRate), noErr)
+
+        XCTAssertEqual(Double(bitRate), Double(PluginAudioUploadEncoder.compressedUploadBitRate), accuracy: 4_000)
     }
 
     func testWavFallbackRetryClassifierRequiresMediaFormatOrProbeFailure() {

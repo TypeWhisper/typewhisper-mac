@@ -666,6 +666,9 @@ public enum PluginAudioUploadEncoder {
     public static let sampleRate = 16_000
     public static let minimumUploadDuration: TimeInterval = 1.0
     private static let compressedUploadChunkFrames = 16_000 * 30
+    // The default AAC rate for 16 kHz mono is about 27 kbit/s, which is too lossy for some
+    // languages: Deepgram Nova-3 returned empty Arabic transcripts at that rate.
+    static let compressedUploadBitRate = 48_000
 
     public static func normalizedAudioForUpload(_ audio: AudioData) -> AudioData {
         guard audio.duration < minimumUploadDuration else { return audio }
@@ -880,6 +883,7 @@ public enum PluginAudioUploadEncoder {
             AVFormatIDKey: kAudioFormatMPEG4AAC,
             AVSampleRateKey: Double(sampleRate),
             AVNumberOfChannelsKey: 1,
+            AVEncoderBitRateKey: compressedUploadBitRate,
         ]
         guard let format = AVAudioFormat(
             commonFormat: .pcmFormatFloat32,

@@ -47,7 +47,16 @@ final class WatchFolderViewModel: ObservableObject {
         }
     }
     @Published var selectedModel: String? {
-        didSet { UserDefaults.standard.set(selectedModel, forKey: UserDefaultsKeys.watchFolderModel) }
+        didSet {
+            UserDefaults.standard.set(selectedModel, forKey: UserDefaultsKeys.watchFolderModel)
+            guard isInitialized, oldValue != selectedModel, let engine = resolvedEngine else { return }
+            let normalized = languageSelection.normalizedForSupportedLanguages(
+                engine.supportedLanguages(forModel: selectedModel)
+            )
+            if normalized != languageSelection {
+                languageSelection = normalized
+            }
+        }
     }
 
     private var isInitialized = false
@@ -74,7 +83,7 @@ final class WatchFolderViewModel: ObservableObject {
 
     var selectedEngineSupportedLanguages: [String] {
         guard let engine = resolvedEngine else { return [] }
-        return engine.supportedLanguages.sorted()
+        return engine.supportedLanguages(forModel: selectedModel).sorted()
     }
 
     let watchFolderService: WatchFolderService
@@ -194,7 +203,9 @@ final class WatchFolderViewModel: ObservableObject {
                 selectedModel = nil
                 return
             }
-            let normalized = languageSelection.normalizedForSupportedLanguages(engine.supportedLanguages)
+            let normalized = languageSelection.normalizedForSupportedLanguages(
+                engine.supportedLanguages(forModel: selectedModel)
+            )
             if normalized != languageSelection {
                 languageSelection = normalized
             }
@@ -202,7 +213,9 @@ final class WatchFolderViewModel: ObservableObject {
         }
 
         if let engine = resolvedEngine {
-            let normalized = languageSelection.normalizedForSupportedLanguages(engine.supportedLanguages)
+            let normalized = languageSelection.normalizedForSupportedLanguages(
+                engine.supportedLanguages(forModel: selectedModel)
+            )
             if normalized != languageSelection {
                 languageSelection = normalized
             }

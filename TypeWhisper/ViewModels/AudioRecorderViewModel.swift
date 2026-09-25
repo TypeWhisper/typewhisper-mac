@@ -253,7 +253,11 @@ final class AudioRecorderViewModel: ObservableObject {
         }
     }
     @Published var selectedModel: String? {
-        didSet { defaults.set(selectedModel, forKey: UserDefaultsKeys.recorderTranscriptionModel) }
+        didSet {
+            defaults.set(selectedModel, forKey: UserDefaultsKeys.recorderTranscriptionModel)
+            guard isInitialized, oldValue != selectedModel else { return }
+            normalizeLanguageSelectionForResolvedEngine()
+        }
     }
     @Published var languageSelection: LanguageSelection = .auto {
         didSet {
@@ -299,7 +303,7 @@ final class AudioRecorderViewModel: ObservableObject {
         return pluginManager.transcriptionEngine(for: providerId)
     }
     var selectedEngineSupportedLanguages: [String] {
-        resolvedEngine?.supportedLanguages.sorted() ?? []
+        resolvedEngine?.supportedLanguages(forModel: selectedModel).sorted() ?? []
     }
     var selectedLanguage: String? { languageSelection.requestedLanguage }
     var canToggleRecording: Bool {
@@ -513,7 +517,9 @@ final class AudioRecorderViewModel: ObservableObject {
 
     private func normalizeLanguageSelectionForResolvedEngine() {
         guard let engine = resolvedEngine else { return }
-        let normalized = languageSelection.normalizedForSupportedLanguages(engine.supportedLanguages)
+        let normalized = languageSelection.normalizedForSupportedLanguages(
+            engine.supportedLanguages(forModel: selectedModel)
+        )
         if normalized != languageSelection {
             languageSelection = normalized
         }

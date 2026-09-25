@@ -51,11 +51,27 @@ enum ModelLifecycleError: LocalizedError {
     }
 }
 
+private let supportedLanguagesForModelSelector = NSSelectorFromString("supportedLanguagesForModelId:")
+
 extension TranscriptionEnginePlugin {
     var acceptsLanguageHints: Bool {
         self is LanguageHintTranscriptionEnginePlugin
             || self is StructuredLanguageHintTranscriptionEnginePlugin
             || self is LiveLanguageHintTranscriptionCapablePlugin
+    }
+
+    /// Languages of a specific model, for flows that override the plugin's selected model.
+    /// Plugins opt in through the Objective-C selector `supportedLanguagesForModelId:`;
+    /// otherwise, and without a model override, the plugin's current list applies.
+    func supportedLanguages(forModel modelId: String?) -> [String] {
+        guard let modelId,
+              let object = self as? NSObject,
+              object.responds(to: supportedLanguagesForModelSelector),
+              let languages = object.perform(supportedLanguagesForModelSelector, with: modelId)?
+                .takeUnretainedValue() as? [String] else {
+            return supportedLanguages
+        }
+        return languages
     }
 }
 
@@ -647,10 +663,10 @@ final class ModelManagerService: ObservableObject {
             }
         }
 
-        let runtimeSelection = runtimeLanguageSelection(for: languageSelection, plugin: plugin)
+        let preparationSelection = runtimeLanguageSelection(for: languageSelection, plugin: plugin)
         let preparationLanguage = preparationRequestedLanguage(
             for: languageSelection,
-            runtimeSelection: runtimeSelection,
+            runtimeSelection: preparationSelection,
             plugin: plugin
         )
         let overrideRestoreId = try await prepareEngineForTranscription(
@@ -663,6 +679,10 @@ final class ModelManagerService: ObservableObject {
             restoreCloudModelOverride(plugin: plugin, previousId: overrideRestoreId)
             throw modelNotLoadedError(for: plugin)
         }
+
+        // A cloud model override can change the supported languages, so normalize
+        // against the model that will actually transcribe.
+        let runtimeSelection = runtimeLanguageSelection(for: languageSelection, plugin: plugin)
 
         guard let livePlugin = plugin as? LiveTranscriptionCapablePlugin else {
             restoreCloudModelOverride(plugin: plugin, previousId: overrideRestoreId)
@@ -818,10 +838,10 @@ final class ModelManagerService: ObservableObject {
             endAutoUnloadProtectedUse(of: plugin)
         }
 
-        let runtimeSelection = runtimeLanguageSelection(for: languageSelection, plugin: plugin)
+        let preparationSelection = runtimeLanguageSelection(for: languageSelection, plugin: plugin)
         let preparationLanguage = preparationRequestedLanguage(
             for: languageSelection,
-            runtimeSelection: runtimeSelection,
+            runtimeSelection: preparationSelection,
             plugin: plugin
         )
         overrideRestoreId = try await prepareEngineForTranscription(
@@ -833,6 +853,10 @@ final class ModelManagerService: ObservableObject {
         guard plugin.isConfigured else {
             throw modelNotLoadedError(for: plugin)
         }
+
+        // A cloud model override can change the supported languages, so normalize
+        // against the model that will actually transcribe.
+        let runtimeSelection = runtimeLanguageSelection(for: languageSelection, plugin: plugin)
 
         let startTime = CFAbsoluteTimeGetCurrent()
         let audio = await Self.makeAudioData(from: audioSamples)
@@ -974,10 +998,10 @@ final class ModelManagerService: ObservableObject {
             endAutoUnloadProtectedUse(of: plugin)
         }
 
-        let runtimeSelection = runtimeLanguageSelection(for: languageSelection, plugin: plugin)
+        let preparationSelection = runtimeLanguageSelection(for: languageSelection, plugin: plugin)
         let preparationLanguage = preparationRequestedLanguage(
             for: languageSelection,
-            runtimeSelection: runtimeSelection,
+            runtimeSelection: preparationSelection,
             plugin: plugin
         )
         overrideRestoreId = try await prepareEngineForTranscription(
@@ -989,6 +1013,10 @@ final class ModelManagerService: ObservableObject {
         guard plugin.isConfigured else {
             throw modelNotLoadedError(for: plugin)
         }
+
+        // A cloud model override can change the supported languages, so normalize
+        // against the model that will actually transcribe.
+        let runtimeSelection = runtimeLanguageSelection(for: languageSelection, plugin: plugin)
 
         let startTime = CFAbsoluteTimeGetCurrent()
         let audio = await Self.makeAudioData(from: audioSamples)
