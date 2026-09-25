@@ -14,15 +14,15 @@ struct HistoryPage {
     var hasMore: Bool { offset + records.count < totalCount }
 }
 
-struct HistoryQuery {
-    enum Collection {
+struct HistoryQuery: Sendable {
+    enum Collection: Sendable {
         case all
         case inbox
         case withAudio
         case failed
     }
 
-    enum SortOrder {
+    enum SortOrder: Sendable {
         case newest
         case oldest
         case duration
@@ -37,22 +37,97 @@ struct HistoryQuery {
     var includeLegacyCurrentMacRecords = false
     var source: RecordingSource?
     var sortOrder: SortOrder = .newest
+
+    var hasSearchText: Bool {
+        !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    /// Whether the query is evaluated by enumerating the complete history instead of a
+    /// SQLite page, because device identity and free-text search are matched in memory.
+    var requiresPostFiltering: Bool {
+        hasSearchText
+            || originDeviceID != nil
+            || appBundleIdentifier != nil
+            || cutoffDate != nil
+            || source != nil
+    }
 }
 
-struct HistoryAppFacet: Hashable {
+/// Evaluates the history filters that are applied during enumeration instead of in SQLite.
+/// Built once per query so the search text is normalized once rather than for every record.
+struct HistoryPostFilter {
+    private let query: HistoryQuery
+    private let searchText: String
+    private let sourcesMatchingSearch: Set<RecordingSource>
+
+    init(query: HistoryQuery) {
+        let searchText = query.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
+        self.query = query
+        self.searchText = searchText
+        sourcesMatchingSearch = searchText.isEmpty
+            ? []
+            : Set(RecordingSource.allCases.filter { Self.text($0.displayName, contains: searchText) })
+    }
+
+    func matches(_ record: TranscriptionRecord) -> Bool {
+        if let appBundleIdentifier = query.appBundleIdentifier,
+           record.appBundleIdentifier != appBundleIdentifier {
+            return false
+        }
+        if let cutoffDate = query.cutoffDate, record.timestamp < cutoffDate { return false }
+        if let source = query.source, record.source != source { return false }
+        if let originDeviceID = query.originDeviceID,
+           !Self.matchesDevice(record, deviceID: originDeviceID, includeLegacyMac: query.includeLegacyCurrentMacRecords) {
+            return false
+        }
+        return matchesSearchText(record)
+    }
+
+    func matchesSearchText(_ record: TranscriptionRecord) -> Bool {
+        guard !searchText.isEmpty else { return true }
+        return Self.text(record.rawText, contains: searchText)
+            || Self.text(record.finalText, contains: searchText)
+            || (record.renderedDocument.map { Self.text($0, contains: searchText) } ?? false)
+            || (record.appName.map { Self.text($0, contains: searchText) } ?? false)
+            || (record.appDomain.map { Self.text($0, contains: searchText) } ?? false)
+            || sourcesMatchingSearch.contains(record.source)
+    }
+
+    /// Case-insensitive and diacritic-sensitive, like the former lowercased comparison,
+    /// without allocating lowercased copies of every searched field.
+    static func text(_ text: String, contains searchText: String) -> Bool {
+        text.range(of: searchText, options: .caseInsensitive) != nil
+    }
+
+    private static func matchesDevice(
+        _ record: TranscriptionRecord,
+        deviceID: String,
+        includeLegacyMac: Bool
+    ) -> Bool {
+        let storedID = record.originDeviceID.trimmingCharacters(in: .whitespacesAndNewlines)
+        if storedID == deviceID { return true }
+        guard storedID.isEmpty else { return false }
+
+        let normalizedPlatform = record.originPlatformRaw.lowercased()
+        if includeLegacyMac, normalizedPlatform.contains("mac") { return true }
+        return deviceID == "platform:\(normalizedPlatform.isEmpty ? "unknown" : normalizedPlatform)"
+    }
+}
+
+struct HistoryAppFacet: Hashable, Sendable {
     let bundleID: String
     let name: String
     let count: Int
 }
 
-struct HistoryDeviceFacet: Hashable {
+struct HistoryDeviceFacet: Hashable, Sendable {
     let deviceID: String
     let platform: String
     let source: RecordingSource
     let count: Int
 }
 
-struct HistoryFacets {
+struct HistoryFacets: Sendable {
     let totalCount: Int
     let inboxCount: Int
     let audioCount: Int
@@ -286,23 +361,22 @@ final class HistoryService: ObservableObject {
         offset: Int,
         limit: Int
     ) -> HistoryPage {
-        var descriptor = fetchDescriptor(for: query)
+        var descriptor = Self.fetchDescriptor(for: query)
         let requestedOffset = max(offset, 0)
         let requestedLimit = max(limit, 0)
 
         // Device identity combines persisted fields, and free-text search spans computed
         // values. Enumerate these queries in batches so only the requested page is retained.
-        if requiresPostFiltering(query) {
+        if query.requiresPostFiltering {
             var records: [TranscriptionRecord] = []
-            var totalCount = 0
             do {
-                try modelContext.enumerate(descriptor, batchSize: 500) { record in
-                    guard matchesPostFilters(record, query: query) else { return }
-                    if totalCount >= requestedOffset, records.count < requestedLimit {
-                        records.append(record)
-                    }
-                    totalCount += 1
-                }
+                let totalCount = try Self.enumerateMatches(
+                    in: modelContext,
+                    descriptor: descriptor,
+                    query: query,
+                    offset: requestedOffset,
+                    limit: requestedLimit
+                ) { records.append($0) }
                 return HistoryPage(
                     records: records,
                     totalCount: totalCount,
@@ -340,15 +414,61 @@ final class HistoryService: ObservableObject {
         }
     }
 
-    func recordCountThrowing(query: HistoryQuery = HistoryQuery()) throws -> Int {
-        if requiresPostFiltering(query) {
-            var count = 0
-            try modelContext.enumerate(fetchDescriptor(for: query), batchSize: 500) { record in
-                if matchesPostFilters(record, query: query) { count += 1 }
-            }
-            return count
+    /// Runs the full-history scan of a post-filtered query, such as free-text search, on a
+    /// private context off the main actor and then loads only the requested page on the main
+    /// context. The scan observes saved history only. Returns `nil` when the caller was cancelled.
+    func fetchPageInBackground(
+        query: HistoryQuery = HistoryQuery(),
+        offset: Int,
+        limit: Int
+    ) async -> HistoryPage? {
+        guard query.requiresPostFiltering else {
+            return fetchPage(query: query, offset: offset, limit: limit)
         }
-        return try modelContext.fetchCount(fetchDescriptor(for: query))
+        let requestedOffset = max(offset, 0)
+        let requestedLimit = max(limit, 0)
+        let container = modelContainer
+        let scan = Task.detached(priority: .userInitiated) {
+            try Self.matchingRecordIDs(
+                in: container,
+                query: query,
+                offset: requestedOffset,
+                limit: requestedLimit
+            )
+        }
+        let result = await withTaskCancellationHandler {
+            await scan.result
+        } onCancel: {
+            scan.cancel()
+        }
+        guard !Task.isCancelled else { return nil }
+
+        switch result {
+        case .success(let match):
+            return HistoryPage(
+                records: records(withIDs: match.ids),
+                totalCount: match.totalCount,
+                offset: requestedOffset
+            )
+        case .failure(let error):
+            if error is CancellationError { return nil }
+            logger.error("Failed to search history in background: \(error.localizedDescription)")
+            return HistoryPage(records: [], totalCount: 0, offset: requestedOffset)
+        }
+    }
+
+    func recordCountThrowing(query: HistoryQuery = HistoryQuery()) throws -> Int {
+        let descriptor = Self.fetchDescriptor(for: query)
+        if query.requiresPostFiltering {
+            return try Self.enumerateMatches(
+                in: modelContext,
+                descriptor: descriptor,
+                query: query,
+                offset: 0,
+                limit: 0
+            ) { _ in }
+        }
+        return try modelContext.fetchCount(descriptor)
     }
 
     func recordCount(query: HistoryQuery = HistoryQuery()) -> Int {
@@ -361,6 +481,61 @@ final class HistoryService: ObservableObject {
     }
 
     func facets(currentDeviceID: String?) -> HistoryFacets {
+        do {
+            return try Self.computeFacets(
+                in: modelContainer,
+                currentDeviceID: currentDeviceID,
+                checksCancellation: false
+            )
+        } catch {
+            logger.error("Failed to build history facets: \(error.localizedDescription)")
+            return Self.emptyFacets
+        }
+    }
+
+    /// Builds the sidebar facets on a private context off the main actor.
+    /// Returns `nil` when the caller was cancelled or the scan failed.
+    func facetsInBackground(currentDeviceID: String?) async -> HistoryFacets? {
+        let container = modelContainer
+        let scan = Task.detached(priority: .userInitiated) {
+            try Self.computeFacets(
+                in: container,
+                currentDeviceID: currentDeviceID,
+                checksCancellation: true
+            )
+        }
+        let result = await withTaskCancellationHandler {
+            await scan.result
+        } onCancel: {
+            scan.cancel()
+        }
+        guard !Task.isCancelled else { return nil }
+
+        switch result {
+        case .success(let facets):
+            return facets
+        case .failure(let error):
+            if !(error is CancellationError) {
+                logger.error("Failed to build history facets: \(error.localizedDescription)")
+            }
+            return nil
+        }
+    }
+
+    private static let emptyFacets = HistoryFacets(
+        totalCount: 0,
+        inboxCount: 0,
+        audioCount: 0,
+        failedCount: 0,
+        apps: [],
+        devices: []
+    )
+
+    nonisolated private static func computeFacets(
+        in modelContainer: ModelContainer,
+        currentDeviceID: String?,
+        checksCancellation: Bool
+    ) throws -> HistoryFacets {
         struct AppAccumulator {
             var name: String
             var count: Int
@@ -391,38 +566,35 @@ final class HistoryService: ObservableObject {
             \TranscriptionRecord.remoteAudioRelativePath,
         ]
 
-        do {
-            try context.enumerate(descriptor, batchSize: 500) { record in
-                totalCount += 1
-                if record.isOpenInInbox { inboxCount += 1 }
-                if record.audioFileName != nil || record.hasRemoteAudio { audioCount += 1 }
-                if record.processingState == .failed { failedCount += 1 }
+        try context.enumerate(descriptor, batchSize: 500) { record in
+            if checksCancellation, totalCount.isMultiple(of: 500) { try Task.checkCancellation() }
+            totalCount += 1
+            if record.isOpenInInbox { inboxCount += 1 }
+            if record.audioFileName != nil || record.hasRemoteAudio { audioCount += 1 }
+            if record.processingState == .failed { failedCount += 1 }
 
-                if let bundleID = record.appBundleIdentifier,
-                   let name = record.appName,
-                   !bundleID.isEmpty,
-                   !name.isEmpty {
-                    var value = apps[bundleID] ?? AppAccumulator(name: name, count: 0)
-                    value.name = name
-                    value.count += 1
-                    apps[bundleID] = value
-                }
-
-                let platform = record.originPlatformRaw
-                let trimmedID = record.originDeviceID.trimmingCharacters(in: .whitespacesAndNewlines)
-                let normalizedPlatform = platform.lowercased()
-                let deviceID: String
-                if !trimmedID.isEmpty {
-                    deviceID = trimmedID
-                } else if normalizedPlatform.contains("mac"), let currentDeviceID {
-                    deviceID = currentDeviceID
-                } else {
-                    deviceID = "platform:\(normalizedPlatform.isEmpty ? "unknown" : normalizedPlatform)"
-                }
-                devices[DeviceKey(deviceID: deviceID, platform: platform, source: record.source), default: 0] += 1
+            if let bundleID = record.appBundleIdentifier,
+               let name = record.appName,
+               !bundleID.isEmpty,
+               !name.isEmpty {
+                var value = apps[bundleID] ?? AppAccumulator(name: name, count: 0)
+                value.name = name
+                value.count += 1
+                apps[bundleID] = value
             }
-        } catch {
-            logger.error("Failed to build history facets: \(error.localizedDescription)")
+
+            let platform = record.originPlatformRaw
+            let trimmedID = record.originDeviceID.trimmingCharacters(in: .whitespacesAndNewlines)
+            let normalizedPlatform = platform.lowercased()
+            let deviceID: String
+            if !trimmedID.isEmpty {
+                deviceID = trimmedID
+            } else if normalizedPlatform.contains("mac"), let currentDeviceID {
+                deviceID = currentDeviceID
+            } else {
+                deviceID = "platform:\(normalizedPlatform.isEmpty ? "unknown" : normalizedPlatform)"
+            }
+            devices[DeviceKey(deviceID: deviceID, platform: platform, source: record.source), default: 0] += 1
         }
 
         return HistoryFacets(
@@ -445,9 +617,10 @@ final class HistoryService: ObservableObject {
     }
 
     func allRecordsThrowing(query: HistoryQuery = HistoryQuery()) throws -> [TranscriptionRecord] {
-        let records = try modelContext.fetch(fetchDescriptor(for: query))
-        guard requiresPostFiltering(query) else { return records }
-        return records.filter { matchesPostFilters($0, query: query) }
+        let records = try modelContext.fetch(Self.fetchDescriptor(for: query))
+        guard query.requiresPostFiltering else { return records }
+        let filter = HistoryPostFilter(query: query)
+        return records.filter { filter.matches($0) }
     }
 
     func allRecords(query: HistoryQuery = HistoryQuery()) -> [TranscriptionRecord] {
@@ -480,21 +653,54 @@ final class HistoryService: ObservableObject {
     }
 
     func uniqueDomains(limit: Int = 50) -> [String] {
-        guard limit > 0 else { return [] }
-        var counts: [String: Int] = [:]
-        let context = ModelContext(modelContainer)
-        var descriptor = FetchDescriptor<TranscriptionRecord>()
-        descriptor.propertiesToFetch = [\TranscriptionRecord.appURL]
         do {
-            try context.enumerate(descriptor, batchSize: 500) { record in
-                guard let domain = record.appDomain else { return }
-                let cleaned = domain.hasPrefix("www.") ? String(domain.dropFirst(4)) : domain
-                guard !cleaned.isEmpty else { return }
-                counts[cleaned, default: 0] += 1
-            }
+            return try Self.computeUniqueDomains(in: modelContainer, limit: limit, checksCancellation: false)
         } catch {
             logger.error("Failed to enumerate history domains: \(error.localizedDescription)")
             return []
+        }
+    }
+
+    /// Same result as `uniqueDomains(limit:)`, computed on a private context off the main actor.
+    /// Cancelling the caller stops the scan; it then returns an empty list.
+    func uniqueDomainsInBackground(limit: Int = 50) async -> [String] {
+        let container = modelContainer
+        let scan = Task.detached(priority: .userInitiated) {
+            try Self.computeUniqueDomains(in: container, limit: limit, checksCancellation: true)
+        }
+        let result = await withTaskCancellationHandler {
+            await scan.result
+        } onCancel: {
+            scan.cancel()
+        }
+        switch result {
+        case .success(let domains):
+            return domains
+        case .failure(let error):
+            if error is CancellationError { return [] }
+            logger.error("Failed to enumerate history domains: \(error.localizedDescription)")
+            return []
+        }
+    }
+
+    nonisolated private static func computeUniqueDomains(
+        in modelContainer: ModelContainer,
+        limit: Int,
+        checksCancellation: Bool
+    ) throws -> [String] {
+        guard limit > 0 else { return [] }
+        var counts: [String: Int] = [:]
+        var visitedCount = 0
+        let context = ModelContext(modelContainer)
+        var descriptor = FetchDescriptor<TranscriptionRecord>()
+        descriptor.propertiesToFetch = [\TranscriptionRecord.appURL]
+        try context.enumerate(descriptor, batchSize: 500) { record in
+            if checksCancellation, visitedCount.isMultiple(of: 500) { try Task.checkCancellation() }
+            visitedCount += 1
+            guard let domain = record.appDomain else { return }
+            let cleaned = domain.hasPrefix("www.") ? String(domain.dropFirst(4)) : domain
+            guard !cleaned.isEmpty else { return }
+            counts[cleaned, default: 0] += 1
         }
         return counts.sorted { $0.value > $1.value }.prefix(limit).map(\.key)
     }
@@ -522,19 +728,42 @@ final class HistoryService: ObservableObject {
     }
 
     func completeInbox(_ record: TranscriptionRecord) {
-        guard record.inboxState == .open else { return }
-        record.inboxState = .completed
-        record.inboxCompletedAt = Date()
-        record.inboxUpdatedAt = Date()
-        save()
-        refreshRecentRecords()
+        completeInbox([record])
+    }
+
+    /// Completes every open inbox record with a single save and a single `recentRecords`
+    /// publish, so sync scheduling and widget updates run once per batch.
+    func completeInbox(_ records: [TranscriptionRecord]) {
+        updateInbox(records, from: .open) { record, now in
+            record.inboxState = .completed
+            record.inboxCompletedAt = now
+        }
     }
 
     func reopenInbox(_ record: TranscriptionRecord) {
-        guard record.inboxState == .completed else { return }
-        record.inboxState = .open
-        record.inboxCompletedAt = nil
-        record.inboxUpdatedAt = Date()
+        reopenInbox([record])
+    }
+
+    /// Reopens every completed inbox record with a single save and a single `recentRecords` publish.
+    func reopenInbox(_ records: [TranscriptionRecord]) {
+        updateInbox(records, from: .completed) { record, _ in
+            record.inboxState = .open
+            record.inboxCompletedAt = nil
+        }
+    }
+
+    private func updateInbox(
+        _ records: [TranscriptionRecord],
+        from state: CaptureInboxState,
+        apply: (TranscriptionRecord, Date) -> Void
+    ) {
+        let eligible = records.filter { $0.inboxState == state }
+        guard !eligible.isEmpty else { return }
+        let now = Date()
+        for record in eligible {
+            apply(record, now)
+            record.inboxUpdatedAt = now
+        }
         save()
         refreshRecentRecords()
     }
@@ -782,7 +1011,7 @@ final class HistoryService: ObservableObject {
         }
     }
 
-    private func fetchDescriptor(for query: HistoryQuery) -> FetchDescriptor<TranscriptionRecord> {
+    nonisolated private static func fetchDescriptor(for query: HistoryQuery) -> FetchDescriptor<TranscriptionRecord> {
         let openInboxState = CaptureInboxState.open.rawValue
         let failedProcessingState = RecordingProcessingState.failed.rawValue
 
@@ -828,49 +1057,83 @@ final class HistoryService: ObservableObject {
         return FetchDescriptor(predicate: predicate, sortBy: sortBy)
     }
 
-    private func requiresPostFiltering(_ query: HistoryQuery) -> Bool {
-        !query.searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            || query.originDeviceID != nil
-            || query.appBundleIdentifier != nil
-            || query.cutoffDate != nil
-            || query.source != nil
+    /// Enumerates a post-filtered query in batches, passing only the records inside the
+    /// requested page to `collect`, and returns the total number of matches. Only background
+    /// scans pass `checksCancellation`, so synchronous callers never observe a partial result.
+    nonisolated private static func enumerateMatches(
+        in context: ModelContext,
+        descriptor: FetchDescriptor<TranscriptionRecord>,
+        query: HistoryQuery,
+        offset: Int,
+        limit: Int,
+        checksCancellation: Bool = false,
+        collect: (TranscriptionRecord) -> Void
+    ) throws -> Int {
+        let filter = HistoryPostFilter(query: query)
+        var totalCount = 0
+        var collectedCount = 0
+        var visitedCount = 0
+        try context.enumerate(descriptor, batchSize: 500) { record in
+            if checksCancellation, visitedCount.isMultiple(of: 500) { try Task.checkCancellation() }
+            visitedCount += 1
+            guard filter.matches(record) else { return }
+            if totalCount >= offset, collectedCount < limit {
+                collect(record)
+                collectedCount += 1
+            }
+            totalCount += 1
+        }
+        return totalCount
     }
 
-    private func matchesPostFilters(_ record: TranscriptionRecord, query: HistoryQuery) -> Bool {
-        if let appBundleIdentifier = query.appBundleIdentifier,
-           record.appBundleIdentifier != appBundleIdentifier {
-            return false
-        }
-        if let cutoffDate = query.cutoffDate, record.timestamp < cutoffDate { return false }
-        if let source = query.source, record.source != source { return false }
-        if let originDeviceID = query.originDeviceID,
-           !matchesDevice(record, deviceID: originDeviceID, includeLegacyMac: query.includeLegacyCurrentMacRecords) {
-            return false
-        }
-
-        let searchText = query.searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !searchText.isEmpty else { return true }
-        let lowered = searchText.lowercased()
-        return record.rawText.lowercased().contains(lowered)
-            || record.finalText.lowercased().contains(lowered)
-            || (record.renderedDocument?.lowercased().contains(lowered) ?? false)
-            || (record.appName?.lowercased().contains(lowered) ?? false)
-            || (record.appDomain?.lowercased().contains(lowered) ?? false)
-            || record.source.displayName.lowercased().contains(lowered)
+    nonisolated private static func matchingRecordIDs(
+        in modelContainer: ModelContainer,
+        query: HistoryQuery,
+        offset: Int,
+        limit: Int
+    ) throws -> (ids: [UUID], totalCount: Int) {
+        let context = ModelContext(modelContainer)
+        var descriptor = fetchDescriptor(for: query)
+        descriptor.propertiesToFetch = [
+            \TranscriptionRecord.id,
+            \TranscriptionRecord.timestamp,
+            \TranscriptionRecord.rawText,
+            \TranscriptionRecord.finalText,
+            \TranscriptionRecord.renderedDocument,
+            \TranscriptionRecord.appName,
+            \TranscriptionRecord.appBundleIdentifier,
+            \TranscriptionRecord.appURL,
+            \TranscriptionRecord.sourceRaw,
+            \TranscriptionRecord.originDeviceID,
+            \TranscriptionRecord.originPlatformRaw,
+        ]
+        var ids: [UUID] = []
+        let totalCount = try enumerateMatches(
+            in: context,
+            descriptor: descriptor,
+            query: query,
+            offset: offset,
+            limit: limit,
+            checksCancellation: true
+        ) { ids.append($0.id) }
+        return (ids, totalCount)
     }
 
-    private func matchesDevice(
-        _ record: TranscriptionRecord,
-        deviceID: String,
-        includeLegacyMac: Bool
-    ) -> Bool {
-        let storedID = record.originDeviceID.trimmingCharacters(in: .whitespacesAndNewlines)
-        if storedID == deviceID { return true }
-        guard storedID.isEmpty else { return false }
-
-        let normalizedPlatform = record.originPlatformRaw.lowercased()
-        if includeLegacyMac, normalizedPlatform.contains("mac") { return true }
-        return deviceID == "platform:\(normalizedPlatform.isEmpty ? "unknown" : normalizedPlatform)"
+    /// Loads records for IDs found by a background scan, preserving the scan order.
+    /// Records deleted since the scan are skipped.
+    private func records(withIDs ids: [UUID]) -> [TranscriptionRecord] {
+        guard !ids.isEmpty else { return [] }
+        let descriptor = FetchDescriptor<TranscriptionRecord>(
+            predicate: #Predicate { ids.contains($0.id) }
+        )
+        do {
+            let fetched = try modelContext.fetch(descriptor)
+            let recordsByID = Dictionary(fetched.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+            return ids.compactMap { recordsByID[$0] }
+        } catch {
+            logger.error("Failed to load history search results: \(error.localizedDescription)")
+            return []
+        }
     }
 
     private func deleteAudioFile(for record: TranscriptionRecord) {

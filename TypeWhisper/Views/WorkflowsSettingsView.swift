@@ -1087,7 +1087,6 @@ private struct WorkflowEditorPage: View {
     @ObservedObject private var workflowService = ServiceContainer.shared.workflowService
     @ObservedObject private var hotkeyService = ServiceContainer.shared.hotkeyService
     @ObservedObject private var profilesViewModel = ServiceContainer.shared.profilesViewModel
-    @ObservedObject private var historyService = ServiceContainer.shared.historyService
     @ObservedObject private var promptProcessingService = ServiceContainer.shared.promptProcessingService
     @ObservedObject private var settingsViewModel = SettingsViewModel.shared
     @ObservedObject private var pluginManager = PluginManager.shared
@@ -1098,6 +1097,7 @@ private struct WorkflowEditorPage: View {
     @State private var isAdvancedExpanded = false
     @State private var showingAppPicker = false
     @State private var websiteInput = ""
+    @StateObject private var websiteSuggestionStore = WorkflowWebsiteSuggestionStore()
 
     init(workflow: Workflow?) {
         self.workflow = workflow
@@ -1973,6 +1973,9 @@ private struct WorkflowEditorPage: View {
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }
+        .task {
+            await websiteSuggestionStore.loadIfNeeded()
+        }
     }
 
     private var hotkeyTriggerEditor: some View {
@@ -2058,16 +2061,7 @@ private struct WorkflowEditorPage: View {
     }
 
     private var websiteSuggestions: [String] {
-        let query = workflowNormalizedDomain(websiteInput)
-        let source = historyService.uniqueDomains(limit: 8)
-
-        if query.isEmpty {
-            return source.filter { !draft.websitePatterns.contains($0) }
-        }
-
-        return source.filter { domain in
-            !draft.websitePatterns.contains(domain) && domain.localizedCaseInsensitiveContains(query)
-        }
+        websiteSuggestionStore.suggestions(for: websiteInput, excluding: draft.websitePatterns)
     }
 
     private func save() {
@@ -2673,6 +2667,52 @@ enum WorkflowMicrophoneBoostOverride: String, CaseIterable, Hashable, Identifiab
             localizedAppText("Whisper Mode On", de: "Whisper-Modus ein")
         case .off:
             localizedAppText("Whisper Mode Off", de: "Whisper-Modus aus")
+        }
+    }
+}
+
+/// Loads the most frequent history domains once per workflow editor and filters that cached
+/// list while typing, instead of scanning the complete history on every render.
+@MainActor
+final class WorkflowWebsiteSuggestionStore: ObservableObject {
+    static let domainLimit = 8
+
+    @Published private(set) var domains: [String] = []
+    private let loadDomains: @MainActor () async -> [String]
+    private var hasLoadedDomains = false
+    private var loadGeneration = 0
+
+    init(
+        loadDomains: @escaping @MainActor () async -> [String] = {
+            await ServiceContainer.shared.historyService.uniqueDomainsInBackground(
+                limit: WorkflowWebsiteSuggestionStore.domainLimit
+            )
+        }
+    ) {
+        self.loadDomains = loadDomains
+    }
+
+    /// Loads the domains unless an earlier load finished. A load whose task was cancelled, such
+    /// as when the editor disappears, stops its scan and leaves the next appearance to load again.
+    func loadIfNeeded() async {
+        guard !hasLoadedDomains else { return }
+        loadGeneration &+= 1
+        let generation = loadGeneration
+        let loaded = await loadDomains()
+        guard !Task.isCancelled, generation == loadGeneration else { return }
+        hasLoadedDomains = true
+        domains = loaded
+    }
+
+    func suggestions(for input: String, excluding websitePatterns: [String]) -> [String] {
+        let query = workflowNormalizedDomain(input)
+
+        if query.isEmpty {
+            return domains.filter { !websitePatterns.contains($0) }
+        }
+
+        return domains.filter { domain in
+            !websitePatterns.contains(domain) && domain.localizedCaseInsensitiveContains(query)
         }
     }
 }

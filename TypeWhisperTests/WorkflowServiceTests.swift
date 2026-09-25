@@ -206,6 +206,51 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertEqual(decoded.autoEnterMode, .spokenCommand)
     }
 
+    @MainActor
+    func testWorkflowWebsiteSuggestionsLoadHistoryDomainsOnce() async {
+        var loadCount = 0
+        let store = WorkflowWebsiteSuggestionStore {
+            loadCount += 1
+            return ["github.com", "docs.github.com", "example.com"]
+        }
+        XCTAssertEqual(store.suggestions(for: "", excluding: []), [])
+
+        await store.loadIfNeeded()
+        await store.loadIfNeeded()
+
+        XCTAssertEqual(
+            store.suggestions(for: "", excluding: ["example.com"]),
+            ["github.com", "docs.github.com"]
+        )
+        XCTAssertEqual(
+            store.suggestions(for: " WWW.GitHub ", excluding: []),
+            ["github.com", "docs.github.com"]
+        )
+        XCTAssertEqual(store.suggestions(for: "docs", excluding: ["docs.github.com"]), [])
+        XCTAssertEqual(loadCount, 1)
+    }
+
+    @MainActor
+    func testWorkflowWebsiteSuggestionsReloadAfterCancelledLoad() async {
+        var loadCount = 0
+        let store = WorkflowWebsiteSuggestionStore {
+            loadCount += 1
+            return ["github.com"]
+        }
+
+        // The editor disappeared before its load finished.
+        let cancelledLoad = Task { await store.loadIfNeeded() }
+        cancelledLoad.cancel()
+        await cancelledLoad.value
+        XCTAssertEqual(store.suggestions(for: "", excluding: []), [])
+
+        await store.loadIfNeeded()
+        await store.loadIfNeeded()
+
+        XCTAssertEqual(store.suggestions(for: "", excluding: []), ["github.com"])
+        XCTAssertEqual(loadCount, 2)
+    }
+
     func testWorkflowDraftPreservesSpokenAutoEnterMode() {
         let workflow = Workflow(
             name: "Spoken Submit",

@@ -130,6 +130,12 @@ enum HistoryDetailViewMode: Int {
     case changes
 }
 
+enum HistoryDiffPresentation: Equatable, Sendable {
+    case segments([DiffSegment])
+    /// The texts are too long for a word-level comparison.
+    case tooLarge
+}
+
 enum HistoryNavigationSelection: Hashable {
     case smartMailbox(HistoryCollectionScope)
     case device(String)
@@ -167,7 +173,15 @@ private enum PendingHistoryTransition: Equatable {
 
 @MainActor
 final class HistoryViewModel: ObservableObject {
+    typealias BackgroundPageLoader = @MainActor (HistoryQuery, _ offset: Int, _ limit: Int) async -> HistoryPage?
+    typealias DiffPresentationLoader = @MainActor (_ rawText: String, _ finalText: String) async -> HistoryDiffPresentation?
+
     private static let pageSize = 100
+    /// Diffs whose inputs fit in this many UTF-8 bytes are computed inline while rendering.
+    static let inlineDiffInputLimit = 4_000
+    /// Upper bound for the word-level LCS table, which costs one byte and one comparison per cell.
+    nonisolated static let maxDiffComparisonCells = 4_000_000
+    private static let diffCacheLimit = 16
 
     nonisolated(unsafe) static var _shared: HistoryViewModel?
     static var shared: HistoryViewModel {
@@ -223,6 +237,26 @@ final class HistoryViewModel: ObservableObject {
     private var cancellables = Set<AnyCancellable>()
     private var isActive = false
     private var facetDevices: [HistoryDeviceFacet] = []
+    private let backgroundPageLoader: BackgroundPageLoader
+    private let diffPresentationLoader: DiffPresentationLoader
+    private let historyRefreshDelay: Duration
+    private var queryGeneration = 0
+    /// A reload that was skipped or dropped while the draft had unsaved changes.
+    private var deferredReload: (preservingLoadedRecords: Bool, resetListIdentity: Bool)?
+    private var queryTask: Task<Void, Never>?
+    private var loadMoreAfterQuery = false
+    private var facetsGeneration = 0
+    private var facetsTask: Task<Void, Never>?
+    private var pendingHistoryRefresh: Task<Void, Never>?
+    private var pendingWork: [UUID: Task<Void, Never>] = [:]
+    private var diffCache: [UUID: CachedDiff] = [:]
+    private var diffCacheOrder: [UUID] = []
+
+    private struct CachedDiff {
+        let rawText: String
+        let finalText: String
+        let presentation: HistoryDiffPresentation
+    }
     @Published private(set) var inboxCount = 0
     @Published private(set) var audioCount = 0
     @Published private(set) var failedCount = 0
@@ -231,12 +265,22 @@ final class HistoryViewModel: ObservableObject {
         historyService: HistoryService,
         textDiffService: TextDiffService,
         dictionaryService: DictionaryService,
-        syncController: CloudFolderSyncController? = nil
+        syncController: CloudFolderSyncController? = nil,
+        historyRefreshDelay: Duration = .milliseconds(150),
+        backgroundPageLoader: BackgroundPageLoader? = nil,
+        diffPresentationLoader: DiffPresentationLoader? = nil
     ) {
         self.historyService = historyService
         self.textDiffService = textDiffService
         self.dictionaryService = dictionaryService
         self.syncController = syncController
+        self.historyRefreshDelay = historyRefreshDelay
+        self.backgroundPageLoader = backgroundPageLoader ?? { [historyService] query, offset, limit in
+            await historyService.fetchPageInBackground(query: query, offset: offset, limit: limit)
+        }
+        self.diffPresentationLoader = diffPresentationLoader ?? { rawText, finalText in
+            await HistoryViewModel.computeDiffPresentationInBackground(rawText: rawText, finalText: finalText)
+        }
         currentDeviceID = syncController?.historySyncPreferences?.deviceID
         records = historyService.recentRecords
         totalMatchingRecordCount = historyService.totalRecords
@@ -328,6 +372,7 @@ final class HistoryViewModel: ObservableObject {
 
     func deactivate() {
         isActive = false
+        cancelPendingQueryWork()
         records = historyService.recentRecords
         totalMatchingRecordCount = historyService.totalRecords
         hasMoreRecords = records.count < totalMatchingRecordCount
@@ -336,19 +381,42 @@ final class HistoryViewModel: ObservableObject {
 
     func loadMoreRecords() {
         guard isActive, hasMoreRecords, !isLoadingMore else { return }
+        // Until a reload deferred by the unsaved draft runs, the records belong to an older
+        // query, so their count is no valid offset into the current one.
+        guard deferredReload == nil else { return }
+        guard queryTask == nil else {
+            // A reload is still searching; continue paging once its first page is shown.
+            loadMoreAfterQuery = true
+            return
+        }
+        let query = currentQuery
+        let offset = records.count
         isLoadingMore = true
-        defer { isLoadingMore = false }
 
-        let page = historyService.fetchPage(
-            query: currentQuery,
-            offset: records.count,
-            limit: Self.pageSize
-        )
-        let existingIDs = Set(records.map(\.id))
-        records.append(contentsOf: page.records.filter { !existingIDs.contains($0.id) })
-        totalMatchingRecordCount = page.totalCount
-        hasMoreRecords = page.hasMore
-        recomputeVisibleRecords()
+        guard query.requiresPostFiltering else {
+            defer { isLoadingMore = false }
+            appendPage(historyService.fetchPage(query: query, offset: offset, limit: Self.pageSize))
+            return
+        }
+
+        let generation = queryGeneration
+        let loader = backgroundPageLoader
+        queryTask = startTrackedTask { [weak self] in
+            let page = await loader(query, offset, Self.pageSize)
+            // A newer reload or deactivation resets the paging state itself.
+            guard let self, generation == self.queryGeneration else { return }
+            self.queryTask = nil
+            self.isLoadingMore = false
+            if let page { self.appendPage(page) }
+        }
+    }
+
+    /// Waits until coalesced refreshes, background searches, and facet scans started so far,
+    /// including the work they start themselves, have finished.
+    func waitForPendingWork() async {
+        while let task = pendingWork.values.first {
+            await task.value
+        }
     }
 
     func toggleDeviceExpansion(_ id: String) {
@@ -458,6 +526,7 @@ final class HistoryViewModel: ObservableObject {
         editedText = newText
         originalDraftText = newText
         detailViewMode = .final
+        reloadDeferredQueryIfNeeded()
 
         let suggestions = textDiffService.extractCorrections(original: originalText, edited: newText)
         guard !suggestions.isEmpty else {
@@ -484,18 +553,15 @@ final class HistoryViewModel: ObservableObject {
         editedText = originalDraftText
         showCorrectionBanner = false
         correctionSuggestions = []
+        reloadDeferredQueryIfNeeded()
     }
 
     func markComplete(_ records: [TranscriptionRecord]) {
-        for record in records where record.isOpenInInbox {
-            historyService.completeInbox(record)
-        }
+        historyService.completeInbox(records)
     }
 
     func reopen(_ records: [TranscriptionRecord]) {
-        for record in records where record.inboxState == .completed {
-            historyService.reopenInbox(record)
-        }
+        historyService.reopenInbox(records)
     }
 
     func deleteRecord(_ record: TranscriptionRecord) {
@@ -554,11 +620,56 @@ final class HistoryViewModel: ObservableObject {
         historyService.audioFileURL(for: record)
     }
 
-    func diffSegments(for record: TranscriptionRecord) -> [DiffSegment] {
-        textDiffService.computeWordDiff(
-            original: record.rawText.trimmingCharacters(in: .whitespacesAndNewlines),
-            processed: record.finalText
-        )
+    /// Returns the diff for the record's current texts from the cache. Small inputs are
+    /// computed on demand; larger ones return `nil` until `loadDiffPresentation(for:)` finishes.
+    func diffPresentation(for record: TranscriptionRecord) -> HistoryDiffPresentation? {
+        let rawText = record.rawText
+        let finalText = record.finalText
+        if let cached = diffCache[record.id],
+           cached.rawText == rawText,
+           cached.finalText == finalText {
+            return cached.presentation
+        }
+        guard rawText.utf8.count + finalText.utf8.count <= Self.inlineDiffInputLimit else { return nil }
+        let presentation = Self.makeDiffPresentation(rawText: rawText, finalText: finalText, checkCancellation: {})
+        cacheDiff(presentation, for: record.id, rawText: rawText, finalText: finalText)
+        return presentation
+    }
+
+    /// Computes a missing diff off the main actor and publishes it once it is cached. The result
+    /// is discarded when the caller was cancelled or the record's text changed in the meantime,
+    /// so a superseded comparison cannot replace the diff of the current text.
+    func loadDiffPresentation(for record: TranscriptionRecord) async {
+        guard diffPresentation(for: record) == nil else { return }
+        let recordID = record.id
+        let rawText = record.rawText
+        let finalText = record.finalText
+        guard let presentation = await diffPresentationLoader(rawText, finalText),
+              !Task.isCancelled,
+              !record.isDeleted, record.modelContext != nil,
+              record.rawText == rawText, record.finalText == finalText
+        else { return }
+        cacheDiff(presentation, for: recordID, rawText: rawText, finalText: finalText)
+        objectWillChange.send()
+    }
+
+    /// Compares the texts on a detached task and forwards the caller's cancellation to it, so an
+    /// obsolete comparison stops early instead of finishing the LCS table. Returns `nil` when the
+    /// comparison was cancelled.
+    static func computeDiffPresentationInBackground(
+        rawText: String,
+        finalText: String
+    ) async -> HistoryDiffPresentation? {
+        let comparison = Task.detached(priority: .userInitiated) {
+            try HistoryViewModel.makeDiffPresentation(rawText: rawText, finalText: finalText) {
+                try Task.checkCancellation()
+            }
+        }
+        return await withTaskCancellationHandler {
+            try? await comparison.value
+        } onCancel: {
+            comparison.cancel()
+        }
     }
 
     func dismissCorrectionBanner() {
@@ -767,18 +878,77 @@ final class HistoryViewModel: ObservableObject {
         preservingLoadedRecords: Bool = false,
         resetListIdentity: Bool = true
     ) {
-        guard !isDirty else { return }
+        guard !isDirty else {
+            deferReload(preservingLoadedRecords: preservingLoadedRecords, resetListIdentity: resetListIdentity)
+            return
+        }
+        deferredReload = nil
+        queryGeneration &+= 1
+        queryTask?.cancel()
+        queryTask = nil
+        loadMoreAfterQuery = false
+        if isLoadingMore { isLoadingMore = false }
+
         let limit: Int
         if isActive {
             limit = preservingLoadedRecords ? max(records.count, Self.pageSize) : Self.pageSize
         } else {
             limit = HistoryService.recentRecordsLimit
         }
-        let page = historyService.fetchPage(
-            query: currentQuery,
-            offset: 0,
-            limit: limit
+        let query = currentQuery
+        guard query.requiresPostFiltering else {
+            applyReloadedPage(
+                historyService.fetchPage(query: query, offset: 0, limit: limit),
+                resetListIdentity: resetListIdentity
+            )
+            return
+        }
+
+        // Free-text search and device, app, time, or source filters scan the complete history,
+        // so they run off the main actor. The result is dropped when a newer query or
+        // deactivation supersedes it, and deferred while the draft has unsaved changes.
+        let generation = queryGeneration
+        let loader = backgroundPageLoader
+        queryTask = startTrackedTask { [weak self] in
+            let page = await loader(query, 0, limit)
+            guard let self, generation == self.queryGeneration else { return }
+            self.queryTask = nil
+            guard let page, !self.isDirty else {
+                self.loadMoreAfterQuery = false
+                if page != nil {
+                    self.deferReload(
+                        preservingLoadedRecords: preservingLoadedRecords,
+                        resetListIdentity: resetListIdentity
+                    )
+                }
+                return
+            }
+            self.applyReloadedPage(page, resetListIdentity: resetListIdentity)
+            if self.loadMoreAfterQuery {
+                self.loadMoreAfterQuery = false
+                self.loadMoreRecords()
+            }
+        }
+    }
+
+    private func deferReload(preservingLoadedRecords: Bool, resetListIdentity: Bool) {
+        let pending = deferredReload
+        deferredReload = (
+            preservingLoadedRecords: (pending?.preservingLoadedRecords ?? true) && preservingLoadedRecords,
+            resetListIdentity: (pending?.resetListIdentity ?? false) || resetListIdentity
         )
+    }
+
+    /// Runs the reload that the unsaved draft held back, now that the draft is clean again.
+    private func reloadDeferredQueryIfNeeded() {
+        guard let pending = deferredReload, !isDirty else { return }
+        reloadCurrentQuery(
+            preservingLoadedRecords: pending.preservingLoadedRecords,
+            resetListIdentity: pending.resetListIdentity
+        )
+    }
+
+    private func applyReloadedPage(_ page: HistoryPage, resetListIdentity: Bool) {
         records = page.records
         totalMatchingRecordCount = page.totalCount
         hasMoreRecords = page.hasMore
@@ -788,9 +958,31 @@ final class HistoryViewModel: ObservableObject {
         recomputeVisibleRecords()
     }
 
+    private func appendPage(_ page: HistoryPage) {
+        let existingIDs = Set(records.map(\.id))
+        records.append(contentsOf: page.records.filter { !existingIDs.contains($0.id) })
+        totalMatchingRecordCount = page.totalCount
+        hasMoreRecords = page.hasMore
+        recomputeVisibleRecords()
+    }
+
     private func refreshFacets() {
         guard isActive else { return }
-        let facets = historyService.facets(currentDeviceID: currentDeviceID)
+        facetsGeneration &+= 1
+        let generation = facetsGeneration
+        facetsTask?.cancel()
+        let historyService = historyService
+        let currentDeviceID = currentDeviceID
+        facetsTask = startTrackedTask { [weak self] in
+            let facets = await historyService.facetsInBackground(currentDeviceID: currentDeviceID)
+            guard let self, generation == self.facetsGeneration else { return }
+            self.facetsTask = nil
+            guard let facets, self.isActive else { return }
+            self.applyFacets(facets)
+        }
+    }
+
+    private func applyFacets(_ facets: HistoryFacets) {
         inboxCount = facets.inboxCount
         audioCount = facets.audioCount
         failedCount = facets.failedCount
@@ -810,11 +1002,8 @@ final class HistoryViewModel: ObservableObject {
             .sink { [weak self] recentRecords in
                 guard let self else { return }
                 if self.isActive {
-                    self.reloadCurrentQuery(
-                        preservingLoadedRecords: true,
-                        resetListIdentity: false
-                    )
-                    self.refreshFacets()
+                    self.removeDetachedRecords()
+                    self.scheduleHistoryRefresh()
                 } else {
                     self.records = recentRecords
                     self.totalMatchingRecordCount = self.historyService.totalRecords
@@ -848,6 +1037,86 @@ final class HistoryViewModel: ObservableObject {
                 self.recomputeDeviceSections(facets: self.facetDevices, devices: devices)
             }
             .store(in: &cancellables)
+    }
+
+    /// Dictation, inbox changes, and sync can publish in quick succession. Coalesce them into
+    /// one query reload and one facet scan instead of full-history scans for every publish.
+    private func scheduleHistoryRefresh() {
+        guard pendingHistoryRefresh == nil else { return }
+        let delay = historyRefreshDelay
+        pendingHistoryRefresh = startTrackedTask { [weak self] in
+            try? await Task.sleep(for: delay)
+            guard let self, !Task.isCancelled else { return }
+            self.pendingHistoryRefresh = nil
+            guard self.isActive else { return }
+            self.reloadCurrentQuery(preservingLoadedRecords: true, resetListIdentity: false)
+            self.refreshFacets()
+        }
+    }
+
+    /// Deleted records must leave the list immediately rather than after the coalesced reload,
+    /// because rendering a deleted model can fault on data that no longer exists.
+    private func removeDetachedRecords() {
+        let attached = records.filter { !$0.isDeleted && $0.modelContext != nil }
+        guard attached.count != records.count else { return }
+        totalMatchingRecordCount = max(0, totalMatchingRecordCount - (records.count - attached.count))
+        records = attached
+        recomputeVisibleRecords()
+    }
+
+    private func cancelPendingQueryWork() {
+        deferredReload = nil
+        queryGeneration &+= 1
+        queryTask?.cancel()
+        queryTask = nil
+        loadMoreAfterQuery = false
+        if isLoadingMore { isLoadingMore = false }
+        facetsGeneration &+= 1
+        facetsTask?.cancel()
+        facetsTask = nil
+        pendingHistoryRefresh?.cancel()
+        pendingHistoryRefresh = nil
+    }
+
+    @discardableResult
+    private func startTrackedTask(_ operation: @escaping @MainActor () async -> Void) -> Task<Void, Never> {
+        let id = UUID()
+        let task = Task { [weak self] in
+            await operation()
+            self?.pendingWork[id] = nil
+        }
+        pendingWork[id] = task
+        return task
+    }
+
+    nonisolated private static func makeDiffPresentation(
+        rawText: String,
+        finalText: String,
+        checkCancellation: () throws -> Void
+    ) rethrows -> HistoryDiffPresentation {
+        guard let segments = try TextDiffService.wordDiff(
+            original: rawText.trimmingCharacters(in: .whitespacesAndNewlines),
+            processed: finalText,
+            maxComparisonCells: maxDiffComparisonCells,
+            checkCancellation: checkCancellation
+        ) else {
+            return .tooLarge
+        }
+        return .segments(segments)
+    }
+
+    private func cacheDiff(
+        _ presentation: HistoryDiffPresentation,
+        for recordID: UUID,
+        rawText: String,
+        finalText: String
+    ) {
+        let entry = CachedDiff(rawText: rawText, finalText: finalText, presentation: presentation)
+        guard diffCache.updateValue(entry, forKey: recordID) == nil else { return }
+        diffCacheOrder.append(recordID)
+        if diffCacheOrder.count > Self.diffCacheLimit {
+            diffCache.removeValue(forKey: diffCacheOrder.removeFirst())
+        }
     }
 
     private func recomputeDeviceSections(
