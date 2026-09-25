@@ -3359,6 +3359,16 @@ struct OpenAIChatGPTModelCache: Codable, Sendable {
 
 // MARK: - Settings View
 
+enum OpenAIAPIKeyField {
+    /// Offer Remove only while the field shows the stored key (or is empty), so an edited key gets Save and can replace it.
+    /// A failed validation keeps Save available so the key can be retried.
+    static func showsRemove(storedKey: String?, input: String, validationResult: Bool?) -> Bool {
+        let storedKey = storedKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let input = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !storedKey.isEmpty && (input.isEmpty || input == storedKey) && validationResult != false
+    }
+}
+
 private struct OpenAISettingsView: View {
     let plugin: OpenAIPlugin
     @State private var authMode: OpenAIAuthMode = .apiKey
@@ -3536,7 +3546,11 @@ private struct OpenAISettingsView: View {
                 }
                 .buttonStyle(.borderless)
 
-                if plugin._apiKey?.isEmpty == false {
+                if OpenAIAPIKeyField.showsRemove(
+                    storedKey: plugin._apiKey,
+                    input: apiKeyInput,
+                    validationResult: validationResult
+                ) {
                     Button(String(localized: "Remove", bundle: bundle)) {
                         apiKeyInput = ""
                         validationResult = nil
@@ -3554,6 +3568,8 @@ private struct OpenAISettingsView: View {
                     .disabled(apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
+            // Lock the row until the result arrives so it always describes the key in the field.
+            .disabled(isValidating)
 
             if isValidating {
                 HStack(spacing: 4) {
@@ -3575,6 +3591,9 @@ private struct OpenAISettingsView: View {
             Text("API keys are stored securely in the Keychain", bundle: bundle)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+        }
+        .onChange(of: apiKeyInput) {
+            validationResult = nil
         }
     }
 
@@ -3813,17 +3832,30 @@ private struct OpenAISettingsView: View {
         let trimmedKey = apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedKey.isEmpty else { return }
 
-        plugin.setApiKey(trimmedKey)
+        // A first key is stored right away because a key can fail the /v1/models check and still transcribe.
+        // A replacement is stored only once validated so a mistyped paste can't overwrite a working key.
+        let replacesStoredKey = plugin._apiKey?.isEmpty == false
+        if !replacesStoredKey {
+            plugin.setApiKey(trimmedKey)
+        }
+
+        func showResult(_ isValid: Bool) {
+            isValidating = false
+            // A focused field may still take typing while the row is disabled, so only label the key it still shows.
+            validationResult = apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines) == trimmedKey ? isValid : nil
+        }
 
         isValidating = true
         validationResult = nil
         Task {
             let isValid = await plugin.validateApiKey(trimmedKey)
             if isValid {
+                if replacesStoredKey {
+                    plugin.setApiKey(trimmedKey)
+                }
                 let models = await plugin.refreshFetchedLLMModels()
                 await MainActor.run {
-                    isValidating = false
-                    validationResult = true
+                    showResult(true)
                     if !models.isEmpty {
                         fetchedLLMModels = models
                         selectedLLMModel = plugin.selectedLLMModelId ?? models.first?.id ?? selectedLLMModel
@@ -3832,8 +3864,7 @@ private struct OpenAISettingsView: View {
                 }
             } else {
                 await MainActor.run {
-                    isValidating = false
-                    validationResult = false
+                    showResult(false)
                 }
             }
         }
