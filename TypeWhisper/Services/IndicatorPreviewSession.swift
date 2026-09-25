@@ -28,11 +28,22 @@ final class IndicatorPreviewSession: ObservableObject {
 
     private var timer: Timer?
     private var startedAt: Date?
+    private var windowCloseObserver: NSObjectProtocol?
 
     func start() {
         guard !isActive else { return }
         isActive = true
         startedAt = Date()
+        // Safety net: the preview must never outlive the Settings window.
+        windowCloseObserver = NotificationCenter.default.addObserver(
+            forName: NSWindow.willCloseNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let window = notification.object as? NSWindow,
+                  window.identifier?.rawValue.lowercased().contains("settings") == true else { return }
+            Task { @MainActor in self?.stop() }
+        }
         let timer = Timer(timeInterval: Self.tickInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tick() }
         }
@@ -45,6 +56,10 @@ final class IndicatorPreviewSession: ObservableObject {
         guard isActive else { return }
         timer?.invalidate()
         timer = nil
+        if let windowCloseObserver {
+            NotificationCenter.default.removeObserver(windowCloseObserver)
+            self.windowCloseObserver = nil
+        }
         startedAt = nil
         isActive = false
         recordingDuration = 0

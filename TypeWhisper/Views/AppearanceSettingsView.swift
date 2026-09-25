@@ -15,7 +15,6 @@ struct AppearanceSettingsView: View {
     @AppStorage(UserDefaultsKeys.dockIconBehaviorWhenMenuBarHidden) private var dockIconBehaviorRawValue = DockIconBehavior.keepVisible.rawValue
     @ObservedObject private var pluginManager = PluginManager.shared
     @ObservedObject private var dictation = DictationViewModel.shared
-    @ObservedObject private var preview = IndicatorPreviewSession.shared
 
     private var supportsTranscriptPreview: Bool {
         dictation.indicatorStyle.supportsTranscriptPreview
@@ -234,12 +233,6 @@ struct AppearanceSettingsView: View {
             .padding(.bottom, SettingsLayoutMetrics.pagePadding)
         }
         .frame(minWidth: 500, minHeight: 300)
-        .onAppear {
-            preview.start()
-        }
-        .onDisappear {
-            preview.stop()
-        }
     }
 
     @ViewBuilder

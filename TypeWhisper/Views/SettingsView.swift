@@ -157,6 +157,15 @@ struct SettingsView: View {
         .frame(minWidth: 950, idealWidth: 1050, minHeight: 550, idealHeight: 600)
         .onAppear {
             navigateToFileTranscriptionIfNeeded()
+            syncIndicatorPreview()
+        }
+        // The detail view's own onDisappear is not reliable inside the split
+        // view, so the selected tab drives the live indicator preview.
+        .onChange(of: selectedTab) { _, _ in
+            syncIndicatorPreview()
+        }
+        .onDisappear {
+            IndicatorPreviewSession.shared.stop()
         }
         .onChange(of: fileTranscription.showFilePickerFromMenu) { _, _ in
             navigateToFileTranscriptionIfNeeded()
@@ -192,6 +201,14 @@ struct SettingsView: View {
 
     static func availableTab(_ tab: SettingsTab) -> SettingsTab {
         tab
+    }
+
+    private func syncIndicatorPreview() {
+        if selectedTab == .appearance {
+            IndicatorPreviewSession.shared.start()
+        } else {
+            IndicatorPreviewSession.shared.stop()
+        }
     }
 
     private func navigateToFileTranscriptionIfNeeded() {
