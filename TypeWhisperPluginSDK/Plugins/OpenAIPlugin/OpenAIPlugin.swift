@@ -3821,13 +3821,13 @@ private struct OpenAISettingsView: View {
         let trimmedKey = apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedKey.isEmpty else { return }
 
-        plugin.setApiKey(trimmedKey)
-
         isValidating = true
         validationResult = nil
         Task {
             let isValid = await plugin.validateApiKey(trimmedKey)
             if isValid {
+                // Store only a validated key so a mistyped paste can't replace a working one.
+                plugin.setApiKey(trimmedKey)
                 let models = await plugin.refreshFetchedLLMModels()
                 await MainActor.run {
                     isValidating = false
