@@ -1,5 +1,5 @@
 {
-  "originHash" : "f45a5b8196a68ae01232c01ed3bb3a4f45544839d1629fd251070ff2ac47a4a1",
+  "originHash" : "70faf065323dbe669200df51fa3263d8e9505cbaf82a16383a9824bd59dedeb0",
   "pins" : [
     {
       "identity" : "eventsource",
@@ -15,8 +15,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/FluidInference/FluidAudio.git",
       "state" : {
-        "revision" : "41540ea237350afe5117a082b5c28eda642d0612",
-        "version" : "0.15.7"
+        "revision" : "5c51c5c93afff0d89594a2a93c3103e790ba648c",
+        "version" : "0.17.1"
       }
     },
     {
@@ -68,8 +68,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/sparkle-project/Sparkle.git",
       "state" : {
-        "revision" : "ac2def288cbff5cfc7df3ffef6abdf45b72bcb0a",
-        "version" : "2.9.6"
+        "revision" : "eef1a539a373c1f1a320624b1130fc5de7b2e100",
+        "version" : "2.10.0"
       }
     },
     {
@@ -86,8 +86,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-asn1.git",
       "state" : {
-        "revision" : "d9a5b37470adc940d22c3bcd5ca6953a516b727f",
-        "version" : "1.7.2"
+        "revision" : "3b6410f7dee09eb33cdd26260c5fd47fda19b0e2",
+        "version" : "1.7.3"
       }
     },
     {
@@ -131,8 +131,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/huggingface/swift-jinja.git",
       "state" : {
-        "revision" : "12ea4955e380dae6b0cd98299effe48c7fe584fc",
-        "version" : "2.5.0"
+        "revision" : "4588064a20f3fc093c95f2f7d3359999bf30cae5",
+        "version" : "2.5.1"
       }
     },
     {
@@ -149,8 +149,8 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/apple/swift-nio.git",
       "state" : {
-        "revision" : "a931f2c1de8dd49381ce3bf2e279d033f68d8865",
-        "version" : "2.102.0"
+        "revision" : "21de5f08c1a166a6dd293d0e587ad977bf8dac5d",
+        "version" : "2.103.0"
       }
     },
     {
