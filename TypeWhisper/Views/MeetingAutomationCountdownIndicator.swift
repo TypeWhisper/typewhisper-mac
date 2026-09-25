@@ -287,12 +287,12 @@ struct MeetingAutomationCountdownIndicator: View {
                 VStack(alignment: .leading, spacing: 1) {
                     Text(headline)
                         .font(CalendarMeetingCountdownTypography.font)
-                        .foregroundStyle(.white.opacity(0.94))
+                        .foregroundStyle(Color.primary.opacity(0.94))
                         .lineLimit(1)
 
                     Text(countdownText(remainingSeconds))
                         .font(CalendarMeetingCountdownTypography.font)
-                        .foregroundStyle(.white.opacity(0.7))
+                        .foregroundStyle(Color.primary.opacity(0.7))
                         .lineLimit(1)
                         .accessibilityIdentifier(countdownAccessibilityIdentifier)
                 }
@@ -303,10 +303,10 @@ struct MeetingAutomationCountdownIndicator: View {
                     .buttonStyle(.borderless)
                     .controlSize(.small)
                     .font(CalendarMeetingCountdownTypography.font)
-                    .foregroundStyle(.white)
+                    .foregroundStyle(.primary)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
-                    .background(Color.white.opacity(0.12), in: Capsule())
+                    .background(Color.primary.opacity(0.12), in: Capsule())
                     .accessibilityIdentifier(actionAccessibilityIdentifier)
                     .accessibilityHint(actionAccessibilityHint)
             }

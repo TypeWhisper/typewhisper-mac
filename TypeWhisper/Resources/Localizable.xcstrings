@@ -463,6 +463,50 @@
         }
       }
     },
+    "The notch itself stays black. The theme applies to the area that expands below it." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Notch selbst bleibt schwarz. Das Theme gilt für den Bereich, der darunter ausklappt."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ノッチ自体は黒のままです。テーマはその下に展開される領域に適用されます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "刘海本身保持黑色。主题应用于其下方展开的区域。"
+          }
+        }
+      }
+    },
+    "Theme" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Design"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "テーマ"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "主题"
+          }
+        }
+      }
+    },
     "This model cannot be imported: %@" : {
       "localizations" : {
         "de" : {
@@ -12694,6 +12738,28 @@
         }
       }
     },
+    "Glass follows your system appearance and uses Liquid Glass on macOS 26. Earlier versions show a translucent material." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Glas folgt dem Erscheinungsbild des Systems und nutzt ab macOS 26 Liquid Glass. Ältere Versionen zeigen ein transluzentes Material."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ガラスはシステムの外観に従い、macOS 26ではLiquid Glassを使用します。それ以前のバージョンでは半透明のマテリアルを表示します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "玻璃主题跟随系统外观，在 macOS 26 上使用 Liquid Glass，更早的版本显示半透明材质。"
+          }
+        }
+      }
+    },
     "Global LLM Fallbacks" : {
       "localizations" : {
         "ja" : {
@@ -14645,6 +14711,90 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "直接跳转到许可证设置中的激活栏。"
+          }
+        }
+      }
+    },
+    "indicatorTheme.classic" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Klassisch"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Classic"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "クラシック"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "经典"
+          }
+        }
+      }
+    },
+    "indicatorTheme.glass" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Glas"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Glass"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ガラス"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "玻璃"
+          }
+        }
+      }
+    },
+    "indicatorTheme.light" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Hell"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Light"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ライト"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "浅色"
           }
         }
       }

@@ -122,6 +122,24 @@ final class DictationViewModelIndicatorSettingsTests: XCTestCase {
         XCTAssertEqual(DictationViewModel.loadIndicatorStyle(defaults: defaults), .minimal)
     }
 
+    func testIndicatorThemeDefaultsToClassic() {
+        XCTAssertNil(defaults.string(forKey: UserDefaultsKeys.indicatorTheme))
+        XCTAssertEqual(DictationViewModel.loadIndicatorTheme(defaults: defaults), .classic)
+    }
+
+    func testIndicatorThemePersistsGlass() {
+        DictationViewModel.persistIndicatorTheme(.glass, defaults: defaults)
+
+        XCTAssertEqual(defaults.string(forKey: UserDefaultsKeys.indicatorTheme), IndicatorTheme.glass.rawValue)
+        XCTAssertEqual(DictationViewModel.loadIndicatorTheme(defaults: defaults), .glass)
+    }
+
+    func testUnknownIndicatorThemeFallsBackToClassic() {
+        defaults.set("neon", forKey: UserDefaultsKeys.indicatorTheme)
+
+        XCTAssertEqual(DictationViewModel.loadIndicatorTheme(defaults: defaults), .classic)
+    }
+
     func testUnknownIndicatorStyleFallsBackToNotch() {
         defaults.set("mystery", forKey: UserDefaultsKeys.indicatorStyle)
 
@@ -1483,6 +1501,9 @@ final class IndicatorPanelInteractionTests: XCTestCase {
             .frame(width: CGFloat(width), height: CGFloat(height))
             .background(.black.opacity(0.84), in: Capsule())
             .clipShape(Capsule())
+            // The progress bar uses the semantic primary color, which the
+            // classic surface resolves in the dark scheme.
+            .environment(\.colorScheme, .dark)
         )
         renderer.proposedSize = ProposedViewSize(
             width: CGFloat(width),

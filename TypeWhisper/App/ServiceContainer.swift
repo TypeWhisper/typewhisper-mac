@@ -311,6 +311,9 @@ final class ServiceContainer: ObservableObject {
             cancellationBehaviorDidChange: { [dictationViewModel] behavior in
                 dictationViewModel.cancellationBehavior = behavior
             },
+            indicatorThemeDidChange: { [dictationViewModel] theme in
+                dictationViewModel.indicatorTheme = theme
+            },
             dictationRecoveryPreferencesDidChange: { [recoveryViewModel] in
                 recoveryViewModel.reloadPreferencesFromDefaults()
             }

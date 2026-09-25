@@ -172,6 +172,7 @@ enum SettingsBackupExporter {
         var soundTranscriptionSuccess: Bool? = nil
         var soundError: Bool? = nil
         var indicatorStyle: String? = nil
+        var indicatorTheme: String? = nil
         var indicatorVisibleInScreenCaptures: Bool? = nil
         var indicatorTranscriptPreviewEnabled: Bool? = nil
         var liveFieldTranscriptEnabled: Bool? = nil
@@ -225,6 +226,7 @@ enum SettingsBackupExporter {
             if soundTranscriptionSuccess != nil { count += 1 }
             if soundError != nil { count += 1 }
             if indicatorStyle != nil { count += 1 }
+            if indicatorTheme != nil { count += 1 }
             if indicatorVisibleInScreenCaptures != nil { count += 1 }
             if indicatorTranscriptPreviewEnabled != nil { count += 1 }
             if liveFieldTranscriptEnabled != nil { count += 1 }
@@ -575,6 +577,7 @@ enum SettingsBackupExporter {
                 soundTranscriptionSuccess: userDefaults.object(forKey: UserDefaultsKeys.soundTranscriptionSuccess) as? Bool,
                 soundError: userDefaults.object(forKey: UserDefaultsKeys.soundError) as? Bool,
                 indicatorStyle: userDefaults.string(forKey: UserDefaultsKeys.indicatorStyle),
+                indicatorTheme: userDefaults.string(forKey: UserDefaultsKeys.indicatorTheme),
                 indicatorVisibleInScreenCaptures: userDefaults.object(forKey: UserDefaultsKeys.indicatorVisibleInScreenCaptures) as? Bool,
                 indicatorTranscriptPreviewEnabled: userDefaults.object(forKey: UserDefaultsKeys.indicatorTranscriptPreviewEnabled) as? Bool,
                 liveFieldTranscriptEnabled: userDefaults.object(forKey: UserDefaultsKeys.liveFieldTranscriptEnabled) as? Bool,
@@ -645,6 +648,7 @@ enum SettingsBackupExporter {
         userDefaults: UserDefaults = .standard,
         liveFieldTranscriptEnabledDidChange: ((Bool) -> Void)? = nil,
         cancellationBehaviorDidChange: ((CancellationBehavior) -> Void)? = nil,
+        indicatorThemeDidChange: ((IndicatorTheme) -> Void)? = nil,
         recoveryRetentionPolicyDidChange: ((DictationRecoveryRetentionPolicy) -> Void)? = nil,
         dictationRecoveryPreferencesDidChange: (() -> Void)? = nil
     ) async -> ImportResult {
@@ -859,6 +863,12 @@ enum SettingsBackupExporter {
         apply(preferences.soundTranscriptionSuccess, forKey: UserDefaultsKeys.soundTranscriptionSuccess)
         apply(preferences.soundError, forKey: UserDefaultsKeys.soundError)
         apply(preferences.indicatorStyle, forKey: UserDefaultsKeys.indicatorStyle)
+        // A backup is user-editable JSON: only a known theme is restored and
+        // handed to the live view model, anything else keeps the current one.
+        if let indicatorTheme = preferences.indicatorTheme.flatMap(IndicatorTheme.init(rawValue:)) {
+            apply(indicatorTheme.rawValue, forKey: UserDefaultsKeys.indicatorTheme)
+            indicatorThemeDidChange?(indicatorTheme)
+        }
         apply(preferences.indicatorVisibleInScreenCaptures, forKey: UserDefaultsKeys.indicatorVisibleInScreenCaptures)
         apply(preferences.indicatorTranscriptPreviewEnabled, forKey: UserDefaultsKeys.indicatorTranscriptPreviewEnabled)
         apply(preferences.liveFieldTranscriptEnabled, forKey: UserDefaultsKeys.liveFieldTranscriptEnabled)
@@ -964,6 +974,7 @@ final class SettingsBackupAutomationService {
     private let liveFieldTranscriptEnabledDidChange: ((Bool) -> Void)?
     private let recoveryRetentionPolicyDidChange: ((DictationRecoveryRetentionPolicy) -> Void)?
     private let cancellationBehaviorDidChange: ((CancellationBehavior) -> Void)?
+    private let indicatorThemeDidChange: ((IndicatorTheme) -> Void)?
     private let dictationRecoveryPreferencesDidChange: (() -> Void)?
 
     init(
@@ -980,6 +991,7 @@ final class SettingsBackupAutomationService {
         liveFieldTranscriptEnabledDidChange: ((Bool) -> Void)? = nil,
         recoveryRetentionPolicyDidChange: ((DictationRecoveryRetentionPolicy) -> Void)? = nil,
         cancellationBehaviorDidChange: ((CancellationBehavior) -> Void)? = nil,
+        indicatorThemeDidChange: ((IndicatorTheme) -> Void)? = nil,
         dictationRecoveryPreferencesDidChange: (() -> Void)? = nil
     ) {
         self.workflowService = workflowService
@@ -995,6 +1007,7 @@ final class SettingsBackupAutomationService {
         self.liveFieldTranscriptEnabledDidChange = liveFieldTranscriptEnabledDidChange
         self.recoveryRetentionPolicyDidChange = recoveryRetentionPolicyDidChange
         self.cancellationBehaviorDidChange = cancellationBehaviorDidChange
+        self.indicatorThemeDidChange = indicatorThemeDidChange
         self.dictationRecoveryPreferencesDidChange = dictationRecoveryPreferencesDidChange
     }
 
@@ -1028,6 +1041,7 @@ final class SettingsBackupAutomationService {
             userDefaults: userDefaults,
             liveFieldTranscriptEnabledDidChange: liveFieldTranscriptEnabledDidChange,
             cancellationBehaviorDidChange: cancellationBehaviorDidChange,
+            indicatorThemeDidChange: indicatorThemeDidChange,
             recoveryRetentionPolicyDidChange: recoveryRetentionPolicyDidChange,
             dictationRecoveryPreferencesDidChange: dictationRecoveryPreferencesDidChange
         )

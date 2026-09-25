@@ -132,6 +132,14 @@ class OverlayIndicatorPanel: NSPanel {
             }
             .store(in: &cancellables)
 
+        vm.$indicatorTheme
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] theme in
+                self?.appearance = theme.panelAppearance
+            }
+            .store(in: &cancellables)
+
         vm.$indicatorVisibleInScreenCaptures
             .removeDuplicates()
             .receive(on: DispatchQueue.main)

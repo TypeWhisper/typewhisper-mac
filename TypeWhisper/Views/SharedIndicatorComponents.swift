@@ -1,4 +1,124 @@
+import AppKit
 import SwiftUI
+
+// MARK: - Theme
+
+extension IndicatorTheme {
+    /// Color scheme the indicator content renders in. Glass follows the system appearance.
+    var preferredColorScheme: ColorScheme? {
+        switch self {
+        case .classic:
+            .dark
+        case .light:
+            .light
+        case .glass:
+            nil
+        }
+    }
+
+    /// Appearance for the hosting panel so semantic colors resolve to match the surface.
+    var panelAppearance: NSAppearance? {
+        switch self {
+        case .classic:
+            NSAppearance(named: .darkAqua)
+        case .light:
+            NSAppearance(named: .aqua)
+        case .glass:
+            nil
+        }
+    }
+
+    /// Hairline around the surface. Glass draws its own rim highlight.
+    var strokeColor: Color? {
+        switch self {
+        case .classic:
+            .white.opacity(0.15)
+        case .light:
+            .black.opacity(0.1)
+        case .glass:
+            nil
+        }
+    }
+
+    /// Multiplier for the drop shadow the indicator views draw. Glass ships its
+    /// own shadow, and a SwiftUI shadow would show through the translucent surface.
+    var shadowOpacityScale: Double {
+        switch self {
+        case .classic:
+            1
+        case .light:
+            0.5
+        case .glass:
+            0
+        }
+    }
+}
+
+/// Draws the themed background, clip and hairline stroke of a floating indicator.
+struct IndicatorSurfaceModifier<S: Shape>: ViewModifier {
+    let theme: IndicatorTheme
+    let shape: S
+    let strokeColor: Color?
+
+    func body(content: Content) -> some View {
+        themedBackground(content)
+            // The hosting panel itself is rectangular. Clip all rendered content,
+            // especially the feedback progress bar, to the visible surface.
+            .clipShape(shape)
+            .overlay {
+                if let stroke = strokeColor ?? theme.strokeColor {
+                    shape.stroke(stroke, lineWidth: 1)
+                }
+            }
+    }
+
+    @ViewBuilder
+    private func themedBackground(_ content: Content) -> some View {
+        switch theme {
+        case .classic:
+            content.background(.black.opacity(0.85), in: shape)
+        case .light:
+            content.background(.regularMaterial, in: shape)
+        case .glass:
+            if #available(macOS 26.0, *) {
+                content.glassEffect(.clear, in: shape)
+            } else {
+                content.background(.regularMaterial, in: shape)
+            }
+        }
+    }
+}
+
+extension View {
+    func indicatorSurface<S: Shape>(
+        theme: IndicatorTheme,
+        shape: S,
+        strokeColor: Color? = nil
+    ) -> some View {
+        modifier(IndicatorSurfaceModifier(theme: theme, shape: shape, strokeColor: strokeColor))
+    }
+}
+
+// MARK: - Motion
+
+enum IndicatorMotion {
+    /// Spring used when an indicator grows, shrinks or pops in.
+    static let expand = Animation.spring(response: 0.38, dampingFraction: 0.78)
+
+    /// Scale an indicator starts from when a recording begins, so it visibly
+    /// unfolds instead of switching content in place.
+    static let revealScale: CGFloat = 0.92
+
+    /// Runs the pop-in: snap to the reveal scale without animation, then spring to 1.
+    static func popIn(_ scale: Binding<CGFloat>) {
+        var snap = Transaction()
+        snap.disablesAnimations = true
+        withTransaction(snap) { scale.wrappedValue = revealScale }
+        DispatchQueue.main.async {
+            withAnimation(expand) { scale.wrappedValue = 1 }
+        }
+    }
+}
 
 // MARK: - Sizing
 
@@ -110,7 +230,7 @@ struct IndicatorLeftStatus: View {
             } else {
                 ProgressView()
                     .controlSize(.mini)
-                    .tint(.white)
+                    .tint(.primary)
             }
         case .inserting:
             if hasActionFeedback {
@@ -142,7 +262,7 @@ struct IndicatorPreparingView: View {
     var body: some View {
         ProgressView()
             .controlSize(.mini)
-            .tint(.white)
+            .tint(.primary)
             .frame(width: max(sizing.iconSize, sizing.dotSize), height: max(sizing.iconSize, sizing.dotSize))
             .accessibilityHidden(true)
     }
@@ -155,7 +275,7 @@ struct IndicatorPreparingLabel: View {
     var body: some View {
         Text(presentation.recordingStatusLabel)
             .font(.system(size: sizing.profileFontSize, weight: .medium))
-            .foregroundStyle(.white.opacity(sizing.timerOpacity))
+            .foregroundStyle(Color.primary.opacity(sizing.timerOpacity))
             .lineLimit(1)
             .fixedSize(horizontal: true, vertical: false)
             .accessibilityLabel(presentation.recordingStatusLabel)
@@ -201,7 +321,7 @@ struct IndicatorRecordingContent: View {
             } else {
                 Text(formatDuration(presentation.recordingDuration))
                     .font(.system(size: sizing.timerFontSize, weight: .medium).monospacedDigit())
-                    .foregroundStyle(.white.opacity(sizing.timerOpacity))
+                    .foregroundStyle(Color.primary.opacity(sizing.timerOpacity))
                     .lineLimit(1)
                     .fixedSize(horizontal: true, vertical: false)
                     .accessibilityLabel(String(localized: "Recording timer"))
@@ -217,7 +337,7 @@ struct IndicatorRecordingContent: View {
             if let name = presentation.activeRuleName {
                 Text(name)
                     .font(.system(size: sizing.profileFontSize, weight: .medium))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(.primary)
                     .lineLimit(1)
                     .truncationMode(.tail)
                     .padding(.horizontal, sizing.profilePaddingH)
@@ -245,10 +365,10 @@ struct IndicatorExpandableText: View {
 
     var body: some View {
         ScrollViewReader { proxy in
-            ScrollView(.vertical, showsIndicators: true) {
+            ScrollView(.vertical, showsIndicators: false) {
                 Text(text)
                     .font(.system(size: fontSize))
-                    .foregroundStyle(.white.opacity(0.85))
+                    .foregroundStyle(Color.primary.opacity(0.85))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, contentPadding)
                     .padding(.vertical, 14)
@@ -274,7 +394,7 @@ struct IndicatorFeedbackProgressBar: View {
 
     var body: some View {
         Rectangle()
-            .fill(Color.white.opacity(0.65))
+            .fill(Color.primary.opacity(0.65))
             .frame(maxWidth: .infinity)
             .frame(height: 2)
             .scaleEffect(
@@ -316,7 +436,7 @@ struct IndicatorActionFeedback: View {
                     .accessibilityHidden(true)
                 Text(message)
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.white.opacity(0.9))
+                    .foregroundStyle(Color.primary.opacity(0.9))
                     .lineLimit(2)
 
                 if let actionTitle, let onAction {
@@ -325,10 +445,10 @@ struct IndicatorActionFeedback: View {
                         .buttonStyle(.borderless)
                         .controlSize(.small)
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(.white)
+                        .foregroundStyle(.primary)
                         .padding(.horizontal, 8)
                         .padding(.vertical, 4)
-                        .background(Color.white.opacity(0.12), in: Capsule())
+                        .background(Color.primary.opacity(0.12), in: Capsule())
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)

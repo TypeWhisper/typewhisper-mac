@@ -669,6 +669,9 @@ struct AdvancedSettingsView: View {
             cancellationBehaviorDidChange: { behavior in
                 dictation.cancellationBehavior = behavior
             },
+            indicatorThemeDidChange: { theme in
+                dictation.indicatorTheme = theme
+            },
             recoveryRetentionPolicyDidChange: { policy in
                 _ = container.audioRecordingService.updateRecoveryRetentionPolicy(policy)
             },

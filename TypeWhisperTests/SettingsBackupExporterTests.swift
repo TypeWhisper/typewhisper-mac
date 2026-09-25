@@ -692,6 +692,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         source.userDefaults.set(0.35, forKey: UserDefaultsKeys.audioDuckingLevel)
         source.userDefaults.set(3, forKey: UserDefaultsKeys.indicatorTranscriptPreviewFontSizeOffset)
         source.userDefaults.set("overlay", forKey: UserDefaultsKeys.indicatorStyle)
+        source.userDefaults.set("glass", forKey: UserDefaultsKeys.indicatorTheme)
         source.userDefaults.set("instant", forKey: UserDefaultsKeys.cancellationBehavior)
         source.userDefaults.set(false, forKey: UserDefaultsKeys.indicatorVisibleInScreenCaptures)
         source.userDefaults.set(true, forKey: UserDefaultsKeys.liveFieldTranscriptEnabled)
@@ -718,6 +719,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         XCTAssertEqual(backup.preferences.audioDuckingLevel, 0.35)
         XCTAssertEqual(backup.preferences.indicatorTranscriptPreviewFontSizeOffset, 3)
         XCTAssertEqual(backup.preferences.indicatorStyle, "overlay")
+        XCTAssertEqual(backup.preferences.indicatorTheme, "glass")
         XCTAssertEqual(backup.preferences.cancellationBehavior, "instant")
         XCTAssertEqual(backup.preferences.indicatorVisibleInScreenCaptures, false)
         XCTAssertEqual(backup.preferences.liveFieldTranscriptEnabled, true)
@@ -729,6 +731,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         var appliedRecoveryRetentionPolicy: DictationRecoveryRetentionPolicy?
         var appliedLiveFieldTranscriptEnabled: Bool?
         var appliedCancellationBehavior: CancellationBehavior?
+        var appliedIndicatorTheme: IndicatorTheme?
 
         let result = await SettingsBackupExporter.importBackup(
             backup,
@@ -744,6 +747,7 @@ final class SettingsBackupExporterTests: XCTestCase {
             userDefaults: destination.userDefaults,
             liveFieldTranscriptEnabledDidChange: { appliedLiveFieldTranscriptEnabled = $0 },
             cancellationBehaviorDidChange: { appliedCancellationBehavior = $0 },
+            indicatorThemeDidChange: { appliedIndicatorTheme = $0 },
             recoveryRetentionPolicyDidChange: { appliedRecoveryRetentionPolicy = $0 }
         )
 
@@ -754,6 +758,8 @@ final class SettingsBackupExporterTests: XCTestCase {
         XCTAssertEqual(destination.userDefaults.bool(forKey: UserDefaultsKeys.translationEnabled), true)
         XCTAssertEqual(destination.userDefaults.bool(forKey: UserDefaultsKeys.showMenuBarIcon), false)
         XCTAssertEqual(destination.userDefaults.string(forKey: UserDefaultsKeys.indicatorStyle), "overlay")
+        XCTAssertEqual(destination.userDefaults.string(forKey: UserDefaultsKeys.indicatorTheme), "glass")
+        XCTAssertEqual(appliedIndicatorTheme, .glass)
         XCTAssertEqual(
             destination.userDefaults.object(forKey: UserDefaultsKeys.indicatorVisibleInScreenCaptures) as? Bool,
             false
@@ -765,6 +771,40 @@ final class SettingsBackupExporterTests: XCTestCase {
         XCTAssertEqual(destination.userDefaults.integer(forKey: UserDefaultsKeys.dictationRecoveryRetentionDays), 7)
         XCTAssertEqual(appliedRecoveryRetentionPolicy, .sevenDays)
         XCTAssertNil(destination.userDefaults.string(forKey: UserDefaultsKeys.fileTranscriptionEngine))
+    }
+
+    func testUnknownIndicatorThemeInBackupPreservesDestinationTheme() async throws {
+        let destination = try makeFixture()
+        defer { teardown(destination) }
+        destination.userDefaults.set("light", forKey: UserDefaultsKeys.indicatorTheme)
+        var preferences = SettingsBackupExporter.PreferencesDTO.empty
+        preferences.indicatorTheme = "neon"
+        let backup = SettingsBackupExporter.SettingsBackup(
+            schemaVersion: SettingsBackupExporter.schemaVersion,
+            exportedAt: Date(), appVersion: "1.0",
+            workflows: [], dictionaryEntries: [], snippets: [], promptActions: [], profiles: [],
+            hotkeys: [:], plugins: [], history: [], updateChannel: nil, preferences: preferences
+        )
+        var appliedIndicatorTheme: IndicatorTheme?
+
+        let result = await SettingsBackupExporter.importBackup(
+            backup,
+            workflowService: destination.workflowService,
+            dictionaryService: destination.dictionaryService,
+            snippetService: destination.snippetService,
+            profileService: destination.profileService,
+            promptActionService: destination.promptActionService,
+            pluginManager: destination.pluginManager,
+            pluginRegistryService: destination.pluginRegistryService,
+            historyService: destination.historyService,
+            usageStatisticsService: destination.usageStatisticsService,
+            userDefaults: destination.userDefaults,
+            indicatorThemeDidChange: { appliedIndicatorTheme = $0 }
+        )
+
+        XCTAssertEqual(result.preferencesApplied, 0)
+        XCTAssertEqual(destination.userDefaults.string(forKey: UserDefaultsKeys.indicatorTheme), "light")
+        XCTAssertNil(appliedIndicatorTheme)
     }
 
     func testBuildBackupExportsEffectiveRegisteredRecoveryRetentionPolicy() throws {

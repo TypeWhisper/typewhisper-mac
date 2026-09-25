@@ -2,6 +2,7 @@ import SwiftUI
 
 struct IndicatorPreviewView: View {
     @ObservedObject private var dictation = DictationViewModel.shared
+    @Environment(\.colorScheme) private var systemColorScheme
     private let previewNotchWidth: CGFloat = 185
     private let notchPreviewBaseHeight: CGFloat = 110
     private let notchPreviewBaseBodyHeight: CGFloat = 38
@@ -15,6 +16,17 @@ struct IndicatorPreviewView: View {
     private let streamingText = String(localized: "Hello, this is a live preview of the streaming text...")
     private var showTranscriptPreview: Bool {
         dictation.indicatorTranscriptPreviewEnabled && dictation.indicatorStyle.supportsTranscriptPreview
+    }
+    private var previewTheme: IndicatorTheme {
+        dictation.indicatorTheme
+    }
+    private var themeColorScheme: ColorScheme {
+        previewTheme.preferredColorScheme ?? systemColorScheme
+    }
+    /// The notch cap is always black, so the notch preview stays dark and only
+    /// its expanded body takes the theme scheme.
+    private var previewColorScheme: ColorScheme {
+        dictation.indicatorStyle == .notch ? .dark : themeColorScheme
     }
     private var notchClosedWidth: CGFloat {
         NotchIndicatorLayout.recordingClosedWidth(
@@ -91,11 +103,12 @@ struct IndicatorPreviewView: View {
                     minimalPreview
                 }
             }
-            .environment(\.colorScheme, .dark)
+            .environment(\.colorScheme, previewColorScheme)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
         .frame(height: previewHeight)
         .animation(.easeInOut(duration: 0.2), value: dictation.indicatorStyle)
+        .animation(.easeInOut(duration: 0.2), value: dictation.indicatorTheme)
         .animation(.easeInOut(duration: 0.2), value: dictation.notchIndicatorLeftContent)
         .animation(.easeInOut(duration: 0.2), value: dictation.notchIndicatorRightContent)
         .animation(.easeInOut(duration: 0.2), value: dictation.indicatorTranscriptPreviewEnabled)
@@ -113,7 +126,13 @@ struct IndicatorPreviewView: View {
             notchPreviewBody
         }
         .frame(width: notchPreviewWidth)
-        .background(.black)
+        .background(alignment: .top) {
+            if previewTheme == .classic {
+                Color.black
+            } else {
+                Color.black.frame(height: notchHeight)
+            }
+        }
         .clipShape(NotchShape(bottomCornerRadius: notchBottomCornerRadius))
         .frame(maxHeight: .infinity, alignment: .top)
     }
@@ -141,7 +160,7 @@ struct IndicatorPreviewView: View {
     private var notchPreviewBody: some View {
         Text(streamingText)
             .font(.system(size: notchPreviewFontSize))
-            .foregroundStyle(.white.opacity(0.7))
+            .foregroundStyle(Color.primary.opacity(0.7))
             .lineLimit(2)
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 28)
@@ -149,6 +168,11 @@ struct IndicatorPreviewView: View {
             .frame(height: notchPreviewBodyHeight, alignment: .top)
             .clipped()
             .opacity(showTranscriptPreview ? 1 : 0)
+            .modifier(NotchPreviewBodySurface(
+                theme: previewTheme,
+                cornerRadius: notchBottomCornerRadius,
+                colorScheme: themeColorScheme
+            ))
     }
 
     // MARK: - Overlay Preview
@@ -168,7 +192,7 @@ struct IndicatorPreviewView: View {
             if showTranscriptPreview {
                 Text(streamingText)
                     .font(.system(size: overlayPreviewFontSize))
-                    .foregroundStyle(.white.opacity(0.7))
+                    .foregroundStyle(Color.primary.opacity(0.7))
                     .lineLimit(2)
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.horizontal, 20)
@@ -176,11 +200,7 @@ struct IndicatorPreviewView: View {
             }
         }
         .frame(width: showTranscriptPreview ? 320 : 280)
-        .background(.black.opacity(0.85), in: RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 24, style: .continuous)
-                .stroke(Color.white.opacity(0.15), lineWidth: 1)
-        )
+        .indicatorSurface(theme: previewTheme, shape: RoundedRectangle(cornerRadius: 24, style: .continuous))
     }
 
     @ViewBuilder
@@ -193,23 +213,19 @@ struct IndicatorPreviewView: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 10)
-        .background(.black.opacity(0.85), in: Capsule())
-        .overlay(
-            Capsule()
-                .stroke(Color.white.opacity(0.14), lineWidth: 1)
-        )
+        .indicatorSurface(theme: previewTheme, shape: Capsule())
     }
 
     // MARK: - App Icon Placeholder
 
     private func appIconPlaceholder(size: CGFloat, cornerRadius: CGFloat) -> some View {
         RoundedRectangle(cornerRadius: cornerRadius)
-            .fill(.white.opacity(0.15))
+            .fill(Color.primary.opacity(0.15))
             .frame(width: size, height: size)
             .overlay(
                 Image(systemName: "app.fill")
                     .font(.system(size: size * 0.6))
-                    .foregroundStyle(.white.opacity(0.4))
+                    .foregroundStyle(Color.primary.opacity(0.4))
             )
     }
 
@@ -225,14 +241,14 @@ struct IndicatorPreviewView: View {
         case .timer:
             Text(formatDuration(notchPreviewRecordingDuration))
                 .font(.system(size: size, weight: .medium).monospacedDigit())
-                .foregroundStyle(.white.opacity(0.6))
+                .foregroundStyle(Color.primary.opacity(0.6))
                 .lineLimit(1)
                 .fixedSize(horizontal: true, vertical: false)
         case .waveform:
             HStack(spacing: 1.5) {
                 ForEach(0..<5, id: \.self) { i in
                     RoundedRectangle(cornerRadius: 1)
-                        .fill(.white)
+                        .fill(.primary)
                         .frame(width: 2.5, height: [4, 8, 12, 7, 5][i])
                 }
             }
@@ -240,7 +256,7 @@ struct IndicatorPreviewView: View {
         case .profile:
             Text(notchPreviewActiveRuleName)
                 .font(.system(size: size * 0.85, weight: .medium))
-                .foregroundStyle(.white)
+                .foregroundStyle(.primary)
                 .lineLimit(1)
                 .truncationMode(.tail)
                 .padding(.horizontal, 5)
@@ -284,6 +300,115 @@ struct ScreenshotIndicatorShowcaseView: View {
     }
 }
 #endif
+
+// MARK: - Notch preview body surface
+
+private struct NotchPreviewBodySurface: ViewModifier {
+    let theme: IndicatorTheme
+    let cornerRadius: CGFloat
+    let colorScheme: ColorScheme
+
+    func body(content: Content) -> some View {
+        if theme == .classic {
+            content
+        } else {
+            content
+                .indicatorSurface(
+                    theme: theme,
+                    shape: UnevenRoundedRectangle(
+                        bottomLeadingRadius: cornerRadius,
+                        bottomTrailingRadius: cornerRadius,
+                        style: .continuous
+                    )
+                )
+                .environment(\.colorScheme, colorScheme)
+        }
+    }
+}
+
+// MARK: - Option Tile
+
+/// Selectable tile shared by the style and theme pickers.
+struct IndicatorOptionTile<Icon: View>: View {
+    let label: String
+    let isSelected: Bool
+    let action: () -> Void
+    @ViewBuilder let icon: () -> Icon
+
+    var body: some View {
+        Button(action: action) {
+            VStack(spacing: 6) {
+                icon()
+                    .frame(height: 36)
+                Text(label)
+                    .font(.caption)
+                    .foregroundStyle(isSelected ? .primary : .secondary)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(isSelected ? Color.accentColor.opacity(0.1) : Color.secondary.opacity(0.05))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(isSelected ? Color.accentColor : Color.secondary.opacity(0.2), lineWidth: isSelected ? 2 : 1)
+            )
+        }
+        .frame(maxWidth: .infinity)
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+        .accessibilityAddTraits(.isButton)
+        .accessibilityValue(isSelected ? String(localized: "Selected") : "")
+    }
+}
+
+// MARK: - Theme Tile Picker
+
+struct IndicatorThemePicker: View {
+    @ObservedObject private var dictation = DictationViewModel.shared
+    @Environment(\.colorScheme) private var systemColorScheme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(String(localized: "Theme"))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            HStack(spacing: 8) {
+                ForEach(IndicatorTheme.allCases, id: \.self) { theme in
+                    IndicatorOptionTile(
+                        label: theme.title,
+                        isSelected: dictation.indicatorTheme == theme,
+                        action: { dictation.indicatorTheme = theme }
+                    ) {
+                        themeSwatch(theme)
+                    }
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func themeSwatch(_ theme: IndicatorTheme) -> some View {
+        HStack(spacing: 4) {
+            RoundedRectangle(cornerRadius: 1.5)
+                .fill(Color.primary.opacity(0.45))
+                .frame(width: 5, height: 5)
+            Text("1:23")
+                .font(.system(size: 7, weight: .medium).monospacedDigit())
+                .foregroundStyle(Color.primary.opacity(0.65))
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
+        }
+        .padding(.horizontal, 8)
+        .frame(width: 56, height: 20)
+        .indicatorSurface(theme: theme, shape: Capsule())
+        .environment(\.colorScheme, theme.preferredColorScheme ?? systemColorScheme)
+        .padding(6)
+        .background(Color(white: 0.15), in: RoundedRectangle(cornerRadius: 6, style: .continuous))
+    }
+}
 
 // MARK: - Style Tile Picker
 
@@ -349,35 +474,17 @@ struct IndicatorStylePicker: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
 
-    @ViewBuilder
-    private func styleTile<Content: View>(_ style: IndicatorStyle, label: String, @ViewBuilder icon: () -> Content) -> some View {
-        let isSelected = dictation.indicatorStyle == style
-        Button {
-            dictation.indicatorStyle = style
-        } label: {
-            VStack(spacing: 6) {
-                icon()
-                    .frame(height: 36)
-                Text(label)
-                    .font(.caption)
-                    .foregroundStyle(isSelected ? .primary : .secondary)
-            }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(isSelected ? Color.accentColor.opacity(0.1) : Color.secondary.opacity(0.05))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .stroke(isSelected ? Color.accentColor : Color.secondary.opacity(0.2), lineWidth: isSelected ? 2 : 1)
-            )
-        }
-        .frame(maxWidth: .infinity)
-        .buttonStyle(.plain)
-        .accessibilityLabel(label)
-        .accessibilityAddTraits(.isButton)
-        .accessibilityValue(isSelected ? String(localized: "Selected") : "")
+    private func styleTile<Content: View>(
+        _ style: IndicatorStyle,
+        label: String,
+        @ViewBuilder icon: @escaping () -> Content
+    ) -> some View {
+        IndicatorOptionTile(
+            label: label,
+            isSelected: dictation.indicatorStyle == style,
+            action: { dictation.indicatorStyle = style },
+            icon: icon
+        )
     }
 
     private func tileStatusIndicator(size: CGFloat, cornerRadius: CGFloat) -> some View {
