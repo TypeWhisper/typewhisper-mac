@@ -172,6 +172,7 @@ enum SettingsBackupExporter {
         var soundTranscriptionSuccess: Bool? = nil
         var soundError: Bool? = nil
         var indicatorStyle: String? = nil
+        var indicatorTheme: String? = nil
         var indicatorVisibleInScreenCaptures: Bool? = nil
         var indicatorTranscriptPreviewEnabled: Bool? = nil
         var liveFieldTranscriptEnabled: Bool? = nil
@@ -225,6 +226,7 @@ enum SettingsBackupExporter {
             if soundTranscriptionSuccess != nil { count += 1 }
             if soundError != nil { count += 1 }
             if indicatorStyle != nil { count += 1 }
+            if indicatorTheme != nil { count += 1 }
             if indicatorVisibleInScreenCaptures != nil { count += 1 }
             if indicatorTranscriptPreviewEnabled != nil { count += 1 }
             if liveFieldTranscriptEnabled != nil { count += 1 }
@@ -575,6 +577,7 @@ enum SettingsBackupExporter {
                 soundTranscriptionSuccess: userDefaults.object(forKey: UserDefaultsKeys.soundTranscriptionSuccess) as? Bool,
                 soundError: userDefaults.object(forKey: UserDefaultsKeys.soundError) as? Bool,
                 indicatorStyle: userDefaults.string(forKey: UserDefaultsKeys.indicatorStyle),
+                indicatorTheme: userDefaults.string(forKey: UserDefaultsKeys.indicatorTheme),
                 indicatorVisibleInScreenCaptures: userDefaults.object(forKey: UserDefaultsKeys.indicatorVisibleInScreenCaptures) as? Bool,
                 indicatorTranscriptPreviewEnabled: userDefaults.object(forKey: UserDefaultsKeys.indicatorTranscriptPreviewEnabled) as? Bool,
                 liveFieldTranscriptEnabled: userDefaults.object(forKey: UserDefaultsKeys.liveFieldTranscriptEnabled) as? Bool,
@@ -859,6 +862,7 @@ enum SettingsBackupExporter {
         apply(preferences.soundTranscriptionSuccess, forKey: UserDefaultsKeys.soundTranscriptionSuccess)
         apply(preferences.soundError, forKey: UserDefaultsKeys.soundError)
         apply(preferences.indicatorStyle, forKey: UserDefaultsKeys.indicatorStyle)
+        apply(preferences.indicatorTheme, forKey: UserDefaultsKeys.indicatorTheme)
         apply(preferences.indicatorVisibleInScreenCaptures, forKey: UserDefaultsKeys.indicatorVisibleInScreenCaptures)
         apply(preferences.indicatorTranscriptPreviewEnabled, forKey: UserDefaultsKeys.indicatorTranscriptPreviewEnabled)
         apply(preferences.liveFieldTranscriptEnabled, forKey: UserDefaultsKeys.liveFieldTranscriptEnabled)

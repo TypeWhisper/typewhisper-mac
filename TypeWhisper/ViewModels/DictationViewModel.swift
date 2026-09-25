@@ -330,6 +330,10 @@ final class DictationViewModel: ObservableObject {
         didSet { Self.persistIndicatorStyle(indicatorStyle) }
     }
 
+    @Published var indicatorTheme: IndicatorTheme {
+        didSet { Self.persistIndicatorTheme(indicatorTheme) }
+    }
+
     @Published var notchIndicatorVisibility: NotchIndicatorVisibility {
         didSet { UserDefaults.standard.set(notchIndicatorVisibility.rawValue, forKey: UserDefaultsKeys.notchIndicatorVisibility) }
     }
@@ -633,6 +637,7 @@ final class DictationViewModel: ObservableObject {
         self.microphoneBoostEnabled = Self.loadMicrophoneBoostEnabled()
         self.spokenFeedbackEnabled = UserDefaults.standard.bool(forKey: UserDefaultsKeys.spokenFeedbackEnabled)
         self.indicatorStyle = Self.loadIndicatorStyle()
+        self.indicatorTheme = Self.loadIndicatorTheme()
         self.notchIndicatorVisibility = UserDefaults.standard.string(forKey: UserDefaultsKeys.notchIndicatorVisibility)
             .flatMap { NotchIndicatorVisibility(rawValue: $0) } ?? .duringActivity
         self.notchIndicatorLeftContent = UserDefaults.standard.string(forKey: UserDefaultsKeys.notchIndicatorLeftContent)
@@ -777,6 +782,15 @@ final class DictationViewModel: ObservableObject {
         defaults.set(style.rawValue, forKey: UserDefaultsKeys.indicatorStyle)
     }
 
+    nonisolated static func loadIndicatorTheme(defaults: UserDefaults = .standard) -> IndicatorTheme {
+        defaults.string(forKey: UserDefaultsKeys.indicatorTheme)
+            .flatMap { IndicatorTheme(rawValue: $0) } ?? .classic
+    }
+
+    nonisolated static func persistIndicatorTheme(_ theme: IndicatorTheme, defaults: UserDefaults = .standard) {
+        defaults.set(theme.rawValue, forKey: UserDefaultsKeys.indicatorTheme)
+    }
+
     nonisolated static func loadTranscribeShortQuietClipsAggressively(defaults: UserDefaults = .standard) -> Bool {
         defaults.object(forKey: UserDefaultsKeys.transcribeShortQuietClipsAggressively) as? Bool ?? true
     }
@@ -919,6 +933,7 @@ final class DictationViewModel: ObservableObject {
         guard AppConstants.isScreenshotAutomation else { return }
 
         indicatorStyle = .overlay
+        indicatorTheme = .classic
         indicatorTranscriptPreviewEnabled = true
         indicatorVisibleInScreenCaptures = true
         notchIndicatorVisibility = .duringActivity

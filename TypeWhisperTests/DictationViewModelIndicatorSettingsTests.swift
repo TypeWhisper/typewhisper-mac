@@ -122,6 +122,30 @@ final class DictationViewModelIndicatorSettingsTests: XCTestCase {
         XCTAssertEqual(DictationViewModel.loadIndicatorStyle(defaults: defaults), .minimal)
     }
 
+    func testIndicatorThemeDefaultsToClassic() {
+        XCTAssertNil(defaults.string(forKey: UserDefaultsKeys.indicatorTheme))
+        XCTAssertEqual(DictationViewModel.loadIndicatorTheme(defaults: defaults), .classic)
+    }
+
+    func testIndicatorThemePersistsGlass() {
+        DictationViewModel.persistIndicatorTheme(.glass, defaults: defaults)
+
+        XCTAssertEqual(defaults.string(forKey: UserDefaultsKeys.indicatorTheme), IndicatorTheme.glass.rawValue)
+        XCTAssertEqual(DictationViewModel.loadIndicatorTheme(defaults: defaults), .glass)
+    }
+
+    func testUnknownIndicatorThemeFallsBackToClassic() {
+        defaults.set("neon", forKey: UserDefaultsKeys.indicatorTheme)
+
+        XCTAssertEqual(DictationViewModel.loadIndicatorTheme(defaults: defaults), .classic)
+    }
+
+    func testOnlyFloatingStylesSupportThemes() {
+        XCTAssertFalse(IndicatorStyle.notch.supportsTheme)
+        XCTAssertTrue(IndicatorStyle.overlay.supportsTheme)
+        XCTAssertTrue(IndicatorStyle.minimal.supportsTheme)
+    }
+
     func testUnknownIndicatorStyleFallsBackToNotch() {
         defaults.set("mystery", forKey: UserDefaultsKeys.indicatorStyle)
 

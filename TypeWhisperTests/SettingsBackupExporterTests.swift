@@ -692,6 +692,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         source.userDefaults.set(0.35, forKey: UserDefaultsKeys.audioDuckingLevel)
         source.userDefaults.set(3, forKey: UserDefaultsKeys.indicatorTranscriptPreviewFontSizeOffset)
         source.userDefaults.set("overlay", forKey: UserDefaultsKeys.indicatorStyle)
+        source.userDefaults.set("glass", forKey: UserDefaultsKeys.indicatorTheme)
         source.userDefaults.set("instant", forKey: UserDefaultsKeys.cancellationBehavior)
         source.userDefaults.set(false, forKey: UserDefaultsKeys.indicatorVisibleInScreenCaptures)
         source.userDefaults.set(true, forKey: UserDefaultsKeys.liveFieldTranscriptEnabled)
@@ -718,6 +719,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         XCTAssertEqual(backup.preferences.audioDuckingLevel, 0.35)
         XCTAssertEqual(backup.preferences.indicatorTranscriptPreviewFontSizeOffset, 3)
         XCTAssertEqual(backup.preferences.indicatorStyle, "overlay")
+        XCTAssertEqual(backup.preferences.indicatorTheme, "glass")
         XCTAssertEqual(backup.preferences.cancellationBehavior, "instant")
         XCTAssertEqual(backup.preferences.indicatorVisibleInScreenCaptures, false)
         XCTAssertEqual(backup.preferences.liveFieldTranscriptEnabled, true)
@@ -754,6 +756,7 @@ final class SettingsBackupExporterTests: XCTestCase {
         XCTAssertEqual(destination.userDefaults.bool(forKey: UserDefaultsKeys.translationEnabled), true)
         XCTAssertEqual(destination.userDefaults.bool(forKey: UserDefaultsKeys.showMenuBarIcon), false)
         XCTAssertEqual(destination.userDefaults.string(forKey: UserDefaultsKeys.indicatorStyle), "overlay")
+        XCTAssertEqual(destination.userDefaults.string(forKey: UserDefaultsKeys.indicatorTheme), "glass")
         XCTAssertEqual(
             destination.userDefaults.object(forKey: UserDefaultsKeys.indicatorVisibleInScreenCaptures) as? Bool,
             false

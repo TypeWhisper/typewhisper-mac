@@ -192,6 +192,18 @@ struct GeneralSettingsView: View {
                     .listRowInsets(EdgeInsets())
                     .listRowBackground(Color.clear)
 
+                if dictation.indicatorStyle.supportsTheme {
+                    IndicatorThemePicker()
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+
+                    if dictation.indicatorTheme == .glass {
+                        Text(String(localized: "Glass follows your system appearance and uses Liquid Glass on macOS 26. Earlier versions show a translucent material."))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
                 if supportsTranscriptPreview {
                     Toggle(String(localized: "Show live transcript preview"), isOn: $dictation.indicatorTranscriptPreviewEnabled)
 

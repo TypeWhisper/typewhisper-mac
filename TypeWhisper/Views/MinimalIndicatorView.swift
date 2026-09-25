@@ -108,10 +108,6 @@ struct MinimalIndicatorView: View {
         }
     }
 
-    private var strokeColor: Color {
-        errorMessage == nil ? .white.opacity(0.14) : .red.opacity(0.55)
-    }
-
     private var shadowColor: Color {
         errorMessage == nil ? .black.opacity(0.22) : .red.opacity(0.18)
     }
@@ -120,7 +116,7 @@ struct MinimalIndicatorView: View {
         content
             .frame(width: currentWidth)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: isTop ? .top : .bottom)
-            .preferredColorScheme(.dark)
+            .preferredColorScheme(viewModel.indicatorTheme.preferredColorScheme)
             .animation(.easeInOut(duration: 0.2), value: currentWidth)
             .animation(.easeInOut(duration: 0.2), value: presentation.state)
             .animation(.easeInOut(duration: 1.0), value: dotPulse)
@@ -168,12 +164,11 @@ struct MinimalIndicatorView: View {
 
     private var content: some View {
         contentBody
-            .background(.black.opacity(0.84), in: Capsule())
-            .overlay(
-                Capsule()
-                    .stroke(strokeColor, lineWidth: 1)
+            .indicatorSurface(
+                theme: viewModel.indicatorTheme,
+                shape: Capsule(),
+                strokeColor: errorMessage == nil ? nil : .red.opacity(0.55)
             )
-            .clipShape(Capsule())
             .shadow(color: shadowColor, radius: 10, y: 4)
     }
 
@@ -261,7 +256,7 @@ struct MinimalIndicatorView: View {
                 }
                 ProgressView()
                     .controlSize(.mini)
-                    .tint(.white)
+                    .tint(.primary)
             }
         case .inserting:
             IndicatorLeftStatus(
@@ -293,7 +288,7 @@ struct MinimalIndicatorView: View {
 
             Text(text)
                 .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.white.opacity(0.92))
+                .foregroundStyle(Color.primary.opacity(0.92))
                 .lineLimit(2)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -302,10 +297,10 @@ struct MinimalIndicatorView: View {
                     .buttonStyle(.borderless)
                     .controlSize(.small)
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(.white)
+                    .foregroundStyle(.primary)
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
-                    .background(Color.white.opacity(0.12), in: Capsule())
+                    .background(Color.primary.opacity(0.12), in: Capsule())
             }
         }
     }

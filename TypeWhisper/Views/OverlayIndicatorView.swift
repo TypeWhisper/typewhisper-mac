@@ -30,25 +30,19 @@ struct OverlayTranscriptPreviewState: Equatable {
 }
 
 struct OverlayIndicatorSurface<Content: View>: View {
+    let theme: IndicatorTheme
     let content: Content
 
-    init(@ViewBuilder content: () -> Content) {
+    init(theme: IndicatorTheme = .classic, @ViewBuilder content: () -> Content) {
+        self.theme = theme
         self.content = content()
-    }
-
-    private var shape: RoundedRectangle {
-        RoundedRectangle(cornerRadius: 24, style: .continuous)
     }
 
     var body: some View {
         content
-            .background(.black.opacity(0.85), in: shape)
-            // The hosting panel itself is rectangular. Clip all rendered content,
-            // especially the feedback progress bar, to the visible pill.
-            .clipShape(shape)
-            .overlay(
-                shape
-                    .stroke(Color.white.opacity(0.15), lineWidth: 1)
+            .indicatorSurface(
+                theme: theme,
+                shape: RoundedRectangle(cornerRadius: 24, style: .continuous)
             )
     }
 }
@@ -132,7 +126,7 @@ struct OverlayIndicatorView: View {
     }
 
     var body: some View {
-        OverlayIndicatorSurface {
+        OverlayIndicatorSurface(theme: viewModel.indicatorTheme) {
             Group {
                 if let countdownPresentation,
                    countdownPresentation.kind.isStart {
@@ -157,7 +151,7 @@ struct OverlayIndicatorView: View {
         }
         .shadow(color: .black.opacity(0.3), radius: 10, y: 5)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: isTop ? .top : .bottom)
-        .preferredColorScheme(.dark)
+        .preferredColorScheme(viewModel.indicatorTheme.preferredColorScheme)
         .onHover { hovered in
             guard hasActionFeedback else { return }
             viewModel.setActionFeedbackHovered(hovered)
@@ -283,7 +277,7 @@ struct OverlayIndicatorView: View {
                     remainingFraction: presentation.actionFeedbackRemainingFraction
                 )
                 .overlay(alignment: .top) {
-                    Divider().background(Color.white.opacity(0.1))
+                    Divider().background(Color.primary.opacity(0.1))
                 }
             }
         } else {
@@ -302,7 +296,7 @@ struct OverlayIndicatorView: View {
                     remainingFraction: presentation.actionFeedbackRemainingFraction
                 )
                 .overlay(alignment: .bottom) {
-                    Divider().background(Color.white.opacity(0.1))
+                    Divider().background(Color.primary.opacity(0.1))
                 }
             }
 
@@ -368,11 +362,11 @@ struct OverlayIndicatorView: View {
                 if let phase = presentation.processingPhase {
                     Text(phase)
                         .font(.system(size: 12))
-                        .foregroundStyle(.white.opacity(0.7))
+                        .foregroundStyle(Color.primary.opacity(0.7))
                 }
                 ProgressView()
                     .controlSize(.mini)
-                    .tint(.white)
+                    .tint(.primary)
             }
         }
         .padding(.horizontal, 20)

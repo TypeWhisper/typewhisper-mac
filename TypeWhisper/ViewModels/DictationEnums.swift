@@ -32,6 +32,30 @@ enum OverlayPosition: String, CaseIterable {
     case bottom
 }
 
+/// Visual treatment of the floating indicator surfaces.
+enum IndicatorTheme: String, CaseIterable {
+    case classic
+    case glass
+    case light
+}
+
+extension IndicatorStyle {
+    /// The notch style extends the hardware notch and always stays black.
+    var supportsTheme: Bool {
+        self != .notch
+    }
+}
+
+extension IndicatorTheme {
+    var title: String {
+        switch self {
+        case .classic: String(localized: "indicatorTheme.classic", defaultValue: "Classic")
+        case .glass: String(localized: "indicatorTheme.glass", defaultValue: "Glass")
+        case .light: String(localized: "indicatorTheme.light", defaultValue: "Light")
+        }
+    }
+}
+
 extension IndicatorStyle {
     var supportsTranscriptPreview: Bool {
         self != .minimal
