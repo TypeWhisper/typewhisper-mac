@@ -3359,6 +3359,15 @@ struct OpenAIChatGPTModelCache: Codable, Sendable {
 
 // MARK: - Settings View
 
+enum OpenAIAPIKeyField {
+    /// Offer Remove only while the field shows the stored key (or is empty), so an edited key gets Save and can replace it.
+    static func showsRemove(storedKey: String?, input: String) -> Bool {
+        let storedKey = storedKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let input = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !storedKey.isEmpty && (input.isEmpty || input == storedKey)
+    }
+}
+
 private struct OpenAISettingsView: View {
     let plugin: OpenAIPlugin
     @State private var authMode: OpenAIAuthMode = .apiKey
@@ -3514,13 +3523,6 @@ private struct OpenAISettingsView: View {
         }
     }
 
-    /// Offer Remove only while the field shows the stored key (or is empty), so an edited key gets Save and can replace it.
-    private var isShowingStoredApiKey: Bool {
-        let storedKey = plugin._apiKey?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        let inputKey = apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines)
-        return !storedKey.isEmpty && (inputKey.isEmpty || inputKey == storedKey)
-    }
-
     private var apiKeySection: some View {
         VStack(alignment: .leading, spacing: 8) {
             Text("API Key", bundle: bundle)
@@ -3543,7 +3545,7 @@ private struct OpenAISettingsView: View {
                 }
                 .buttonStyle(.borderless)
 
-                if isShowingStoredApiKey {
+                if OpenAIAPIKeyField.showsRemove(storedKey: plugin._apiKey, input: apiKeyInput) {
                     Button(String(localized: "Remove", bundle: bundle)) {
                         apiKeyInput = ""
                         validationResult = nil

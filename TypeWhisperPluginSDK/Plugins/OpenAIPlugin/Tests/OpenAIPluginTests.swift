@@ -44,6 +44,15 @@ final class OpenAIPluginTests: XCTestCase {
         }
     }
 
+    func testAPIKeyFieldShowsRemoveOnlyForTheStoredKey() {
+        XCTAssertFalse(OpenAIAPIKeyField.showsRemove(storedKey: nil, input: "sk-new"))
+        XCTAssertFalse(OpenAIAPIKeyField.showsRemove(storedKey: nil, input: ""))
+        XCTAssertTrue(OpenAIAPIKeyField.showsRemove(storedKey: "sk-old", input: "sk-old"))
+        XCTAssertTrue(OpenAIAPIKeyField.showsRemove(storedKey: " sk-old\n", input: "sk-old "))
+        XCTAssertTrue(OpenAIAPIKeyField.showsRemove(storedKey: "sk-old", input: "  "))
+        XCTAssertFalse(OpenAIAPIKeyField.showsRemove(storedKey: "sk-old", input: "sk-new"))
+    }
+
     func testOpenAIPluginAdvertisesLiveSTTAndTTSProtocols() {
         let plugin: Any = OpenAIPlugin()
 
