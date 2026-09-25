@@ -3552,16 +3552,17 @@ private struct OpenAISettingsView: View {
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                     .foregroundStyle(.red)
-                    .disabled(isValidating)
                 } else {
                     Button(String(localized: "Save", bundle: bundle)) {
                         saveApiKey()
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.small)
-                    .disabled(apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || isValidating)
+                    .disabled(apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
+            // Lock the row until the result arrives so it always describes the key in the field.
+            .disabled(isValidating)
 
             if isValidating {
                 HStack(spacing: 4) {
@@ -3583,6 +3584,9 @@ private struct OpenAISettingsView: View {
             Text("API keys are stored securely in the Keychain", bundle: bundle)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+        }
+        .onChange(of: apiKeyInput) {
+            validationResult = nil
         }
     }
 
@@ -3821,6 +3825,12 @@ private struct OpenAISettingsView: View {
         let trimmedKey = apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedKey.isEmpty else { return }
 
+        func showResult(_ isValid: Bool) {
+            isValidating = false
+            // A focused field may still take typing while the row is disabled, so only label the key it still shows.
+            validationResult = apiKeyInput.trimmingCharacters(in: .whitespacesAndNewlines) == trimmedKey ? isValid : nil
+        }
+
         isValidating = true
         validationResult = nil
         Task {
@@ -3830,8 +3840,7 @@ private struct OpenAISettingsView: View {
                 plugin.setApiKey(trimmedKey)
                 let models = await plugin.refreshFetchedLLMModels()
                 await MainActor.run {
-                    isValidating = false
-                    validationResult = true
+                    showResult(true)
                     if !models.isEmpty {
                         fetchedLLMModels = models
                         selectedLLMModel = plugin.selectedLLMModelId ?? models.first?.id ?? selectedLLMModel
@@ -3840,8 +3849,7 @@ private struct OpenAISettingsView: View {
                 }
             } else {
                 await MainActor.run {
-                    isValidating = false
-                    validationResult = false
+                    showResult(false)
                 }
             }
         }
