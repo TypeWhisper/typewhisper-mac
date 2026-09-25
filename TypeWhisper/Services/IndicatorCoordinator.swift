@@ -170,7 +170,7 @@ struct IndicatorPresentationState: Equatable {
             if recorderState == .recording {
                 return IndicatorPresentationState(source: .recorder, state: .recording)
             }
-            if previewActive {
+            if previewActive, recorderState == .idle {
                 return IndicatorPresentationState(source: .preview, state: .recording)
             }
             return IndicatorPresentationState(source: .dictation, state: dictationState)

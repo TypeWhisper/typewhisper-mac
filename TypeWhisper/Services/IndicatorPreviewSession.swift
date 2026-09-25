@@ -7,7 +7,7 @@ import Foundation
 /// rendering on screen instead of a mock. A real dictation or recorder session
 /// always wins; the preview only fills in while both are idle.
 @MainActor
-final class IndicatorPreviewSession: ObservableObject {
+final class IndicatorPreviewSession: NSObject, ObservableObject {
     static let shared = IndicatorPreviewSession()
 
     @Published private(set) var isActive = false
@@ -30,25 +30,18 @@ final class IndicatorPreviewSession: ObservableObject {
     private var timer: Timer?
     /// Monotonic start time so wall-clock adjustments cannot run the preview backwards.
     private var startedAt: TimeInterval?
-    private var windowCloseObserver: NSObjectProtocol?
 
     func start() {
         guard !isActive else { return }
         isActive = true
         startedAt = ProcessInfo.processInfo.systemUptime
         // Safety net: the preview must never outlive the Settings window.
-        windowCloseObserver = NotificationCenter.default.addObserver(
-            forName: NSWindow.willCloseNotification,
-            object: nil,
-            queue: .main
-        ) { [weak self] notification in
-            // Delivered on the main queue, so the window can be inspected here.
-            MainActor.assumeIsolated {
-                guard let window = notification.object as? NSWindow,
-                      window.identifier?.rawValue.lowercased().contains("settings") == true else { return }
-                self?.stop()
-            }
-        }
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(windowWillClose(_:)),
+            name: NSWindow.willCloseNotification,
+            object: nil
+        )
         let timer = Timer(timeInterval: Self.tickInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in self?.tick() }
         }
@@ -61,15 +54,19 @@ final class IndicatorPreviewSession: ObservableObject {
         guard isActive else { return }
         timer?.invalidate()
         timer = nil
-        if let windowCloseObserver {
-            NotificationCenter.default.removeObserver(windowCloseObserver)
-            self.windowCloseObserver = nil
-        }
+        NotificationCenter.default.removeObserver(self, name: NSWindow.willCloseNotification, object: nil)
         startedAt = nil
         isActive = false
         recordingDuration = 0
         audioLevel = 0
         partialText = ""
+    }
+
+    /// Window notifications are posted on the main thread.
+    @objc private func windowWillClose(_ notification: Notification) {
+        guard let window = notification.object as? NSWindow,
+              window.identifier?.rawValue.lowercased().contains("settings") == true else { return }
+        stop()
     }
 
     private func tick() {

@@ -1217,6 +1217,14 @@ final class IndicatorPresentationStateTests: XCTestCase {
         )
         XCTAssertEqual(recorder.source, .recorder)
 
+        let finalizing = IndicatorPresentationState.resolve(
+            dictationState: .idle,
+            recorderState: .finalizing,
+            previewActive: true
+        )
+        XCTAssertEqual(finalizing.source, .dictation)
+        XCTAssertEqual(finalizing.state, .idle)
+
         let off = IndicatorPresentationState.resolve(
             dictationState: .idle,
             recorderState: .idle,
