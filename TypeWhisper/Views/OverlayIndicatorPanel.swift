@@ -140,6 +140,14 @@ class OverlayIndicatorPanel: NSPanel {
             }
             .store(in: &cancellables)
 
+        IndicatorPreviewSession.shared.$isActive
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.updateVisibility(vm: vm, recorder: recorder)
+            }
+            .store(in: &cancellables)
+
         vm.$indicatorVisibleInScreenCaptures
             .removeDuplicates()
             .receive(on: DispatchQueue.main)
@@ -188,7 +196,8 @@ class OverlayIndicatorPanel: NSPanel {
 
         let presentation = IndicatorPresentationState.resolve(
             dictationState: vm.state,
-            recorderState: recorder.state
+            recorderState: recorder.state,
+            previewActive: IndicatorPreviewSession.shared.isActive
         )
         let normallyVisible = IndicatorPresentationState.shouldShow(
             visibility: vm.notchIndicatorVisibility,

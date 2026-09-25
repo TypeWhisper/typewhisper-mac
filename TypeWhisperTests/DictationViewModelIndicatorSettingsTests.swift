@@ -1192,6 +1192,60 @@ final class IndicatorPresentationStateTests: XCTestCase {
         ))
     }
 
+    func testPreviewFillsInOnlyWhileIdleAndIgnoresVisibility() {
+        let idle = IndicatorPresentationState.resolve(
+            dictationState: .idle,
+            recorderState: .idle,
+            previewActive: true
+        )
+        XCTAssertEqual(idle.source, .preview)
+        XCTAssertEqual(idle.state, .recording)
+        XCTAssertTrue(IndicatorPresentationState.shouldShow(visibility: .never, presentation: idle))
+        XCTAssertTrue(IndicatorPresentationState.shouldShow(visibility: .duringActivity, presentation: idle))
+
+        let recording = IndicatorPresentationState.resolve(
+            dictationState: .recording,
+            recorderState: .idle,
+            previewActive: true
+        )
+        XCTAssertEqual(recording.source, .dictation)
+
+        let recorder = IndicatorPresentationState.resolve(
+            dictationState: .idle,
+            recorderState: .recording,
+            previewActive: true
+        )
+        XCTAssertEqual(recorder.source, .recorder)
+
+        let off = IndicatorPresentationState.resolve(
+            dictationState: .idle,
+            recorderState: .idle,
+            previewActive: false
+        )
+        XCTAssertEqual(off.source, .dictation)
+        XCTAssertFalse(IndicatorPresentationState.shouldShow(visibility: .never, presentation: off))
+    }
+
+    func testPreviewSessionProducesSpeechLikeLevelsAndGrowingTranscript() {
+        var levels: [Float] = []
+        var time: TimeInterval = 0
+        while time < 2.6 {
+            levels.append(IndicatorPreviewSession.level(at: time))
+            time += 1.0 / 30.0
+        }
+        XCTAssertTrue(levels.allSatisfy { $0 >= 0 && $0 <= 1 })
+        XCTAssertGreaterThan(levels.max() ?? 0, 0.4)
+        XCTAssertLessThan(levels.min() ?? 1, 0.1)
+
+        let text = "one two three"
+        XCTAssertEqual(IndicatorPreviewSession.transcript(at: 0, text: text), "")
+        XCTAssertEqual(IndicatorPreviewSession.transcript(at: 0.4, text: text), "one")
+        XCTAssertEqual(IndicatorPreviewSession.transcript(at: 1.1, text: text), "one two three")
+        XCTAssertEqual(IndicatorPreviewSession.transcript(at: 3.0, text: text), "one two three")
+        let cycle = 3 * IndicatorPreviewSession.wordInterval + IndicatorPreviewSession.holdDuration
+        XCTAssertEqual(IndicatorPreviewSession.transcript(at: cycle + 0.1, text: text), "")
+    }
+
     func testBluetoothPreparationUsesSharedPreparingMicrophonePresentation() {
         let preparing = makeRecordingPresentation(isInputReady: false)
         let ready = makeRecordingPresentation(isInputReady: true)

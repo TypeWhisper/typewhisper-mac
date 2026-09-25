@@ -441,6 +441,28 @@
         }
       }
     },
+    "Menu Bar & Dock" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Menüleiste & Dock"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "メニューバーと Dock"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "菜单栏与程序坞"
+          }
+        }
+      }
+    },
     "The model architecture ‘%@’ is not supported by the installed engines. Importing its files cannot add a new engine." : {
       "localizations" : {
         "de" : {
@@ -35491,6 +35513,28 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "TypeWhisper 在此场景中应识别哪种语言。"
+          }
+        }
+      }
+    },
+    "While this page is open, the indicator runs as a live preview on your screen." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Solange diese Seite geöffnet ist, läuft der Indikator als Live-Vorschau auf deinem Bildschirm."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "このページを開いている間、インジケーターは画面上でライブプレビューとして動作します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "打开此页面期间，指示器会在屏幕上以实时预览方式运行。"
           }
         }
       }

@@ -43,7 +43,7 @@ bundle exec fastlane mac screenshots languages:en-US,de-DE
 Raw screenshots are written to ignored locale folders under
 `fastlane/screenshots/` with names such as `en-US/Mac-free-history.png` and
 `en-US/Mac-premium-calendar.png`. The Free pass covers 21 Settings states,
-including a dedicated Indicator settings view and the production Overlay
+including the Appearance page with the indicator settings and the production Overlay
 indicator in an active dictation context. Premium capture is intentionally
 limited to the active Premium overview plus its Access, Calendar, Correction
 Learning, and Cloud Sync detail windows. A complete run produces 26 images per

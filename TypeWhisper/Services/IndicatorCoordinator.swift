@@ -142,6 +142,8 @@ struct IndicatorPresentationState: Equatable {
     enum Source: Equatable {
         case dictation
         case recorder
+        /// Synthetic recording shown while the Appearance settings page is open.
+        case preview
     }
 
     let source: Source
@@ -158,7 +160,8 @@ struct IndicatorPresentationState: Equatable {
 
     static func resolve(
         dictationState: DictationViewModel.State,
-        recorderState: AudioRecorderViewModel.RecorderState
+        recorderState: AudioRecorderViewModel.RecorderState,
+        previewActive: Bool = false
     ) -> IndicatorPresentationState {
         switch dictationState {
         case .recording, .processing, .inserting, .error:
@@ -166,6 +169,9 @@ struct IndicatorPresentationState: Equatable {
         case .idle, .promptSelection, .promptProcessing:
             if recorderState == .recording {
                 return IndicatorPresentationState(source: .recorder, state: .recording)
+            }
+            if previewActive {
+                return IndicatorPresentationState(source: .preview, state: .recording)
             }
             return IndicatorPresentationState(source: .dictation, state: dictationState)
         }
@@ -175,6 +181,10 @@ struct IndicatorPresentationState: Equatable {
         visibility: NotchIndicatorVisibility,
         presentation: IndicatorPresentationState
     ) -> Bool {
+        // The preview exists to show the indicator, so it ignores the visibility setting.
+        if presentation.source == .preview {
+            return true
+        }
         switch visibility {
         case .always:
             return true
@@ -222,14 +232,36 @@ struct IndicatorPresentationData {
     @MainActor
     static func make(
         dictation: DictationViewModel,
-        recorder: AudioRecorderViewModel
+        recorder: AudioRecorderViewModel,
+        preview: IndicatorPreviewSession = .shared
     ) -> IndicatorPresentationData {
         let presentation = IndicatorPresentationState.resolve(
             dictationState: dictation.state,
-            recorderState: recorder.state
+            recorderState: recorder.state,
+            previewActive: preview.isActive
         )
 
         switch presentation.source {
+        case .preview:
+            return IndicatorPresentationData(
+                source: .preview,
+                state: .recording,
+                recordingDuration: preview.recordingDuration,
+                audioLevel: preview.audioLevel,
+                partialText: preview.partialText,
+                activeRuleName: preview.activeRuleName,
+                activeAppIcon: preview.appIcon,
+                isRecordingInputReady: true,
+                cancelWarningMessage: nil,
+                processingPhase: nil,
+                actionFeedbackMessage: nil,
+                actionFeedbackIcon: nil,
+                actionFeedbackIsError: false,
+                actionFeedbackActionTitle: nil,
+                actionFeedbackRemainingFraction: nil,
+                actionFeedbackIsPaused: false,
+                externalStreamingDisplayCount: 0
+            )
         case .dictation:
             return IndicatorPresentationData(
                 source: .dictation,
