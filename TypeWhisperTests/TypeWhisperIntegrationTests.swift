@@ -6439,6 +6439,163 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testCancellationWhileWaitingForPendingPasteLeavesClipboardUntouched() async throws {
+        let harness = ClipboardRestoreHarness(verifiesPaste: false)
+        harness.service.pendingPasteSettleWindow = .seconds(60)
+        harness.service.defaultPasteFallbackRestoreDelay = .seconds(60)
+        var copyCount = 0
+        harness.service.copySimulatorOverride = { copyCount += 1 }
+        harness.setClipboard("Existing")
+        _ = try await harness.service.insertText("First dictation", preserveClipboard: true)
+        let changeCountAfterFirstPaste = harness.pasteboard.changeCount
+
+        let insertion = Task { @MainActor in
+            try await harness.service.insertText("Second dictation", preserveClipboard: true)
+        }
+        let selectionCopy = Task { @MainActor in
+            await harness.service.getTextSelectionViaCopy()
+        }
+        await Task.yield()
+        insertion.cancel()
+        selectionCopy.cancel()
+
+        do {
+            _ = try await insertion.value
+            XCTFail("A cancelled insertion must not insert")
+        } catch is CancellationError {}
+        let copiedSelection = await selectionCopy.value
+
+        XCTAssertNil(copiedSelection)
+        XCTAssertEqual(harness.pasteCount, 1)
+        XCTAssertEqual(copyCount, 0)
+        XCTAssertEqual(harness.pasteboard.changeCount, changeCountAfterFirstPaste)
+        XCTAssertEqual(harness.pasteboard.string(forType: .string), "First dictation")
+        XCTAssertTrue(harness.service.hasPendingClipboardRestore)
+    }
+
+    @MainActor
+    func testWaitersForTheSamePasteAlsoWaitForThePasteAnotherWaiterPosted() async throws {
+        let harness = ClipboardRestoreHarness(verifiesPaste: true)
+        harness.service.pasteVerificationAttempts = 10_000
+        // Only verification may end the waits here.
+        harness.service.pendingPasteSettleWindow = .seconds(60)
+        var postedPayloads: [String] = []
+        var landedPayloads: [String] = []
+        var readsSincePaste = 0
+        harness.service.pasteSimulatorOverride = { [unowned harness] in
+            harness.pasteCount += 1
+            postedPayloads.append(harness.pasteboard.string(forType: .string) ?? "nil")
+        }
+        // Each paste lands on the tenth field read after it was posted and inserts whatever
+        // the clipboard holds at that moment.
+        harness.service.focusedTextStateOverride = { [unowned harness] _ in
+            if harness.pasteCount > landedPayloads.count {
+                readsSincePaste += 1
+                if readsSincePaste >= 10 {
+                    readsSincePaste = 0
+                    landedPayloads.append(harness.pasteboard.string(forType: .string) ?? "nil")
+                }
+            }
+            let landed = landedPayloads.count
+            return (
+                value: String(repeating: "x", count: landed),
+                selectedText: nil,
+                selectedRange: NSRange(location: landed, length: 0)
+            )
+        }
+        harness.setClipboard("Existing")
+
+        _ = try await harness.service.insertText("First dictation", preserveClipboard: true)
+        // Both wait for the first paste. The one resuming second must then wait for the paste
+        // the other one posted.
+        let second = Task { @MainActor in
+            try await harness.service.insertText("Second dictation", preserveClipboard: true)
+        }
+        let third = Task { @MainActor in
+            try await harness.service.insertText("Third dictation", preserveClipboard: true)
+        }
+        _ = try await second.value
+        _ = try await third.value
+        await harness.service.waitForPendingClipboardRestore()
+
+        XCTAssertEqual(postedPayloads.count, 3)
+        XCTAssertEqual(landedPayloads, postedPayloads)
+        XCTAssertEqual(harness.pasteboard.string(forType: .string), "Existing")
+    }
+
+    @MainActor
+    func testDirectAXInsertionWaitsForPendingPasteToLand() async throws {
+        let harness = ClipboardRestoreHarness(verifiesPaste: true)
+        harness.service.pasteVerificationAttempts = 10_000
+        harness.service.pendingPasteSettleWindow = .seconds(60)
+        var readsSincePaste = 0
+        var pasteLanded = false
+        var axInserted = false
+        harness.service.focusedTextStateOverride = { [unowned harness] _ in
+            if harness.pasteCount > 0, !pasteLanded {
+                readsSincePaste += 1
+                if readsSincePaste >= 10 {
+                    pasteLanded = true
+                    harness.events.append("landed")
+                }
+            }
+            let value = (pasteLanded ? "Hello" : "") + (axInserted ? " world" : "")
+            return (
+                value: value,
+                selectedText: nil,
+                selectedRange: NSRange(location: value.count, length: 0)
+            )
+        }
+        harness.setClipboard("Existing")
+
+        // Direct AX insertion fails in the harness, so this one pastes.
+        _ = try await harness.service.insertText("Hello", preserveClipboard: true)
+        harness.service.insertTextAtOverride = { [unowned harness] _, _ in
+            harness.events.append("ax")
+            axInserted = true
+            return true
+        }
+        let result = try await harness.service.insertText(" world", preserveClipboard: true)
+
+        XCTAssertEqual(result, .insertedViaAccessibility)
+        XCTAssertEqual(harness.events, ["paste", "landed", "ax"])
+    }
+
+    @MainActor
+    func testSelectionCopyWaitsForPendingPasteToLand() async throws {
+        let harness = ClipboardRestoreHarness(verifiesPaste: true)
+        harness.service.pasteVerificationAttempts = 10_000
+        harness.service.pendingPasteSettleWindow = .seconds(60)
+        var readsSincePaste = 0
+        var landedPayloads: [String] = []
+        harness.service.focusedTextStateOverride = { [unowned harness] _ in
+            if harness.pasteCount > landedPayloads.count {
+                readsSincePaste += 1
+                if readsSincePaste >= 10 {
+                    landedPayloads.append(harness.pasteboard.string(forType: .string) ?? "nil")
+                }
+            }
+            let landed = landedPayloads.count
+            return (
+                value: String(repeating: "x", count: landed),
+                selectedText: nil,
+                selectedRange: NSRange(location: landed, length: 0)
+            )
+        }
+        harness.service.copySimulatorOverride = { [unowned harness] in
+            harness.setClipboard("Selected source")
+        }
+        harness.setClipboard("Existing")
+
+        _ = try await harness.service.insertText("Dictated", preserveClipboard: true)
+        let copiedSelection = await harness.service.getTextSelectionViaCopy()
+
+        XCTAssertEqual(copiedSelection, "Selected source")
+        XCTAssertEqual(landedPayloads, ["Dictated"])
+        XCTAssertEqual(harness.pasteboard.string(forType: .string), "Existing")
+    }
+
+    @MainActor
     func testTerminationFlushGivesAnUnverifiedPasteTheSettleWindowBeforeRestoring() async throws {
         let harness = ClipboardRestoreHarness(verifiesPaste: false)
         harness.service.pendingPasteSettleWindow = .milliseconds(200)

@@ -232,7 +232,7 @@ final class TextInsertionService {
     var autoEnterDelay: Duration = .milliseconds(50)
     /// How long after posting a synthetic paste the clipboard may be replaced even though the
     /// paste was not verified yet. Bounds the wait of a following insertion and of the flush
-    /// at termination, see `waitForPendingPasteToSettle()`.
+    /// at termination, see `settlePendingPaste()`.
     var pendingPasteSettleWindow: Duration = .milliseconds(300)
     var copySelectionRetryDelay: Duration = .milliseconds(120)
     var copySelectionReadSettleDelay: Duration = .milliseconds(20)
@@ -247,13 +247,22 @@ final class TextInsertionService {
         /// restored while the clipboard still holds that payload.
         let ownedChangeCount: Int
         let pastedAt: ContinuousClock.Instant
-        /// Whether the paste has landed. Set by `verification` as soon as it knows.
-        var pasteVerified = false
         let verification: Task<PasteVerification, Never>
         let task: Task<PasteVerification, Never>
     }
 
     private var pendingClipboardRestore: PendingClipboardRestore?
+
+    /// The latest synthetic paste. The target may not have consumed it until it is verified or
+    /// `pendingPasteSettleWindow` has passed, see `settlePendingPaste()`. A pending clipboard
+    /// restore belongs to this paste and shares its `id`.
+    private struct PendingPaste {
+        let id: UUID
+        let pastedAt: ContinuousClock.Instant
+        var verified = false
+    }
+
+    private var pendingPaste: PendingPaste?
 
     init(
         browserURLResolver: BrowserURLResolver = BrowserURLResolver(),
@@ -592,7 +601,8 @@ final class TextInsertionService {
         pendingClipboardRestore = nil
         pending.verification.cancel()
         pending.task.cancel()
-        if !pending.pasteVerified {
+        let pasteVerified = pendingPaste.map { $0.id == pending.id && $0.verified } ?? false
+        if !pasteVerified {
             let remaining = ContinuousClock.now.duration(to: pending.pastedAt + pendingPasteSettleWindow)
             if remaining > .zero {
                 let components = remaining.components
@@ -604,18 +614,27 @@ final class TextInsertionService {
         restoreClipboardIfOwned(pending)
     }
 
-    /// Waits until the synthetic paste of an earlier insertion, whose restore is still pending,
-    /// has landed or `pendingPasteSettleWindow` has passed since it was posted. Replacing the
-    /// clipboard before that could make the earlier paste insert the new payload.
-    private func waitForPendingPasteToSettle() async {
-        guard let pending = pendingClipboardRestore else { return }
-        let deadline = pending.pastedAt + pendingPasteSettleWindow
+    /// Waits until the latest synthetic paste was verified or `pendingPasteSettleWindow` has
+    /// passed since it was posted. Until then the target may not have consumed the paste, so
+    /// replacing the clipboard could make it insert other content, and inserting text directly
+    /// could land before it. Every check reads the latest paste again, so a paste another
+    /// caller posts during the wait is waited for too. Nothing between the return and the next
+    /// clipboard write or insertion suspends, so no other paste can start in between.
+    ///
+    /// - Throws: `CancellationError` when the caller is cancelled while it has to wait. The
+    ///   caller must then leave the clipboard and the target untouched.
+    private func settlePendingPaste() async throws {
         let checkInterval = min(pasteVerificationPollingDelay, .milliseconds(5))
-        // The verification task sets `pasteVerified`; checking the flag is cheap.
-        while let current = pendingClipboardRestore, current.id == pending.id, !current.pasteVerified,
-              ContinuousClock.now < deadline, !Task.isCancelled {
-            try? await Task.sleep(for: checkInterval)
+        while let paste = pendingPaste, !paste.verified,
+              ContinuousClock.now < paste.pastedAt + pendingPasteSettleWindow {
+            try Task.checkCancellation()
+            try await Task.sleep(for: checkInterval)
         }
+    }
+
+    private func markPasteVerified(id: UUID) {
+        guard pendingPaste?.id == id else { return }
+        pendingPaste?.verified = true
     }
 
     /// Waits for the clipboard restore scheduled by the latest synthetic paste and returns
@@ -679,14 +698,14 @@ final class TextInsertionService {
         _ savedItems: ClipboardSnapshot,
         to pasteboard: NSPasteboard,
         ownedChangeCount: Int,
+        pasteID id: UUID,
+        pastedAt: ContinuousClock.Instant,
         verificationTask: Task<PasteVerification, Never>?,
         verificationState: PasteVerificationState,
         isTerminalApp: Bool,
         requiresPasteboardInsertion: Bool,
         bundleId: String?
     ) {
-        let id = UUID()
-        let pastedAt = ContinuousClock.now
         let verification = Task { @MainActor [weak self] () -> PasteVerification in
             guard let self else { return .notAwaited }
             let verification: PasteVerification
@@ -696,8 +715,8 @@ final class TextInsertionService {
                 verification = await waitForPasteVerification(using: verificationState)
                 logPasteVerification(verification, bundleId: bundleId)
             }
-            if verification == .verified, pendingClipboardRestore?.id == id {
-                pendingClipboardRestore?.pasteVerified = true
+            if verification == .verified {
+                markPasteVerified(id: id)
             }
             return verification
         }
@@ -1116,6 +1135,8 @@ final class TextInsertionService {
         guard isAccessibilityGranted else {
             throw TextInsertionError.accessibilityNotGranted
         }
+        // Covers direct AX insertion too, so it cannot land before an earlier queued paste.
+        try await settlePendingPaste()
 
         let formattedClipboardPayload = ClipboardContentFormatter.payload(for: text, outputFormat: outputFormat)
         let requiresPasteboardInsertion = ClipboardContentFormatter.requiresPasteboardInsertion(
@@ -1149,7 +1170,6 @@ final class TextInsertionService {
         }
 
         let pasteboard = pasteboardProvider()
-        await waitForPendingPasteToSettle()
         // Resolve an earlier restore before touching the clipboard so this insertion never
         // saves a previous dictation's payload as the user's original clipboard.
         let pendingOriginalItems = takeOverPendingClipboardRestore(on: pasteboard)
@@ -1174,6 +1194,9 @@ final class TextInsertionService {
             "insertText using synthetic paste: bundle=\(bundleId ?? "nil", privacy: .public), preserveClipboard=\(preserveClipboard, privacy: .public), changeCountBefore=\(initialChangeCount, privacy: .public), changeCountAfterWrite=\(ownedChangeCount, privacy: .public)"
         )
         simulatePaste()
+        let pasteID = UUID()
+        let pastedAt = ContinuousClock.now
+        pendingPaste = PendingPaste(id: pasteID, pastedAt: pastedAt)
 
         // One verification serves both this call and the clipboard restore.
         var verificationTask: Task<PasteVerification, Never>?
@@ -1182,6 +1205,9 @@ final class TextInsertionService {
                 guard let self else { return .unverified(.focusedTextStateUnavailable) }
                 let verification = await waitForPasteVerification(using: pasteVerificationState)
                 logPasteVerification(verification, bundleId: bundleId)
+                if verification == .verified {
+                    markPasteVerified(id: pasteID)
+                }
                 return verification
             }
         }
@@ -1194,6 +1220,8 @@ final class TextInsertionService {
                 savedItems,
                 to: pasteboard,
                 ownedChangeCount: ownedChangeCount,
+                pasteID: pasteID,
+                pastedAt: pastedAt,
                 verificationTask: verificationTask,
                 verificationState: pasteVerificationState,
                 isTerminalApp: isTerminalApp,
@@ -1404,6 +1432,12 @@ final class TextInsertionService {
     }
 
     private func getTextSelectionViaCopy(deferClipboardRestore: Bool) async -> CopiedTextSelection? {
+        // The copy replaces the clipboard, which an earlier queued paste may still read.
+        do {
+            try await settlePendingPaste()
+        } catch {
+            return nil
+        }
         if let textSelectionViaCopyOverride {
             let pasteboard = pasteboardProvider()
             let savedItems = takeOverPendingClipboardRestore(on: pasteboard)
