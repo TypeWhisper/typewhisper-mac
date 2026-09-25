@@ -215,10 +215,11 @@ final class LicenseService: ObservableObject {
         )
     }
     var canUseProTranscriptionFallback: Bool { hasCommercialLicense || isSupporter }
-    var supporterClaimProof: SupporterClaimProof? {
+    /// Throws when the supporter Keychain entry cannot be read right now, so callers keep claim state.
+    func readSupporterClaimProof() throws -> SupporterClaimProof? {
         guard supporterStatus == .active,
               let supporterTier,
-              let stored = loadSupporterFromKeychain() else { return nil }
+              let stored = try readSupporterFromKeychain() else { return nil }
 
         return SupporterClaimProof(
             key: stored.key,
@@ -1208,7 +1209,7 @@ final class SupporterDiscordService: ObservableObject {
     private let logger = Logger(subsystem: AppConstants.loggerSubsystem, category: "SupporterDiscordService")
     private let defaults: UserDefaults
     private let transport: SupporterDiscordTransport
-    private let claimProofProvider: @MainActor () -> SupporterClaimProof?
+    private let claimProofProvider: @MainActor () throws -> SupporterClaimProof?
     private let baseURLProvider: @MainActor () -> URL
 
     init(
@@ -1217,12 +1218,12 @@ final class SupporterDiscordService: ObservableObject {
         transport: @escaping SupporterDiscordTransport = { request in
             try await URLSession.shared.data(for: request)
         },
-        claimProofProvider: (@MainActor () -> SupporterClaimProof?)? = nil,
+        claimProofProvider: (@MainActor () throws -> SupporterClaimProof?)? = nil,
         baseURLProvider: (@MainActor () -> URL)? = nil
     ) {
         self.defaults = defaults
         self.transport = transport
-        self.claimProofProvider = claimProofProvider ?? { licenseService.supporterClaimProof }
+        self.claimProofProvider = claimProofProvider ?? { try licenseService.readSupporterClaimProof() }
         self.baseURLProvider = baseURLProvider ?? { AppConstants.DiscordClaim.baseURL }
         self.claimStatus = Self.loadPersistedStatus(defaults: defaults)
     }
@@ -1237,7 +1238,17 @@ final class SupporterDiscordService: ObservableObject {
 
     @discardableResult
     func createClaimSession() async -> URL? {
-        guard let proof = claimProofProvider() else {
+        let proof: SupporterClaimProof?
+        do {
+            proof = try claimProofProvider()
+        } catch {
+            // An unreadable Keychain is not a removed entitlement. Keep the existing claim session.
+            claimStatus = Self.status(from: claimStatus, errorMessage: error.localizedDescription)
+            persist()
+            logger.warning("Discord claim session deferred because Keychain is unavailable")
+            return nil
+        }
+        guard let proof else {
             handleSupporterEntitlementRemoved()
             claimStatus = Self.status(
                 from: claimStatus,
@@ -1301,7 +1312,14 @@ final class SupporterDiscordService: ObservableObject {
     }
 
     func refreshStatusIfNeeded() async {
-        guard claimProofProvider() != nil else {
+        let proof: SupporterClaimProof?
+        do {
+            proof = try claimProofProvider()
+        } catch {
+            logger.warning("Discord claim refresh deferred because Keychain is unavailable")
+            return
+        }
+        guard proof != nil else {
             handleSupporterEntitlementRemoved()
             return
         }
@@ -1314,7 +1332,14 @@ final class SupporterDiscordService: ObservableObject {
     }
 
     func refreshClaimStatus() async {
-        guard let proof = claimProofProvider() else {
+        let proof: SupporterClaimProof?
+        do {
+            proof = try claimProofProvider()
+        } catch {
+            logger.warning("Discord claim refresh deferred because Keychain is unavailable")
+            return
+        }
+        guard let proof else {
             handleSupporterEntitlementRemoved()
             return
         }

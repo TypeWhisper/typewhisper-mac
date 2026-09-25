@@ -947,6 +947,68 @@ final class CLISupportTests: XCTestCase {
     }
 
     @MainActor
+    func testSupporterKeychainReadFailureKeepsDiscordClaimThroughStartupRefresh() async throws {
+        let (defaults, suiteName) = try makeIsolatedDefaults()
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set("session-123", forKey: UserDefaultsKeys.supporterDiscordSessionId)
+        let linked = SupporterDiscordClaimStatus(
+            state: .linked,
+            discordUsername: "marco#1234",
+            linkedRoles: ["Supporter Gold"],
+            errorMessage: nil,
+            sessionId: "session-123",
+            updatedAt: Date()
+        )
+        defaults.set(try JSONEncoder().encode(linked), forKey: UserDefaultsKeys.supporterDiscordClaimStatus)
+
+        let licenseService = LicenseService(
+            defaults: defaults,
+            keychainServiceName: "TypeWhisperTests.UnavailableKeychain.\(UUID().uuidString)",
+            keychainCopyMatching: { _, _ in errSecInteractionNotAllowed },
+            dataTransport: { request in
+                XCTFail("Validation must be skipped while Keychain is unavailable")
+                return (Data(), Self.httpResponse(url: request.url!, statusCode: 500))
+            }
+        )
+        licenseService.supporterStatus = .active
+        licenseService.supporterTier = .gold
+        defaults.set(Date.distantPast, forKey: UserDefaultsKeys.lastSupporterValidation)
+
+        // Uses the production claim-proof provider backed by the failing Keychain read.
+        let discordService = SupporterDiscordService(
+            licenseService: licenseService,
+            defaults: defaults,
+            transport: { request in
+                XCTFail("Discord claim status must not be requested without a readable proof")
+                return (Data(), Self.httpResponse(url: request.url!, statusCode: 500))
+            }
+        )
+        let previousDiscordService = SupporterDiscordService.shared
+        SupporterDiscordService.shared = discordService
+        defer { SupporterDiscordService.shared = previousDiscordService }
+
+        // Same order as ServiceContainer startup, plus the callback-driven refresh.
+        await licenseService.validateSupporterIfNeeded()
+        await discordService.refreshStatusIfNeeded()
+        await discordService.refreshClaimStatus()
+
+        XCTAssertThrowsError(try licenseService.readSupporterClaimProof())
+        XCTAssertEqual(licenseService.supporterStatus, .active)
+        XCTAssertEqual(licenseService.supporterTier, .gold)
+        XCTAssertEqual(discordService.claimStatus.state, .linked)
+        XCTAssertEqual(discordService.claimStatus.sessionId, "session-123")
+        XCTAssertEqual(discordService.claimStatus.discordUsername, "marco#1234")
+        XCTAssertEqual(defaults.string(forKey: UserDefaultsKeys.supporterDiscordSessionId), "session-123")
+
+        // A user-started claim fails visibly but still keeps the linked session.
+        let claimURL = await discordService.createClaimSession()
+        XCTAssertNil(claimURL)
+        XCTAssertEqual(discordService.claimStatus.state, .linked)
+        XCTAssertNotNil(discordService.claimStatus.errorMessage)
+        XCTAssertEqual(defaults.string(forKey: UserDefaultsKeys.supporterDiscordSessionId), "session-123")
+    }
+
+    @MainActor
     func testSupporterUnreadablePayloadKeepsCachedStateWithoutValidation() async throws {
         let (defaults, suiteName) = try makeIsolatedDefaults()
         defer { defaults.removePersistentDomain(forName: suiteName) }
