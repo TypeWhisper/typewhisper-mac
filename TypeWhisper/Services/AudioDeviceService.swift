@@ -893,7 +893,8 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
         let session = try inputCaptureFactory.startInputOnlyCapture(
             deviceID: deviceID,
             label: label,
-            bufferSize: 1024
+            bufferSize: 1024,
+            deliveryQueue: nil
         ) { [weak self] buffer in
             self?.processPreviewBuffer(buffer)
         }
@@ -2312,16 +2313,20 @@ protocol AudioInputCaptureSession: AnyObject {
 protocol AudioInputCaptureFactory: AnyObject {
     func inputOnlyCaptureFormat(deviceID: AudioDeviceID) throws -> AVAudioFormat
     func validateInputOnlyDevice(deviceID: AudioDeviceID, label: String) throws
+    /// `onBuffer` runs on `deliveryQueue` (a private serial queue when nil), never on the
+    /// realtime IO thread, and receives one newly allocated buffer per IO-cycle slice.
     func prepareInputOnlyCapture(
         deviceID: AudioDeviceID,
         label: String,
         bufferSize: AVAudioFrameCount,
+        deliveryQueue: DispatchQueue?,
         onBuffer: @escaping (AVAudioPCMBuffer) -> Void
     ) throws -> AudioInputCaptureSession
     func startInputOnlyCapture(
         deviceID: AudioDeviceID,
         label: String,
         bufferSize: AVAudioFrameCount,
+        deliveryQueue: DispatchQueue?,
         onBuffer: @escaping (AVAudioPCMBuffer) -> Void
     ) throws -> AudioInputCaptureSession
 }
@@ -2342,6 +2347,7 @@ final class CoreAudioHALInputCaptureFactory: AudioInputCaptureFactory {
             deviceID: deviceID,
             label: label,
             bufferSize: 128,
+            deliveryQueue: nil,
             onBuffer: { _ in }
         )
         session.stop()
@@ -2351,6 +2357,7 @@ final class CoreAudioHALInputCaptureFactory: AudioInputCaptureFactory {
         deviceID: AudioDeviceID,
         label: String,
         bufferSize: AVAudioFrameCount,
+        deliveryQueue: DispatchQueue?,
         onBuffer: @escaping (AVAudioPCMBuffer) -> Void
     ) throws -> AudioInputCaptureSession {
         let format = try inputOnlyCaptureFormat(deviceID: deviceID)
@@ -2362,6 +2369,7 @@ final class CoreAudioHALInputCaptureFactory: AudioInputCaptureFactory {
                 label: label,
                 operations: operations,
                 startsImmediately: false,
+                deliveryQueue: deliveryQueue,
                 onBuffer: onBuffer
             )
         } catch let error as SelectedInputDeviceError {
@@ -2375,12 +2383,14 @@ final class CoreAudioHALInputCaptureFactory: AudioInputCaptureFactory {
         deviceID: AudioDeviceID,
         label: String,
         bufferSize: AVAudioFrameCount,
+        deliveryQueue: DispatchQueue?,
         onBuffer: @escaping (AVAudioPCMBuffer) -> Void
     ) throws -> AudioInputCaptureSession {
         let session = try prepareInputOnlyCapture(
             deviceID: deviceID,
             label: label,
             bufferSize: bufferSize,
+            deliveryQueue: deliveryQueue,
             onBuffer: onBuffer
         )
         do {
@@ -2421,6 +2431,15 @@ protocol CoreAudioHALInputOperating: AnyObject {
         frameCount: UInt32,
         data: UnsafeMutablePointer<AudioBufferList>
     ) -> OSStatus
+    func maximumFramesPerSlice(_ audioUnit: AudioUnit) -> UInt32?
+    /// When true, the realtime callback pulls input with `AudioUnitRender` directly from C.
+    /// Otherwise it reaches `render(...)` through a Swift thunk, which is meant for test doubles.
+    var rendersDirectlyWithAudioUnit: Bool { get }
+}
+
+extension CoreAudioHALInputOperating {
+    func maximumFramesPerSlice(_ audioUnit: AudioUnit) -> UInt32? { nil }
+    var rendersDirectlyWithAudioUnit: Bool { false }
 }
 
 struct CoreAudioHALInputOperationError: LocalizedError {
@@ -2433,6 +2452,8 @@ struct CoreAudioHALInputOperationError: LocalizedError {
 }
 
 final class CoreAudioHALInputOperations: CoreAudioHALInputOperating {
+    var rendersDirectlyWithAudioUnit: Bool { true }
+
     func makeInputUnit() throws -> AudioUnit {
         var description = AudioComponentDescription(
             componentType: kAudioUnitType_Output,
@@ -2548,6 +2569,21 @@ final class CoreAudioHALInputOperations: CoreAudioHALInputOperating {
         AudioUnitRender(audioUnit, actionFlags, timestamp, busNumber, frameCount, data)
     }
 
+    func maximumFramesPerSlice(_ audioUnit: AudioUnit) -> UInt32? {
+        var maximumFrames: UInt32 = 0
+        var size = UInt32(MemoryLayout<UInt32>.size)
+        let status = AudioUnitGetProperty(
+            audioUnit,
+            kAudioUnitProperty_MaximumFramesPerSlice,
+            kAudioUnitScope_Global,
+            0,
+            &maximumFrames,
+            &size
+        )
+        guard status == noErr, maximumFrames > 0 else { return nil }
+        return maximumFrames
+    }
+
     private func setUInt32Property(
         _ propertyID: AudioUnitPropertyID,
         scope: AudioUnitScope,
@@ -2618,27 +2654,252 @@ final class CoreAudioHALInputOperations: CoreAudioHALInputOperating {
     }
 }
 
+/// Context for the Swift `render(...)` fallback used when operations cannot render from C.
+private final class CoreAudioHALInputOperationsRenderer {
+    let audioUnit: AudioUnit
+    let operations: CoreAudioHALInputOperating
+
+    init(audioUnit: AudioUnit, operations: CoreAudioHALInputOperating) {
+        self.audioUnit = audioUnit
+        self.operations = operations
+    }
+}
+
 final class CoreAudioHALInputCaptureSession: AudioInputCaptureSession, @unchecked Sendable {
     private static let callbackQuiescenceInterval: TimeInterval = 0.3
     private static let callbackDrainRetryInterval: TimeInterval = 0.01
+    private static let admittedCallbackWaitTimeout: TimeInterval = 0.3
+    private static let admittedCallbackPollInterval: TimeInterval = 0.001
+    static let defaultDeliveryInterval: DispatchTimeInterval = .milliseconds(10)
 
+    /// Owns everything the realtime callback touches (a C render state with preallocated
+    /// render buffers and an SPSC ring) plus the consumer that hands slices to `onBuffer`
+    /// on the delivery queue. The C state is freed in `deinit`, which cannot run before the
+    /// callback context is destroyed because `CallbackLifetime` keeps this object alive.
     final class RenderState: @unchecked Sendable {
-        let audioUnit: AudioUnit
-        let operations: CoreAudioHALInputOperating
+        private static let minimumFramesPerSlice: UInt32 = 8192
+        private static let ringBufferDuration: Double = 2
+        private static let maximumSlicesPerDeliveryPass = 4096
+        private static let lossReportIntervalNanoseconds: UInt64 = 1_000_000_000
+        private static let deliveryTimerLeeway: DispatchTimeInterval = .milliseconds(2)
+        private static let deliveryQueueKey = DispatchSpecificKey<ObjectIdentifier>()
+
+        private enum DeliveryPhase {
+            case idle
+            case running
+            case finished
+        }
+
         let format: AVAudioFormat
-        let onBuffer: (AVAudioPCMBuffer) -> Void
+        let realtimeState: OpaquePointer
+        private let label: String
+        private let deliveryQueue: DispatchQueue
+        private let operationsRenderer: CoreAudioHALInputOperationsRenderer
+        private let onBuffer: (AVAudioPCMBuffer) -> Void
+
+        private let deliveryLock = NSLock()
+        private var deliveryPhase = DeliveryPhase.idle
+        private var deliveryTimer: DispatchSourceTimer?
+
+        // Consumer-only state, touched exclusively on the delivery queue.
+        private var isDelivering = false
+        private var didFinishDelivery = false
+        private var unreportedDroppedFrames: UInt64 = 0
+        private var unreportedRenderFailures: UInt64 = 0
+        private var lastRenderFailureStatus: OSStatus = noErr
+        private var lastLossReportUptimeNanoseconds: UInt64 = 0
+        private var totalDroppedFrames: UInt64 = 0
+        private var totalRenderFailures: UInt64 = 0
 
         init(
             audioUnit: AudioUnit,
             operations: CoreAudioHALInputOperating,
             format: AVAudioFormat,
+            label: String,
+            deliveryQueue: DispatchQueue,
             onBuffer: @escaping (AVAudioPCMBuffer) -> Void
-        ) {
-            self.audioUnit = audioUnit
-            self.operations = operations
+        ) throws {
+            let operationsRenderer = CoreAudioHALInputOperationsRenderer(
+                audioUnit: audioUnit,
+                operations: operations
+            )
+            let realtimeState: OpaquePointer?
+            if operations.rendersDirectlyWithAudioUnit {
+                realtimeState = CoreAudioHALInputRenderStateCreate(
+                    format.channelCount,
+                    CoreAudioHALInputAudioUnitRender,
+                    UnsafeMutableRawPointer(audioUnit)
+                )
+            } else {
+                realtimeState = CoreAudioHALInputRenderStateCreate(
+                    format.channelCount,
+                    coreAudioHALInputOperationsRender,
+                    Unmanaged.passUnretained(operationsRenderer).toOpaque()
+                )
+            }
+            guard let realtimeState else {
+                throw CoreAudioHALInputOperationError(
+                    operation: "\(label) create HAL input render state",
+                    status: -1
+                )
+            }
+
             self.format = format
+            self.realtimeState = realtimeState
+            self.label = label
+            self.deliveryQueue = deliveryQueue
+            self.operationsRenderer = operationsRenderer
             self.onBuffer = onBuffer
+            deliveryQueue.setSpecific(key: Self.deliveryQueueKey, value: ObjectIdentifier(deliveryQueue))
         }
+
+        deinit {
+            CoreAudioHALInputRenderStateDestroy(realtimeState)
+        }
+
+        /// Allocates render storage and the ring. Must run before the callback gate opens
+        /// so the IO thread never observes a partially prepared state.
+        func prepareBuffers(reportedMaximumFramesPerSlice: UInt32?) throws {
+            let maximumFramesPerSlice = max(reportedMaximumFramesPerSlice ?? 0, Self.minimumFramesPerSlice)
+            let ringCapacitySamples = UInt64(
+                (format.sampleRate * Self.ringBufferDuration).rounded(.up)
+            ) * UInt64(format.channelCount)
+            guard CoreAudioHALInputRenderStatePrepare(
+                realtimeState,
+                maximumFramesPerSlice,
+                ringCapacitySamples
+            ) else {
+                throw CoreAudioHALInputOperationError(
+                    operation: "\(label) allocate HAL input buffers",
+                    status: -1
+                )
+            }
+        }
+
+        func startDelivery(interval: DispatchTimeInterval) {
+            deliveryLock.withLock {
+                guard deliveryPhase == .idle else { return }
+                let timer = DispatchSource.makeTimerSource(queue: deliveryQueue)
+                timer.schedule(deadline: .now() + interval, repeating: interval, leeway: Self.deliveryTimerLeeway)
+                timer.setEventHandler { [self] in
+                    deliverAvailableSlices(isFinal: false)
+                }
+                deliveryTimer = timer
+                deliveryPhase = .running
+                timer.resume()
+            }
+        }
+
+        /// Stops periodic delivery and hands every slice still in the ring to `onBuffer`.
+        /// When `waitUntilDelivered` is true this returns only after that final drain ran,
+        /// so no `onBuffer` call can happen afterwards.
+        func finishDelivery(waitUntilDelivered: Bool) {
+            let (shouldFinish, timer) = deliveryLock.withLock { () -> (Bool, DispatchSourceTimer?) in
+                guard deliveryPhase != .finished else { return (false, nil) }
+                deliveryPhase = .finished
+                let timer = deliveryTimer
+                deliveryTimer = nil
+                return (true, timer)
+            }
+            guard shouldFinish else { return }
+            timer?.cancel()
+
+            if isOnDeliveryQueue {
+                deliverAvailableSlices(isFinal: true)
+            } else if waitUntilDelivered {
+                deliveryQueue.sync {
+                    deliverAvailableSlices(isFinal: true)
+                }
+            } else {
+                deliveryQueue.async { [self] in
+                    deliverAvailableSlices(isFinal: true)
+                }
+            }
+        }
+
+        private var isOnDeliveryQueue: Bool {
+            DispatchQueue.getSpecific(key: Self.deliveryQueueKey) == ObjectIdentifier(deliveryQueue)
+        }
+
+        /// Consumer side of the ring. Must run on the delivery queue.
+        private func deliverAvailableSlices(isFinal: Bool) {
+            guard !didFinishDelivery else { return }
+            guard !isDelivering else {
+                // `onBuffer` stopped the session re-entrantly; the outer pass ends after this slice.
+                if isFinal { didFinishDelivery = true }
+                return
+            }
+
+            isDelivering = true
+            // Periodic passes are capped so one pass cannot monopolize the delivery queue.
+            // The final pass empties the ring: the gate is closed and admitted callbacks
+            // have left, so the ring cannot grow, and nothing drains it afterwards.
+            var deliveredSlices = 0
+            while isFinal || deliveredSlices < Self.maximumSlicesPerDeliveryPass {
+                deliveredSlices += 1
+                guard !didFinishDelivery else { break }
+                let frameCount = CoreAudioHALInputRenderStatePeekSliceFrameCount(realtimeState)
+                guard frameCount > 0 else { break }
+                // Each slice gets its own buffer: AVAudioConverter keeps reading an input
+                // buffer on its next `convert` call, so reusing one would alter the audio.
+                guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount),
+                      let channels = buffer.floatChannelData else {
+                    _ = CoreAudioHALInputRenderStateSkipSlice(realtimeState)
+                    continue
+                }
+                buffer.frameLength = CoreAudioHALInputRenderStateReadSlice(realtimeState, channels, frameCount)
+                onBuffer(buffer)
+            }
+            isDelivering = false
+            if isFinal { didFinishDelivery = true }
+            reportCaptureLoss(force: isFinal)
+        }
+
+        private func collectCaptureLoss() {
+            let droppedFrames = CoreAudioHALInputRenderStateTakeDroppedFrames(realtimeState)
+            var lastStatus: OSStatus = noErr
+            let renderFailures = CoreAudioHALInputRenderStateTakeRenderFailures(realtimeState, &lastStatus)
+            if renderFailures > 0 {
+                lastRenderFailureStatus = lastStatus
+            }
+            unreportedDroppedFrames += droppedFrames
+            unreportedRenderFailures += renderFailures
+            totalDroppedFrames += droppedFrames
+            totalRenderFailures += renderFailures
+        }
+
+        private func reportCaptureLoss(force: Bool) {
+            collectCaptureLoss()
+            guard unreportedDroppedFrames > 0 || unreportedRenderFailures > 0 else { return }
+
+            let now = DispatchTime.now().uptimeNanoseconds
+            guard force
+                || lastLossReportUptimeNanoseconds == 0
+                || now &- lastLossReportUptimeNanoseconds >= Self.lossReportIntervalNanoseconds else {
+                return
+            }
+            lastLossReportUptimeNanoseconds = now
+            deviceHelperLogger.warning(
+                "[\(self.label)] HAL input capture lost audio: droppedFrames=\(self.unreportedDroppedFrames), renderFailures=\(self.unreportedRenderFailures), lastRenderStatus=\(audioStatusString(self.lastRenderFailureStatus), privacy: .public), sessionDroppedFrames=\(self.totalDroppedFrames)"
+            )
+            unreportedDroppedFrames = 0
+            unreportedRenderFailures = 0
+        }
+
+#if DEBUG
+        func testingDeliverPendingSlices() {
+            deliveryQueue.sync {
+                deliverAvailableSlices(isFinal: false)
+            }
+        }
+
+        func testingCaptureLossTotals() -> (droppedFrames: UInt64, renderFailures: UInt64) {
+            deliveryQueue.sync {
+                collectCaptureLoss()
+                return (totalDroppedFrames, totalRenderFailures)
+            }
+        }
+#endif
     }
 
     private final class CallbackLifetime: @unchecked Sendable {
@@ -2689,6 +2950,37 @@ final class CoreAudioHALInputCaptureSession: AudioInputCaptureSession, @unchecke
             operations.stop(audioUnit)
             scheduleFinalization()
         }
+
+        /// Blocks until every callback admitted before the gate closed has left, so the
+        /// final ring drain sees its slice. Returns false if `timeout` elapsed first.
+        /// Must run after `stop()`; the IO thread takes no lock this path could hold.
+        func waitForAdmittedCallbacks(timeout: TimeInterval) -> Bool {
+            let deadline = DispatchTime.now() + timeout
+#if DEBUG
+            var didReportWait = false
+#endif
+            while true {
+                let isDrained = lifecycleLock.withLock { () -> Bool in
+                    // Disposal starts only after the closed context drained once, and the
+                    // context may be destroyed after that, so it must not be read anymore.
+                    guard !disposalStarted else { return true }
+                    return CoreAudioHALCallbackContextIsDrained(callbackContext)
+                }
+                if isDrained { return true }
+                guard DispatchTime.now() < deadline else { return false }
+#if DEBUG
+                if !didReportWait {
+                    didReportWait = true
+                    testingWillWaitForAdmittedCallbacks?()
+                }
+#endif
+                Thread.sleep(forTimeInterval: CoreAudioHALInputCaptureSession.admittedCallbackPollInterval)
+            }
+        }
+
+#if DEBUG
+        var testingWillWaitForAdmittedCallbacks: (() -> Void)?
+#endif
 
         private func scheduleFinalization() {
             Self.teardownQueue.asyncAfter(
@@ -2754,12 +3046,16 @@ final class CoreAudioHALInputCaptureSession: AudioInputCaptureSession, @unchecke
     }
 
     private let callbackLifetime: CallbackLifetime
+    private let renderState: RenderState
     private let deviceID: AudioDeviceID
     private let format: AVAudioFormat
     private let label: String
+    private let deliveryInterval: DispatchTimeInterval
     private let startLock = NSLock()
     private var didStart = false
 
+    /// `onBuffer` runs on `deliveryQueue` (a private serial queue when nil) and receives one
+    /// newly allocated buffer per IO-cycle slice, exactly as rendered by the realtime callback.
     init(
         deviceID: AudioDeviceID,
         format: AVAudioFormat,
@@ -2767,6 +3063,8 @@ final class CoreAudioHALInputCaptureSession: AudioInputCaptureSession, @unchecke
         label: String,
         operations: CoreAudioHALInputOperating,
         startsImmediately: Bool = true,
+        deliveryQueue: DispatchQueue? = nil,
+        deliveryInterval: DispatchTimeInterval = CoreAudioHALInputCaptureSession.defaultDeliveryInterval,
         onBuffer: @escaping (AVAudioPCMBuffer) -> Void
     ) throws {
         let audioUnit: AudioUnit
@@ -2782,14 +3080,33 @@ final class CoreAudioHALInputCaptureSession: AudioInputCaptureSession, @unchecke
             throw error
         }
 
-        let renderState = RenderState(
-            audioUnit: audioUnit,
-            operations: operations,
-            format: format,
-            onBuffer: onBuffer
-        )
+        let renderState: RenderState
+        do {
+            renderState = try RenderState(
+                audioUnit: audioUnit,
+                operations: operations,
+                format: format,
+                label: label,
+                deliveryQueue: deliveryQueue ?? DispatchQueue(
+                    label: "com.typewhisper.coreaudio-hal-input-delivery",
+                    qos: .userInitiated
+                ),
+                onBuffer: onBuffer
+            )
+        } catch {
+            operations.stop(audioUnit)
+            operations.uninitialize(audioUnit)
+            operations.dispose(audioUnit)
+            AudioInputCaptureDiagnosticsStore.recordFailure(
+                label: label,
+                deviceID: deviceID,
+                format: format,
+                error: error
+            )
+            throw error
+        }
         guard let callbackContext = CoreAudioHALCallbackContextCreate(
-            Unmanaged.passUnretained(renderState).toOpaque()
+            UnsafeMutableRawPointer(renderState.realtimeState)
         ) else {
             let error = CoreAudioHALInputOperationError(
                 operation: "\(label) create HAL callback context",
@@ -2812,9 +3129,11 @@ final class CoreAudioHALInputCaptureSession: AudioInputCaptureSession, @unchecke
             renderState: renderState,
             callbackContext: callbackContext
         )
+        self.renderState = renderState
         self.deviceID = deviceID
         self.format = format
         self.label = label
+        self.deliveryInterval = deliveryInterval
 
         do {
             let disabled: UInt32 = 0
@@ -2827,11 +3146,14 @@ final class CoreAudioHALInputCaptureSession: AudioInputCaptureSession, @unchecke
             try operations.setStreamFormat(&streamDescription, audioUnit: audioUnit, label: label)
 
             var callback = AURenderCallbackStruct(
-                inputProc: coreAudioHALInputRenderCallback,
+                inputProc: CoreAudioHALInputRenderCallback,
                 inputProcRefCon: UnsafeMutableRawPointer(callbackContext)
             )
             try operations.setInputCallback(&callback, audioUnit: audioUnit, label: label)
             try operations.initialize(audioUnit, label: label)
+            try renderState.prepareBuffers(
+                reportedMaximumFramesPerSlice: operations.maximumFramesPerSlice(audioUnit)
+            )
             if startsImmediately {
                 try start()
             } else {
@@ -2840,7 +3162,7 @@ final class CoreAudioHALInputCaptureSession: AudioInputCaptureSession, @unchecke
                 )
             }
         } catch {
-            callbackLifetime.stop()
+            teardown(waitForDelivery: true)
             AudioInputCaptureDiagnosticsStore.recordFailure(
                 label: label,
                 deviceID: deviceID,
@@ -2852,7 +3174,7 @@ final class CoreAudioHALInputCaptureSession: AudioInputCaptureSession, @unchecke
     }
 
     deinit {
-        callbackLifetime.stop()
+        teardown(waitForDelivery: false)
     }
 
     func start() throws {
@@ -2870,13 +3192,14 @@ final class CoreAudioHALInputCaptureSession: AudioInputCaptureSession, @unchecke
                     status: -1
                 )
             }
+            renderState.startDelivery(interval: deliveryInterval)
             try callbackLifetime.operations.start(callbackLifetime.audioUnit, label: label)
             AudioInputCaptureDiagnosticsStore.clear()
             deviceHelperLogger.info(
                 "[\(self.label)] Started input-only HAL capture for device \(self.deviceID), sampleRate=\(self.format.sampleRate), channels=\(self.format.channelCount)"
             )
         } catch {
-            callbackLifetime.stop()
+            teardown(waitForDelivery: true)
             AudioInputCaptureDiagnosticsStore.recordFailure(
                 label: label,
                 deviceID: deviceID,
@@ -2904,8 +3227,22 @@ final class CoreAudioHALInputCaptureSession: AudioInputCaptureSession, @unchecke
         min(hardwareChannelCount, 2)
     }
 
+    /// Closes the callback gate, stops the unit, and delivers every slice captured before
+    /// the stop. After `stop()` returns no further `onBuffer` call happens.
     func stop() {
+        teardown(waitForDelivery: true)
+    }
+
+    private func teardown(waitForDelivery: Bool) {
         callbackLifetime.stop()
+        // A callback admitted before the gate closed can still be inside the render and
+        // publish its slice after the HAL stop returns. Drain the ring only once it left.
+        if !callbackLifetime.waitForAdmittedCallbacks(timeout: Self.admittedCallbackWaitTimeout) {
+            deviceHelperLogger.warning(
+                "[\(self.label)] HAL input callback still in flight after stop; its slice may be lost"
+            )
+        }
+        renderState.finishDelivery(waitUntilDelivered: waitForDelivery)
     }
 
     private static func streamDescription(for format: AVAudioFormat) throws -> AudioStreamBasicDescription {
@@ -2919,46 +3256,27 @@ final class CoreAudioHALInputCaptureSession: AudioInputCaptureSession, @unchecke
     }
 }
 
-private func coreAudioHALInputRenderCallback(
-    inRefCon: UnsafeMutableRawPointer,
-    ioActionFlags: UnsafeMutablePointer<AudioUnitRenderActionFlags>,
-    inTimeStamp: UnsafePointer<AudioTimeStamp>,
-    inBusNumber: UInt32,
-    inNumberFrames: UInt32,
-    ioData: UnsafeMutablePointer<AudioBufferList>?
+/// Swift fallback for operations that cannot render from C (test doubles). Production
+/// operations render through `CoreAudioHALInputAudioUnitRender` without entering Swift.
+private func coreAudioHALInputOperationsRender(
+    context: UnsafeMutableRawPointer,
+    actionFlags: UnsafeMutablePointer<AudioUnitRenderActionFlags>,
+    timestamp: UnsafePointer<AudioTimeStamp>,
+    busNumber: UInt32,
+    frameCount: UInt32,
+    data: UnsafeMutablePointer<AudioBufferList>
 ) -> OSStatus {
-    let callbackContext = OpaquePointer(inRefCon)
-    var renderStatePointer: UnsafeMutableRawPointer?
-    guard CoreAudioHALCallbackContextEnter(callbackContext, &renderStatePointer) else {
-        return noErr
-    }
-    defer { CoreAudioHALCallbackContextLeave(callbackContext) }
-    guard let renderStatePointer else { return noErr }
-
-    let renderState = Unmanaged<CoreAudioHALInputCaptureSession.RenderState>
-        .fromOpaque(renderStatePointer)
+    let renderer = Unmanaged<CoreAudioHALInputOperationsRenderer>
+        .fromOpaque(context)
         .takeUnretainedValue()
-
-    guard let buffer = AVAudioPCMBuffer(
-        pcmFormat: renderState.format,
-        frameCapacity: AVAudioFrameCount(inNumberFrames)
-    ) else {
-        return kAudioUnitErr_InvalidPropertyValue
-    }
-    buffer.frameLength = AVAudioFrameCount(inNumberFrames)
-
-    let status = renderState.operations.render(
-        audioUnit: renderState.audioUnit,
-        actionFlags: ioActionFlags,
-        timestamp: inTimeStamp,
-        busNumber: 1,
-        frameCount: inNumberFrames,
-        data: buffer.mutableAudioBufferList
+    return renderer.operations.render(
+        audioUnit: renderer.audioUnit,
+        actionFlags: actionFlags,
+        timestamp: timestamp,
+        busNumber: busNumber,
+        frameCount: frameCount,
+        data: data
     )
-    guard status == noErr else { return status }
-
-    renderState.onBuffer(buffer)
-    return noErr
 }
 
 enum AudioInputBufferNormalizer {
@@ -3650,6 +3968,20 @@ extension CoreAudioHALInputCaptureSession {
         callbackQuiescenceInterval
     }
 
+    /// Runs on the stopping thread when `stop()` first finds an admitted callback in flight.
+    func testingSetWillWaitForAdmittedCallbacksHook(_ hook: (() -> Void)?) {
+        callbackLifetime.testingWillWaitForAdmittedCallbacks = hook
+    }
+
+    /// Synchronously hands every slice currently in the ring to `onBuffer`.
+    func testingDeliverPendingBuffers() {
+        renderState.testingDeliverPendingSlices()
+    }
+
+    func testingCaptureLossTotals() -> (droppedFrames: UInt64, renderFailures: UInt64) {
+        renderState.testingCaptureLossTotals()
+    }
+
     static func testingCallbackContextSealTransitions() -> (
         sealedWhileInFlight: Bool,
         sealedAfterDrain: Bool,
@@ -3691,6 +4023,90 @@ extension CoreAudioHALInputCaptureSession {
                 payloadAfterSeal == nil
             )
         }
+    }
+}
+
+private func coreAudioHALInputTestingSilentRender(
+    context: UnsafeMutableRawPointer,
+    actionFlags: UnsafeMutablePointer<AudioUnitRenderActionFlags>,
+    timestamp: UnsafePointer<AudioTimeStamp>,
+    busNumber: UInt32,
+    frameCount: UInt32,
+    data: UnsafeMutablePointer<AudioBufferList>
+) -> OSStatus {
+    noErr
+}
+
+/// Test handle on the C SPSC ring shared by the HAL input callback (producer) and the
+/// delivery queue (consumer). Write from one thread and read from one other thread.
+final class CoreAudioHALInputTestingRing: @unchecked Sendable {
+    let channelCount: Int
+    let maximumFramesPerSlice: Int
+    private let state: OpaquePointer
+
+    init?(channelCount: Int, maximumFramesPerSlice: Int, minimumCapacitySamples: Int) {
+        // The silent render proc never dereferences its context.
+        guard let placeholderContext = UnsafeMutableRawPointer(bitPattern: 0x1),
+              let state = CoreAudioHALInputRenderStateCreate(
+                  UInt32(channelCount),
+                  coreAudioHALInputTestingSilentRender,
+                  placeholderContext
+              ) else {
+            return nil
+        }
+        guard CoreAudioHALInputRenderStatePrepare(
+            state,
+            UInt32(maximumFramesPerSlice),
+            UInt64(minimumCapacitySamples)
+        ) else {
+            CoreAudioHALInputRenderStateDestroy(state)
+            return nil
+        }
+        self.channelCount = channelCount
+        self.maximumFramesPerSlice = maximumFramesPerSlice
+        self.state = state
+    }
+
+    deinit {
+        CoreAudioHALInputRenderStateDestroy(state)
+    }
+
+    var capacitySamples: Int {
+        Int(CoreAudioHALInputRenderStateRingCapacity(state))
+    }
+
+    /// Producer side. `channels` holds one equally long array per channel.
+    func write(_ channels: [[Float]]) -> Bool {
+        precondition(channels.count == channelCount)
+        let frameCount = channels.first?.count ?? 0
+        let storage = channels.map { channel -> UnsafeMutablePointer<Float> in
+            let pointer = UnsafeMutablePointer<Float>.allocate(capacity: max(channel.count, 1))
+            pointer.initialize(from: channel, count: channel.count)
+            return pointer
+        }
+        defer { storage.forEach { $0.deallocate() } }
+        let pointers = storage.map { UnsafePointer($0) }
+        return pointers.withUnsafeBufferPointer { channelPointers in
+            CoreAudioHALInputRenderStateWriteSlice(state, channelPointers.baseAddress!, UInt32(frameCount))
+        }
+    }
+
+    /// Consumer side. Returns the oldest slice, or nil when the ring is empty.
+    func read(frameCapacity: Int? = nil) -> [[Float]]? {
+        let capacity = frameCapacity ?? maximumFramesPerSlice
+        let storage = (0..<channelCount).map { _ in
+            UnsafeMutablePointer<Float>.allocate(capacity: max(capacity, 1))
+        }
+        defer { storage.forEach { $0.deallocate() } }
+        let frameCount = storage.withUnsafeBufferPointer { channelPointers in
+            CoreAudioHALInputRenderStateReadSlice(state, channelPointers.baseAddress!, UInt32(capacity))
+        }
+        guard frameCount > 0 else { return nil }
+        return storage.map { Array(UnsafeBufferPointer(start: $0, count: Int(frameCount))) }
+    }
+
+    func takeDroppedFrames() -> UInt64 {
+        CoreAudioHALInputRenderStateTakeDroppedFrames(state)
     }
 }
 #endif
