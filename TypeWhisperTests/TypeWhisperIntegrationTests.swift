@@ -3,6 +3,7 @@ import Carbon.HIToolbox
 import Combine
 import CoreAudio
 import Foundation
+import os
 import XCTest
 import TypeWhisperPluginSDK
 @testable import TypeWhisper
@@ -7509,6 +7510,98 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(session.status, .completed)
         XCTAssertEqual(session.transcription?.appURL, "https://example.com/page")
         XCTAssertEqual(context.historyService.recentRecords.first?.appURL, "https://example.com/page")
+    }
+
+    @MainActor
+    func testPendingCompletionIsEmittedOnceBeforeTheNextRecordingStarts() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        let historyEnabledKey = UserDefaultsKeys.historyEnabled
+        let originalHistoryEnabled = UserDefaults.standard.object(forKey: historyEnabledKey)
+        var dictationContext: DictationContext?
+        defer {
+            EventBus.shared?.emissionObserverForTesting = nil
+            MockTranscriptionPlugin.reset()
+            dictationContext = nil
+            Self.restoreUserDefault(originalHistoryEnabled, forKey: historyEnabledKey)
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        UserDefaults.standard.set(true, forKey: historyEnabledKey)
+        MockTranscriptionPlugin.reset()
+        MockTranscriptionPlugin.setResponseText("transcribed")
+        let urlRequested = expectation(description: "Browser lookup started")
+        urlRequested.assertForOverFulfill = false
+        let urlGate = DispatchSemaphore(value: 0)
+        defer { urlGate.signal() }
+        let lookupCount = OSAllocatedUnfairLock(initialState: 0)
+        // Only the first dictation's lookup is slow.
+        let resolver = BrowserURLResolver { _, _ in
+            let lookup = lookupCount.withLock { count -> Int in
+                count += 1
+                return count
+            }
+            if lookup == 1 {
+                urlRequested.fulfill()
+                urlGate.wait()
+            }
+            return BrowserResolution(url: URL(string: "https://example.com/page"), title: nil)
+        }
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory, browserURLResolver: resolver)
+        let context = try XCTUnwrap(dictationContext)
+        context.dictationViewModel.preserveClipboard = false
+        var events: [String] = []
+        EventBus.shared.emissionObserverForTesting = { event in
+            switch event {
+            case .recordingStarted:
+                events.append("recordingStarted")
+            case .transcriptionCompleted(let payload):
+                events.append("transcriptionCompleted:\(payload.url ?? "nil")")
+            default:
+                break
+            }
+        }
+
+        let pasteboard = NSPasteboard.withUniqueName()
+        let pasted = expectation(description: "Text pasted")
+        context.textInsertionService.pasteboardProvider = { pasteboard }
+        context.textInsertionService.captureActiveAppOverride = { ("Chrome", "com.google.Chrome", nil) }
+        context.textInsertionService.accessibilityGrantedOverride = true
+        context.textInsertionService.selectedTextOverride = { nil }
+        context.textInsertionService.focusedTextElementOverride = { nil }
+        context.textInsertionService.pasteSimulatorOverride = { pasted.fulfill() }
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { _ in
+            Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
+        }
+
+        let firstSessionID = context.dictationViewModel.apiStartRecording()
+        await context.dictationViewModel.testingWaitForRecordingStart()
+        context.audioRecordingService.testingNotifyFirstRecordingAudioBuffer()
+        await fulfillment(of: [urlRequested], timeout: 10)
+        _ = context.dictationViewModel.apiStopRecording()
+        await fulfillment(of: [pasted], timeout: 10)
+        XCTAssertEqual(events, ["recordingStarted"])
+
+        // The next recording starts while the first dictation still waits for its URL.
+        context.dictationViewModel.state = .idle
+        _ = context.dictationViewModel.apiStartRecording()
+        await context.dictationViewModel.testingWaitForRecordingStart()
+        context.audioRecordingService.testingNotifyFirstRecordingAudioBuffer()
+        XCTAssertEqual(events, ["recordingStarted", "transcriptionCompleted:nil", "recordingStarted"])
+        XCTAssertEqual(context.historyService.totalRecords, 0)
+
+        urlGate.signal()
+        for _ in 0..<200 {
+            if context.dictationViewModel.apiDictationSession(id: firstSessionID)?.status == .completed { break }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+
+        // Persistence finished with the URL and did not emit the completion again.
+        XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: firstSessionID)?.status, .completed)
+        XCTAssertEqual(context.historyService.recentRecords.first?.appURL, "https://example.com/page")
+        XCTAssertEqual(events.filter { $0.hasPrefix("transcriptionCompleted") }.count, 1)
     }
 
     @MainActor

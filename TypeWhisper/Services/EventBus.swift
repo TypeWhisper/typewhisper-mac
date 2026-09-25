@@ -31,7 +31,16 @@ final class EventBus: EventBusProtocol, @unchecked Sendable {
         }
     }
 
+#if DEBUG
+    /// Called synchronously for each emitted event, so tests can check the emission order.
+    /// Subscribers run in detached tasks and may observe events in a different order.
+    var emissionObserverForTesting: ((TypeWhisperEvent) -> Void)?
+#endif
+
     func emit(_ event: TypeWhisperEvent) {
+#if DEBUG
+        emissionObserverForTesting?(event)
+#endif
         let handlers = subscriptions.map { $0.handler }
         for handler in handlers {
             Task.detached {

@@ -1005,6 +1005,8 @@ final class DictationViewModel: ObservableObject {
         let historyClearGeneration: Int
         let audioSamples: [Float]?
         let pipelineSteps: [String]?
+        /// Set when `.transcriptionCompleted` went out before persistence, so it is emitted once.
+        var completionEventEmitted = false
     }
 
     /// Persists a dictation after its text was inserted, so history audio encoding, SwiftData
@@ -1038,6 +1040,34 @@ final class DictationViewModel: ObservableObject {
             let pendingDictation = pendingPostInsertionDictations.remove(at: index)
             persistCompletedDictation(pendingDictation, historyAudioFileName: historyAudioFileName)
         }
+    }
+
+    /// Emits `.transcriptionCompleted` for dictations whose persistence still waits, for
+    /// example for the browser URL, before a new recording starts. Subscribers then see the
+    /// previous completion before the next `.recordingStarted`. The events carry the metadata
+    /// known now, so the URL may be nil; the history record still gets the URL later.
+    private func emitPendingTranscriptionCompletedEvents() {
+        for index in pendingPostInsertionDictations.indices
+        where !pendingPostInsertionDictations[index].completionEventEmitted {
+            emitTranscriptionCompleted(for: pendingPostInsertionDictations[index])
+            pendingPostInsertionDictations[index].completionEventEmitted = true
+        }
+    }
+
+    private func emitTranscriptionCompleted(for dictation: CompletedDictation) {
+        EventBus.shared.emit(.transcriptionCompleted(TranscriptionCompletedPayload(
+            timestamp: dictation.timestamp,
+            rawText: dictation.rawText,
+            finalText: dictation.finalText,
+            language: dictation.language,
+            engineUsed: dictation.engineUsed,
+            modelUsed: dictation.modelUsed,
+            durationSeconds: dictation.durationSeconds,
+            appName: dictation.appName,
+            bundleIdentifier: dictation.appBundleIdentifier,
+            url: dictation.appURL,
+            ruleName: dictation.ruleName
+        )))
     }
 
     private func pendingPostInsertionDictationIndex(id: UUID) -> Int? {
@@ -1102,19 +1132,9 @@ final class DictationViewModel: ObservableObject {
             )
         }
 
-        EventBus.shared.emit(.transcriptionCompleted(TranscriptionCompletedPayload(
-            timestamp: dictation.timestamp,
-            rawText: dictation.rawText,
-            finalText: dictation.finalText,
-            language: dictation.language,
-            engineUsed: dictation.engineUsed,
-            modelUsed: dictation.modelUsed,
-            durationSeconds: dictation.durationSeconds,
-            appName: dictation.appName,
-            bundleIdentifier: dictation.appBundleIdentifier,
-            url: appURL,
-            ruleName: dictation.ruleName
-        )))
+        if !dictation.completionEventEmitted {
+            emitTranscriptionCompleted(for: dictation)
+        }
 
         usageStatisticsRecorder?.recordTranscription(
             timestamp: dictation.timestamp,
@@ -1564,6 +1584,9 @@ final class DictationViewModel: ObservableObject {
 
         let startTimestamp = CFAbsoluteTimeGetCurrent()
         clearRecordingStartCueState()
+        // The previous dictation's completion must reach subscribers before this recording's
+        // `.recordingStarted`, even while its persistence still waits for the browser URL.
+        emitPendingTranscriptionCompletedEvents()
 
         // Cancel any pending transcription from a previous recording
         if transcriptionTask != nil {
