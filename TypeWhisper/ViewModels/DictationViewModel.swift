@@ -3437,7 +3437,7 @@ final class DictationViewModel: ObservableObject {
                 return self.canUseEngineForPreview(engine)
             }
         )
-        let previewEngineOverrideId: String?
+        var previewEngineOverrideId: String?
         let previewUsable: Bool
         switch resolution {
         case .followsDictationEngine:
@@ -3454,7 +3454,19 @@ final class DictationViewModel: ObservableObject {
             previewUsable = false
             logger.warning("Selected live preview engine is unavailable; preview disabled for this recording instead of falling back to the dictation engine")
         }
-        let effectiveAllowLiveTranscription = allowLiveTranscription && previewUsable
+        var effectiveAllowLiveTranscription = allowLiveTranscription && previewUsable
+        // Engines whose live session is the dictation path (e.g. Soniox realtime) keep
+        // streaming without a visible preview. Otherwise the final transcription would
+        // fall back to a much slower batch request after the user stops.
+        let streamsDictationWithoutPreview = !effectiveAllowLiveTranscription
+            && modelManager.prefersLiveSessionForDictation(
+                engineOverrideId: params.engineOverrideId,
+                selectedProviderId: params.providerId
+            )
+        if streamsDictationWithoutPreview {
+            previewEngineOverrideId = params.engineOverrideId
+            effectiveAllowLiveTranscription = true
+        }
         lastStreamingParams = effectiveAllowLiveTranscription ? params : nil
         let previewFollowsDictationEngine =
             (previewEngineOverrideId ?? params.providerId) == (params.engineOverrideId ?? params.providerId)
@@ -3481,6 +3493,7 @@ final class DictationViewModel: ObservableObject {
             cloudModelOverride: previewFollowsDictationEngine ? params.cloudModelOverride : nil,
             normalizeNumbers: params.normalizeNumbers,
             allowLiveTranscription: effectiveAllowLiveTranscription,
+            allowsBatchPreviewFallback: !streamsDictationWithoutPreview,
             stateCheck: { [weak self] in self?.state == .recording }
         )
     }

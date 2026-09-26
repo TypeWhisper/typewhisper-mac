@@ -1901,4 +1901,151 @@ final class StreamingHandlerTests: XCTestCase {
         XCTAssertNil(plugin.lastSelection.requestedLanguage)
         XCTAssertEqual(plugin.lastPrompt, "Hint Terms")
     }
+
+    func testHiddenPreviewSkipsBatchPreviewFallbackLoop() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let plugin = MockStreamingFallbackPlugin()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.streaming-fallback",
+                    name: "Mock Streaming Fallback",
+                    version: "1.0.0",
+                    principalClass: "MockStreamingFallbackPlugin",
+                    requiresAPIKey: false
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider(plugin.providerId)
+
+        let handler = StreamingHandler(
+            modelManager: modelManager,
+            bufferProvider: { Array(repeating: 0.5, count: 160_000) },
+            recentBufferProvider: { _ in Array(repeating: 0.5, count: 160_000) },
+            bufferDeltaProvider: { _ in ([], 0) },
+            bufferedDurationProvider: { 10.0 }
+        )
+
+        handler.start(
+            streamPrompt: "Unused Terms",
+            engineOverrideId: plugin.providerId,
+            selectedProviderId: plugin.providerId,
+            languageSelection: .exact("en"),
+            task: .transcribe,
+            cloudModelOverride: nil,
+            allowLiveTranscription: true,
+            allowsBatchPreviewFallback: false,
+            stateCheck: { true }
+        )
+
+        try await Task.sleep(for: .milliseconds(3400))
+        let result = await handler.finish()
+
+        XCTAssertNil(result)
+        XCTAssertEqual(plugin.transcribeCallCount, 0)
+    }
+
+    func testLiveSessionRunsWhenBatchPreviewFallbackIsDisabled() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let plugin = MockLivePlugin()
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.live",
+                    name: "Mock Live",
+                    version: "1.0.0",
+                    principalClass: "MockLivePlugin",
+                    requiresAPIKey: false,
+                    capabilities: [PluginCapability.liveDictation.rawValue]
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider(plugin.providerId)
+
+        let handler = StreamingHandler(
+            modelManager: modelManager,
+            bufferProvider: { [] },
+            recentBufferProvider: { _ in [] },
+            bufferDeltaProvider: { _ in (Array(repeating: 0.1, count: 4000), 4000) },
+            bufferedDurationProvider: { 0.25 }
+        )
+
+        handler.start(
+            streamPrompt: "Live Terms",
+            engineOverrideId: plugin.providerId,
+            selectedProviderId: plugin.providerId,
+            languageSelection: .exact("en"),
+            task: .transcribe,
+            cloudModelOverride: nil,
+            allowLiveTranscription: true,
+            allowsBatchPreviewFallback: false,
+            stateCheck: { false }
+        )
+
+        try await Task.sleep(for: .milliseconds(150))
+        let result = await handler.finish()
+
+        XCTAssertEqual(result?.text, "finished")
+        XCTAssertEqual(plugin.liveSessionCreateCount, 1)
+    }
+
+    func testModelManagerPrefersLiveSessionOnlyForLiveDictationCapablePlugins() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let optedInLivePlugin = MockLivePlugin()
+        let plainLivePlugin = MockHintLivePlugin()
+        let batchPlugin = MockBatchPlugin()
+        func loaded(
+            _ instance: TypeWhisperPlugin,
+            id: String,
+            capabilities: [String]?
+        ) -> LoadedPlugin {
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: id,
+                    name: id,
+                    version: "1.0.0",
+                    principalClass: id,
+                    capabilities: capabilities
+                ),
+                instance: instance,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        }
+        let liveDictation = [PluginCapability.liveDictation.rawValue]
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = [
+            loaded(optedInLivePlugin, id: "com.typewhisper.mock.live", capabilities: liveDictation),
+            loaded(plainLivePlugin, id: "com.typewhisper.mock.live-hints", capabilities: nil),
+            loaded(batchPlugin, id: "com.typewhisper.mock.batch", capabilities: liveDictation),
+        ]
+
+        let modelManager = ModelManagerService()
+
+        XCTAssertTrue(modelManager.prefersLiveSessionForDictation(engineOverrideId: optedInLivePlugin.providerId))
+        XCTAssertFalse(modelManager.prefersLiveSessionForDictation(engineOverrideId: plainLivePlugin.providerId))
+        XCTAssertFalse(modelManager.prefersLiveSessionForDictation(engineOverrideId: batchPlugin.providerId))
+        XCTAssertFalse(modelManager.prefersLiveSessionForDictation(engineOverrideId: "missing-engine"))
+    }
 }

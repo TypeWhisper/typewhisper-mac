@@ -17,7 +17,8 @@
         "tts"
     ],
     "capabilities": [
-        "source-footage-progress"
+        "source-footage-progress",
+        "live-dictation"
     ],
     "iconSystemName": "waveform.badge.mic",
     "principalClass": "SonioxPlugin",

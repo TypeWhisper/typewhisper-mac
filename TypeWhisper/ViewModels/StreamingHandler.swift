@@ -102,6 +102,7 @@ final class StreamingHandler: @unchecked Sendable {
         cloudModelOverride: String?,
         normalizeNumbers: Bool? = nil,
         allowLiveTranscription: Bool,
+        allowsBatchPreviewFallback: Bool = true,
         stateCheck: @escaping @MainActor @Sendable () -> Bool
     ) {
         let pendingStopTask = stop()
@@ -155,6 +156,14 @@ final class StreamingHandler: @unchecked Sendable {
                 logger.info("Live transcript preview using live session providerId=\(handle.providerId, privacy: .public)")
                 self.sharedState.withLock { $0.liveSessionHandle = handle }
                 await self.runLiveSessionLoop(stateCheck: stateCheck)
+                return
+            }
+
+            guard allowsBatchPreviewFallback else {
+                logger.info("Live transcript preview fallback skipped providerId=\(providerId, privacy: .public) reason=preview-hidden")
+                await MainActor.run { [weak self] in
+                    self?.clearStreamingState(notifyStreamingStopped: true)
+                }
                 return
             }
 

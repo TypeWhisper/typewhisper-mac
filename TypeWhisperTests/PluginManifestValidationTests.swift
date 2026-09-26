@@ -119,6 +119,15 @@ final class PluginManifestValidationTests: XCTestCase {
         }
     }
 
+    func testSonioxDeclaresLiveDictationCapability() throws {
+        let manifestURL = TestSupport.repoRoot.appendingPathComponent(
+            "TypeWhisperPluginSDK/Plugins/SonioxPlugin/manifest.json"
+        )
+        let manifest = try JSONDecoder().decode(PluginManifest.self, from: Data(contentsOf: manifestURL))
+
+        XCTAssertTrue(manifest.supportsCapability(.liveDictation))
+    }
+
     func testWhisperKitPlugin12RequiresCompatibleHost17() throws {
         let manifestURL = TestSupport.repoRoot.appendingPathComponent(
             "TypeWhisperPluginSDK/Plugins/WhisperKitPlugin/manifest.json"
