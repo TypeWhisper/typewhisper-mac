@@ -242,6 +242,48 @@ final class TranscriptionNormalizationServiceTests: XCTestCase {
         )
     }
 
+    func testTimeNotationRequiresWordBoundaryAfterUhr() {
+        for text in [
+            "Der Vortrag beginnt um 12.50 Uhren",
+            "Die 20.45 Uhrzeit ist falsch",
+            "Sein 9.30 Uhrwerk tickt laut"
+        ] {
+            XCTAssertEqual(
+                TranscriptionNormalizationService.normalizeTimeNotation(text, languages: ["de"]),
+                text
+            )
+        }
+        // Uhr followed by punctuation or end of string still rewrites.
+        XCTAssertEqual(
+            TranscriptionNormalizationService.normalizeTimeNotation("Treffen um 20.45 Uhr.", languages: ["de"]),
+            "Treffen um 20:45 Uhr."
+        )
+    }
+
+    func testTimeNotationRewritesTimeRanges() {
+        XCTAssertEqual(
+            TranscriptionNormalizationService.normalizeTimeNotation("von 9.00 bis 17.00 Uhr", languages: ["de"]),
+            "von 9:00 bis 17:00 Uhr"
+        )
+        XCTAssertEqual(
+            TranscriptionNormalizationService.normalizeTimeNotation("zwischen 14.30 und 15.00 Uhr", languages: ["de"]),
+            "zwischen 14:30 und 15:00 Uhr"
+        )
+        XCTAssertEqual(
+            TranscriptionNormalizationService.normalizeTimeNotation("Sprechstunde 9.00-17.00 Uhr", languages: ["de"]),
+            "Sprechstunde 9:00-17:00 Uhr"
+        )
+        XCTAssertEqual(
+            TranscriptionNormalizationService.normalizeTimeNotation("Sprechstunde 9.00–17.00 Uhr", languages: ["de"]),
+            "Sprechstunde 9:00–17:00 Uhr"
+        )
+        // A range without Uhr stays untouched.
+        XCTAssertEqual(
+            TranscriptionNormalizationService.normalizeTimeNotation("von 9.00 bis 17.00", languages: ["de"]),
+            "von 9.00 bis 17.00"
+        )
+    }
+
     @MainActor
     func testTimeNotationAppliesThroughNormalizeTextWhenNumberNormalizationIsOff() {
         let defaults = UserDefaults(suiteName: #function)!
@@ -281,5 +323,39 @@ final class TranscriptionNormalizationServiceTests: XCTestCase {
 
         XCTAssertEqual(result.text, "um 20:45 Uhr")
         XCTAssertEqual(result.segments.map(\.text), ["um 20:45 Uhr", "um 9:30 Uhr"])
+    }
+
+    @MainActor
+    func testPipelineRewritesTimeIntroducedByCorrections() async throws {
+        let appSupportDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: appSupportDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: appSupportDirectory) }
+
+        let dictionaryService = DictionaryService(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        let profileStore = DictationPunctuationProfileStore(defaults: UserDefaults(suiteName: #function)!, storageKey: #function)
+        dictionaryService.addEntry(type: .correction, original: "TIME", replacement: "20.45 Uhr")
+
+        let pipeline = PostProcessingPipeline(
+            snippetService: SnippetService(),
+            dictionaryService: dictionaryService,
+            appFormatterService: nil,
+            punctuationStrategyResolver: PunctuationStrategyResolver(profileStore: profileStore)
+        )
+
+        let result = try await pipeline.process(
+            text: "Treffen um TIME",
+            context: PostProcessingContext(language: "de"),
+            dictationContext: DictationRuntimeContext(
+                engineId: nil,
+                modelId: nil,
+                configuredLanguage: "de",
+                detectedLanguage: nil
+            )
+        )
+
+        XCTAssertEqual(result.text, "Treffen um 20:45 Uhr")
+        XCTAssertEqual(result.appliedSteps, ["Corrections", "Time Notation"])
     }
 }
