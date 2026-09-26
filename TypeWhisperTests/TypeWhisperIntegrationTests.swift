@@ -15393,8 +15393,16 @@ extension TypeWhisperIntegrationTests {
 
         let modelManager = ModelManagerService()
         let audioRecordingService = AudioRecordingService()
+        audioRecordingService.hasMicrophonePermissionOverride = true
+        audioRecordingService.inputAvailabilityOverride = { _ in true }
+        audioRecordingService.startRecordingOverride = {}
+        audioRecordingService.stopRecordingOverride = { _ in
+            Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
+        }
         let hotkeyService = HotkeyService()
         let textInsertionService = TextInsertionService()
+        textInsertionService.accessibilityGrantedOverride = true
+        textInsertionService.pasteSimulatorOverride = {}
         let historyService = HistoryService(appSupportDirectory: appSupportDirectory)
         let recentTranscriptionStore = RecentTranscriptionStore()
         let profileService = ProfileService(appSupportDirectory: appSupportDirectory)
@@ -15473,9 +15481,21 @@ extension TypeWhisperIntegrationTests {
         // The harness has no installed engines, so only the recovery engine can make this true.
         XCTAssertTrue(harness.viewModel.canDictate)
 
-        let output = try await harness.viewModel.transcribeFinalAudioForTesting(primaryEngineId: "primary")
-        XCTAssertEqual(output.text, "fallback")
-        XCTAssertTrue(output.usedRecoveryFallback)
+        let sessionID = harness.viewModel.apiStartRecording()
+        await harness.viewModel.testingWaitForRecordingStart()
+        XCTAssertEqual(harness.viewModel.apiDictationSession(id: sessionID)?.status, .recording)
+
+        _ = harness.viewModel.apiStopRecording()
+        for _ in 0..<80 {
+            if harness.viewModel.apiDictationSession(id: sessionID)?.status == .completed {
+                break
+            }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+        let session = harness.viewModel.apiDictationSession(id: sessionID)
+        XCTAssertEqual(session?.status, .completed)
+        XCTAssertEqual(session?.transcription?.rawText, "fallback", session?.error ?? "")
+        await harness.viewModel.testingWaitForRecordingCleanup()
     }
 
     @MainActor
