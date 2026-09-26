@@ -1,6 +1,470 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Selected entry content": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Inhalt des ausgewählten Eintrags"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "所选条目内容"
+          }
+        }
+      }
+    },
+    "Source files found on this Mac: %@.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quelldateien auf diesem Mac gefunden: %@."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在此 Mac 上找到来源文件：%@。"
+          }
+        }
+      }
+    },
+    "Review Words...": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wörter prüfen …"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "预览词语…"
+          }
+        }
+      }
+    },
+    "Review Snippets...": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Snippets prüfen …"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "预览文本片段…"
+          }
+        }
+      }
+    },
+    "Import from Wispr Flow or Handy...": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aus Wispr Flow oder Handy importieren …"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "从 Wispr Flow 或 Handy 导入…"
+          }
+        }
+      }
+    },
+    "This file does not have a supported import format.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Diese Datei hat kein unterstütztes Importformat."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此文件的导入格式不受支持。"
+          }
+        }
+      }
+    },
+    "The source could not be read safely. Quitting the source app and trying again may help. Nothing was imported.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Quelle konnte nicht sicher gelesen werden. Beende gegebenenfalls die Quell-App und versuche es erneut. Es wurde nichts importiert."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法安全读取来源。退出来源应用后重试可能有帮助。未导入任何内容。"
+          }
+        }
+      }
+    },
+    "The source exceeds the import limits. Nothing was imported.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Quelle überschreitet die Importgrenzen. Es wurde nichts importiert."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "来源超出导入限制。未导入任何内容。"
+          }
+        }
+      }
+    },
+    "The import could not be saved. Nothing was imported.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Import konnte nicht gespeichert werden. Es wurde nichts importiert."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法保存导入内容。未导入任何内容。"
+          }
+        }
+      }
+    },
+    "No source file was found. Use Choose File to locate it.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Quelldatei gefunden. Suche sie über „Datei auswählen“."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未找到来源文件。请使用“选择文件”定位文件。"
+          }
+        }
+      }
+    },
+    "Your list changed while you were reviewing. Nothing was imported. Please review the updated list.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Liste wurde während der Prüfung geändert. Es wurde nichts importiert. Bitte prüfe die aktualisierte Liste."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "列表在预览期间发生了变化。未导入任何内容。请检查更新后的列表。"
+          }
+        }
+      }
+    },
+    "Import Words from Another App": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wörter aus anderer App importieren"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "从其他应用导入词语"
+          }
+        }
+      }
+    },
+    "Import Snippets from Another App": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Snippets aus anderer App importieren"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "从其他应用导入文本片段"
+          }
+        }
+      }
+    },
+    "Review the entries before importing. Existing entries will not be overwritten.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Prüfe die Einträge vor dem Import. Vorhandene Einträge werden nicht überschrieben."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请在导入前检查条目。现有条目不会被覆盖。"
+          }
+        }
+      }
+    },
+    "Source": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quelle"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "来源"
+          }
+        }
+      }
+    },
+    "Read from App": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aus App lesen"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "从应用读取"
+          }
+        }
+      }
+    },
+    "Choose File...": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Datei auswählen …"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "选择文件…"
+          }
+        }
+      }
+    },
+    "Reading source...": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Quelle wird gelesen …"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在读取来源…"
+          }
+        }
+      }
+    },
+    "Term / Trigger": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Begriff / Auslöser"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "词语 / 触发词"
+          }
+        }
+      }
+    },
+    "Status": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Status"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "状态"
+          }
+        }
+      }
+    },
+    "Import Selected": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Auswahl importieren"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "导入所选内容"
+          }
+        }
+      }
+    },
+    "No compatible entries found. Nothing was changed.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine kompatiblen Einträge gefunden. Es wurde nichts geändert."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未找到兼容条目。未进行任何更改。"
+          }
+        }
+      }
+    },
+    "Snippets containing TypeWhisper dynamic placeholders are excluded to preserve literal text.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Snippets mit dynamischen TypeWhisper-Platzhaltern werden ausgelassen, damit sich der Text nicht ungewollt verändert."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "含有 TypeWhisper 动态占位符的文本片段将被排除，以保留原始文本含义。"
+          }
+        }
+      }
+    },
+    "New": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Neu"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "新增"
+          }
+        }
+      }
+    },
+    "Duplicate": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Duplikat"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重复"
+          }
+        }
+      }
+    },
+    "Conflict": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Konflikt"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "冲突"
+          }
+        }
+      }
+    },
+    "Import from Another App...": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Aus anderer App importieren …"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "从其他应用导入…"
+          }
+        }
+      }
+    },
+    "%lld selected, %lld duplicates, %lld conflicts.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld ausgewählt, %lld Duplikate, %lld Konflikte."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已选择 %lld 项，%lld 项重复，%lld 项冲突。"
+          }
+        }
+      }
+    },
+    "%lld entries excluded (deleted, another entry type, empty or incompatible).": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld Einträge ausgelassen (gelöscht, anderer Eintragstyp, leer oder inkompatibel)."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已排除 %lld 个条目（已删除、其他类型、空白或不兼容）。"
+          }
+        }
+      }
+    },
     "Canary needs an explicit source language. Choose Greek or English for Sophea in Dictation settings." : {
       "localizations" : {
         "de" : {

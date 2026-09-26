@@ -47,6 +47,47 @@ final class SnippetService: ObservableObject {
         }
     }
 
+    var appImportSnapshot: [AppVocabularyImport.Existing] {
+        snippets.map {
+            AppVocabularyImport.Existing(id: $0.id, entry: AppVocabularyImport.Entry(kind: .snippet, original: $0.trigger, replacement: $0.replacement),
+                                         caseSensitive: $0.caseSensitive, isEnabled: $0.isEnabled)
+        }
+    }
+
+    #if DEBUG
+    var appImportSaveOverride: (() throws -> Void)?
+    #endif
+
+    /// One reviewed destination is committed in one save. A stale review never writes.
+    func importReviewedEntries(
+        _ entries: [AppVocabularyImport.Entry],
+        baseline: [AppVocabularyImport.Existing]
+    ) throws -> Bool {
+        guard let context = modelContext else { throw AppVocabularyImportError.storageUnavailable }
+        loadSnippets()
+        guard appImportSnapshot == baseline else { return false }
+        guard entries.allSatisfy({ $0.kind == .snippet }) else {
+            throw AppVocabularyImportError.invalidFormat
+        }
+        let review = AppVocabularyImport.review(.init(entries: entries), existing: baseline)
+        for row in review where row.outcome == .add {
+            let entry = row.entry
+            context.insert(Snippet(trigger: entry.original, replacement: entry.replacement ?? ""))
+        }
+        do {
+            #if DEBUG
+            try appImportSaveOverride?()
+            #endif
+            try context.save()
+            loadSnippets()
+            return true
+        } catch {
+            context.rollback()
+            loadSnippets()
+            throw AppVocabularyImportError.storageUnavailable
+        }
+    }
+
     func addSnippet(trigger: String, replacement: String, caseSensitive: Bool = false) {
         guard let context = modelContext else { return }
 

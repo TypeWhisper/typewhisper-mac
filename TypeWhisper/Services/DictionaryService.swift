@@ -130,6 +130,47 @@ final class DictionaryService: ObservableObject {
         }
     }
 
+    var appImportSnapshot: [AppVocabularyImport.Existing] {
+        entries.map {
+            AppVocabularyImport.Existing(id: $0.id, entry: AppVocabularyImport.Entry(kind: $0.type == .term ? .term : .correction, original: $0.original, replacement: $0.replacement),
+                                         caseSensitive: $0.caseSensitive, isEnabled: $0.isEnabled)
+        }
+    }
+
+    #if DEBUG
+    var appImportSaveOverride: (() throws -> Void)?
+    #endif
+
+    /// One reviewed destination is committed in one save. A stale review never writes.
+    func importReviewedEntries(
+        _ entries: [AppVocabularyImport.Entry],
+        baseline: [AppVocabularyImport.Existing]
+    ) throws -> Bool {
+        guard let context = modelContext else { throw AppVocabularyImportError.storageUnavailable }
+        loadEntries()
+        guard appImportSnapshot == baseline else { return false }
+        guard entries.allSatisfy({ $0.kind != .snippet }) else {
+            throw AppVocabularyImportError.invalidFormat
+        }
+        let review = AppVocabularyImport.review(.init(entries: entries), existing: baseline)
+        for row in review where row.outcome == .add {
+            let entry = row.entry
+            context.insert(DictionaryEntry(type: entry.kind == .term ? .term : .correction, original: entry.original, replacement: entry.replacement))
+        }
+        do {
+            #if DEBUG
+            try appImportSaveOverride?()
+            #endif
+            try context.save()
+            loadEntries()
+            return true
+        } catch {
+            context.rollback()
+            loadEntries()
+            throw AppVocabularyImportError.storageUnavailable
+        }
+    }
+
     func addEntry(
         type: DictionaryEntryType,
         original: String,
