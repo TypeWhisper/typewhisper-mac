@@ -129,6 +129,20 @@ final class PostProcessingPipeline {
             }
         }
 
+        // Final time-notation pass: a post-processor plugin with a priority above
+        // the built-in steps can still introduce a `20.45 Uhr` after the late
+        // Time Notation step ran.
+        let finalText = TranscriptionNormalizationService.normalizeTimeNotation(
+            result,
+            languages: normalizationLanguages(context: context, dictationContext: dictationContext)
+        )
+        if finalText != result {
+            result = finalText
+            if !appliedSteps.contains("Time Notation") {
+                appliedSteps.append("Time Notation")
+            }
+        }
+
         return PostProcessingResult(text: result, appliedSteps: appliedSteps, fallback: nil)
     }
 

@@ -330,10 +330,14 @@ final class TranscriptionNormalizationServiceTests: XCTestCase {
         let appSupportDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
         try FileManager.default.createDirectory(at: appSupportDirectory, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: appSupportDirectory) }
 
-        let dictionaryService = DictionaryService(appSupportDirectory: appSupportDirectory)
+        let previousPluginManager = PluginManager.shared
         PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        defer {
+            PluginManager.shared = previousPluginManager
+            try? FileManager.default.removeItem(at: appSupportDirectory)
+        }
+        let dictionaryService = DictionaryService(appSupportDirectory: appSupportDirectory)
         let profileStore = DictationPunctuationProfileStore(defaults: UserDefaults(suiteName: #function)!, storageKey: #function)
         dictionaryService.addEntry(type: .correction, original: "TIME", replacement: "20.45 Uhr")
 
