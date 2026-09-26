@@ -610,4 +610,129 @@ final class DictationInsertionTextFormatterTests: XCTestCase {
             " really? "
         )
     }
+
+    // MARK: - Standalone value final-period cleanup (#1333)
+
+    private func emptyFieldInsertionContext() -> TextInsertionService.InsertionContext {
+        TextInsertionService.InsertionContext(
+            value: "",
+            selectedRange: NSRange(location: 0, length: 0),
+            selectedText: nil,
+            previousCharacter: nil,
+            nextCharacter: nil
+        )
+    }
+
+    private func assertStandaloneCleanup(
+        _ input: String,
+        becomes expected: String,
+        enabled: Bool = true,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertEqual(
+            DictationInsertionTextFormatter.textForInsertion(
+                input,
+                insertionContext: emptyFieldInsertionContext(),
+                standaloneValueFinalPeriodCleanupEnabled: enabled
+            ),
+            expected,
+            file: file,
+            line: line
+        )
+    }
+
+    func testStandaloneCleanupStripsFinalPeriodFromEmail() {
+        assertStandaloneCleanup("name@example.com.", becomes: "name@example.com")
+    }
+
+    func testStandaloneCleanupStripsFinalPeriodFromURLs() {
+        assertStandaloneCleanup("https://example.com/docs.", becomes: "https://example.com/docs")
+        assertStandaloneCleanup("www.example.com.", becomes: "www.example.com")
+        assertStandaloneCleanup("example.com.", becomes: "example.com")
+    }
+
+    func testStandaloneCleanupStripsFinalPeriodFromDecimalNumbers() {
+        assertStandaloneCleanup("3.14.", becomes: "3.14")
+        assertStandaloneCleanup("1,5.", becomes: "1,5")
+        assertStandaloneCleanup("1,000.50.", becomes: "1,000.50")
+        assertStandaloneCleanup("1.000,50.", becomes: "1.000,50")
+    }
+
+    func testStandaloneCleanupStripsFinalPeriodFromPhoneNumbers() {
+        assertStandaloneCleanup("+49 171 2345678.", becomes: "+49 171 2345678")
+        assertStandaloneCleanup("(030) 123456.", becomes: "(030) 123456")
+    }
+
+    func testStandaloneCleanupStripsFinalPeriodFromVersionStrings() {
+        assertStandaloneCleanup("1.2.3.", becomes: "1.2.3")
+        assertStandaloneCleanup("v2.10.4.", becomes: "v2.10.4")
+    }
+
+    func testStandaloneCleanupPreservesAbbreviations() {
+        assertStandaloneCleanup("Dr.", becomes: "Dr.")
+        assertStandaloneCleanup("U.S.", becomes: "U.S.")
+        assertStandaloneCleanup("e.g.", becomes: "e.g.")
+        assertStandaloneCleanup("Dr.med.", becomes: "Dr.med.")
+        assertStandaloneCleanup("Ph.D.", becomes: "Ph.D.")
+    }
+
+    func testStandaloneCleanupPreservesProseAndSentencesEndingInValues() {
+        assertStandaloneCleanup("Hello world.", becomes: "Hello world.")
+        assertStandaloneCleanup(
+            "Contact me at name@example.com.",
+            becomes: "Contact me at name@example.com."
+        )
+    }
+
+    func testStandaloneCleanupPreservesAmbiguousNumericForms() {
+        assertStandaloneCleanup("19.04.2026.", becomes: "19.04.2026.")
+        assertStandaloneCleanup("2026-09-27.", becomes: "2026-09-27.")
+        assertStandaloneCleanup("123.", becomes: "123.")
+    }
+
+    func testStandaloneCleanupPreservesEllipsesAndOtherPunctuation() {
+        assertStandaloneCleanup("Wait...", becomes: "Wait...")
+        assertStandaloneCleanup("Really?", becomes: "Really?")
+    }
+
+    func testStandaloneCleanupRespectsOptOut() {
+        assertStandaloneCleanup("name@example.com.", becomes: "name@example.com.", enabled: false)
+    }
+
+    func testStandaloneCleanupDoesNotApplyAtEndOfExistingSentence() {
+        let context = TextInsertionService.InsertionContext(
+            value: "Email: ",
+            selectedRange: NSRange(location: 7, length: 0),
+            selectedText: nil,
+            previousCharacter: " ",
+            nextCharacter: nil
+        )
+
+        XCTAssertEqual(
+            DictationInsertionTextFormatter.textForInsertion(
+                "name@example.com.",
+                insertionContext: context
+            ),
+            "name@example.com."
+        )
+    }
+
+    func testStandaloneCleanupDoesNotDoubleStripMidSentence() {
+        let context = TextInsertionService.InsertionContext(
+            value: "ab",
+            selectedRange: NSRange(location: 1, length: 0),
+            selectedText: nil,
+            previousCharacter: "a",
+            nextCharacter: "b"
+        )
+
+        XCTAssertEqual(
+            DictationInsertionTextFormatter.textForInsertion(
+                "name@example.com.",
+                insertionContext: context
+            ),
+            " name@example.com "
+        )
+    }
 }

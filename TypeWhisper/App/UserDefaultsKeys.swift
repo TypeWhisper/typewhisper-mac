@@ -121,6 +121,7 @@ enum UserDefaultsKeys {
 
     // MARK: - Formatting
     static let appFormattingEnabled = "appFormattingEnabled"
+    static let stripFinalPeriodFromStandaloneValuesEnabled = "stripFinalPeriodFromStandaloneValuesEnabled"
     static let transcriptionNumberNormalizationEnabled = "transcriptionNumberNormalizationEnabled"
     static let transcriptionNumberNormalizationMinimumValue = "transcriptionNumberNormalizationMinimumValue"
     static let dictationPunctuationProfiles = "dictationPunctuationProfiles"

@@ -1153,6 +1153,15 @@ struct RecordingSettingsView: View {
                 Text(String(localized: "Smaller numbers stay as spoken words. Decimals and digit sequences still convert to digits. Existing digits stay unchanged."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
+
+                Toggle(String(localized: "Strip final period from standalone values"), isOn: Binding(
+                    get: { UserDefaults.standard.bool(forKey: UserDefaultsKeys.stripFinalPeriodFromStandaloneValuesEnabled) },
+                    set: { UserDefaults.standard.set($0, forKey: UserDefaultsKeys.stripFinalPeriodFromStandaloneValuesEnabled) }
+                ))
+
+                Text(String(localized: "Removes a model-added period when a dictated email address, URL, number, or version string is inserted on its own, keeping the value usable in form fields. Abbreviations, dates, and sentences are left alone."))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
 
                 Section(String(localized: "Audio Ducking")) {

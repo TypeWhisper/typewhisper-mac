@@ -2696,7 +2696,9 @@ final class DictationViewModel: ObservableObject {
                     let insertionText = DictationInsertionTextFormatter.textForInsertion(
                         text,
                         insertionContext: insertionContext,
-                        contextualInsertionEnabled: contextualInsertionEnabled
+                        contextualInsertionEnabled: contextualInsertionEnabled,
+                        standaloneValueFinalPeriodCleanupEnabled: DictationInsertionTextFormatter
+                            .standaloneValueFinalPeriodCleanupEnabled()
                     )
                     let shouldObservePostInsertionEdits = (
                         shouldTrackTargetAppCorrectionLearning
@@ -4570,10 +4572,15 @@ enum DictationInsertionTextFormatter {
         defaults.bool(forKey: UserDefaultsKeys.appFormattingEnabled)
     }
 
+    static func standaloneValueFinalPeriodCleanupEnabled(defaults: UserDefaults = .standard) -> Bool {
+        defaults.bool(forKey: UserDefaultsKeys.stripFinalPeriodFromStandaloneValuesEnabled)
+    }
+
     static func textForInsertion(
         _ text: String,
         insertionContext: TextInsertionService.InsertionContext? = nil,
-        contextualInsertionEnabled: Bool = true
+        contextualInsertionEnabled: Bool = true,
+        standaloneValueFinalPeriodCleanupEnabled: Bool = true
     ) -> String {
         guard contextualInsertionEnabled, let insertionContext else {
             return text
@@ -4585,6 +4592,13 @@ enum DictationInsertionTextFormatter {
             result = lowercasingFirstWordIfSafe(result)
         }
         if shouldStripFinalPeriod(boundaries) {
+            result = strippingSingleFinalPeriod(result)
+        }
+        if shouldStripStandaloneValueFinalPeriod(
+            result,
+            boundaries: boundaries,
+            enabled: standaloneValueFinalPeriodCleanupEnabled
+        ) {
             result = strippingSingleFinalPeriod(result)
         }
 
@@ -4693,6 +4707,119 @@ enum DictationInsertionTextFormatter {
             return false
         }
         return isWordLike(next) || closingPunctuation.contains(next)
+    }
+
+    /// Strips a model-added final period when the whole transcript is a
+    /// standalone value (email address, URL, number, version string) dropped
+    /// into an empty field. Mutually exclusive with the mid-sentence rule
+    /// above — that one needs surrounding text, this one needs none — so a
+    /// period can only ever be stripped once.
+    private static func shouldStripStandaloneValueFinalPeriod(
+        _ text: String,
+        boundaries: InsertionBoundaries,
+        enabled: Bool
+    ) -> Bool {
+        guard enabled,
+              boundaries.previousNonWhitespaceCharacter == nil,
+              boundaries.nextNonWhitespaceCharacter == nil
+        else {
+            return false
+        }
+        return StandaloneValueFinalPeriodCleanup.shouldStripFinalPeriod(from: text)
+    }
+
+    /// Decides whether a transcript standing on its own is a value whose final
+    /// period was added by the model rather than dictated, as in
+    /// `name@example.com.` typed into an empty field.
+    ///
+    /// Conservative on purpose: only whole-text matches for email addresses,
+    /// URLs, decimal numbers, phone numbers, and version strings qualify.
+    /// Abbreviations (`Dr.`, `U.S.`), prose, and ambiguous numeric forms such
+    /// as dates keep their period.
+    private enum StandaloneValueFinalPeriodCleanup {
+        static func shouldStripFinalPeriod(from text: String) -> Bool {
+            guard text.hasSuffix("."), !text.hasSuffix("..") else { return false }
+            let candidate = String(text.dropLast())
+            guard !candidate.isEmpty else { return false }
+            if isAbbreviation(text) { return false }
+            if isDateLike(candidate) { return false }
+            return isEmailAddress(candidate)
+                || isWebAddress(candidate)
+                || isDecimalNumber(candidate)
+                || isVersionString(candidate)
+                || isPhoneNumber(candidate)
+        }
+
+        /// `Dr.`, `U.S.`, `e.g.`, `Dr.med.`, `Ph.D.` — never values. Each
+        /// dot-separated group is either a single letter or a known
+        /// abbreviation word, so `file.txt.` still counts as a value.
+        private static let abbreviationExpression = try? NSRegularExpression(
+            pattern: #"^(?:(?:[A-Za-z]|Dr|Mr|Mrs|Ms|No|St|Jr|Sr|Prof|Inc|Ltd|Co|etc|vs|bzw|ca|ggf|evtl|Nr|Tel|med|rer|nat|ing|dipl|phil|Ph)\.)+$"#,
+            options: [.caseInsensitive]
+        )
+
+        private static let emailExpression = try? NSRegularExpression(
+            pattern: #"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$"#
+        )
+
+        private static let urlExpression = try? NSRegularExpression(
+            pattern: #"^(?:https?://|ftp://|www\.)\S+$|^(?:[A-Za-z0-9](?:[A-Za-z0-9\-]*[A-Za-z0-9])?\.)+[A-Za-z]{2,}(?::\d+)?(?:/\S*)?$"#,
+            options: [.caseInsensitive]
+        )
+
+        /// `3.14`, `1,5`, `1,000.50`, `1.000,50` — both English and German forms.
+        private static let decimalExpression = try? NSRegularExpression(
+            pattern: #"^\d{1,3}(?:[.,]\d{3})+(?:[.,]\d+)?$|^\d+[.,]\d+$"#
+        )
+
+        /// `19.04.2026`, `2026-09-27` — ambiguous with versions, so untouched.
+        private static let dateExpression = try? NSRegularExpression(
+            pattern: #"^\d{1,2}[./\-]\d{1,2}[./\-]\d{2,4}$|^\d{4}[./\-]\d{1,2}[./\-]\d{1,2}$"#
+        )
+
+        private static let versionExpression = try? NSRegularExpression(
+            pattern: #"^v?\d+(?:\.\d+){2,}$"#,
+            options: [.caseInsensitive]
+        )
+
+        private static let phoneExpression = try? NSRegularExpression(
+            pattern: #"^[+\d(][\d\s\-/.()]*$"#
+        )
+
+        private static func isAbbreviation(_ text: String) -> Bool {
+            matches(abbreviationExpression, text)
+        }
+
+        private static func isEmailAddress(_ candidate: String) -> Bool {
+            matches(emailExpression, candidate)
+        }
+
+        private static func isWebAddress(_ candidate: String) -> Bool {
+            matches(urlExpression, candidate)
+        }
+
+        private static func isDecimalNumber(_ candidate: String) -> Bool {
+            matches(decimalExpression, candidate)
+        }
+
+        private static func isDateLike(_ candidate: String) -> Bool {
+            matches(dateExpression, candidate)
+        }
+
+        private static func isVersionString(_ candidate: String) -> Bool {
+            matches(versionExpression, candidate)
+        }
+
+        private static func isPhoneNumber(_ candidate: String) -> Bool {
+            guard matches(phoneExpression, candidate) else { return false }
+            return candidate.filter(\.isWholeNumber).count >= 6
+        }
+
+        private static func matches(_ expression: NSRegularExpression?, _ text: String) -> Bool {
+            guard let expression else { return false }
+            let range = NSRange(text.startIndex..<text.endIndex, in: text)
+            return expression.firstMatch(in: text, options: [], range: range) != nil
+        }
     }
 
     private static func lowercasingFirstWordIfSafe(_ text: String) -> String {
