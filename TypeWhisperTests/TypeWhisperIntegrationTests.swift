@@ -3698,6 +3698,17 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     func testDictationStartReturnsConflictWhenRecordingCannotStart() async throws {
+        let selectedEngineKey = UserDefaultsKeys.selectedEngine
+        let originalSelection = UserDefaults.standard.object(forKey: selectedEngineKey)
+        UserDefaults.standard.removeObject(forKey: selectedEngineKey)
+        defer {
+            if let originalSelection {
+                UserDefaults.standard.set(originalSelection, forKey: selectedEngineKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: selectedEngineKey)
+            }
+        }
+
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         var context: APIContext?
         defer {
@@ -3714,7 +3725,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let json = try Self.jsonObject(response)
 
         XCTAssertEqual(response.status, 409)
-        XCTAssertEqual((json["error"] as? [String: Any])?["message"] as? String, TranscriptionEngineError.modelNotLoaded.localizedDescription)
+        XCTAssertEqual((json["error"] as? [String: Any])?["message"] as? String, TranscriptionEngineError.noEngineSelected.localizedDescription)
     }
 
     func testDictationStartEndpointWaitsForBluetoothReadinessAndKeepsResponseSchema() async throws {
@@ -10070,6 +10081,10 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
     @MainActor
     func testApiStartRecording_showsSelectModelErrorWhenNoProviderIsSelected() async throws {
+        let previousSettingsNavigationCoordinator = SettingsNavigationCoordinator.shared
+        let navigationCoordinator = SettingsNavigationCoordinator()
+        SettingsNavigationCoordinator.shared = navigationCoordinator
+        defer { SettingsNavigationCoordinator.shared = previousSettingsNavigationCoordinator }
         let selectedEngineKey = UserDefaultsKeys.selectedEngine
         let originalSelection = UserDefaults.standard.object(forKey: selectedEngineKey)
         UserDefaults.standard.removeObject(forKey: selectedEngineKey)
@@ -10167,8 +10182,16 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(dictationViewModel.state, .inserting)
         XCTAssertEqual(
             dictationViewModel.actionFeedbackMessage,
-            TranscriptionEngineError.modelNotLoaded.localizedDescription
+            TranscriptionEngineError.noEngineSelected.localizedDescription
         )
+        XCTAssertEqual(
+            dictationViewModel.actionFeedbackActionTitle,
+            try TestSupport.localizedCatalogValueForCurrentLocale(for: "Open Settings")
+        )
+
+        dictationViewModel.performActionFeedbackAction(openRecoverySettingsWindow: false)
+
+        XCTAssertEqual(navigationCoordinator.request?.tab, .dictation)
     }
 
     @MainActor

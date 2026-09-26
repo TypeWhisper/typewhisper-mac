@@ -3,28 +3,48 @@ import Combine
 import TypeWhisperPluginSDK
 
 enum TranscriptionEngineError: LocalizedError {
+    case noEngineSelected
+    case engineUnavailable(engineName: String?, reason: String?)
     case modelNotLoaded
     case appleSpeechModelNotLoaded
-    case unsupportedTask(String)
     case transcriptionFailed(String)
     case modelLoadFailed(String)
     case modelDownloadFailed(String)
 
     var errorDescription: String? {
         switch self {
+        case .noEngineSelected:
+            "No transcription engine selected. Choose one in Settings > Dictation > Engine, or install one in Integrations."
+        case .engineUnavailable(let engineName, let reason):
+            [
+                "\(engineName ?? "The selected transcription engine") is not available.",
+                Self.sentence(reason),
+                "Check its setup in Integrations or choose another engine in Settings > Dictation.",
+            ].compactMap { $0 }.joined(separator: " ")
         case .modelNotLoaded:
-            "No model loaded. Please download and select a model first."
+            "The selected model is not ready yet. Download or load it in Integrations, or choose another model in Settings > Dictation."
         case .appleSpeechModelNotLoaded:
             "Apple Speech needs a language model. Open Integrations > Apple Speech and select a language model, or choose a specific transcription language."
-        case .unsupportedTask(let detail):
-            "Unsupported task: \(detail)"
         case .transcriptionFailed(let detail):
-            "Transcription failed: \(detail)"
+            ["Transcription failed.", Self.sentence(detail), "Please try again."]
+                .compactMap { $0 }.joined(separator: " ")
         case .modelLoadFailed(let detail):
-            "Failed to load model: \(detail)"
+            [
+                "Failed to load the selected model.",
+                Self.sentence(detail),
+                "Try again, or choose another model in Settings > Dictation.",
+            ].compactMap { $0 }.joined(separator: " ")
         case .modelDownloadFailed(let detail):
-            "Failed to download model: \(detail)"
+            ["Failed to download the model.", Self.sentence(detail), "Check your connection and try again."]
+                .compactMap { $0 }.joined(separator: " ")
         }
+    }
+
+    private static func sentence(_ text: String?) -> String? {
+        guard let trimmed = text?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty else { return nil }
+        guard let last = trimmed.last, !".!?".contains(last) else { return trimmed }
+        return trimmed + "."
     }
 }
 
@@ -240,9 +260,21 @@ final class ModelManagerService: ObservableObject {
     /// True when the selected engine plugin exists. The actual model readiness check
     /// happens in transcribe() which handles restoration via triggerRestoreModel().
     var canTranscribe: Bool {
-        guard let providerId = selectedProviderId,
-              let engine = PluginManager.shared.transcriptionEngine(for: providerId) else { return false }
-        return canUseForTranscription(engine)
+        transcriptionReadinessError(providerId: selectedProviderId) == nil
+    }
+
+    /// Explains why the given engine cannot start a transcription, before any model preparation.
+    /// Returns nil when the engine exists and is usable; model readiness is checked in transcribe().
+    func transcriptionReadinessError(providerId: String?) -> TranscriptionEngineError? {
+        guard let providerId else { return .noEngineSelected }
+        guard let engine = PluginManager.shared.transcriptionEngine(for: providerId) else {
+            return .engineUnavailable(engineName: nil, reason: "It is not installed or is disabled.")
+        }
+        let authStatus = transcriptionAuthStatus(for: engine)
+        guard authStatus.isAvailable else {
+            return .engineUnavailable(engineName: engine.providerDisplayName, reason: authStatus.unavailableReason)
+        }
+        return nil
     }
 
     var activeEngineName: String? {
@@ -644,15 +676,9 @@ final class ModelManagerService: ObservableObject {
     ) async throws -> LiveTranscriptionSessionHandle? {
         let providerId = engineOverrideId ?? selectedProviderId
         guard let providerId,
-              let plugin = PluginManager.shared.transcriptionEngine(for: providerId) else {
-            throw TranscriptionEngineError.modelNotLoaded
-        }
-
-        let authStatus = transcriptionAuthStatus(for: plugin)
-        guard authStatus.isAvailable else {
-            throw TranscriptionEngineError.unsupportedTask(
-                authStatus.unavailableReason ?? "Transcription is not available for this engine."
-            )
+              let plugin = PluginManager.shared.transcriptionEngine(for: providerId),
+              canUseForTranscription(plugin) else {
+            throw transcriptionReadinessError(providerId: providerId) ?? TranscriptionEngineError.noEngineSelected
         }
 
         beginAutoUnloadProtectedUse(of: plugin)
@@ -820,15 +846,9 @@ final class ModelManagerService: ObservableObject {
     ) async throws -> TranscriptionResult {
         let providerId = engineOverrideId ?? selectedProviderId
         guard let providerId,
-              let plugin = PluginManager.shared.transcriptionEngine(for: providerId) else {
-            throw TranscriptionEngineError.modelNotLoaded
-        }
-
-        let authStatus = transcriptionAuthStatus(for: plugin)
-        guard authStatus.isAvailable else {
-            throw TranscriptionEngineError.unsupportedTask(
-                authStatus.unavailableReason ?? "Transcription is not available for this engine."
-            )
+              let plugin = PluginManager.shared.transcriptionEngine(for: providerId),
+              canUseForTranscription(plugin) else {
+            throw transcriptionReadinessError(providerId: providerId) ?? TranscriptionEngineError.noEngineSelected
         }
 
         beginAutoUnloadProtectedUse(of: plugin)
@@ -980,15 +1000,9 @@ final class ModelManagerService: ObservableObject {
     ) async throws -> TranscriptionResult {
         let providerId = engineOverrideId ?? selectedProviderId
         guard let providerId,
-              let plugin = PluginManager.shared.transcriptionEngine(for: providerId) else {
-            throw TranscriptionEngineError.modelNotLoaded
-        }
-
-        let authStatus = transcriptionAuthStatus(for: plugin)
-        guard authStatus.isAvailable else {
-            throw TranscriptionEngineError.unsupportedTask(
-                authStatus.unavailableReason ?? "Transcription is not available for this engine."
-            )
+              let plugin = PluginManager.shared.transcriptionEngine(for: providerId),
+              canUseForTranscription(plugin) else {
+            throw transcriptionReadinessError(providerId: providerId) ?? TranscriptionEngineError.noEngineSelected
         }
 
         beginAutoUnloadProtectedUse(of: plugin)

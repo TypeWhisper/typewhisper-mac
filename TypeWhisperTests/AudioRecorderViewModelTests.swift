@@ -1237,7 +1237,7 @@ final class AudioRecorderViewModelTests: XCTestCase {
         XCTAssertEqual(fixture.plugin.restoreCount, 1)
         XCTAssertFalse(fixture.plugin.isConfigured)
         XCTAssertEqual(failure.phase, .finalTranscription)
-        XCTAssertTrue(failure.providerError.contains("Failed to load model"))
+        XCTAssertTrue(failure.providerError.contains("Failed to load the selected model"))
         XCTAssertTrue(failure.providerError.contains(restoreMessage))
         XCTAssertTrue(fixture.viewModel.errorMessage?.contains(restoreMessage) == true)
         XCTAssertFalse(FileManager.default.fileExists(atPath: fixture.transcriptURL.path))
