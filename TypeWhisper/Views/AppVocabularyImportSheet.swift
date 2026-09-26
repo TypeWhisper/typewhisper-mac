@@ -43,6 +43,12 @@ struct AppVocabularyImportSheet: View {
                         .disabled(model.isLoading)
                 }
 
+                if model.source == .wisprCSV {
+                    Toggle(String(localized: "First row is a header"), isOn: $model.csvHasHeader)
+                        .onChange(of: model.csvHasHeader) { _, _ in model.reloadCSV() }
+                        .disabled(model.isLoading)
+                }
+
                 if model.isLoading {
                     ProgressView(String(localized: "Reading source..."))
                         .frame(maxWidth: .infinity, minHeight: 80)

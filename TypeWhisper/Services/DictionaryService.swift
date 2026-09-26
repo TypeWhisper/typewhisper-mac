@@ -153,9 +153,12 @@ final class DictionaryService: ObservableObject {
             throw AppVocabularyImportError.invalidFormat
         }
         let review = AppVocabularyImport.review(.init(entries: entries), existing: baseline)
+        var inserted: [DictionaryEntry] = []
         for row in review where row.outcome == .add {
             let entry = row.entry
-            context.insert(DictionaryEntry(type: entry.kind == .term ? .term : .correction, original: entry.original, replacement: entry.replacement))
+            let item = DictionaryEntry(type: entry.kind == .term ? .term : .correction, original: entry.original, replacement: entry.replacement)
+            context.insert(item)
+            inserted.append(item)
         }
         do {
             #if DEBUG
@@ -165,7 +168,9 @@ final class DictionaryService: ObservableObject {
             loadEntries()
             return true
         } catch {
-            context.rollback()
+            // Preserve unrelated pending changes, including deferred dictation counters.
+            for item in inserted { context.delete(item) }
+            context.processPendingChanges()
             loadEntries()
             throw AppVocabularyImportError.storageUnavailable
         }

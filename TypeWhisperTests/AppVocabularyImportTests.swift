@@ -81,9 +81,60 @@ final class AppVocabularyImportTests: XCTestCase {
         XCTAssertEqual(count, 6)
     }
 
+    func testHeaderlessCSVPreservesHeaderLikeFirstEntries() throws {
+        for word in ["word", "term", "phrase", "original", "trigger"] {
+            let batch = try AppVocabularyImport.parseCSV(Data("\(word)\nsecond\n".utf8), destination: .dictionary)
+            XCTAssertEqual(batch.entries.map(\.original), [word, "second"])
+        }
+        let batch = try AppVocabularyImport.parseCSV(Data("original,replacement\nsecond,value\n".utf8), destination: .snippets)
+        XCTAssertEqual(batch.entries.map(\.original), ["original", "second"])
+    }
+
+    @MainActor
+    func testReviewUsesRuntimeUnicodeCaseFolding() throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+        let snippets = SnippetService(appSupportDirectory: dir)
+        snippets.addSnippet(trigger: "straße", replacement: "Keep")
+        XCTAssertEqual(snippets.applySnippets(to: "STRASSE"), "Keep")
+        let candidate = Entry(kind: .snippet, original: "STRASSE", replacement: "Different")
+        XCTAssertEqual(AppVocabularyImport.review(.init(entries: [candidate]), existing: snippets.appImportSnapshot).first?.outcome, .conflict)
+        for (a, b) in [("straße", "STRASSE"), ("ς", "Σ"), ("é", "e\u{301}")] {
+            let batch = AppVocabularyImport.Batch(entries: [Entry(kind: .term, original: a, replacement: nil), Entry(kind: .term, original: b, replacement: nil)])
+            XCTAssertEqual(AppVocabularyImport.review(batch, existing: []).map(\.outcome), [.add, .duplicate])
+        }
+    }
+
+    @MainActor
+    func testFailedImportsPreserveDeferredUsageCounts() throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+        let dictionary = DictionaryService(appSupportDirectory: dir)
+        dictionary.addEntry(type: .correction, original: "teh", replacement: "the")
+        XCTAssertEqual(dictionary.applyCorrections(to: "teh", deferUsageCountSave: true), "the")
+        dictionary.appImportSaveOverride = { throw CocoaError(.fileWriteOutOfSpace) }
+        XCTAssertThrowsError(try dictionary.importReviewedEntries([Entry(kind: .term, original: "Discard", replacement: nil)], baseline: dictionary.appImportSnapshot))
+        XCTAssertEqual(dictionary.entries.first?.usageCount, 1)
+        dictionary.saveDeferredUsageCounts()
+        let reloadedDictionary = DictionaryService(appSupportDirectory: dir)
+        XCTAssertEqual(reloadedDictionary.entries.map(\.original), ["teh"])
+        XCTAssertEqual(reloadedDictionary.entries.first?.usageCount, 1)
+
+        let snippets = SnippetService(appSupportDirectory: dir)
+        snippets.addSnippet(trigger: "sig", replacement: "Signature")
+        XCTAssertEqual(snippets.applySnippets(to: "sig", deferUsageCountSave: true), "Signature")
+        snippets.appImportSaveOverride = { throw CocoaError(.fileWriteOutOfSpace) }
+        XCTAssertThrowsError(try snippets.importReviewedEntries([Entry(kind: .snippet, original: "Discard", replacement: "No")], baseline: snippets.appImportSnapshot))
+        XCTAssertEqual(snippets.snippets.first?.usageCount, 1)
+        snippets.saveDeferredUsageCounts()
+        let reloadedSnippets = SnippetService(appSupportDirectory: dir)
+        XCTAssertEqual(reloadedSnippets.snippets.map(\.trigger), ["sig"])
+        XCTAssertEqual(reloadedSnippets.snippets.first?.usageCount, 1)
+    }
+
     func testCSVWordsCorrectionsBOMAndCRLF() throws {
         let data = Data("\u{FEFF}phrase,replacement\r\nKubernetes,\r\nante ropic,Anthropic\r\n\"ACME, Inc.\",\r\n".utf8)
-        let batch = try AppVocabularyImport.parseCSV(data, destination: .dictionary)
+        let batch = try AppVocabularyImport.parseCSV(data, destination: .dictionary, hasHeader: true)
         XCTAssertEqual(batch.entries, [
             Entry(kind: .term, original: "Kubernetes", replacement: nil),
             Entry(kind: .correction, original: "ante ropic", replacement: "Anthropic"),
@@ -93,7 +144,7 @@ final class AppVocabularyImportTests: XCTestCase {
 
     func testCSVSnippetWhitespaceQuotesAndMultiline() throws {
         let data = Data("trigger,replacement\r\nsig,\" Hello \"\"there\"\"\r\nRegards  \"\r\n".utf8)
-        let batch = try AppVocabularyImport.parseCSV(data, destination: .snippets)
+        let batch = try AppVocabularyImport.parseCSV(data, destination: .snippets, hasHeader: true)
         XCTAssertEqual(batch.entries.first?.replacement, " Hello \"there\"\nRegards  ")
     }
 
@@ -105,7 +156,7 @@ final class AppVocabularyImportTests: XCTestCase {
 
     func testSnippetPlaceholdersAreNotActivatedByImport() throws {
         let batch = try AppVocabularyImport.parseCSV(
-            Data("trigger,replacement\nclip,{{CLIPBOARD}}\ndate,{date:yyyy}\nplain,Hello\n".utf8), destination: .snippets)
+            Data("trigger,replacement\nclip,{{CLIPBOARD}}\ndate,{date:yyyy}\nplain,Hello\n".utf8), destination: .snippets, hasHeader: true)
         XCTAssertEqual(batch.entries.map(\.original), ["plain"])
         XCTAssertEqual(batch.excluded, 2)
     }
@@ -255,8 +306,52 @@ final class AppVocabularyImportTests: XCTestCase {
     func testWisprRejectsMalformedRowsWithoutPartialBatch() throws {
         try withDatabase { db, url, scratch in
             try execute(db, "INSERT INTO Dictionary VALUES ('1','valid',NULL,0,0), ('2','bad',NULL,2,0)")
-            XCTAssertThrowsError(try WisprFlowImportReader.read(url: url, destination: .dictionary, scratchParent: scratch))
+            var attempts = 0
+            XCTAssertThrowsError(try WisprFlowImportReader.read(url: url, destination: .dictionary, scratchParent: scratch, afterCopy: { attempts += 1 })) { error in
+                guard case AppVocabularyImportError.invalidFormat = error else { return XCTFail("Wrong error: \(error)") }
+            }
+            XCTAssertEqual(attempts, 1)
         }
+    }
+
+    func testWisprMissingTableReportsInvalidFormatWithoutRetrying() throws {
+        try withDatabase { db, url, scratch in
+            try execute(db, "DROP TABLE Dictionary")
+            var attempts = 0
+            XCTAssertThrowsError(try WisprFlowImportReader.read(url: url, destination: .dictionary, scratchParent: scratch, afterCopy: { attempts += 1 })) { error in
+                guard case AppVocabularyImportError.invalidFormat = error else { return XCTFail("Wrong error: \(error)") }
+            }
+            XCTAssertEqual(attempts, 1)
+        }
+    }
+
+    @MainActor
+    func testCSVHeaderChoiceReloadsPreviewWithoutWriting() async throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+        let dictionary = DictionaryService(appSupportDirectory: dir)
+        let snippets = SnippetService(appSupportDirectory: dir)
+        let model = AppVocabularyImportViewModel(destination: .dictionary, dictionary: dictionary, snippets: snippets)
+        let file = dir.appendingPathComponent("words.csv")
+        try Data("word\nSwift\n".utf8).write(to: file)
+        model.source = .wisprCSV
+        model.load(file)
+        try await waitForLoad(model)
+        XCTAssertEqual(model.rows.map(\.entry.original), ["word", "Swift"])
+        model.csvHasHeader = true
+        model.reloadCSV()
+        try await waitForLoad(model)
+        XCTAssertEqual(model.rows.map(\.entry.original), ["Swift"])
+        XCTAssertTrue(dictionary.entries.isEmpty)
+        model.csvHasHeader = false
+        model.reloadCSV()
+        try await waitForLoad(model)
+        XCTAssertEqual(model.rows.map(\.entry.original), ["word", "Swift"])
+        XCTAssertTrue(dictionary.entries.isEmpty)
+        model.reset()
+        model.reloadCSV()
+        XCTAssertNil(model.batch)
+        XCTAssertFalse(model.isLoading)
     }
 
     func testWisprVerifiesCopiedBytes() throws {
@@ -342,6 +437,7 @@ final class AppVocabularyImportTests: XCTestCase {
         let file = dir.appendingPathComponent("words.csv")
         try Data("word\nSwift\nKubernetes\n".utf8).write(to: file)
         model.source = .wisprCSV
+        model.csvHasHeader = true
         model.load(file)
         try await waitForLoad(model)
         XCTAssertNil(model.error)
@@ -365,6 +461,7 @@ final class AppVocabularyImportTests: XCTestCase {
         let file = dir.appendingPathComponent("words.csv")
         try Data("word\nSwift\n".utf8).write(to: file)
         model.source = .wisprCSV
+        model.csvHasHeader = true
         model.load(file)
         try await waitForLoad(model)
         dictionary.addEntry(type: .term, original: "Added while reviewing")

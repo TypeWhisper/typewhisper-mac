@@ -23,15 +23,16 @@ Supported sources:
 **Read from App** uses the standard macOS Application Support location. **Choose File…**
 also accepts a manually located database or settings file. CSV supports UTF-8, an
 optional BOM/header, quoted commas, escaped quotes, and multiline expansions.
+The first row is preserved by default; select **First row is a header** to omit it.
 
 Nothing is saved until **Import Selected** is clicked. The review shows new entries,
 duplicates, conflicts and excluded counts. Existing entries are never overwritten or
 re-enabled. Identical text with different case-sensitivity or enabled state is a
 conflict, not a duplicate. Selecting a preview row shows its complete content in a
-scrollable detail area. Trigger/original collisions are compared without case sensitivity; the
+scrollable detail area. Trigger/original collisions are compared using Unicode case folding; the
 first source entry wins. A changed destination invalidates the review and requires a
 new confirmation. Dictionary and snippet imports are separate, single-store saves.
-Save failures roll back the import.
+Save failures remove only the import's new objects and preserve pending usage counts.
 
 Wispr Flow's database and WAL are copied into a private temporary directory. Source
 parts are checked before and after copying using SHA-256 and file metadata; copied
@@ -39,7 +40,8 @@ bytes must match. The source is never opened with SQLite. Only the private copy 
 opened read/write so SQLite can recreate missing WAL sidecars after a clean shutdown;
 `query_only=ON` prevents data changes through queries. The copy is removed after reading.
 A rollback journal, symlink, invalid schema or
-unstable snapshot prevents import. Acquisition retries up to three times. Handy's
+unstable snapshot prevents import. Acquisition retries up to three times for transient failures. Stable unsupported
+schemas and malformed rows report a format error without retrying. Handy's
 JSON is accepted only after two identical reads decode successfully.
 
 Deleted Wispr Flow rows and rows belonging to the other destination are excluded.
@@ -80,12 +82,13 @@ xcodebuild test -skipPackagePluginValidation -project TypeWhisper.xcodeproj \
 Tests use synthetic databases matching the verified schemas, including committed
 WAL data, cleanly closed WAL databases without sidecars, same-size source mutations with restored timestamps, copy tampering,
 journals, symlinks, malformed rows, row limits, conflicts, stale reviews and failed
-saves. They do not establish compatibility with every released vendor version.
+saves, preserved deferred usage counts, Unicode collisions and explicit CSV header selection.
+They do not establish compatibility with every released vendor version.
 
-Local validation on 2026-09-27: all 102 selected tests passed. The signed development
+Local validation on 2026-09-27: all 107 selected tests passed. The signed development
 app was also checked through its native UI: source detection in the wizard, the
 import text link below the feature overview, real Wispr Flow word and snippet previews,
 Handy's empty custom-word list and a synthetic nonempty Handy file, row selection,
-full-content detail and cancellation. The real Wispr source and sidecar presence
+full-content detail, CSV header toggling in both directions and cancellation. The real Wispr source and sidecar presence
 were unchanged by SHA-256 comparison before and after the UI previews. Preview
 dialogs were cancelled; persistence and rollback were tested in isolated stores.

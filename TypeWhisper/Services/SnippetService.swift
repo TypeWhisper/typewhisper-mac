@@ -70,9 +70,12 @@ final class SnippetService: ObservableObject {
             throw AppVocabularyImportError.invalidFormat
         }
         let review = AppVocabularyImport.review(.init(entries: entries), existing: baseline)
+        var inserted: [Snippet] = []
         for row in review where row.outcome == .add {
             let entry = row.entry
-            context.insert(Snippet(trigger: entry.original, replacement: entry.replacement ?? ""))
+            let item = Snippet(trigger: entry.original, replacement: entry.replacement ?? "")
+            context.insert(item)
+            inserted.append(item)
         }
         do {
             #if DEBUG
@@ -82,7 +85,9 @@ final class SnippetService: ObservableObject {
             loadSnippets()
             return true
         } catch {
-            context.rollback()
+            // Preserve unrelated pending changes, including deferred dictation counters.
+            for item in inserted { context.delete(item) }
+            context.processPendingChanges()
             loadSnippets()
             throw AppVocabularyImportError.storageUnavailable
         }

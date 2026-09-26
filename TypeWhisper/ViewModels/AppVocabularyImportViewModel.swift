@@ -5,6 +5,7 @@ import UniformTypeIdentifiers
 @MainActor
 final class AppVocabularyImportViewModel: ObservableObject {
     let destination: AppVocabularyImport.Destination
+    @Published var csvHasHeader = false
     @Published var source = AppVocabularyImport.Source.wisprFlow
     @Published private(set) var batch: AppVocabularyImport.Batch?
     @Published private(set) var rows: [AppVocabularyImport.Review] = []
@@ -13,6 +14,7 @@ final class AppVocabularyImportViewModel: ObservableObject {
     @Published private(set) var isLoading = false
     @Published private(set) var error: String?
     @Published private(set) var importedCount: Int?
+    private var loadedURL: URL?
     private var baseline: [AppVocabularyImport.Existing] = []
     private var loadTask: Task<Void, Never>?
     private var generation = UUID()
@@ -47,6 +49,7 @@ final class AppVocabularyImportViewModel: ObservableObject {
         generation = UUID()
         loadTask?.cancel()
         loadTask = nil
+        loadedURL = nil
         batch = nil
         rows = []
         selected = []
@@ -82,16 +85,22 @@ final class AppVocabularyImportViewModel: ObservableObject {
         load(url)
     }
 
+    func reloadCSV() {
+        guard source == .wisprCSV, let loadedURL else { return }
+        load(loadedURL)
+    }
+
     func load(_ url: URL) {
         reset()
+        loadedURL = url
         isLoading = true
-        let source = source, destination = destination, generation = generation
+        let source = source, destination = destination, generation = generation, csvHasHeader = csvHasHeader
         loadTask = Task { [weak self] in
             // Only immutable values cross the actor boundary. Large files never block the UI.
             let worker = Task.detached(priority: .userInitiated) {
                 let accessed = url.startAccessingSecurityScopedResource()
                 defer { if accessed { url.stopAccessingSecurityScopedResource() } }
-                return Result { try AppVocabularyImport.load(source: source, url: url, destination: destination) }
+                return Result { try AppVocabularyImport.load(source: source, url: url, destination: destination, csvHasHeader: csvHasHeader) }
             }
             let result = await withTaskCancellationHandler {
                 await worker.value

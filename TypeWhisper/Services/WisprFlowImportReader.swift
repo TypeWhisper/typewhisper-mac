@@ -46,6 +46,8 @@ enum WisprFlowImportReader {
                 return try query(copy, destination: destination)
             } catch AppVocabularyImportError.tooLarge {
                 throw AppVocabularyImportError.tooLarge
+            } catch AppVocabularyImportError.invalidFormat {
+                throw AppVocabularyImportError.invalidFormat
             } catch is CancellationError {
                 throw CancellationError()
             } catch {
@@ -117,16 +119,14 @@ enum WisprFlowImportReader {
         // No CREATE flag: a missing copied database is an error. Queries remain read-only.
         let opened = sqlite3_open_v2(url.path, &database, SQLITE_OPEN_READWRITE | SQLITE_OPEN_NOMUTEX, nil)
         defer { sqlite3_close(database) }
-        guard opened == SQLITE_OK, let database else { throw AppVocabularyImportError.invalidFormat }
+        guard opened == SQLITE_OK, let database else { throw sqliteFailure(opened) }
         sqlite3_limit(database, SQLITE_LIMIT_LENGTH, 1_000_000)
-        guard sqlite3_exec(database, "PRAGMA trusted_schema=OFF; PRAGMA query_only=ON;", nil, nil, nil) == SQLITE_OK else {
-            throw AppVocabularyImportError.invalidFormat
-        }
+        let configured = sqlite3_exec(database, "PRAGMA trusted_schema=OFF; PRAGMA query_only=ON;", nil, nil, nil)
+        guard configured == SQLITE_OK else { throw sqliteFailure(configured) }
         var statement: OpaquePointer?
         let sql = "SELECT phrase, replacement, isDeleted, isSnippet FROM Dictionary ORDER BY id COLLATE BINARY ASC LIMIT \(AppVocabularyImport.maximumRows + 1)"
-        guard sqlite3_prepare_v2(database, sql, -1, &statement, nil) == SQLITE_OK else {
-            throw AppVocabularyImportError.invalidFormat
-        }
+        let prepared = sqlite3_prepare_v2(database, sql, -1, &statement, nil)
+        guard prepared == SQLITE_OK else { throw sqliteFailure(prepared) }
         defer { sqlite3_finalize(statement) }
         var batch = AppVocabularyImport.Batch(), count = 0
         var status = sqlite3_step(statement)
@@ -146,8 +146,22 @@ enum WisprFlowImportReader {
             }
             status = sqlite3_step(statement)
         }
-        guard status == SQLITE_DONE else { throw AppVocabularyImportError.invalidFormat }
+        guard status == SQLITE_DONE else { throw sqliteFailure(status) }
         return batch
+    }
+
+    private static func sqliteFailure(_ status: Int32) -> AppVocabularyImportError {
+        switch status & 0xFF {
+        case SQLITE_TOOBIG:
+            return .tooLarge
+        case SQLITE_BUSY, SQLITE_LOCKED, SQLITE_IOERR, SQLITE_CANTOPEN,
+             SQLITE_CORRUPT, SQLITE_NOTADB, SQLITE_PROTOCOL, SQLITE_SCHEMA:
+            // A fresh snapshot can recover from a transient database generation or I/O failure.
+            return .unstableSource
+        default:
+            // Missing tables/columns and unsupported SQL values are format errors.
+            return .invalidFormat
+        }
     }
 
     private static func text(_ statement: OpaquePointer?, column: Int32, optional: Bool) throws -> String? {

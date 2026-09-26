@@ -17,6 +17,12 @@
         }
       }
     },
+    "First row is a header": {
+      "localizations": {
+        "de": { "stringUnit": { "state": "translated", "value": "Erste Zeile ist eine Kopfzeile" } },
+        "zh-Hans": { "stringUnit": { "state": "translated", "value": "首行为标题行" } }
+      }
+    },
     "Source files found on this Mac: %@.": {
       "localizations": {
         "de": {
@@ -438,7 +444,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "%lld ausgewählt, %lld Duplikate, %lld Konflikte."
+            "value": "Ausgewählt: %lld · Duplikate: %lld · Konflikte: %lld"
           }
         },
         "zh-Hans": {
@@ -454,7 +460,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "%lld Einträge ausgelassen (gelöscht, anderer Eintragstyp, leer oder inkompatibel)."
+            "value": "Ausgelassene Einträge: %lld (gelöscht, anderer Eintragstyp, leer oder inkompatibel)."
           }
         },
         "zh-Hans": {
@@ -2429,7 +2435,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%1$lld Einträge importiert."
+            "value" : "Importierte Einträge: %1$lld."
           }
         },
         "ja" : {

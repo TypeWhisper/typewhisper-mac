@@ -48,7 +48,9 @@ enum AppVocabularyImport {
         let original: String
         let replacement: String?
 
-        var key: String { kind.rawValue + ":" + original.lowercased() }
+        var key: String {
+            kind.rawValue + ":" + original.folding(options: .caseInsensitive, locale: Locale(identifier: "en_US_POSIX"))
+        }
     }
 
     struct Batch: Sendable {
@@ -103,7 +105,7 @@ enum AppVocabularyImport {
         }
     }
 
-    static func load(source: Source, url: URL, destination: Destination) throws -> Batch {
+    static func load(source: Source, url: URL, destination: Destination, csvHasHeader: Bool = false) throws -> Batch {
         switch source {
         case .wisprFlow:
             return try WisprFlowImportReader.read(url: url, destination: destination)
@@ -111,7 +113,7 @@ enum AppVocabularyImport {
             guard destination == .dictionary else { throw AppVocabularyImportError.invalidFormat }
             return try readHandy { try boundedData(url) }
         case .wisprCSV:
-            return try parseCSV(boundedData(url), destination: destination)
+            return try parseCSV(boundedData(url), destination: destination, hasHeader: csvHasHeader)
         }
     }
 
@@ -184,7 +186,7 @@ enum AppVocabularyImport {
                    options: .regularExpression) != nil
     }
 
-    static func parseCSV(_ data: Data, destination: Destination) throws -> Batch {
+    static func parseCSV(_ data: Data, destination: Destination, hasHeader: Bool = false) throws -> Batch {
         guard data.count <= maximumTextBytes else { throw AppVocabularyImportError.tooLarge }
         guard var text = String(data: data, encoding: .utf8) else { throw AppVocabularyImportError.invalidFormat }
         if text.hasPrefix("\u{FEFF}") { text.removeFirst() }
@@ -225,11 +227,8 @@ enum AppVocabularyImport {
         }
         guard !quoted else { throw AppVocabularyImportError.invalidFormat }
         if !field.isEmpty || !row.isEmpty || closedQuote { rows.append(row + [field]) }
-        if let header = rows.first?.map({ $0.trimmingCharacters(in: .whitespaces).lowercased() }),
-           ["word", "term", "phrase", "original", "trigger"].contains(header[0]),
-           (header.count == 1 || (header.count == 2 && ["replacement", "correction", "expansion"].contains(header[1]))) {
-            rows.removeFirst()
-        }
+        // Cell contents cannot distinguish a header from a legitimate first entry.
+        if hasHeader, !rows.isEmpty { rows.removeFirst() }
         guard rows.count <= maximumRows else { throw AppVocabularyImportError.tooLarge }
         var batch = Batch()
         for row in rows {
