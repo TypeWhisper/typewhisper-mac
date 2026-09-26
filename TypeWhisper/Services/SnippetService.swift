@@ -161,12 +161,21 @@ final class SnippetService: ObservableObject {
         while searchStart < text.endIndex,
               let range = text.range(of: snippet.trigger, options: options, range: searchStart..<text.endIndex) {
             guard !range.isEmpty else { break }
+            // Only whole-grapheme matches may be used for Character subscripting.
+            guard String.Index(range.lowerBound, within: text) != nil,
+                  String.Index(range.upperBound, within: text) != nil else {
+                searchStart = range.upperBound
+                continue
+            }
             let previous = range.lowerBound > text.startIndex ? text[text.index(before: range.lowerBound)] : nil
             let next = range.upperBound < text.endIndex ? text[range.upperBound] : nil
             if !isSnippetWordCharacter(previous), !isSnippetWordCharacter(next) {
                 ranges.append(range)
+                searchStart = range.upperBound
+            } else {
+                // A rejected occurrence can overlap a later valid symbol trigger.
+                searchStart = text.index(after: range.lowerBound)
             }
-            searchStart = range.upperBound
         }
         return ranges
     }

@@ -3,6 +3,32 @@ import XCTest
 
 final class SnippetServiceTests: XCTestCase {
     @MainActor
+    func testTriggersDoNotSplitExtendedGraphemes() throws {
+        for caseSensitive in [false, true] {
+            for (trigger, input) in [("\u{301}", "e\u{301}"), ("👩🏽", "👩🏽‍💻"), ("👩", "👩🏽‍💻")] {
+                let directory = try TestSupport.makeTemporaryDirectory()
+                defer { TestSupport.remove(directory) }
+                let service = SnippetService(appSupportDirectory: directory)
+                service.addSnippet(trigger: trigger, replacement: "expanded", caseSensitive: caseSensitive)
+
+                XCTAssertEqual(service.applySnippets(to: input), input)
+                XCTAssertEqual(service.snippets.first?.usageCount, 0)
+            }
+        }
+    }
+
+    @MainActor
+    func testRejectedMatchDoesNotSkipOverlappingValidSymbolTrigger() throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(directory) }
+        let service = SnippetService(appSupportDirectory: directory)
+        service.addSnippet(trigger: "++", replacement: "expanded")
+
+        XCTAssertEqual(service.applySnippets(to: "a+++ ++++"), "a+expanded expandedexpanded")
+        XCTAssertEqual(service.snippets.first?.usageCount, 1)
+    }
+
+    @MainActor
     func testCanonicallyEquivalentTriggersMatchWithoutNormalizingSurroundingText() throws {
         for caseSensitive in [false, true] {
             for (trigger, input) in [("é", "e\u{301}"), ("e\u{301}", "é")] {
