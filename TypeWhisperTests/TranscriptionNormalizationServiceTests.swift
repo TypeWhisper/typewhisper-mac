@@ -362,4 +362,143 @@ final class TranscriptionNormalizationServiceTests: XCTestCase {
         XCTAssertEqual(result.text, "Treffen um 20:45 Uhr")
         XCTAssertEqual(result.appliedSteps, ["Corrections", "Time Notation"])
     }
+
+    // MARK: - English spoken dates
+
+    @MainActor
+    func testSpokenDatesNormalizeMonthAndDayPhrases() async throws {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        defer { defaults.removePersistentDomain(forName: #function) }
+
+        XCTAssertEqual(
+            TranscriptionNormalizationService.normalizeText("July twenty eighth", language: "en", defaults: defaults),
+            "July 28"
+        )
+        XCTAssertEqual(
+            TranscriptionNormalizationService.normalizeText("May twenty third", language: "en", defaults: defaults),
+            "May 23"
+        )
+        XCTAssertEqual(
+            TranscriptionNormalizationService.normalizeText("June first", language: "en", defaults: defaults),
+            "June 1"
+        )
+        XCTAssertEqual(
+            TranscriptionNormalizationService.normalizeText("January two", language: "en", defaults: defaults),
+            "January 2"
+        )
+    }
+
+    func testSpokenDatesRecognizeDigitAndWordDayForms() {
+        XCTAssertEqual(
+            TranscriptionNormalizationService.normalizeSpokenDates("December 25th", languages: ["en"]),
+            "December 25"
+        )
+        XCTAssertEqual(
+            TranscriptionNormalizationService.normalizeSpokenDates("March 31st", languages: ["en"]),
+            "March 31"
+        )
+        XCTAssertEqual(
+            TranscriptionNormalizationService.normalizeSpokenDates("April ninth", languages: ["en"]),
+            "April 9"
+        )
+        XCTAssertEqual(
+            TranscriptionNormalizationService.normalizeSpokenDates("July twenty-first", languages: ["en"]),
+            "July 21"
+        )
+        XCTAssertEqual(
+            TranscriptionNormalizationService.normalizeSpokenDates("Sept 1st", languages: ["en"]),
+            "Sept 1"
+        )
+        XCTAssertEqual(
+            TranscriptionNormalizationService.normalizeSpokenDates("jun 3rd", languages: ["en"]),
+            "jun 3"
+        )
+    }
+
+    func testSpokenDatesConvertInsideSentences() {
+        XCTAssertEqual(
+            TranscriptionNormalizationService.normalizeSpokenDates(
+                "meet me July 28th at noon and August first",
+                languages: ["en"]
+            ),
+            "meet me July 28 at noon and August 1"
+        )
+    }
+
+    func testSpokenDatesAreIdempotent() {
+        for text in ["July 28", "August 1", "February 30"] {
+            XCTAssertEqual(
+                TranscriptionNormalizationService.normalizeSpokenDates(text, languages: ["en"]),
+                text
+            )
+        }
+        let once = TranscriptionNormalizationService.normalizeSpokenDates("October 3rd", languages: ["en"])
+        XCTAssertEqual(
+            TranscriptionNormalizationService.normalizeSpokenDates(once, languages: ["en"]),
+            once
+        )
+    }
+
+    func testSpokenDatesLeaveNonDatesAlone() {
+        for text in [
+            "first, let's start",
+            "the eighth day",
+            "July 2026",
+            "July 32nd",
+            "December 100th",
+            "April showers",
+            "07/28/2026",
+            "next Tuesday",
+        ] {
+            XCTAssertEqual(
+                TranscriptionNormalizationService.normalizeSpokenDates(text, languages: ["en"]),
+                text
+            )
+        }
+    }
+
+    func testSpokenDatesRequireCapitalizedMayAndMarch() {
+        // `may` / `march` double as verbs; only the capitalized form counts as a month.
+        XCTAssertEqual(
+            TranscriptionNormalizationService.normalizeSpokenDates("you may first try again", languages: ["en"]),
+            "you may first try again"
+        )
+        XCTAssertEqual(
+            TranscriptionNormalizationService.normalizeSpokenDates("they march third into battle", languages: ["en"]),
+            "they march third into battle"
+        )
+        XCTAssertEqual(
+            TranscriptionNormalizationService.normalizeSpokenDates("May first", languages: ["en"]),
+            "May 1"
+        )
+        XCTAssertEqual(
+            TranscriptionNormalizationService.normalizeSpokenDates("March 15", languages: ["en"]),
+            "March 15"
+        )
+    }
+
+    func testSpokenDatesSkipOtherLanguages() {
+        XCTAssertEqual(
+            TranscriptionNormalizationService.normalizeSpokenDates("July twenty eighth", languages: ["de"]),
+            "July twenty eighth"
+        )
+        XCTAssertEqual(
+            TranscriptionNormalizationService.normalizeSpokenDates("July twenty eighth", languages: []),
+            "July twenty eighth"
+        )
+    }
+
+    @MainActor
+    func testSpokenDatesFollowNumberNormalizationSetting() async throws {
+        let defaults = UserDefaults(suiteName: #function)!
+        defaults.removePersistentDomain(forName: #function)
+        defaults.set(false, forKey: UserDefaultsKeys.transcriptionNumberNormalizationEnabled)
+        defer { defaults.removePersistentDomain(forName: #function) }
+
+        XCTAssertEqual(
+            TranscriptionNormalizationService.normalizeText("July 28th", language: "en", defaults: defaults),
+            "July 28th"
+        )
+    }
 }
