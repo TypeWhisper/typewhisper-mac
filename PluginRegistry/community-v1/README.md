@@ -12,7 +12,8 @@ source-review metadata only and are not published as installable marketplace
 plugins.
 
 Community entries must use `source: "community"`. Release metadata, when
-present, belongs inside `releases[]`.
+present, belongs inside `releases[]`. The `com.typewhisper` ID namespace and
+the author `TypeWhisper` are reserved for official plugins.
 
 The TypeWhisper marketplace only supports TypeWhisper-built community
 artifacts. If a community entry includes `releases[]`, each `downloadURL` must

@@ -154,6 +154,44 @@ class CommunityPluginRegistryAssemblyTests(unittest.TestCase):
             errors,
         )
 
+    def test_reserved_typewhisper_id_namespace_is_rejected(self) -> None:
+        for plugin_id in ["com.typewhisper.example", "com.TypeWhisper.example", "com.typewhisper"]:
+            with self.subTest(plugin_id=plugin_id):
+                with tempfile.TemporaryDirectory() as tmp:
+                    path = Path(tmp) / f"{plugin_id}.json"
+                    path.write_text(json.dumps(community_entry(plugin_id)) + "\n")
+
+                    entries, errors = load_community_entries(Path(tmp))
+
+                self.assertEqual(entries, [])
+                self.assertTrue(
+                    any("reserved 'com.typewhisper' namespace" in error for error in errors),
+                    errors,
+                )
+
+    def test_ids_that_only_share_the_reserved_prefix_are_allowed(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "com.typewhisperfan.plugin.json"
+            path.write_text(json.dumps(community_entry("com.typewhisperfan.plugin")) + "\n")
+
+            entries, errors = load_community_entries(Path(tmp))
+
+        self.assertEqual(errors, [])
+        self.assertEqual(len(entries), 1)
+
+    def test_typewhisper_author_is_rejected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "com.example.plugin.json"
+            path.write_text(json.dumps(community_entry(author=" TypeWhisper ")) + "\n")
+
+            entries, errors = load_community_entries(Path(tmp))
+
+        self.assertEqual(entries, [])
+        self.assertTrue(
+            any("must name the community maintainer" in error for error in errors),
+            errors,
+        )
+
     def test_unreleased_source_only_entry_is_not_published(self) -> None:
         base_registry = {
             "schemaVersion": 1,
