@@ -443,6 +443,10 @@ final class DictationViewModel: ObservableObject {
     /// dictation engine. When false (a distinct preview engine), the live session's
     /// text is display-only and must never be promoted to the final transcription.
     private var lastPreviewFollowsDictationEngine = true
+    /// A website workflow may still switch the engine once the browser URL resolves,
+    /// so a hidden live-dictation session waits for that instead of streaming audio
+    /// to the global engine first.
+    private var hiddenLiveSessionAwaitsWebsiteWorkflow = false
     private var liveFieldTranscriptSession: LiveFieldTranscriptSession?
     /// Workflow LLM segments processed while recording (opt-in per workflow).
     /// Belongs to the current recording; the stop path takes ownership of it.
@@ -1930,6 +1934,10 @@ final class DictationViewModel: ObservableObject {
             activeApp: activeApp,
             preCapturedTarget: liveFieldCapture?.liveFieldTarget
         )
+        hiddenLiveSessionAwaitsWebsiteWorkflow = !websiteResolvedBeforeRecording
+            && forcedWorkflowId == nil
+            && activeApp.bundleId != nil
+            && hasApplicableWebsiteWorkflow(bundleIdentifier: activeApp.bundleId)
         startLiveStreaming(
             allowLiveTranscription: indicatorTranscriptPreviewEnabled
                 || liveFieldTranscriptEnabled
@@ -2032,9 +2040,14 @@ final class DictationViewModel: ObservableObject {
             }
 
             capturedActiveApp = (name: currentApp.name, bundleId: currentApp.bundleId, url: resolvedURL)
+            let hiddenLiveSessionWasDeferred = hiddenLiveSessionAwaitsWebsiteWorkflow
+            hiddenLiveSessionAwaitsWebsiteWorkflow = false
 
             guard let resolvedURL else {
                 logger.info("URL resolution: no URL resolved")
+                if hiddenLiveSessionWasDeferred, refreshLiveStreamingIfParamsChanged() {
+                    refreshIncrementalWorkflowPostProcessing(forceRestart: true)
+                }
                 return nil
             }
 
@@ -2047,7 +2060,9 @@ final class DictationViewModel: ObservableObject {
             }
 
             // The URL can change the resolved output format of the current workflow.
-            refreshIncrementalWorkflowPostProcessing()
+            let startedDeferredLiveSession = hiddenLiveSessionWasDeferred
+                && refreshLiveStreamingIfParamsChanged()
+            refreshIncrementalWorkflowPostProcessing(forceRestart: startedDeferredLiveSession)
             logger.info("URL resolution: no workflow matched for URL \(resolvedURL)")
             return resolvedURL
         }
@@ -2115,8 +2130,8 @@ final class DictationViewModel: ObservableObject {
     /// Whether anything before insertion can depend on the browser URL: website triggers can
     /// change the matched workflow (language, engine, prompt, output, auto-enter, action),
     /// automatic output formats resolve by URL, and action and post-processor plugins receive it.
-    private func browserURLRequiredBeforeInsertion(bundleIdentifier: String?) -> Bool {
-        let hasApplicableWebsiteWorkflow = workflowService.workflows.contains { workflow in
+    private func hasApplicableWebsiteWorkflow(bundleIdentifier: String?) -> Bool {
+        workflowService.workflows.contains { workflow in
             guard workflow.isEnabled,
                   let trigger = workflow.trigger,
                   !trigger.websitePatterns.isEmpty else {
@@ -2125,7 +2140,10 @@ final class DictationViewModel: ObservableObject {
             return trigger.appBundleIdentifiers.isEmpty
                 || trigger.appBundleIdentifiers.contains(bundleIdentifier ?? "")
         }
-        return hasApplicableWebsiteWorkflow
+    }
+
+    private func browserURLRequiredBeforeInsertion(bundleIdentifier: String?) -> Bool {
+        hasApplicableWebsiteWorkflow(bundleIdentifier: bundleIdentifier)
             || WorkflowOutputFormatResolver.isAutomaticFormat(effectiveOutputFormat)
             || effectiveActionPluginId != nil
             || PluginManager.shared?.postProcessors.isEmpty == false
@@ -3460,6 +3478,7 @@ final class DictationViewModel: ObservableObject {
         // fall back to a much slower batch request after the user stops. An unavailable
         // preview engine stays suppressed, since the preview would still be shown.
         let streamsDictationWithoutPreview = !allowLiveTranscription
+            && !hiddenLiveSessionAwaitsWebsiteWorkflow
             && modelManager.prefersLiveSessionForDictation(
                 engineOverrideId: params.engineOverrideId,
                 selectedProviderId: params.providerId

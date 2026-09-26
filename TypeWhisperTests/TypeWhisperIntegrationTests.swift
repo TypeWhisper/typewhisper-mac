@@ -7127,7 +7127,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         context.audioRecordingService.startRecordingOverride = {}
         context.audioRecordingService.stopRecordingOverride = { _ in [] }
 
-        _ = context.dictationViewModel.apiStartRecording()
+        let sessionID = context.dictationViewModel.apiStartRecording()
         await context.dictationViewModel.testingWaitForRecordingStart()
         XCTAssertEqual(context.dictationViewModel.state, .recording)
         for _ in 0..<20 where livePlugin.liveSessionCreateCount == 0 {
@@ -7135,6 +7135,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         }
         let count = livePlugin.liveSessionCreateCount
         _ = context.dictationViewModel.apiStopRecording()
+        await Self.waitForDictationSessionToFinish(context.dictationViewModel, id: sessionID)
         return count
     }
 
@@ -7155,8 +7156,14 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(count, 0)
     }
 
+    /// Returns the live-dictation session count before and after the browser URL
+    /// resolves, with the preview hidden and a website workflow for example.com.
     @MainActor
-    func testWebsiteWorkflowSwitchingToLiveDictationEngineStartsHiddenLiveSession() async throws {
+    private func websiteWorkflowLiveSessionCounts(
+        globalEngineIsLiveDictation: Bool,
+        workflowEngineId: String,
+        resolvedURL: String
+    ) async throws -> (beforeURL: Int, afterURL: Int) {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         var dictationContext: DictationContext?
         defer {
@@ -7170,7 +7177,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let resolver = BrowserURLResolver { _, _ in
             urlRequested.fulfill()
             urlGate.wait()
-            return BrowserResolution(url: URL(string: "https://example.com/chat"), title: nil)
+            return BrowserResolution(url: URL(string: resolvedURL), title: nil)
         }
         dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory, browserURLResolver: resolver)
         let context = try XCTUnwrap(dictationContext)
@@ -7188,11 +7195,14 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             sourceURL: appSupportDirectory,
             isEnabled: true
         ))
+        if globalEngineIsLiveDictation {
+            context.modelManager.selectProvider(livePlugin.providerId)
+        }
         _ = context.workflowService.addWorkflow(
             name: "Website Workflow",
             template: .dictation,
             trigger: .website("example.com"),
-            behavior: WorkflowBehavior(transcriptionEngineId: livePlugin.providerId)
+            behavior: WorkflowBehavior(transcriptionEngineId: workflowEngineId)
         )
         let originalPreviewEnabled = context.dictationViewModel.indicatorTranscriptPreviewEnabled
         defer { context.dictationViewModel.indicatorTranscriptPreviewEnabled = originalPreviewEnabled }
@@ -7203,19 +7213,70 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         context.audioRecordingService.startRecordingOverride = {}
         context.audioRecordingService.stopRecordingOverride = { _ in [] }
 
-        _ = context.dictationViewModel.apiStartRecording()
+        let sessionID = context.dictationViewModel.apiStartRecording()
         await context.dictationViewModel.testingWaitForRecordingStart()
         await fulfillment(of: [urlRequested], timeout: 1)
-        XCTAssertEqual(livePlugin.liveSessionCreateCount, 0)
+        try await Task.sleep(for: .milliseconds(100))
+        let beforeURL = livePlugin.liveSessionCreateCount
 
         urlGate.signal()
-        for _ in 0..<40 where livePlugin.liveSessionCreateCount == 0 {
+        for _ in 0..<20 where livePlugin.liveSessionCreateCount == 0 {
             try await Task.sleep(for: .milliseconds(25))
         }
-
         XCTAssertEqual(context.dictationViewModel.state, .recording)
-        XCTAssertEqual(livePlugin.liveSessionCreateCount, 1)
+        let afterURL = livePlugin.liveSessionCreateCount
+
         _ = context.dictationViewModel.apiStopRecording()
+        await Self.waitForDictationSessionToFinish(context.dictationViewModel, id: sessionID)
+        return (beforeURL, afterURL)
+    }
+
+    @MainActor
+    private static func waitForDictationSessionToFinish(_ viewModel: DictationViewModel, id: UUID?) async {
+        guard let id else { return }
+        for _ in 0..<120 {
+            if let status = viewModel.apiDictationSession(id: id)?.status,
+               status == .completed || status == .failed {
+                return
+            }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+    }
+
+    @MainActor
+    func testWebsiteWorkflowSwitchingToLiveDictationEngineStartsHiddenLiveSession() async throws {
+        let counts = try await websiteWorkflowLiveSessionCounts(
+            globalEngineIsLiveDictation: false,
+            workflowEngineId: "mock-live-dictation",
+            resolvedURL: "https://example.com/chat"
+        )
+
+        XCTAssertEqual(counts.beforeURL, 0)
+        XCTAssertEqual(counts.afterURL, 1)
+    }
+
+    @MainActor
+    func testHiddenLiveSessionWaitsForWebsiteWorkflowThatSwitchesAwayFromLiveDictation() async throws {
+        let counts = try await websiteWorkflowLiveSessionCounts(
+            globalEngineIsLiveDictation: true,
+            workflowEngineId: "mock",
+            resolvedURL: "https://example.com/chat"
+        )
+
+        XCTAssertEqual(counts.beforeURL, 0)
+        XCTAssertEqual(counts.afterURL, 0)
+    }
+
+    @MainActor
+    func testHiddenLiveSessionStartsAfterUnmatchedWebsiteResolution() async throws {
+        let counts = try await websiteWorkflowLiveSessionCounts(
+            globalEngineIsLiveDictation: true,
+            workflowEngineId: "mock",
+            resolvedURL: "https://example.org/other"
+        )
+
+        XCTAssertEqual(counts.beforeURL, 0)
+        XCTAssertEqual(counts.afterURL, 1)
     }
 
     @MainActor
