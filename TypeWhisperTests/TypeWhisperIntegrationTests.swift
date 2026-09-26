@@ -15383,7 +15383,7 @@ extension TypeWhisperIntegrationTests {
     private func makeHedgedDictationViewModel(
         hedgeThreshold: TimeInterval?,
         transcriptionDeadline: TimeInterval? = nil,
-        simulatesRecordingAndInsertion: Bool = false,
+        microphonePermissionOverride: Bool? = nil,
         primaryRunner: @escaping DictationViewModel.PrimaryTranscriptionRunner,
         fallbackRunner: @escaping DictationViewModel.RecoveryFallbackRunner
     ) throws -> (viewModel: DictationViewModel, cleanup: () -> Void) {
@@ -15394,20 +15394,9 @@ extension TypeWhisperIntegrationTests {
 
         let modelManager = ModelManagerService()
         let audioRecordingService = AudioRecordingService()
-        if simulatesRecordingAndInsertion {
-            audioRecordingService.hasMicrophonePermissionOverride = true
-            audioRecordingService.inputAvailabilityOverride = { _ in true }
-            audioRecordingService.startRecordingOverride = {}
-            audioRecordingService.stopRecordingOverride = { _ in
-                Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
-            }
-        }
+        audioRecordingService.hasMicrophonePermissionOverride = microphonePermissionOverride
         let hotkeyService = HotkeyService()
         let textInsertionService = TextInsertionService()
-        if simulatesRecordingAndInsertion {
-            textInsertionService.accessibilityGrantedOverride = true
-            textInsertionService.pasteSimulatorOverride = {}
-        }
         let historyService = HistoryService(appSupportDirectory: appSupportDirectory)
         let recentTranscriptionStore = RecentTranscriptionStore()
         let profileService = ProfileService(appSupportDirectory: appSupportDirectory)
@@ -15474,7 +15463,8 @@ extension TypeWhisperIntegrationTests {
     func testRecoveryEngineLetsDictationStartWhenSelectedEngineIsUnavailable() async throws {
         let harness = try makeHedgedDictationViewModel(
             hedgeThreshold: nil,
-            simulatesRecordingAndInsertion: true,
+            // Stops the start right after the engine check, so no real audio device is touched.
+            microphonePermissionOverride: false,
             primaryRunner: { _, _, _, _, _, _, _, _ in
                 throw TranscriptionEngineError.engineUnavailable(engineName: "Primary", reason: nil)
             },
@@ -15487,21 +15477,16 @@ extension TypeWhisperIntegrationTests {
         // The harness has no installed engines, so only the recovery engine can make this true.
         XCTAssertTrue(harness.viewModel.canDictate)
 
+        // The start passes the engine check and only stops at the (disabled) microphone.
         let sessionID = harness.viewModel.apiStartRecording()
-        await harness.viewModel.testingWaitForRecordingStart()
-        XCTAssertEqual(harness.viewModel.apiDictationSession(id: sessionID)?.status, .recording)
+        XCTAssertEqual(
+            harness.viewModel.apiDictationSession(id: sessionID)?.error,
+            "Microphone permission required."
+        )
 
-        _ = harness.viewModel.apiStopRecording()
-        for _ in 0..<80 {
-            if harness.viewModel.apiDictationSession(id: sessionID)?.status == .completed {
-                break
-            }
-            try? await Task.sleep(for: .milliseconds(25))
-        }
-        let session = harness.viewModel.apiDictationSession(id: sessionID)
-        XCTAssertEqual(session?.status, .completed)
-        XCTAssertEqual(session?.transcription?.rawText, "fallback", session?.error ?? "")
-        await harness.viewModel.testingWaitForRecordingCleanup()
+        let output = try await harness.viewModel.transcribeFinalAudioForTesting(primaryEngineId: "primary")
+        XCTAssertEqual(output.text, "fallback")
+        XCTAssertTrue(output.usedRecoveryFallback)
     }
 
     @MainActor
