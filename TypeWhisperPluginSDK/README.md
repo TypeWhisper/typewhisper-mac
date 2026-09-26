@@ -535,14 +535,22 @@ let wavData = PluginWavEncoder.encode(samples, sampleRate: 16000)
 
 To distribute via the TypeWhisper plugin marketplace:
 
-1. Submit plugin source for review, or link to a reviewed source repository.
-2. Submit a PR adding `PluginRegistry/community-v1/com.yourname.myplugin.json`
-   on `main`.
+1. Submit a PR to `main` that adds the plugin source under
+   `TypeWhisperPluginSDK/Plugins/<Name>Plugin/`, its SwiftPM and Xcode bundle
+   targets, and a slug-to-target mapping in `.github/workflows/plugin-release.yml`.
+   The release workflow only builds plugins from this repository, so a link to
+   an external source repository is not enough.
+2. In the same PR, or after source review, add
+   `PluginRegistry/community-v1/com.yourname.myplugin.json`.
 3. Keep `releases[]` omitted or empty until a TypeWhisper maintainer publishes
    the installable artifact.
 4. After review, a maintainer runs `plugin-release.yml` with
    `distribution_source=community`. The workflow builds, signs, hosts, and
    publishes the TypeWhisper-owned ZIP to `gh-pages/plugins-community-v1.json`.
+
+Community plugins must use their own ID namespace and author name. IDs starting
+with `com.typewhisper.` and the author `TypeWhisper` are reserved for official
+plugins and rejected by registry validation.
 
 Community marketplace artifacts must be built and hosted by TypeWhisper.
 Contributor-hosted ZIPs, personal GitHub Release assets, and other external
