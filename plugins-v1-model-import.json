@@ -7,7 +7,7 @@
       "author": "TypeWhisper",
       "description": "Local Canary speech recognition on Apple Silicon. Supports Sophea for Greek and English and compatible imported models.",
       "category": "transcription",
-      "downloadCount": 0,
+      "downloadCount": 5,
       "descriptions": {
         "de": "Lokale Canary-Spracherkennung auf Apple Silicon. Unterst\u00fctzt Sophea f\u00fcr Griechisch und Englisch sowie kompatible importierte Modelle.",
         "ja": "Apple Silicon\u3067\u52d5\u4f5c\u3059\u308b\u30ed\u30fc\u30ab\u30ebCanary\u97f3\u58f0\u8a8d\u8b58\u3002\u30ae\u30ea\u30b7\u30e3\u8a9e\u3068\u82f1\u8a9e\u306eSophea\u3084\u4e92\u63db\u30e2\u30c7\u30eb\u306b\u5bfe\u5fdc\u3002"
@@ -23,7 +23,8 @@
           "minOSVersion": "14.0",
           "supportedArchitectures": [
             "arm64"
-          ]
+          ],
+          "downloadCount": 5
         }
       ]
     },
@@ -33,7 +34,7 @@
       "author": "TypeWhisper",
       "description": "Local speech-to-text and translation by IBM, powered by MLX on Apple Silicon. 6 languages with bidirectional translation.",
       "category": "transcription",
-      "downloadCount": 0,
+      "downloadCount": 993,
       "descriptions": {
         "de": "Lokale Spracherkennung und \u00dcbersetzung von IBM mit MLX auf Apple Silicon. 6 Sprachen mit bidirektionaler \u00dcbersetzung.",
         "ja": "Apple Silicon\u4e0a\u306eMLX\u3067\u52d5\u4f5c\u3059\u308bIBM\u306e\u30ed\u30fc\u30ab\u30eb\u97f3\u58f0\u8a8d\u8b58\u3068\u7ffb\u8a33\u3067\u3059\u30026\u8a00\u8a9e\u306e\u53cc\u65b9\u5411\u7ffb\u8a33\u306b\u5bfe\u5fdc\u3057\u307e\u3059\u3002"
@@ -50,7 +51,8 @@
           "minOSVersion": "14.0",
           "supportedArchitectures": [
             "arm64"
-          ]
+          ],
+          "downloadCount": 3
         }
       ]
     },
@@ -60,7 +62,7 @@
       "author": "TypeWhisper",
       "description": "Local Qwen3-ASR speech-to-text powered by MLX on Apple Silicon. 30 languages plus Chinese dialect coverage, no API key required.",
       "category": "transcription",
-      "downloadCount": 0,
+      "downloadCount": 4690,
       "descriptions": {
         "de": "Lokale Qwen3-ASR-Spracherkennung mit MLX auf Apple Silicon. 30 Sprachen plus chinesische Dialektabdeckung, kein API-Key n\u00f6tig.",
         "ja": "Apple Silicon\u4e0a\u306eMLX\u3067\u52d5\u4f5c\u3059\u308b\u30ed\u30fc\u30ab\u30ebQwen3-ASR\u97f3\u58f0\u8a8d\u8b58\u3067\u3059\u300230\u8a00\u8a9e\u3068\u4e2d\u56fd\u8a9e\u65b9\u8a00\u306b\u5bfe\u5fdc\u3057\u3001API\u30ad\u30fc\u306f\u4e0d\u8981\u3067\u3059\u3002"
@@ -77,7 +79,8 @@
           "minOSVersion": "14.0",
           "supportedArchitectures": [
             "arm64"
-          ]
+          ],
+          "downloadCount": 2
         }
       ]
     },
@@ -87,7 +90,7 @@
       "author": "TypeWhisper",
       "description": "Local speech-to-text powered by Voxtral MLX on Apple Silicon. Fast and accurate.",
       "category": "transcription",
-      "downloadCount": 0,
+      "downloadCount": 2026,
       "descriptions": {
         "de": "Lokale Spracherkennung mit Voxtral MLX auf Apple Silicon. Schnell und pr\u00e4zise.",
         "ja": "Apple Silicon\u4e0a\u306eVoxtral MLX\u3067\u52d5\u4f5c\u3059\u308b\u30ed\u30fc\u30ab\u30eb\u97f3\u58f0\u8a8d\u8b58\u3067\u3059\u3002\u9ad8\u901f\u304b\u3064\u9ad8\u7cbe\u5ea6\u3067\u3059\u3002"
@@ -104,7 +107,8 @@
           "minOSVersion": "14.0",
           "supportedArchitectures": [
             "arm64"
-          ]
+          ],
+          "downloadCount": 2
         }
       ]
     }
