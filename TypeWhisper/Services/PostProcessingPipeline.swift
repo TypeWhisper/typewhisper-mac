@@ -69,6 +69,7 @@ final class PostProcessingPipeline {
         func stepName(for id: Int) -> String {
             switch id {
             case -6: return "Number Normalization"
+            case -7: return "Time Notation"
             case -4: return "Formatting"
             case -5: return "Speech Punctuation"
             case -1: return llmStepName ?? "Prompt"
@@ -128,6 +129,20 @@ final class PostProcessingPipeline {
             }
         }
 
+        // Final time-notation pass: a post-processor plugin with a priority above
+        // the built-in steps can still introduce a `20.45 Uhr` after the late
+        // Time Notation step ran.
+        let finalText = TranscriptionNormalizationService.normalizeTimeNotation(
+            result,
+            languages: normalizationLanguages(context: context, dictationContext: dictationContext)
+        )
+        if finalText != result {
+            result = finalText
+            if !appliedSteps.contains("Time Notation") {
+                appliedSteps.append("Time Notation")
+            }
+        }
+
         return PostProcessingResult(text: result, appliedSteps: appliedSteps, fallback: nil)
     }
 
@@ -165,7 +180,7 @@ final class PostProcessingPipeline {
     private static let llmStepPriority = 300
 
     /// Builds the priority-ordered step list: (priority, id).
-    /// IDs: -1 = LLM, -2 = snippets, -3 = dictionary, -4 = app formatter, -5 = punctuation, -6 = normalization, 0+ = plugin index
+    /// IDs: -1 = LLM, -2 = snippets, -3 = dictionary, -4 = app formatter, -5 = punctuation, -6 = normalization, -7 = time notation (late), 0+ = plugin index
     private func orderedSteps(
         includesLLMStep: Bool,
         outputFormat: String?,
@@ -191,8 +206,24 @@ final class PostProcessingPipeline {
         }
         steps.append((500, -2))
         steps.append((600, -3))
+        // Time rewrite runs once more at the very end: the LLM step, plugins,
+        // snippets and corrections can all introduce a `20.45 Uhr` that the
+        // early normalization step never saw.
+        steps.append((700, -7))
         steps.sort { $0.priority < $1.priority }
         return steps
+    }
+
+    private func normalizationLanguages(
+        context: PostProcessingContext,
+        dictationContext: DictationRuntimeContext?
+    ) -> [String] {
+        TranscriptionNormalizationService.normalizationLanguages(
+            task: .transcribe,
+            detectedLanguage: dictationContext?.detectedLanguage ?? context.language,
+            configuredLanguage: dictationContext?.configuredLanguage ?? context.language,
+            configuredLanguageCandidates: dictationContext?.configuredLanguageCandidates ?? []
+        )
     }
 
     private func applyBuiltInStep(
@@ -206,16 +237,15 @@ final class PostProcessingPipeline {
     ) -> String {
         switch id {
         case -6:
-            let languages = TranscriptionNormalizationService.normalizationLanguages(
-                task: .transcribe,
-                detectedLanguage: dictationContext?.detectedLanguage ?? context.language,
-                configuredLanguage: dictationContext?.configuredLanguage ?? context.language,
-                configuredLanguageCandidates: dictationContext?.configuredLanguageCandidates ?? []
-            )
             return TranscriptionNormalizationService.normalizeText(
                 text,
-                languages: languages,
+                languages: normalizationLanguages(context: context, dictationContext: dictationContext),
                 normalizeNumbers: normalizeNumbers
+            )
+        case -7:
+            return TranscriptionNormalizationService.normalizeTimeNotation(
+                text,
+                languages: normalizationLanguages(context: context, dictationContext: dictationContext)
             )
         case -4:
             return appFormatterService!.format(
