@@ -3,6 +3,36 @@ import XCTest
 
 final class SnippetServiceTests: XCTestCase {
     @MainActor
+    func testCanonicallyEquivalentTriggersMatchWithoutNormalizingSurroundingText() throws {
+        for caseSensitive in [false, true] {
+            for (trigger, input) in [("é", "e\u{301}"), ("e\u{301}", "é")] {
+                let directory = try TestSupport.makeTemporaryDirectory()
+                defer { TestSupport.remove(directory) }
+                let service = SnippetService(appSupportDirectory: directory)
+                service.addSnippet(trigger: trigger, replacement: "expanded", caseSensitive: caseSensitive)
+                let prefix = "cafe\u{301} "
+
+                let output = service.applySnippets(to: prefix + input)
+                XCTAssertEqual(Array(output.utf8), Array((prefix + "expanded").utf8))
+                XCTAssertEqual(service.snippets.first?.usageCount, 1)
+            }
+        }
+    }
+
+    @MainActor
+    func testEmojiGraphemesSeparateTriggersFromWords() throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(directory) }
+        let service = SnippetService(appSupportDirectory: directory)
+        service.addSnippet(trigger: "sig", replacement: "expanded")
+
+        for emoji in ["❤️", "☕️", "1️⃣", "👩🏽‍💻"] {
+            XCTAssertEqual(service.applySnippets(to: "a\(emoji)sig\(emoji)b"), "a\(emoji)expanded\(emoji)b")
+        }
+        XCTAssertEqual(service.snippets.first?.usageCount, 4)
+    }
+
+    @MainActor
     func testTriggersDoNotMatchInsideWords() throws {
         let directory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(directory) }

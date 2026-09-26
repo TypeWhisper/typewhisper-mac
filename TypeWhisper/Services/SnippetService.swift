@@ -128,16 +128,12 @@ final class SnippetService: ObservableObject {
         for snippet in snippets where snippet.isEnabled {
             guard !snippet.trigger.isEmpty else { continue }
 
-            // Unlike \b, these boundaries also support triggers with symbols at
-            // either end (such as /sig or c++). \w includes Unicode word characters.
-            let pattern = "(?<!\\w)" + NSRegularExpression.escapedPattern(for: snippet.trigger) + "(?!\\w)"
-            let options: NSRegularExpression.Options = snippet.caseSensitive ? [] : [.caseInsensitive]
-            guard let regex = try? NSRegularExpression(pattern: pattern, options: options) else { continue }
-            let range = NSRange(result.startIndex..., in: result)
-
-            if regex.firstMatch(in: result, range: range) != nil {
-                let replacement = NSRegularExpression.escapedTemplate(for: snippet.processedReplacement())
-                result = regex.stringByReplacingMatches(in: result, range: range, withTemplate: replacement)
+            let ranges = snippetMatchRanges(for: snippet, in: result)
+            if !ranges.isEmpty {
+                let replacement = snippet.processedReplacement()
+                for range in ranges.reversed() {
+                    result.replaceSubrange(range, with: replacement)
+                }
 
                 snippet.usageCount += 1
                 needsSave = true
@@ -153,6 +149,42 @@ final class SnippetService: ObservableObject {
         }
 
         return result
+    }
+
+    private func snippetMatchRanges(for snippet: Snippet, in text: String) -> [Range<String.Index>] {
+        var ranges: [Range<String.Index>] = []
+        var searchStart = text.startIndex
+        let options: String.CompareOptions = snippet.caseSensitive ? [] : [.caseInsensitive]
+
+        // Foundation string search preserves canonical equivalence without
+        // changing the Unicode representation of surrounding text.
+        while searchStart < text.endIndex,
+              let range = text.range(of: snippet.trigger, options: options, range: searchStart..<text.endIndex) {
+            guard !range.isEmpty else { break }
+            let previous = range.lowerBound > text.startIndex ? text[text.index(before: range.lowerBound)] : nil
+            let next = range.upperBound < text.endIndex ? text[range.upperBound] : nil
+            if !isSnippetWordCharacter(previous), !isSnippetWordCharacter(next) {
+                ranges.append(range)
+            }
+            searchStart = range.upperBound
+        }
+        return ranges
+    }
+
+    private func isSnippetWordCharacter(_ character: Character?) -> Bool {
+        guard let character, let base = character.unicodeScalars.first else { return false }
+        // Keycap emoji contain a digit but separate words like other emoji.
+        if character.unicodeScalars.contains("\u{20E3}") { return false }
+        if character.isLetter || character.isNumber { return true }
+
+        // Inspect the grapheme's base so emoji variation selectors and combining
+        // marks do not turn a preceding symbol into a word character.
+        switch base.properties.generalCategory {
+        case .connectorPunctuation, .nonspacingMark, .spacingMark, .enclosingMark:
+            return true
+        default:
+            return base == "\u{200C}" || base == "\u{200D}"
+        }
     }
 
     /// Saves usage counters left unsaved by `applySnippets(to:deferUsageCountSave:)`.
