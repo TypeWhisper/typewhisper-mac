@@ -490,6 +490,17 @@ final class ModelManagerService: ObservableObject {
         return (plugin as? any TranscriptPreviewFallbackPolicyProviding)?.allowsTranscriptPreviewFallback ?? true
     }
 
+    /// Whether the dictation engine opted in to delivering its final result through a
+    /// live session, so dictation should stream even when no transcript preview is shown.
+    func prefersLiveSessionForDictation(engineOverrideId: String? = nil, selectedProviderId: String? = nil) -> Bool {
+        guard let providerId = engineOverrideId ?? selectedProviderId ?? self.selectedProviderId,
+              PluginManager.shared.transcriptionEngine(for: providerId) is any LiveTranscriptionCapablePlugin,
+              let loadedPlugin = PluginManager.shared.loadedTranscriptionPlugin(for: providerId) else {
+            return false
+        }
+        return loadedPlugin.manifest.supportsCapability(.liveDictation)
+    }
+
     func transcriptionAuthStatus(for engine: TranscriptionEnginePlugin) -> PluginAuthRoleStatus {
         // Legacy plugins may use isConfigured for loaded-model state, so absence of the
         // optional auth-role protocol should not make auto-unloaded local engines unselectable.

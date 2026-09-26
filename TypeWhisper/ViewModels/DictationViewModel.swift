@@ -447,6 +447,14 @@ final class DictationViewModel: ObservableObject {
     /// dictation engine. When false (a distinct preview engine), the live session's
     /// text is display-only and must never be promoted to the final transcription.
     private var lastPreviewFollowsDictationEngine = true
+    /// Whether the most recent live session ran with the preview hidden. Its partial
+    /// text then never replaces a failed finalization; the full recording is
+    /// transcribed instead.
+    private var lastStreamingPreviewHidden = false
+    /// A website workflow may still switch the engine once the browser URL resolves,
+    /// so a hidden live-dictation session waits for that instead of streaming audio
+    /// to the global engine first.
+    private var hiddenLiveSessionAwaitsWebsiteWorkflow = false
     private var liveFieldTranscriptSession: LiveFieldTranscriptSession?
     /// Workflow LLM segments processed while recording (opt-in per workflow).
     /// Belongs to the current recording; the stop path takes ownership of it.
@@ -1940,6 +1948,10 @@ final class DictationViewModel: ObservableObject {
             activeApp: activeApp,
             preCapturedTarget: liveFieldCapture?.liveFieldTarget
         )
+        hiddenLiveSessionAwaitsWebsiteWorkflow = !websiteResolvedBeforeRecording
+            && forcedWorkflowId == nil
+            && activeApp.bundleId != nil
+            && hasApplicableWebsiteWorkflow(bundleIdentifier: activeApp.bundleId)
         startLiveStreaming(
             allowLiveTranscription: indicatorTranscriptPreviewEnabled
                 || liveFieldTranscriptEnabled
@@ -2042,9 +2054,14 @@ final class DictationViewModel: ObservableObject {
             }
 
             capturedActiveApp = (name: currentApp.name, bundleId: currentApp.bundleId, url: resolvedURL)
+            let hiddenLiveSessionWasDeferred = hiddenLiveSessionAwaitsWebsiteWorkflow
+            hiddenLiveSessionAwaitsWebsiteWorkflow = false
 
             guard let resolvedURL else {
                 logger.info("URL resolution: no URL resolved")
+                if hiddenLiveSessionWasDeferred, refreshLiveStreamingIfParamsChanged() {
+                    refreshIncrementalWorkflowPostProcessing(forceRestart: true)
+                }
                 return nil
             }
 
@@ -2057,7 +2074,9 @@ final class DictationViewModel: ObservableObject {
             }
 
             // The URL can change the resolved output format of the current workflow.
-            refreshIncrementalWorkflowPostProcessing()
+            let startedDeferredLiveSession = hiddenLiveSessionWasDeferred
+                && refreshLiveStreamingIfParamsChanged()
+            refreshIncrementalWorkflowPostProcessing(forceRestart: startedDeferredLiveSession)
             logger.info("URL resolution: no workflow matched for URL \(resolvedURL)")
             return resolvedURL
         }
@@ -2125,8 +2144,61 @@ final class DictationViewModel: ObservableObject {
     /// Whether anything before insertion can depend on the browser URL: website triggers can
     /// change the matched workflow (language, engine, prompt, output, auto-enter, action),
     /// automatic output formats resolve by URL, and action and post-processor plugins receive it.
-    private func browserURLRequiredBeforeInsertion(bundleIdentifier: String?) -> Bool {
-        let hasApplicableWebsiteWorkflow = workflowService.workflows.contains { workflow in
+    /// Waits for the website workflow, then sends the finished recording through the
+    /// resolved engine's live session if that engine streams dictation. Returns nil when
+    /// batch transcription should handle the recording instead.
+    private func transcribeRecordingThroughDeferredLiveSession(_ samples: [Float]) async -> TranscriptionResult? {
+        if let pendingURLResolution = urlResolutionTask {
+            _ = await pendingURLResolution.value
+        }
+        guard !Task.isCancelled else { return nil }
+        let previewRequested = indicatorTranscriptPreviewEnabled
+            || liveFieldTranscriptEnabled
+            || externalStreamingDisplayCount > 0
+        let engineOverrideId = effectiveEngineOverrideId
+        let providerId = modelManager.selectedProviderId
+        guard !previewRequested,
+              modelManager.prefersLiveSessionForDictation(
+                engineOverrideId: engineOverrideId,
+                selectedProviderId: providerId
+              ) else {
+            return nil
+        }
+        let dictionaryProviderId = engineOverrideId ?? providerId
+        let streamPrompt = dictionaryService.getTermsForPrompt(providerId: dictionaryProviderId) ?? ""
+        let dictionaryTermHints = dictionaryService.getTermHints(providerId: dictionaryProviderId)
+        let languageSelection = effectiveLanguageSelection
+        let task = effectiveTask
+        let cloudModelOverride = effectiveCloudModelOverride
+        let normalizeNumbers = effectiveNumberNormalizationOverride
+        let replay: @MainActor () async throws -> TranscriptionResult? = { [streamingHandler] in
+            await streamingHandler.transcribeRecordingThroughLiveSession(
+                samples,
+                streamPrompt: streamPrompt,
+                dictionaryTermHints: dictionaryTermHints,
+                engineOverrideId: engineOverrideId,
+                languageSelection: languageSelection,
+                task: task,
+                cloudModelOverride: cloudModelOverride,
+                normalizeNumbers: normalizeNumbers
+            )
+        }
+        // A stalled provider must not hold the stop path; on expiry the replay is
+        // cancelled and batch transcription takes over with its own deadline.
+        let audioDuration = Double(samples.count) / AudioRecordingService.targetSampleRate
+        guard let deadline = transcriptionDeadlineProvider(audioDuration), deadline > 0 else {
+            return try? await replay()
+        }
+        do {
+            return try await runWithDeadline(deadline, operationName: "Live replay", replay)
+        } catch {
+            logger.warning("Live replay did not finish, using batch transcription: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+    }
+
+    private func hasApplicableWebsiteWorkflow(bundleIdentifier: String?) -> Bool {
+        workflowService.workflows.contains { workflow in
             guard workflow.isEnabled,
                   let trigger = workflow.trigger,
                   !trigger.websitePatterns.isEmpty else {
@@ -2135,7 +2207,10 @@ final class DictationViewModel: ObservableObject {
             return trigger.appBundleIdentifiers.isEmpty
                 || trigger.appBundleIdentifiers.contains(bundleIdentifier ?? "")
         }
-        return hasApplicableWebsiteWorkflow
+    }
+
+    private func browserURLRequiredBeforeInsertion(bundleIdentifier: String?) -> Bool {
+        hasApplicableWebsiteWorkflow(bundleIdentifier: bundleIdentifier)
             || WorkflowOutputFormatResolver.isAutomaticFormat(effectiveOutputFormat)
             || effectiveActionPluginId != nil
             || PluginManager.shared?.postProcessors.isEmpty == false
@@ -2214,6 +2289,9 @@ final class DictationViewModel: ObservableObject {
         isStopInFlight = true
         let canKeepFinalLiveInsertionQuiet = streamingHandler.hasActiveLiveTranscriptionSession
             && !requiresVisiblePostProcessingPhase
+        // Stopped before the browser URL resolved: the hidden live session never started.
+        // Captured here because the URL task may clear the marker before finalization runs.
+        let hiddenLiveSessionWasDeferred = hiddenLiveSessionAwaitsWebsiteWorkflow && lastStreamingParams == nil
         state = .processing
         processingPhase = canKeepFinalLiveInsertionQuiet
             ? nil
@@ -2221,11 +2299,14 @@ final class DictationViewModel: ObservableObject {
         markActiveDictationSessionProcessingIfNeeded()
         stopFinalizationTask = Task { [weak self] in
             guard let self else { return }
-            await finalizeStopDictation(submitRequested: submitRequested)
+            await finalizeStopDictation(
+                submitRequested: submitRequested,
+                hiddenLiveSessionWasDeferred: hiddenLiveSessionWasDeferred
+            )
         }
     }
 
-    private func finalizeStopDictation(submitRequested: Bool) async {
+    private func finalizeStopDictation(submitRequested: Bool, hiddenLiveSessionWasDeferred: Bool) async {
         var didStartTranscriptionTask = false
         defer {
             if Task.isCancelled {
@@ -2268,6 +2349,8 @@ final class DictationViewModel: ObservableObject {
         lastStreamingParams = nil
         let previewFollowedDictationEngine = lastPreviewFollowsDictationEngine
         lastPreviewFollowsDictationEngine = true
+        let streamingPreviewWasHidden = lastStreamingPreviewHidden || hiddenLiveSessionWasDeferred
+        lastStreamingPreviewHidden = false
         stopRecordingTimer()
         let previewText = partialText.trimmingCharacters(in: .whitespacesAndNewlines)
         let stopPolicy = AudioRecordingService.StopPolicy.finalizeShortSpeech()
@@ -2276,7 +2359,10 @@ final class DictationViewModel: ObservableObject {
         guard !Task.isCancelled else { return }
         logger.info("Stop timing: stopRecording done elapsedMs=\(stopElapsedMs(), privacy: .public), previewTextLength=\(previewText.count, privacy: .public)")
         let liveSessionResultBeforePreviewFallback: TranscriptionResult?
-        if previewFollowedDictationEngine {
+        if hiddenLiveSessionWasDeferred,
+           let replayedResult = await transcribeRecordingThroughDeferredLiveSession(samples) {
+            liveSessionResultBeforePreviewFallback = replayedResult
+        } else if previewFollowedDictationEngine {
             liveSessionResultBeforePreviewFallback = await streamingHandler.finish(finalSamples: samples)
         } else {
             // The live session ran on a preview-only engine; its text is display-only
@@ -2304,6 +2390,7 @@ final class DictationViewModel: ObservableObject {
         let peakLevel = audioRecordingService.peakRawAudioLevel
         let rawDuration = Double(samples.count) / AudioRecordingService.targetSampleRate
         if previewFollowedDictationEngine,
+           !streamingPreviewWasHidden,
            !hasConfirmedTranscriptionResultText(liveSessionResult),
            let previewResult = stableLivePreviewFallbackResult(
             previewText: previewText,
@@ -2312,11 +2399,11 @@ final class DictationViewModel: ObservableObject {
            ) {
             liveSessionResult = previewResult
         }
-        // A distinct preview engine's text never becomes the final result, but its
-        // having recognized speech still counts for the discard-quiet-clip gating —
-        // otherwise valid quiet speech would be discarded before the dictation
-        // engine gets to transcribe it.
-        let previewEngineConfirmedSpeech = !previewFollowedDictationEngine
+        // Text from a distinct preview engine or a hidden live session never becomes
+        // the final result on its own, but its having recognized speech still counts
+        // for the discard-quiet-clip gating — otherwise valid quiet speech would be
+        // discarded before the dictation engine gets to transcribe it.
+        let previewEngineConfirmedSpeech = (!previewFollowedDictationEngine || streamingPreviewWasHidden)
             && StreamingHandler.isSubstantiveStablePreview(
                 previewText.trimmingCharacters(in: .whitespacesAndNewlines)
             )
@@ -2893,7 +2980,18 @@ final class DictationViewModel: ObservableObject {
                 normalizeNumbers: normalizeNumbers
             )
         }
-        let arbiter = DeadlineArbiter<FinalTranscriptionOutput>()
+        return try await runWithDeadline(deadline, operationName: "Final transcription", transcriptionOperation)
+    }
+
+    /// Runs `operation` as an unstructured task settled through a `DeadlineArbiter`:
+    /// returns its outcome, or throws `TranscriptionDeadlineExceeded` once `deadline`
+    /// passes. The work is cancelled but never awaited.
+    private func runWithDeadline<Value>(
+        _ deadline: TimeInterval,
+        operationName: String,
+        _ operation: @escaping @MainActor () async throws -> Value
+    ) async throws -> Value {
+        let arbiter = DeadlineArbiter<Value>()
         // The continuation only signals completion; the (non-Sendable) outcome
         // stays inside the main-actor arbiter and is read back here.
         await withTaskCancellationHandler {
@@ -2901,7 +2999,7 @@ final class DictationViewModel: ObservableObject {
                 arbiter.begin(continuation)
                 let work = Task { @MainActor in
                     do {
-                        arbiter.settle(.success(try await transcriptionOperation()))
+                        arbiter.settle(.success(try await operation()))
                     } catch {
                         arbiter.settle(.failure(error))
                     }
@@ -2912,7 +3010,7 @@ final class DictationViewModel: ObservableObject {
                     } catch {
                         return
                     }
-                    logger.error("Final transcription exceeded its deadline of \(deadline, format: .fixed(precision: 1))s; abandoning in-flight requests")
+                    logger.error("\(operationName, privacy: .public) exceeded its deadline of \(deadline, format: .fixed(precision: 1))s; abandoning in-flight requests")
                     arbiter.settle(.failure(TranscriptionDeadlineExceeded(seconds: deadline)))
                 }
                 arbiter.register(work: work, timer: timer)
@@ -3448,7 +3546,7 @@ final class DictationViewModel: ObservableObject {
                 return self.canUseEngineForPreview(engine)
             }
         )
-        let previewEngineOverrideId: String?
+        var previewEngineOverrideId: String?
         let previewUsable: Bool
         switch resolution {
         case .followsDictationEngine:
@@ -3465,11 +3563,26 @@ final class DictationViewModel: ObservableObject {
             previewUsable = false
             logger.warning("Selected live preview engine is unavailable; preview disabled for this recording instead of falling back to the dictation engine")
         }
-        let effectiveAllowLiveTranscription = allowLiveTranscription && previewUsable
+        var effectiveAllowLiveTranscription = allowLiveTranscription && previewUsable
+        // Engines whose live session is the dictation path (e.g. Soniox realtime) keep
+        // streaming when the preview is hidden. Otherwise the final transcription would
+        // fall back to a much slower batch request after the user stops. An unavailable
+        // preview engine stays suppressed, since the preview would still be shown.
+        let streamsDictationWithoutPreview = !allowLiveTranscription
+            && !hiddenLiveSessionAwaitsWebsiteWorkflow
+            && modelManager.prefersLiveSessionForDictation(
+                engineOverrideId: params.engineOverrideId,
+                selectedProviderId: params.providerId
+            )
+        if streamsDictationWithoutPreview {
+            previewEngineOverrideId = params.engineOverrideId
+            effectiveAllowLiveTranscription = true
+        }
         lastStreamingParams = effectiveAllowLiveTranscription ? params : nil
         let previewFollowsDictationEngine =
             (previewEngineOverrideId ?? params.providerId) == (params.engineOverrideId ?? params.providerId)
         lastPreviewFollowsDictationEngine = previewFollowsDictationEngine
+        lastStreamingPreviewHidden = streamsDictationWithoutPreview
         let dictionaryProviderId = previewEngineOverrideId ?? params.providerId
         // A distinct preview engine that can't translate still previews the speech —
         // as a transcription. The final (translating) result comes from the dictation
@@ -3492,6 +3605,7 @@ final class DictationViewModel: ObservableObject {
             cloudModelOverride: previewFollowsDictationEngine ? params.cloudModelOverride : nil,
             normalizeNumbers: params.normalizeNumbers,
             allowLiveTranscription: effectiveAllowLiveTranscription,
+            previewHidden: streamsDictationWithoutPreview,
             stateCheck: { [weak self] in self?.state == .recording }
         )
     }
@@ -3631,12 +3745,12 @@ final class DictationViewModel: ObservableObject {
     /// Restart live streaming if the currently effective params differ from the ones
     /// used when `streamingHandler.start(...)` was last called. Called after URL
     /// resolution refines the rule, to keep live preview consistent with the final
-    /// transcription. No-op when recording already stopped, when live streaming was
-    /// disabled, or when no meaningful param changed.
+    /// transcription. No-op when recording already stopped, when no meaningful param
+    /// changed, or when live streaming was disabled and the refined engine doesn't
+    /// stream dictation through a live session.
     @discardableResult
     private func refreshLiveStreamingIfParamsChanged() -> Bool {
         guard state == .recording else { return false }
-        guard let previous = lastStreamingParams else { return false }
         let newParams = StreamingParamsSnapshot(
             engineOverrideId: effectiveEngineOverrideId,
             providerId: modelManager.selectedProviderId,
@@ -3645,11 +3759,21 @@ final class DictationViewModel: ObservableObject {
             cloudModelOverride: effectiveCloudModelOverride,
             normalizeNumbers: effectiveNumberNormalizationOverride
         )
-        guard newParams != previous else { return false }
-        logger.info("Streaming params changed after URL resolution, restarting live session")
         let allowLive = indicatorTranscriptPreviewEnabled
             || liveFieldTranscriptEnabled
             || externalStreamingDisplayCount > 0
+        guard let previous = lastStreamingParams else {
+            // Nothing streams yet, but a workflow may have switched to an engine that
+            // streams dictation even with the preview hidden.
+            guard modelManager.prefersLiveSessionForDictation(
+                engineOverrideId: newParams.engineOverrideId,
+                selectedProviderId: newParams.providerId
+            ) else { return false }
+            startLiveStreaming(allowLiveTranscription: allowLive)
+            return lastStreamingParams != nil
+        }
+        guard newParams != previous else { return false }
+        logger.info("Streaming params changed after URL resolution, restarting live session")
         startLiveStreaming(allowLiveTranscription: allowLive)
         return true
     }

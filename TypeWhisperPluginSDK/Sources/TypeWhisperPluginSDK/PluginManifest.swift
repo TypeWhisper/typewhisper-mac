@@ -11,6 +11,9 @@ public enum PluginHosting: String, Codable, Sendable {
 
 public enum PluginCapability: String, Codable, Sendable, CaseIterable {
     case sourceFootageProgress = "source-footage-progress"
+    /// The engine's live session produces the final dictation result, so the host
+    /// streams dictation through it even when no transcript preview is shown.
+    case liveDictation = "live-dictation"
 }
 
 public struct PluginManifest: Codable, Equatable, Sendable {
