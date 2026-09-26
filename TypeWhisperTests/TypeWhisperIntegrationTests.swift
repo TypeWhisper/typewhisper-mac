@@ -15383,6 +15383,7 @@ extension TypeWhisperIntegrationTests {
     private func makeHedgedDictationViewModel(
         hedgeThreshold: TimeInterval?,
         transcriptionDeadline: TimeInterval? = nil,
+        simulatesRecordingAndInsertion: Bool = false,
         primaryRunner: @escaping DictationViewModel.PrimaryTranscriptionRunner,
         fallbackRunner: @escaping DictationViewModel.RecoveryFallbackRunner
     ) throws -> (viewModel: DictationViewModel, cleanup: () -> Void) {
@@ -15393,16 +15394,20 @@ extension TypeWhisperIntegrationTests {
 
         let modelManager = ModelManagerService()
         let audioRecordingService = AudioRecordingService()
-        audioRecordingService.hasMicrophonePermissionOverride = true
-        audioRecordingService.inputAvailabilityOverride = { _ in true }
-        audioRecordingService.startRecordingOverride = {}
-        audioRecordingService.stopRecordingOverride = { _ in
-            Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
+        if simulatesRecordingAndInsertion {
+            audioRecordingService.hasMicrophonePermissionOverride = true
+            audioRecordingService.inputAvailabilityOverride = { _ in true }
+            audioRecordingService.startRecordingOverride = {}
+            audioRecordingService.stopRecordingOverride = { _ in
+                Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
+            }
         }
         let hotkeyService = HotkeyService()
         let textInsertionService = TextInsertionService()
-        textInsertionService.accessibilityGrantedOverride = true
-        textInsertionService.pasteSimulatorOverride = {}
+        if simulatesRecordingAndInsertion {
+            textInsertionService.accessibilityGrantedOverride = true
+            textInsertionService.pasteSimulatorOverride = {}
+        }
         let historyService = HistoryService(appSupportDirectory: appSupportDirectory)
         let recentTranscriptionStore = RecentTranscriptionStore()
         let profileService = ProfileService(appSupportDirectory: appSupportDirectory)
@@ -15469,6 +15474,7 @@ extension TypeWhisperIntegrationTests {
     func testRecoveryEngineLetsDictationStartWhenSelectedEngineIsUnavailable() async throws {
         let harness = try makeHedgedDictationViewModel(
             hedgeThreshold: nil,
+            simulatesRecordingAndInsertion: true,
             primaryRunner: { _, _, _, _, _, _, _, _ in
                 throw TranscriptionEngineError.engineUnavailable(engineName: "Primary", reason: nil)
             },
