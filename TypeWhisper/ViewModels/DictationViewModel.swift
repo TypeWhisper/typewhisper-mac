@@ -2134,6 +2134,39 @@ final class DictationViewModel: ObservableObject {
     /// Whether anything before insertion can depend on the browser URL: website triggers can
     /// change the matched workflow (language, engine, prompt, output, auto-enter, action),
     /// automatic output formats resolve by URL, and action and post-processor plugins receive it.
+    /// Waits for the website workflow, then sends the finished recording through the
+    /// resolved engine's live session if that engine streams dictation. Returns nil when
+    /// batch transcription should handle the recording instead.
+    private func transcribeRecordingThroughDeferredLiveSession(_ samples: [Float]) async -> TranscriptionResult? {
+        if let pendingURLResolution = urlResolutionTask {
+            _ = await pendingURLResolution.value
+        }
+        guard !Task.isCancelled else { return nil }
+        let previewRequested = indicatorTranscriptPreviewEnabled
+            || liveFieldTranscriptEnabled
+            || externalStreamingDisplayCount > 0
+        let engineOverrideId = effectiveEngineOverrideId
+        let providerId = modelManager.selectedProviderId
+        guard !previewRequested,
+              modelManager.prefersLiveSessionForDictation(
+                engineOverrideId: engineOverrideId,
+                selectedProviderId: providerId
+              ) else {
+            return nil
+        }
+        let dictionaryProviderId = engineOverrideId ?? providerId
+        return await streamingHandler.transcribeRecordingThroughLiveSession(
+            samples,
+            streamPrompt: dictionaryService.getTermsForPrompt(providerId: dictionaryProviderId) ?? "",
+            dictionaryTermHints: dictionaryService.getTermHints(providerId: dictionaryProviderId),
+            engineOverrideId: engineOverrideId,
+            languageSelection: effectiveLanguageSelection,
+            task: effectiveTask,
+            cloudModelOverride: effectiveCloudModelOverride,
+            normalizeNumbers: effectiveNumberNormalizationOverride
+        )
+    }
+
     private func hasApplicableWebsiteWorkflow(bundleIdentifier: String?) -> Bool {
         workflowService.workflows.contains { workflow in
             guard workflow.isEnabled,
@@ -2280,7 +2313,9 @@ final class DictationViewModel: ObservableObject {
         lastStreamingParams = nil
         let previewFollowedDictationEngine = lastPreviewFollowsDictationEngine
         lastPreviewFollowsDictationEngine = true
-        let streamingPreviewWasHidden = lastStreamingPreviewHidden
+        // Stopped before the browser URL resolved: the hidden live session never started.
+        let hiddenLiveSessionWasDeferred = hiddenLiveSessionAwaitsWebsiteWorkflow && streamingParams == nil
+        let streamingPreviewWasHidden = lastStreamingPreviewHidden || hiddenLiveSessionWasDeferred
         lastStreamingPreviewHidden = false
         stopRecordingTimer()
         let previewText = partialText.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2290,7 +2325,10 @@ final class DictationViewModel: ObservableObject {
         guard !Task.isCancelled else { return }
         logger.info("Stop timing: stopRecording done elapsedMs=\(stopElapsedMs(), privacy: .public), previewTextLength=\(previewText.count, privacy: .public)")
         let liveSessionResultBeforePreviewFallback: TranscriptionResult?
-        if previewFollowedDictationEngine {
+        if hiddenLiveSessionWasDeferred,
+           let replayedResult = await transcribeRecordingThroughDeferredLiveSession(samples) {
+            liveSessionResultBeforePreviewFallback = replayedResult
+        } else if previewFollowedDictationEngine {
             liveSessionResultBeforePreviewFallback = await streamingHandler.finish(finalSamples: samples)
         } else {
             // The live session ran on a preview-only engine; its text is display-only
@@ -2327,11 +2365,11 @@ final class DictationViewModel: ObservableObject {
            ) {
             liveSessionResult = previewResult
         }
-        // A distinct preview engine's text never becomes the final result, but its
-        // having recognized speech still counts for the discard-quiet-clip gating —
-        // otherwise valid quiet speech would be discarded before the dictation
-        // engine gets to transcribe it.
-        let previewEngineConfirmedSpeech = !previewFollowedDictationEngine
+        // Text from a distinct preview engine or a hidden live session never becomes
+        // the final result on its own, but its having recognized speech still counts
+        // for the discard-quiet-clip gating — otherwise valid quiet speech would be
+        // discarded before the dictation engine gets to transcribe it.
+        let previewEngineConfirmedSpeech = (!previewFollowedDictationEngine || streamingPreviewWasHidden)
             && StreamingHandler.isSubstantiveStablePreview(
                 previewText.trimmingCharacters(in: .whitespacesAndNewlines)
             )

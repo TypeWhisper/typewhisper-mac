@@ -17,6 +17,7 @@ final class StreamingHandler: @unchecked Sendable {
         /// The session only produces the final result: no batch preview loop, and a
         /// failed finalization yields nil so the caller transcribes the full recording.
         var previewHidden = false
+        var liveSessionAppendFailed = false
     }
 
     private static let liveSessionPollInterval: Duration = .milliseconds(350)
@@ -26,6 +27,7 @@ final class StreamingHandler: @unchecked Sendable {
     private static let livePreviewAnalysisFrameDuration: TimeInterval = 0.1
     private static let livePreviewSpeechRMSFloor: Float = 0.004
     private static let livePreviewSustainedSilenceDuration: TimeInterval = 1.4
+    private static let recordingReplayChunkSize = 4_096
 
     private struct LivePreviewAudioActivity {
         var duration: TimeInterval
@@ -214,6 +216,15 @@ final class StreamingHandler: @unchecked Sendable {
             return nil
         }
 
+        // A hidden session missing audio must not produce the final text; the caller
+        // transcribes the full recording instead.
+        if sharedState.withLock({ $0.previewHidden && $0.liveSessionAppendFailed }) {
+            logger.info("Hidden live session lost audio during recording, using batch transcription")
+            await modelManager.cancelLiveTranscriptionSession(handle)
+            clearStreamingState(notifyStreamingStopped: true)
+            return nil
+        }
+
         let stablePreviewBeforeFinish = sharedState.withLock { $0.confirmedStreamingText }
         let delta = nextBufferDelta(finalSamples: finalSamples)
 
@@ -258,6 +269,65 @@ final class StreamingHandler: @unchecked Sendable {
                 return previewResult
             }
             clearStreamingState(notifyStreamingStopped: true)
+            return nil
+        }
+    }
+
+    /// Sends a finished recording through a fresh live session and returns its final
+    /// result, or nil on any failure so the caller can fall back to batch transcription.
+    /// Used when the engine that streams dictation was only known after recording stopped.
+    @MainActor
+    func transcribeRecordingThroughLiveSession(
+        _ samples: [Float],
+        streamPrompt: String,
+        dictionaryTermHints: [PluginDictionaryTermHint],
+        engineOverrideId: String?,
+        languageSelection: LanguageSelection,
+        task: TranscriptionTask,
+        cloudModelOverride: String?,
+        normalizeNumbers: Bool?
+    ) async -> TranscriptionResult? {
+        guard !samples.isEmpty else { return nil }
+
+        let handle: ModelManagerService.LiveTranscriptionSessionHandle
+        do {
+            guard let createdHandle = try await modelManager.createLiveTranscriptionSession(
+                languageSelection: languageSelection,
+                task: task,
+                engineOverrideId: engineOverrideId,
+                cloudModelOverride: cloudModelOverride,
+                prompt: streamPrompt,
+                dictionaryTermHints: dictionaryTermHints,
+                onProgress: { _ in true }
+            ) else {
+                return nil
+            }
+            handle = createdHandle
+        } catch {
+            logger.warning("Recording replay could not open a live session: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
+
+        do {
+            var offset = 0
+            while offset < samples.count {
+                let end = min(offset + Self.recordingReplayChunkSize, samples.count)
+                try await handle.session.appendAudio(samples: Array(samples[offset..<end]))
+                offset = end
+            }
+            let result = try await modelManager.finishLiveTranscriptionSession(
+                handle,
+                bufferedDuration: Double(samples.count) / Self.livePreviewSampleRate,
+                language: languageSelection.requestedLanguage,
+                languageCandidates: languageSelection.selectedCodes,
+                task: task,
+                normalizeNumbers: normalizeNumbers
+            )
+            logger.info("Recording replayed through live session providerId=\(handle.providerId, privacy: .public)")
+            return result
+        } catch {
+            logger.warning("Recording replay through live session failed: \(error.localizedDescription, privacy: .public)")
+            await modelManager.cancelLiveTranscriptionSession(handle)
             return nil
         }
     }
@@ -327,6 +397,7 @@ final class StreamingHandler: @unchecked Sendable {
                     try await handle.session.appendAudio(samples: delta.samples)
                 } catch {
                     logger.warning("Live transcription append failed: \(error.localizedDescription)")
+                    sharedState.withLock { $0.liveSessionAppendFailed = true }
                     break
                 }
             }
@@ -406,6 +477,7 @@ final class StreamingHandler: @unchecked Sendable {
             state.task = .transcribe
             state.sampleCursor = 0
             state.previewHidden = false
+            state.liveSessionAppendFailed = false
         }
         progressText.withLock { $0 = "" }
     }

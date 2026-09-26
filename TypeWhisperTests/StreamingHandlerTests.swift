@@ -441,6 +441,11 @@ final class StreamingHandlerTests: XCTestCase {
             finishError = error
         }
 
+        /// Fails only the next append, so later appends (e.g. the finish tail) succeed.
+        func setAppendError(_ error: PluginTranscriptionError?) {
+            appendError = error
+        }
+
         func prepareToBlockNextAppend() {
             shouldBlockNextAppend = true
             appendWasReleased = false
@@ -461,6 +466,10 @@ final class StreamingHandlerTests: XCTestCase {
         }
 
         func appendAudio(samples: [Float]) async throws {
+            if let appendError {
+                self.appendError = nil
+                throw appendError
+            }
             appendedChunkSizes.append(samples.count)
 
             if shouldBlockNextAppend {
@@ -504,6 +513,7 @@ final class StreamingHandlerTests: XCTestCase {
 
         private var finalResult = PluginTranscriptionResult(text: "finished", detectedLanguage: "en")
         private var finishError: PluginTranscriptionError?
+        private var appendError: PluginTranscriptionError?
     }
 
     override func tearDown() {
@@ -1138,6 +1148,72 @@ final class StreamingHandlerTests: XCTestCase {
         let result = await handler.finish()
 
         XCTAssertNil(result)
+    }
+
+    func testFinishReturnsNilWhenHiddenLiveSessionAppendFails() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let plugin = MockLivePlugin(progressMode: .rollingWindow)
+        await plugin.session.setProgressUpdates([
+            "Early words stay in the transcript",
+            "the transcript while later words arrive",
+        ])
+        await plugin.session.setAppendError(PluginTranscriptionError.networkError("socket closed"))
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.live",
+                    name: "Mock Live",
+                    version: "1.0.0",
+                    principalClass: "MockLivePlugin",
+                    requiresAPIKey: false
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider(plugin.providerId)
+
+        let deltaLock = NSLock()
+        var sentDeltaCount = 0
+        let handler = StreamingHandler(
+            modelManager: modelManager,
+            bufferProvider: { [] },
+            recentBufferProvider: { _ in [] },
+            bufferDeltaProvider: { offset in
+                deltaLock.lock()
+                defer { deltaLock.unlock() }
+                guard sentDeltaCount < 2 else { return ([], offset) }
+                sentDeltaCount += 1
+                return (Array(repeating: 0.2, count: 4000), sentDeltaCount * 4000)
+            },
+            bufferedDurationProvider: { 0.25 }
+        )
+
+        handler.start(
+            streamPrompt: "Live Terms",
+            engineOverrideId: plugin.providerId,
+            selectedProviderId: plugin.providerId,
+            languageSelection: .auto,
+            task: .transcribe,
+            cloudModelOverride: nil,
+            allowLiveTranscription: true,
+            previewHidden: true,
+            stateCheck: { true }
+        )
+
+        try await Task.sleep(for: .milliseconds(500))
+        let result = await handler.finish()
+
+        let cancellation = await plugin.session.cancellationSnapshot()
+        XCTAssertNil(result)
+        XCTAssertEqual(cancellation.callCount, 1)
     }
 
     func testFinalLiveResultKeepsProviderFinalWhenPreviewIsNotSubstantive() {
