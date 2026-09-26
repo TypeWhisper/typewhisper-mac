@@ -298,6 +298,11 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         }
     }
 
+    enum BluetoothStopBehavior: Equatable {
+        case keepPrepared
+        case release
+    }
+
     enum AudioRecordingError: LocalizedError {
         case microphonePermissionDenied
         case noMicrophoneDetected
@@ -344,6 +349,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     var inputAvailabilityOverride: ((AudioDeviceID?) -> Bool)?
     var startRecordingOverride: (() throws -> Void)?
     var stopRecordingOverride: ((StopPolicy) async -> [Float])?
+    var engineTeardownOverride: ((AVAudioEngine) -> Void)?
     var onFirstRecordingAudioBuffer: (() -> Void)?
 
     /// CoreAudio device ID to use for recording. nil = system default input.
@@ -1409,7 +1415,10 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         }
     }
 
-    func stopRecording(policy: StopPolicy) async -> [Float] {
+    func stopRecording(
+        policy: StopPolicy,
+        bluetoothBehavior: BluetoothStopBehavior = .keepPrepared
+    ) async -> [Float] {
         if let stopRecordingOverride {
             outputVolumeGuard.captureBaseline()
             let samples = await stopRecordingOverride(policy)
@@ -1485,6 +1494,9 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         }
 
         guard let engine = capture.engine else {
+            if bluetoothBehavior == .release {
+                invalidatePreparedRecordingInputs(reason: "bluetooth-recording-release-without-engine")
+            }
             outputVolumeGuard.clear()
             return []
         }
@@ -1507,8 +1519,15 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
 
         removeConfigurationObserver()
         outputVolumeGuard.captureBaseline()
-        let keptPreparedInput = keepBluetoothInputPrepared(engine)
+        if bluetoothBehavior == .release {
+            invalidatePreparedRecordingInputs(reason: "bluetooth-recording-release")
+        }
+        let keptPreparedInput = bluetoothBehavior == .keepPrepared
+            && keepBluetoothInputPrepared(engine)
         if !keptPreparedInput {
+            processingQueue.sync {
+                bluetoothInputStartupTracker.reset()
+            }
             teardownEngine(engine)
             // CoreAudio teardown callbacks can outlive the stopped engine.
             engineTeardownRetainer.retain(engine, for: Self.engineTeardownRetentionInterval)
@@ -1530,7 +1549,9 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
             self?.rawAudioLevel = 0
         }
 
-        scheduleRecordingInputPreparation(after: Self.postRecordingInputPreparationDelay)
+        if bluetoothBehavior == .keepPrepared {
+            scheduleRecordingInputPreparation(after: Self.postRecordingInputPreparationDelay)
+        }
 
         return samples
     }
@@ -2161,6 +2182,10 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     }
 
     private func teardownEngine(_ engine: AVAudioEngine) {
+        if let engineTeardownOverride {
+            engineTeardownOverride(engine)
+            return
+        }
         engine.inputNode.removeTap(onBus: 0)
         engine.stop()
     }
@@ -3138,6 +3163,26 @@ extension AudioRecordingService {
 
     func testingCurrentAudioEngine() -> AVAudioEngine? {
         engineLock.withLock { audioEngine }
+    }
+
+    func testingHasPreparedBluetoothInput() -> Bool {
+        engineLock.withLock { preparedBluetoothInput != nil }
+    }
+
+    func testingPreparedInputGeneration() -> UInt64 {
+        engineLock.withLock { preparedInputGeneration }
+    }
+
+    func testingSetPreparedBluetoothInput(_ engine: AVAudioEngine, deviceID: AudioDeviceID) {
+        let format = AVAudioFormat(standardFormatWithSampleRate: Self.targetSampleRate, channels: 1)!
+        engineLock.withLock {
+            preparedBluetoothInput = PreparedBluetoothInput(
+                engine: engine,
+                deviceID: deviceID,
+                tapFormat: format,
+                inputGeneration: 1
+            )
+        }
     }
 
     func testingClaimPreparedBluetoothInput(_ engine: AVAudioEngine, deviceID: AudioDeviceID) -> Bool {
