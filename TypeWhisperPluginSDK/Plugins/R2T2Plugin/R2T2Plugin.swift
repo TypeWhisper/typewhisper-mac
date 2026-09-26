@@ -291,13 +291,13 @@ private actor R2T2TranscriptCollector {
 /// Uses Network.framework because URLSession cannot read a response while its request body is
 /// still being streamed.
 private final class R2T2LiveConnection: @unchecked Sendable {
-    private static let logger = Logger(subsystem: "com.typewhisper.r2t2", category: "Live")
+    private static let logger = Logger(subsystem: "com.scriptease.r2t2", category: "Live")
     private static let connectTimeout: Duration = .seconds(5)
     /// Includes model load on the server's first request after startup or idle unload.
     private static let finishTimeout: Duration = .seconds(120)
 
     private let connection: NWConnection
-    private let queue = DispatchQueue(label: "com.typewhisper.r2t2.live")
+    private let queue = DispatchQueue(label: "com.scriptease.r2t2.live")
     private let collector = R2T2TranscriptCollector()
     private let onProgress: @Sendable (String) -> Bool
     private let parserLock = OSAllocatedUnfairLock(initialState: R2T2ResponseParser())
@@ -486,12 +486,12 @@ private final class R2T2LiveTranscriptionSession: LiveTranscriptionSession, @unc
 final class R2T2Plugin: NSObject, TranscriptionEnginePlugin, LiveTranscriptionCapablePlugin,
     LiveTranscriptionProgressModeProviding, DictionaryTermsCapabilityProviding, @unchecked Sendable
 {
-    static let pluginId = "com.typewhisper.r2t2"
+    static let pluginId = "com.scriptease.r2t2"
     static let pluginName = "Confucius4-R2T2"
     static let serverURLKey = "serverURL"
     static let modelIdKey = "modelId"
 
-    private let logger = Logger(subsystem: "com.typewhisper.r2t2", category: "Plugin")
+    private let logger = Logger(subsystem: "com.scriptease.r2t2", category: "Plugin")
     fileprivate var host: HostServices?
     fileprivate var _serverURL = R2T2Protocol.defaultServerURL
     fileprivate var _modelId = R2T2Protocol.defaultModelId

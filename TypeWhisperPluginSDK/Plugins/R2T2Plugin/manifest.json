@@ -1,16 +1,19 @@
 {
-    "id": "com.typewhisper.r2t2",
+    "id": "com.scriptease.r2t2",
     "name": "Confucius4-R2T2",
     "version": "0.1.0",
     "minHostVersion": "1.7.0",
     "sdkCompatibilityVersion": "v1",
     "minOSVersion": "14.0",
-    "author": "TypeWhisper",
-    "description": "On-device real-time streaming transcription with Confucius4-R2T2 (NetEase Youdao) via a local audio.cpp server on Metal. Append-only output, Chinese and English optimized.",
+    "author": "scriptease",
+    "description": "On-device real-time streaming transcription with Confucius4-R2T2 (NetEase Youdao). Requires a running audio.cpp server on this Mac, which the plugin does not start. Append-only output, Chinese and English optimized.",
     "descriptions": {
-        "de": "Lokale Echtzeit-Streaming-Transkription mit Confucius4-R2T2 (NetEase Youdao) über einen lokalen audio.cpp-Server auf Metal. Append-only-Ausgabe, optimiert für Chinesisch und Englisch."
+        "de": "Lokale Echtzeit-Streaming-Transkription mit Confucius4-R2T2 (NetEase Youdao). Benötigt einen laufenden audio.cpp-Server auf diesem Mac, den das Plugin nicht selbst startet. Append-only-Ausgabe, optimiert für Chinesisch und Englisch."
     },
     "category": "transcription",
+    "capabilities": [
+        "live-dictation"
+    ],
     "hosting": "local",
     "iconSystemName": "waveform.badge.mic",
     "principalClass": "R2T2Plugin",
