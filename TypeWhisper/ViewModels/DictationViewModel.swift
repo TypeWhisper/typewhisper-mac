@@ -714,8 +714,11 @@ final class DictationViewModel: ObservableObject {
         hotkeyService.discardPushToTalkRecordingOnExtraKeyPress = true
     }
 
+    /// True when the selected engine can transcribe, or when the automatic recovery
+    /// engine can stand in for it after the primary attempt fails.
     var canDictate: Bool {
         modelManager.canTranscribe
+            || recoveryFallbackConfigurationProvider(modelManager.selectedProviderId, effectiveTask) != nil
     }
 
     @available(*, deprecated, renamed: "activeRuleName")

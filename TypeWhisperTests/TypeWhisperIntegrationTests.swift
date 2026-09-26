@@ -15458,6 +15458,27 @@ extension TypeWhisperIntegrationTests {
     }
 
     @MainActor
+    func testRecoveryEngineLetsDictationStartWhenSelectedEngineIsUnavailable() async throws {
+        let harness = try makeHedgedDictationViewModel(
+            hedgeThreshold: nil,
+            primaryRunner: { _, _, _, _, _, _, _, _ in
+                throw TranscriptionEngineError.engineUnavailable(engineName: "Primary", reason: nil)
+            },
+            fallbackRunner: { _, _, _, _, _, _, _ in
+                Self.hedgeTranscriptionResult(text: "fallback", engine: "test-fallback")
+            }
+        )
+        defer { harness.cleanup() }
+
+        // The harness has no installed engines, so only the recovery engine can make this true.
+        XCTAssertTrue(harness.viewModel.canDictate)
+
+        let output = try await harness.viewModel.transcribeFinalAudioForTesting(primaryEngineId: "primary")
+        XCTAssertEqual(output.text, "fallback")
+        XCTAssertTrue(output.usedRecoveryFallback)
+    }
+
+    @MainActor
     func testTranscriptionDeadlineAbandonsHungPrimaryAndFallback() async throws {
         var primaryCancelled = false
         var fallbackCancelled = false
