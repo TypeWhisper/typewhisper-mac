@@ -179,6 +179,25 @@ jobs:
             exit 0
           fi
           python3 scripts/assemble_community_plugin_registry.py
+          # Check the bundled manifest against its registry entry before anything is built or released.
+          python3 - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          manifest_path = Path("TypeWhisperPluginSDK/Plugins") / os.environ["TARGET"] / "manifest.json"
+          if not manifest_path.is_file():
+              raise SystemExit(f"Missing manifest at {manifest_path}")
+          manifest = json.loads(manifest_path.read_text())
+          metadata_path = Path("PluginRegistry/community-v1") / f"{manifest.get('id')}.json"
+          if not metadata_path.is_file():
+              raise SystemExit(f"Missing community registry metadata at {metadata_path}")
+          metadata = json.loads(metadata_path.read_text())
+          if metadata.get("author") != manifest.get("author"):
+              raise SystemExit(
+                  f"community metadata author {metadata.get('author')} does not match manifest author {manifest.get('author')}"
+              )
+          PY
 
       - name: Validate release manifest
         run: |
@@ -519,10 +538,6 @@ jobs:
                   )
               if metadata.get("source") != "community":
                   raise SystemExit("community registry metadata must set source=community")
-              if metadata.get("author") != manifest.get("author"):
-                  raise SystemExit(
-                      f"community metadata author {metadata.get('author')} does not match manifest author {manifest.get('author')}"
-                  )
 
           # Semver-tolerant version sort key. Accepts "1.2.3", "1.2.3-beta.4",
           # "1.2.3+build.5" etc. Pre-release tags sort before matching release

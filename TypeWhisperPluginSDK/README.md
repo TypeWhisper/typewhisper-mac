@@ -550,9 +550,10 @@ To distribute via the TypeWhisper plugin marketplace:
 
 Community plugins must use their own ID namespace and author name. The
 `com.typewhisper` ID namespace and the author `TypeWhisper` are reserved for
-official plugins and rejected by registry validation. The bundled
-`manifest.json` must use the same `id` and `author` as the registry entry, or
-the community release workflow stops.
+official plugins and rejected by registry validation. The author check ignores
+case and surrounding whitespace, so variants like ` typewhisper ` are rejected
+too. The bundled `manifest.json` must use the same `id` and `author` as the
+registry entry, or the community release workflow stops before building.
 
 Community marketplace artifacts must be built and hosted by TypeWhisper.
 Contributor-hosted ZIPs, personal GitHub Release assets, and other external
