@@ -519,6 +519,10 @@ jobs:
                   )
               if metadata.get("source") != "community":
                   raise SystemExit("community registry metadata must set source=community")
+              if metadata.get("author") != manifest.get("author"):
+                  raise SystemExit(
+                      f"community metadata author {metadata.get('author')} does not match manifest author {manifest.get('author')}"
+                  )
 
           # Semver-tolerant version sort key. Accepts "1.2.3", "1.2.3-beta.4",
           # "1.2.3+build.5" etc. Pre-release tags sort before matching release

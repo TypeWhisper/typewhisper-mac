@@ -60,7 +60,7 @@ OS_VERSION_RE = re.compile(r"^\d+\.\d+(?:\.\d+)?$")
 TYPEWHISPER_RELEASE_NETLOC = "github.com"
 TYPEWHISPER_RELEASE_PATH_PREFIX = "/TypeWhisper/typewhisper-mac/releases/download/"
 # Official plugins use this ID namespace and author name; community entries must not.
-RESERVED_PLUGIN_ID_PREFIX = "com.typewhisper."
+RESERVED_PLUGIN_ID_NAMESPACE = "com.typewhisper"
 RESERVED_AUTHOR = "typewhisper"
 
 
@@ -264,9 +264,13 @@ def validate_plugin(plugin: dict, path: Path) -> list[str]:
             errors.append(f"{filename}: 'id' must use reverse-domain form")
         elif path.name != f"{plugin_id}.json":
             errors.append(f"{filename}: filename must be '{plugin_id}.json'")
-        if isinstance(plugin_id, str) and plugin_id.lower().startswith(RESERVED_PLUGIN_ID_PREFIX):
+        normalized_id = plugin_id.lower() if isinstance(plugin_id, str) else ""
+        if (
+            normalized_id == RESERVED_PLUGIN_ID_NAMESPACE
+            or normalized_id.startswith(f"{RESERVED_PLUGIN_ID_NAMESPACE}.")
+        ):
             errors.append(
-                f"{filename}: 'id' must not use the reserved '{RESERVED_PLUGIN_ID_PREFIX}' namespace"
+                f"{filename}: 'id' must not use the reserved '{RESERVED_PLUGIN_ID_NAMESPACE}' namespace"
             )
 
     if plugin.get("source") != "community":
