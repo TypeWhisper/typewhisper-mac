@@ -117,7 +117,7 @@ final class SnippetService: ObservableObject {
         }
     }
 
-    /// Apply all enabled snippets to the given text.
+    /// Apply all enabled snippets without matching inside words.
     ///
     /// With `deferUsageCountSave`, usage counters stay unsaved until `saveDeferredUsageCounts()`
     /// so the dictation pipeline does not block insertion on a SwiftData save.
@@ -126,21 +126,18 @@ final class SnippetService: ObservableObject {
         var needsSave = false
 
         for snippet in snippets where snippet.isEnabled {
-            let searchTrigger = snippet.caseSensitive ? snippet.trigger : snippet.trigger.lowercased()
-            let searchText = snippet.caseSensitive ? result : result.lowercased()
+            guard !snippet.trigger.isEmpty else { continue }
 
-            if searchText.contains(searchTrigger) {
-                let replacement = snippet.processedReplacement()
+            // Unlike \b, these boundaries also support triggers with symbols at
+            // either end (such as /sig or c++). \w includes Unicode word characters.
+            let pattern = "(?<!\\w)" + NSRegularExpression.escapedPattern(for: snippet.trigger) + "(?!\\w)"
+            let options: NSRegularExpression.Options = snippet.caseSensitive ? [] : [.caseInsensitive]
+            guard let regex = try? NSRegularExpression(pattern: pattern, options: options) else { continue }
+            let range = NSRange(result.startIndex..., in: result)
 
-                if snippet.caseSensitive {
-                    result = result.replacingOccurrences(of: snippet.trigger, with: replacement)
-                } else {
-                    result = result.replacingOccurrences(
-                        of: snippet.trigger,
-                        with: replacement,
-                        options: .caseInsensitive
-                    )
-                }
+            if regex.firstMatch(in: result, range: range) != nil {
+                let replacement = NSRegularExpression.escapedTemplate(for: snippet.processedReplacement())
+                result = regex.stringByReplacingMatches(in: result, range: range, withTemplate: replacement)
 
                 snippet.usageCount += 1
                 needsSave = true
