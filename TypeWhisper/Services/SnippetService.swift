@@ -117,7 +117,7 @@ final class SnippetService: ObservableObject {
         }
     }
 
-    /// Apply all enabled snippets to the given text.
+    /// Apply all enabled snippets without matching inside words.
     ///
     /// With `deferUsageCountSave`, usage counters stay unsaved until `saveDeferredUsageCounts()`
     /// so the dictation pipeline does not block insertion on a SwiftData save.
@@ -126,20 +126,13 @@ final class SnippetService: ObservableObject {
         var needsSave = false
 
         for snippet in snippets where snippet.isEnabled {
-            let searchTrigger = snippet.caseSensitive ? snippet.trigger : snippet.trigger.lowercased()
-            let searchText = snippet.caseSensitive ? result : result.lowercased()
+            guard !snippet.trigger.isEmpty else { continue }
 
-            if searchText.contains(searchTrigger) {
+            let ranges = snippetMatchRanges(for: snippet, in: result)
+            if !ranges.isEmpty {
                 let replacement = snippet.processedReplacement()
-
-                if snippet.caseSensitive {
-                    result = result.replacingOccurrences(of: snippet.trigger, with: replacement)
-                } else {
-                    result = result.replacingOccurrences(
-                        of: snippet.trigger,
-                        with: replacement,
-                        options: .caseInsensitive
-                    )
+                for range in ranges.reversed() {
+                    result.replaceSubrange(range, with: replacement)
                 }
 
                 snippet.usageCount += 1
@@ -156,6 +149,51 @@ final class SnippetService: ObservableObject {
         }
 
         return result
+    }
+
+    private func snippetMatchRanges(for snippet: Snippet, in text: String) -> [Range<String.Index>] {
+        var ranges: [Range<String.Index>] = []
+        var searchStart = text.startIndex
+        let options: String.CompareOptions = snippet.caseSensitive ? [] : [.caseInsensitive]
+
+        // Foundation string search preserves canonical equivalence without
+        // changing the Unicode representation of surrounding text.
+        while searchStart < text.endIndex,
+              let range = text.range(of: snippet.trigger, options: options, range: searchStart..<text.endIndex) {
+            guard !range.isEmpty else { break }
+            // Only whole-grapheme matches may be used for Character subscripting.
+            guard String.Index(range.lowerBound, within: text) != nil,
+                  String.Index(range.upperBound, within: text) != nil else {
+                searchStart = range.upperBound
+                continue
+            }
+            let previous = range.lowerBound > text.startIndex ? text[text.index(before: range.lowerBound)] : nil
+            let next = range.upperBound < text.endIndex ? text[range.upperBound] : nil
+            if !isSnippetWordCharacter(previous), !isSnippetWordCharacter(next) {
+                ranges.append(range)
+                searchStart = range.upperBound
+            } else {
+                // A rejected occurrence can overlap a later valid symbol trigger.
+                searchStart = text.index(after: range.lowerBound)
+            }
+        }
+        return ranges
+    }
+
+    private func isSnippetWordCharacter(_ character: Character?) -> Bool {
+        guard let character, let base = character.unicodeScalars.first else { return false }
+        // Keycap emoji contain a digit but separate words like other emoji.
+        if character.unicodeScalars.contains("\u{20E3}") { return false }
+        if character.isLetter || character.isNumber { return true }
+
+        // Inspect the grapheme's base so emoji variation selectors and combining
+        // marks do not turn a preceding symbol into a word character.
+        switch base.properties.generalCategory {
+        case .connectorPunctuation, .nonspacingMark, .spacingMark, .enclosingMark:
+            return true
+        default:
+            return base == "\u{200C}" || base == "\u{200D}"
+        }
     }
 
     /// Saves usage counters left unsaved by `applySnippets(to:deferUsageCountSave:)`.
