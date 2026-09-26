@@ -105,6 +105,26 @@ final class AppVocabularyImportTests: XCTestCase {
         }
     }
 
+    func testTurkishDictionaryCollisionsMatchLocaleWhileSnippetsRemainLocaleIndependent() {
+        let turkish = Locale(identifier: "tr_TR")
+        XCTAssertNotEqual("I".compare("i", options: .caseInsensitive, locale: turkish), .orderedSame)
+        XCTAssertEqual("I".compare("ı", options: .caseInsensitive, locale: turkish), .orderedSame)
+        XCTAssertEqual("İ".compare("i", options: .caseInsensitive, locale: turkish), .orderedSame)
+        let existing = AppVocabularyImport.Existing(id: UUID(), entry: Entry(kind: .correction, original: "I", replacement: "Same"), caseSensitive: false, isEnabled: true)
+        let batch = AppVocabularyImport.Batch(entries: [
+            Entry(kind: .correction, original: "i", replacement: "Same"),
+            Entry(kind: .correction, original: "ı", replacement: "Different"),
+            Entry(kind: .correction, original: "İ", replacement: "Same")
+        ])
+        XCTAssertEqual(AppVocabularyImport.review(batch, existing: [existing], dictionaryLocale: turkish).map(\.outcome), [.add, .conflict, .duplicate])
+        let snippets = AppVocabularyImport.Batch(entries: [
+            Entry(kind: .snippet, original: "I", replacement: "Same"),
+            Entry(kind: .snippet, original: "i", replacement: "Same")
+        ])
+        XCTAssertNotNil("I".range(of: "i", options: .caseInsensitive))
+        XCTAssertEqual(AppVocabularyImport.review(snippets, existing: [], dictionaryLocale: turkish).map(\.outcome), [.add, .duplicate])
+    }
+
     @MainActor
     func testFailedImportsPreserveDeferredUsageCounts() throws {
         let dir = try TestSupport.makeTemporaryDirectory()

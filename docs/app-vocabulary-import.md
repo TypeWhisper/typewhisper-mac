@@ -30,7 +30,8 @@ duplicates, conflicts and excluded counts. Existing entries are never overwritte
 re-enabled. Identical text with different case-sensitivity or enabled state is a
 conflict, not a duplicate. Selecting a preview row shows its complete content in a
 scrollable detail area. Trigger/original collisions are compared using Unicode case folding; the
-first source entry wins. A changed destination invalidates the review and requires a
+first source entry wins. Dictionary keys use the current locale, while snippet keys
+use locale-independent folding to match their respective runtime searches. A changed destination invalidates the review and requires a
 new confirmation. Dictionary and snippet imports are separate, single-store saves.
 Save failures remove only the import's new objects and preserve pending usage counts.
 
@@ -85,7 +86,7 @@ journals, symlinks, malformed rows, row limits, conflicts, stale reviews and fai
 saves, preserved deferred usage counts, Unicode collisions and explicit CSV header selection.
 They do not establish compatibility with every released vendor version.
 
-Local validation on 2026-09-27: all 107 selected tests passed. The signed development
+Local validation on 2026-09-27: all 108 selected tests passed. The signed development
 app was also checked through its native UI: source detection in the wizard, the
 import text link below the feature overview, real Wispr Flow word and snippet previews,
 Handy's empty custom-word list and a synthetic nonempty Handy file, row selection,

@@ -48,8 +48,10 @@ enum AppVocabularyImport {
         let original: String
         let replacement: String?
 
-        var key: String {
-            kind.rawValue + ":" + original.folding(options: .caseInsensitive, locale: Locale(identifier: "en_US_POSIX"))
+        func key(dictionaryLocale: Locale) -> String {
+            // Dictionary comparisons use the current locale; snippet searches use no locale.
+            let locale: Locale? = kind == .snippet ? nil : dictionaryLocale
+            return kind.rawValue + ":" + original.folding(options: .caseInsensitive, locale: locale)
         }
     }
 
@@ -75,20 +77,21 @@ enum AppVocabularyImport {
     static let maximumRows = 25_000
     static let maximumTextBytes = 8 * 1024 * 1024
 
-    static func review(_ batch: Batch, existing: [Existing]) -> [Review] {
+    static func review(_ batch: Batch, existing: [Existing], dictionaryLocale: Locale = .current) -> [Review] {
         var known: [String: [(replacement: String?, caseSensitive: Bool, isEnabled: Bool)]] = [:]
         for item in existing {
-            known[item.entry.key, default: []].append((item.entry.replacement, item.caseSensitive, item.isEnabled))
+            known[item.entry.key(dictionaryLocale: dictionaryLocale), default: []].append((item.entry.replacement, item.caseSensitive, item.isEnabled))
         }
         return batch.entries.enumerated().map { index, entry in
             let outcome: Review.Outcome
-            if let collisions = known[entry.key] {
+            let key = entry.key(dictionaryLocale: dictionaryLocale)
+            if let collisions = known[key] {
                 outcome = collisions.allSatisfy {
                     $0.replacement == entry.replacement && !$0.caseSensitive && $0.isEnabled
                 } ? .duplicate : .conflict
             } else {
                 outcome = .add
-                known[entry.key] = [(entry.replacement, false, true)]
+                known[key] = [(entry.replacement, false, true)]
             }
             return Review(id: index, entry: entry, outcome: outcome)
         }
