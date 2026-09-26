@@ -154,12 +154,13 @@ final class DictationViewModel: ObservableObject {
         let usedRecoveryFallback: Bool
     }
 
-    private struct AutomaticRecoveryFallbackFailure: LocalizedError {
-        let primaryDescription: String
+    struct AutomaticRecoveryFallbackFailure: LocalizedError {
+        let primaryError: Error
         let fallbackDescription: String
 
         var errorDescription: String? {
-            localizedAppText(
+            let primaryDescription = primaryError.localizedDescription
+            return localizedAppText(
                 "Primary transcription failed: \(primaryDescription). Recovery fallback failed: \(fallbackDescription)",
                 de: "Primäre Transkription fehlgeschlagen: \(primaryDescription). Recovery-Fallback fehlgeschlagen: \(fallbackDescription)"
             )
@@ -3052,7 +3053,7 @@ final class DictationViewModel: ObservableObject {
                     "Recovery fallback transcription failed with engine \(configuration.engineId, privacy: .public): \(error.localizedDescription, privacy: .public)"
                 )
                 throw AutomaticRecoveryFallbackFailure(
-                    primaryDescription: primaryError.localizedDescription,
+                    primaryError: primaryError,
                     fallbackDescription: error.localizedDescription
                 )
             }
@@ -3282,7 +3283,7 @@ final class DictationViewModel: ObservableObject {
                 "Hedged transcription failed on both engines; primary: \(primary.localizedDescription, privacy: .public), fallback: \(fallback.localizedDescription, privacy: .public)"
             )
             throw AutomaticRecoveryFallbackFailure(
-                primaryDescription: primary.localizedDescription,
+                primaryError: primary,
                 fallbackDescription: fallback.localizedDescription
             )
         }
@@ -4369,6 +4370,10 @@ final class DictationViewModel: ObservableObject {
 
     /// Settings page where the user can fix a transcription setup error, or nil for transient failures.
     static func settingsTab(forTranscriptionError error: Error) -> SettingsTab? {
+        if let failure = error as? AutomaticRecoveryFallbackFailure {
+            return settingsTab(forTranscriptionError: failure.primaryError)
+        }
+
         if let transcriptionError = error as? TranscriptionEngineError {
             switch transcriptionError {
             case .noEngineSelected, .modelNotLoaded, .modelLoadFailed(_):

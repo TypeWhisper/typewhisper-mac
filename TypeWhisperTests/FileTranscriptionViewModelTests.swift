@@ -1222,6 +1222,15 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         XCTAssertNil(DictationViewModel.settingsTab(forTranscriptionError: TranscriptionEngineError.transcriptionFailed("x")))
         XCTAssertNil(DictationViewModel.settingsTab(forTranscriptionError: PluginTranscriptionError.networkError("offline")))
         XCTAssertNil(DictationViewModel.settingsTab(forTranscriptionError: UnknownTranscriptionError()))
+        XCTAssertEqual(
+            DictationViewModel.settingsTab(
+                forTranscriptionError: DictationViewModel.AutomaticRecoveryFallbackFailure(
+                    primaryError: TranscriptionEngineError.engineUnavailable(engineName: nil, reason: nil),
+                    fallbackDescription: "offline"
+                )
+            ),
+            .integrations
+        )
     }
 
     func testAutomaticRecoveryFallbackRejectsCancellation() {
