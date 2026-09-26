@@ -15937,6 +15937,7 @@ extension TypeWhisperIntegrationTests {
     private func makeHedgedDictationViewModel(
         hedgeThreshold: TimeInterval?,
         transcriptionDeadline: TimeInterval? = nil,
+        microphonePermissionOverride: Bool? = nil,
         primaryRunner: @escaping DictationViewModel.PrimaryTranscriptionRunner,
         fallbackRunner: @escaping DictationViewModel.RecoveryFallbackRunner
     ) throws -> (viewModel: DictationViewModel, cleanup: () -> Void) {
@@ -15947,6 +15948,7 @@ extension TypeWhisperIntegrationTests {
 
         let modelManager = ModelManagerService()
         let audioRecordingService = AudioRecordingService()
+        audioRecordingService.hasMicrophonePermissionOverride = microphonePermissionOverride
         let hotkeyService = HotkeyService()
         let textInsertionService = TextInsertionService()
         let historyService = HistoryService(appSupportDirectory: appSupportDirectory)
@@ -16009,6 +16011,36 @@ extension TypeWhisperIntegrationTests {
         )
         viewModel.soundFeedbackEnabled = false
         return (viewModel, { TestSupport.remove(appSupportDirectory) })
+    }
+
+    @MainActor
+    func testRecoveryEngineLetsDictationStartWhenSelectedEngineIsUnavailable() async throws {
+        let harness = try makeHedgedDictationViewModel(
+            hedgeThreshold: nil,
+            // Stops the start right after the engine check, so no real audio device is touched.
+            microphonePermissionOverride: false,
+            primaryRunner: { _, _, _, _, _, _, _, _ in
+                throw TranscriptionEngineError.engineUnavailable(engineName: "Primary", reason: nil)
+            },
+            fallbackRunner: { _, _, _, _, _, _, _ in
+                Self.hedgeTranscriptionResult(text: "fallback", engine: "test-fallback")
+            }
+        )
+        defer { harness.cleanup() }
+
+        // The harness has no installed engines, so only the recovery engine can make this true.
+        XCTAssertTrue(harness.viewModel.canDictate)
+
+        // The start passes the engine check and only stops at the (disabled) microphone.
+        let sessionID = harness.viewModel.apiStartRecording()
+        XCTAssertEqual(
+            harness.viewModel.apiDictationSession(id: sessionID)?.error,
+            "Microphone permission required."
+        )
+
+        let output = try await harness.viewModel.transcribeFinalAudioForTesting(primaryEngineId: "primary")
+        XCTAssertEqual(output.text, "fallback")
+        XCTAssertTrue(output.usedRecoveryFallback)
     }
 
     @MainActor
