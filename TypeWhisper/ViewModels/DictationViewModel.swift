@@ -3456,9 +3456,10 @@ final class DictationViewModel: ObservableObject {
         }
         var effectiveAllowLiveTranscription = allowLiveTranscription && previewUsable
         // Engines whose live session is the dictation path (e.g. Soniox realtime) keep
-        // streaming without a visible preview. Otherwise the final transcription would
-        // fall back to a much slower batch request after the user stops.
-        let streamsDictationWithoutPreview = !effectiveAllowLiveTranscription
+        // streaming when the preview is hidden. Otherwise the final transcription would
+        // fall back to a much slower batch request after the user stops. An unavailable
+        // preview engine stays suppressed, since the preview would still be shown.
+        let streamsDictationWithoutPreview = !allowLiveTranscription
             && modelManager.prefersLiveSessionForDictation(
                 engineOverrideId: params.engineOverrideId,
                 selectedProviderId: params.providerId
@@ -3633,12 +3634,12 @@ final class DictationViewModel: ObservableObject {
     /// Restart live streaming if the currently effective params differ from the ones
     /// used when `streamingHandler.start(...)` was last called. Called after URL
     /// resolution refines the rule, to keep live preview consistent with the final
-    /// transcription. No-op when recording already stopped, when live streaming was
-    /// disabled, or when no meaningful param changed.
+    /// transcription. No-op when recording already stopped, when no meaningful param
+    /// changed, or when live streaming was disabled and the refined engine doesn't
+    /// stream dictation through a live session.
     @discardableResult
     private func refreshLiveStreamingIfParamsChanged() -> Bool {
         guard state == .recording else { return false }
-        guard let previous = lastStreamingParams else { return false }
         let newParams = StreamingParamsSnapshot(
             engineOverrideId: effectiveEngineOverrideId,
             providerId: modelManager.selectedProviderId,
@@ -3647,11 +3648,21 @@ final class DictationViewModel: ObservableObject {
             cloudModelOverride: effectiveCloudModelOverride,
             normalizeNumbers: effectiveNumberNormalizationOverride
         )
-        guard newParams != previous else { return false }
-        logger.info("Streaming params changed after URL resolution, restarting live session")
         let allowLive = indicatorTranscriptPreviewEnabled
             || liveFieldTranscriptEnabled
             || externalStreamingDisplayCount > 0
+        guard let previous = lastStreamingParams else {
+            // Nothing streams yet, but a workflow may have switched to an engine that
+            // streams dictation even with the preview hidden.
+            guard modelManager.prefersLiveSessionForDictation(
+                engineOverrideId: newParams.engineOverrideId,
+                selectedProviderId: newParams.providerId
+            ) else { return false }
+            startLiveStreaming(allowLiveTranscription: allowLive)
+            return lastStreamingParams != nil
+        }
+        guard newParams != previous else { return false }
+        logger.info("Streaming params changed after URL resolution, restarting live session")
         startLiveStreaming(allowLiveTranscription: allowLive)
         return true
     }

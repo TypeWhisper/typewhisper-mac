@@ -976,6 +976,55 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         }
     }
 
+    @objc(APIRouterMockLiveDictationPlugin)
+    private final class MockLiveDictationPlugin: NSObject, LiveTranscriptionCapablePlugin, @unchecked Sendable {
+        static var pluginId: String { "com.typewhisper.mock.live-dictation" }
+        static var pluginName: String { "Mock Live Dictation" }
+
+        var providerId: String { "mock-live-dictation" }
+        var providerDisplayName: String { "Mock Live Dictation" }
+        var isConfigured: Bool { true }
+        var transcriptionModels: [PluginModelInfo] { [PluginModelInfo(id: "live", displayName: "Live")] }
+        var selectedModelId: String? { "live" }
+        var supportsTranslation: Bool { false }
+        private let lock = NSLock()
+        private var createCount = 0
+
+        var liveSessionCreateCount: Int {
+            lock.withLock { createCount }
+        }
+
+        required override init() {}
+
+        func activate(host: HostServices) {}
+        func deactivate() {}
+        func selectModel(_ modelId: String) {}
+
+        func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
+            PluginTranscriptionResult(text: "batch", detectedLanguage: language)
+        }
+
+        func createLiveTranscriptionSession(
+            language: String?,
+            translate: Bool,
+            prompt: String?,
+            onProgress: @Sendable @escaping (String) -> Bool
+        ) async throws -> any LiveTranscriptionSession {
+            lock.withLock { createCount += 1 }
+            return MockLiveSession()
+        }
+
+        private actor MockLiveSession: LiveTranscriptionSession {
+            func appendAudio(samples: [Float]) async throws {}
+
+            func finish() async throws -> PluginTranscriptionResult {
+                PluginTranscriptionResult(text: "live", detectedLanguage: "en")
+            }
+
+            func cancel() async {}
+        }
+    }
+
     @objc(APIRouterStructuredTranscriptionPlugin)
     private final class StructuredTranscriptionPlugin: NSObject, StructuredTranscriptionEnginePlugin, @unchecked Sendable {
         static var pluginId: String { "com.typewhisper.mock.structured-transcription" }
@@ -7031,6 +7080,142 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(session.transcription?.rawText, "live preview text")
         XCTAssertEqual(session.transcription?.text, "live preview text")
         XCTAssertEqual(MockTranscriptionPlugin.transcribeCallCount, 0)
+    }
+
+    @MainActor
+    private func liveDictationSessionCount(
+        previewEnabled: Bool,
+        livePreviewEngineId: String?
+    ) async throws -> Int {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory)
+        let context = try XCTUnwrap(dictationContext)
+        let livePlugin = MockLiveDictationPlugin()
+        PluginManager.shared.loadedPlugins.append(LoadedPlugin(
+            manifest: PluginManifest(
+                id: "com.typewhisper.mock.live-dictation",
+                name: "Mock Live Dictation",
+                version: "1.0.0",
+                principalClass: "APIRouterMockLiveDictationPlugin",
+                capabilities: [PluginCapability.liveDictation.rawValue]
+            ),
+            instance: livePlugin,
+            bundle: Bundle.main,
+            sourceURL: appSupportDirectory,
+            isEnabled: true
+        ))
+        context.modelManager.selectProvider(livePlugin.providerId)
+        let originalPreviewEnabled = context.dictationViewModel.indicatorTranscriptPreviewEnabled
+        let originalPreviewEngineId = context.dictationViewModel.livePreviewEngineId
+        defer {
+            context.dictationViewModel.indicatorTranscriptPreviewEnabled = originalPreviewEnabled
+            context.dictationViewModel.livePreviewEngineId = originalPreviewEngineId
+        }
+        context.dictationViewModel.indicatorTranscriptPreviewEnabled = previewEnabled
+        context.dictationViewModel.livePreviewEngineId = livePreviewEngineId
+        context.textInsertionService.captureActiveAppOverride = {
+            ("Notes", "com.apple.Notes", nil)
+        }
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { _ in [] }
+
+        _ = context.dictationViewModel.apiStartRecording()
+        await context.dictationViewModel.testingWaitForRecordingStart()
+        XCTAssertEqual(context.dictationViewModel.state, .recording)
+        for _ in 0..<20 where livePlugin.liveSessionCreateCount == 0 {
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+        let count = livePlugin.liveSessionCreateCount
+        _ = context.dictationViewModel.apiStopRecording()
+        return count
+    }
+
+    @MainActor
+    func testLiveDictationEngineStreamsWhenPreviewIsHidden() async throws {
+        let count = try await liveDictationSessionCount(previewEnabled: false, livePreviewEngineId: nil)
+
+        XCTAssertEqual(count, 1)
+    }
+
+    @MainActor
+    func testLiveDictationEngineStaysSuppressedWhenSelectedPreviewEngineIsUnavailable() async throws {
+        let count = try await liveDictationSessionCount(
+            previewEnabled: true,
+            livePreviewEngineId: "missing-preview-engine"
+        )
+
+        XCTAssertEqual(count, 0)
+    }
+
+    @MainActor
+    func testWebsiteWorkflowSwitchingToLiveDictationEngineStartsHiddenLiveSession() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        var dictationContext: DictationContext?
+        defer {
+            dictationContext = nil
+            TestSupport.remove(appSupportDirectory)
+        }
+
+        let urlRequested = expectation(description: "Browser lookup started")
+        let urlGate = DispatchSemaphore(value: 0)
+        defer { urlGate.signal() }
+        let resolver = BrowserURLResolver { _, _ in
+            urlRequested.fulfill()
+            urlGate.wait()
+            return BrowserResolution(url: URL(string: "https://example.com/chat"), title: nil)
+        }
+        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory, browserURLResolver: resolver)
+        let context = try XCTUnwrap(dictationContext)
+        let livePlugin = MockLiveDictationPlugin()
+        PluginManager.shared.loadedPlugins.append(LoadedPlugin(
+            manifest: PluginManifest(
+                id: "com.typewhisper.mock.live-dictation",
+                name: "Mock Live Dictation",
+                version: "1.0.0",
+                principalClass: "APIRouterMockLiveDictationPlugin",
+                capabilities: [PluginCapability.liveDictation.rawValue]
+            ),
+            instance: livePlugin,
+            bundle: Bundle.main,
+            sourceURL: appSupportDirectory,
+            isEnabled: true
+        ))
+        _ = context.workflowService.addWorkflow(
+            name: "Website Workflow",
+            template: .dictation,
+            trigger: .website("example.com"),
+            behavior: WorkflowBehavior(transcriptionEngineId: livePlugin.providerId)
+        )
+        let originalPreviewEnabled = context.dictationViewModel.indicatorTranscriptPreviewEnabled
+        defer { context.dictationViewModel.indicatorTranscriptPreviewEnabled = originalPreviewEnabled }
+        context.dictationViewModel.indicatorTranscriptPreviewEnabled = false
+        context.textInsertionService.captureActiveAppOverride = { ("Chrome", "com.google.Chrome", nil) }
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { _ in [] }
+
+        _ = context.dictationViewModel.apiStartRecording()
+        await context.dictationViewModel.testingWaitForRecordingStart()
+        await fulfillment(of: [urlRequested], timeout: 1)
+        XCTAssertEqual(livePlugin.liveSessionCreateCount, 0)
+
+        urlGate.signal()
+        for _ in 0..<40 where livePlugin.liveSessionCreateCount == 0 {
+            try await Task.sleep(for: .milliseconds(25))
+        }
+
+        XCTAssertEqual(context.dictationViewModel.state, .recording)
+        XCTAssertEqual(livePlugin.liveSessionCreateCount, 1)
+        _ = context.dictationViewModel.apiStopRecording()
     }
 
     @MainActor
