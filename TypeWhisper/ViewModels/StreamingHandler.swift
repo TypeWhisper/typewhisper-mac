@@ -14,6 +14,9 @@ final class StreamingHandler: @unchecked Sendable {
         var task: TranscriptionTask = .transcribe
         var livePreviewAudioGate = LivePreviewAudioGate()
         var sampleCursor = 0
+        /// The session only produces the final result: no batch preview loop, and a
+        /// failed finalization yields nil so the caller transcribes the full recording.
+        var previewHidden = false
     }
 
     private static let liveSessionPollInterval: Duration = .milliseconds(350)
@@ -102,7 +105,7 @@ final class StreamingHandler: @unchecked Sendable {
         cloudModelOverride: String?,
         normalizeNumbers: Bool? = nil,
         allowLiveTranscription: Bool,
-        allowsBatchPreviewFallback: Bool = true,
+        previewHidden: Bool = false,
         stateCheck: @escaping @MainActor @Sendable () -> Bool
     ) {
         let pendingStopTask = stop()
@@ -127,6 +130,7 @@ final class StreamingHandler: @unchecked Sendable {
             state.configuredLanguage = languageSelection.requestedLanguage
             state.configuredLanguageCandidates = languageSelection.selectedCodes
             state.task = task
+            state.previewHidden = previewHidden
         }
         onStreamingStateChange?(true)
 
@@ -159,7 +163,7 @@ final class StreamingHandler: @unchecked Sendable {
                 return
             }
 
-            guard allowsBatchPreviewFallback else {
+            guard !previewHidden else {
                 logger.info("Live transcript preview fallback skipped providerId=\(providerId, privacy: .public) reason=preview-hidden")
                 await MainActor.run { [weak self] in
                     self?.clearStreamingState(notifyStreamingStopped: true)
@@ -240,7 +244,8 @@ final class StreamingHandler: @unchecked Sendable {
         } catch {
             logger.warning("Finalizing live transcription failed: \(error.localizedDescription, privacy: .public) [flushedTailSamples=\(String(describing: delta.samples.count), privacy: .public), elapsedMs=\(elapsedMs(), privacy: .public)]")
             await modelManager.cancelLiveTranscriptionSession(handle)
-            if let previewResult = stablePreviewResult(
+            if !sharedState.withLock({ $0.previewHidden }),
+               let previewResult = stablePreviewResult(
                 stablePreviewBeforeFinish,
                 handle: handle
             ) {
@@ -400,6 +405,7 @@ final class StreamingHandler: @unchecked Sendable {
             state.configuredLanguageCandidates = []
             state.task = .transcribe
             state.sampleCursor = 0
+            state.previewHidden = false
         }
         progressText.withLock { $0 = "" }
     }

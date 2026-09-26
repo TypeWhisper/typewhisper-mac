@@ -443,6 +443,10 @@ final class DictationViewModel: ObservableObject {
     /// dictation engine. When false (a distinct preview engine), the live session's
     /// text is display-only and must never be promoted to the final transcription.
     private var lastPreviewFollowsDictationEngine = true
+    /// Whether the most recent live session ran with the preview hidden. Its partial
+    /// text then never replaces a failed finalization; the full recording is
+    /// transcribed instead.
+    private var lastStreamingPreviewHidden = false
     /// A website workflow may still switch the engine once the browser URL resolves,
     /// so a hidden live-dictation session waits for that instead of streaming audio
     /// to the global engine first.
@@ -2276,6 +2280,8 @@ final class DictationViewModel: ObservableObject {
         lastStreamingParams = nil
         let previewFollowedDictationEngine = lastPreviewFollowsDictationEngine
         lastPreviewFollowsDictationEngine = true
+        let streamingPreviewWasHidden = lastStreamingPreviewHidden
+        lastStreamingPreviewHidden = false
         stopRecordingTimer()
         let previewText = partialText.trimmingCharacters(in: .whitespacesAndNewlines)
         let stopPolicy = AudioRecordingService.StopPolicy.finalizeShortSpeech()
@@ -2312,6 +2318,7 @@ final class DictationViewModel: ObservableObject {
         let peakLevel = audioRecordingService.peakRawAudioLevel
         let rawDuration = Double(samples.count) / AudioRecordingService.targetSampleRate
         if previewFollowedDictationEngine,
+           !streamingPreviewWasHidden,
            !hasConfirmedTranscriptionResultText(liveSessionResult),
            let previewResult = stableLivePreviewFallbackResult(
             previewText: previewText,
@@ -3491,6 +3498,7 @@ final class DictationViewModel: ObservableObject {
         let previewFollowsDictationEngine =
             (previewEngineOverrideId ?? params.providerId) == (params.engineOverrideId ?? params.providerId)
         lastPreviewFollowsDictationEngine = previewFollowsDictationEngine
+        lastStreamingPreviewHidden = streamsDictationWithoutPreview
         let dictionaryProviderId = previewEngineOverrideId ?? params.providerId
         // A distinct preview engine that can't translate still previews the speech —
         // as a transcription. The final (translating) result comes from the dictation
@@ -3513,7 +3521,7 @@ final class DictationViewModel: ObservableObject {
             cloudModelOverride: previewFollowsDictationEngine ? params.cloudModelOverride : nil,
             normalizeNumbers: params.normalizeNumbers,
             allowLiveTranscription: effectiveAllowLiveTranscription,
-            allowsBatchPreviewFallback: !streamsDictationWithoutPreview,
+            previewHidden: streamsDictationWithoutPreview,
             stateCheck: { [weak self] in self?.state == .recording }
         )
     }

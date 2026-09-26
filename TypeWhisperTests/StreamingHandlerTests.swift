@@ -1076,6 +1076,70 @@ final class StreamingHandlerTests: XCTestCase {
         XCTAssertEqual(result?.engineUsed, plugin.providerId)
     }
 
+    func testFinishReturnsNilWhenHiddenLiveSessionFinalizationFails() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let plugin = MockLivePlugin(progressMode: .rollingWindow)
+        await plugin.session.setProgressUpdates([
+            "Early words stay in the transcript",
+            "the transcript while later words arrive",
+        ])
+        await plugin.session.setFinishError(PluginTranscriptionError.networkError("timeout"))
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared.loadedPlugins = [
+            LoadedPlugin(
+                manifest: PluginManifest(
+                    id: "com.typewhisper.mock.live",
+                    name: "Mock Live",
+                    version: "1.0.0",
+                    principalClass: "MockLivePlugin",
+                    requiresAPIKey: false
+                ),
+                instance: plugin,
+                bundle: Bundle.main,
+                sourceURL: appSupportDirectory,
+                isEnabled: true
+            )
+        ]
+
+        let modelManager = ModelManagerService()
+        modelManager.selectProvider(plugin.providerId)
+
+        let deltaLock = NSLock()
+        var sentDeltaCount = 0
+        let handler = StreamingHandler(
+            modelManager: modelManager,
+            bufferProvider: { [] },
+            recentBufferProvider: { _ in [] },
+            bufferDeltaProvider: { offset in
+                deltaLock.lock()
+                defer { deltaLock.unlock() }
+                guard sentDeltaCount < 2 else { return ([], offset) }
+                sentDeltaCount += 1
+                return (Array(repeating: 0.2, count: 4000), sentDeltaCount * 4000)
+            },
+            bufferedDurationProvider: { 0.25 }
+        )
+
+        handler.start(
+            streamPrompt: "Live Terms",
+            engineOverrideId: plugin.providerId,
+            selectedProviderId: plugin.providerId,
+            languageSelection: .auto,
+            task: .transcribe,
+            cloudModelOverride: nil,
+            allowLiveTranscription: true,
+            previewHidden: true,
+            stateCheck: { true }
+        )
+
+        try await Task.sleep(for: .milliseconds(500))
+        let result = await handler.finish()
+
+        XCTAssertNil(result)
+    }
+
     func testFinalLiveResultKeepsProviderFinalWhenPreviewIsNotSubstantive() {
         let result = StreamingHandler.resultPreferringStablePreviewIfNeeded(
             TranscriptionResult(
@@ -1943,7 +2007,7 @@ final class StreamingHandlerTests: XCTestCase {
             task: .transcribe,
             cloudModelOverride: nil,
             allowLiveTranscription: true,
-            allowsBatchPreviewFallback: false,
+            previewHidden: true,
             stateCheck: { true }
         )
 
@@ -1954,7 +2018,7 @@ final class StreamingHandlerTests: XCTestCase {
         XCTAssertEqual(plugin.transcribeCallCount, 0)
     }
 
-    func testLiveSessionRunsWhenBatchPreviewFallbackIsDisabled() async throws {
+    func testLiveSessionRunsWhenPreviewIsHidden() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
 
@@ -1996,7 +2060,7 @@ final class StreamingHandlerTests: XCTestCase {
             task: .transcribe,
             cloudModelOverride: nil,
             allowLiveTranscription: true,
-            allowsBatchPreviewFallback: false,
+            previewHidden: true,
             stateCheck: { false }
         )
 
