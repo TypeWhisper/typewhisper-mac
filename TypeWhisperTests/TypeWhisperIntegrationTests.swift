@@ -989,10 +989,22 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         var supportsTranslation: Bool { false }
         private let lock = NSLock()
         private var createCount = 0
+        private var appendCount = 0
+        private var cancelCount = 0
         var failsFinalization = false
+        /// Session creation takes this long and ignores cancellation, like a stalled provider.
+        var sessionCreationStall: TimeInterval = 0
 
         var liveSessionCreateCount: Int {
             lock.withLock { createCount }
+        }
+
+        var liveSessionAppendCount: Int {
+            lock.withLock { appendCount }
+        }
+
+        var liveSessionCancelCount: Int {
+            lock.withLock { cancelCount }
         }
 
         required override init() {}
@@ -1012,17 +1024,33 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             onProgress: @Sendable @escaping (String) -> Bool
         ) async throws -> any LiveTranscriptionSession {
             lock.withLock { createCount += 1 }
-            return MockLiveSession(failsFinalization: failsFinalization)
+            let stallEnd = Date().addingTimeInterval(sessionCreationStall)
+            while Date() < stallEnd {
+                try? await Task.sleep(for: .milliseconds(20))
+            }
+            return MockLiveSession(failsFinalization: failsFinalization, plugin: self)
+        }
+
+        fileprivate func recordAppend() {
+            lock.withLock { appendCount += 1 }
+        }
+
+        fileprivate func recordCancel() {
+            lock.withLock { cancelCount += 1 }
         }
 
         private actor MockLiveSession: LiveTranscriptionSession {
             private let failsFinalization: Bool
+            private let plugin: MockLiveDictationPlugin
 
-            init(failsFinalization: Bool) {
+            init(failsFinalization: Bool, plugin: MockLiveDictationPlugin) {
                 self.failsFinalization = failsFinalization
+                self.plugin = plugin
             }
 
-            func appendAudio(samples: [Float]) async throws {}
+            func appendAudio(samples: [Float]) async throws {
+                plugin.recordAppend()
+            }
 
             func finish() async throws -> PluginTranscriptionResult {
                 if failsFinalization {
@@ -1031,7 +1059,9 @@ final class TypeWhisperIntegrationTests: XCTestCase {
                 return PluginTranscriptionResult(text: "live", detectedLanguage: "en")
             }
 
-            func cancel() async {}
+            func cancel() async {
+                plugin.recordCancel()
+            }
         }
     }
 
@@ -7367,7 +7397,11 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     /// live-dictation global engine. Returns the live session count and final raw text.
     @MainActor
     private func earlyStopWebsiteDictation(
-        workflowEngineId: String
+        workflowEngineId: String,
+        urlResolvesDuringStop: Bool = false,
+        transcriptionDeadline: TimeInterval? = nil,
+        configurePlugin: (MockLiveDictationPlugin) -> Void = { _ in },
+        afterFinish: (MockLiveDictationPlugin) async throws -> Void = { _ in }
     ) async throws -> (liveSessions: Int, rawText: String?) {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         var dictationContext: DictationContext?
@@ -7387,9 +7421,14 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             urlGate.wait()
             return BrowserResolution(url: URL(string: "https://example.com/chat"), title: nil)
         }
-        dictationContext = Self.makeDictationContext(appSupportDirectory: appSupportDirectory, browserURLResolver: resolver)
+        dictationContext = Self.makeDictationContext(
+            appSupportDirectory: appSupportDirectory,
+            browserURLResolver: resolver,
+            transcriptionDeadline: transcriptionDeadline
+        )
         let context = try XCTUnwrap(dictationContext)
         let livePlugin = MockLiveDictationPlugin()
+        configurePlugin(livePlugin)
         PluginManager.shared.loadedPlugins.append(LoadedPlugin(
             manifest: PluginManifest(
                 id: "com.typewhisper.mock.live-dictation",
@@ -7430,14 +7469,22 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let sessionID = context.dictationViewModel.apiStartRecording()
         await context.dictationViewModel.testingWaitForRecordingStart()
         await fulfillment(of: [urlRequested], timeout: 1)
-        _ = context.dictationViewModel.apiStopRecording()
-        try await Task.sleep(for: .milliseconds(100))
-        XCTAssertEqual(livePlugin.liveSessionCreateCount, 0)
-
-        urlGate.signal()
+        if urlResolvesDuringStop {
+            // Let the lookup return while the main actor is blocked, so the URL task
+            // resumes after the stop switched to processing but before finalization.
+            urlGate.signal()
+            usleep(50_000)
+            _ = context.dictationViewModel.apiStopRecording()
+        } else {
+            _ = context.dictationViewModel.apiStopRecording()
+            try await Task.sleep(for: .milliseconds(100))
+            XCTAssertEqual(livePlugin.liveSessionCreateCount, 0)
+            urlGate.signal()
+        }
         await Self.waitForDictationSessionToFinish(context.dictationViewModel, id: sessionID)
         let session = context.dictationViewModel.apiDictationSession(id: sessionID)
         XCTAssertEqual(session?.status, .completed)
+        try await afterFinish(livePlugin)
         return (livePlugin.liveSessionCreateCount, session?.transcription?.rawText)
     }
 
@@ -7447,6 +7494,41 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         XCTAssertEqual(outcome.liveSessions, 1)
         XCTAssertEqual(outcome.rawText, "live")
+    }
+
+    @MainActor
+    func testEarlyStopReplaysRecordingWhenURLResolvesDuringStop() async throws {
+        let outcome = try await earlyStopWebsiteDictation(
+            workflowEngineId: "mock-live-dictation",
+            urlResolvesDuringStop: true
+        )
+
+        XCTAssertEqual(outcome.liveSessions, 1)
+        XCTAssertEqual(outcome.rawText, "live")
+    }
+
+    @MainActor
+    func testEarlyStopReplayFallsBackToBatchWhenLiveSessionStallsPastDeadline() async throws {
+        let outcome = try await earlyStopWebsiteDictation(
+            workflowEngineId: "mock-live-dictation",
+            transcriptionDeadline: 0.3,
+            configurePlugin: { $0.sessionCreationStall = 2.0 },
+            afterFinish: { plugin in
+                // Dictation finished while session creation was still stalled, so the
+                // stop path did not wait for it.
+                XCTAssertEqual(plugin.liveSessionCancelCount, 0)
+                // The stalled session opens after the deadline; it must be closed
+                // without receiving audio.
+                for _ in 0..<120 where plugin.liveSessionCancelCount == 0 {
+                    try await Task.sleep(for: .milliseconds(25))
+                }
+                XCTAssertEqual(plugin.liveSessionCancelCount, 1)
+                XCTAssertEqual(plugin.liveSessionAppendCount, 0)
+            }
+        )
+
+        XCTAssertEqual(outcome.liveSessions, 1)
+        XCTAssertEqual(outcome.rawText, "batch")
     }
 
     @MainActor

@@ -309,11 +309,15 @@ final class StreamingHandler: @unchecked Sendable {
         }
 
         do {
+            // A cancelled replay (processing cancelled or its deadline passed) must not
+            // keep sending audio, including when the session opened after cancellation.
+            try Task.checkCancellation()
             var offset = 0
             while offset < samples.count {
                 let end = min(offset + Self.recordingReplayChunkSize, samples.count)
                 try await handle.session.appendAudio(samples: Array(samples[offset..<end]))
                 offset = end
+                try Task.checkCancellation()
             }
             let result = try await modelManager.finishLiveTranscriptionSession(
                 handle,

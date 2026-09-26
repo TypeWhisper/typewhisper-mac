@@ -2155,16 +2155,36 @@ final class DictationViewModel: ObservableObject {
             return nil
         }
         let dictionaryProviderId = engineOverrideId ?? providerId
-        return await streamingHandler.transcribeRecordingThroughLiveSession(
-            samples,
-            streamPrompt: dictionaryService.getTermsForPrompt(providerId: dictionaryProviderId) ?? "",
-            dictionaryTermHints: dictionaryService.getTermHints(providerId: dictionaryProviderId),
-            engineOverrideId: engineOverrideId,
-            languageSelection: effectiveLanguageSelection,
-            task: effectiveTask,
-            cloudModelOverride: effectiveCloudModelOverride,
-            normalizeNumbers: effectiveNumberNormalizationOverride
-        )
+        let streamPrompt = dictionaryService.getTermsForPrompt(providerId: dictionaryProviderId) ?? ""
+        let dictionaryTermHints = dictionaryService.getTermHints(providerId: dictionaryProviderId)
+        let languageSelection = effectiveLanguageSelection
+        let task = effectiveTask
+        let cloudModelOverride = effectiveCloudModelOverride
+        let normalizeNumbers = effectiveNumberNormalizationOverride
+        let replay: @MainActor () async throws -> TranscriptionResult? = { [streamingHandler] in
+            await streamingHandler.transcribeRecordingThroughLiveSession(
+                samples,
+                streamPrompt: streamPrompt,
+                dictionaryTermHints: dictionaryTermHints,
+                engineOverrideId: engineOverrideId,
+                languageSelection: languageSelection,
+                task: task,
+                cloudModelOverride: cloudModelOverride,
+                normalizeNumbers: normalizeNumbers
+            )
+        }
+        // A stalled provider must not hold the stop path; on expiry the replay is
+        // cancelled and batch transcription takes over with its own deadline.
+        let audioDuration = Double(samples.count) / AudioRecordingService.targetSampleRate
+        guard let deadline = transcriptionDeadlineProvider(audioDuration), deadline > 0 else {
+            return try? await replay()
+        }
+        do {
+            return try await runWithDeadline(deadline, operationName: "Live replay", replay)
+        } catch {
+            logger.warning("Live replay did not finish, using batch transcription: \(error.localizedDescription, privacy: .public)")
+            return nil
+        }
     }
 
     private func hasApplicableWebsiteWorkflow(bundleIdentifier: String?) -> Bool {
@@ -2259,6 +2279,9 @@ final class DictationViewModel: ObservableObject {
         isStopInFlight = true
         let canKeepFinalLiveInsertionQuiet = streamingHandler.hasActiveLiveTranscriptionSession
             && !requiresVisiblePostProcessingPhase
+        // Stopped before the browser URL resolved: the hidden live session never started.
+        // Captured here because the URL task may clear the marker before finalization runs.
+        let hiddenLiveSessionWasDeferred = hiddenLiveSessionAwaitsWebsiteWorkflow && lastStreamingParams == nil
         state = .processing
         processingPhase = canKeepFinalLiveInsertionQuiet
             ? nil
@@ -2266,11 +2289,14 @@ final class DictationViewModel: ObservableObject {
         markActiveDictationSessionProcessingIfNeeded()
         stopFinalizationTask = Task { [weak self] in
             guard let self else { return }
-            await finalizeStopDictation(submitRequested: submitRequested)
+            await finalizeStopDictation(
+                submitRequested: submitRequested,
+                hiddenLiveSessionWasDeferred: hiddenLiveSessionWasDeferred
+            )
         }
     }
 
-    private func finalizeStopDictation(submitRequested: Bool) async {
+    private func finalizeStopDictation(submitRequested: Bool, hiddenLiveSessionWasDeferred: Bool) async {
         var didStartTranscriptionTask = false
         defer {
             if Task.isCancelled {
@@ -2313,8 +2339,6 @@ final class DictationViewModel: ObservableObject {
         lastStreamingParams = nil
         let previewFollowedDictationEngine = lastPreviewFollowsDictationEngine
         lastPreviewFollowsDictationEngine = true
-        // Stopped before the browser URL resolved: the hidden live session never started.
-        let hiddenLiveSessionWasDeferred = hiddenLiveSessionAwaitsWebsiteWorkflow && streamingParams == nil
         let streamingPreviewWasHidden = lastStreamingPreviewHidden || hiddenLiveSessionWasDeferred
         lastStreamingPreviewHidden = false
         stopRecordingTimer()
@@ -2945,7 +2969,18 @@ final class DictationViewModel: ObservableObject {
                 normalizeNumbers: normalizeNumbers
             )
         }
-        let arbiter = DeadlineArbiter<FinalTranscriptionOutput>()
+        return try await runWithDeadline(deadline, operationName: "Final transcription", transcriptionOperation)
+    }
+
+    /// Runs `operation` as an unstructured task settled through a `DeadlineArbiter`:
+    /// returns its outcome, or throws `TranscriptionDeadlineExceeded` once `deadline`
+    /// passes. The work is cancelled but never awaited.
+    private func runWithDeadline<Value>(
+        _ deadline: TimeInterval,
+        operationName: String,
+        _ operation: @escaping @MainActor () async throws -> Value
+    ) async throws -> Value {
+        let arbiter = DeadlineArbiter<Value>()
         // The continuation only signals completion; the (non-Sendable) outcome
         // stays inside the main-actor arbiter and is read back here.
         await withTaskCancellationHandler {
@@ -2953,7 +2988,7 @@ final class DictationViewModel: ObservableObject {
                 arbiter.begin(continuation)
                 let work = Task { @MainActor in
                     do {
-                        arbiter.settle(.success(try await transcriptionOperation()))
+                        arbiter.settle(.success(try await operation()))
                     } catch {
                         arbiter.settle(.failure(error))
                     }
@@ -2964,7 +2999,7 @@ final class DictationViewModel: ObservableObject {
                     } catch {
                         return
                     }
-                    logger.error("Final transcription exceeded its deadline of \(deadline, format: .fixed(precision: 1))s; abandoning in-flight requests")
+                    logger.error("\(operationName, privacy: .public) exceeded its deadline of \(deadline, format: .fixed(precision: 1))s; abandoning in-flight requests")
                     arbiter.settle(.failure(TranscriptionDeadlineExceeded(seconds: deadline)))
                 }
                 arbiter.register(work: work, timer: timer)
