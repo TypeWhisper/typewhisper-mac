@@ -82,27 +82,28 @@ final class PromptPaletteController: PromptPaletteControlling {
     ) {
         paletteController.show(
             configuration: workflowLevelConfiguration,
-            items: workflowItems + [groupItem]
-        ) { [weak self] item in
-            guard let self else { return }
-            if item.id == groupItem.id {
-                self.showRecentTranscriptions(
-                    recentEntries,
-                    onSelect: onSelect,
-                    onBack: { [weak self] in
-                        self?.showWorkflowLevel(
-                            workflowItems: workflowItems,
-                            groupItem: groupItem,
-                            entriesByID: entriesByID,
-                            recentEntries: recentEntries,
-                            onSelect: onSelect
-                        )
-                    }
-                )
-            } else if let entry = entriesByID[item.id] {
-                onSelect(entry)
+            items: workflowItems + [groupItem],
+            onSelect: { [weak self] item in
+                guard let self else { return }
+                if item.id == groupItem.id {
+                    self.showRecentTranscriptions(
+                        recentEntries,
+                        onSelect: onSelect,
+                        onBack: { [weak self] in
+                            self?.showWorkflowLevel(
+                                workflowItems: workflowItems,
+                                groupItem: groupItem,
+                                entriesByID: entriesByID,
+                                recentEntries: recentEntries,
+                                onSelect: onSelect
+                            )
+                        }
+                    )
+                } else if let entry = entriesByID[item.id] {
+                    onSelect(entry)
+                }
             }
-        }
+        )
     }
 
     func hide() {
@@ -118,11 +119,12 @@ final class PromptPaletteController: PromptPaletteControlling {
         let entriesByID = Dictionary(uniqueKeysWithValues: itemPairs.map { ($0.0.id, $0.1) })
         paletteController.show(
             configuration: workflowLevelConfiguration,
-            items: itemPairs.map(\.0)
-        ) { item in
-            guard let entry = entriesByID[item.id] else { return }
-            onSelect(entry)
-        }
+            items: itemPairs.map(\.0),
+            onSelect: { item in
+                guard let entry = entriesByID[item.id] else { return }
+                onSelect(entry)
+            }
+        )
     }
 
     /// Second level behind the group item: the recent transcriptions list.
