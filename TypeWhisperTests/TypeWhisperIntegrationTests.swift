@@ -15556,6 +15556,29 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    private func fnHotkey() -> UnifiedHotkey {
+        UnifiedHotkey(
+            keyCode: 0x00,
+            modifierFlags: 0,
+            isFn: true
+        )
+    }
+
+    private func makeKeyboardEvent(
+        keyCode: UInt16,
+        keyDown: Bool,
+        flags: CGEventFlags = [.maskControl, .maskAlternate, .maskShift, .maskCommand],
+        isRepeat: Bool = false
+    ) throws -> NSEvent {
+        let event = try XCTUnwrap(
+            CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(keyCode), keyDown: keyDown)
+        )
+        event.flags = flags
+        event.setIntegerValueField(.keyboardEventAutorepeat, value: isRepeat ? 1 : 0)
+        return try XCTUnwrap(NSEvent(cgEvent: event))
+    }
+
+    @MainActor
     func testDisabledModeEscapeDuringPushToTalkRecordingPassesThrough() throws {
         let service = HotkeyService()
         service.suspendMonitoring()
@@ -19246,7 +19269,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
     }
 
     @MainActor
-    fileprivate func fnHotkey() -> UnifiedHotkey {
+    private func fnHotkey() -> UnifiedHotkey {
         UnifiedHotkey(
             keyCode: 0x00,
             modifierFlags: 0,
@@ -19273,7 +19296,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         )
     }
 
-    fileprivate func makeKeyboardEvent(
+    private func makeKeyboardEvent(
         keyCode: UInt16,
         keyDown: Bool,
         flags: CGEventFlags = [.maskControl, .maskAlternate, .maskShift, .maskCommand],
