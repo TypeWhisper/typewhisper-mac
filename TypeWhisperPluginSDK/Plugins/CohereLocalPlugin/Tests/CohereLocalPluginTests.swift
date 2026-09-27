@@ -361,6 +361,64 @@ final class CohereLocalPluginTests: XCTestCase {
         XCTAssertFalse(assets.isInstalled)
     }
 
+    func testMissingDownloadBytesSkipsAssetsWithTheExpectedSize() throws {
+        let host = try PluginTestHostServices(shouldRestoreLoadedModelsPassively: false)
+        let model = CohereLocalPlugin.fastModel
+        let assets = CohereLocalModelAssets(
+            pluginDataDirectory: host.pluginDataDirectory,
+            model: model
+        )
+        let runtimeBytes = CohereLocalModelAssets.runtimeArchiveSize * 3
+        XCTAssertEqual(
+            assets.missingDownloadBytes,
+            model.fileSize + CohereLocalModelAssets.vadSize + runtimeBytes
+        )
+
+        try createSparseFile(at: assets.modelFileURL, size: model.fileSize)
+        try createSparseFile(at: assets.vadModelURL, size: CohereLocalModelAssets.vadSize - 1)
+
+        XCTAssertEqual(
+            assets.missingDownloadBytes,
+            CohereLocalModelAssets.vadSize + runtimeBytes
+        )
+    }
+
+    func testInterruptedRuntimeInstallFilesAreRemovedBeforeDownload() throws {
+        let host = try PluginTestHostServices(shouldRestoreLoadedModelsPassively: false)
+        let assets = CohereLocalModelAssets(
+            pluginDataDirectory: host.pluginDataDirectory,
+            model: CohereLocalPlugin.fastModel
+        )
+        let archive = assets.runtimeRootDirectory
+            .appendingPathComponent(".download-\(UUID().uuidString)-crispasr-macos.tar.gz")
+        let staging = assets.runtimeRootDirectory
+            .appendingPathComponent(".staging-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
+        try Data("partial".utf8).write(to: archive)
+        try FileManager.default.createDirectory(
+            at: assets.runtimeDirectory,
+            withIntermediateDirectories: true
+        )
+        try Data("runtime".utf8).write(to: assets.runtimeExecutableURL)
+
+        assets.removeInterruptedRuntimeInstallFiles()
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: archive.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: staging.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: assets.runtimeExecutableURL.path))
+    }
+
+    private func createSparseFile(at url: URL, size: Int64) throws {
+        try FileManager.default.createDirectory(
+            at: url.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        FileManager.default.createFile(atPath: url.path, contents: nil)
+        let handle = try FileHandle(forWritingTo: url)
+        defer { try? handle.close() }
+        try handle.truncate(atOffset: UInt64(size))
+    }
+
     func testLegacySharedModelDirectoryMigratesToNeutralDirectory() throws {
         let host = try PluginTestHostServices(shouldRestoreLoadedModelsPassively: false)
         let assets = CohereLocalModelAssets(

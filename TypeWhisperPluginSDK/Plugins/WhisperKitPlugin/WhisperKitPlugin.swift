@@ -1,7 +1,7 @@
 import Foundation
 import SwiftUI
 import WhisperKit
-import TypeWhisperPluginSDK
+@_spi(FirstPartyPlugins) import TypeWhisperPluginSDK
 
 // Keep this policy plugin-local because the SDK network guard was added after TypeWhisper 1.6.0.
 enum WhisperKitNetworkAccessPolicy {
@@ -588,11 +588,21 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
                     return
                 }
                 removeIncompleteModelIfNeeded(at: modelPath)
+                removeStaleDownloadCache(for: modelDef)
                 modelState = .downloading
                 downloadProgress = 0.05
 
                 var lastProgress = 0.0
                 try WhisperKitNetworkAccessPolicy.ensureAccessIsAllowed()
+                let spaceReservation = try await PluginDownloadDiskSpace.reserveHuggingFaceDownload(
+                    repositoryID: Self.modelRepo,
+                    path: modelDef.id,
+                    token: _hfToken,
+                    destination: downloadBase,
+                    trackedDirectory: modelStorageRoots[0],
+                    modelName: modelDef.displayName
+                )
+                defer { spaceReservation?.release() }
                 modelFolder = try await WhisperKit.download(
                     variant: modelDef.id,
                     downloadBase: downloadBase,
@@ -989,6 +999,18 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
         try? fileManager.removeItem(at: modelPath)
     }
 
+    /// swift-transformers keeps `.incomplete` files and per-file metadata for a
+    /// variant under the repository's `.cache` folder. An interrupted download
+    /// leaves them behind, and they are stale once the variant folder is gone.
+    private func removeStaleDownloadCache(for modelDef: WhisperModelDef) {
+        let cache = modelStorageRoots[0]
+            .appendingPathComponent(".cache")
+            .appendingPathComponent("huggingface")
+            .appendingPathComponent("download")
+            .appendingPathComponent(modelDef.id)
+        try? FileManager.default.removeItem(at: cache)
+    }
+
     /// Migrate models from old location (TypeWhisper/models/) to plugin data directory
     private func migrateOldModels(for modelDef: WhisperModelDef) {
         let fm = FileManager.default
@@ -1084,19 +1106,19 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
         WhisperModelDef(
             id: "openai_whisper-tiny",
             displayName: "Tiny",
-            sizeDescription: "~39 MB",
+            sizeDescription: "~77 MB",
             ramRequirement: "4 GB+"
         ),
         WhisperModelDef(
             id: "openai_whisper-base",
             displayName: "Base",
-            sizeDescription: "~74 MB",
+            sizeDescription: "~147 MB",
             ramRequirement: "4 GB+"
         ),
         WhisperModelDef(
             id: "openai_whisper-small",
             displayName: "Small",
-            sizeDescription: "~244 MB",
+            sizeDescription: "~486 MB",
             ramRequirement: "8 GB+"
         ),
         WhisperModelDef(
@@ -1108,25 +1130,25 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
         WhisperModelDef(
             id: "openai_whisper-large-v3",
             displayName: "Large v3",
-            sizeDescription: "~1.5 GB",
+            sizeDescription: "~3.1 GB",
             ramRequirement: "16 GB+"
         ),
         WhisperModelDef(
             id: "openai_whisper-large-v3_turbo",
             displayName: "Large v3 Turbo",
-            sizeDescription: "~800 MB",
+            sizeDescription: "~3.2 GB",
             ramRequirement: "8 GB+"
         ),
         WhisperModelDef(
             id: "distil-whisper_distil-large-v3_turbo",
             displayName: "Distil Large v3 Turbo",
-            sizeDescription: "~600 MB",
+            sizeDescription: "~1.5 GB",
             ramRequirement: "8 GB+"
         ),
         WhisperModelDef(
             id: "distil-whisper_distil-large-v3",
             displayName: "Distil Large v3",
-            sizeDescription: "~594 MB",
+            sizeDescription: "~1.5 GB",
             ramRequirement: "8 GB+"
         ),
     ]

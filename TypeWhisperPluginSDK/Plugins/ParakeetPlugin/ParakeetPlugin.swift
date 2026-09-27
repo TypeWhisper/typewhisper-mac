@@ -3,7 +3,7 @@ import CoreML
 import OSLog
 import SwiftUI
 import FluidAudio
-import TypeWhisperPluginSDK
+@_spi(FirstPartyPlugins) import TypeWhisperPluginSDK
 
 private actor AsyncTranscriptionGate {
     private var isLocked = false
@@ -658,11 +658,13 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
 
         do {
             applyHuggingFaceTokenToEnvironment()
-            if allowDownloads {
-                try await ensureVocabularyAsset(for: version)
-            }
             let models: AsrModels
             if allowDownloads {
+                let spaceReservation = isModelDownloaded(version: version)
+                    ? nil
+                    : try await reserveDownloadSpace(for: version)
+                defer { spaceReservation?.release() }
+                try await ensureVocabularyAsset(for: version)
                 models = try await AsrModels.downloadAndLoad(version: version.asrModelVersion)
             } else {
                 models = try Self.loadInstalledModels(version: version)
@@ -886,6 +888,21 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         await loadModel(version: version, passively: passively)
     }
 
+    /// FluidAudio resumes `.partial` files in the cache directory, so bytes
+    /// already there count toward the download instead of being deleted.
+    private func reserveDownloadSpace(for version: ParakeetVersion) async throws -> PluginDownloadSpaceReservation? {
+        let cacheDir = AsrModels.defaultCacheDirectory(for: version.asrModelVersion)
+        return try await PluginDownloadDiskSpace.reserveHuggingFaceDownload(
+            repositoryID: version.repository.rawValue,
+            matching: version.requiredModelFiles.sorted().map { "\($0)/*" } + ["*vocab*.json"],
+            token: _hfToken,
+            destination: cacheDir,
+            trackedDirectory: cacheDir,
+            existingFilesCountTowardDownload: true,
+            modelName: version.modelDef.displayName
+        )
+    }
+
     fileprivate func isModelDownloaded(version: ParakeetVersion) -> Bool {
         let cacheDir = AsrModels.defaultCacheDirectory(for: version.asrModelVersion)
         return AsrModels.modelsExist(at: cacheDir, version: version.asrModelVersion)
@@ -955,6 +972,21 @@ enum ParakeetVersion: String, CaseIterable {
         switch self {
         case .v2: return .v2
         case .v3: return .v3
+        }
+    }
+
+    var repository: Repo {
+        switch self {
+        case .v2: return .parakeetV2
+        case .v3: return .parakeetV3
+        }
+    }
+
+    /// Model folders `AsrModels.download` fetches with its default int8 encoder.
+    var requiredModelFiles: Set<String> {
+        switch self {
+        case .v2: return ModelNames.ASR.requiredModels
+        case .v3: return ModelNames.ASR.requiredModelsV3()
         }
     }
 

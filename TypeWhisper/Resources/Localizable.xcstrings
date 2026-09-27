@@ -1,6 +1,94 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Not enough disk space to download %@. It needs %@ of free space, but only %@ is available on “%@”.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht genug Speicherplatz, um %1$@ herunterzuladen. Benötigt werden %2$@ freier Speicher, auf „%4$@“ sind aber nur %3$@ verfügbar."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ をダウンロードするための空き容量が足りません。%2$@ の空き容量が必要ですが、「%4$@」で使用できるのは %3$@ だけです。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "磁盘空间不足，无法下载 %1$@。需要 %2$@ 可用空间，但“%4$@”上只有 %3$@ 可用。"
+          }
+        }
+      }
+    },
+    "Not enough disk space to download %@. It needs %@ of free space, but only %@ is available.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nicht genug Speicherplatz, um %1$@ herunterzuladen. Benötigt werden %2$@ freier Speicher, verfügbar sind aber nur %3$@."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%1$@ をダウンロードするための空き容量が足りません。%2$@ の空き容量が必要ですが、使用できるのは %3$@ だけです。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "磁盘空间不足，无法下载 %1$@。需要 %2$@ 可用空间，但只有 %3$@ 可用。"
+          }
+        }
+      }
+    },
+    "Other model downloads in progress still need %@.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Andere laufende Modell-Downloads benötigen noch %@."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "実行中の他のモデルのダウンロードに、まだ %@ が必要です。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "其他正在进行的模型下载仍需要 %@。"
+          }
+        }
+      }
+    },
+    "Free up space and try again.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gib Speicherplatz frei und versuche es erneut."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "空き容量を増やしてから、もう一度お試しください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "请释放空间后重试。"
+          }
+        }
+      }
+    },
     "Selected entry content": {
       "localizations": {
         "de": {

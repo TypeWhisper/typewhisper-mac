@@ -1,7 +1,7 @@
 import CryptoKit
 import Foundation
 import HuggingFace
-import TypeWhisperPluginSDK
+@_spi(FirstPartyPlugins) import TypeWhisperPluginSDK
 
 struct CohereLocalModelAssets: Sendable {
     static let modelRepositoryId = "cstr/cohere-transcribe-03-2026-GGUF"
@@ -107,6 +107,14 @@ struct CohereLocalModelAssets: Sendable {
             at: rootDirectory,
             withIntermediateDirectories: true
         )
+        removeInterruptedRuntimeInstallFiles()
+        let spaceReservation = try PluginDownloadDiskSpace.reserve(
+            downloadBytes: missingDownloadBytes,
+            destination: rootDirectory,
+            trackedDirectory: rootDirectory,
+            modelName: model.displayName
+        )
+        defer { spaceReservation?.release() }
 
         let session = URLSession(configuration: .default)
         defer { session.invalidateAndCancel() }
@@ -168,6 +176,33 @@ struct CohereLocalModelAssets: Sendable {
 
         guard isInstalled else {
             throw CohereLocalPluginError.incompleteModelDownload
+        }
+    }
+
+    /// Bytes the download still has to write. Files with the expected size
+    /// count as present; `download` verifies their checksums afterwards.
+    var missingDownloadBytes: Int64 {
+        var bytes: Int64 = 0
+        if fileSize(modelFileURL) != model.fileSize { bytes += model.fileSize }
+        if fileSize(vadModelURL) != Self.vadSize { bytes += Self.vadSize }
+        // The archive, its extracted staging copy, and the installed runtime
+        // briefly coexist during installation.
+        if !isRuntimeInstalled { bytes += Self.runtimeArchiveSize * 3 }
+        return bytes
+    }
+
+    /// Removes runtime archives and staging folders that an interrupted
+    /// install left behind. Normal runs delete them in `defer` blocks.
+    func removeInterruptedRuntimeInstallFiles() {
+        guard let entries = try? FileManager.default.contentsOfDirectory(
+            at: runtimeRootDirectory,
+            includingPropertiesForKeys: nil
+        ) else {
+            return
+        }
+        for entry in entries where entry.lastPathComponent.hasPrefix(".download-")
+            || entry.lastPathComponent.hasPrefix(".staging-") {
+            try? FileManager.default.removeItem(at: entry)
         }
     }
 
@@ -407,6 +442,12 @@ struct CohereLocalModelAssets: Sendable {
             hasher.update(data: data)
         }
         return hasher.finalize().map { String(format: "%02x", $0) }.joined()
+    }
+
+    private func fileSize(_ url: URL) -> Int64? {
+        (try? FileManager.default.attributesOfItem(atPath: url.path))
+            .flatMap { $0[.size] as? NSNumber }?
+            .int64Value
     }
 
     private func isNonEmptyFile(_ url: URL) -> Bool {

@@ -393,6 +393,16 @@ final class VoxtralPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMod
                         userInfo: [NSLocalizedDescriptionKey: "Invalid repository ID: \(modelDef.repoId)"]
                     )
                 }
+                let spaceReservation = try await PluginDownloadDiskSpace.reserveHuggingFaceDownload(
+                    repositoryID: modelDef.repoId,
+                    matching: Self.modelDownloadPatterns,
+                    token: _hfToken,
+                    destination: modelsDir,
+                    trackedDirectory: PluginHuggingFaceModelStore(modelsDirectory: modelsDir)
+                        .repositoryCacheDirectory(for: modelDef.repoId),
+                    modelName: modelDef.displayName
+                )
+                defer { spaceReservation?.release() }
                 let client = HubClient(
                     host: HubClient.defaultHost,
                     bearerToken: PluginHuggingFaceTokenHelper.normalizedToken(_hfToken),
