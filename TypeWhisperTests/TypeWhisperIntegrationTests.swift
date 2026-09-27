@@ -15511,6 +15511,19 @@ final class TypeWhisperIntegrationTests: XCTestCase {
                 let upCGEvent = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: 0x35, keyDown: false))
                 let down = try XCTUnwrap(NSEvent(cgEvent: downCGEvent))
                 let up = try XCTUnwrap(NSEvent(cgEvent: upCGEvent))
+                if behavior == .disabled {
+                    // Escape passes through to the foreground app: the hotkey
+                    // layer must not suppress it, and nothing may cancel.
+                    XCTAssertFalse(context.hotkeyService.isCancellationAvailable)
+                    XCTAssertFalse(context.hotkeyService.processEventForTesting(down, source: .eventTap))
+                    XCTAssertFalse(context.hotkeyService.processEventForTesting(up, source: .eventTap))
+                    context.dictationViewModel.handleCancelHotkey()
+                    XCTAssertEqual(context.dictationViewModel.state, state)
+                    XCTAssertNil(context.dictationViewModel.cancelWarningMessage)
+                    XCTAssertNil(context.dictationViewModel.actionFeedbackMessage)
+                    await context.dictationViewModel.testingWaitForRecordingCleanup()
+                    continue
+                }
                 XCTAssertTrue(context.hotkeyService.processEventForTesting(down, source: .eventTap))
                 await withCheckedContinuation { continuation in
                     DispatchQueue.main.async { continuation.resume() }

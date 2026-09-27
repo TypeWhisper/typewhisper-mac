@@ -236,7 +236,7 @@ final class DictationViewModel: ObservableObject {
 
     @Published var state: State = .idle {
         didSet {
-            hotkeyService.isCancellationAvailable = cancelWarningTargetForCurrentState() != nil
+            refreshCancellationAvailability()
             updateSubmitOnEnterAvailability()
             clearCancelWarningIfStateNoLongerMatches()
         }
@@ -292,7 +292,10 @@ final class DictationViewModel: ObservableObject {
         didSet { Self.persistTranscribeShortQuietClipsAggressively(transcribeShortQuietClipsAggressively) }
     }
     @Published var cancellationBehavior: CancellationBehavior {
-        didSet { Self.persistCancellationBehavior(cancellationBehavior) }
+        didSet {
+            Self.persistCancellationBehavior(cancellationBehavior)
+            refreshCancellationAvailability()
+        }
     }
     @Published var microphoneBoostEnabled: Bool {
         didSet {
@@ -1488,6 +1491,8 @@ final class DictationViewModel: ObservableObject {
         logger.info(
             "Cancel hotkey received: state=\(String(describing: self.state), privacy: .public), inputReady=\(self.isRecordingInputReady, privacy: .public), startPending=\(self.recordingStartTask != nil, privacy: .public)"
         )
+        // Disabled mode: Escape never cancels, whatever path delivered the press.
+        guard cancellationBehavior != .disabled else { return }
         guard let target = cancelWarningTargetForCurrentState() else { return }
 
         if cancellationBehavior != .doubleEscape {
@@ -1520,6 +1525,13 @@ final class DictationViewModel: ObservableObject {
             guard self?.cancelWarningTarget == target else { return }
             self?.clearCancelWarning()
         }
+    }
+
+    private func refreshCancellationAvailability() {
+        // Disabled mode leaves Escape entirely alone: the hotkey layer must
+        // not suppress it, so it passes through to the foreground app.
+        hotkeyService.isCancellationAvailable =
+            cancellationBehavior != .disabled && cancelWarningTargetForCurrentState() != nil
     }
 
     private func cancelWarningTargetForCurrentState() -> CancelWarningTarget? {
