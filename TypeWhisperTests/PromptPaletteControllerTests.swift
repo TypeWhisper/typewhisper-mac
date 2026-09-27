@@ -152,6 +152,57 @@ final class PromptPaletteControllerTests: XCTestCase {
         XCTAssertFalse(spy.isVisible)
     }
 
+    func testEscapeOnRecentTranscriptionsReturnsToWorkflowList() {
+        let spy = SelectionPaletteControllerSpy()
+        let controller = PromptPaletteController(paletteController: spy)
+        controller.show(
+            entries: [
+                .workflow(makeWorkflow(name: "Summarize")),
+                .recentTranscription(makeRecentEntry(text: "hello world")),
+            ],
+            sourceText: nil,
+            onSelect: { _ in }
+        )
+
+        spy.selectItem(at: 1, inShow: 0) // group item -> second level
+        XCTAssertEqual(spy.shows.count, 2)
+        XCTAssertNotNil(spy.shows[1].onEscape)
+
+        spy.pressEscape(inShow: 1)
+
+        XCTAssertEqual(spy.shows.count, 3)
+        XCTAssertEqual(spy.shows[2].items.map(\.title), ["Summarize", "Recent Transcriptions"])
+    }
+
+    func testEscapeOnTopLevelKeepsDefaultDismissBehavior() {
+        let spy = SelectionPaletteControllerSpy()
+        let controller = PromptPaletteController(paletteController: spy)
+        controller.show(
+            entries: [
+                .workflow(makeWorkflow(name: "Summarize")),
+                .recentTranscription(makeRecentEntry(text: "hello world")),
+            ],
+            sourceText: nil,
+            onSelect: { _ in }
+        )
+
+        // No custom Escape handler on the top level: the palette layer hides.
+        XCTAssertNil(spy.shows[0].onEscape)
+    }
+
+    func testEscapeOnFlatListKeepsDefaultDismissBehavior() {
+        let spy = SelectionPaletteControllerSpy()
+        let controller = PromptPaletteController(paletteController: spy)
+        controller.show(
+            entries: [.workflow(makeWorkflow(name: "Summarize"))],
+            sourceText: nil,
+            onSelect: { _ in }
+        )
+
+        XCTAssertEqual(spy.shows.count, 1)
+        XCTAssertNil(spy.shows[0].onEscape)
+    }
+
     // MARK: - Helpers
 
     private func makeWorkflow(name: String, isEnabled: Bool = true) -> Workflow {
@@ -176,6 +227,7 @@ private final class SelectionPaletteControllerSpy: SelectionPaletteControlling {
         let configuration: SelectionPaletteConfiguration
         let items: [SelectionPaletteItem]
         let onSelect: (SelectionPaletteItem) -> Void
+        let onEscape: (() -> Void)?
     }
 
     var isVisible = false
@@ -184,10 +236,11 @@ private final class SelectionPaletteControllerSpy: SelectionPaletteControlling {
     func show(
         configuration: SelectionPaletteConfiguration,
         items: [SelectionPaletteItem],
-        onSelect: @escaping (SelectionPaletteItem) -> Void
+        onSelect: @escaping (SelectionPaletteItem) -> Void,
+        onEscape: (() -> Void)? = nil
     ) {
         isVisible = true
-        shows.append(ShownPalette(configuration: configuration, items: items, onSelect: onSelect))
+        shows.append(ShownPalette(configuration: configuration, items: items, onSelect: onSelect, onEscape: onEscape))
     }
 
     func hide() {
@@ -197,5 +250,9 @@ private final class SelectionPaletteControllerSpy: SelectionPaletteControlling {
     func selectItem(at index: Int, inShow showIndex: Int) {
         let shown = shows[showIndex]
         shown.onSelect(shown.items[index])
+    }
+
+    func pressEscape(inShow showIndex: Int) {
+        shows[showIndex].onEscape?()
     }
 }

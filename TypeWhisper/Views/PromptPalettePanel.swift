@@ -62,13 +62,43 @@ final class PromptPaletteController: PromptPaletteControlling {
             (paletteItem(for: .workflow(workflow)), PromptPaletteEntry.workflow(workflow))
         }
         let entriesByID = Dictionary(uniqueKeysWithValues: workflowPairs.map { ($0.0.id, $0.1) })
+        showWorkflowLevel(
+            workflowItems: workflowPairs.map(\.0),
+            groupItem: groupItem,
+            entriesByID: entriesByID,
+            recentEntries: recentEntries,
+            onSelect: onSelect
+        )
+    }
+
+    /// The workflow list. Also the landing place when backing out of the
+    /// recent-transcriptions level with Escape.
+    private func showWorkflowLevel(
+        workflowItems: [SelectionPaletteItem],
+        groupItem: SelectionPaletteItem,
+        entriesByID: [UUID: PromptPaletteEntry],
+        recentEntries: [RecentTranscriptionStore.Entry],
+        onSelect: @escaping (PromptPaletteEntry) -> Void
+    ) {
         paletteController.show(
             configuration: workflowLevelConfiguration,
-            items: workflowPairs.map(\.0) + [groupItem]
+            items: workflowItems + [groupItem]
         ) { [weak self] item in
             guard let self else { return }
             if item.id == groupItem.id {
-                self.showRecentTranscriptions(recentEntries, onSelect: onSelect)
+                self.showRecentTranscriptions(
+                    recentEntries,
+                    onSelect: onSelect,
+                    onBack: { [weak self] in
+                        self?.showWorkflowLevel(
+                            workflowItems: workflowItems,
+                            groupItem: groupItem,
+                            entriesByID: entriesByID,
+                            recentEntries: recentEntries,
+                            onSelect: onSelect
+                        )
+                    }
+                )
             } else if let entry = entriesByID[item.id] {
                 onSelect(entry)
             }
@@ -97,10 +127,12 @@ final class PromptPaletteController: PromptPaletteControlling {
 
     /// Second level behind the group item: the recent transcriptions list.
     /// Selecting one forwards the original entry, so insertion behavior is
-    /// unchanged.
+    /// unchanged. Escape backs out to the workflow list via `onBack` instead
+    /// of dismissing the palette.
     private func showRecentTranscriptions(
         _ recentEntries: [RecentTranscriptionStore.Entry],
-        onSelect: @escaping (PromptPaletteEntry) -> Void
+        onSelect: @escaping (PromptPaletteEntry) -> Void,
+        onBack: @escaping () -> Void
     ) {
         let itemPairs = recentEntries.map { entry in
             (paletteItem(for: .recentTranscription(entry)), entry)
@@ -108,11 +140,13 @@ final class PromptPaletteController: PromptPaletteControlling {
         let entriesByID = Dictionary(uniqueKeysWithValues: itemPairs.map { ($0.0.id, $0.1) })
         paletteController.show(
             configuration: recentTranscriptionsConfiguration,
-            items: itemPairs.map(\.0)
-        ) { item in
-            guard let entry = entriesByID[item.id] else { return }
-            onSelect(.recentTranscription(entry))
-        }
+            items: itemPairs.map(\.0),
+            onSelect: { item in
+                guard let entry = entriesByID[item.id] else { return }
+                onSelect(.recentTranscription(entry))
+            },
+            onEscape: onBack
+        )
     }
 
     private var workflowLevelConfiguration: SelectionPaletteConfiguration {

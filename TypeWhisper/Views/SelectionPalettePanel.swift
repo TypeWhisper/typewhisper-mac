@@ -56,10 +56,15 @@ struct SelectionPaletteConfiguration: Equatable {
 @MainActor
 protocol SelectionPaletteControlling: AnyObject {
     var isVisible: Bool { get }
+    /// Presents the palette. `onEscape` replaces the default Escape behavior
+    /// (hiding the palette) for this presentation only — used by multi-level
+    /// palettes to return to the previous level instead of dismissing.
+    /// Callers that pass nothing keep the historical hide-on-Escape behavior.
     func show(
         configuration: SelectionPaletteConfiguration,
         items: [SelectionPaletteItem],
-        onSelect: @escaping (SelectionPaletteItem) -> Void
+        onSelect: @escaping (SelectionPaletteItem) -> Void,
+        onEscape: (() -> Void)? = nil
     )
     func hide()
 }
@@ -375,7 +380,8 @@ final class SelectionPaletteController: SelectionPaletteControlling {
     func show(
         configuration: SelectionPaletteConfiguration,
         items: [SelectionPaletteItem],
-        onSelect: @escaping (SelectionPaletteItem) -> Void
+        onSelect: @escaping (SelectionPaletteItem) -> Void,
+        onEscape: (() -> Void)? = nil
     ) {
         hide()
         guard !items.isEmpty else { return }
@@ -388,7 +394,11 @@ final class SelectionPaletteController: SelectionPaletteControlling {
                 onSelect(item)
             },
             onDismiss: { [weak self] in
-                self?.hide()
+                if let onEscape {
+                    onEscape()
+                } else {
+                    self?.hide()
+                }
             }
         )
         self.interactionModel = interactionModel

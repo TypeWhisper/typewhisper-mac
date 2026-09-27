@@ -1237,7 +1237,8 @@ private final class SelectionPaletteControllerSpy: SelectionPaletteControlling {
     func show(
         configuration: SelectionPaletteConfiguration,
         items: [SelectionPaletteItem],
-        onSelect: @escaping (SelectionPaletteItem) -> Void
+        onSelect: @escaping (SelectionPaletteItem) -> Void,
+        onEscape: (() -> Void)? = nil
     ) {
         isVisible = true
         lastConfiguration = configuration
