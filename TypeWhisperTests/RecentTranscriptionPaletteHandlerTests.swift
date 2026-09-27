@@ -1238,7 +1238,7 @@ private final class SelectionPaletteControllerSpy: SelectionPaletteControlling {
         configuration: SelectionPaletteConfiguration,
         items: [SelectionPaletteItem],
         onSelect: @escaping (SelectionPaletteItem) -> Void,
-        onEscape: (@escaping () -> Void)? = nil
+        onEscape: (() -> Void)? = nil
     ) {
         isVisible = true
         lastConfiguration = configuration

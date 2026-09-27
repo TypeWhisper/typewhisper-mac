@@ -237,7 +237,7 @@ private final class SelectionPaletteControllerSpy: SelectionPaletteControlling {
         configuration: SelectionPaletteConfiguration,
         items: [SelectionPaletteItem],
         onSelect: @escaping (SelectionPaletteItem) -> Void,
-        onEscape: (@escaping () -> Void)? = nil
+        onEscape: (() -> Void)? = nil
     ) {
         isVisible = true
         shows.append(ShownPalette(configuration: configuration, items: items, onSelect: onSelect, onEscape: onEscape))
