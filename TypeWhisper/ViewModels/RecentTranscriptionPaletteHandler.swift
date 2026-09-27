@@ -75,7 +75,8 @@ final class RecentTranscriptionPaletteHandler {
             onSelect: { [weak self] item in
                 guard let self, let entry = entriesByID[item.id] else { return }
                 self.startInsertion(entry)
-            }
+            },
+            onEscape: nil
         )
     }
 

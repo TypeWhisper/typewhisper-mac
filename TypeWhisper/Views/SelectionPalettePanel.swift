@@ -59,12 +59,15 @@ protocol SelectionPaletteControlling: AnyObject {
     /// Presents the palette. `onEscape` replaces the default Escape behavior
     /// (hiding the palette) for this presentation only — used by multi-level
     /// palettes to return to the previous level instead of dismissing.
-    /// Callers that pass nothing keep the historical hide-on-Escape behavior.
+    /// Pass nil to keep the historical hide-on-Escape behavior. (Note: Swift
+    /// forbids default arguments in protocol methods, so callers must pass
+    /// `onEscape` explicitly; the concrete controller keeps a default for
+    /// concrete-typed callers.)
     func show(
         configuration: SelectionPaletteConfiguration,
         items: [SelectionPaletteItem],
         onSelect: @escaping (SelectionPaletteItem) -> Void,
-        onEscape: (@escaping () -> Void)? = nil
+        onEscape: (@escaping () -> Void)?
     )
     func hide()
 }

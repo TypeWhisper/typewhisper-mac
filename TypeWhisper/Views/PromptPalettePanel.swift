@@ -102,7 +102,8 @@ final class PromptPaletteController: PromptPaletteControlling {
                 } else if let entry = entriesByID[item.id] {
                     onSelect(entry)
                 }
-            }
+            },
+            onEscape: nil
         )
     }
 
@@ -123,7 +124,8 @@ final class PromptPaletteController: PromptPaletteControlling {
             onSelect: { item in
                 guard let entry = entriesByID[item.id] else { return }
                 onSelect(entry)
-            }
+            },
+            onEscape: nil
         )
     }
 
