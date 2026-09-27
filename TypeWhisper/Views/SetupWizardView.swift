@@ -14,6 +14,9 @@ struct SetupWizardView: View {
     @State private var selectedHotkeyMode: HotkeySlotType
     @State private var trialSuccess = false
     @State private var trialText = ""
+    /// Tracks whether the current `.inserting` phase was entered from
+    /// `.processing`, i.e. a real transcription ran. See SetupWizardTrialSignal.
+    @State private var trialEnteredInsertingFromProcessing = false
     @State private var didAnnounceInitialStep = false
     @State private var isPreparingAppleSpeechFallback = false
     @State private var isActivatingParakeet = false
@@ -332,7 +335,15 @@ struct SetupWizardView: View {
     }
 
     private func completeSetupAndOpenHome() {
-        HomeViewModel.shared.completeSetupWizard()
+        // Issue #1335: finishing without a ready engine or a successful test
+        // is "finish later", not completion. Defer instead of marking setup
+        // complete so the wizard resurfaces with its honest state instead of
+        // implying the app is ready.
+        if trialSuccess || hasEngineReadyForSetupTest {
+            HomeViewModel.shared.completeSetupWizard()
+        } else {
+            HomeViewModel.shared.deferSetupWizard()
+        }
         SettingsNavigationCoordinator.shared?.navigate(to: .home)
         dismiss()
 
@@ -1193,13 +1204,30 @@ struct SetupWizardView: View {
             }
         }
         .onChange(of: dictation.state) { oldValue, newValue in
-            if case .inserting = oldValue, case .idle = newValue {
+            let evaluation = SetupWizardTrialSignal.evaluate(
+                oldState: oldValue,
+                newState: newValue,
+                enteredInsertingFromProcessing: trialEnteredInsertingFromProcessing
+            )
+            trialEnteredInsertingFromProcessing = evaluation.enteredInsertingFromProcessing
+            if evaluation.granted {
                 withAnimation(.spring(duration: 0.35)) {
                     trialSuccess = true
                 }
+                if let providerId = modelManager.selectedProviderId {
+                    markSetupWizardProviderTested(providerId)
+                }
             }
         }
+        .onChange(of: modelManager.selectedProviderId) { _, newValue in
+            // The tested state belongs to the engine that passed the test.
+            trialSuccess = newValue.map { testedSetupWizardProviderIds.contains($0) } ?? false
+        }
         .task {
+            if let providerId = modelManager.selectedProviderId,
+               testedSetupWizardProviderIds.contains(providerId) {
+                trialSuccess = true
+            }
             try? await Task.sleep(for: .milliseconds(50))
             isTrialFieldFocused = true
         }
@@ -1290,9 +1318,27 @@ struct SetupWizardView: View {
     }
 
     private func canUseEngineForSetupTest(_ engine: TranscriptionEnginePlugin) -> Bool {
-        guard modelManager.canUseForTranscription(engine) else { return false }
-        if engine.isConfigured { return true }
-        return engine.providerId != SetupWizardAppleSpeechFallback.providerId && engine.selectedModelId != nil
+        // Issue #1335: a selected or persisted model ID alone is not readiness.
+        // canUseForTranscription only checks authentication, so gate the setup
+        // test on the engine being configured (loaded) or restorable —
+        // installed model assets persisted for lazy restoration, or a provider
+        // preparation fallback such as Apple Speech's catalog. The test itself
+        // runs the real recording/transcription/insertion path, which is the
+        // actual proof of readiness.
+        modelManager.canPrepareForTranscription(engine)
+    }
+
+    /// Provider IDs whose setup dictation test completed through the real
+    /// recording/transcription/insertion path (issue #1335). Unlike
+    /// `trialSuccess`, this survives closing and reopening the wizard.
+    private var testedSetupWizardProviderIds: [String] {
+        UserDefaults.standard.stringArray(forKey: UserDefaultsKeys.setupWizardTestedProviderIds) ?? []
+    }
+
+    private func markSetupWizardProviderTested(_ providerId: String) {
+        var ids = Set(testedSetupWizardProviderIds)
+        guard ids.insert(providerId).inserted else { return }
+        UserDefaults.standard.set(Array(ids), forKey: UserDefaultsKeys.setupWizardTestedProviderIds)
     }
 
     private func canUseAppleSpeechFallbackEngine(_ engine: TranscriptionEnginePlugin?) -> Bool {
@@ -1705,6 +1751,42 @@ enum SetupWizardRecommendationUnavailableReason: Equatable {
                 de: "Für diesen Mac ist kein kompatibler Download verfügbar."
             )
         }
+    }
+}
+
+/// Issue #1335: decides whether a dictation state transition counts as a
+/// successful setup-wizard dictation test.
+///
+/// A successful test must use the real recording/transcription/insertion path
+/// and grant no success state when insertion fails. Insertion failures surface
+/// as `.error`, which never passes through `.inserting` on its way to `.idle`.
+/// However, notch/toast feedback (`showNotchFeedback`) also passes through
+/// `.inserting`, so entering `.inserting` from any state other than
+/// `.processing` — i.e. without a transcription having run — must never grant
+/// the tested state.
+enum SetupWizardTrialSignal {
+    /// Evaluates one dictation state transition. Returns whether the
+    /// transition grants the tested state, along with the updated
+    /// `enteredInsertingFromProcessing` flag for the next transition.
+    static func evaluate(
+        oldState: DictationViewModel.State,
+        newState: DictationViewModel.State,
+        enteredInsertingFromProcessing: Bool
+    ) -> (granted: Bool, enteredInsertingFromProcessing: Bool) {
+        if oldState == .inserting, newState == .inserting {
+            // Re-entrant set inside the real insertion path (e.g. the
+            // post-processing fallback toast): keep the flag, grant nothing yet.
+            return (false, enteredInsertingFromProcessing)
+        }
+        if oldState == .processing, newState == .inserting {
+            return (false, true)
+        }
+        guard oldState == .inserting else {
+            return (false, enteredInsertingFromProcessing)
+        }
+        // Leaving .inserting: the flag has served its purpose — reset it, and
+        // grant only when a transcription actually ran beforehand.
+        return (newState == .idle && enteredInsertingFromProcessing, false)
     }
 }
 

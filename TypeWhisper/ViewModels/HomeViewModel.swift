@@ -65,6 +65,16 @@ final class HomeViewModel: ObservableObject {
         showSetupWizard = false
     }
 
+    /// Dismisses the wizard without marking setup complete (issue #1335): the
+    /// wizard resurfaces on next launch at the persisted step, so explicitly
+    /// skipped model setup stays discoverable instead of implying readiness.
+    func deferSetupWizard() {
+        showSetupWizard = false
+        // The didSet above just persisted setupWizardCompleted = true;
+        // deferring is not completing, so restore the incomplete state.
+        UserDefaults.standard.set(false, forKey: UserDefaultsKeys.setupWizardCompleted)
+    }
+
     func resetSetupWizard() {
         UserDefaults.standard.set(0, forKey: UserDefaultsKeys.setupWizardCurrentStep)
         showSetupWizard = true
