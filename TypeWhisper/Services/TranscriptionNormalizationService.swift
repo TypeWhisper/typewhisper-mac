@@ -271,10 +271,15 @@ enum TranscriptionNormalizationService {
     /// word (`first`, `tenth`, `twenty`), or a compound (`twenty eighth`,
     /// `thirty-first`). The word tables are the real gate: a noun following the
     /// month (`April showers`) simply does not map to a day and is left alone.
+    ///
+    /// A second word is only ever part of the day phrase for tens+unit
+    /// compounds. Without that restriction the greedy capture would swallow
+    /// `first at` into one failed match, and `June first at noon` would never
+    /// normalize because the failed match is never retried as just `first`.
     private enum EnglishDateNormalization {
         /// A month name or abbreviation followed by a plausible day phrase.
         private static let expression = try? NSRegularExpression(
-            pattern: #"\b(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\b\s+(\d{1,2}(?:st|nd|rd|th)?|[A-Za-z]+(?:[\s-]+[A-Za-z]+)?)"#,
+            pattern: #"\b(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)\b\s+(\d{1,2}(?:st|nd|rd|th)?\b|(?:twenty|thirty)[\s-]+(?:first|one|second|two|third|three|fourth|four|fifth|five|sixth|six|seventh|seven|eighth|eight|ninth|nine)\b|[A-Za-z]+\b)"#,
             options: [.caseInsensitive]
         )
 

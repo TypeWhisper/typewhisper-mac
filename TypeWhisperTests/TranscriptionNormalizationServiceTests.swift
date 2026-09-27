@@ -424,6 +424,15 @@ final class TranscriptionNormalizationServiceTests: XCTestCase {
             ),
             "meet me July 28 at noon and August 1"
         )
+        // A word following the day must not be swallowed into a failed match:
+        // `first at` is not a day, but `first` on its own is.
+        XCTAssertEqual(
+            TranscriptionNormalizationService.normalizeSpokenDates(
+                "June first at noon",
+                languages: ["en"]
+            ),
+            "June 1 at noon"
+        )
     }
 
     func testSpokenDatesAreIdempotent() {
