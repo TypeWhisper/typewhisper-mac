@@ -1,6 +1,306 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Selected entry content" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Inhalt des ausgewählten Eintrags"
+          }
+        }
+      }
+    },
+    "First row is a header" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Erste Zeile ist eine Kopfzeile"
+          }
+        }
+      }
+    },
+    "Source files found on this Mac: %@." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quelldateien auf diesem Mac gefunden: %@."
+          }
+        }
+      }
+    },
+    "Review Words..." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wörter prüfen …"
+          }
+        }
+      }
+    },
+    "Review Snippets..." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Snippets prüfen …"
+          }
+        }
+      }
+    },
+    "Import from Wispr Flow or Handy..." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aus Wispr Flow oder Handy importieren …"
+          }
+        }
+      }
+    },
+    "This file does not have a supported import format." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Diese Datei hat kein unterstütztes Importformat."
+          }
+        }
+      }
+    },
+    "The source could not be read safely. Quitting the source app and trying again may help. Nothing was imported." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Quelle konnte nicht sicher gelesen werden. Beende gegebenenfalls die Quell-App und versuche es erneut. Es wurde nichts importiert."
+          }
+        }
+      }
+    },
+    "The source exceeds the import limits. Nothing was imported." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Quelle überschreitet die Importgrenzen. Es wurde nichts importiert."
+          }
+        }
+      }
+    },
+    "The import could not be saved. Nothing was imported." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Der Import konnte nicht gespeichert werden. Es wurde nichts importiert."
+          }
+        }
+      }
+    },
+    "No source file was found. Use Choose File to locate it." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine Quelldatei gefunden. Suche sie über „Datei auswählen“."
+          }
+        }
+      }
+    },
+    "Your list changed while you were reviewing. Nothing was imported. Please review the updated list." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Die Liste wurde während der Prüfung geändert. Es wurde nichts importiert. Bitte prüfe die aktualisierte Liste."
+          }
+        }
+      }
+    },
+    "Import Words from Another App" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wörter aus anderer App importieren"
+          }
+        }
+      }
+    },
+    "Import Snippets from Another App" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Snippets aus anderer App importieren"
+          }
+        }
+      }
+    },
+    "Review the entries before importing. Existing entries will not be overwritten." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Prüfe die Einträge vor dem Import. Vorhandene Einträge werden nicht überschrieben."
+          }
+        }
+      }
+    },
+    "Source" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quelle"
+          }
+        }
+      }
+    },
+    "Read from App" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aus App lesen"
+          }
+        }
+      }
+    },
+    "Choose File..." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Datei auswählen …"
+          }
+        }
+      }
+    },
+    "Reading source..." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Quelle wird gelesen …"
+          }
+        }
+      }
+    },
+    "Term / Trigger" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Begriff / Auslöser"
+          }
+        }
+      }
+    },
+    "Status" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Status"
+          }
+        }
+      }
+    },
+    "Import Selected" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auswahl importieren"
+          }
+        }
+      }
+    },
+    "No compatible entries found. Nothing was changed." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine kompatiblen Einträge gefunden. Es wurde nichts geändert."
+          }
+        }
+      }
+    },
+    "Snippets containing TypeWhisper dynamic placeholders are excluded to preserve literal text." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Snippets mit dynamischen TypeWhisper-Platzhaltern werden ausgelassen, damit sich der Text nicht ungewollt verändert."
+          }
+        }
+      }
+    },
+    "New" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Neu"
+          }
+        }
+      }
+    },
+    "Duplicate" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Duplikat"
+          }
+        }
+      }
+    },
+    "Conflict" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Konflikt"
+          }
+        }
+      }
+    },
+    "Import from Another App..." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aus anderer App importieren …"
+          }
+        }
+      }
+    },
+    "%lld selected, %lld duplicates, %lld conflicts." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ausgewählt: %lld · Duplikate: %lld · Konflikte: %lld"
+          }
+        }
+      }
+    },
+    "%lld entries excluded (deleted, another entry type, empty or incompatible)." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ausgelassene Einträge: %lld (gelöscht, anderer Eintragstyp, leer oder inkompatibel)."
+          }
+        }
+      }
+    },
     "Canary needs an explicit source language. Choose Greek or English for Sophea in Dictation settings." : {
       "localizations" : {
         "de" : {
