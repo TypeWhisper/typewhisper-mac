@@ -253,6 +253,9 @@ final class PluginDiskSpaceLedger: @unchecked Sendable {
         let headroomBytes: Int64
         let trackedDirectory: URL?
         let baselineBytes: Int64
+        /// Set once another reservation tracked the same or a nested directory.
+        /// Growth can then no longer be attributed, even after the other ends.
+        var sharesTrackedDirectory = false
     }
 
     private let lock = NSLock()
@@ -331,7 +334,16 @@ final class PluginDiskSpaceLedger: @unchecked Sendable {
 
             let ids = requirements.map { requirement in
                 let id = UUID()
-                entries[id] = requirement.entry
+                var entry = requirement.entry
+                if let trackedDirectory = entry.trackedDirectory {
+                    for (otherID, other) in entries {
+                        guard let otherDirectory = other.trackedDirectory,
+                              Self.directoriesOverlap(otherDirectory, trackedDirectory) else { continue }
+                        entries[otherID]?.sharesTrackedDirectory = true
+                        entry.sharesTrackedDirectory = true
+                    }
+                }
+                entries[id] = entry
                 return id
             }
             return PluginDownloadSpaceReservation { [weak self] in
@@ -344,16 +356,11 @@ final class PluginDiskSpaceLedger: @unchecked Sendable {
 
     /// Written bytes only offset the download part. The headroom stays reserved
     /// even when temporary copies make a download write more than expected.
-    /// When another reservation tracks the same or a nested directory, growth
-    /// cannot be attributed, so the full amount stays reserved.
+    /// Reservations that ever shared a tracked directory keep the full amount.
     private func outstandingBytes(for id: UUID) -> Int64 {
         guard let entry = entries[id] else { return 0 }
         guard let trackedDirectory = entry.trackedDirectory,
-              !entries.contains(where: { otherID, other in
-                  otherID != id && other.trackedDirectory.map {
-                      Self.directoriesOverlap($0, trackedDirectory)
-                  } == true
-              }) else {
+              !entry.sharesTrackedDirectory else {
             return entry.downloadBytes + entry.headroomBytes
         }
         let written = max(directorySize(trackedDirectory) - entry.baselineBytes, 0)

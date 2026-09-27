@@ -281,8 +281,20 @@ final class PluginDownloadDiskSpaceTests: XCTestCase {
         )) { error in
             XCTAssertEqual((error as? PluginInsufficientDiskSpaceError)?.reservedByOtherDownloadsBytes, 4 * gigabyte)
         }
-        first?.release()
+
+        // The nested download finished; its files must not count as progress
+        // for the download that tracks the parent directory.
         second?.release()
+        XCTAssertThrowsError(try ledger.reserve(
+            downloadBytes: 3_500_000_000,
+            destination: tracked,
+            trackedDirectory: nil,
+            modelName: "Third",
+            headroomBytes: 0
+        )) { error in
+            XCTAssertEqual((error as? PluginInsufficientDiskSpaceError)?.reservedByOtherDownloadsBytes, 2 * gigabyte)
+        }
+        first?.release()
     }
 
     func testUnknownVolumeCapacityDoesNotBlockDownloads() throws {
