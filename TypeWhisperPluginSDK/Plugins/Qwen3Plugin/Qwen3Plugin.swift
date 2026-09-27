@@ -409,6 +409,8 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
                     destination: modelsDir,
                     trackedDirectory: PluginHuggingFaceModelStore(modelsDirectory: modelsDir)
                         .repositoryCacheDirectory(for: modelDef.repoId),
+                    // HubClient downloads through URLSession's temporary directory.
+                    stagingDirectory: FileManager.default.temporaryDirectory,
                     modelName: modelDef.displayName
                 )
                 defer { spaceReservation?.release() }

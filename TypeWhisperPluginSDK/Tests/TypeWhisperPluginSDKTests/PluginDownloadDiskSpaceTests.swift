@@ -297,6 +297,25 @@ final class PluginDownloadDiskSpaceTests: XCTestCase {
         first?.release()
     }
 
+    func testSymlinkAliasesOfATrackedDirectoryOverlap() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PluginDownloadDiskSpaceTests-\(UUID().uuidString)", isDirectory: true)
+        let models = root.appendingPathComponent("models", isDirectory: true)
+        let alias = root.appendingPathComponent("alias")
+        try FileManager.default.createDirectory(at: models, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: models)
+        defer { try? FileManager.default.removeItem(at: root) }
+
+        XCTAssertTrue(PluginDiskSpaceLedger.directoriesOverlap(
+            models.appendingPathComponent("models--org--model"),
+            alias.appendingPathComponent("models--org--model/blobs")
+        ))
+        XCTAssertFalse(PluginDiskSpaceLedger.directoriesOverlap(
+            models.appendingPathComponent("models--org--first"),
+            alias.appendingPathComponent("models--org--second")
+        ))
+    }
+
     func testUnknownVolumeCapacityDoesNotBlockDownloads() throws {
         let ledger = PluginDiskSpaceLedger(volumeProvider: { _ in nil }, directorySize: { _ in 0 })
 

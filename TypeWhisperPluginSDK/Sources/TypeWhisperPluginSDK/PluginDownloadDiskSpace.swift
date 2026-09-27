@@ -367,10 +367,26 @@ final class PluginDiskSpaceLedger: @unchecked Sendable {
         return max(entry.downloadBytes - written, 0) + entry.headroomBytes
     }
 
-    private static func directoriesOverlap(_ lhs: URL, _ rhs: URL) -> Bool {
-        let left = lhs.standardizedFileURL.path
-        let right = rhs.standardizedFileURL.path
+    static func directoriesOverlap(_ lhs: URL, _ rhs: URL) -> Bool {
+        let left = canonicalPath(lhs)
+        let right = canonicalPath(rhs)
         return left == right || left.hasPrefix(right + "/") || right.hasPrefix(left + "/")
+    }
+
+    /// Resolves symlinks in the nearest existing ancestor, so aliases of the same
+    /// directory compare equal even before the directory itself exists.
+    static func canonicalPath(_ url: URL) -> String {
+        let fileManager = FileManager.default
+        var existing = url.standardizedFileURL.path
+        var missingComponents: [String] = []
+        while !fileManager.fileExists(atPath: existing) {
+            let parent = (existing as NSString).deletingLastPathComponent
+            guard !parent.isEmpty, parent != existing else { break }
+            missingComponents.insert((existing as NSString).lastPathComponent, at: 0)
+            existing = parent
+        }
+        let resolved = URL(fileURLWithPath: existing).resolvingSymlinksInPath().path
+        return missingComponents.reduce(resolved) { ($0 as NSString).appendingPathComponent($1) }
     }
 }
 

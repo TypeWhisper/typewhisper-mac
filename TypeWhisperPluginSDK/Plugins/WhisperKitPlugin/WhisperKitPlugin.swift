@@ -603,6 +603,8 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
                     token: _hfToken,
                     destination: downloadBase,
                     trackedDirectory: modelStorageRoots[0],
+                    // swift-transformers downloads through URLSession's temporary directory.
+                    stagingDirectory: FileManager.default.temporaryDirectory,
                     modelName: modelDef.displayName
                 )
                 modelFolder = try await WhisperKit.download(
