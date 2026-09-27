@@ -14444,6 +14444,12 @@
             "state" : "translated",
             "value" : "Lange Diktate abschnittsweise verarbeiten"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "分段处理长篇听写"
+          }
         }
       }
     },
@@ -14453,6 +14459,12 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Beschleunigt lange Diktate, indem der Text in Abschnitten verarbeitet wird. Mit einer Streaming-Engine und Live-Vorschau werden fertige Sätze schon während des Sprechens verarbeitet, sonst laufen die Abschnitte bei Cloud-Anbietern nach der Aufnahme parallel. Verursacht mehr Anfragen. Nicht geeignet für Workflows, die den ganzen Text auf einmal brauchen, etwa Zusammenfassungen oder JSON."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将文本分段处理，以加快长篇听写的速度。使用流式引擎并开启实时预览时，已说完的句子会在你说话时同步处理；否则，使用云服务提供商时，各段会在录音结束后并行处理。会产生更多请求。不适用于需要一次性处理全文的工作流，例如摘要或 JSON。"
           }
         }
       }
