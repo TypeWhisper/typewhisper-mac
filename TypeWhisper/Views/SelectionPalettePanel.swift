@@ -64,7 +64,7 @@ protocol SelectionPaletteControlling: AnyObject {
         configuration: SelectionPaletteConfiguration,
         items: [SelectionPaletteItem],
         onSelect: @escaping (SelectionPaletteItem) -> Void,
-        onEscape: (() -> Void)? = nil
+        onEscape: (@escaping () -> Void)? = nil
     )
     func hide()
 }
@@ -381,7 +381,7 @@ final class SelectionPaletteController: SelectionPaletteControlling {
         configuration: SelectionPaletteConfiguration,
         items: [SelectionPaletteItem],
         onSelect: @escaping (SelectionPaletteItem) -> Void,
-        onEscape: (() -> Void)? = nil
+        onEscape: (@escaping () -> Void)? = nil
     ) {
         hide()
         guard !items.isEmpty else { return }
