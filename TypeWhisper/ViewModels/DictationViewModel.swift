@@ -295,6 +295,12 @@ final class DictationViewModel: ObservableObject {
         didSet {
             Self.persistCancellationBehavior(cancellationBehavior)
             refreshCancellationAvailability()
+            // A Double-mode cancel warning must not survive the switch to
+            // Disabled: Escape can't cancel anymore, so the "press Esc again"
+            // indicator would lie.
+            if cancellationBehavior == .disabled {
+                clearCancelWarning()
+            }
         }
     }
     @Published var microphoneBoostEnabled: Bool {
