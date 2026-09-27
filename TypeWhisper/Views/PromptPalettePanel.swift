@@ -7,6 +7,18 @@ enum PromptPaletteEntry {
     case recentTranscription(RecentTranscriptionStore.Entry)
 }
 
+private extension PromptPaletteEntry {
+    var workflow: Workflow? {
+        guard case .workflow(let workflow) = self else { return nil }
+        return workflow
+    }
+
+    var recentEntry: RecentTranscriptionStore.Entry? {
+        guard case .recentTranscription(let entry) = self else { return nil }
+        return entry
+    }
+}
+
 @MainActor
 protocol PromptPaletteControlling: AnyObject {
     var isVisible: Bool { get }
@@ -37,36 +49,117 @@ final class PromptPaletteController: PromptPaletteControlling {
         }
         guard !visibleEntries.isEmpty else { return }
 
-        let itemPairs = visibleEntries.map { entry in
+        let recentEntries = visibleEntries.compactMap(\.recentEntry)
+        guard !recentEntries.isEmpty else {
+            showFlat(entries: visibleEntries, onSelect: onSelect)
+            return
+        }
+
+        // Top level: workflows stay prominent, recent transcriptions collapse
+        // behind a single group item.
+        let groupItem = recentTranscriptionsGroupItem(count: recentEntries.count)
+        let workflowPairs = visibleEntries.compactMap(\.workflow).map { workflow in
+            (paletteItem(for: .workflow(workflow)), PromptPaletteEntry.workflow(workflow))
+        }
+        let entriesByID = Dictionary(uniqueKeysWithValues: workflowPairs.map { ($0.0.id, $0.1) })
+        paletteController.show(
+            configuration: workflowLevelConfiguration,
+            items: workflowPairs.map(\.0) + [groupItem]
+        ) { [weak self] item in
+            guard let self else { return }
+            if item.id == groupItem.id {
+                self.showRecentTranscriptions(recentEntries, onSelect: onSelect)
+            } else if let entry = entriesByID[item.id] {
+                onSelect(entry)
+            }
+        }
+    }
+
+    func hide() {
+        paletteController.hide()
+    }
+
+    /// The pre-submenu behavior: a flat list, used when there are no recent
+    /// transcriptions to group.
+    private func showFlat(entries: [PromptPaletteEntry], onSelect: @escaping (PromptPaletteEntry) -> Void) {
+        let itemPairs = entries.map { entry in
             (paletteItem(for: entry), entry)
         }
         let entriesByID = Dictionary(uniqueKeysWithValues: itemPairs.map { ($0.0.id, $0.1) })
-        let containsRecentTranscriptions = visibleEntries.contains { entry in
-            if case .recentTranscription = entry {
-                return true
-            }
-            return false
-        }
-
         paletteController.show(
-            configuration: SelectionPaletteConfiguration(
-                panelWidth: containsRecentTranscriptions ? 520 : 380,
-                panelHeight: containsRecentTranscriptions ? 380 : 344,
-                previewText: nil,
-                previewLineLimit: 3,
-                titleLineLimit: containsRecentTranscriptions ? 2 : 1,
-                searchPrompt: searchPrompt(containsRecentTranscriptions: containsRecentTranscriptions),
-                emptyStateTitle: emptyStateTitle(containsRecentTranscriptions: containsRecentTranscriptions)
-            ),
-            items: itemPairs.map { $0.0 }
+            configuration: workflowLevelConfiguration,
+            items: itemPairs.map(\.0)
         ) { item in
             guard let entry = entriesByID[item.id] else { return }
             onSelect(entry)
         }
     }
 
-    func hide() {
-        paletteController.hide()
+    /// Second level behind the group item: the recent transcriptions list.
+    /// Selecting one forwards the original entry, so insertion behavior is
+    /// unchanged.
+    private func showRecentTranscriptions(
+        _ recentEntries: [RecentTranscriptionStore.Entry],
+        onSelect: @escaping (PromptPaletteEntry) -> Void
+    ) {
+        let itemPairs = recentEntries.map { entry in
+            (paletteItem(for: .recentTranscription(entry)), entry)
+        }
+        let entriesByID = Dictionary(uniqueKeysWithValues: itemPairs.map { ($0.0.id, $0.1) })
+        paletteController.show(
+            configuration: recentTranscriptionsConfiguration,
+            items: itemPairs.map(\.0)
+        ) { item in
+            guard let entry = entriesByID[item.id] else { return }
+            onSelect(.recentTranscription(entry))
+        }
+    }
+
+    private var workflowLevelConfiguration: SelectionPaletteConfiguration {
+        SelectionPaletteConfiguration(
+            panelWidth: 380,
+            panelHeight: 344,
+            previewText: nil,
+            previewLineLimit: 3,
+            titleLineLimit: 1,
+            searchPrompt: localizedAppText("Search workflows...", de: "Workflows suchen..."),
+            emptyStateTitle: localizedAppText("No matching workflows", de: "Keine passenden Workflows")
+        )
+    }
+
+    private var recentTranscriptionsConfiguration: SelectionPaletteConfiguration {
+        SelectionPaletteConfiguration(
+            panelWidth: 520,
+            panelHeight: 380,
+            previewText: nil,
+            previewLineLimit: 3,
+            titleLineLimit: 2,
+            searchPrompt: localizedAppText(
+                "Search recent transcriptions...",
+                de: "Letzte Transkriptionen suchen..."
+            ),
+            emptyStateTitle: localizedAppText("No matching results", de: "Keine passenden Ergebnisse")
+        )
+    }
+
+    private func recentTranscriptionsGroupItem(count: Int) -> SelectionPaletteItem {
+        SelectionPaletteItem(
+            id: UUID(),
+            title: localizedAppText("Recent Transcriptions", de: "Letzte Transkriptionen"),
+            subtitle: recentTranscriptionsGroupSubtitle(count: count),
+            iconSystemName: "clock.arrow.circlepath",
+            searchTokens: [
+                localizedAppText("Recent Transcription", de: "Letzte Transkription"),
+                localizedAppText("Recent Transcriptions", de: "Letzte Transkriptionen"),
+            ]
+        )
+    }
+
+    private func recentTranscriptionsGroupSubtitle(count: Int) -> String {
+        if count == 1 {
+            return localizedAppText("1 recent transcription", de: "1 letzte Transkription")
+        }
+        return localizedAppText("\(count) recent transcriptions", de: "\(count) letzte Transkriptionen")
     }
 
     private func paletteItem(for entry: PromptPaletteEntry) -> SelectionPaletteItem {
@@ -88,21 +181,6 @@ final class PromptPaletteController: PromptPaletteControlling {
                 searchTokens: recentTranscriptionSearchTokens(for: recentEntry)
             )
         }
-    }
-
-    private func searchPrompt(containsRecentTranscriptions: Bool) -> String {
-        containsRecentTranscriptions
-            ? localizedAppText(
-                "Search workflows and recent transcriptions...",
-                de: "Workflows und letzte Transkriptionen suchen..."
-            )
-            : localizedAppText("Search workflows...", de: "Workflows suchen...")
-    }
-
-    private func emptyStateTitle(containsRecentTranscriptions: Bool) -> String {
-        containsRecentTranscriptions
-            ? localizedAppText("No matching results", de: "Keine passenden Ergebnisse")
-            : localizedAppText("No matching workflows", de: "Keine passenden Workflows")
     }
 
     private func workflowPaletteSubtitle(for workflow: Workflow) -> String? {
