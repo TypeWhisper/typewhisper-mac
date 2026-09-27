@@ -4733,9 +4733,10 @@ enum DictationInsertionTextFormatter {
     /// `name@example.com.` typed into an empty field.
     ///
     /// Conservative on purpose: only whole-text matches for email addresses,
-    /// URLs, decimal numbers, phone numbers, and version strings qualify.
-    /// Abbreviations (`Dr.`, `U.S.`), prose, and ambiguous numeric forms such
-    /// as dates keep their period.
+    /// bare-domain URLs, decimal numbers, phone numbers, and version strings
+    /// qualify. Abbreviations (`Dr.`, `U.S.`), prose, ambiguous numeric forms
+    /// such as dates, and URLs carrying a path, query, or fragment keep
+    /// their period — a dot is a legal part of those (RFC 3986 section 2.3).
     private enum StandaloneValueFinalPeriodCleanup {
         static func shouldStripFinalPeriod(from text: String) -> Bool {
             guard text.hasSuffix("."), !text.hasSuffix("..") else { return false }
@@ -4762,8 +4763,13 @@ enum DictationInsertionTextFormatter {
             pattern: #"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$"#
         )
 
+        /// Bare-domain URLs only: `example.com`, `www.example.com`,
+        /// `https://example.com`. A terminal dot directly after the host is
+        /// the classic model-added sentence period. Once a path, query, or
+        /// fragment is present the dot may belong to the resource
+        /// (`https://example.com/search?q=Dr.`), so it stays untouched.
         private static let urlExpression = try? NSRegularExpression(
-            pattern: #"^(?:https?://|ftp://|www\.)\S+$|^(?:[A-Za-z0-9](?:[A-Za-z0-9\-]*[A-Za-z0-9])?\.)+[A-Za-z]{2,}(?::\d+)?(?:/\S*)?$"#,
+            pattern: #"^(?:https?://|ftp://|www\.)?(?:[A-Za-z0-9](?:[A-Za-z0-9\-]*[A-Za-z0-9])?\.)+[A-Za-z]{2,}(?::\d+)?$"#,
             options: [.caseInsensitive]
         )
 
@@ -4772,9 +4778,13 @@ enum DictationInsertionTextFormatter {
             pattern: #"^\d{1,3}(?:[.,]\d{3})+(?:[.,]\d+)?$|^\d+[.,]\d+$"#
         )
 
-        /// `19.04.2026`, `2026-09-27` — ambiguous with versions, so untouched.
+        /// `19.04.2026`, `2026-09-27`, `27. 09. 2026` — ambiguous with
+        /// versions, so untouched. Whitespace around the separators is
+        /// accepted because dictation often inserts it (`27 / 09 / 2026`);
+        /// without it such dates would fall through to the phone-number
+        /// check and wrongly lose their period.
         private static let dateExpression = try? NSRegularExpression(
-            pattern: #"^\d{1,2}[./\-]\d{1,2}[./\-]\d{2,4}$|^\d{4}[./\-]\d{1,2}[./\-]\d{1,2}$"#
+            pattern: #"^\d{1,2}\s*[./\-]\s*\d{1,2}\s*[./\-]\s*\d{2,4}$|^\d{4}\s*[./\-]\s*\d{1,2}\s*[./\-]\s*\d{1,2}$"#
         )
 
         private static let versionExpression = try? NSRegularExpression(

@@ -647,9 +647,31 @@ final class DictationInsertionTextFormatterTests: XCTestCase {
     }
 
     func testStandaloneCleanupStripsFinalPeriodFromURLs() {
-        assertStandaloneCleanup("https://example.com/docs.", becomes: "https://example.com/docs")
+        assertStandaloneCleanup("https://example.com.", becomes: "https://example.com")
         assertStandaloneCleanup("www.example.com.", becomes: "www.example.com")
         assertStandaloneCleanup("example.com.", becomes: "example.com")
+    }
+
+    func testStandaloneCleanupPreservesTerminalPeriodInURLPathsAndQueries() {
+        // A period is a legal part of URL paths and queries (RFC 3986
+        // section 2.3), so the dot may belong to the requested resource.
+        assertStandaloneCleanup("https://example.com/docs.", becomes: "https://example.com/docs.")
+        assertStandaloneCleanup(
+            "https://example.com/files/report.",
+            becomes: "https://example.com/files/report."
+        )
+        assertStandaloneCleanup(
+            "https://example.com/search?q=Dr.",
+            becomes: "https://example.com/search?q=Dr."
+        )
+    }
+
+    func testStandaloneCleanupPreservesSpacedDates() {
+        // Dictation often inserts whitespace around date separators; those
+        // dates must not fall through to the phone-number check.
+        assertStandaloneCleanup("27. 09. 2026.", becomes: "27. 09. 2026.")
+        assertStandaloneCleanup("27 / 09 / 2026.", becomes: "27 / 09 / 2026.")
+        assertStandaloneCleanup("2026 - 09 - 27.", becomes: "2026 - 09 - 27.")
     }
 
     func testStandaloneCleanupStripsFinalPeriodFromDecimalNumbers() {
