@@ -573,7 +573,11 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
         let loadGeneration = beginModelLoad()
         // Held until compilation finishes: the headroom covers Core ML caches.
         var downloadSpaceReservation: PluginDownloadSpaceReservation?
-        defer { downloadSpaceReservation?.release() }
+        var repairSpaceReservation: PluginDownloadSpaceReservation?
+        defer {
+            downloadSpaceReservation?.release()
+            repairSpaceReservation?.release()
+        }
         do {
             // Migrate old models if they exist
             migrateOldModels(for: modelDef)
@@ -621,7 +625,7 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
             }
             guard isCurrentModelLoad(loadGeneration) else { return }
             if allowDownloads {
-                try await repairDownloadedModelIfNeeded(at: modelFolder, variant: modelDef.id)
+                repairSpaceReservation = try await repairDownloadedModelIfNeeded(at: modelFolder, variant: modelDef.id)
             }
             guard isCurrentModelLoad(loadGeneration) else { return }
 
@@ -904,11 +908,16 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
         }
     }
 
-    private func repairDownloadedModelIfNeeded(at modelPath: URL, variant: String) async throws {
+    /// Returns the space reservation for the repaired files. The caller keeps it
+    /// until compilation finishes so the headroom stays reserved.
+    private func repairDownloadedModelIfNeeded(
+        at modelPath: URL,
+        variant: String
+    ) async throws -> PluginDownloadSpaceReservation? {
         let missingFiles = requiredModelFiles(at: modelPath)
             .filter { !FileManager.default.fileExists(atPath: modelPath.appendingPathComponent($0).path) }
 
-        guard !missingFiles.isEmpty else { return }
+        guard !missingFiles.isEmpty else { return nil }
 
         try WhisperKitNetworkAccessPolicy.ensureAccessIsAllowed()
         let spaceReservation = try await PluginDownloadDiskSpace.reserveHuggingFaceDownload(
@@ -922,15 +931,20 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
             stagingDirectory: FileManager.default.temporaryDirectory,
             modelName: Self.availableModels.first { $0.id == variant }?.displayName ?? variant
         )
-        defer { spaceReservation?.release() }
 
-        for relativePath in missingFiles {
-            try await downloadModelFile(
-                variant: variant,
-                relativePath: relativePath,
-                destination: modelPath.appendingPathComponent(relativePath)
-            )
+        do {
+            for relativePath in missingFiles {
+                try await downloadModelFile(
+                    variant: variant,
+                    relativePath: relativePath,
+                    destination: modelPath.appendingPathComponent(relativePath)
+                )
+            }
+        } catch {
+            spaceReservation?.release()
+            throw error
         }
+        return spaceReservation
     }
 
     private func requiredModelFiles(at modelPath: URL) -> [String] {

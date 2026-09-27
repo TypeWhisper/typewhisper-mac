@@ -191,7 +191,7 @@ public enum PluginDownloadDiskSpace {
         dataFetcher: @escaping @Sendable (URLRequest) async throws -> (Data, URLResponse) = PluginHTTPClient.data
     ) async throws -> PluginDownloadSpaceReservation? {
         let downloadBytes: Int64
-        let largestFileBytes: Int64
+        let stagingBytes: Int64
         do {
             let files = try await PluginHuggingFaceDownloadSize.files(
                 repositoryID: repositoryID,
@@ -204,7 +204,9 @@ public enum PluginDownloadDiskSpace {
             downloadBytes = localRepositoryRoot.map {
                 PluginHuggingFaceDownloadSize.missingBytes(of: files, in: $0)
             } ?? files.reduce(0) { $0 + $1.size }
-            largestFileBytes = files.map(\.size).max() ?? 0
+            // Snapshot downloads stage several files at once, and a server that
+            // ignores a resume request sends the whole file again.
+            stagingBytes = files.reduce(0) { $0 + $1.size }
         } catch is CancellationError {
             throw CancellationError()
         } catch {
@@ -217,7 +219,7 @@ public enum PluginDownloadDiskSpace {
             destination: destination,
             trackedDirectory: trackedDirectory,
             stagingDirectory: stagingDirectory,
-            stagingBytes: largestFileBytes,
+            stagingBytes: stagingBytes,
             modelName: modelName
         )
     }
