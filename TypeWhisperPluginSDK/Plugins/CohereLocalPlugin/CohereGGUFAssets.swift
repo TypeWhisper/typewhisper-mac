@@ -108,8 +108,20 @@ struct CohereLocalModelAssets: Sendable {
             withIntermediateDirectories: true
         )
         removeInterruptedRuntimeInstallFiles()
+        // Verify before reserving: a file with the right size but a wrong
+        // checksum is deleted here and has to be downloaded again.
+        let needsModel = !isVerifiedFile(
+            modelFileURL,
+            expectedSize: model.fileSize,
+            expectedSHA256: model.sha256
+        )
+        let needsVAD = !isVerifiedFile(
+            vadModelURL,
+            expectedSize: Self.vadSize,
+            expectedSHA256: Self.vadSHA256
+        )
         let spaceReservation = try PluginDownloadDiskSpace.reserve(
-            downloadBytes: missingDownloadBytes,
+            downloadBytes: missingDownloadBytes(needsModel: needsModel, needsVAD: needsVAD),
             destination: rootDirectory,
             trackedDirectory: rootDirectory,
             modelName: model.displayName
@@ -118,11 +130,7 @@ struct CohereLocalModelAssets: Sendable {
 
         let session = URLSession(configuration: .default)
         defer { session.invalidateAndCancel() }
-        if !isVerifiedFile(
-            modelFileURL,
-            expectedSize: model.fileSize,
-            expectedSHA256: model.sha256
-        ) {
+        if needsModel {
             try await Self.downloadHubFile(
                 session: session,
                 repositoryId: Self.modelRepositoryId,
@@ -141,11 +149,7 @@ struct CohereLocalModelAssets: Sendable {
         }
         progressHandler(0.98)
 
-        if !isVerifiedFile(
-            vadModelURL,
-            expectedSize: Self.vadSize,
-            expectedSHA256: Self.vadSHA256
-        ) {
+        if needsVAD {
             try FileManager.default.createDirectory(
                 at: auxiliaryDirectory,
                 withIntermediateDirectories: true
@@ -179,12 +183,12 @@ struct CohereLocalModelAssets: Sendable {
         }
     }
 
-    /// Bytes the download still has to write. Files with the expected size
-    /// count as present; `download` verifies their checksums afterwards.
-    var missingDownloadBytes: Int64 {
+    /// Bytes the download still has to write, given which checksum-verified
+    /// assets are missing.
+    func missingDownloadBytes(needsModel: Bool, needsVAD: Bool) -> Int64 {
         var bytes: Int64 = 0
-        if fileSize(modelFileURL) != model.fileSize { bytes += model.fileSize }
-        if fileSize(vadModelURL) != Self.vadSize { bytes += Self.vadSize }
+        if needsModel { bytes += model.fileSize }
+        if needsVAD { bytes += Self.vadSize }
         // The archive, its extracted staging copy, and the installed runtime
         // briefly coexist during installation.
         if !isRuntimeInstalled { bytes += Self.runtimeArchiveSize * 3 }
@@ -442,12 +446,6 @@ struct CohereLocalModelAssets: Sendable {
             hasher.update(data: data)
         }
         return hasher.finalize().map { String(format: "%02x", $0) }.joined()
-    }
-
-    private func fileSize(_ url: URL) -> Int64? {
-        (try? FileManager.default.attributesOfItem(atPath: url.path))
-            .flatMap { $0[.size] as? NSNumber }?
-            .int64Value
     }
 
     private func isNonEmptyFile(_ url: URL) -> Bool {

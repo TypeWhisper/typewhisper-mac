@@ -906,6 +906,18 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
 
         guard !missingFiles.isEmpty else { return }
 
+        try WhisperKitNetworkAccessPolicy.ensureAccessIsAllowed()
+        let spaceReservation = try await PluginDownloadDiskSpace.reserveHuggingFaceDownload(
+            repositoryID: Self.modelRepo,
+            path: variant,
+            matching: missingFiles.map { "\(variant)/\($0)" },
+            token: _hfToken,
+            destination: modelPath,
+            trackedDirectory: modelPath,
+            modelName: Self.availableModels.first { $0.id == variant }?.displayName ?? variant
+        )
+        defer { spaceReservation?.release() }
+
         for relativePath in missingFiles {
             try await downloadModelFile(
                 variant: variant,

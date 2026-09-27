@@ -361,7 +361,7 @@ final class CohereLocalPluginTests: XCTestCase {
         XCTAssertFalse(assets.isInstalled)
     }
 
-    func testMissingDownloadBytesSkipsAssetsWithTheExpectedSize() throws {
+    func testMissingDownloadBytesCountsOnlyAssetsThatNeedDownloading() throws {
         let host = try PluginTestHostServices(shouldRestoreLoadedModelsPassively: false)
         let model = CohereLocalPlugin.fastModel
         let assets = CohereLocalModelAssets(
@@ -369,16 +369,13 @@ final class CohereLocalPluginTests: XCTestCase {
             model: model
         )
         let runtimeBytes = CohereLocalModelAssets.runtimeArchiveSize * 3
+
         XCTAssertEqual(
-            assets.missingDownloadBytes,
+            assets.missingDownloadBytes(needsModel: true, needsVAD: true),
             model.fileSize + CohereLocalModelAssets.vadSize + runtimeBytes
         )
-
-        try createSparseFile(at: assets.modelFileURL, size: model.fileSize)
-        try createSparseFile(at: assets.vadModelURL, size: CohereLocalModelAssets.vadSize - 1)
-
         XCTAssertEqual(
-            assets.missingDownloadBytes,
+            assets.missingDownloadBytes(needsModel: false, needsVAD: true),
             CohereLocalModelAssets.vadSize + runtimeBytes
         )
     }
@@ -406,17 +403,6 @@ final class CohereLocalPluginTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: archive.path))
         XCTAssertFalse(FileManager.default.fileExists(atPath: staging.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: assets.runtimeExecutableURL.path))
-    }
-
-    private func createSparseFile(at url: URL, size: Int64) throws {
-        try FileManager.default.createDirectory(
-            at: url.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        FileManager.default.createFile(atPath: url.path, contents: nil)
-        let handle = try FileHandle(forWritingTo: url)
-        defer { try? handle.close() }
-        try handle.truncate(atOffset: UInt64(size))
     }
 
     func testLegacySharedModelDirectoryMigratesToNeutralDirectory() throws {

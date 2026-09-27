@@ -13,7 +13,6 @@ final class PluginDownloadDiskSpaceTests: XCTestCase {
             downloadBytes: 2 * gigabyte,
             destination: destination,
             trackedDirectory: nil,
-            existingFilesCountTowardDownload: false,
             modelName: "Qwen3 1.7B (6-bit)",
             headroomBytes: 100_000_000
         )
@@ -31,7 +30,6 @@ final class PluginDownloadDiskSpaceTests: XCTestCase {
             downloadBytes: 2 * gigabyte,
             destination: destination,
             trackedDirectory: nil,
-            existingFilesCountTowardDownload: false,
             modelName: "Large v3",
             headroomBytes: 100_000_000
         )) { error in
@@ -57,7 +55,6 @@ final class PluginDownloadDiskSpaceTests: XCTestCase {
             downloadBytes: 2 * gigabyte,
             destination: destination,
             trackedDirectory: nil,
-            existingFilesCountTowardDownload: false,
             modelName: "First",
             headroomBytes: 0
         )
@@ -66,7 +63,6 @@ final class PluginDownloadDiskSpaceTests: XCTestCase {
             downloadBytes: 2 * gigabyte,
             destination: destination,
             trackedDirectory: nil,
-            existingFilesCountTowardDownload: false,
             modelName: "Second",
             headroomBytes: 0
         )) { error in
@@ -80,7 +76,6 @@ final class PluginDownloadDiskSpaceTests: XCTestCase {
             downloadBytes: 2 * gigabyte,
             destination: destination,
             trackedDirectory: nil,
-            existingFilesCountTowardDownload: false,
             modelName: "Second",
             headroomBytes: 0
         ))
@@ -101,7 +96,6 @@ final class PluginDownloadDiskSpaceTests: XCTestCase {
             downloadBytes: 2 * gigabyte,
             destination: destination,
             trackedDirectory: tracked,
-            existingFilesCountTowardDownload: false,
             modelName: "First",
             headroomBytes: 0
         )
@@ -111,7 +105,6 @@ final class PluginDownloadDiskSpaceTests: XCTestCase {
             downloadBytes: 2 * gigabyte,
             destination: destination,
             trackedDirectory: nil,
-            existingFilesCountTowardDownload: false,
             modelName: "Second",
             headroomBytes: 0
         ))
@@ -130,7 +123,6 @@ final class PluginDownloadDiskSpaceTests: XCTestCase {
             downloadBytes: 2 * gigabyte,
             destination: URL(fileURLWithPath: "/Users/test/models"),
             trackedDirectory: nil,
-            existingFilesCountTowardDownload: false,
             modelName: "Internal",
             headroomBytes: 0
         )
@@ -139,30 +131,63 @@ final class PluginDownloadDiskSpaceTests: XCTestCase {
             downloadBytes: 2 * gigabyte,
             destination: URL(fileURLWithPath: "/Volumes/External/models"),
             trackedDirectory: nil,
-            existingFilesCountTowardDownload: false,
             modelName: "External",
             headroomBytes: 0
         ))
         internalReservation?.release()
     }
 
-    func testResumableDownloadsOnlyNeedTheMissingBytes() throws {
-        let tracked = URL(fileURLWithPath: "/Volumes/Models/FluidAudio/parakeet")
+    func testHeadroomStaysReservedWhenADownloadWritesMoreThanExpected() throws {
+        let tracked = URL(fileURLWithPath: "/Volumes/Models/PluginData/models/models--org--first")
+        let sizes = DirectorySizes()
         let ledger = PluginDiskSpaceLedger(
             volumeProvider: { _ in
-                PluginDiskSpaceVolume(identifier: "/Volumes/Models", name: nil, availableBytes: self.gigabyte)
+                PluginDiskSpaceVolume(identifier: "/Volumes/Models", name: nil, availableBytes: 3 * self.gigabyte)
             },
-            directorySize: { $0 == tracked ? 1_500_000_000 : 0 }
+            directorySize: { sizes.value(for: $0) }
         )
-
-        XCTAssertNotNil(try ledger.reserve(
-            downloadBytes: 2 * gigabyte,
-            destination: tracked,
+        let first = try ledger.reserve(
+            downloadBytes: gigabyte,
+            destination: destination,
             trackedDirectory: tracked,
-            existingFilesCountTowardDownload: true,
-            modelName: "Parakeet",
+            modelName: "First",
+            headroomBytes: 500_000_000
+        )
+        // Temporary copies made the first download write twice its size.
+        sizes.set(2 * gigabyte, for: tracked)
+
+        XCTAssertThrowsError(try ledger.reserve(
+            downloadBytes: 2_600_000_000,
+            destination: destination,
+            trackedDirectory: nil,
+            modelName: "Second",
             headroomBytes: 0
-        ))
+        )) { error in
+            XCTAssertEqual((error as? PluginInsufficientDiskSpaceError)?.reservedByOtherDownloadsBytes, 500_000_000)
+        }
+        first?.release()
+    }
+
+    func testMissingBytesCountsOnlyListedFilesAndResumablePartials() throws {
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("PluginDownloadDiskSpaceTests-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        func write(_ bytes: Int, to relativePath: String) throws {
+            let url = root.appendingPathComponent(relativePath)
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try Data(count: bytes).write(to: url)
+        }
+        try write(100, to: "Decoder.mlmodelc/weights/weight.bin")
+        try write(300, to: "Encoder.mlmodelc/weights/weight.bin.partial")
+        // Another encoder precision the selected download does not reuse.
+        try write(5_000, to: "Encoder_v2.mlmodelc/weights/weight.bin")
+        let files = [
+            PluginHuggingFaceDownloadSize.RemoteFile(path: "Decoder.mlmodelc/weights/weight.bin", size: 100),
+            PluginHuggingFaceDownloadSize.RemoteFile(path: "Encoder.mlmodelc/weights/weight.bin", size: 1_000),
+            PluginHuggingFaceDownloadSize.RemoteFile(path: "parakeet_vocab.json", size: 20),
+        ]
+
+        XCTAssertEqual(PluginHuggingFaceDownloadSize.missingBytes(of: files, in: root), 720)
     }
 
     func testUnknownVolumeCapacityDoesNotBlockDownloads() throws {
@@ -172,7 +197,6 @@ final class PluginDownloadDiskSpaceTests: XCTestCase {
             downloadBytes: 50 * gigabyte,
             destination: destination,
             trackedDirectory: nil,
-            existingFilesCountTowardDownload: false,
             modelName: "Unknown",
             headroomBytes: 0
         ))

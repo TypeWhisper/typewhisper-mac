@@ -141,8 +141,6 @@ public enum PluginDownloadDiskSpace {
     ///   - trackedDirectory: Directory that grows while the download runs. Bytes written
     ///     there count against this reservation, so parallel downloads are not charged
     ///     twice for data that is already on disk.
-    ///   - existingFilesCountTowardDownload: Pass `true` when the downloader resumes or
-    ///     skips files already present in `trackedDirectory`.
     ///   - modelName: Display name used in the error message.
     /// - Returns: A reservation, or `nil` when the volume capacity cannot be determined.
     ///   An unknown capacity never blocks a download.
@@ -150,7 +148,6 @@ public enum PluginDownloadDiskSpace {
         downloadBytes: Int64,
         destination: URL,
         trackedDirectory: URL? = nil,
-        existingFilesCountTowardDownload: Bool = false,
         modelName: String,
         headroomBytes: Int64 = defaultHeadroomBytes
     ) throws -> PluginDownloadSpaceReservation? {
@@ -158,7 +155,6 @@ public enum PluginDownloadDiskSpace {
             downloadBytes: downloadBytes,
             destination: destination,
             trackedDirectory: trackedDirectory,
-            existingFilesCountTowardDownload: existingFilesCountTowardDownload,
             modelName: modelName,
             headroomBytes: headroomBytes
         )
@@ -168,6 +164,11 @@ public enum PluginDownloadDiskSpace {
     ///
     /// Returns `nil` without checking when the size lookup fails, for example when
     /// the Mac is offline. The download then reports its own, more specific error.
+    ///
+    /// - Parameter localRepositoryRoot: Directory that mirrors the repository layout.
+    ///   Pass it when the downloader skips or resumes files that are already there.
+    ///   Only files at the listed remote paths, or their `.partial` counterparts,
+    ///   count as downloaded.
     public static func reserveHuggingFaceDownload(
         repositoryID: String,
         revision: String = "main",
@@ -176,13 +177,13 @@ public enum PluginDownloadDiskSpace {
         token: String? = nil,
         destination: URL,
         trackedDirectory: URL? = nil,
-        existingFilesCountTowardDownload: Bool = false,
+        localRepositoryRoot: URL? = nil,
         modelName: String,
         dataFetcher: @escaping @Sendable (URLRequest) async throws -> (Data, URLResponse) = PluginHTTPClient.data
     ) async throws -> PluginDownloadSpaceReservation? {
         let downloadBytes: Int64
         do {
-            downloadBytes = try await PluginHuggingFaceDownloadSize.totalBytes(
+            let files = try await PluginHuggingFaceDownloadSize.files(
                 repositoryID: repositoryID,
                 revision: revision,
                 path: path,
@@ -190,6 +191,9 @@ public enum PluginDownloadDiskSpace {
                 token: token,
                 dataFetcher: dataFetcher
             )
+            downloadBytes = localRepositoryRoot.map {
+                PluginHuggingFaceDownloadSize.missingBytes(of: files, in: $0)
+            } ?? files.reduce(0) { $0 + $1.size }
         } catch is CancellationError {
             throw CancellationError()
         } catch {
@@ -201,7 +205,6 @@ public enum PluginDownloadDiskSpace {
             downloadBytes: downloadBytes,
             destination: destination,
             trackedDirectory: trackedDirectory,
-            existingFilesCountTowardDownload: existingFilesCountTowardDownload,
             modelName: modelName
         )
     }
@@ -233,7 +236,8 @@ final class PluginDiskSpaceLedger: @unchecked Sendable {
 
     private struct Entry {
         let volumeIdentifier: String
-        let neededBytes: Int64
+        let downloadBytes: Int64
+        let headroomBytes: Int64
         let trackedDirectory: URL?
         let baselineBytes: Int64
     }
@@ -259,7 +263,6 @@ final class PluginDiskSpaceLedger: @unchecked Sendable {
         downloadBytes: Int64,
         destination: URL,
         trackedDirectory: URL?,
-        existingFilesCountTowardDownload: Bool,
         modelName: String,
         headroomBytes: Int64
     ) throws -> PluginDownloadSpaceReservation? {
@@ -268,11 +271,9 @@ final class PluginDiskSpaceLedger: @unchecked Sendable {
         try lock.withLock {
             guard let volume = volumeProvider(destination) else { return nil }
 
-            let baseline = trackedDirectory.map(directorySize) ?? 0
-            let remaining = existingFilesCountTowardDownload
-                ? max(downloadBytes - baseline, 0)
-                : max(downloadBytes, 0)
-            let needed = remaining + max(headroomBytes, 0)
+            let download = max(downloadBytes, 0)
+            let headroom = max(headroomBytes, 0)
+            let needed = download + headroom
 
             let reservedByOthers = entries.values
                 .filter { $0.volumeIdentifier == volume.identifier }
@@ -292,9 +293,10 @@ final class PluginDiskSpaceLedger: @unchecked Sendable {
             let id = UUID()
             entries[id] = Entry(
                 volumeIdentifier: volume.identifier,
-                neededBytes: needed,
+                downloadBytes: download,
+                headroomBytes: headroom,
                 trackedDirectory: trackedDirectory,
-                baselineBytes: baseline
+                baselineBytes: trackedDirectory.map(directorySize) ?? 0
             )
             return PluginDownloadSpaceReservation { [weak self] in
                 self?.lock.withLock { _ = self?.entries.removeValue(forKey: id) }
@@ -302,10 +304,14 @@ final class PluginDiskSpaceLedger: @unchecked Sendable {
         }
     }
 
+    /// Written bytes only offset the download part. The headroom stays reserved
+    /// even when temporary copies make a download write more than expected.
     private func outstandingBytes(for entry: Entry) -> Int64 {
-        guard let trackedDirectory = entry.trackedDirectory else { return entry.neededBytes }
+        guard let trackedDirectory = entry.trackedDirectory else {
+            return entry.downloadBytes + entry.headroomBytes
+        }
         let written = max(directorySize(trackedDirectory) - entry.baselineBytes, 0)
-        return max(entry.neededBytes - written, 0)
+        return max(entry.downloadBytes - written, 0) + entry.headroomBytes
     }
 }
 
@@ -317,6 +323,16 @@ public enum PluginHuggingFaceDownloadSize {
         case tooManyPages
     }
 
+    public struct RemoteFile: Equatable, Sendable {
+        public let path: String
+        public let size: Int64
+
+        public init(path: String, size: Int64) {
+            self.path = path
+            self.size = size
+        }
+    }
+
     private struct TreeEntry: Decodable {
         let type: String
         let path: String
@@ -326,11 +342,6 @@ public enum PluginHuggingFaceDownloadSize {
     private static let maxPages = 50
 
     /// Total size of the files a snapshot download of `repositoryID` would fetch.
-    ///
-    /// - Parameters:
-    ///   - path: Limits the listing to a folder inside the repository.
-    ///   - patterns: `fnmatch` globs matched against the full repository path, the same
-    ///     way swift-huggingface filters `downloadSnapshot(matching:)`. Empty matches all files.
     public static func totalBytes(
         repositoryID: String,
         revision: String = "main",
@@ -340,6 +351,32 @@ public enum PluginHuggingFaceDownloadSize {
         host: URL = URL(string: "https://huggingface.co")!,
         dataFetcher: @escaping @Sendable (URLRequest) async throws -> (Data, URLResponse) = PluginHTTPClient.data
     ) async throws -> Int64 {
+        try await files(
+            repositoryID: repositoryID,
+            revision: revision,
+            path: path,
+            matching: patterns,
+            token: token,
+            host: host,
+            dataFetcher: dataFetcher
+        ).reduce(0) { $0 + $1.size }
+    }
+
+    /// Files a snapshot download of `repositoryID` would fetch, with their sizes.
+    ///
+    /// - Parameters:
+    ///   - path: Limits the listing to a folder inside the repository.
+    ///   - patterns: `fnmatch` globs matched against the full repository path, the same
+    ///     way swift-huggingface filters `downloadSnapshot(matching:)`. Empty matches all files.
+    public static func files(
+        repositoryID: String,
+        revision: String = "main",
+        path: String? = nil,
+        matching patterns: [String] = [],
+        token: String? = nil,
+        host: URL = URL(string: "https://huggingface.co")!,
+        dataFetcher: @escaping @Sendable (URLRequest) async throws -> (Data, URLResponse) = PluginHTTPClient.data
+    ) async throws -> [RemoteFile] {
         let repositoryParts = repositoryID.split(separator: "/", omittingEmptySubsequences: false)
         guard repositoryParts.count == 2,
               repositoryParts.allSatisfy({ !$0.isEmpty && $0 != "." && $0 != ".." }) else {
@@ -362,7 +399,7 @@ public enum PluginHuggingFaceDownloadSize {
         components.queryItems = [URLQueryItem(name: "recursive", value: "true")]
 
         var nextURL = components.url
-        var total: Int64 = 0
+        var files: [RemoteFile] = []
         var pages = 0
         while let pageURL = nextURL {
             pages += 1
@@ -381,11 +418,31 @@ public enum PluginHuggingFaceDownloadSize {
 
             for entry in try JSONDecoder().decode([TreeEntry].self, from: data)
             where entry.type == "file" && matches(entry.path, patterns: patterns) {
-                total += max(entry.size ?? 0, 0)
+                files.append(RemoteFile(path: entry.path, size: max(entry.size ?? 0, 0)))
             }
             nextURL = (response as? HTTPURLResponse).flatMap(nextPageURL)
         }
-        return total
+        return files
+    }
+
+    /// Bytes still missing below `localRoot`, which mirrors the repository layout.
+    /// A local file, or a `.partial` file a resuming downloader left behind, counts
+    /// up to the remote file's size. Unrelated local files are ignored.
+    public static func missingBytes(of files: [RemoteFile], in localRoot: URL) -> Int64 {
+        files.reduce(0) { total, file in
+            let local = localRoot.appendingPathComponent(file.path)
+            let present = regularFileSize(local)
+                ?? regularFileSize(local.appendingPathExtension("partial"))
+                ?? 0
+            return total + max(file.size - min(present, file.size), 0)
+        }
+    }
+
+    private static func regularFileSize(_ url: URL) -> Int64? {
+        guard let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .fileSizeKey]),
+              values.isRegularFile == true,
+              let size = values.fileSize else { return nil }
+        return Int64(size)
     }
 
     static func matches(_ path: String, patterns: [String]) -> Bool {

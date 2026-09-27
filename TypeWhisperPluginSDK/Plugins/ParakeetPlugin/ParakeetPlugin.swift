@@ -423,6 +423,8 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         ctcModelState = .downloading
         do {
             applyHuggingFaceTokenToEnvironment()
+            let spaceReservation = try await reserveCtcDownloadSpace()
+            defer { spaceReservation?.release() }
             let models = try await CtcModels.downloadAndLoad(variant: .ctc110m)
             let cacheDir = CtcModels.defaultCacheDirectory(for: .ctc110m)
             let tokenizer = try await CtcTokenizer.load(from: cacheDir)
@@ -888,18 +890,32 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         await loadModel(version: version, passively: passively)
     }
 
-    /// FluidAudio resumes `.partial` files in the cache directory, so bytes
-    /// already there count toward the download instead of being deleted.
+    /// FluidAudio skips complete files and resumes `.partial` files in the cache
+    /// directory, so those bytes count toward the download instead of being deleted.
     private func reserveDownloadSpace(for version: ParakeetVersion) async throws -> PluginDownloadSpaceReservation? {
         let cacheDir = AsrModels.defaultCacheDirectory(for: version.asrModelVersion)
         return try await PluginDownloadDiskSpace.reserveHuggingFaceDownload(
-            repositoryID: version.repository.rawValue,
+            repositoryID: version.repository.remotePath,
             matching: version.requiredModelFiles.sorted().map { "\($0)/*" } + ["*vocab*.json"],
             token: _hfToken,
             destination: cacheDir,
             trackedDirectory: cacheDir,
-            existingFilesCountTowardDownload: true,
+            localRepositoryRoot: cacheDir,
             modelName: version.modelDef.displayName
+        )
+    }
+
+    private func reserveCtcDownloadSpace() async throws -> PluginDownloadSpaceReservation? {
+        let cacheDir = CtcModels.defaultCacheDirectory(for: .ctc110m)
+        guard !CtcModels.modelsExist(at: cacheDir) else { return nil }
+        return try await PluginDownloadDiskSpace.reserveHuggingFaceDownload(
+            repositoryID: CtcModelVariant.ctc110m.repo.remotePath,
+            matching: ModelNames.CTC.requiredModels.sorted().map { "\($0)/*" } + [ModelNames.CTC.vocabularyPath],
+            token: _hfToken,
+            destination: cacheDir,
+            trackedDirectory: cacheDir,
+            localRepositoryRoot: cacheDir,
+            modelName: "Parakeet CTC 110M"
         )
     }
 
