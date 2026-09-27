@@ -141,6 +141,10 @@ public enum PluginDownloadDiskSpace {
     ///   - trackedDirectory: Directory that grows while the download runs. Bytes written
     ///     there count against this reservation, so parallel downloads are not charged
     ///     twice for data that is already on disk.
+    ///   - stagingDirectory: Where the downloader writes files before moving them into
+    ///     `destination`, such as URLSession's temporary directory. When it is on
+    ///     another volume, that volume must also hold `stagingBytes`.
+    ///   - stagingBytes: Largest amount staged at once, usually the largest single file.
     ///   - modelName: Display name used in the error message.
     /// - Returns: A reservation, or `nil` when the volume capacity cannot be determined.
     ///   An unknown capacity never blocks a download.
@@ -148,6 +152,8 @@ public enum PluginDownloadDiskSpace {
         downloadBytes: Int64,
         destination: URL,
         trackedDirectory: URL? = nil,
+        stagingDirectory: URL? = nil,
+        stagingBytes: Int64 = 0,
         modelName: String,
         headroomBytes: Int64 = defaultHeadroomBytes
     ) throws -> PluginDownloadSpaceReservation? {
@@ -155,6 +161,8 @@ public enum PluginDownloadDiskSpace {
             downloadBytes: downloadBytes,
             destination: destination,
             trackedDirectory: trackedDirectory,
+            stagingDirectory: stagingDirectory,
+            stagingBytes: stagingBytes,
             modelName: modelName,
             headroomBytes: headroomBytes
         )
@@ -178,10 +186,12 @@ public enum PluginDownloadDiskSpace {
         destination: URL,
         trackedDirectory: URL? = nil,
         localRepositoryRoot: URL? = nil,
+        stagingDirectory: URL? = nil,
         modelName: String,
         dataFetcher: @escaping @Sendable (URLRequest) async throws -> (Data, URLResponse) = PluginHTTPClient.data
     ) async throws -> PluginDownloadSpaceReservation? {
         let downloadBytes: Int64
+        let largestFileBytes: Int64
         do {
             let files = try await PluginHuggingFaceDownloadSize.files(
                 repositoryID: repositoryID,
@@ -194,6 +204,7 @@ public enum PluginDownloadDiskSpace {
             downloadBytes = localRepositoryRoot.map {
                 PluginHuggingFaceDownloadSize.missingBytes(of: files, in: $0)
             } ?? files.reduce(0) { $0 + $1.size }
+            largestFileBytes = files.map(\.size).max() ?? 0
         } catch is CancellationError {
             throw CancellationError()
         } catch {
@@ -205,6 +216,8 @@ public enum PluginDownloadDiskSpace {
             downloadBytes: downloadBytes,
             destination: destination,
             trackedDirectory: trackedDirectory,
+            stagingDirectory: stagingDirectory,
+            stagingBytes: largestFileBytes,
             modelName: modelName
         )
     }
@@ -263,6 +276,8 @@ final class PluginDiskSpaceLedger: @unchecked Sendable {
         downloadBytes: Int64,
         destination: URL,
         trackedDirectory: URL?,
+        stagingDirectory: URL? = nil,
+        stagingBytes: Int64 = 0,
         modelName: String,
         headroomBytes: Int64
     ) throws -> PluginDownloadSpaceReservation? {
@@ -271,47 +286,84 @@ final class PluginDiskSpaceLedger: @unchecked Sendable {
         try lock.withLock {
             guard let volume = volumeProvider(destination) else { return nil }
 
-            let download = max(downloadBytes, 0)
-            let headroom = max(headroomBytes, 0)
-            let needed = download + headroom
-
-            let reservedByOthers = entries.values
-                .filter { $0.volumeIdentifier == volume.identifier }
-                .reduce(Int64(0)) { $0 + outstandingBytes(for: $1) }
-            let available = max(volume.availableBytes - reservedByOthers, 0)
-
-            guard available >= needed else {
-                throw PluginInsufficientDiskSpaceError(
-                    modelName: modelName,
-                    requiredBytes: needed,
-                    availableBytes: available,
-                    reservedByOtherDownloadsBytes: reservedByOthers,
-                    volumeName: volume.name
+            var requirements = [(
+                volume: volume,
+                entry: Entry(
+                    volumeIdentifier: volume.identifier,
+                    downloadBytes: max(downloadBytes, 0),
+                    headroomBytes: max(headroomBytes, 0),
+                    trackedDirectory: trackedDirectory,
+                    baselineBytes: trackedDirectory.map(directorySize) ?? 0
                 )
+            )]
+            // A staging copy on the same volume is moved, not duplicated.
+            if let stagingDirectory,
+               let stagingVolume = volumeProvider(stagingDirectory),
+               stagingVolume.identifier != volume.identifier {
+                requirements.append((
+                    volume: stagingVolume,
+                    entry: Entry(
+                        volumeIdentifier: stagingVolume.identifier,
+                        downloadBytes: max(stagingBytes, 0),
+                        headroomBytes: 0,
+                        trackedDirectory: nil,
+                        baselineBytes: 0
+                    )
+                ))
             }
 
-            let id = UUID()
-            entries[id] = Entry(
-                volumeIdentifier: volume.identifier,
-                downloadBytes: download,
-                headroomBytes: headroom,
-                trackedDirectory: trackedDirectory,
-                baselineBytes: trackedDirectory.map(directorySize) ?? 0
-            )
+            for requirement in requirements {
+                let needed = requirement.entry.downloadBytes + requirement.entry.headroomBytes
+                let reservedByOthers = entries
+                    .filter { $0.value.volumeIdentifier == requirement.volume.identifier }
+                    .reduce(Int64(0)) { $0 + outstandingBytes(for: $1.key) }
+                let available = max(requirement.volume.availableBytes - reservedByOthers, 0)
+                guard available >= needed else {
+                    throw PluginInsufficientDiskSpaceError(
+                        modelName: modelName,
+                        requiredBytes: needed,
+                        availableBytes: available,
+                        reservedByOtherDownloadsBytes: reservedByOthers,
+                        volumeName: requirement.volume.name
+                    )
+                }
+            }
+
+            let ids = requirements.map { requirement in
+                let id = UUID()
+                entries[id] = requirement.entry
+                return id
+            }
             return PluginDownloadSpaceReservation { [weak self] in
-                self?.lock.withLock { _ = self?.entries.removeValue(forKey: id) }
+                self?.lock.withLock {
+                    for id in ids { _ = self?.entries.removeValue(forKey: id) }
+                }
             }
         }
     }
 
     /// Written bytes only offset the download part. The headroom stays reserved
     /// even when temporary copies make a download write more than expected.
-    private func outstandingBytes(for entry: Entry) -> Int64 {
-        guard let trackedDirectory = entry.trackedDirectory else {
+    /// When another reservation tracks the same or a nested directory, growth
+    /// cannot be attributed, so the full amount stays reserved.
+    private func outstandingBytes(for id: UUID) -> Int64 {
+        guard let entry = entries[id] else { return 0 }
+        guard let trackedDirectory = entry.trackedDirectory,
+              !entries.contains(where: { otherID, other in
+                  otherID != id && other.trackedDirectory.map {
+                      Self.directoriesOverlap($0, trackedDirectory)
+                  } == true
+              }) else {
             return entry.downloadBytes + entry.headroomBytes
         }
         let written = max(directorySize(trackedDirectory) - entry.baselineBytes, 0)
         return max(entry.downloadBytes - written, 0) + entry.headroomBytes
+    }
+
+    private static func directoriesOverlap(_ lhs: URL, _ rhs: URL) -> Bool {
+        let left = lhs.standardizedFileURL.path
+        let right = rhs.standardizedFileURL.path
+        return left == right || left.hasPrefix(right + "/") || right.hasPrefix(left + "/")
     }
 }
 

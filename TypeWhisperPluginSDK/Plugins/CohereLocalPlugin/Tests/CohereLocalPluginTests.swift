@@ -378,6 +378,11 @@ final class CohereLocalPluginTests: XCTestCase {
             assets.missingDownloadBytes(needsModel: false, needsVAD: true),
             CohereLocalModelAssets.vadSize + runtimeBytes
         )
+        XCTAssertEqual(assets.largestStagedBytes(needsModel: true, needsVAD: true), model.fileSize)
+        XCTAssertEqual(
+            assets.largestStagedBytes(needsModel: false, needsVAD: true),
+            CohereLocalModelAssets.runtimeArchiveSize
+        )
     }
 
     func testInterruptedRuntimeInstallFilesAreRemovedBeforeDownload() throws {

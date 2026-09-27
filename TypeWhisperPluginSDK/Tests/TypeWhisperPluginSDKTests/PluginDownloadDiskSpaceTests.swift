@@ -190,6 +190,101 @@ final class PluginDownloadDiskSpaceTests: XCTestCase {
         XCTAssertEqual(PluginHuggingFaceDownloadSize.missingBytes(of: files, in: root), 720)
     }
 
+    func testStagingOnAnotherVolumeNeedsRoomForTheLargestFile() throws {
+        let ledger = PluginDiskSpaceLedger(
+            volumeProvider: { url in
+                url.path.hasPrefix("/Volumes/External")
+                    ? PluginDiskSpaceVolume(identifier: "/Volumes/External", name: "External", availableBytes: 10 * self.gigabyte)
+                    : PluginDiskSpaceVolume(identifier: "/", name: "Macintosh HD", availableBytes: self.gigabyte)
+            },
+            directorySize: { _ in 0 }
+        )
+
+        XCTAssertThrowsError(try ledger.reserve(
+            downloadBytes: 2 * gigabyte,
+            destination: URL(fileURLWithPath: "/Volumes/External/models"),
+            trackedDirectory: nil,
+            stagingDirectory: URL(fileURLWithPath: "/private/var/folders/tmp"),
+            stagingBytes: 1_500_000_000,
+            modelName: "Large",
+            headroomBytes: 0
+        )) { error in
+            let spaceError = error as? PluginInsufficientDiskSpaceError
+            XCTAssertEqual(spaceError?.volumeName, "Macintosh HD")
+            XCTAssertEqual(spaceError?.requiredBytes, 1_500_000_000)
+        }
+        XCTAssertEqual(ledger.activeReservationCount, 0)
+
+        let reservation = try ledger.reserve(
+            downloadBytes: 2 * gigabyte,
+            destination: URL(fileURLWithPath: "/Volumes/External/models"),
+            trackedDirectory: nil,
+            stagingDirectory: URL(fileURLWithPath: "/private/var/folders/tmp"),
+            stagingBytes: 500_000_000,
+            modelName: "Large",
+            headroomBytes: 0
+        )
+        XCTAssertEqual(ledger.activeReservationCount, 2)
+        reservation?.release()
+        XCTAssertEqual(ledger.activeReservationCount, 0)
+    }
+
+    func testStagingOnTheSameVolumeIsNotCountedTwice() throws {
+        let ledger = makeLedger(availableBytes: 3 * gigabyte)
+
+        let reservation = try ledger.reserve(
+            downloadBytes: 2 * gigabyte,
+            destination: destination,
+            trackedDirectory: nil,
+            stagingDirectory: URL(fileURLWithPath: "/tmp"),
+            stagingBytes: 2 * gigabyte,
+            modelName: "Model",
+            headroomBytes: 0
+        )
+
+        XCTAssertNotNil(reservation)
+        XCTAssertEqual(ledger.activeReservationCount, 1)
+    }
+
+    func testSharedTrackedDirectoryKeepsFullReservations() throws {
+        let tracked = URL(fileURLWithPath: "/Volumes/Models/PluginData/models")
+        let sizes = DirectorySizes()
+        let ledger = PluginDiskSpaceLedger(
+            volumeProvider: { _ in
+                PluginDiskSpaceVolume(identifier: "/Volumes/Models", name: nil, availableBytes: 5 * self.gigabyte)
+            },
+            directorySize: { sizes.value(for: $0) }
+        )
+        let first = try ledger.reserve(
+            downloadBytes: 2 * gigabyte,
+            destination: tracked,
+            trackedDirectory: tracked,
+            modelName: "First",
+            headroomBytes: 0
+        )
+        let second = try ledger.reserve(
+            downloadBytes: 2 * gigabyte,
+            destination: tracked,
+            trackedDirectory: tracked.appendingPathComponent("models--org--second"),
+            modelName: "Second",
+            headroomBytes: 0
+        )
+        // Growth in the shared directory cannot be attributed to either download.
+        sizes.set(2 * gigabyte, for: tracked)
+
+        XCTAssertThrowsError(try ledger.reserve(
+            downloadBytes: 2 * gigabyte,
+            destination: tracked,
+            trackedDirectory: nil,
+            modelName: "Third",
+            headroomBytes: 0
+        )) { error in
+            XCTAssertEqual((error as? PluginInsufficientDiskSpaceError)?.reservedByOtherDownloadsBytes, 4 * gigabyte)
+        }
+        first?.release()
+        second?.release()
+    }
+
     func testUnknownVolumeCapacityDoesNotBlockDownloads() throws {
         let ledger = PluginDiskSpaceLedger(volumeProvider: { _ in nil }, directorySize: { _ in 0 })
 

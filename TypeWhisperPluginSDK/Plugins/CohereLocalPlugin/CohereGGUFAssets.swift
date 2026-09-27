@@ -124,6 +124,9 @@ struct CohereLocalModelAssets: Sendable {
             downloadBytes: missingDownloadBytes(needsModel: needsModel, needsVAD: needsVAD),
             destination: rootDirectory,
             trackedDirectory: rootDirectory,
+            // URLSession downloads each asset to its temporary directory first.
+            stagingDirectory: FileManager.default.temporaryDirectory,
+            stagingBytes: largestStagedBytes(needsModel: needsModel, needsVAD: needsVAD),
             modelName: model.displayName
         )
         defer { spaceReservation?.release() }
@@ -193,6 +196,15 @@ struct CohereLocalModelAssets: Sendable {
         // briefly coexist during installation.
         if !isRuntimeInstalled { bytes += Self.runtimeArchiveSize * 3 }
         return bytes
+    }
+
+    /// Largest single file URLSession stages before it is moved into place.
+    func largestStagedBytes(needsModel: Bool, needsVAD: Bool) -> Int64 {
+        [
+            needsModel ? model.fileSize : 0,
+            needsVAD ? Self.vadSize : 0,
+            isRuntimeInstalled ? 0 : Self.runtimeArchiveSize,
+        ].max() ?? 0
     }
 
     /// Removes runtime archives and staging folders that an interrupted

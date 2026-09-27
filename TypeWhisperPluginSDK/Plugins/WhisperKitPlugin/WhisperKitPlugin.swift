@@ -571,6 +571,9 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
 
         loadingModelId = modelDef.id
         let loadGeneration = beginModelLoad()
+        // Held until compilation finishes: the headroom covers Core ML caches.
+        var downloadSpaceReservation: PluginDownloadSpaceReservation?
+        defer { downloadSpaceReservation?.release() }
         do {
             // Migrate old models if they exist
             migrateOldModels(for: modelDef)
@@ -594,7 +597,7 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
 
                 var lastProgress = 0.0
                 try WhisperKitNetworkAccessPolicy.ensureAccessIsAllowed()
-                let spaceReservation = try await PluginDownloadDiskSpace.reserveHuggingFaceDownload(
+                downloadSpaceReservation = try await PluginDownloadDiskSpace.reserveHuggingFaceDownload(
                     repositoryID: Self.modelRepo,
                     path: modelDef.id,
                     token: _hfToken,
@@ -602,7 +605,6 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
                     trackedDirectory: modelStorageRoots[0],
                     modelName: modelDef.displayName
                 )
-                defer { spaceReservation?.release() }
                 modelFolder = try await WhisperKit.download(
                     variant: modelDef.id,
                     downloadBase: downloadBase,
@@ -914,6 +916,8 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
             token: _hfToken,
             destination: modelPath,
             trackedDirectory: modelPath,
+            // URLSession downloads each file to its temporary directory first.
+            stagingDirectory: FileManager.default.temporaryDirectory,
             modelName: Self.availableModels.first { $0.id == variant }?.displayName ?? variant
         )
         defer { spaceReservation?.release() }
