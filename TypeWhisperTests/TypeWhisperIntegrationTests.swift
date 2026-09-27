@@ -19246,7 +19246,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
     }
 
     @MainActor
-    private func fnHotkey() -> UnifiedHotkey {
+    fileprivate func fnHotkey() -> UnifiedHotkey {
         UnifiedHotkey(
             keyCode: 0x00,
             modifierFlags: 0,
@@ -19273,7 +19273,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         )
     }
 
-    private func makeKeyboardEvent(
+    fileprivate func makeKeyboardEvent(
         keyCode: UInt16,
         keyDown: Bool,
         flags: CGEventFlags = [.maskControl, .maskAlternate, .maskShift, .maskCommand],
