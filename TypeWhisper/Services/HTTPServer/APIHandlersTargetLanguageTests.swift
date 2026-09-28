@@ -57,16 +57,16 @@ final class APIHandlersTargetLanguageTests: XCTestCase {
             TranscriptionSegment(text: "How are you", start: 1.5, end: 3.25),
         ]
 
-        var translatedTexts: [String] = []
+        var batchedInputs: [[String]] = []
         let out = try await APITranslation.translateSegments(segments, translation: translation) {
-            text, target, source in
-            translatedTexts.append(text)
+            texts, target, source in
+            batchedInputs.append(texts)
             XCTAssertEqual(target.minimalIdentifier, "de")
             XCTAssertEqual(source?.minimalIdentifier, "en")
-            return "[de] \(text)"
+            return texts.map { "[de] \($0)" }
         }
 
-        XCTAssertEqual(translatedTexts, ["Hello world", "How are you"])
+        XCTAssertEqual(batchedInputs, [["Hello world", "How are you"]], "all segments must go through one batch call")
         XCTAssertEqual(out.count, 2)
         XCTAssertEqual(out[0].text, "[de] Hello world")
         XCTAssertEqual(out[0].start, 0.0, accuracy: 1e-9)
@@ -88,13 +88,16 @@ final class APIHandlersTargetLanguageTests: XCTestCase {
         ]
 
         var callCount = 0
+        var batched: [[String]] = []
         let out = try await APITranslation.translateSegments(segments, translation: translation) {
-            text, _, _ in
+            texts, _, _ in
             callCount += 1
-            return text.uppercased()
+            batched.append(texts)
+            return texts.map { $0.uppercased() }
         }
 
         XCTAssertEqual(callCount, 1, "blank segment text must not hit the translation service")
+        XCTAssertEqual(batched, [["Hi"]])
         XCTAssertEqual(out[0].text, "   ")
         XCTAssertEqual(out[1].text, "HI")
     }
@@ -119,10 +122,14 @@ final class APIHandlersTargetLanguageTests: XCTestCase {
 
     func testTranslateSegmentsEmptyInput() async throws {
         let translation = try XCTUnwrap(APITranslation.resolve(targetCode: "de", detectedLanguage: "en"))
+        var callCount = 0
         let out = try await APITranslation.translateSegments([], translation: translation) {
-            text, _, _ in return text
+            texts, _, _ in
+            callCount += 1
+            return texts
         }
         XCTAssertTrue(out.isEmpty)
+        XCTAssertEqual(callCount, 0, "no segments must mean no batch call")
     }
 }
 #endif

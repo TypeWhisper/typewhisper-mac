@@ -4,6 +4,14 @@ import os
 #if canImport(Translation)
 import Translation
 
+/// Errors for strict translation requests (used by the HTTP API path).
+/// Non-strict callers keep the historical graceful fallback to the source text.
+enum TranslationError: Error {
+    case timedOut
+    case cancelled
+    case batchCountMismatch(expected: Int, actual: Int)
+}
+
 @available(macOS 15, *)
 @MainActor
 final class TranslationService: ObservableObject {
@@ -16,13 +24,18 @@ final class TranslationService: ObservableObject {
 
     private var sourceText = ""
     private var continuation: CheckedContinuation<String, Error>?
+    private var pendingStrict = false
     private var activeRequestId = "-"
+    private var batchContinuation: CheckedContinuation<[String], Error>?
+    private var batchSourceTexts: [String] = []
+    private var batchStrict = false
     private static let logger = Logger(subsystem: AppConstants.loggerSubsystem, category: "Translation")
 
     func translate(
         text: String,
         to target: Locale.Language,
-        source sourceLanguage: Locale.Language? = nil
+        source sourceLanguage: Locale.Language? = nil,
+        strict: Bool = false
     ) async throws -> String {
         let requestId = String(UUID().uuidString.prefix(8))
         let normalizedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -46,7 +59,8 @@ final class TranslationService: ObservableObject {
                 text: normalizedText,
                 source: sourceLanguage,
                 target: target,
-                english: english
+                english: english,
+                strict: strict
             )
         }
 
@@ -55,7 +69,8 @@ final class TranslationService: ObservableObject {
             text: normalizedText,
             source: sourceLanguage,
             target: target,
-            availabilityStatus: directStatus
+            availabilityStatus: directStatus,
+            strict: strict
         )
 
         // Some language pairs report "supported" but still produce unchanged text.
@@ -82,7 +97,8 @@ final class TranslationService: ObservableObject {
                     text: normalizedText,
                     source: sourceLanguage,
                     target: target,
-                    english: english
+                    english: english,
+                    strict: strict
                 )
             }
         }
@@ -96,7 +112,8 @@ final class TranslationService: ObservableObject {
         text: String,
         source sourceLanguage: Locale.Language?,
         target: Locale.Language,
-        english: Locale.Language
+        english: Locale.Language,
+        strict: Bool
     ) async throws -> String {
         let toEnglishStatus = await availabilityStatus(
             for: text,
@@ -109,7 +126,8 @@ final class TranslationService: ObservableObject {
             text: text,
             source: sourceLanguage,
             target: english,
-            availabilityStatus: toEnglishStatus
+            availabilityStatus: toEnglishStatus,
+            strict: strict
         )
         let normalizedEnglish = englishText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !normalizedEnglish.isEmpty, normalizedEnglish != text else {
@@ -129,10 +147,91 @@ final class TranslationService: ObservableObject {
             text: normalizedEnglish,
             source: english,
             target: target,
-            availabilityStatus: toTargetStatus
+            availabilityStatus: toTargetStatus,
+            strict: strict
         )
         Self.logger.info("Translation[\(requestId)] completed via English")
         return final
+    }
+
+    /// Translates multiple texts through a single translation session.
+    ///
+    /// Unlike repeated `translate` calls, this performs the session reset only
+    /// once, so long segment lists don't pay the per-request setup cost.
+    /// Results keep the input order. When `strict` is true, timeouts,
+    /// cancellations, and session failures throw instead of falling back to
+    /// the source texts.
+    func translateBatch(
+        texts: [String],
+        to target: Locale.Language,
+        source sourceLanguage: Locale.Language? = nil,
+        strict: Bool = false
+    ) async throws -> [String] {
+        let requestId = String(UUID().uuidString.prefix(8))
+        guard !texts.isEmpty else { return [] }
+        Self.logger.info("Translation[\(requestId)] batch start \(sourceLanguage?.minimalIdentifier ?? "auto") -> \(target.minimalIdentifier), count=\(texts.count)")
+
+        // A batch never shares the session with another request.
+        cancelPending(reason: "new batch \(requestId)")
+
+        // Single session reset for the whole batch (see requestTranslation).
+        configuration = nil
+        viewId = UUID()
+        try await Task.sleep(for: .milliseconds(100))
+
+        batchSourceTexts = texts
+        batchStrict = strict
+
+        return try await withCheckedThrowingContinuation { cont in
+            self.batchContinuation = cont
+            self.activeRequestId = requestId
+            self.configuration = .init(source: sourceLanguage, target: target)
+            Self.logger.info("Translation[\(requestId)] batch requested \(sourceLanguage?.minimalIdentifier ?? "auto") -> \(target.minimalIdentifier)")
+
+            let timeout: Duration = .seconds(15 + texts.count * 2)
+
+            // Timeout watchdog.
+            Task { [weak self] in
+                try await Task.sleep(for: timeout)
+                guard let self else { return }
+                if let pending = self.batchContinuation {
+                    Self.logger.error("Translation[\(requestId)] batch timed out, \(strict ? "throwing" : "returning source texts")")
+                    if strict {
+                        pending.resume(throwing: TranslationError.timedOut)
+                    } else {
+                        pending.resume(returning: self.batchSourceTexts)
+                    }
+                    self.batchContinuation = nil
+                    self.batchSourceTexts = []
+                    self.configuration = nil
+                    self.activeRequestId = "-"
+                }
+            }
+        }
+    }
+
+    /// Cancels any in-flight request, resuming it per its own strict flag.
+    private func cancelPending(reason: String) {
+        if let pending = continuation {
+            Self.logger.warning("Translation[\(activeRequestId)] cancelled by \(reason)")
+            if pendingStrict {
+                pending.resume(throwing: TranslationError.cancelled)
+            } else {
+                pending.resume(returning: sourceText)
+            }
+            continuation = nil
+            pendingStrict = false
+        }
+        if let pending = batchContinuation {
+            Self.logger.warning("Translation[\(activeRequestId)] batch cancelled by \(reason)")
+            if batchStrict {
+                pending.resume(throwing: TranslationError.cancelled)
+            } else {
+                pending.resume(returning: batchSourceTexts)
+            }
+            batchContinuation = nil
+            batchSourceTexts = []
+        }
     }
 
     private func availabilityStatus(
@@ -164,7 +263,8 @@ final class TranslationService: ObservableObject {
         text: String,
         source sourceLanguage: Locale.Language?,
         target: Locale.Language,
-        availabilityStatus: LanguageAvailability.Status?
+        availabilityStatus: LanguageAvailability.Status?,
+        strict: Bool
     ) async throws -> String {
         let needsInteractiveHost = availabilityStatus == .supported
         if needsInteractiveHost {
@@ -177,13 +277,8 @@ final class TranslationService: ObservableObject {
             }
         }
 
-        // Cancel any pending translation - resume with original text
-        if let pending = continuation {
-            let previousRequestId = self.activeRequestId
-            Self.logger.warning("Translation[\(previousRequestId)] cancelled by new request \(requestId)")
-            pending.resume(returning: self.sourceText)
-            self.continuation = nil
-        }
+        // Cancel any pending translation before starting a new one.
+        cancelPending(reason: "new request \(requestId)")
 
         // Force SwiftUI to recreate the .translationTask by changing the view identity.
         // Without this, subsequent translations with the same target language may not
@@ -193,6 +288,7 @@ final class TranslationService: ObservableObject {
         try await Task.sleep(for: .milliseconds(100))
 
         sourceText = text
+        pendingStrict = strict
 
         return try await withCheckedThrowingContinuation { cont in
             self.continuation = cont
@@ -208,9 +304,14 @@ final class TranslationService: ObservableObject {
                 guard let self else { return }
                 if let pending = self.continuation {
                     let seconds = needsInteractiveHost ? 90 : 15
-                    Self.logger.error("Translation[\(requestId)] timed out after \(seconds)s, returning original text")
-                    pending.resume(returning: self.sourceText)
+                    Self.logger.error("Translation[\(requestId)] timed out after \(seconds)s, \(strict ? "throwing" : "returning original text")")
+                    if strict {
+                        pending.resume(throwing: TranslationError.timedOut)
+                    } else {
+                        pending.resume(returning: self.sourceText)
+                    }
                     self.continuation = nil
+                    self.pendingStrict = false
                     self.configuration = nil
                     self.activeRequestId = "-"
                 }
@@ -220,6 +321,40 @@ final class TranslationService: ObservableObject {
 
     func handleSession(_ session: sending TranslationSession) async {
         let requestId = activeRequestId
+
+        // Batch path: one session translates every text via the framework's
+        // batch API, so long segment lists pay the session setup cost once.
+        if let batchCont = batchContinuation {
+            batchContinuation = nil
+            let texts = batchSourceTexts
+            let strict = batchStrict
+            batchSourceTexts = []
+            do {
+                do {
+                    try await session.prepareTranslation()
+                } catch {
+                    Self.logger.warning("Translation[\(requestId)] batch prepare failed: \(error.localizedDescription)")
+                }
+                let responses = try await session.translations(from: texts)
+                guard responses.count == texts.count else {
+                    throw TranslationError.batchCountMismatch(expected: texts.count, actual: responses.count)
+                }
+                Self.logger.info("Translation[\(requestId)] batch completed, count=\(responses.count)")
+                batchCont.resume(returning: responses.map(\.targetText))
+            } catch {
+                Self.logger.error("Translation[\(requestId)] batch failed: \(error.localizedDescription), \(strict ? "throwing" : "returning source texts")")
+                if strict {
+                    batchCont.resume(throwing: error)
+                } else {
+                    batchCont.resume(returning: texts)
+                }
+            }
+            configuration = nil
+            activeRequestId = "-"
+            return
+        }
+
+        let strict = pendingStrict
         do {
             do {
                 try await session.prepareTranslation()
@@ -231,10 +366,15 @@ final class TranslationService: ObservableObject {
             Self.logger.info("Translation[\(requestId)] session completed")
             continuation?.resume(returning: result.targetText)
         } catch {
-            Self.logger.error("Translation[\(requestId)] failed: \(error.localizedDescription), returning original text")
-            continuation?.resume(returning: sourceText)
+            Self.logger.error("Translation[\(requestId)] failed: \(error.localizedDescription), \(strict ? "throwing" : "returning original text")")
+            if strict {
+                continuation?.resume(throwing: error)
+            } else {
+                continuation?.resume(returning: sourceText)
+            }
         }
         continuation = nil
+        pendingStrict = false
         configuration = nil
         activeRequestId = "-"
     }

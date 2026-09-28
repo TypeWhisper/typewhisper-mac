@@ -57,34 +57,45 @@ struct APITranslation {
         )
     }
 
-    /// Translates each segment's text through `translate`, preserving start/end
-    /// timestamps, speaker metadata, and segment order. Segments with
-    /// empty/blank text skip the translation call. A translation failure
-    /// propagates to the caller (the API maps it to HTTP 500) — this never
-    /// returns source-language text labeled as translated.
+    /// Translates every segment's text in a single translation session,
+    /// preserving start/end timestamps, speaker metadata, and segment order.
+    /// Segments with empty/blank text skip the service call. Batching keeps
+    /// long verbose responses from paying the per-request session setup cost
+    /// once per segment. A translation failure propagates to the caller (the
+    /// API maps it to HTTP 500) — this never returns source-language text
+    /// labeled as translated.
     static func translateSegments(
         _ segments: [TranscriptionSegment],
         translation: APITranslation,
-        translate: (String, Locale.Language, Locale.Language?) async throws -> String
+        translateBatch: ([String], Locale.Language, Locale.Language?) async throws -> [String]
     ) async throws -> [TranscriptionSegment] {
-        var translated: [TranscriptionSegment] = []
-        translated.reserveCapacity(segments.count)
-        for segment in segments {
-            let text: String
+        var texts: [String?] = Array(repeating: nil, count: segments.count)
+        var batchInputs: [String] = []
+        var batchIndices: [Int] = []
+        for (index, segment) in segments.enumerated() {
             if segment.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                text = segment.text
+                texts[index] = segment.text
             } else {
-                text = try await translate(segment.text, translation.target, translation.source)
+                batchIndices.append(index)
+                batchInputs.append(segment.text)
             }
-            translated.append(TranscriptionSegment(
-                text: text,
+        }
+        if !batchInputs.isEmpty {
+            // The batch contract preserves order; a count mismatch throws.
+            let results = try await translateBatch(batchInputs, translation.target, translation.source)
+            for (index, result) in zip(batchIndices, results) {
+                texts[index] = result
+            }
+        }
+        return segments.enumerated().map { index, segment in
+            TranscriptionSegment(
+                text: texts[index] ?? segment.text,
                 start: segment.start,
                 end: segment.end,
                 speakerLabel: segment.speakerLabel,
                 speakerConfidence: segment.speakerConfidence
-            ))
+            )
         }
-        return translated
     }
 }
 #endif

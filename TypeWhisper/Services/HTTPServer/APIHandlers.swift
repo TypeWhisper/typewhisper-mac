@@ -406,14 +406,20 @@ final class APIHandlers: @unchecked Sendable {
                         finalText = try await ts.translate(
                             text: finalText,
                             to: translation.target,
-                            source: translation.source
+                            source: translation.source,
+                            strict: true
                         )
                         if options.responseFormat == "verbose_json" {
                             responseSegments = try await APITranslation.translateSegments(
                                 result.segments,
                                 translation: translation,
-                                translate: { text, target, source in
-                                    try await ts.translate(text: text, to: target, source: source)
+                                translateBatch: { texts, target, source in
+                                    try await ts.translateBatch(
+                                        texts: texts,
+                                        to: target,
+                                        source: source,
+                                        strict: true
+                                    )
                                 }
                             )
                         }
