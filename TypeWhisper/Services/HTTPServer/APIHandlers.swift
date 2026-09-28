@@ -394,31 +394,28 @@ final class APIHandlers: @unchecked Sendable {
             )
 
             var finalText = result.text
+            var responseLanguage = result.detectedLanguage
+            var responseSegments = result.segments
             if let targetCode = options.targetLanguage {
                 #if canImport(Translation)
                 if #available(macOS 15, *), let ts = translationService as? TranslationService {
-                    if let targetNormalized = TranslationService.normalizedLanguageIdentifier(from: targetCode) {
-                        if targetCode.caseInsensitiveCompare(targetNormalized) != .orderedSame {
-                            apiLogger.info("API translation target normalized \(targetCode, privacy: .public) -> \(targetNormalized, privacy: .public)")
-                        }
-                        let target = Locale.Language(identifier: targetNormalized)
-                        let sourceRaw = result.detectedLanguage
-                        let sourceNormalized = TranslationService.normalizedLanguageIdentifier(from: sourceRaw)
-                        if let sourceRaw {
-                            if let sourceNormalized {
-                                if sourceRaw.caseInsensitiveCompare(sourceNormalized) != .orderedSame {
-                                    apiLogger.info("API translation source normalized \(sourceRaw, privacy: .public) -> \(sourceNormalized, privacy: .public)")
-                                }
-                            } else {
-                                apiLogger.warning("API translation source language \(sourceRaw, privacy: .public) invalid, using auto source")
-                            }
-                        }
-                        let sourceLanguage = sourceNormalized.map { Locale.Language(identifier: $0) }
+                    if let translation = APITranslation.resolve(
+                        targetCode: targetCode,
+                        detectedLanguage: result.detectedLanguage
+                    ) {
                         finalText = try await ts.translate(
                             text: finalText,
-                            to: target,
-                            source: sourceLanguage
+                            to: translation.target,
+                            source: translation.source
                         )
+                        responseSegments = try await APITranslation.translateSegments(
+                            result.segments,
+                            translation: translation,
+                            translate: { text, target, source in
+                                try await ts.translate(text: text, to: target, source: source)
+                            }
+                        )
+                        responseLanguage = translation.targetIdentifier
                     } else {
                         apiLogger.error("API translation target language invalid: \(targetCode, privacy: .public)")
                     }
@@ -477,7 +474,7 @@ final class APIHandlers: @unchecked Sendable {
                     let segments: [SegmentEntry]
                 }
 
-                let segments = result.segments.map {
+                let segments = responseSegments.map {
                     SegmentEntry(
                         start: $0.start,
                         end: $0.end,
@@ -489,7 +486,7 @@ final class APIHandlers: @unchecked Sendable {
 
                 return .json(VerboseResponse(
                     text: finalText,
-                    language: result.detectedLanguage,
+                    language: responseLanguage,
                     duration: result.duration,
                     processing_time: result.processingTime,
                     engine: result.engineUsed,
@@ -508,7 +505,7 @@ final class APIHandlers: @unchecked Sendable {
 
                 return .json(TranscribeResponse(
                     text: finalText,
-                    language: result.detectedLanguage,
+                    language: responseLanguage,
                     duration: result.duration,
                     processing_time: result.processingTime,
                     engine: result.engineUsed,
