@@ -77,8 +77,10 @@ struct UserDataLocations: Sendable {
 ///
 /// Secrets stay out of the archive: provider API keys, license activations and
 /// the premium account token live in the Keychain, and the local API token file
-/// is skipped. Downloaded models and plugin bundles are skipped as well; they
-/// can be downloaded again and would make the archive gigabytes large.
+/// is skipped. Downloaded and imported models and plugin bundles are skipped as
+/// well: model weights are not personal data and would make the archive
+/// gigabytes large. The UI names imported models explicitly, since the managed
+/// copy may be the only one left.
 enum UserDataExportService {
     enum ExportError: LocalizedError {
         case archiveFailed(Int32)
@@ -347,6 +349,6 @@ enum UserDataExportService {
 
         Not included: provider API keys, license activations and the premium
         account token (stored in the macOS Keychain), the local API token,
-        downloaded models and installed plugin bundles.
+        downloaded or imported models and installed plugin bundles.
         """
 }

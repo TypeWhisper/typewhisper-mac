@@ -119,8 +119,8 @@ struct AdvancedSettingsView: View {
                     }
 
                     SettingsInfoButton(text: localizedAppText(
-                        "Export creates a ZIP archive with everything TypeWhisper stores on this Mac: history with saved audio, dictionary, snippets, workflows, profiles, plugin data, logs, all preferences and an importable settings backup. API keys, license activations, downloaded models and installed plugins are not included. Delete removes all of this data from this Mac, including API keys and downloaded models, and quits TypeWhisper.",
-                        de: "Der Export erstellt ein ZIP-Archiv mit allem, was TypeWhisper auf diesem Mac speichert: Verlauf mit gespeicherten Audioaufnahmen, Wörterbuch, Snippets, Workflows, Profile, Plugin-Daten, Protokolle, alle Einstellungen und eine importierbare Einstellungssicherung. API-Schlüssel, Lizenzaktivierungen, heruntergeladene Modelle und installierte Plugins sind nicht enthalten. Löschen entfernt all diese Daten von diesem Mac, auch API-Schlüssel und heruntergeladene Modelle, und beendet TypeWhisper."
+                        "Export creates a ZIP archive with everything TypeWhisper stores on this Mac: history with saved audio, dictionary, snippets, workflows, profiles, plugin data, logs, all preferences and an importable settings backup. API keys, license activations, downloaded and imported models and installed plugins are not included. Delete removes all of this data from this Mac, including API keys and downloaded and imported models, and quits TypeWhisper.",
+                        de: "Der Export erstellt ein ZIP-Archiv mit allem, was TypeWhisper auf diesem Mac speichert: Verlauf mit gespeicherten Audioaufnahmen, Wörterbuch, Snippets, Workflows, Profile, Plugin-Daten, Protokolle, alle Einstellungen und eine importierbare Einstellungssicherung. API-Schlüssel, Lizenzaktivierungen, heruntergeladene und importierte Modelle sowie installierte Plugins sind nicht enthalten. Löschen entfernt all diese Daten von diesem Mac, auch API-Schlüssel sowie heruntergeladene und importierte Modelle, und beendet TypeWhisper."
                     ))
                 }
                 .confirmationDialog(
@@ -132,8 +132,8 @@ struct AdvancedSettingsView: View {
                     }
                 } message: {
                     Text(localizedAppText(
-                        "TypeWhisper deletes its history and audio, dictionary, snippets, workflows, profiles, settings, plugins, downloaded models, API keys and license activation on this Mac, then quits. Data in iCloud, a cloud sync folder, on other devices and recordings saved by the recorder stay untouched. This cannot be undone.",
-                        de: "TypeWhisper löscht Verlauf und Audioaufnahmen, Wörterbuch, Snippets, Workflows, Profile, Einstellungen, Plugins, heruntergeladene Modelle, API-Schlüssel und die Lizenzaktivierung auf diesem Mac und beendet sich danach. Daten in iCloud, in einem Cloud-Sync-Ordner, auf anderen Geräten und vom Recorder gespeicherte Aufnahmen bleiben erhalten. Das kann nicht rückgängig gemacht werden."
+                        "TypeWhisper deletes its history and audio, dictionary, snippets, workflows, profiles, settings, plugins, downloaded and imported models, API keys and license activation on this Mac, then quits. Imported models are not part of the data export. Data in iCloud, a cloud sync folder, on other devices and recordings saved by the recorder stay untouched. This cannot be undone.",
+                        de: "TypeWhisper löscht Verlauf und Audioaufnahmen, Wörterbuch, Snippets, Workflows, Profile, Einstellungen, Plugins, heruntergeladene und importierte Modelle, API-Schlüssel und die Lizenzaktivierung auf diesem Mac und beendet sich danach. Importierte Modelle sind nicht im Datenexport enthalten. Daten in iCloud, in einem Cloud-Sync-Ordner, auf anderen Geräten und vom Recorder gespeicherte Aufnahmen bleiben erhalten. Das kann nicht rückgängig gemacht werden."
                     ))
                 }
             }
