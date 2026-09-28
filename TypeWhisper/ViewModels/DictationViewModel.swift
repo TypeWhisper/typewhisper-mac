@@ -4814,6 +4814,17 @@ enum DictationInsertionTextFormatter {
     }
 }
 
+// Upper bound of the "short dictation" window for the aggressive quiet-clip
+// policy. Issue #732: dictations of a few seconds were discarded as "no speech"
+// even with aggressive transcription enabled, because the aggressive path only
+// covered sub-second clips.
+private let aggressiveShortDictationMaxDuration: TimeInterval = 8.0
+
+// Peak level below which a clip counts as near-silence even in aggressive mode.
+// Matches the sub-second aggressive floor: the microphone boost path can still
+// make speech at this level transcribable, but anything quieter is noise.
+private let aggressiveQuietClipPeakFloor: Float = 0.003
+
 func classifyShortSpeech(
     rawDuration: TimeInterval,
     peakLevel: Float,
@@ -4826,13 +4837,26 @@ func classifyShortSpeech(
     if rawDuration < 1.0 {
         // Bias toward transcribing short clips. False negatives here are worse than
         // letting the recognizer return empty text for actual silence.
-        if peakLevel < 0.003 {
+        if peakLevel < aggressiveQuietClipPeakFloor {
             return transcribeShortQuietClipsAggressively ? .transcribe : .discardNoSpeech
         }
         return .transcribe
     }
 
-    if peakLevel < 0.006 { return .discardNoSpeech }
+    if peakLevel < 0.006 {
+        // Aggressive mode extends the short-clip bias past the sub-second window:
+        // a quiet peak on a short dictation is more likely quiet speech than
+        // silence, and the recognizer returning empty text is a cheaper failure
+        // than discarding real speech. Near-silence is still discarded, and long
+        // recordings keep the strict threshold so extended silence isn't
+        // needlessly transcribed.
+        if transcribeShortQuietClipsAggressively,
+           rawDuration < aggressiveShortDictationMaxDuration,
+           peakLevel >= aggressiveQuietClipPeakFloor {
+            return .transcribe
+        }
+        return .discardNoSpeech
+    }
     return .transcribe
 }
 
