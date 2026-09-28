@@ -103,6 +103,37 @@ final class AppVocabularyImportTests: XCTestCase {
         XCTAssertTrue(reads.isEmpty)
     }
 
+    func testHandyRetriesReadSplitInsideMultibyteCharacter() throws {
+        // A mid-write read can stop inside a multibyte character. The trailing
+        // bytes are potentially incomplete, not invalid, so the read must be
+        // retried until two identical reads parse.
+        let valid = Data(#"{"settings":{"custom_words":["Stäble"]}}"#.utf8)
+        let lead = valid.firstIndex(of: 0xC3)!
+        let partial = Data(valid.prefix(through: lead))
+        var reads = [partial, partial, valid, valid]
+        let batch = try AppVocabularyImport.readHandy { reads.removeFirst() }
+        XCTAssertEqual(batch.entries.first?.original, "Stäble")
+        XCTAssertTrue(reads.isEmpty)
+    }
+
+    func testHandyReportsInvalidFormatForIrrecoverableUTF8Tail() throws {
+        // A stray continuation byte cannot complete on retry, so it must fail
+        // fast as an invalid format instead of burning the bounded retries.
+        var broken = Data(#"{"settings":{"custom_words":["St"#.utf8)
+        broken.append(0x80)
+        broken.append(contentsOf: Data(#"]}}"#.utf8))
+        var reads = 0
+        XCTAssertThrowsError(try AppVocabularyImport.readHandy {
+            reads += 1
+            return broken
+        }) { error in
+            guard case AppVocabularyImportError.invalidFormat = error else {
+                return XCTFail("expected invalidFormat, got \(error)")
+            }
+        }
+        XCTAssertEqual(reads, 2)
+    }
+
     func testHandyReportsInvalidFormatForStableMalformedJSON() throws {
         // Syntactically broken but complete input cannot settle into valid
         // JSON, so it must fail fast as an invalid format, not unstableSource.
