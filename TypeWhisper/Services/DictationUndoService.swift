@@ -137,7 +137,7 @@ final class DictationUndoService: ObservableObject {
         isDictationBusy: @escaping @MainActor () -> Bool,
         didRestoreRawTranscript: @escaping @MainActor (UUID, String) -> Void,
         now: @escaping @MainActor () -> Date = { Date() },
-        maximumSnapshotAge: TimeInterval = Self.defaultMaximumSnapshotAge
+        maximumSnapshotAge: TimeInterval = DictationUndoService.defaultMaximumSnapshotAge
     ) {
         self.captureActiveApp = captureActiveApp
         self.focusedObservation = focusedObservation
