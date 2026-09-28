@@ -8,6 +8,12 @@
             "state": "translated",
             "value": "Laden"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "加载"
+          }
         }
       }
     },

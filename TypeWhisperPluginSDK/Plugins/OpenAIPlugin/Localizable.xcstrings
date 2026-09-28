@@ -8,6 +8,12 @@
             "state": "translated",
             "value": "Anweisungen für die Stimme"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "语音指令"
+          }
         }
       }
     },
@@ -17,6 +23,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Temperaturmodus"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "温度模式"
           }
         }
       }
@@ -28,6 +40,12 @@
             "state": "translated",
             "value": "Die ChatGPT-Anmeldung verwendet die unterstützte ChatGPT-/Codex-Modellliste. Verwende den API-Schlüssel-Modus für den vollständigen OpenAI-API-Katalog."
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ChatGPT 登录使用受支持的 ChatGPT/Codex 模型列表。如需完整的 OpenAI API 目录，请使用 API 密钥模式。"
+          }
         }
       }
     },
@@ -37,6 +55,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Modelle konnten nicht aktualisiert werden. Die aktuelle Liste bleibt erhalten."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法刷新模型，将保留当前列表。"
           }
         }
       }
@@ -48,6 +72,12 @@
             "state": "translated",
             "value": "Benutzerdefiniert"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自定义"
+          }
         }
       }
     },
@@ -57,6 +87,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Die benutzerdefinierte Temperatur wird für die gewählte GPT-5-Denkkonfiguration ignoriert."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "对于所选的 GPT-5 推理配置，将忽略自定义温度。"
           }
         }
       }
@@ -68,6 +104,12 @@
             "state": "translated",
             "value": "Anbieterstandard"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "提供商默认"
+          }
         }
       }
     },
@@ -77,6 +119,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Wird aktualisiert"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在刷新"
           }
         }
       }
@@ -88,6 +136,12 @@
             "state": "translated",
             "value": "OpenAI-Modelle werden aktualisiert …"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在刷新 OpenAI 模型…"
+          }
         }
       }
     },
@@ -97,6 +151,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Temperatur"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "温度"
           }
         }
       }
@@ -108,6 +168,12 @@
             "state": "translated",
             "value": "Stimme für die Sprachausgabe"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "语音合成声音"
+          }
         }
       }
     },
@@ -118,6 +184,12 @@
             "state": "translated",
             "value": "ChatGPT-/Codex-Modellliste aktualisiert."
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ChatGPT/Codex 模型列表已更新。"
+          }
         }
       }
     },
@@ -127,6 +199,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Verwende deine bestehende ChatGPT-Plus-/Pro- oder Codex-Anmeldung für die Prompt-Verarbeitung. Transkription und Sprachausgabe benötigen weiterhin einen API-Schlüssel."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用您现有的 ChatGPT Plus/Pro 或 Codex 登录进行提示词处理。转录和文本转语音仍需要 API 密钥。"
           }
         }
       }

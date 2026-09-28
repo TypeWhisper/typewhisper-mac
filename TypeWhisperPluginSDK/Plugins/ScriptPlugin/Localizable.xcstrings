@@ -8,6 +8,12 @@
             "state": "translated",
             "value": "Keine Regeln konfiguriert."
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未配置任何规则。"
+          }
         }
       }
     },

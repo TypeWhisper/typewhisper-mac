@@ -8,6 +8,12 @@
             "state": "translated",
             "value": "Du formatierst gesprochene Diktate als übersichtliche, Obsidian-kompatible Markdown-Notizen. Gliedere den Text mit passenden Überschriften, Aufzählungen und Absätzen. Korrigiere die Grammatik und entferne Füllwörter, ohne die ursprüngliche Bedeutung zu verändern. Gib nur das formatierte Markdown aus, ohne Erklärungen."
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你是一位将口述内容整理为简洁的 Obsidian 兼容 Markdown 笔记的助手。使用适当的标题、项目符号和段落来组织文本。修正语法并删除填充词，同时保留原意。仅输出格式化后的 Markdown，不要添加解释。"
+          }
         }
       }
     },
