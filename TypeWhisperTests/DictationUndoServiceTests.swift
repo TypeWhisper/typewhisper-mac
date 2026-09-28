@@ -162,7 +162,8 @@ final class DictationUndoServiceTests: XCTestCase {
     // MARK: - Eligibility
 
     func testPerformWithoutSnapshotFails() {
-        let service = Harness(value: "text", caret: 4).makeService()
+        let harness = Harness(value: "text", caret: 4)
+        let service = harness.makeService()
         XCTAssertFalse(service.canUndo)
         XCTAssertFalse(service.canRestoreRaw)
         XCTAssertEqual(service.perform(.undo), .failed(.noSnapshot))

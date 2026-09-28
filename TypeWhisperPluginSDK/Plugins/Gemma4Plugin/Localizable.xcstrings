@@ -1,6 +1,150 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Temperature Mode": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Temperaturmodus"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "温度模式"
+          }
+        }
+      }
+    },
+    "Creative": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kreativ"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "创意"
+          }
+        }
+      }
+    },
+    "Custom": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Benutzerdefiniert"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自定义"
+          }
+        }
+      }
+    },
+    "Generation": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Generierung"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "生成"
+          }
+        }
+      }
+    },
+    "Load": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Laden"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "加载"
+          }
+        }
+      }
+    },
+    "Precise": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Präzise"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "精准"
+          }
+        }
+      }
+    },
+    "Provider Default": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anbieterstandard"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "提供商默认"
+          }
+        }
+      }
+    },
+    "Temperature": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Temperatur"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "温度"
+          }
+        }
+      }
+    },
+    "Uses Gemma 4's built-in default temperature.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verwendet die integrierte Standardtemperatur von Gemma 4."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用 Gemma 4 内置的默认温度。"
+          }
+        }
+      }
+    },
     "Download & Load": {
       "localizations": {
         "de": {
@@ -72,7 +216,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Der Download von Gemma 4 von Hugging Face hat zu lange gedauert. Bitte erneut versuchen. Ein optionaler HuggingFace-Token in diesem Plugin kann die Download-Rate-Limits erhoehen."
+            "value": "Der Download von Gemma 4 von Hugging Face hat zu lange gedauert. Bitte erneut versuchen. Ein optionaler HuggingFace-Token in diesem Plugin kann die Download-Rate-Limits erhöhen."
           }
         },
         "ja": {
@@ -182,7 +326,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Lade zuerst ein Gemma-4-Modell in den Integrationen, bevor du es fuer Prompts verwendest."
+            "value": "Lade zuerst ein Gemma-4-Modell in den Integrationen, bevor du es für Prompts verwendest."
           }
         },
         "ja": {
@@ -358,7 +502,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Optional. Erhoeht Download-Rate-Limits. Kostenlos unter huggingface.co/settings/tokens"
+            "value": "Optional. Erhöht Download-Rate-Limits. Kostenlos unter huggingface.co/settings/tokens"
           }
         },
         "ja": {
@@ -424,7 +568,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Gemma 4 E2B/E4B 4-bit Modelle sind empfohlen. Groessere Varianten sind experimentell und koennen je nach Hardware fehlschlagen."
+            "value": "Gemma 4 E2B/E4B 4-bit Modelle sind empfohlen. Größere Varianten sind experimentell und können je nach Hardware fehlschlagen."
           }
         },
         "ja": {
