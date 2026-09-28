@@ -18,6 +18,9 @@ directory, and the isolated screenshot defaults domain is reset around every
 capture. Screenshot runs do not read, replace, or delete the user's TypeWhisper
 or TypeWhisper-Dev preferences, keychain items, or application data.
 
+Settings and History captures use the same 1150 × 890 point content size in
+every language. The PNG dimensions also include the native window shadow.
+
 ## Setup
 
 Use Ruby 3.3 and install the pinned bundle:
@@ -77,7 +80,7 @@ separate from the Settings-window matrix.
 
 ## Plugin screenshots for typewhisper.com
 
-The plugin lane covers the 43 current first-party bundles. It builds each
+The plugin lane covers the 47 current first-party bundles. It builds each
 selected bundle, stages only that bundle in a temporary Application Support
 directory, opens its native settings window, and captures English and German
 website assets:
@@ -114,6 +117,10 @@ a provider. Local-model settings display their catalog without downloading a
 model. If a future settings screen requires remote-only response data, add a
 deterministic screenshot fixture for that response instead of using a real API
 key or live service.
+
+Obsidian captures include a selected example vault, and MCP Client captures
+include an example HTTP server. Both fixtures are localized and seeded only in
+the isolated screenshot defaults. The example MCP server is not connected.
 
 Publishing requires `cwebp`, `oxipng`, and ImageMagick's `identify`. After
 reviewing both locale images, copy and optimize the PNG/WebP assets in a local

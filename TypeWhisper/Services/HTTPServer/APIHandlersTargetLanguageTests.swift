@@ -99,7 +99,7 @@ final class APIHandlersTargetLanguageTests: XCTestCase {
         XCTAssertEqual(out[1].text, "HI")
     }
 
-    func testTranslateSegmentsPropagatesTranslationError() async {
+    func testTranslateSegmentsPropagatesTranslationError() async throws {
         let translation = try XCTUnwrap(APITranslation.resolve(targetCode: "de", detectedLanguage: "en"))
         struct TranslationBoom: Error {}
         let segments = [TranscriptionSegment(text: "Hello", start: 0.0, end: 1.0)]

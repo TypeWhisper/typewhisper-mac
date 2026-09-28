@@ -528,9 +528,7 @@ private struct LinearSettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
-                    let prompt = """
-                    You are an assistant that converts spoken dictation into a structured Linear issue. Extract: 1) A concise title (max 100 chars), 2) A detailed description in markdown, 3) Priority (1=Urgent, 2=High, 3=Medium, 4=Low) - infer from context, default 3. Respond ONLY with valid JSON: {"title": "...", "description": "...", "priority": 3}
-                    """
+                    let prompt = String(localized: "You are an assistant that converts spoken dictation into a structured Linear issue. Extract: 1) A concise title (max 100 chars), 2) A detailed description in markdown, 3) Priority (1=Urgent, 2=High, 3=Medium, 4=Low) - infer from context, default 3. Respond ONLY with valid JSON: {\"title\": \"...\", \"description\": \"...\", \"priority\": 3}", bundle: bundle)
                     Text(prompt)
                         .font(.system(.caption, design: .monospaced))
                         .padding(8)

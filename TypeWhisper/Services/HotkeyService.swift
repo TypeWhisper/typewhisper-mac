@@ -1202,10 +1202,24 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             isEscapeKeySuppressed = false
             return true
         }
+        if event.type == .keyUp, event.keyCode == Self.escapeKeyCode, !isCancellationAvailable {
+            // Disabled mode: the release of a passed-through Escape press must
+            // pass through as well. Otherwise it falls into slot matching and a
+            // bare-Escape toggle/workflow slot swallows it instead of the app
+            // receiving it.
+            return false
+        }
         if event.type == .keyDown && event.keyCode == Self.escapeKeyCode {
             cancelPendingHybridModifierHold()
             if isEscapeKeySuppressed { return true }
-            guard isCancellationAvailable, !event.isARepeat else { return false }
+            if !isCancellationAvailable {
+                // Disabled mode: Escape is never ours. Pass it straight through
+                // to the foreground app before the push-to-talk interruption
+                // check and slot matching, so it can neither discard a
+                // recording nor fire a hotkey slot.
+                return false
+            }
+            guard !event.isARepeat else { return false }
 
             isEscapeKeySuppressed = true
             // The press latch deduplicates fallback delivery without dropping a quick second press.
