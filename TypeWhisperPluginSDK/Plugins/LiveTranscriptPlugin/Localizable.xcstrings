@@ -8,6 +8,12 @@
             "state": "translated",
             "value": "Hintergrunddeckkraft"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "背景不透明度"
+          }
         }
       }
     },
@@ -17,6 +23,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Höhe"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "高度"
           }
         }
       }
@@ -28,6 +40,12 @@
             "state": "translated",
             "value": "Bei niedrigeren Werten bleibt mehr von der App hinter dem Transkript sichtbar."
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "数值越低，转录内容后面的应用就越清晰可见。"
+          }
         }
       }
     },
@@ -38,6 +56,12 @@
             "state": "translated",
             "value": "Breite"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "宽度"
+          }
         }
       }
     },
@@ -47,6 +71,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fenstergröße"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "窗口大小"
           }
         }
       }

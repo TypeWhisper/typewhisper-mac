@@ -228,6 +228,12 @@
             "state": "translated",
             "value": "Benutzerdefiniert"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自定义"
+          }
         }
       }
     },
@@ -237,6 +243,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "LLM-Modell"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "LLM 模型"
           }
         }
       }
@@ -248,6 +260,12 @@
             "state": "translated",
             "value": "Anbieterstandard"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "提供商默认"
+          }
         }
       }
     },
@@ -257,6 +275,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Aktualisieren"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "刷新"
           }
         }
       }
@@ -268,6 +292,12 @@
             "state": "translated",
             "value": "Temperatur"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "温度"
+          }
         }
       }
     },
@@ -277,6 +307,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Temperaturmodus"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "温度模式"
           }
         }
       }
@@ -288,6 +324,12 @@
             "state": "translated",
             "value": "Transkriptionsmodell"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "转录模型"
+          }
         }
       }
     },
@@ -297,6 +339,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Standardmodelle werden verwendet. Klicke auf „Aktualisieren“, um alle verfügbaren Modelle abzurufen."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在使用默认模型。点击刷新以获取所有可用模型。"
           }
         }
       }
