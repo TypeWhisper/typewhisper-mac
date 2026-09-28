@@ -461,7 +461,11 @@ struct PluginSettingsView: View {
     @State private var selectedCapabilityFilters: Set<PluginCategory> = []
     @State private var searchText = ""
     @State private var discoverSort: DiscoverSort = .popularity
-    @State private var discoverHostingFilter: DiscoverHostingFilter = .all
+    @State private var discoverHostingFilter: DiscoverHostingFilter = PluginSettingsView.initialDiscoverHostingFilter
+
+    private static var initialDiscoverHostingFilter: DiscoverHostingFilter {
+        AppConstants.screenshotState == "integrations-local" ? .local : .all
+    }
 
     var body: some View {
         VStack(spacing: 0) {

@@ -54,7 +54,7 @@ struct SettingsView: View {
         case "snippets": return .snippets
         case "workflows": return .workflows
         case "premium": return .premium
-        case "plugins", "integrations-available": return .integrations
+        case "plugins", "integrations-available", "integrations-local": return .integrations
         case "advanced": return .advanced
         case "license": return .license
         case "about": return .about
