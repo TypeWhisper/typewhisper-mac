@@ -129,6 +129,10 @@ enum AppVocabularyImport {
             if first == second {
                 do { return try parseHandy(first) }
                 catch AppVocabularyImportError.tooLarge { throw AppVocabularyImportError.tooLarge }
+                // A truncated mid-write read never finishes parsing, so keep
+                // retrying for a stable pair. Stable reads that parse but are
+                // not a Handy store are an invalid format.
+                catch DecodingError.dataCorrupted { continue }
                 catch is DecodingError { throw AppVocabularyImportError.invalidFormat }
                 catch { continue }
             }
