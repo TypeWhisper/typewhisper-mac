@@ -1,6 +1,16 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "No rules configured.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Regeln konfiguriert."
+          }
+        }
+      }
+    },
     "Active for all transcriptions.": {
       "localizations": {
         "de": {

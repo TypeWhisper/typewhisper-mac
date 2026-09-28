@@ -323,11 +323,11 @@ private struct GroqSettingsView: View {
 
                 HStack(spacing: 8) {
                     if showApiKey {
-                        TextField("API Key", text: $apiKeyInput)
+                        TextField(String(localized: "API Key", bundle: bundle), text: $apiKeyInput)
                             .textFieldStyle(.roundedBorder)
                             .font(.system(.body, design: .monospaced))
                     } else {
-                        SecureField("API Key", text: $apiKeyInput)
+                        SecureField(String(localized: "API Key", bundle: bundle), text: $apiKeyInput)
                             .textFieldStyle(.roundedBorder)
                     }
 
@@ -383,7 +383,7 @@ private struct GroqSettingsView: View {
                     Text("Transcription Model", bundle: bundle)
                         .font(.headline)
 
-                    Picker("Transcription Model", selection: $selectedModel) {
+                    Picker(String(localized: "Transcription Model", bundle: bundle), selection: $selectedModel) {
                         ForEach(plugin.transcriptionModels, id: \.id) { model in
                             Text(model.displayName).tag(model.id)
                         }
@@ -423,7 +423,7 @@ private struct GroqSettingsView: View {
                         .controlSize(.small)
                     }
 
-                    Picker("LLM Model", selection: $selectedLLMModel) {
+                    Picker(String(localized: "LLM Model", bundle: bundle), selection: $selectedLLMModel) {
                         ForEach(plugin.supportedModels, id: \.id) { model in
                             Text(model.displayName).tag(model.id)
                         }
@@ -446,7 +446,7 @@ private struct GroqSettingsView: View {
                     Text("Temperature", bundle: bundle)
                         .font(.headline)
 
-                    Picker("Temperature Mode", selection: $llmTemperatureMode) {
+                    Picker(String(localized: "Temperature Mode", bundle: bundle), selection: $llmTemperatureMode) {
                         Text("Provider Default", bundle: bundle).tag(PluginLLMTemperatureMode.providerDefault)
                         Text("Custom", bundle: bundle).tag(PluginLLMTemperatureMode.custom)
                     }

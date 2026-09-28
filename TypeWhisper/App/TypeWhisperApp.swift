@@ -1047,7 +1047,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
             return
         }
 
-        prepareScreenshotWindow(window, contentSize: NSSize(width: 1_280, height: 780))
+        prepareScreenshotWindow(window, contentSize: NSSize(width: 1_150, height: 890))
     }
 
     private func prepareScreenshotPremiumWindow(

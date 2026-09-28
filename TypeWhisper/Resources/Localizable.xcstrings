@@ -1,6 +1,286 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
+    "Clear balance" : {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guthaben löschen"
+          }
+        }
+      }
+    },
+    "Last recognition" : {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Letzte Spracherkennung"
+          }
+        }
+      }
+    },
+    "Balance updated" : {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guthaben aktualisiert"
+          }
+        }
+      }
+    },
+    "Spent since balance update" : {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbrauch seit Guthabenaktualisierung"
+          }
+        }
+      }
+    },
+    "Estimated remaining" : {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Geschätztes Restguthaben"
+          }
+        }
+      }
+    },
+    "Authorization Key is stored securely in the Keychain. If validation fails with a certificate error, install the SaluteSpeech certificate trusted by macOS." : {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Der Autorisierungsschlüssel wird sicher im Schlüsselbund gespeichert. Falls die Prüfung wegen eines Zertifikatfehlers scheitert, installiere das von macOS als vertrauenswürdig eingestufte SaluteSpeech-Zertifikat."
+          }
+        }
+      }
+    },
+    "Local estimate. Update it from SaluteSpeech Studio." : {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Lokale Schätzung. Aktualisiere sie anhand von SaluteSpeech Studio."
+          }
+        }
+      }
+    },
+    "Reset tracked usage" : {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erfassten Verbrauch zurücksetzen"
+          }
+        }
+      }
+    },
+    "Save balance" : {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Guthaben speichern"
+          }
+        }
+      }
+    },
+    "Valid until" : {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gültig bis"
+          }
+        }
+      }
+    },
+    "Minutes" : {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Minuten"
+          }
+        }
+      }
+    },
+    "Studio remaining" : {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Studio-Restguthaben"
+          }
+        }
+      }
+    },
+    "Tracked spent" : {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erfasster Verbrauch"
+          }
+        }
+      }
+    },
+    "Recognition Usage" : {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Spracherkennungsnutzung"
+          }
+        }
+      }
+    },
+    "Corporate" : {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Unternehmen"
+          }
+        }
+      }
+    },
+    "Personal" : {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Persönlich"
+          }
+        }
+      }
+    },
+    "OAuth Scope" : {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OAuth-Bereich"
+          }
+        }
+      }
+    },
+    "Authorization Key" : {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Autorisierungsschlüssel"
+          }
+        }
+      }
+    },
+    "Reset Defaults" : {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Standardwerte wiederherstellen"
+          }
+        }
+      }
+    },
+    "One word per line. Commas and semicolons are also accepted." : {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ein Wort pro Zeile. Kommas und Semikolons werden ebenfalls akzeptiert."
+          }
+        }
+      }
+    },
+    "Filler words" : {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Füllwörter"
+          }
+        }
+      }
+    },
+    "Connected" : {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verbunden"
+          }
+        }
+      }
+    },
+    "No memories match your search." : {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Erinnerungen passen zu deiner Suche."
+          }
+        }
+      }
+    },
+    "Memories will appear here after transcriptions are processed." : {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nach der Verarbeitung von Transkriptionen erscheinen hier Erinnerungen."
+          }
+        }
+      }
+    },
+    "No Memories" : {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Keine Erinnerungen"
+          }
+        }
+      }
+    },
+    "Search memories..." : {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Erinnerungen durchsuchen …"
+          }
+        }
+      }
+    },
+    "%lld memories stored" : {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%lld gespeicherte Erinnerungen"
+          }
+        }
+      }
+    },
+    "Usage Statistics" : {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nutzungsstatistik"
+          }
+        }
+      }
+    },
     "Not enough disk space to download %@. It needs %@ of free space, but only %@ is available on “%@”.": {
       "localizations": {
         "de": {
@@ -3720,7 +4000,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Eigenen Sound hinzufuegen"
+            "value" : "Eigenen Sound hinzufügen"
           }
         },
         "ja" : {
@@ -6901,7 +7181,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Sounddatei auswaehlen"
+            "value" : "Sounddatei auswählen"
           }
         },
         "ja" : {
@@ -6948,7 +7228,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Waehle eine Transkriptions-Engine. Jede Engine muss ein Modell herunterladen. Oeffne die Einstellungen zum Konfigurieren."
+            "value" : "Wähle eine Transkriptions-Engine. Jede Engine muss ein Modell herunterladen. Öffne die Einstellungen zum Konfigurieren."
           }
         },
         "ja" : {
@@ -7601,6 +7881,12 @@
     },
     "Clear Usage Statistics" : {
       "localizations" : {
+        "de" : {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Nutzungsstatistik löschen"
+          }
+        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -8735,6 +9021,12 @@
       "comment" : "Description of a dictionary support type when corrections are only supported.",
       "isCommentAutoGenerated" : true,
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nur Korrekturen"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -17088,6 +17380,12 @@
     },
     "Meeting Notes" : {
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Besprechungsnotizen"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -18480,7 +18778,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Noch keine Community-Pakete verfuegbar."
+            "value" : "Noch keine Community-Pakete verfügbar."
           }
         },
         "ja" : {
@@ -19344,7 +19642,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Keine Transkriptions-Engines verfuegbar."
+            "value" : "Keine Transkriptions-Engines verfügbar."
           }
         },
         "ja" : {
@@ -19368,7 +19666,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Keine Transkriptions-Engines installiert. Engines ueber Integrationen installieren."
+            "value" : "Keine Transkriptions-Engines installiert. Engines über Integrationen installieren."
           }
         },
         "ja" : {
@@ -20162,7 +20460,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Oeffne die Einstellungen einer Engine, um ein Modell herunterzuladen."
+            "value" : "Öffne die Einstellungen einer Engine, um ein Modell herunterzuladen."
           }
         },
         "ja" : {
@@ -20209,7 +20507,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Integrationen oeffnen"
+            "value" : "Integrationen öffnen"
           }
         },
         "ja" : {
@@ -20382,6 +20680,12 @@
     },
     "Open Setup Wizard" : {
       "localizations" : {
+        "de" : {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Einrichtungsassistent öffnen"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -24063,7 +24367,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Speichert ein Transkript fuer Recorder-Aufnahmen. Die Auswahl unten gilt nur fuer den System Audio Recorder, nicht fuer normale Dictation."
+            "value" : "Speichert ein Transkript für Recorder-Aufnahmen. Die Auswahl unten gilt nur für den System-Audio-Recorder, nicht für normale Diktate."
           }
         },
         "en" : {
@@ -24204,7 +24508,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Die finale Transkription hat keinen Text zurueckgegeben."
+            "value" : "Die finale Transkription hat keinen Text zurückgegeben."
           }
         },
         "en" : {
@@ -24655,7 +24959,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Keine Engine ausgewaehlt"
+            "value" : "Keine Engine ausgewählt"
           }
         },
         "en" : {
@@ -24935,7 +25239,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Live-Transkript waehrend der Aufnahme anzeigen"
+            "value" : "Live-Transkript während der Aufnahme anzeigen"
           }
         },
         "en" : {
@@ -25271,7 +25575,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Transkription fehlgeschlagen waehrend %@: %@"
+            "value" : "Transkription fehlgeschlagen während %@: %@"
           }
         },
         "en" : {
@@ -25299,7 +25603,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Transkription fehlgeschlagen fuer %@, %@ waehrend %@: %@"
+            "value" : "Transkription fehlgeschlagen für %@, %@ während %@: %@"
           }
         },
         "en" : {
@@ -25327,7 +25631,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Aktiviere das Transkript, um Engine, Modell, Sprache und Aufgabe fuer Recorder-Aufnahmen zu aendern."
+            "value" : "Aktiviere das Transkript, um Engine, Modell, Sprache und Aufgabe für Recorder-Aufnahmen zu ändern."
           }
         },
         "en" : {
@@ -25355,7 +25659,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Dictation-Standard-Engine verwenden"
+            "value" : "Diktat-Standard-Engine verwenden"
           }
         },
         "en" : {
@@ -26388,7 +26692,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Erfordert einen laufenden API-Server. Das CLI-Tool verbindet sich mit TypeWhispers API fuer schnelle Transkription ohne Modell-Kaltstart."
+            "value" : "Erfordert einen laufenden API-Server. Das CLI-Tool verbindet sich mit TypeWhispers API für schnelle Transkription ohne Modell-Kaltstart."
           }
         },
         "ja" : {
@@ -27937,6 +28241,12 @@
     },
     "Set a spoken language to configure punctuation behavior." : {
       "localizations" : {
+        "de" : {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wähle eine gesprochene Sprache, um die Satzzeichenerkennung zu konfigurieren."
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -28173,7 +28483,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ordnerueberwachung"
+            "value" : "Ordnerüberwachung"
           }
         },
         "en" : {
@@ -28921,6 +29231,12 @@
     },
     "Spoken Punctuation" : {
       "localizations" : {
+        "de" : {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Gesprochene Satzzeichen"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -30235,7 +30551,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Haeufige Begriffe aus Datenanalyse und KI fuer bessere Spracherkennung."
+            "value" : "Häufige Begriffe aus Datenanalyse und KI für bessere Spracherkennung."
           }
         },
         "en" : {
@@ -30264,7 +30580,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Haeufige Design-Begriffe fuer bessere Spracherkennung."
+            "value" : "Häufige Design-Begriffe für bessere Spracherkennung."
           }
         },
         "en" : {
@@ -30293,7 +30609,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Haeufige DevOps- und Cloud-Begriffe fuer bessere Spracherkennung."
+            "value" : "Häufige DevOps- und Cloud-Begriffe für bessere Spracherkennung."
           }
         },
         "en" : {
@@ -30322,7 +30638,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Haeufige iOS- und macOS-Begriffe fuer bessere Spracherkennung."
+            "value" : "Häufige iOS- und macOS-Begriffe für bessere Spracherkennung."
           }
         },
         "en" : {
@@ -30351,7 +30667,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Haeufige Begriffe aus der Webentwicklung fuer bessere Spracherkennung."
+            "value" : "Häufige Begriffe aus der Webentwicklung für bessere Spracherkennung."
           }
         },
         "en" : {
@@ -30400,6 +30716,12 @@
       "comment" : "Badge text for a dictionary engine support row.",
       "isCommentAutoGenerated" : true,
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Begriffe + Korrekturen"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -30518,6 +30840,12 @@
       "comment" : "Description of a dictionary engine support status when the user needs to set a plugin.",
       "isCommentAutoGenerated" : true,
       "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Begriffe erfordern eine Plugin-Einstellung"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -30627,7 +30955,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Text eingefuegt"
+            "value" : "Text eingefügt"
           }
         },
         "ja" : {
@@ -32156,7 +32484,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Zu kurz, halte den Hotkey etwas laenger"
+            "value" : "Zu kurz, halte den Hotkey etwas länger"
           }
         },
         "ja" : {
@@ -32423,6 +32751,12 @@
     },
     "Transcribe short / quiet clips more aggressively" : {
       "localizations" : {
+        "de" : {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Kurze oder leise Aufnahmen stärker berücksichtigen"
+          }
+        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -33939,7 +34273,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Update verfuegbar"
+            "value" : "Update verfügbar"
           }
         },
         "ja" : {
@@ -34807,7 +35141,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ueberwachung beim App-Start beginnen"
+            "value" : "Überwachung beim App-Start beginnen"
           }
         },
         "en" : {
@@ -34835,7 +35169,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Quelldateien nach Transkription loeschen"
+            "value" : "Quelldateien nach Transkription löschen"
           }
         },
         "en" : {
@@ -34863,7 +35197,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ueberwacht den ausgewaehlten Ordner auf neue Audiodateien und transkribiert sie automatisch."
+            "value" : "Überwacht den ausgewählten Ordner auf neue Audiodateien und transkribiert sie automatisch."
           }
         },
         "en" : {
@@ -34947,7 +35281,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Das gewaehlte Untertitel-Format benoetigt Zeitstempel, aber die Engine hat keine Segmente geliefert."
+            "value" : "Das gewählte Untertitel-Format benötigt Zeitstempel, aber die Engine hat keine Segmente geliefert."
           }
         },
         "en" : {
@@ -35031,7 +35365,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Verlauf loeschen"
+            "value" : "Verlauf löschen"
           }
         },
         "en" : {
@@ -35173,7 +35507,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Kein Ordner ausgewaehlt"
+            "value" : "Kein Ordner ausgewählt"
           }
         },
         "en" : {
@@ -35229,7 +35563,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Gleicher Ordner wie Ueberwachungsordner"
+            "value" : "Gleicher Ordner wie Überwachungsordner"
           }
         },
         "en" : {
@@ -35313,7 +35647,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ordner auswaehlen..."
+            "value" : "Ordner auswählen..."
           }
         },
         "en" : {
@@ -35341,7 +35675,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ordner fuer die Audio-Ueberwachung auswaehlen"
+            "value" : "Ordner für die Audio-Überwachung auswählen"
           }
         },
         "en" : {
@@ -35369,7 +35703,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ordner fuer die Transkriptions-Ausgabe auswaehlen"
+            "value" : "Ordner für die Transkriptions-Ausgabe auswählen"
           }
         },
         "en" : {
@@ -35425,7 +35759,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ueberwachung starten"
+            "value" : "Überwachung starten"
           }
         },
         "en" : {
@@ -35453,7 +35787,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ueberwachung stoppen"
+            "value" : "Überwachung stoppen"
           }
         },
         "en" : {
@@ -35481,7 +35815,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ueberwachter Ordner"
+            "value" : "Überwachter Ordner"
           }
         },
         "en" : {
