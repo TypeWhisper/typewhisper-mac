@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import SQLite3
 import UniformTypeIdentifiers
 
 /// Every place this app variant (release, dev, or screenshot run) writes user
@@ -40,6 +41,7 @@ struct UserDataLocations: Sendable {
                 isDirectory: true
             ))
         }
+        auxiliaryItems += UserDataExportService.stagingDirectories(fileManager: fileManager)
 
         return UserDataLocations(
             appSupportDirectory: AppConstants.appSupportDirectory,
@@ -61,6 +63,7 @@ struct UserDataLocations: Sendable {
 enum UserDataExportService {
     enum ExportError: LocalizedError {
         case archiveFailed(Int32)
+        case databaseSnapshotFailed(String)
 
         var errorDescription: String? {
             switch self {
@@ -69,9 +72,16 @@ enum UserDataExportService {
                     "The ZIP archive could not be created (ditto exit code \(status)).",
                     de: "Das ZIP-Archiv konnte nicht erstellt werden (ditto-Exit-Code \(status))."
                 )
+            case .databaseSnapshotFailed(let name):
+                return localizedAppText(
+                    "The database \(name) could not be copied.",
+                    de: "Die Datenbank \(name) konnte nicht kopiert werden."
+                )
             }
         }
     }
+
+    static let stagingDirectoryPrefix = "TypeWhisper-DataExport-"
 
     static let appSupportFolderName = "Application Support"
     static let preferencesFileName = "preferences.json"
@@ -123,18 +133,18 @@ enum UserDataExportService {
     @MainActor
     static func export(
         to destination: URL,
-        settingsBackup: Data?,
+        settingsBackup: Data,
         locations: UserDataLocations = .current(),
         userDefaults: UserDefaults = .standard
     ) async throws {
         let preferences = try preferencesJSON(
             userDefaults.persistentDomain(forName: locations.preferencesDomain) ?? [:]
         )
-        var extraFiles = [
+        let extraFiles = [
             readmeFileName: Data(readme.utf8),
             preferencesFileName: preferences,
+            settingsBackupFileName: settingsBackup,
         ]
-        extraFiles[settingsBackupFileName] = settingsBackup
         let appSupportDirectory = locations.appSupportDirectory
 
         try await Task.detached(priority: .userInitiated) {
@@ -152,8 +162,13 @@ enum UserDataExportService {
         to destination: URL
     ) throws {
         let fileManager = FileManager.default
+        // Leftovers from an export interrupted by a crash or force quit hold
+        // a full unencrypted copy of the user's data.
+        for staleDirectory in stagingDirectories(fileManager: fileManager) {
+            try? fileManager.removeItem(at: staleDirectory)
+        }
         let workDirectory = fileManager.temporaryDirectory
-            .appendingPathComponent("TypeWhisper-DataExport-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("\(stagingDirectoryPrefix)\(UUID().uuidString)", isDirectory: true)
         defer { try? fileManager.removeItem(at: workDirectory) }
 
         let root = workDirectory.appendingPathComponent(
@@ -186,30 +201,89 @@ enum UserDataExportService {
         }
     }
 
+    static func stagingDirectories(fileManager: FileManager = .default) -> [URL] {
+        let temporaryDirectory = fileManager.temporaryDirectory
+        let names = (try? fileManager.contentsOfDirectory(atPath: temporaryDirectory.path)) ?? []
+        return names
+            .filter { $0.hasPrefix(stagingDirectoryPrefix) }
+            .map { temporaryDirectory.appendingPathComponent($0, isDirectory: true) }
+    }
+
     static func copyUserData(from source: URL, to destination: URL) throws {
         let fileManager = FileManager.default
         try fileManager.createDirectory(at: destination, withIntermediateDirectories: true)
         guard let enumerator = fileManager.enumerator(atPath: source.path) else { return }
 
         while let relativePath = enumerator.nextObject() as? String {
-            let isDirectory = (enumerator.fileAttributes?[.type] as? FileAttributeType) == .typeDirectory
+            let type = enumerator.fileAttributes?[.type] as? FileAttributeType
+            // Links could point outside the export once the archive is unpacked.
+            if type == .typeSymbolicLink { continue }
+            let isDirectory = type == .typeDirectory
             guard shouldExport(relativePath: relativePath) else {
                 if isDirectory { enumerator.skipDescendants() }
                 continue
             }
 
+            let sourceFile = source.appendingPathComponent(relativePath, isDirectory: isDirectory)
             let target = destination.appendingPathComponent(relativePath, isDirectory: isDirectory)
             if isDirectory {
                 try fileManager.createDirectory(at: target, withIntermediateDirectories: true)
                 continue
             }
+            if isSQLiteSidecar(sourceFile) { continue }
             do {
-                try fileManager.copyItem(at: source.appendingPathComponent(relativePath), to: target)
+                if isSQLiteDatabase(sourceFile) {
+                    try snapshotSQLiteDatabase(from: sourceFile, to: target)
+                } else {
+                    try fileManager.copyItem(at: sourceFile, to: target)
+                }
             } catch CocoaError.fileReadNoSuchFile, CocoaError.fileNoSuchFile {
                 // Transient files (SQLite journals, recovery audio) can
                 // disappear between enumeration and copy.
                 continue
             }
+        }
+    }
+
+    private static let sqliteSidecarSuffixes = ["-wal", "-shm", "-journal"]
+
+    static func isSQLiteDatabase(_ url: URL) -> Bool {
+        guard let handle = try? FileHandle(forReadingFrom: url) else { return false }
+        defer { try? handle.close() }
+        let header = (try? handle.read(upToCount: 16)) ?? Data()
+        return header == Data("SQLite format 3\u{0}".utf8)
+    }
+
+    /// WAL, shared-memory and rollback journal files of a SQLite database.
+    /// They are folded into the database snapshot instead of being copied.
+    static func isSQLiteSidecar(_ url: URL) -> Bool {
+        let name = url.lastPathComponent
+        guard let suffix = sqliteSidecarSuffixes.first(where: { name.hasSuffix($0) }) else { return false }
+        let database = url.deletingLastPathComponent()
+            .appendingPathComponent(String(name.dropLast(suffix.count)))
+        return isSQLiteDatabase(database)
+    }
+
+    /// Copies a live database with `VACUUM INTO`, so the copy is a consistent
+    /// snapshot even while the app writes to it, already contains the pages
+    /// that still sit in the WAL file, and needs no sidecar files.
+    static func snapshotSQLiteDatabase(from source: URL, to destination: URL) throws {
+        let failure = ExportError.databaseSnapshotFailed(source.lastPathComponent)
+
+        var database: OpaquePointer?
+        defer { sqlite3_close(database) }
+        guard sqlite3_open_v2(source.path, &database, SQLITE_OPEN_READONLY, nil) == SQLITE_OK else {
+            throw failure
+        }
+        sqlite3_busy_timeout(database, 5_000)
+
+        var statement: OpaquePointer?
+        defer { sqlite3_finalize(statement) }
+        let transient = unsafeBitCast(-1, to: sqlite3_destructor_type.self)
+        guard sqlite3_prepare_v2(database, "VACUUM INTO ?", -1, &statement, nil) == SQLITE_OK,
+              sqlite3_bind_text(statement, 1, destination.path, -1, transient) == SQLITE_OK,
+              sqlite3_step(statement) == SQLITE_DONE else {
+            throw failure
         }
     }
 

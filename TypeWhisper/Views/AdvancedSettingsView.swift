@@ -768,15 +768,22 @@ struct AdvancedSettingsView: View {
     private func exportAllData() {
         guard let url = UserDataExportService.presentSavePanel() else { return }
         let container = ServiceContainer.shared
-        let settingsBackup = try? SettingsBackupExporter.encodedJSON(SettingsBackupExporter.buildBackup(
-            workflowService: container.workflowService,
-            dictionaryService: container.dictionaryService,
-            snippetService: container.snippetService,
-            profileService: container.profileService,
-            promptActionService: container.promptActionService,
-            pluginManager: container.pluginManager,
-            historyService: container.historyService
-        ))
+        let settingsBackup: Data
+        do {
+            settingsBackup = try SettingsBackupExporter.encodedJSON(SettingsBackupExporter.buildBackup(
+                workflowService: container.workflowService,
+                dictionaryService: container.dictionaryService,
+                snippetService: container.snippetService,
+                profileService: container.profileService,
+                promptActionService: container.promptActionService,
+                pluginManager: container.pluginManager,
+                historyService: container.historyService
+            ))
+        } catch {
+            backupErrorMessage = error.localizedDescription
+            showBackupError = true
+            return
+        }
 
         isExportingAllData = true
         Task {
@@ -793,8 +800,14 @@ struct AdvancedSettingsView: View {
 
     private func deleteAllData() {
         isDeletingAllData = true
+        // Cancels a pending start so it cannot recreate the discovery files.
+        viewModel.stopServer()
+        let container = ServiceContainer.shared
         Task {
-            await UserDataEraser.releaseLicenseActivations(ServiceContainer.shared.licenseService)
+            await UserDataEraser.releaseRemoteActivations(
+                licenseService: container.licenseService,
+                premiumAccountService: container.premiumAccountService
+            )
             UserDataEraser.eraseAllAndQuit()
         }
     }

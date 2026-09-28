@@ -4,6 +4,7 @@ import os
 import Security
 import ServiceManagement
 import UserNotifications
+import WidgetKit
 
 /// Removes everything TypeWhisper stores on this Mac: Keychain items (API
 /// keys, license, local API token, premium account token), the Application
@@ -23,16 +24,25 @@ enum UserDataEraser {
 
     private static let logger = Logger(subsystem: AppConstants.loggerSubsystem, category: "UserDataEraser")
 
-    /// Frees the license and supporter activation slots on Polar so they can
-    /// be used on another Mac. Failures are ignored; the local wipe proceeds.
-    static func releaseLicenseActivations(_ licenseService: LicenseService) async {
+    /// Frees the license and supporter activation slots on Polar and detaches
+    /// this Mac from the premium account, so the slots can be used on another
+    /// Mac. Failures are ignored; the local wipe proceeds.
+    static func releaseRemoteActivations(
+        licenseService: LicenseService,
+        premiumAccountService: PremiumAccountService
+    ) async {
         await licenseService.deactivateLicense()
         await licenseService.deactivateSupporterLicense()
+        if premiumAccountService.isSignedIn {
+            await premiumAccountService.signOutFromAccount()
+        }
     }
 
     /// Deletes all data, then terminates the process immediately.
     static func eraseAllAndQuit() -> Never {
         let failures = eraseAll(locations: .current())
+        // Widget timelines cache recent transcript previews.
+        WidgetCenter.shared.reloadAllTimelines()
         if !failures.isEmpty {
             let alert = NSAlert()
             alert.alertStyle = .warning
@@ -100,8 +110,11 @@ enum UserDataEraser {
     }
 
     nonisolated static func resetSystemRegistrations() {
-        if SMAppService.mainApp.status == .enabled {
+        switch SMAppService.mainApp.status {
+        case .enabled, .requiresApproval:
             try? SMAppService.mainApp.unregister()
+        default:
+            break
         }
         let notificationCenter = UNUserNotificationCenter.current()
         notificationCenter.removeAllPendingNotificationRequests()

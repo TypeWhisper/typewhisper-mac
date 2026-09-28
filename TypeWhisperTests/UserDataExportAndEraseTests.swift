@@ -1,3 +1,4 @@
+import SQLite3
 import XCTest
 @testable import TypeWhisper
 
@@ -131,13 +132,72 @@ final class UserDataExportAndEraseTests: XCTestCase {
         try write("old", to: destination)
         try await UserDataExportService.export(
             to: destination,
-            settingsBackup: nil,
+            settingsBackup: Data("{}".utf8),
             locations: fixture.locations,
             userDefaults: fixture.userDefaults
         )
 
         let data = try Data(contentsOf: destination)
         XCTAssertEqual(data.prefix(2), Data("PK".utf8))
+    }
+
+    func testCopySnapshotsLiveSQLiteDatabasesAndSkipsSidecarsAndSymlinks() throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+        let source = dir.appendingPathComponent("Source", isDirectory: true)
+        let destination = dir.appendingPathComponent("Destination", isDirectory: true)
+        try FileManager.default.createDirectory(at: source, withIntermediateDirectories: true)
+
+        // Keep the connection open so the inserted rows stay in the WAL file.
+        var database: OpaquePointer?
+        XCTAssertEqual(sqlite3_open(source.appendingPathComponent("history.store").path, &database), SQLITE_OK)
+        defer { sqlite3_close(database) }
+        for statement in [
+            "PRAGMA journal_mode=WAL",
+            "PRAGMA wal_autocheckpoint=0",
+            "CREATE TABLE records (text TEXT)",
+            "INSERT INTO records VALUES ('one'), ('two'), ('three')",
+        ] {
+            XCTAssertEqual(sqlite3_exec(database, statement, nil, nil, nil), SQLITE_OK, statement)
+        }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: source.appendingPathComponent("history.store-wal").path))
+
+        let outside = dir.appendingPathComponent("outside.txt")
+        try write("private", to: outside)
+        try FileManager.default.createSymbolicLink(
+            at: source.appendingPathComponent("link.txt"),
+            withDestinationURL: outside
+        )
+        try write("keep", to: source.appendingPathComponent("notes-wal"))
+
+        try UserDataExportService.copyUserData(from: source, to: destination)
+
+        let copied = try FileManager.default.contentsOfDirectory(atPath: destination.path).sorted()
+        XCTAssertEqual(copied, ["history.store", "notes-wal"])
+
+        var snapshot: OpaquePointer?
+        XCTAssertEqual(sqlite3_open_v2(
+            destination.appendingPathComponent("history.store").path,
+            &snapshot,
+            SQLITE_OPEN_READONLY,
+            nil
+        ), SQLITE_OK)
+        defer { sqlite3_close(snapshot) }
+        var count: OpaquePointer?
+        XCTAssertEqual(sqlite3_prepare_v2(snapshot, "SELECT COUNT(*) FROM records", -1, &count, nil), SQLITE_OK)
+        defer { sqlite3_finalize(count) }
+        XCTAssertEqual(sqlite3_step(count), SQLITE_ROW)
+        XCTAssertEqual(sqlite3_column_int(count, 0), 3)
+    }
+
+    func testCurrentLocationsIncludeAbandonedExportStagingDirectories() throws {
+        let staging = FileManager.default.temporaryDirectory
+            .appendingPathComponent("\(UserDataExportService.stagingDirectoryPrefix)\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: staging) }
+
+        let items = UserDataLocations.current().auxiliaryItems.map(\.standardizedFileURL)
+        XCTAssertTrue(items.contains(staging.standardizedFileURL))
     }
 
     // MARK: - Erase
