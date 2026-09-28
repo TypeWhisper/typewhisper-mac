@@ -28,7 +28,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "API-Keys werden sicher im Schlüsselbund gespeichert"
+            "value": "API-Keys werden sicher im Schluesselbund gespeichert"
           }
         },
         "ja": {
@@ -50,7 +50,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "API-Key konnte nicht geprüft werden. Prüfe die Verbindung und versuche es erneut."
+            "value": "API-Key konnte nicht geprueft werden. Pruefe die Verbindung und versuche es erneut."
           }
         },
         "ja": {
@@ -116,7 +116,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ungültiger API-Key"
+            "value": "Ungueltiger API-Key"
           }
         },
         "ja": {
@@ -270,7 +270,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Gesprochene Sprache ist die Sprache der Audioquelle. Wähle Englisch nur, wenn die Aufnahme selbst Englisch ist."
+            "value": "Gesprochene Sprache ist die Sprache der Audioquelle. Waehle Englisch nur, wenn die Aufnahme selbst Englisch ist."
           }
         },
         "ja": {
@@ -336,7 +336,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Gültiger API-Key"
+            "value": "Gueltiger API-Key"
           }
         },
         "ja": {
@@ -358,7 +358,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Wird geprüft..."
+            "value": "Wird geprueft..."
           }
         },
         "ja": {

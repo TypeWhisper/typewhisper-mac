@@ -1,0 +1,23 @@
+name: iCloud Release Policy
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/icloud-release-policy.yml'
+      - '.github/workflows/release.yml'
+      - 'scripts/archive_release.sh'
+      - 'scripts/build-release-local.sh'
+      - 'scripts/check_release_signing.sh'
+      - 'scripts/test_icloud_release_policy.py'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: python3 scripts/test_icloud_release_policy.py

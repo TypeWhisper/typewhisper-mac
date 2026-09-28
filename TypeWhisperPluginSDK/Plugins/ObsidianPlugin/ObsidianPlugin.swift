@@ -1018,10 +1018,9 @@ private struct ObsidianSettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
-                    let prompt = String(
-                        localized: "You are an assistant that formats spoken dictation into a clean Obsidian-compatible markdown note. Structure the text with appropriate headings, bullet points, and paragraphs. Fix grammar and remove filler words while preserving the original meaning. Output only the formatted markdown, no explanations.",
-                        bundle: bundle
-                    )
+                    let prompt = """
+                    You are an assistant that formats spoken dictation into a clean Obsidian-compatible markdown note. Structure the text with appropriate headings, bullet points, and paragraphs. Fix grammar and remove filler words while preserving the original meaning. Output only the formatted markdown, no explanations.
+                    """
                     Text(prompt)
                         .font(.system(.caption, design: .monospaced))
                         .padding(8)

@@ -86,24 +86,4 @@ final class RecentTranscriptionStore: ObservableObject {
     func latestEntry(historyRecords: [TranscriptionRecord]) -> Entry? {
         mergedEntries(historyRecords: historyRecords, limit: 1).first
     }
-
-    /// Updates the stored final text of a session entry (e.g. after a raw
-    /// transcript restore) so copy and read-back reflect the text that
-    /// remains in the document. No-op for unknown ids or empty text.
-    func updateFinalText(id: UUID, finalText: String) {
-        let trimmedText = finalText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmedText.isEmpty,
-              let index = sessionEntries.firstIndex(where: { $0.id == id }) else {
-            return
-        }
-        let entry = sessionEntries[index]
-        sessionEntries[index] = Entry(
-            id: entry.id,
-            finalText: trimmedText,
-            timestamp: entry.timestamp,
-            appName: entry.appName,
-            appBundleIdentifier: entry.appBundleIdentifier,
-            source: entry.source
-        )
-    }
 }

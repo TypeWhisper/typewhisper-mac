@@ -1,22 +1,6 @@
 {
   "sourceLanguage": "en",
   "strings": {
-    "No rules configured.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Keine Regeln konfiguriert."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "未配置任何规则。"
-          }
-        }
-      }
-    },
     "Active for all transcriptions.": {
       "localizations": {
         "de": {

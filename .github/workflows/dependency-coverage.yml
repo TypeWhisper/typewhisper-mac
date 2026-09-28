@@ -1,7 +1,7 @@
 name: Dependency Coverage
 
-# Pull requests run the coverage check in the Build DMG checks job.
 on:
+  pull_request:
   push:
     branches: [main]
   workflow_dispatch:
