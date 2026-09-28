@@ -2,10 +2,14 @@ import SwiftUI
 
 struct SnippetsSettingsView: View {
     @ObservedObject private var viewModel = SnippetsViewModel.shared
+    @State private var isAppImportPresented = false
 
     var body: some View {
         VStack(spacing: 0) {
             SettingsPageHeader(String(localized: "Snippets")) {
+                Button(String(localized: "Import from Another App...")) {
+                    isAppImportPresented = true
+                }
                 Button {
                     viewModel.startCreating()
                 } label: {
@@ -43,6 +47,9 @@ struct SnippetsSettingsView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .sheet(isPresented: $viewModel.isEditing) {
             SnippetEditorSheet(viewModel: viewModel)
+        }
+        .sheet(isPresented: $isAppImportPresented) {
+            AppVocabularyImportSheet(destination: .snippets)
         }
         .alert(String(localized: "Error"), isPresented: Binding(
             get: { viewModel.error != nil },

@@ -5,31 +5,43 @@ import TypeWhisperPluginSDK
 @testable import GroqPlugin
 
 final class GroqPluginTests: XCTestCase {
-    func testDictionaryContextDefaultsToExistingBehaviorAndPersistsOptOut() throws {
+    func testDictionaryContextDefaultsOffAndPersistsOptIn() throws {
         let host = try PluginTestHostServices()
         let plugin = GroqPlugin()
         plugin.activate(host: host)
-        XCTAssertTrue(plugin.sendDictionaryTerms)
-        XCTAssertEqual(plugin.dictionaryTermsSupport, .supported)
-        plugin.setSendDictionaryTerms(false)
-        XCTAssertEqual(host.userDefault(forKey: GroqPlugin.sendDictionaryTermsKey) as? Bool, false)
+        XCTAssertFalse(plugin.sendDictionaryTerms)
         XCTAssertEqual(plugin.dictionaryTermsSupport, .requiresPluginSetting)
+        XCTAssertNil(host.userDefault(forKey: GroqPlugin.sendDictionaryTermsKey))
+        plugin.setSendDictionaryTerms(true)
+        XCTAssertEqual(host.userDefault(forKey: GroqPlugin.sendDictionaryTermsKey) as? Bool, true)
+        XCTAssertEqual(plugin.dictionaryTermsSupport, .supported)
         let reloaded = GroqPlugin()
         reloaded.activate(host: host)
-        XCTAssertFalse(reloaded.sendDictionaryTerms)
-        XCTAssertEqual(reloaded.dictionaryTermsSupport, .requiresPluginSetting)
-        reloaded.setSendDictionaryTerms(true)
         XCTAssertTrue(reloaded.sendDictionaryTerms)
         XCTAssertEqual(reloaded.dictionaryTermsSupport, .supported)
+        reloaded.setSendDictionaryTerms(false)
+        XCTAssertFalse(reloaded.sendDictionaryTerms)
+        XCTAssertEqual(reloaded.dictionaryTermsSupport, .requiresPluginSetting)
     }
 
-    func testTranscribeOmitsDisabledPromptIncludingWavRetryAndRestoresUnmodifiedPrompt() async throws {
+    func testDictionaryContextKeepsExplicitlySavedChoice() throws {
+        for saved in [true, false] {
+            let host = try PluginTestHostServices(defaults: [GroqPlugin.sendDictionaryTermsKey: saved])
+            let plugin = GroqPlugin()
+            plugin.activate(host: host)
+            XCTAssertEqual(plugin.sendDictionaryTerms, saved)
+            XCTAssertEqual(plugin.dictionaryTermsSupport, saved ? .supported : .requiresPluginSetting)
+        }
+    }
+
+    func testTranscribeForwardsHostPromptUnchangedIncludingWavRetryWhileTermsAreOff() async throws {
         let host = try PluginTestHostServices(
-            defaults: ["selectedModel": "whisper-large-v3", "sendDictionaryTerms": false],
+            defaults: ["selectedModel": "whisper-large-v3"],
             secrets: ["api-key": "groq-key"]
         )
         let plugin = GroqPlugin()
         plugin.activate(host: host)
+        XCTAssertFalse(plugin.sendDictionaryTerms)
         let store = PluginHTTPClientSessionStore()
         PluginHTTPClientTestHarness.configure { _ in
             store.makeSession(outcomes: [
@@ -43,20 +55,20 @@ final class GroqPluginTests: XCTestCase {
         }
         let samples = [Float](repeating: 0.1, count: 16_000)
         let audio = AudioData(samples: samples, wavData: PluginWavEncoder.encode(samples), duration: 1)
-        let prompt = "TensorFlow, Prompt Engineering, Keras"
+        // With terms off, the host no longer adds dictionary terms, so any prompt that
+        // arrives here was supplied by the caller and must reach Groq unchanged.
+        let prompt = "Meeting notes about the quarterly budget."
         _ = try await plugin.transcribe(audio: audio, language: "de", translate: false, prompt: prompt)
-        let disabledRequests = try XCTUnwrap(store.sessions.first?.requestedRequests)
-        XCTAssertEqual(disabledRequests.count, 2)
-        for request in disabledRequests {
+        let promptRequests = try XCTUnwrap(store.sessions.first?.requestedRequests)
+        XCTAssertEqual(promptRequests.count, 2)
+        for request in promptRequests {
             let body = String(decoding: try XCTUnwrap(request.httpBody), as: UTF8.self)
-            XCTAssertFalse(body.contains("name=\"prompt\""))
+            XCTAssertTrue(body.contains("name=\"prompt\"\r\n\r\n\(prompt)\r\n"))
         }
-        plugin.setSendDictionaryTerms(true)
-        _ = try await plugin.transcribe(audio: audio, language: "de", translate: false, prompt: prompt)
+        _ = try await plugin.transcribe(audio: audio, language: "de", translate: false, prompt: nil)
         let request = try XCTUnwrap(store.sessions.first?.requestedRequests.last)
         let body = String(decoding: try XCTUnwrap(request.httpBody), as: UTF8.self)
-        XCTAssertTrue(body.contains("name=\"prompt\"\r\n\r\n\(prompt)\r\n"))
-        XCTAssertFalse(body.contains("The audio may contain"))
+        XCTAssertFalse(body.contains("name=\"prompt\""))
     }
 
     override func tearDown() {

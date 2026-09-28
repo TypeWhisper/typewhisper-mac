@@ -80,7 +80,7 @@ final class WhisperKitPluginLifecycleTests: XCTestCase {
         }
 
         XCTAssertEqual(model?.displayName, "Distil Large v3 Turbo")
-        XCTAssertEqual(model?.sizeDescription, "~600 MB")
+        XCTAssertEqual(model?.sizeDescription, "~1.5 GB")
         XCTAssertEqual(model?.ramRequirement, "8 GB+")
     }
 
