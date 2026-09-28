@@ -907,7 +907,10 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
                 usesBluetoothTransport: true,
                 reason: "bluetooth-instant-start-prewarm",
                 readinessDeadline: readinessDeadline,
-                shouldCancel: { [self] in hasPendingRecordingStart }
+                shouldCancel: { [self] in
+                    hasPendingRecordingStart
+                        || engineLock.withLock { preparedInputGeneration != preparationGeneration }
+                }
             )
             let preparedInput = try prepareBluetoothEngine(
                 deviceID: deviceID,
@@ -1056,6 +1059,14 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         }
         guard preparedInputs.0 != nil || preparedInputs.1 != nil || preparedInputs.2 != nil else { return }
         logger.info("Invalidated prepared recording input: \(reason, privacy: .public)")
+    }
+
+    private func waitForRecordingInputPreparationCleanup() async {
+        await withCheckedContinuation { continuation in
+            recordingStartQueue.async {
+                continuation.resume()
+            }
+        }
     }
 
     /// Thread-safe snapshot of the current recording buffer for streaming transcription.
@@ -1511,6 +1522,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         guard let engine = capture.engine else {
             if bluetoothBehavior == .release {
                 invalidatePreparedRecordingInputs(reason: "bluetooth-recording-release-without-engine")
+                await waitForRecordingInputPreparationCleanup()
             }
             outputVolumeGuard.clear()
             return []
@@ -1536,6 +1548,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         outputVolumeGuard.captureBaseline()
         if bluetoothBehavior == .release {
             invalidatePreparedRecordingInputs(reason: "bluetooth-recording-release")
+            await waitForRecordingInputPreparationCleanup()
         }
         let keptPreparedInput = bluetoothBehavior == .keepPrepared
             && keepBluetoothInputPrepared(engine)
