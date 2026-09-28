@@ -372,6 +372,14 @@ final class DictationUndoServiceTests: XCTestCase {
         // Undo/restore replace text through direct Accessibility writes and
         // must never disturb the user's clipboard.
         let pasteboard = NSPasteboard.general
+        let previousClipboard = pasteboard.string(forType: .string)
+        defer {
+            // Leave the developer's clipboard exactly as it was.
+            pasteboard.clearContents()
+            if let previousClipboard {
+                pasteboard.setString(previousClipboard, forType: .string)
+            }
+        }
         pasteboard.clearContents()
         pasteboard.setString("clipboard sentinel", forType: .string)
         let changeCount = pasteboard.changeCount
