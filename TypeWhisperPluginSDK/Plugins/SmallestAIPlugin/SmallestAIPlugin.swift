@@ -42,10 +42,10 @@ final class SmallestAIPlugin: NSObject, TranscriptionEnginePlugin {
 
     var transcriptionModels: [PluginModelInfo] {
         [
-            PluginModelInfo(id: "multi-eu", displayName: String(localized: "Auto (European)", bundle: Bundle(for: SmallestAIPlugin.self))),
-            PluginModelInfo(id: "multi", displayName: String(localized: "Auto (Multilingual)", bundle: Bundle(for: SmallestAIPlugin.self))),
-            PluginModelInfo(id: "multi-indic", displayName: String(localized: "Auto (Indic)", bundle: Bundle(for: SmallestAIPlugin.self))),
-            PluginModelInfo(id: "multi-asian", displayName: String(localized: "Auto (Asian)", bundle: Bundle(for: SmallestAIPlugin.self))),
+            PluginModelInfo(id: "multi-eu", displayName: "Auto (European)"),
+            PluginModelInfo(id: "multi", displayName: "Auto (Multilingual)"),
+            PluginModelInfo(id: "multi-indic", displayName: "Auto (Indic)"),
+            PluginModelInfo(id: "multi-asian", displayName: "Auto (Asian)"),
         ]
     }
 

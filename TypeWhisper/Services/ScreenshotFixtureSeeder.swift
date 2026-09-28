@@ -71,40 +71,10 @@ extension ServiceContainer {
         pluginManager.setWorkflowProvider { [weak self] in
             self?.workflowService.workflows.map(\.pluginWorkflowInfo) ?? []
         }
-        seedScreenshotPluginSettings(language: language)
         pluginManager.scanAndLoadPlugins()
 
         statisticsViewModel.refresh()
         homeViewModel.refresh()
-    }
-
-    private func seedScreenshotPluginSettings(language: ScreenshotFixtureLanguage) {
-        switch AppConstants.screenshotPluginId {
-        case "com.typewhisper.obsidian":
-            let vaultName = language == .german ? "Wissensbibliothek" : "Knowledge Library"
-            UserDefaults.standard.set(
-                "/Users/demo/Documents/Obsidian/\(vaultName)",
-                forKey: "plugin.com.typewhisper.obsidian.vaultPath"
-            )
-        case "com.typewhisper.mcp-client":
-            let configuration: [String: Any] = [
-                "servers": [[
-                    "id": "4CF83F6E-7A32-4A97-8A97-A9C4BD8CC5B3",
-                    "name": language == .german ? "Projektwissen" : "Project Knowledge",
-                    "transport": "streamableHTTP",
-                    "endpoint": "https://mcp.example.com/mcp",
-                    "launchAcknowledged": false,
-                    "createdAt": 0,
-                    "updatedAt": 0,
-                ]],
-                "actions": [],
-            ]
-            if let data = try? JSONSerialization.data(withJSONObject: configuration) {
-                UserDefaults.standard.set(data, forKey: "plugin.com.typewhisper.mcp-client.configuration-v1")
-            }
-        default:
-            break
-        }
     }
 
     private func seedScreenshotHistory(

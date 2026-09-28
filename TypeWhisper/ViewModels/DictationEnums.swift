@@ -90,14 +90,12 @@ enum CancellationBehavior: String, CaseIterable, Sendable {
     case doubleEscape
     case singleEscape
     case instant
-    case disabled
 
     var title: String {
         switch self {
         case .doubleEscape: String(localized: "cancellationBehavior.double", defaultValue: "Double")
         case .singleEscape: String(localized: "cancellationBehavior.single", defaultValue: "Single")
         case .instant: String(localized: "cancellationBehavior.instant", defaultValue: "Instant")
-        case .disabled: String(localized: "cancellationBehavior.disabled", defaultValue: "Disabled")
         }
     }
 }

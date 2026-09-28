@@ -1,7 +1,7 @@
 import Foundation
 import SwiftUI
 import WhisperKit
-@_spi(FirstPartyPlugins) import TypeWhisperPluginSDK
+import TypeWhisperPluginSDK
 
 // Keep this policy plugin-local because the SDK network guard was added after TypeWhisper 1.6.0.
 enum WhisperKitNetworkAccessPolicy {
@@ -571,13 +571,6 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
 
         loadingModelId = modelDef.id
         let loadGeneration = beginModelLoad()
-        // Held until compilation finishes: the headroom covers Core ML caches.
-        var downloadSpaceReservation: PluginDownloadSpaceReservation?
-        var repairSpaceReservation: PluginDownloadSpaceReservation?
-        defer {
-            downloadSpaceReservation?.release()
-            repairSpaceReservation?.release()
-        }
         do {
             // Migrate old models if they exist
             migrateOldModels(for: modelDef)
@@ -595,22 +588,11 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
                     return
                 }
                 removeIncompleteModelIfNeeded(at: modelPath)
-                removeStaleDownloadCache(for: modelDef)
                 modelState = .downloading
                 downloadProgress = 0.05
 
                 var lastProgress = 0.0
                 try WhisperKitNetworkAccessPolicy.ensureAccessIsAllowed()
-                downloadSpaceReservation = try await PluginDownloadDiskSpace.reserveHuggingFaceDownload(
-                    repositoryID: Self.modelRepo,
-                    path: modelDef.id,
-                    token: _hfToken,
-                    destination: downloadBase,
-                    trackedDirectory: modelStorageRoots[0],
-                    // swift-transformers downloads through URLSession's temporary directory.
-                    stagingDirectory: FileManager.default.temporaryDirectory,
-                    modelName: modelDef.displayName
-                )
                 modelFolder = try await WhisperKit.download(
                     variant: modelDef.id,
                     downloadBase: downloadBase,
@@ -625,7 +607,7 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
             }
             guard isCurrentModelLoad(loadGeneration) else { return }
             if allowDownloads {
-                repairSpaceReservation = try await repairDownloadedModelIfNeeded(at: modelFolder, variant: modelDef.id)
+                try await repairDownloadedModelIfNeeded(at: modelFolder, variant: modelDef.id)
             }
             guard isCurrentModelLoad(loadGeneration) else { return }
 
@@ -908,43 +890,19 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
         }
     }
 
-    /// Returns the space reservation for the repaired files. The caller keeps it
-    /// until compilation finishes so the headroom stays reserved.
-    private func repairDownloadedModelIfNeeded(
-        at modelPath: URL,
-        variant: String
-    ) async throws -> PluginDownloadSpaceReservation? {
+    private func repairDownloadedModelIfNeeded(at modelPath: URL, variant: String) async throws {
         let missingFiles = requiredModelFiles(at: modelPath)
             .filter { !FileManager.default.fileExists(atPath: modelPath.appendingPathComponent($0).path) }
 
-        guard !missingFiles.isEmpty else { return nil }
+        guard !missingFiles.isEmpty else { return }
 
-        try WhisperKitNetworkAccessPolicy.ensureAccessIsAllowed()
-        let spaceReservation = try await PluginDownloadDiskSpace.reserveHuggingFaceDownload(
-            repositoryID: Self.modelRepo,
-            path: variant,
-            matching: missingFiles.map { "\(variant)/\($0)" },
-            token: _hfToken,
-            destination: modelPath,
-            trackedDirectory: modelPath,
-            // URLSession downloads each file to its temporary directory first.
-            stagingDirectory: FileManager.default.temporaryDirectory,
-            modelName: Self.availableModels.first { $0.id == variant }?.displayName ?? variant
-        )
-
-        do {
-            for relativePath in missingFiles {
-                try await downloadModelFile(
-                    variant: variant,
-                    relativePath: relativePath,
-                    destination: modelPath.appendingPathComponent(relativePath)
-                )
-            }
-        } catch {
-            spaceReservation?.release()
-            throw error
+        for relativePath in missingFiles {
+            try await downloadModelFile(
+                variant: variant,
+                relativePath: relativePath,
+                destination: modelPath.appendingPathComponent(relativePath)
+            )
         }
-        return spaceReservation
     }
 
     private func requiredModelFiles(at modelPath: URL) -> [String] {
@@ -1029,18 +987,6 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
         let fileManager = FileManager.default
         guard fileManager.fileExists(atPath: modelPath.path), !isUsableDownloadedModel(at: modelPath) else { return }
         try? fileManager.removeItem(at: modelPath)
-    }
-
-    /// swift-transformers keeps `.incomplete` files and per-file metadata for a
-    /// variant under the repository's `.cache` folder. An interrupted download
-    /// leaves them behind, and they are stale once the variant folder is gone.
-    private func removeStaleDownloadCache(for modelDef: WhisperModelDef) {
-        let cache = modelStorageRoots[0]
-            .appendingPathComponent(".cache")
-            .appendingPathComponent("huggingface")
-            .appendingPathComponent("download")
-            .appendingPathComponent(modelDef.id)
-        try? FileManager.default.removeItem(at: cache)
     }
 
     /// Migrate models from old location (TypeWhisper/models/) to plugin data directory
@@ -1138,19 +1084,19 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
         WhisperModelDef(
             id: "openai_whisper-tiny",
             displayName: "Tiny",
-            sizeDescription: "~77 MB",
+            sizeDescription: "~39 MB",
             ramRequirement: "4 GB+"
         ),
         WhisperModelDef(
             id: "openai_whisper-base",
             displayName: "Base",
-            sizeDescription: "~147 MB",
+            sizeDescription: "~74 MB",
             ramRequirement: "4 GB+"
         ),
         WhisperModelDef(
             id: "openai_whisper-small",
             displayName: "Small",
-            sizeDescription: "~486 MB",
+            sizeDescription: "~244 MB",
             ramRequirement: "8 GB+"
         ),
         WhisperModelDef(
@@ -1162,25 +1108,25 @@ final class WhisperKitPlugin: NSObject, SourceProgressTranscriptionEnginePlugin,
         WhisperModelDef(
             id: "openai_whisper-large-v3",
             displayName: "Large v3",
-            sizeDescription: "~3.1 GB",
+            sizeDescription: "~1.5 GB",
             ramRequirement: "16 GB+"
         ),
         WhisperModelDef(
             id: "openai_whisper-large-v3_turbo",
             displayName: "Large v3 Turbo",
-            sizeDescription: "~3.2 GB",
+            sizeDescription: "~800 MB",
             ramRequirement: "8 GB+"
         ),
         WhisperModelDef(
             id: "distil-whisper_distil-large-v3_turbo",
             displayName: "Distil Large v3 Turbo",
-            sizeDescription: "~1.5 GB",
+            sizeDescription: "~600 MB",
             ramRequirement: "8 GB+"
         ),
         WhisperModelDef(
             id: "distil-whisper_distil-large-v3",
             displayName: "Distil Large v3",
-            sizeDescription: "~1.5 GB",
+            sizeDescription: "~594 MB",
             ramRequirement: "8 GB+"
         ),
     ]

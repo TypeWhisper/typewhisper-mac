@@ -30,7 +30,26 @@ fi
 log "checking whitespace and conflict markers against $base_ref"
 git diff --check "$base_ref"...HEAD
 
-bash scripts/ci-checks.sh
+log "checking shell scripts parse"
+while IFS= read -r script_file; do
+  [[ -n "$script_file" ]] || continue
+  bash -n "$script_file"
+done < <(git ls-files 'scripts/*.sh')
+
+log "running Python script tests"
+python3 scripts/test_assemble_community_plugin_registry.py
+python3 scripts/test_check_plugin_sdk_symbol_compatibility.py
+python3 scripts/test_plugin_registry_metadata.py
+python3 scripts/test_resolve_plugin_host_release.py
+python3 scripts/test_verify_appcast_publication.py
+python3 scripts/test_icloud_release_policy.py
+
+log "checking plugin release policy"
+python3 scripts/validate_plugin_release_manifest.py TypeWhisperPluginSDK/Plugins/*/manifest.json
+python3 scripts/test_validate_plugin_release_manifest.py
+
+log "checking main-app localization completeness"
+python3 scripts/check_localization_completeness.py
 
 log "checking release instrumentation helper"
 run_if_exists scripts/check_release_binary_instrumentation.sh --self-test

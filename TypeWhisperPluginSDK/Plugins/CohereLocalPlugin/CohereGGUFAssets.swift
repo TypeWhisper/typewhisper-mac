@@ -1,7 +1,7 @@
 import CryptoKit
 import Foundation
 import HuggingFace
-@_spi(FirstPartyPlugins) import TypeWhisperPluginSDK
+import TypeWhisperPluginSDK
 
 struct CohereLocalModelAssets: Sendable {
     static let modelRepositoryId = "cstr/cohere-transcribe-03-2026-GGUF"
@@ -107,33 +107,14 @@ struct CohereLocalModelAssets: Sendable {
             at: rootDirectory,
             withIntermediateDirectories: true
         )
-        removeInterruptedRuntimeInstallFiles()
-        // Verify before reserving: a file with the right size but a wrong
-        // checksum is deleted here and has to be downloaded again.
-        let needsModel = !isVerifiedFile(
-            modelFileURL,
-            expectedSize: model.fileSize,
-            expectedSHA256: model.sha256
-        )
-        let needsVAD = !isVerifiedFile(
-            vadModelURL,
-            expectedSize: Self.vadSize,
-            expectedSHA256: Self.vadSHA256
-        )
-        let spaceReservation = try PluginDownloadDiskSpace.reserve(
-            downloadBytes: missingDownloadBytes(needsModel: needsModel, needsVAD: needsVAD),
-            destination: rootDirectory,
-            trackedDirectory: rootDirectory,
-            // URLSession downloads each asset to its temporary directory first.
-            stagingDirectory: FileManager.default.temporaryDirectory,
-            stagingBytes: largestStagedBytes(needsModel: needsModel, needsVAD: needsVAD),
-            modelName: model.displayName
-        )
-        defer { spaceReservation?.release() }
 
         let session = URLSession(configuration: .default)
         defer { session.invalidateAndCancel() }
-        if needsModel {
+        if !isVerifiedFile(
+            modelFileURL,
+            expectedSize: model.fileSize,
+            expectedSHA256: model.sha256
+        ) {
             try await Self.downloadHubFile(
                 session: session,
                 repositoryId: Self.modelRepositoryId,
@@ -152,7 +133,11 @@ struct CohereLocalModelAssets: Sendable {
         }
         progressHandler(0.98)
 
-        if needsVAD {
+        if !isVerifiedFile(
+            vadModelURL,
+            expectedSize: Self.vadSize,
+            expectedSHA256: Self.vadSHA256
+        ) {
             try FileManager.default.createDirectory(
                 at: auxiliaryDirectory,
                 withIntermediateDirectories: true
@@ -183,42 +168,6 @@ struct CohereLocalModelAssets: Sendable {
 
         guard isInstalled else {
             throw CohereLocalPluginError.incompleteModelDownload
-        }
-    }
-
-    /// Bytes the download still has to write, given which checksum-verified
-    /// assets are missing.
-    func missingDownloadBytes(needsModel: Bool, needsVAD: Bool) -> Int64 {
-        var bytes: Int64 = 0
-        if needsModel { bytes += model.fileSize }
-        if needsVAD { bytes += Self.vadSize }
-        // The archive, its extracted staging copy, and the installed runtime
-        // briefly coexist during installation.
-        if !isRuntimeInstalled { bytes += Self.runtimeArchiveSize * 3 }
-        return bytes
-    }
-
-    /// Largest single file URLSession stages before it is moved into place.
-    func largestStagedBytes(needsModel: Bool, needsVAD: Bool) -> Int64 {
-        [
-            needsModel ? model.fileSize : 0,
-            needsVAD ? Self.vadSize : 0,
-            isRuntimeInstalled ? 0 : Self.runtimeArchiveSize,
-        ].max() ?? 0
-    }
-
-    /// Removes runtime archives and staging folders that an interrupted
-    /// install left behind. Normal runs delete them in `defer` blocks.
-    func removeInterruptedRuntimeInstallFiles() {
-        guard let entries = try? FileManager.default.contentsOfDirectory(
-            at: runtimeRootDirectory,
-            includingPropertiesForKeys: nil
-        ) else {
-            return
-        }
-        for entry in entries where entry.lastPathComponent.hasPrefix(".download-")
-            || entry.lastPathComponent.hasPrefix(".staging-") {
-            try? FileManager.default.removeItem(at: entry)
         }
     }
 
