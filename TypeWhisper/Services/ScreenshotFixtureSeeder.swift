@@ -284,6 +284,60 @@ extension ServiceContainer {
                 categories: ["action"],
                 hosting: .local
             ),
+            screenshotRegistryPlugin(
+                id: "com.typewhisper.parakeet",
+                name: "Parakeet",
+                description: "Local speech-to-text powered by NVIDIA Parakeet TDT. Fast and accurate, 25 languages.",
+                descriptions: [
+                    "de": "Lokale Spracherkennung mit NVIDIA Parakeet TDT. Schnell und präzise, 25 Sprachen.",
+                    "ja": "NVIDIA Parakeet TDTによるローカル音声認識です。高速かつ高精度で、25言語に対応します。",
+                ],
+                categories: ["transcription"],
+                hosting: .local
+            ),
+            screenshotRegistryPlugin(
+                id: "com.typewhisper.whisperkit",
+                name: "WhisperKit",
+                description: "Local speech-to-text powered by WhisperKit. 8 model sizes, 99 languages, streaming support.",
+                descriptions: [
+                    "de": "Lokale Spracherkennung mit WhisperKit. 8 Modellgrößen, 99 Sprachen, Streaming-Unterstützung.",
+                    "ja": "WhisperKitによるローカル音声認識です。8種類のモデルサイズ、99言語、ストリーミングに対応します。",
+                ],
+                categories: ["transcription"],
+                hosting: .local
+            ),
+            screenshotRegistryPlugin(
+                id: "com.typewhisper.qwen3",
+                name: "Qwen3 ASR",
+                description: "Local Qwen3-ASR speech-to-text powered by MLX on Apple Silicon. 30 languages plus Chinese dialect coverage, no API key required.",
+                descriptions: [
+                    "de": "Lokale Qwen3-ASR-Spracherkennung mit MLX auf Apple Silicon. 30 Sprachen plus chinesische Dialektabdeckung, kein API-Key nötig.",
+                    "ja": "Apple Silicon上のMLXで動作するローカルQwen3-ASR音声認識です。30言語と中国語方言に対応し、APIキーは不要です。",
+                ],
+                categories: ["transcription"],
+                hosting: .local
+            ),
+            screenshotRegistryPlugin(
+                id: "com.typewhisper.gemma4",
+                name: "Gemma 4",
+                description: "Local LLM powered by Google Gemma 4 on Apple Silicon via MLX. No API key required.",
+                descriptions: [
+                    "de": "Lokales LLM mit Google Gemma 4 auf Apple Silicon via MLX. Kein API-Key erforderlich.",
+                    "ja": "Apple Silicon上でMLX経由で動作するGoogle Gemma 4ローカルLLMです。APIキーは不要です。",
+                ],
+                categories: ["llm"],
+                hosting: .local
+            ),
+            screenshotRegistryPlugin(
+                id: "com.typewhisper.filler-words",
+                name: "Filler Words",
+                description: "Removes filler words like \"um\" and \"uh\" from transcribed text.",
+                descriptions: [
+                    "de": "Entfernt Füllwörter wie „ähm“ und „äh“ aus transkribiertem Text.",
+                ],
+                categories: ["post-processor"],
+                hosting: .local
+            ),
         ]
         pluginRegistryService.fetchState = .loaded
         pluginRegistryService.updateAvailableUpdatesCount()
