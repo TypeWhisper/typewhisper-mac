@@ -408,13 +408,15 @@ final class APIHandlers: @unchecked Sendable {
                             to: translation.target,
                             source: translation.source
                         )
-                        responseSegments = try await APITranslation.translateSegments(
-                            result.segments,
-                            translation: translation,
-                            translate: { text, target, source in
-                                try await ts.translate(text: text, to: target, source: source)
-                            }
-                        )
+                        if options.responseFormat == "verbose_json" {
+                            responseSegments = try await APITranslation.translateSegments(
+                                result.segments,
+                                translation: translation,
+                                translate: { text, target, source in
+                                    try await ts.translate(text: text, to: target, source: source)
+                                }
+                            )
+                        }
                         responseLanguage = translation.targetIdentifier
                     } else {
                         apiLogger.error("API translation target language invalid: \(targetCode, privacy: .public)")
