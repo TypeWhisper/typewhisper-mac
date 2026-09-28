@@ -804,6 +804,7 @@ struct AdvancedSettingsView: View {
         viewModel.stopServer()
         let container = ServiceContainer.shared
         Task {
+            await UserDataEraser.discardActiveRecording(container.audioRecorderService)
             await UserDataEraser.releaseRemoteActivations(
                 licenseService: container.licenseService,
                 premiumAccountService: container.premiumAccountService

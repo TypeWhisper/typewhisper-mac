@@ -38,6 +38,17 @@ enum UserDataEraser {
         }
     }
 
+    /// Stops a running recorder session without finalizing it and removes its
+    /// temporary microphone and system audio tracks, which live outside the
+    /// erased folders. The recorder's output folder is left alone.
+    static func discardActiveRecording(_ recorderService: AudioRecorderService) async {
+        guard recorderService.isRecording else { return }
+        let stoppedRecording = await recorderService.stopCapture()
+        for url in [stoppedRecording.micTempURL, stoppedRecording.systemTempURL].compactMap({ $0 }) {
+            try? FileManager.default.removeItem(at: url)
+        }
+    }
+
     /// Deletes all data, then terminates the process immediately.
     static func eraseAllAndQuit() -> Never {
         let failures = eraseAll(locations: .current())
