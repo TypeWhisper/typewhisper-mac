@@ -2059,18 +2059,18 @@ enum OllamaDiscoveryError: Error, Equatable, Sendable {
     var userMessage: String {
         switch self {
         case .invalidURL:
-            String(localized: "The server URL is invalid.", bundle: pluginModuleBundle)
+            return String(localized: "The server URL is invalid.", bundle: pluginModuleBundle)
         case .connectionFailed:
-            String(localized: "Could not reach the Ollama server. Check that it is running and the URL is correct.", bundle: pluginModuleBundle)
+            return String(localized: "Could not reach the Ollama server. Check that it is running and the URL is correct.", bundle: pluginModuleBundle)
         case .unauthorized:
-            String(localized: "The server rejected the request (unauthorized). Check the API key.", bundle: pluginModuleBundle)
+            return String(localized: "The server rejected the request (unauthorized). Check the API key.", bundle: pluginModuleBundle)
         case .serverError(let statusCode):
             let template = String(localized: "The server returned an unexpected error.", bundle: pluginModuleBundle)
             return "\(template) (HTTP \(statusCode))"
         case .emptyResult:
-            String(localized: "The server reported no installed models. Pull a model with `ollama pull <model>` first.", bundle: pluginModuleBundle)
+            return String(localized: "The server reported no installed models. Pull a model with `ollama pull <model>` first.", bundle: pluginModuleBundle)
         case .decodingFailed:
-            String(localized: "The server response was not a valid Ollama /api/tags payload.", bundle: pluginModuleBundle)
+            return String(localized: "The server response was not a valid Ollama /api/tags payload.", bundle: pluginModuleBundle)
         }
     }
 }
@@ -2302,7 +2302,7 @@ private struct OpenAICompatibleSettingsView: View {
 
                 Picker("Server Kind", selection: $serverKind) {
                     ForEach(OpenAICompatibleServerKind.allCases, id: \.self) { kind in
-                        Text(kind.displayName, bundle: bundle).tag(kind)
+                        Text(LocalizedStringKey(kind.displayName), bundle: bundle).tag(kind)
                     }
                 }
                 .pickerStyle(.segmented)
