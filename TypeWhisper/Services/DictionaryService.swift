@@ -130,6 +130,52 @@ final class DictionaryService: ObservableObject {
         }
     }
 
+    var appImportSnapshot: [AppVocabularyImport.Existing] {
+        entries.map {
+            AppVocabularyImport.Existing(id: $0.id, entry: AppVocabularyImport.Entry(kind: $0.type == .term ? .term : .correction, original: $0.original, replacement: $0.replacement),
+                                         caseSensitive: $0.caseSensitive, isEnabled: $0.isEnabled)
+        }
+    }
+
+    #if DEBUG
+    var appImportSaveOverride: (() throws -> Void)?
+    #endif
+
+    /// One reviewed destination is committed in one save. A stale review never writes.
+    func importReviewedEntries(
+        _ entries: [AppVocabularyImport.Entry],
+        baseline: [AppVocabularyImport.Existing]
+    ) throws -> Bool {
+        guard let context = modelContext else { throw AppVocabularyImportError.storageUnavailable }
+        loadEntries()
+        guard appImportSnapshot == baseline else { return false }
+        guard entries.allSatisfy({ $0.kind != .snippet }) else {
+            throw AppVocabularyImportError.invalidFormat
+        }
+        let review = AppVocabularyImport.review(.init(entries: entries), existing: baseline)
+        var inserted: [DictionaryEntry] = []
+        for row in review where row.outcome == .add {
+            let entry = row.entry
+            let item = DictionaryEntry(type: entry.kind == .term ? .term : .correction, original: entry.original, replacement: entry.replacement)
+            context.insert(item)
+            inserted.append(item)
+        }
+        do {
+            #if DEBUG
+            try appImportSaveOverride?()
+            #endif
+            try context.save()
+            loadEntries()
+            return true
+        } catch {
+            // Preserve unrelated pending changes, including deferred dictation counters.
+            for item in inserted { context.delete(item) }
+            context.processPendingChanges()
+            loadEntries()
+            throw AppVocabularyImportError.storageUnavailable
+        }
+    }
+
     func addEntry(
         type: DictionaryEntryType,
         original: String,
@@ -545,8 +591,13 @@ final class DictionaryService: ObservableObject {
             return PluginDictionaryTerms.prompt(from: terms)
         }
 
-        if (plugin as? any DictionaryTermsCapabilityProviding)?.dictionaryTermsSupport == .unsupported {
+        // Terms stay out of the prompt until the plugin setting enables them, so a
+        // caller-supplied prompt can still reach the plugin on its own.
+        switch (plugin as? any DictionaryTermsCapabilityProviding)?.dictionaryTermsSupport {
+        case .unsupported, .requiresPluginSetting:
             return nil
+        case .supported, nil:
+            break
         }
 
         guard let budget = (plugin as? any DictionaryTermsBudgetProviding)?.dictionaryTermsBudget else {

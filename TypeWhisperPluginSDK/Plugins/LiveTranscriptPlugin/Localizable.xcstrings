@@ -1,6 +1,86 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Background opacity": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hintergrunddeckkraft"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "背景不透明度"
+          }
+        }
+      }
+    },
+    "Height": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Höhe"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "高度"
+          }
+        }
+      }
+    },
+    "Lower values keep more of the app behind the transcript visible.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Bei niedrigeren Werten bleibt mehr von der App hinter dem Transkript sichtbar."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "数值越小，实时转录文字背后的应用显示得越多。"
+          }
+        }
+      }
+    },
+    "Width": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Breite"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "宽度"
+          }
+        }
+      }
+    },
+    "Window size": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fenstergröße"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "窗口大小"
+          }
+        }
+      }
+    },
     "Auto-open on recording": {
       "localizations": {
         "de": {

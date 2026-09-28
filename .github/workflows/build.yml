@@ -1,16 +1,12 @@
 name: Build DMG
 
 on:
+  # Pull requests cover feature branches; pushes only build maintained release branches.
   push:
-    branches:
-      - '**'
-      - '!main'
-      - '!gh-pages'
-    tags-ignore:
-      - 'v*'
-      - 'plugin-*'
+    branches: ['release/**']
   pull_request:
-    branches: [main, 'release/1.6']
+    branches: [main, 'release/**']
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.event.pull_request.number || github.ref_name }}
@@ -19,11 +15,35 @@ concurrency:
 env:
   SCHEME: TypeWhisper
   PROJECT: TypeWhisper.xcodeproj
+  XCODE_VERSION: "26.6"
 
 permissions:
   contents: read
 
 jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          # The pull request merge commit's first parent is the base branch.
+          fetch-depth: 2
+
+      - name: Check whitespace and conflict markers
+        if: github.event_name == 'pull_request'
+        run: git diff --check HEAD^1 HEAD
+
+      - name: Run script and policy checks
+        run: bash scripts/ci-checks.sh
+
+      - name: Check dependency coverage
+        run: |
+          ruby scripts/dependency_coverage.rb check
+          ruby scripts/test_dependency_coverage.rb
+
   release-build:
     runs-on: macos-26
     steps:
@@ -35,7 +55,15 @@ jobs:
       - name: Setup Xcode
         uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
-          xcode-version: "26.6"
+          xcode-version: ${{ env.XCODE_VERSION }}
+
+      - name: Restore Swift package cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/SourcePackages
+          key: spm-${{ runner.os }}-xcode${{ env.XCODE_VERSION }}-${{ hashFiles('TypeWhisper.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: |
+            spm-${{ runner.os }}-xcode${{ env.XCODE_VERSION }}-
 
       - name: Resolve Swift packages
         run: |
@@ -43,7 +71,8 @@ jobs:
             echo "Attempt $attempt of 3"
             if xcodebuild -resolvePackageDependencies \
               -project $PROJECT \
-              -scheme $SCHEME; then
+              -scheme $SCHEME \
+              -clonedSourcePackagesDirPath "$RUNNER_TEMP/SourcePackages"; then
               exit 0
             fi
             echo "Package resolution failed, retrying in 10s..."
@@ -51,8 +80,10 @@ jobs:
           done
           exit 1
 
-      - name: Verify Instrumentation Check Script
-        run: bash scripts/check_release_binary_instrumentation.sh --self-test
+      - name: Verify Release Check Scripts
+        run: |
+          bash scripts/check_release_binary_instrumentation.sh --self-test
+          bash scripts/check_release_signing.sh --self-test
 
       - name: Build App
         run: |
@@ -61,6 +92,7 @@ jobs:
             -scheme $SCHEME \
             -configuration Release \
             -derivedDataPath build \
+            -clonedSourcePackagesDirPath "$RUNNER_TEMP/SourcePackages" \
             -destination 'generic/platform=macOS' \
             ENABLE_CODE_COVERAGE=NO \
             CODE_SIGN_IDENTITY="-" \
@@ -116,7 +148,16 @@ jobs:
       - name: Setup Xcode
         uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
-          xcode-version: "26.6"
+          xcode-version: ${{ env.XCODE_VERSION }}
+
+      # This job owns the cache save so the parallel release build does not race it.
+      - name: Cache Swift packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/SourcePackages
+          key: spm-${{ runner.os }}-xcode${{ env.XCODE_VERSION }}-${{ hashFiles('TypeWhisper.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: |
+            spm-${{ runner.os }}-xcode${{ env.XCODE_VERSION }}-
 
       - name: Resolve Swift packages
         run: |
@@ -124,7 +165,8 @@ jobs:
             echo "Attempt $attempt of 3"
             if xcodebuild -resolvePackageDependencies \
               -project $PROJECT \
-              -scheme $SCHEME; then
+              -scheme $SCHEME \
+              -clonedSourcePackagesDirPath "$RUNNER_TEMP/SourcePackages"; then
               exit 0
             fi
             echo "Package resolution failed, retrying in 10s..."
@@ -137,6 +179,7 @@ jobs:
           set -o pipefail
           xcodebuild test -skipPackagePluginValidation -project $PROJECT \
             -scheme $SCHEME \
+            -clonedSourcePackagesDirPath "$RUNNER_TEMP/SourcePackages" \
             -destination 'platform=macOS,arch=arm64' \
             -parallel-testing-enabled NO \
             CODE_SIGN_IDENTITY="-" \
@@ -157,7 +200,26 @@ jobs:
       - name: Setup Xcode
         uses: maxim-lobanov/setup-xcode@ed7a3b1fda3918c0306d1b724322adc0b8cc0a90 # v1.7.0
         with:
-          xcode-version: "26.6"
+          xcode-version: ${{ env.XCODE_VERSION }}
 
       - name: Run Plugin SDK Tests
         run: swift test --package-path TypeWhisperPluginSDK
+
+  # Single required status check for the main ruleset.
+  ci-ok:
+    name: CI ok
+    if: always()
+    needs: [checks, release-build, app-tests, plugin-sdk-tests]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require every CI job to succeed
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          failed="$(jq -r 'to_entries[] | select(.value.result != "success") | "\(.key): \(.value.result)"' <<<"$NEEDS")"
+          if [ -n "$failed" ]; then
+            echo "::error::Not every CI job succeeded"
+            printf '%s\n' "$failed"
+            exit 1
+          fi
+          echo "All CI jobs succeeded"

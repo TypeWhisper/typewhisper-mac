@@ -1,6 +1,70 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Auto (European)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatisch (europäisch)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自动（欧洲）"
+          }
+        }
+      }
+    },
+    "Auto (Multilingual)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatisch (mehrsprachig)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自动（多语言）"
+          }
+        }
+      }
+    },
+    "Auto (Indic)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatisch (indisch)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自动（印度语系）"
+          }
+        }
+      }
+    },
+    "Auto (Asian)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Automatisch (asiatisch)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自动（亚洲）"
+          }
+        }
+      }
+    },
     "API Key": {
       "localizations": {
         "de": {
@@ -28,7 +92,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "API-Keys werden sicher im Schluesselbund gespeichert"
+            "value": "API-Keys werden sicher im Schlüsselbund gespeichert"
           }
         },
         "ja": {
@@ -50,7 +114,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "API-Key konnte nicht geprueft werden. Pruefe die Verbindung und versuche es erneut."
+            "value": "API-Key konnte nicht geprüft werden. Prüfe die Verbindung und versuche es erneut."
           }
         },
         "ja": {
@@ -72,7 +136,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Ungueltiger API-Key"
+            "value": "Ungültiger API-Key"
           }
         },
         "ja": {
@@ -160,7 +224,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Gueltiger API-Key"
+            "value": "Gültiger API-Key"
           }
         },
         "ja": {
@@ -182,7 +246,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Wird geprueft..."
+            "value": "Wird geprüft..."
           }
         },
         "ja": {
