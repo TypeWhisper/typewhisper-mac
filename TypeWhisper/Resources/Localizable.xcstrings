@@ -17050,6 +17050,22 @@
         }
       }
     },
+    "Local & Cloud" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ローカルとクラウド"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本地和云端"
+          }
+        }
+      }
+    },
     "Local defaults are ready first; cloud providers can wait." : {
       "localizations" : {
         "ja" : {

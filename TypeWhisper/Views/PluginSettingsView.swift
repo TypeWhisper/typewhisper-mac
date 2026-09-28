@@ -325,6 +325,79 @@ private enum DiscoverSort: String, CaseIterable {
     }
 }
 
+enum DiscoverHostingFilter: String, CaseIterable {
+    case all
+    case local
+    case cloud
+
+    var title: String {
+        switch self {
+        case .all:
+            return localizedAppText("Local & Cloud", de: "Lokal & Cloud")
+        case .local:
+            return String(localized: "Local")
+        case .cloud:
+            return String(localized: "Cloud")
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .all:
+            return "line.3.horizontal.decrease.circle"
+        case .local:
+            return "desktopcomputer"
+        case .cloud:
+            return "cloud"
+        }
+    }
+
+    func includes(_ hosting: PluginHosting) -> Bool {
+        switch self {
+        case .all:
+            return true
+        case .local:
+            return hosting == .local
+        case .cloud:
+            return hosting == .cloud
+        }
+    }
+}
+
+/// The Discover filters that narrow the marketplace list before search and sorting.
+struct DiscoverPluginFilter {
+    var includeCommunityPlugins = true
+    var hosting: DiscoverHostingFilter = .all
+    var capabilities: Set<PluginCategory> = []
+
+    /// Plugins left after the Community toggle and the hosting filter. The capability menu offers the
+    /// categories of these plugins.
+    func scoped(_ plugins: [RegistryPlugin]) -> [RegistryPlugin] {
+        plugins.filter { plugin in
+            (includeCommunityPlugins || plugin.source != .community)
+                && hosting.includes(plugin.resolvedHosting)
+        }
+    }
+
+    func apply(to plugins: [RegistryPlugin]) -> [RegistryPlugin] {
+        scoped(plugins).filter { plugin in
+            guard !capabilities.isEmpty else { return true }
+            let pluginCategories = Set(Self.displayCategories(Self.categories(from: plugin.categories)))
+            return !pluginCategories.isDisjoint(with: capabilities)
+        }
+    }
+
+    static func categories(from identifiers: [String]) -> [PluginCategory] {
+        identifiers.compactMap(PluginCategory.init(rawValue:)).deduplicated()
+    }
+
+    static func displayCategories(_ categories: [PluginCategory]) -> [PluginCategory] {
+        let uniqueCategories = categories.deduplicated()
+        let specificCategories = uniqueCategories.filter { $0 != .utility }
+        return specificCategories.nonEmpty ?? [.utility]
+    }
+}
+
 private enum IntegrationPluginSource: Equatable {
     case builtIn
     case official
@@ -388,6 +461,7 @@ struct PluginSettingsView: View {
     @State private var selectedCapabilityFilters: Set<PluginCategory> = []
     @State private var searchText = ""
     @State private var discoverSort: DiscoverSort = .popularity
+    @State private var discoverHostingFilter: DiscoverHostingFilter = .all
 
     var body: some View {
         VStack(spacing: 0) {
@@ -615,6 +689,7 @@ struct PluginSettingsView: View {
         if selectedTab != .discover {
             searchText = ""
             selectedCapabilityFilters.removeAll()
+            discoverHostingFilter = .all
         }
     }
 
@@ -741,13 +816,11 @@ struct PluginSettingsView: View {
     }
 
     private func categories(from identifiers: [String]) -> [PluginCategory] {
-        identifiers.compactMap(PluginCategory.init(rawValue:)).deduplicated()
+        DiscoverPluginFilter.categories(from: identifiers)
     }
 
     private func displayCategories(_ categories: [PluginCategory]) -> [PluginCategory] {
-        let uniqueCategories = categories.deduplicated()
-        let specificCategories = uniqueCategories.filter { $0 != .utility }
-        return specificCategories.nonEmpty ?? [.utility]
+        DiscoverPluginFilter.displayCategories(categories)
     }
 
     private func inferredCategories(for plugin: LoadedPlugin) -> [PluginCategory] {
@@ -893,14 +966,16 @@ struct PluginSettingsView: View {
         }
     }
 
-    private var sourceFilteredAvailablePlugins: [RegistryPlugin] {
-        availablePlugins.filter { plugin in
-            includeCommunityPlugins || plugin.source != .community
-        }
+    private var discoverFilter: DiscoverPluginFilter {
+        DiscoverPluginFilter(
+            includeCommunityPlugins: includeCommunityPlugins,
+            hosting: discoverHostingFilter,
+            capabilities: selectedCapabilityFilters
+        )
     }
 
     private var discoverCapabilityOptions: [PluginCategory] {
-        let presentCategories = Set(sourceFilteredAvailablePlugins.flatMap { plugin in
+        let presentCategories = Set(discoverFilter.scoped(availablePlugins).flatMap { plugin in
             displayCategories(categories(from: plugin.categories))
         })
         return PluginCategory.allCases.filter { presentCategories.contains($0) }
@@ -908,12 +983,7 @@ struct PluginSettingsView: View {
 
     private var filteredAvailablePlugins: [RegistryPlugin] {
         let trimmedQuery = searchText.trimmingCharacters(in: .whitespacesAndNewlines)
-        return sourceFilteredAvailablePlugins
-            .filter { plugin in
-                guard !selectedCapabilityFilters.isEmpty else { return true }
-                let pluginCategories = Set(displayCategories(categories(from: plugin.categories)))
-                return !pluginCategories.isDisjoint(with: selectedCapabilityFilters)
-            }
+        return discoverFilter.apply(to: availablePlugins)
             .filter { plugin in
                 guard !trimmedQuery.isEmpty else { return true }
                 return plugin.name.localizedCaseInsensitiveContains(trimmedQuery)
@@ -980,6 +1050,9 @@ struct PluginSettingsView: View {
         .onChange(of: includeCommunityPlugins) { _, _ in
             normalizeCapabilityFilters()
         }
+        .onChange(of: discoverHostingFilter) { _, _ in
+            normalizeCapabilityFilters()
+        }
     }
 
     private var discoverFilterBar: some View {
@@ -988,6 +1061,7 @@ struct PluginSettingsView: View {
                 discoverSearchField
 
                 discoverCapabilityMenu
+                discoverHostingMenu
                 discoverSortMenu
                 discoverCommunityToggle
             }
@@ -997,6 +1071,7 @@ struct PluginSettingsView: View {
 
                 HStack(spacing: 12) {
                     discoverCapabilityMenu
+                    discoverHostingMenu
                     discoverSortMenu
                     discoverCommunityToggle
                 }
@@ -1198,6 +1273,35 @@ struct PluginSettingsView: View {
             }
         } label: {
             Label(capabilityFilterTitle, systemImage: "line.3.horizontal.decrease.circle")
+                .font(.caption.weight(.medium))
+        }
+        .menuStyle(.borderlessButton)
+        .controlSize(.small)
+        .fixedSize()
+    }
+
+    private var discoverHostingMenu: some View {
+        Menu {
+            Button {
+                discoverHostingFilter = .all
+            } label: {
+                Label(
+                    DiscoverHostingFilter.all.title,
+                    systemImage: discoverHostingFilter == .all ? "checkmark" : DiscoverHostingFilter.all.systemImage
+                )
+            }
+
+            Divider()
+
+            ForEach([DiscoverHostingFilter.local, .cloud], id: \.self) { hosting in
+                Button {
+                    discoverHostingFilter = hosting
+                } label: {
+                    Label(hosting.title, systemImage: discoverHostingFilter == hosting ? "checkmark" : hosting.systemImage)
+                }
+            }
+        } label: {
+            Label(discoverHostingFilter.title, systemImage: discoverHostingFilter.systemImage)
                 .font(.caption.weight(.medium))
         }
         .menuStyle(.borderlessButton)
