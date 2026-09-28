@@ -135,7 +135,7 @@ final class PluginManifestValidationTests: XCTestCase {
         let data = try Data(contentsOf: manifestURL)
         let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
 
-        XCTAssertEqual(manifest.version, "1.2.0")
+        XCTAssertEqual(manifest.version, "1.2.1")
         XCTAssertEqual(manifest.minHostVersion, "1.7.0")
         XCTAssertEqual(manifest.sdkCompatibilityVersion, PluginSDKCompatibility.currentVersion)
         XCTAssertEqual(manifest.supportedArchitectures, ["arm64"])
@@ -143,9 +143,9 @@ final class PluginManifestValidationTests: XCTestCase {
 
     func testMLXStoragePluginReleasesRequireHost17() throws {
         let manifestExpectations = [
-            ("TypeWhisperPluginSDK/Plugins/Qwen3Plugin/manifest.json", "1.1.9"),
-            ("TypeWhisperPluginSDK/Plugins/VoxtralPlugin/manifest.json", "1.0.15"),
-            ("TypeWhisperPluginSDK/Plugins/GranitePlugin/manifest.json", "1.0.11"),
+            ("TypeWhisperPluginSDK/Plugins/Qwen3Plugin/manifest.json", "1.1.10"),
+            ("TypeWhisperPluginSDK/Plugins/VoxtralPlugin/manifest.json", "1.0.16"),
+            ("TypeWhisperPluginSDK/Plugins/GranitePlugin/manifest.json", "1.0.12"),
             ("TypeWhisperPluginSDK/Plugins/Gemma4Plugin/manifest.json", "1.1.6"),
         ]
 
@@ -158,14 +158,14 @@ final class PluginManifestValidationTests: XCTestCase {
         }
     }
 
-    func testCohereLocalPlugin101RequiresCompatibleHost17() throws {
+    func testCohereLocalPlugin102RequiresCompatibleHost17() throws {
         let manifestURL = TestSupport.repoRoot.appendingPathComponent(
             "TypeWhisperPluginSDK/Plugins/CohereLocalPlugin/manifest.json"
         )
         let data = try Data(contentsOf: manifestURL)
         let manifest = try JSONDecoder().decode(PluginManifest.self, from: data)
 
-        XCTAssertEqual(manifest.version, "1.0.1")
+        XCTAssertEqual(manifest.version, "1.0.2")
         XCTAssertEqual(manifest.minHostVersion, "1.7.0")
         XCTAssertEqual(manifest.sdkCompatibilityVersion, PluginSDKCompatibility.currentVersion)
         XCTAssertEqual(manifest.supportedArchitectures, ["arm64"])
