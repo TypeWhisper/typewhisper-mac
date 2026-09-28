@@ -244,18 +244,18 @@ private final class RestoreAfterUnloadMockPlugin: NSObject, TranscriptionEngineP
                 self?.lock.withLock {
                     // Pre-#840 behavior: the activity only appears once the load
                     // actually starts, which is after the host gave up.
-                    $0._restoreInFlight = true
+                    self?._restoreInFlight = true
                 }
                 try? await Task.sleep(for: .milliseconds(50))
                 self?.lock.withLock {
-                    $0._configured = true
-                    $0._restoreInFlight = false
+                    self?._configured = true
+                    self?._restoreInFlight = false
                 }
             case .fail(let message):
                 try? await Task.sleep(for: .milliseconds(50))
                 self?.lock.withLock {
-                    $0._restoreError = message
-                    $0._restoreInFlight = false
+                    self?._restoreError = message
+                    self?._restoreInFlight = false
                 }
             }
         }
