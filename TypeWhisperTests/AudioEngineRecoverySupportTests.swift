@@ -2876,6 +2876,46 @@ final class AudioRecordingServiceSelectedDeviceTests: XCTestCase {
         )
     }
 
+    func testBluetoothStopReleaseInvalidatesQueuedInputPreparation() async {
+        let preferenceKey = UserDefaultsKeys.airPodsInstantStartEnabled
+        let originalPreference = UserDefaults.standard.object(forKey: preferenceKey)
+        UserDefaults.standard.set(true, forKey: preferenceKey)
+        defer {
+            if let originalPreference {
+                UserDefaults.standard.set(originalPreference, forKey: preferenceKey)
+            } else {
+                UserDefaults.standard.removeObject(forKey: preferenceKey)
+            }
+        }
+
+        let deviceID = AudioDeviceID(2)
+        let activation = FakeAudioInputDeviceActivator()
+        let queueGate = DispatchSemaphore(value: 0)
+        defer { queueGate.signal() }
+        let service = AudioRecordingService(
+            inputActivationGuard: activation,
+            bluetoothInputRouteStabilizer: FakeBluetoothInputRouteStabilizer { _, _ in false },
+            defaultInputController: FakeAudioInputDeviceDefaultController(defaultInputDeviceID: deviceID)
+        )
+        service.hasMicrophonePermissionOverride = true
+        service.configureInputSelection(
+            deviceID: deviceID,
+            hasExplicitDeviceSelection: true,
+            usesBluetoothTransport: true
+        )
+        service.testingBlockRecordingStartQueue(until: queueGate)
+        service.prepareRecordingInputIfEligible()
+
+        _ = await service.stopRecording(
+            policy: .immediate,
+            bluetoothBehavior: .release
+        )
+        queueGate.signal()
+        await service.testingWaitForScheduledRecordingInputPreparation()
+
+        XCTAssertTrue(activation.activateCalls.isEmpty)
+    }
+
     func testPreparedBluetoothInputWaitsForFreshSilentBuffer() throws {
 
         let clock = FakeReadinessClock()

@@ -349,6 +349,9 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     var inputAvailabilityOverride: ((AudioDeviceID?) -> Bool)?
     var startRecordingOverride: (() throws -> Void)?
     var stopRecordingOverride: ((StopPolicy) async -> [Float])?
+#if DEBUG
+    private(set) var testingLastBluetoothStopBehavior: BluetoothStopBehavior?
+#endif
     var engineTeardownOverride: ((AVAudioEngine) -> Void)?
     var onFirstRecordingAudioBuffer: (() -> Void)?
 
@@ -620,8 +623,13 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     }
 
     private func scheduleRecordingInputPreparation(after delay: TimeInterval) {
+        let scheduledGeneration = engineLock.withLock { preparedInputGeneration }
         recordingStartQueue.asyncAfter(deadline: .now() + delay) { [weak self] in
-            self?.performRecordingInputPreparationIfEligible()
+            guard let self,
+                  self.engineLock.withLock({ self.preparedInputGeneration == scheduledGeneration }) else {
+                return
+            }
+            self.performRecordingInputPreparationIfEligible()
         }
     }
 
@@ -1423,6 +1431,9 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         policy: StopPolicy,
         bluetoothBehavior: BluetoothStopBehavior = .keepPrepared
     ) async -> [Float] {
+#if DEBUG
+        testingLastBluetoothStopBehavior = bluetoothBehavior
+#endif
         if let stopRecordingOverride {
             outputVolumeGuard.captureBaseline()
             let samples = await stopRecordingOverride(policy)
@@ -3134,6 +3145,20 @@ final class BluetoothInputReadinessChecker: AudioInputReadinessChecking {
 
 #if DEBUG
 extension AudioRecordingService {
+    func testingBlockRecordingStartQueue(until semaphore: DispatchSemaphore) {
+        recordingStartQueue.async {
+            semaphore.wait()
+        }
+    }
+
+    func testingWaitForScheduledRecordingInputPreparation() async {
+        await withCheckedContinuation { continuation in
+            recordingStartQueue.asyncAfter(deadline: .now() + 0.01) {
+                continuation.resume()
+            }
+        }
+    }
+
     func testingSetPreparedBuiltInInput(_ engine: AVAudioEngine, deviceID: AudioDeviceID) {
         let format = AVAudioFormat(standardFormatWithSampleRate: Self.targetSampleRate, channels: 1)!
         engineLock.withLock {
