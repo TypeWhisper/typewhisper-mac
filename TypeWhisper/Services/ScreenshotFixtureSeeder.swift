@@ -195,7 +195,8 @@ extension ServiceContainer {
                     "ja": "多言語モデルに対応した高速なクラウド文字起こし。",
                     "zh": "支持多语言模型的快速云端转写。",
                 ],
-                categories: ["transcription"]
+                categories: ["transcription"],
+                hosting: .cloud
             ),
             screenshotRegistryPlugin(
                 id: "com.typewhisper.assemblyai",
@@ -206,7 +207,8 @@ extension ServiceContainer {
                     "ja": "話者識別と言語機能を備えたクラウド音声認識。",
                     "zh": "具备说话人和语言功能的云端语音识别。",
                 ],
-                categories: ["transcription"]
+                categories: ["transcription"],
+                hosting: .cloud
             ),
             screenshotRegistryPlugin(
                 id: "com.typewhisper.openrouter",
@@ -217,7 +219,8 @@ extension ServiceContainer {
                     "ja": "豊富な言語モデルをワークフローで利用できます。",
                     "zh": "在工作流中使用丰富的语言模型。",
                 ],
-                categories: ["llm"]
+                categories: ["llm"],
+                hosting: .cloud
             ),
             screenshotRegistryPlugin(
                 id: "com.typewhisper.elevenlabs",
@@ -228,7 +231,8 @@ extension ServiceContainer {
                     "ja": "読み上げフィードバック向けの自然な音声。",
                     "zh": "用于语音反馈的自然文本转语音。",
                 ],
-                categories: ["tts"]
+                categories: ["tts"],
+                hosting: .cloud
             ),
             screenshotRegistryPlugin(
                 id: "com.typewhisper.file-memory",
@@ -239,7 +243,8 @@ extension ServiceContainer {
                     "ja": "選択した書類のローカル情報をワークフローで利用できます。",
                     "zh": "让工作流使用所选文档中的本地上下文。",
                 ],
-                categories: ["memory"]
+                categories: ["memory"],
+                hosting: .local
             ),
             screenshotRegistryPlugin(
                 id: "com.typewhisper.obsidian",
@@ -250,7 +255,8 @@ extension ServiceContainer {
                     "ja": "処理したメモをObsidianの保管庫へ直接送信します。",
                     "zh": "将处理后的笔记直接发送到 Obsidian 仓库。",
                 ],
-                categories: ["action"]
+                categories: ["action"],
+                hosting: .local
             ),
         ]
         pluginRegistryService.fetchState = .loaded
@@ -262,7 +268,8 @@ extension ServiceContainer {
         name: String,
         description: String,
         descriptions: [String: String],
-        categories: [String]
+        categories: [String],
+        hosting: PluginHosting
     ) -> RegistryPlugin {
         RegistryPlugin(
             id: id,
@@ -281,8 +288,8 @@ extension ServiceContainer {
             size: 1_800_000,
             downloadURL: "https://github.com/TypeWhisper/typewhisper-mac/releases/download/screenshot-fixture/plugin.zip",
             iconSystemName: "puzzlepiece.extension",
-            requiresAPIKey: false,
-            hosting: nil,
+            requiresAPIKey: hosting == .cloud,
+            hosting: hosting,
             descriptions: descriptions,
             downloadCount: 1_250
         )
