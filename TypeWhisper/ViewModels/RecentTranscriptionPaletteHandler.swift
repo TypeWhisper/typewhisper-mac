@@ -71,11 +71,12 @@ final class RecentTranscriptionPaletteHandler {
                 titleLineLimit: 2,
                 emptyStateTitle: String(localized: "No recent transcriptions")
             ),
-            items: items
-        ) { [weak self] item in
-            guard let self, let entry = entriesByID[item.id] else { return }
-            self.startInsertion(entry)
-        }
+            items: items,
+            onSelect: { [weak self] item in
+                guard let self, let entry = entriesByID[item.id] else { return }
+                self.startInsertion(entry)
+            }
+        )
     }
 
     private func startInsertion(_ entry: RecentTranscriptionStore.Entry) {

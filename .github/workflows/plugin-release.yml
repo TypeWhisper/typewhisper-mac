@@ -321,6 +321,7 @@ jobs:
         run: |
           KEYCHAIN_PATH="$RUNNER_TEMP/plugin-signing.keychain-db"
           KEYCHAIN_PASSWORD="$(uuidgen)"
+          echo "::add-mask::$KEYCHAIN_PASSWORD"
 
           echo "$MACOS_SIGNING_P12" | base64 --decode > /tmp/cert.p12
 
@@ -332,10 +333,8 @@ jobs:
           security default-keychain -s "$KEYCHAIN_PATH"
           security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN_PATH"
 
-          {
-            echo "KEYCHAIN_PATH=$KEYCHAIN_PATH"
-            echo "KEYCHAIN_PASSWORD=$KEYCHAIN_PASSWORD"
-          } >> "$GITHUB_ENV"
+          # Later steps only need the path; the unlocked keychain stays usable for signing.
+          echo "KEYCHAIN_PATH=$KEYCHAIN_PATH" >> "$GITHUB_ENV"
 
       - name: Sign Plugin
         env:

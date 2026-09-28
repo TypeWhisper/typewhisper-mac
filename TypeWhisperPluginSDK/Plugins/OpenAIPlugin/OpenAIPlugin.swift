@@ -3400,7 +3400,7 @@ private struct OpenAISettingsView: View {
                 Text("Connection Method", bundle: bundle)
                     .font(.headline)
 
-                Picker("Connection Method", selection: $authMode) {
+                Picker(String(localized: "Connection Method", bundle: bundle), selection: $authMode) {
                     Text("API Key", bundle: bundle).tag(OpenAIAuthMode.apiKey)
                     Text("ChatGPT Login", bundle: bundle).tag(OpenAIAuthMode.chatGPT)
                 }
@@ -3685,7 +3685,7 @@ private struct OpenAISettingsView: View {
                 plugin.selectVoice(selectedVoiceId)
             }
 
-            TextField("Voice instructions", text: $ttsInstructions)
+            TextField(String(localized: "Voice instructions", bundle: bundle), text: $ttsInstructions)
                 .textFieldStyle(.roundedBorder)
                 .onChange(of: ttsInstructions) {
                     plugin.setTTSInstructions(ttsInstructions)
@@ -3788,7 +3788,7 @@ private struct OpenAISettingsView: View {
 
             if authMode == .apiKey {
                 VStack(alignment: .leading, spacing: 8) {
-                    Picker("Temperature Mode", selection: $llmTemperatureMode) {
+                    Picker(String(localized: "Temperature Mode", bundle: bundle), selection: $llmTemperatureMode) {
                         Text("Provider Default", bundle: bundle).tag(PluginLLMTemperatureMode.providerDefault)
                         Text("Custom", bundle: bundle).tag(PluginLLMTemperatureMode.custom)
                     }

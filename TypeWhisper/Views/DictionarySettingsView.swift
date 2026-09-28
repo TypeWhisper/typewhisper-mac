@@ -12,6 +12,7 @@ struct DictionarySettingsView: View {
     @ObservedObject private var trainingService = ServiceContainer.shared.dictionaryTrainingService
     @State private var expandedCorrectionGroups = Set<String>()
     @State private var isTrainingPresented = false
+    @State private var isAppImportPresented = false
 
     init() {
         _termPackRegistryService = ObservedObject(wrappedValue: TermPackRegistryService.shared)
@@ -37,6 +38,9 @@ struct DictionarySettingsView: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .sheet(isPresented: $viewModel.isEditing) {
             DictionaryEditorSheet(viewModel: viewModel)
+        }
+        .sheet(isPresented: $isAppImportPresented) {
+            AppVocabularyImportSheet(destination: .dictionary)
         }
         .sheet(isPresented: $isTrainingPresented, onDismiss: {
             Task { await trainingService.cancel() }
@@ -175,6 +179,12 @@ struct DictionarySettingsView: View {
                 viewModel.importDictionary()
             } label: {
                 Label(String(localized: "Import..."), systemImage: "square.and.arrow.down")
+            }
+
+            Divider()
+
+            Button(String(localized: "Import from Another App...")) {
+                isAppImportPresented = true
             }
 
             Divider()

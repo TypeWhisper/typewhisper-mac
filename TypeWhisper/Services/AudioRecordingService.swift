@@ -480,7 +480,11 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     private static let bluetoothInputReadinessTimeout: TimeInterval = 5.0
     private static let captureTapFrames: AVAudioFrameCount = 256
     private static let audioLevelPublishIntervalNanoseconds: UInt64 = 33_333_333
-    private static let engineTeardownRetentionInterval: TimeInterval = 0.3
+    // AVAudioIOUnit dispatches its property-listener blocks asynchronously, and device
+    // notifications (Bluetooth route changes especially) can arrive seconds after stop().
+    // Releasing a stopped engine before those drain crashes in AVAudioIOUnit::IOUnitPropertyListener,
+    // so hold it for 10 s; a stopped engine with its tap removed costs nothing audible.
+    private static let engineTeardownRetentionInterval: TimeInterval = 10
     private static let postRecordingInputPreparationDelay: TimeInterval = 0.25
 
     init(

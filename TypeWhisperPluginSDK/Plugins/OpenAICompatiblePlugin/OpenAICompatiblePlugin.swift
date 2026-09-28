@@ -167,6 +167,7 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
     var batchEndpointRaw: String
     var llmAPIModeRaw: String
     var reasoningEffortRaw: String
+    var serverKindRaw: String
 
     static let defaultChatRequestTimeout: TimeInterval = 30
     static let minChatRequestTimeout: TimeInterval = 5
@@ -188,6 +189,7 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
         case batchEndpointRaw
         case llmAPIModeRaw
         case reasoningEffortRaw
+        case serverKindRaw
     }
 
     init(
@@ -205,7 +207,8 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
         transcriptionTransportRaw: String = OpenAICompatibleTranscriptTransport.auto.rawValue,
         batchEndpointRaw: String = OpenAICompatibleBatchEndpoint.standard.rawValue,
         llmAPIModeRaw: String = OpenAICompatibleLLMAPI.chatCompletions.rawValue,
-        reasoningEffortRaw: String = OpenAICompatibleReasoningEffort.providerDefault.rawValue
+        reasoningEffortRaw: String = OpenAICompatibleReasoningEffort.providerDefault.rawValue,
+        serverKindRaw: String = OpenAICompatibleServerKind.generic.rawValue
     ) {
         self.id = id
         self.name = name
@@ -222,6 +225,7 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
         self.batchEndpointRaw = batchEndpointRaw
         self.llmAPIModeRaw = llmAPIModeRaw
         self.reasoningEffortRaw = reasoningEffortRaw
+        self.serverKindRaw = serverKindRaw
     }
 
     init(from decoder: Decoder) throws {
@@ -249,6 +253,10 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
             ?? OpenAICompatibleLLMAPI.chatCompletions.rawValue
         reasoningEffortRaw = try container.decodeIfPresent(String.self, forKey: .reasoningEffortRaw)
             ?? OpenAICompatibleReasoningEffort.providerDefault.rawValue
+        // Profiles saved before Ollama discovery existed have no stored value;
+        // default to generic so they keep using /v1/models with no behavior change.
+        serverKindRaw = try container.decodeIfPresent(String.self, forKey: .serverKindRaw)
+            ?? OpenAICompatibleServerKind.generic.rawValue
     }
 
     var isDefault: Bool { id == Self.defaultId }
@@ -281,6 +289,10 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
         OpenAICompatibleReasoningEffort(rawValue: reasoningEffortRaw) ?? .providerDefault
     }
 
+    var serverKind: OpenAICompatibleServerKind {
+        OpenAICompatibleServerKind(rawValue: serverKindRaw) ?? .generic
+    }
+
     /// Resolves the effective (non-`auto`) transport for the currently
     /// selected transcription model.
     func resolvedTranscriptionTransport() -> OpenAICompatibleResolvedTranscriptionTransport {
@@ -307,7 +319,8 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
         transcriptionTransportRaw: String = OpenAICompatibleTranscriptTransport.auto.rawValue,
         batchEndpointRaw: String = OpenAICompatibleBatchEndpoint.standard.rawValue,
         llmAPIModeRaw: String = OpenAICompatibleLLMAPI.chatCompletions.rawValue,
-        reasoningEffortRaw: String = OpenAICompatibleReasoningEffort.providerDefault.rawValue
+        reasoningEffortRaw: String = OpenAICompatibleReasoningEffort.providerDefault.rawValue,
+        serverKindRaw: String = OpenAICompatibleServerKind.generic.rawValue
     ) -> OpenAICompatibleProfile {
         OpenAICompatibleProfile(
             id: defaultId,
@@ -324,8 +337,31 @@ struct OpenAICompatibleProfile: Codable, Equatable, Identifiable, Sendable {
             transcriptionTransportRaw: transcriptionTransportRaw,
             batchEndpointRaw: batchEndpointRaw,
             llmAPIModeRaw: llmAPIModeRaw,
-            reasoningEffortRaw: reasoningEffortRaw
+            reasoningEffortRaw: reasoningEffortRaw,
+            serverKindRaw: serverKindRaw
         )
+    }
+}
+
+// MARK: - Server Kind
+
+/// Identifies which model-discovery protocol a profile uses.
+///
+/// Generic profiles only ever speak the OpenAI-compatible `/v1/models`
+/// endpoint. Ollama profiles additionally query the server's native
+/// `/api/tags` endpoint first, falling back to `/v1/models` when native
+/// discovery is unavailable.
+enum OpenAICompatibleServerKind: String, Codable, Sendable, CaseIterable {
+    case generic
+    case ollama
+
+    var displayName: String {
+        switch self {
+        case .generic:
+            "Generic"
+        case .ollama:
+            "Ollama"
+        }
     }
 }
 
@@ -859,6 +895,16 @@ final class OpenAICompatiblePlugin: NSObject,
         }
     }
 
+    func setServerKind(_ kind: OpenAICompatibleServerKind) {
+        setServerKind(kind, for: OpenAICompatibleProfile.defaultId)
+    }
+
+    func setServerKind(_ kind: OpenAICompatibleServerKind, for profileId: String) {
+        updateProfile(profileId) { profile in
+            profile.serverKindRaw = kind.rawValue
+        }
+    }
+
     func batchEndpoint(for profileId: String) -> OpenAICompatibleBatchEndpoint {
         profile(for: profileId)?.batchEndpoint ?? .standard
     }
@@ -1028,6 +1074,20 @@ final class OpenAICompatiblePlugin: NSObject,
 
     func fetchModels(for profileId: String) async -> [FetchedModel] {
         guard let profile = profile(for: profileId),
+              !profile.baseURL.isEmpty else { return [] }
+
+        if profile.serverKind == .ollama {
+            // Native Ollama discovery first; fall back to the OpenAI-compatible
+            // endpoint (which Ollama also serves) when native discovery fails.
+            if case .success(let models) = await discoverOllamaModels(for: profileId) {
+                return models
+            }
+        }
+        return await fetchOpenAIModels(for: profileId)
+    }
+
+    func fetchOpenAIModels(for profileId: String) async -> [FetchedModel] {
+        guard let profile = profile(for: profileId),
               !profile.baseURL.isEmpty,
               let url = Self.requestURL(
                 baseURL: profile.baseURL,
@@ -1079,6 +1139,80 @@ final class OpenAICompatiblePlugin: NSObject,
         } catch {
             return false
         }
+    }
+
+    // MARK: - Ollama Model Discovery
+
+    /// Queries an explicitly Ollama-configured profile's native `/api/tags`
+    /// endpoint and maps installed model names into `FetchedModel` entries.
+    ///
+    /// Never called for generic profiles: `fetchModels(for:)` is the only
+    /// caller, and it only routes here when the profile's server kind is
+    /// `.ollama`.
+    func discoverOllamaModels(for profileId: String) async -> Result<[FetchedModel], OllamaDiscoveryError> {
+        guard let profile = profile(for: profileId),
+              !profile.baseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              let url = Self.ollamaDiscoveryURL(baseURL: profile.baseURL) else {
+            return .failure(.invalidURL)
+        }
+
+        var request = URLRequest(url: url)
+        // Ollama needs no API key, but forward one when configured so
+        // authenticated proxies in front of Ollama keep working.
+        applyAuthentication(to: &request, profileId: profileId)
+        request.timeoutInterval = 10
+
+        do {
+            let (data, response) = try await PluginHTTPClient.data(for: request)
+            guard let httpResponse = response as? HTTPURLResponse else {
+                return .failure(.connectionFailed)
+            }
+            switch httpResponse.statusCode {
+            case 200:
+                break
+            case 401, 403:
+                return .failure(.unauthorized)
+            default:
+                return .failure(.serverError(statusCode: httpResponse.statusCode))
+            }
+            do {
+                let decoded = try JSONDecoder().decode(OllamaTagsResponse.self, from: data)
+                let models = decoded.models
+                    .map { FetchedModel(id: $0.name) }
+                    .sorted { $0.id < $1.id }
+                guard !models.isEmpty else { return .failure(.emptyResult) }
+                return .success(models)
+            } catch {
+                return .failure(.decodingFailed)
+            }
+        } catch {
+            return .failure(.connectionFailed)
+        }
+    }
+
+    /// Resolves the native Ollama discovery endpoint for a profile base URL.
+    ///
+    /// Both a bare host URL (`http://localhost:11434`) and an
+    /// OpenAI-compatible URL (`http://localhost:11434/v1`) resolve to
+    /// `<host>/api/tags`. Stored base URLs already have any `/v1` suffix
+    /// stripped, but the suffix is removed here as well so raw URLs behave
+    /// the same. The Azure-style `api-version` query parameter is never added:
+    /// it belongs to the OpenAI-compatible endpoint, not the native one.
+    static func ollamaDiscoveryURL(baseURL: String) -> URL? {
+        let trimmed = baseURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, var components = URLComponents(string: trimmed) else { return nil }
+        var path = components.percentEncodedPath
+        while path.hasSuffix("/") {
+            path.removeLast()
+        }
+        if path.hasSuffix("/v1") {
+            path.removeLast(3)
+        }
+        let basePath = path.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        components.percentEncodedPath = "/" + [basePath, "api/tags"]
+            .filter { !$0.isEmpty }
+            .joined(separator: "/")
+        return components.url
     }
 
     // MARK: - Internal Helpers
@@ -1900,6 +2034,47 @@ struct FetchedModel: Codable, Equatable, Sendable {
     }
 }
 
+// MARK: - Ollama Discovery Types
+
+/// Native `/api/tags` response shape. Only `name` is consumed; it carries the
+/// full `model:tag` identifier exactly as Ollama reports it.
+struct OllamaTagsResponse: Decodable {
+    struct TagEntry: Decodable {
+        let name: String
+    }
+
+    let models: [TagEntry]
+}
+
+/// Actionable failure reasons for native Ollama model discovery, surfaced in
+/// the settings UI so users know what to fix.
+enum OllamaDiscoveryError: Error, Equatable, Sendable {
+    case invalidURL
+    case connectionFailed
+    case unauthorized
+    case serverError(statusCode: Int)
+    case emptyResult
+    case decodingFailed
+
+    var userMessage: String {
+        switch self {
+        case .invalidURL:
+            return String(localized: "The server URL is invalid.", bundle: pluginModuleBundle)
+        case .connectionFailed:
+            return String(localized: "Could not reach the Ollama server. Check that it is running and the URL is correct.", bundle: pluginModuleBundle)
+        case .unauthorized:
+            return String(localized: "The server rejected the request (unauthorized). Check the API key.", bundle: pluginModuleBundle)
+        case .serverError(let statusCode):
+            let template = String(localized: "The server returned an unexpected error.", bundle: pluginModuleBundle)
+            return "\(template) (HTTP \(statusCode))"
+        case .emptyResult:
+            return String(localized: "The server reported no installed models. Pull a model with `ollama pull <model>` first.", bundle: pluginModuleBundle)
+        case .decodingFailed:
+            return String(localized: "The server response was not a valid Ollama /api/tags payload.", bundle: pluginModuleBundle)
+        }
+    }
+}
+
 // MARK: - Settings View
 
 private struct OpenAICompatibleSettingsView: View {
@@ -1926,6 +2101,8 @@ private struct OpenAICompatibleSettingsView: View {
     @State private var batchEndpoint: OpenAICompatibleBatchEndpoint = .standard
     @State private var llmAPI: OpenAICompatibleLLMAPI = .chatCompletions
     @State private var reasoningEffort: OpenAICompatibleReasoningEffort = .providerDefault
+    @State private var serverKind: OpenAICompatibleServerKind = .generic
+    @State private var discoveryError: String? = nil
 
     private let bundle = pluginModuleBundle
 
@@ -2119,6 +2296,25 @@ private struct OpenAICompatibleSettingsView: View {
                     .foregroundStyle(.secondary)
             }
 
+            VStack(alignment: .leading, spacing: 8) {
+                Text("Server Kind", bundle: bundle)
+                    .font(.headline)
+
+                Picker("Server Kind", selection: $serverKind) {
+                    ForEach(OpenAICompatibleServerKind.allCases, id: \.self) { kind in
+                        Text(LocalizedStringKey(kind.displayName), bundle: bundle).tag(kind)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .onChange(of: serverKind) {
+                    saveServerKind()
+                }
+
+                Text("Choose Ollama to discover installed models through the server's native /api/tags endpoint. Generic servers only use the OpenAI-compatible /v1/models endpoint.", bundle: bundle)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+
             HStack(spacing: 8) {
                 Button {
                     testConnection()
@@ -2179,6 +2375,12 @@ private struct OpenAICompatibleSettingsView: View {
                 modelPickerSection(profile: selectedProfile)
             } else {
                 manualModelSection
+            }
+
+            if let discoveryError {
+                Text(discoveryError)
+                    .font(.caption)
+                    .foregroundStyle(.red)
             }
 
             llmAPISection
@@ -2364,7 +2566,7 @@ private struct OpenAICompatibleSettingsView: View {
             Text("Temperature", bundle: bundle)
                 .font(.headline)
 
-            Picker("Temperature Mode", selection: $llmTemperatureMode) {
+            Picker(String(localized: "Temperature Mode", bundle: bundle), selection: $llmTemperatureMode) {
                 Text("Provider Default", bundle: bundle).tag(PluginLLMTemperatureMode.providerDefault)
                 Text("Custom", bundle: bundle).tag(PluginLLMTemperatureMode.custom)
             }
@@ -2504,7 +2706,9 @@ private struct OpenAICompatibleSettingsView: View {
         batchEndpoint = profile.batchEndpoint
         llmAPI = profile.llmAPI
         reasoningEffort = profile.reasoningEffort
+        serverKind = profile.serverKind
         connectionResult = nil
+        discoveryError = nil
     }
 
     private func saveChatTimeout() {
@@ -2543,6 +2747,14 @@ private struct OpenAICompatibleSettingsView: View {
         reloadProfiles(selecting: selectedProfile.id, preserveInputs: true)
     }
 
+    private func saveServerKind() {
+        guard let selectedProfile else { return }
+        guard serverKind != selectedProfile.serverKind else { return }
+        plugin.setServerKind(serverKind, for: selectedProfile.id)
+        discoveryError = nil
+        reloadProfiles(selecting: selectedProfile.id, preserveInputs: true)
+    }
+
     private func saveProfileName() {
         guard let selectedProfile else { return }
         let trimmed = nameInput.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -2568,6 +2780,7 @@ private struct OpenAICompatibleSettingsView: View {
 
         isTesting = true
         connectionResult = nil
+        discoveryError = nil
         Task {
             let models = await plugin.fetchModels(for: profileId)
             var isConnected = !models.isEmpty
@@ -2596,13 +2809,23 @@ private struct OpenAICompatibleSettingsView: View {
     private func refreshModels() {
         guard let selectedProfile else { return }
         let profileId = selectedProfile.id
+        let isOllama = selectedProfile.serverKind == .ollama
         saveServerFields(for: profileId)
 
         Task {
+            // For explicit Ollama profiles, surface the native discovery result
+            // so failures show an actionable message; fetchModels still falls
+            // back to /v1/models for the actual list.
+            var failureMessage: String? = nil
+            if isOllama, case .failure(let error) = await plugin.discoverOllamaModels(for: profileId) {
+                failureMessage = error.userMessage
+            }
             let models = await plugin.fetchModels(for: profileId)
             await MainActor.run {
                 plugin.setFetchedModels(models, for: profileId)
                 reloadProfiles(selecting: profileId)
+                // Set after reload: syncFieldsFromSelectedProfile clears it.
+                discoveryError = failureMessage
             }
         }
     }
