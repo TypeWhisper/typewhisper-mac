@@ -1106,6 +1106,106 @@
           }
         }
       }
+    },
+    "Server Kind": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Server Kind"
+          }
+        }
+      }
+    },
+    "Generic": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Generic"
+          }
+        }
+      }
+    },
+    "Ollama": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ollama"
+          }
+        }
+      }
+    },
+    "Choose Ollama to discover installed models through the server's native /api/tags endpoint. Generic servers only use the OpenAI-compatible /v1/models endpoint.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Choose Ollama to discover installed models through the server's native /api/tags endpoint. Generic servers only use the OpenAI-compatible /v1/models endpoint."
+          }
+        }
+      }
+    },
+    "The server URL is invalid.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The server URL is invalid."
+          }
+        }
+      }
+    },
+    "Could not reach the Ollama server. Check that it is running and the URL is correct.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Could not reach the Ollama server. Check that it is running and the URL is correct."
+          }
+        }
+      }
+    },
+    "The server rejected the request (unauthorized). Check the API key.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The server rejected the request (unauthorized). Check the API key."
+          }
+        }
+      }
+    },
+    "The server returned an unexpected error.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The server returned an unexpected error."
+          }
+        }
+      }
+    },
+    "The server reported no installed models. Pull a model with `ollama pull <model>` first.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The server reported no installed models. Pull a model with `ollama pull <model>` first."
+          }
+        }
+      }
+    },
+    "The server response was not a valid Ollama /api/tags payload.": {
+      "localizations": {
+        "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "The server response was not a valid Ollama /api/tags payload."
+          }
+        }
+      }
     }
   },
   "version": "1.0"
