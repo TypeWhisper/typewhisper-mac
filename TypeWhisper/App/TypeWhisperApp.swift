@@ -841,6 +841,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
         ServiceContainer.shared.hotkeyService.onPasteLastTranscription = {
             DictationViewModel.shared.pasteLastTranscription()
         }
+        ServiceContainer.shared.hotkeyService.onUndoLastDictation = {
+            DictationViewModel.shared.undoLastDictation()
+        }
+        ServiceContainer.shared.hotkeyService.onRestoreRawTranscript = {
+            DictationViewModel.shared.restoreRawTranscript()
+        }
         ServiceContainer.shared.hotkeyService.onRecorderToggle = {
             AudioRecorderViewModel.shared.toggleRecording()
         }

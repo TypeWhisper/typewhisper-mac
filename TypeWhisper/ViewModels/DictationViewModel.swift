@@ -323,6 +323,8 @@ final class DictationViewModel: ObservableObject {
     var copyLastTranscriptionHotkeyLabel: String { Self.loadHotkeyLabel(for: .copyLastTranscription) }
     var pasteLastTranscriptionHotkeyLabel: String { Self.loadHotkeyLabel(for: .pasteLastTranscription) }
     var recorderToggleHotkeyLabel: String { Self.loadHotkeyLabel(for: .recorderToggle) }
+    var undoLastDictationHotkeyLabel: String { Self.loadHotkeyLabel(for: .undoLastDictation) }
+    var restoreRawTranscriptHotkeyLabel: String { Self.loadHotkeyLabel(for: .restoreRawTranscript) }
     @Published var activeRuleName: String?
     @Published var activeRuleReasonLabel: String?
     @Published var activeRuleExplanation: String?
@@ -403,6 +405,27 @@ final class DictationViewModel: ObservableObject {
     private var forcedWorkflowId: UUID?
     private var capturedActiveApp: (name: String?, bundleId: String?, url: String?)?
     private var capturedSelectedText: String?
+
+    /// Session-only safe undo / raw-transcript restore for the most recent
+    /// direct text insertion (issue #999). Independent of history settings.
+    private(set) lazy var dictationUndoService: DictationUndoService = {
+        DictationUndoService(
+            textInsertionService: textInsertionService,
+            isDictationBusy: { [weak self] in
+                guard let self else { return true }
+                switch state {
+                case .idle, .error:
+                    return false
+                case .recording, .processing, .inserting,
+                     .promptSelection, .promptProcessing:
+                    return true
+                }
+            },
+            didRestoreRawTranscript: { [weak self] id, rawText in
+                self?.reflectRawTranscriptRestore(id: id, rawText: rawText)
+            }
+        )
+    }()
 
     private var cancellables = Set<AnyCancellable>()
     private var recordingTimer: Timer?
@@ -2724,6 +2747,7 @@ final class DictationViewModel: ObservableObject {
                     ) && resolvedOutputFormat == nil
                     var didInsertText = false
                     var shouldUseNormalInsertion = true
+                    var insertionResult: TextInsertionService.InsertionResult?
 
                     if resolvedOutputFormat == nil,
                        liveFieldTranscriptSession != nil,
@@ -2788,14 +2812,14 @@ final class DictationViewModel: ObservableObject {
                             : nil
                         // Correction learning recaptures the field after insertion, so it
                         // needs the paste to have landed before insertText returns.
-                        let insertionResult = try await textInsertionService.insertText(
+                        insertionResult = try await textInsertionService.insertText(
                             insertionText,
                             preserveClipboard: preserveClipboard,
                             autoEnter: shouldAutoEnterAfterInsertion,
                             outputFormat: resolvedOutputFormat,
                             awaitPasteVerification: learningPreInsertionObservation != nil
                         )
-                        if case .pasted(.unverified(let reason)) = insertionResult {
+                        if case .pasted(.unverified(let reason))? = insertionResult {
                             logger.info(
                                 "Text insertion paste could not be verified; continuing with clipboard paste fallback. reason=\(reason.rawValue, privacy: .public), app=\(activeApp.bundleId ?? "nil", privacy: .public)"
                             )
@@ -2815,6 +2839,33 @@ final class DictationViewModel: ObservableObject {
                             appName: activeApp.name,
                             bundleIdentifier: activeApp.bundleId
                         )))
+                        // Action-plugin runs never insert text and are out of scope for
+                        // undo/restore (issue #999). A snapshot is only recorded when the
+                        // insertion is verifiable: formatted output may transform the
+                        // text, and unverified or unawaited pastes may not have landed
+                        // yet, so neither can back a safe snapshot. The live-field
+                        // finalize path produces no insertionResult and applies the text
+                        // directly, which is verifiable.
+                        let insertionIsVerifiable: Bool
+                        if actionPluginId != nil || resolvedOutputFormat != nil {
+                            insertionIsVerifiable = false
+                        } else if let insertionResult {
+                            switch insertionResult {
+                            case .insertedViaAccessibility, .pasted(.verified):
+                                insertionIsVerifiable = true
+                            case .pasted(.unverified), .pasted(.notAwaited):
+                                insertionIsVerifiable = false
+                            }
+                        } else {
+                            insertionIsVerifiable = true
+                        }
+                        if insertionIsVerifiable {
+                            dictationUndoService.recordSnapshot(
+                                rawTranscript: result.text,
+                                insertedText: insertionText,
+                                transcriptionID: transcriptionID
+                            )
+                        }
                     }
                 }
 
@@ -4193,6 +4244,66 @@ final class DictationViewModel: ObservableObject {
     func readBackLastTranscription() {
         guard let text = lastTranscribedText else { return }
         speechFeedbackService.readBack(text: text, language: lastTranscriptionLanguage)
+    }
+
+    // MARK: - Undo Last Dictation / Restore Raw Transcript (issue #999)
+
+    /// Deletes the text inserted by the most recent successful dictation.
+    /// Safe no-op with user feedback unless the exact inserted text is still
+    /// immediately before the caret in the same app and field.
+    func undoLastDictation() {
+        switch dictationUndoService.perform(.undo) {
+        case .success:
+            showNotchFeedback(
+                message: localizedAppText(
+                    "Last dictation undone.",
+                    de: "Letztes Diktat rückgängig gemacht."
+                ),
+                icon: "arrow.uturn.backward",
+                errorCategory: "insertion"
+            )
+        case .failed(let failure):
+            showNotchFeedback(
+                message: failure.feedbackMessage,
+                icon: "exclamationmark.triangle",
+                isError: true,
+                errorCategory: "insertion"
+            )
+        }
+    }
+
+    /// Replaces the most recent inserted post-processed text with its raw
+    /// transcript. Unavailable when raw and inserted text are identical.
+    func restoreRawTranscript() {
+        switch dictationUndoService.perform(.restore) {
+        case .success:
+            showNotchFeedback(
+                message: localizedAppText(
+                    "Raw transcript restored.",
+                    de: "Rohtext wiederhergestellt."
+                ),
+                icon: "text.badge.checkmark",
+                errorCategory: "insertion"
+            )
+        case .failed(let failure):
+            showNotchFeedback(
+                message: failure.feedbackMessage,
+                icon: "exclamationmark.triangle",
+                isError: true,
+                errorCategory: "insertion"
+            )
+        }
+    }
+
+    /// Keeps recent-transcription state and the history record consistent with
+    /// the text that remains in the document after a raw restore. The
+    /// historical transcription record itself is never erased by an undo.
+    private func reflectRawTranscriptRestore(id: UUID, rawText: String) {
+        recentTranscriptionStore.updateFinalText(id: id, finalText: rawText)
+        if let record = historyService.record(withID: id) {
+            historyService.updateRecord(record, finalText: rawText)
+        }
+        lastTranscribedText = rawText
     }
 
     var canRecoverLastRecording: Bool {

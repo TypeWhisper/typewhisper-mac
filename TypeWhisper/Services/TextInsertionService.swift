@@ -215,6 +215,7 @@ final class TextInsertionService {
     var chromiumAccessibilityObservationOverride: ((String?, pid_t?) -> TargetAppAccessibilityObservationLease?)?
     var setMessagingTimeoutOverride: ((AXUIElement, Float) -> Void)?
     var setSelectedRangeOverride: ((AXUIElement, NSRange) -> Bool)?
+    var replaceRangeOverride: ((AXUIElement, NSRange, String) -> Bool)?
     var textSelectionOverride: (() -> TextSelection?)?
     var insertTextAtOverride: ((AXUIElement, String) -> Bool)?
     var pasteSimulatorOverride: (() -> Void)?
@@ -2153,6 +2154,27 @@ final class TextInsertionService {
             return false
         }
         return (subroleValue as? String) == "AXSecureTextField"
+    }
+
+    /// Selects `range` in `element` and replaces it with `text` (pass an empty
+    /// string to delete). Returns true only when the replacement is verified
+    /// against the element's value, so callers never silently mutate the
+    /// wrong text. Used by safe dictation undo/restore.
+    func replaceRange(_ range: NSRange, in element: AXUIElement, with text: String) -> Bool {
+        if let replaceRangeOverride {
+            return replaceRangeOverride(element, range, text)
+        }
+        guard let before = stringAttribute(kAXValueAttribute as CFString, from: element) else {
+            return false
+        }
+        let beforeNSString = before as NSString
+        guard NSMaxRange(range) <= beforeNSString.length else { return false }
+        guard setSelectedRange(range, on: element) else { return false }
+        guard insertTextAt(element: element, text: text) else { return false }
+        guard let after = stringAttribute(kAXValueAttribute as CFString, from: element) else {
+            return false
+        }
+        return after == beforeNSString.replacingCharacters(in: range, with: text)
     }
 
     private func setSelectedRange(_ range: NSRange, on element: AXUIElement) -> Bool {

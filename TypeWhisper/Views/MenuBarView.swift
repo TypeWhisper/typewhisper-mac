@@ -11,6 +11,8 @@ private final class MenuBarState: ObservableObject {
     @Published var isModelReady: Bool
     @Published var hasRecentTranscriptions: Bool
     @Published var canCopyLastTranscription: Bool
+    @Published var canUndoLastDictation: Bool
+    @Published var canRestoreRawTranscript: Bool
     @Published var hasLastTranscribedText: Bool
     @Published var hasRecoverableRecording: Bool
     @Published var recorderState: AudioRecorderViewModel.RecorderState
@@ -20,6 +22,8 @@ private final class MenuBarState: ObservableObject {
     @Published var copyLastTranscriptionMenuShortcut: HotkeyService.MenuShortcutDescriptor?
     @Published var pasteLastTranscriptionMenuShortcut: HotkeyService.MenuShortcutDescriptor?
     @Published var recorderToggleMenuShortcut: HotkeyService.MenuShortcutDescriptor?
+    @Published var undoLastDictationMenuShortcut: HotkeyService.MenuShortcutDescriptor?
+    @Published var restoreRawTranscriptMenuShortcut: HotkeyService.MenuShortcutDescriptor?
 
     private var cancellables = Set<AnyCancellable>()
 
@@ -37,6 +41,8 @@ private final class MenuBarState: ObservableObject {
         let hasRecentTranscriptions = recentTranscriptionStore.latestEntry(historyRecords: historyService.recentRecords) != nil
         self.hasRecentTranscriptions = hasRecentTranscriptions
         self.canCopyLastTranscription = hasRecentTranscriptions
+        self.canUndoLastDictation = dictation.dictationUndoService.canUndo
+        self.canRestoreRawTranscript = dictation.dictationUndoService.canRestoreRaw
         self.hasLastTranscribedText = dictation.lastTranscribedText != nil
         self.hasRecoverableRecording = audioRecordingService.latestRecoveryRecordingURL != nil
         self.recorderState = recorder.state
@@ -46,6 +52,8 @@ private final class MenuBarState: ObservableObject {
         self.copyLastTranscriptionMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .copyLastTranscription)
         self.pasteLastTranscriptionMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .pasteLastTranscription)
         self.recorderToggleMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .recorderToggle)
+        self.undoLastDictationMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .undoLastDictation)
+        self.restoreRawTranscriptMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .restoreRawTranscript)
         let modelStatus = Self.idleModelStatus(from: modelManager)
         self.statusText = modelStatus.text
         self.statusImage = modelStatus.image
@@ -77,6 +85,13 @@ private final class MenuBarState: ObservableObject {
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
                 self?.refreshCopyAvailability()
+            }
+            .store(in: &cancellables)
+
+        dictation.dictationUndoService.$snapshot
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] _ in
+                self?.refreshUndoAvailability()
             }
             .store(in: &cancellables)
 
@@ -210,6 +225,14 @@ private final class MenuBarState: ObservableObject {
         copyLastTranscriptionMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .copyLastTranscription)
         pasteLastTranscriptionMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .pasteLastTranscription)
         recorderToggleMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .recorderToggle)
+        undoLastDictationMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .undoLastDictation)
+        restoreRawTranscriptMenuShortcut = DictationSettingsHandler.loadMenuShortcutDescriptor(for: .restoreRawTranscript)
+    }
+
+    private func refreshUndoAvailability() {
+        let undoService = DictationViewModel.shared.dictationUndoService
+        canUndoLastDictation = undoService.canUndo
+        canRestoreRawTranscript = undoService.canRestoreRaw
     }
 }
 
@@ -226,6 +249,8 @@ enum MenuBarMenuItem: Hashable {
     case copyLastTranscription
     case pasteLastTranscription
     case readBackLastTranscription
+    case undoLastDictation
+    case restoreRawTranscript
     case checkForUpdates
 }
 
@@ -465,6 +490,9 @@ struct MenuBarView: View {
                 copyLastTranscriptionButton
                 pasteLastTranscriptionButton
                 readBackLastTranscriptionButton
+                Divider()
+                undoLastDictationButton
+                restoreRawTranscriptButton
             } label: {
                 Label(
                     localizedAppText("Last Transcription", de: "Letzte Transkription"),
@@ -475,6 +503,7 @@ struct MenuBarView: View {
                 !status.hasRecentTranscriptions
                     && !status.canCopyLastTranscription
                     && !status.hasLastTranscribedText
+                    && !status.canUndoLastDictation
             )
 
         case .recentTranscriptions:
@@ -488,6 +517,12 @@ struct MenuBarView: View {
 
         case .readBackLastTranscription:
             readBackLastTranscriptionButton
+
+        case .undoLastDictation:
+            undoLastDictationButton
+
+        case .restoreRawTranscript:
+            restoreRawTranscriptButton
 
         case .checkForUpdates:
             Button(String(localized: "Check for Updates...")) {
@@ -545,6 +580,34 @@ struct MenuBarView: View {
         }
         .keyboardShortcut("r", modifiers: [.command, .shift])
         .disabled(!status.hasLastTranscribedText)
+    }
+
+    @ViewBuilder
+    private var undoLastDictationButton: some View {
+        Button {
+            DictationViewModel.shared.undoLastDictation()
+        } label: {
+            Label(
+                localizedAppText("Undo Last Dictation", de: "Letztes Diktat rückgängig"),
+                systemImage: "arrow.uturn.backward"
+            )
+        }
+        .keyboardShortcut(keyboardShortcut(from: status.undoLastDictationMenuShortcut))
+        .disabled(!status.canUndoLastDictation)
+    }
+
+    @ViewBuilder
+    private var restoreRawTranscriptButton: some View {
+        Button {
+            DictationViewModel.shared.restoreRawTranscript()
+        } label: {
+            Label(
+                localizedAppText("Restore Raw Transcript", de: "Rohtext wiederherstellen"),
+                systemImage: "text.badge.checkmark"
+            )
+        }
+        .keyboardShortcut(keyboardShortcut(from: status.restoreRawTranscriptMenuShortcut))
+        .disabled(!status.canRestoreRawTranscript)
     }
 
     private var recorderToggleTitle: String {
