@@ -398,7 +398,6 @@ final class TranscriptionNormalizationServiceTests: XCTestCase {
 
         for text in [
             "In July two people left",
-            "In June fifteen engineers joined",
             "May one of you help?",
             "Sep second half",
             "Tell Jan one thing",
@@ -408,6 +407,14 @@ final class TranscriptionNormalizationServiceTests: XCTestCase {
                 text
             )
         }
+        // "fifteen" is a cardinal count, not a date — the date normalizer
+        // leaves it alone, but the number-word normalizer still converts it
+        // to "15" (values at/above its minimum threshold). The date path
+        // must not turn it into an ordinal day.
+        XCTAssertEqual(
+            TranscriptionNormalizationService.normalizeText("In June fifteen engineers joined", language: "en", defaults: defaults),
+            "In June 15 engineers joined"
+        )
     }
 
     @MainActor
