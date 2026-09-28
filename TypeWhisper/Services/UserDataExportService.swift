@@ -110,6 +110,10 @@ enum UserDataExportService {
 
     static let stagingDirectoryName = "DataExport-"
 
+    /// Preferences that hold credentials. An MDM or `defaults write`
+    /// provisioned license key must not end up in a portable archive.
+    static let excludedPreferenceKeys: Set<String> = [UserDefaultsKeys.managedLicenseKey]
+
     static let appSupportFolderName = "Application Support"
     static let preferencesFileName = "preferences.json"
     static let settingsBackupFileName = "settings-backup.json"
@@ -165,7 +169,8 @@ enum UserDataExportService {
         userDefaults: UserDefaults = .standard
     ) async throws {
         let preferences = try preferencesJSON(
-            userDefaults.persistentDomain(forName: locations.preferencesDomain) ?? [:]
+            (userDefaults.persistentDomain(forName: locations.preferencesDomain) ?? [:])
+                .filter { !excludedPreferenceKeys.contains($0.key) }
         )
         let extraFiles = [
             readmeFileName: Data(readme.utf8),
@@ -256,6 +261,10 @@ enum UserDataExportService {
             let sourceFile = source.appendingPathComponent(relativePath, isDirectory: isDirectory)
             let target = destination.appendingPathComponent(relativePath, isDirectory: isDirectory)
             if isDirectory {
+                // The enumerator silently skips folders it cannot open.
+                guard fileManager.isReadableFile(atPath: sourceFile.path) else {
+                    throw ExportError.unreadableDirectory(sourceFile.path)
+                }
                 try fileManager.createDirectory(at: target, withIntermediateDirectories: true)
                 continue
             }

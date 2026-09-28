@@ -32,6 +32,7 @@ final class UserDataExportAndEraseTests: XCTestCase {
         try write("cache", to: auxiliary.appendingPathComponent("Cache.db"))
 
         userDefaults.set("de", forKey: "selectedLanguage")
+        userDefaults.set("SECRET-LICENSE", forKey: UserDefaultsKeys.managedLicenseKey)
         userDefaults.set(Data([1, 2, 3]), forKey: "cloudFolderSync.folderBookmark")
         userDefaults.set(Date(timeIntervalSince1970: 0), forKey: "pluginRegistryLastUpdateCheck")
 
@@ -120,6 +121,7 @@ final class UserDataExportAndEraseTests: XCTestCase {
         let preferencesData = try Data(contentsOf: root.appendingPathComponent("preferences.json"))
         let preferences = try XCTUnwrap(JSONSerialization.jsonObject(with: preferencesData) as? [String: Any])
         XCTAssertEqual(preferences["selectedLanguage"] as? String, "de")
+        XCTAssertNil(preferences[UserDefaultsKeys.managedLicenseKey])
         XCTAssertEqual(preferences["cloudFolderSync.folderBookmark"] as? String, Data([1, 2, 3]).base64EncodedString())
         XCTAssertEqual(preferences["pluginRegistryLastUpdateCheck"] as? String, "1970-01-01T00:00:00Z")
     }
@@ -219,6 +221,23 @@ final class UserDataExportAndEraseTests: XCTestCase {
         try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: source.path)
         defer {
             try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: source.path)
+            TestSupport.remove(dir)
+        }
+
+        XCTAssertThrowsError(try UserDataExportService.copyUserData(
+            from: source,
+            to: dir.appendingPathComponent("Destination", isDirectory: true)
+        ))
+    }
+
+    func testCopyFailsForUnreadableNestedFolder() throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        let source = dir.appendingPathComponent("Source", isDirectory: true)
+        let nested = source.appendingPathComponent("PluginData/com.test.memory", isDirectory: true)
+        try write("memory", to: nested.appendingPathComponent("memories.json"))
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: nested.path)
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: nested.path)
             TestSupport.remove(dir)
         }
 
