@@ -284,8 +284,11 @@ final class VisualShortcutKeyboardModel: ObservableObject {
     }
 
     private func conflictDescription(for candidate: UnifiedHotkey) -> String? {
-        // The hotkey being edited never conflicts with itself.
-        if let editing = editingHotkey, editing.conflicts(with: candidate) {
+        // The hotkey being edited never conflicts with itself. Only an exact
+        // match is suppressed: a conflicting-but-different candidate (e.g. the
+        // other tap mode of the same combo) still reports its real assignment
+        // instead of being silently hidden.
+        if candidate == editingHotkey {
             return nil
         }
         return existingAssignmentDescription(candidate)
