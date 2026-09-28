@@ -845,7 +845,15 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     }
 
     @objc func triggerAutoUnload() { unloadModel(clearPersistence: false) }
-    @objc func triggerRestoreModel() { Task { await restoreLoadedModel(allowDownloads: true) } }
+
+    @objc func triggerRestoreModel() {
+        markRestoreInFlight()
+        Task {
+            await restoreLoadedModel(allowDownloads: true)
+            finishRestoreTrigger()
+        }
+    }
+
     @objc(triggerRestoreModelForModel:)
     func triggerRestoreModel(forModel modelId: NSString?) {
         guard let modelId = modelId.map(String.init),
@@ -859,7 +867,39 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         selectedVersion = version
         host?.setUserDefault(modelId, forKey: "selectedModel")
         host?.setUserDefault(version.rawValue, forKey: "selectedVersion")
-        Task { await loadModel() }
+        markRestoreInFlight()
+        Task {
+            await loadModel()
+            finishRestoreTrigger()
+        }
+    }
+
+    /// Marks a restore as in-flight synchronously. The host extends its restore
+    /// wait past the base window only while the plugin reports an activity, and
+    /// task scheduling can delay the unstructured task above before it publishes
+    /// its first state update. Without this mark, the host can time out and
+    /// report "no model loaded" for a restore that is still starting.
+    private func markRestoreInFlight() {
+        guard !isConfigured else { return }
+        modelState = .downloading
+        downloadProgress = 0
+    }
+
+    /// Resolves the in-flight restore mark once the restore task finishes. A
+    /// successful load already recorded `.ready` and a failed load already
+    /// recorded the underlying `.error`. Only a restore that produced nothing
+    /// (e.g. nothing was persisted to restore) needs an explicit error, so the
+    /// host surfaces it instead of polling a stale activity until its wait
+    /// expires.
+    private func finishRestoreTrigger() {
+        guard host != nil else { return }
+        switch modelState {
+        case .ready, .error:
+            return
+        case .notLoaded, .downloading:
+            break
+        }
+        modelState = isConfigured ? .ready : .error("No previously loaded model to restore.")
     }
 
     func unloadModel(clearPersistence: Bool = true) {

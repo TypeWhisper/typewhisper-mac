@@ -702,4 +702,59 @@ final class ParakeetPluginTests: XCTestCase {
             XCTAssertEqual(getenv(key).map { String(cString: $0) }, "hf_env_parakeet")
         }
     }
+
+    // MARK: - Restore trigger activity (issue #840)
+
+    func testTriggerRestoreModelPublishesActivitySynchronously() throws {
+        let host = try PluginTestHostServices()
+        let plugin = makePlugin()
+        plugin.activate(host: host)
+
+        XCTAssertNil(plugin.currentSettingsActivity)
+
+        plugin.triggerRestoreModel()
+
+        // The activity must be visible synchronously: the host only extends its
+        // restore wait past the base window while an activity is reported, and
+        // task scheduling can delay the async restore task before it publishes
+        // its first state update.
+        let activity = try XCTUnwrap(plugin.currentSettingsActivity)
+        XCTAssertFalse(activity.isError)
+    }
+
+    func testTriggerRestoreModelWithoutPersistedModelSurfacesError() async throws {
+        let host = try PluginTestHostServices()
+        let plugin = makePlugin()
+        plugin.activate(host: host)
+
+        // No `loadedModel` persisted, so the async restore has nothing to load.
+        plugin.triggerRestoreModel()
+
+        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+        var errorActivity: PluginSettingsActivity?
+        while ContinuousClock.now < deadline {
+            if let current = plugin.currentSettingsActivity, current.isError {
+                errorActivity = current
+                break
+            }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+
+        let activity = try XCTUnwrap(
+            errorActivity,
+            "a restore with nothing persisted must surface an error, not stay silent"
+        )
+        XCTAssertTrue(activity.message.contains("No previously loaded model"))
+    }
+
+    func testTriggerRestoreModelForModelPublishesActivitySynchronously() throws {
+        let host = try PluginTestHostServices()
+        let plugin = makePlugin()
+        plugin.activate(host: host)
+
+        plugin.triggerRestoreModel(forModel: "parakeet-tdt-0.6b-v3")
+
+        // Same synchronous-activity contract as the parameterless trigger.
+        XCTAssertNotNil(plugin.currentSettingsActivity)
+    }
 }
