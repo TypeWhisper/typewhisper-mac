@@ -31,6 +31,14 @@ struct SelectionPaletteConfiguration: Equatable {
     let titleLineLimit: Int
     let searchPrompt: String?
     let emptyStateTitle: String
+    /// Items that stay hidden until the user types in the search field, then
+    /// join the filtered results. Lets a multi-level palette surface
+    /// deeper-level matches (e.g. recent transcriptions) from the top level.
+    let secondaryItems: [SelectionPaletteItem]
+    /// The row selected when the palette is (re)presented — e.g. the group
+    /// item the user drilled in from when backing out with Escape. Nil selects
+    /// the first row.
+    let initialSelectedIndex: Int?
 
     init(
         panelWidth: CGFloat = 380,
@@ -39,7 +47,9 @@ struct SelectionPaletteConfiguration: Equatable {
         previewLineLimit: Int = 3,
         titleLineLimit: Int = 1,
         searchPrompt: String? = nil,
-        emptyStateTitle: String
+        emptyStateTitle: String,
+        secondaryItems: [SelectionPaletteItem] = [],
+        initialSelectedIndex: Int? = nil
     ) {
         self.panelWidth = panelWidth
         self.panelHeight = panelHeight
@@ -48,6 +58,8 @@ struct SelectionPaletteConfiguration: Equatable {
         self.titleLineLimit = titleLineLimit
         self.searchPrompt = searchPrompt
         self.emptyStateTitle = emptyStateTitle
+        self.secondaryItems = secondaryItems
+        self.initialSelectedIndex = initialSelectedIndex
     }
 
     var showsSearchField: Bool { searchPrompt != nil }
@@ -59,10 +71,7 @@ protocol SelectionPaletteControlling: AnyObject {
     /// Presents the palette. `onEscape` replaces the default Escape behavior
     /// (hiding the palette) for this presentation only — used by multi-level
     /// palettes to return to the previous level instead of dismissing.
-    /// Pass nil to keep the historical hide-on-Escape behavior. (Note: Swift
-    /// forbids default arguments in protocol methods, so callers must pass
-    /// `onEscape` explicitly; the concrete controller keeps a default for
-    /// concrete-typed callers.)
+    /// Pass nil to keep the historical hide-on-Escape behavior.
     func show(
         configuration: SelectionPaletteConfiguration,
         items: [SelectionPaletteItem],
@@ -72,9 +81,22 @@ protocol SelectionPaletteControlling: AnyObject {
     func hide()
 }
 
+extension SelectionPaletteControlling {
+    /// Presents the palette with the default hide-on-Escape behavior.
+    /// (A protocol-extension overload, since Swift forbids default arguments
+    /// in protocol methods.)
+    func show(
+        configuration: SelectionPaletteConfiguration,
+        items: [SelectionPaletteItem],
+        onSelect: @escaping (SelectionPaletteItem) -> Void
+    ) {
+        show(configuration: configuration, items: items, onSelect: onSelect, onEscape: nil)
+    }
+}
+
 @MainActor
 final class SelectionPaletteInteractionModel: ObservableObject {
-    let configuration: SelectionPaletteConfiguration
+    @Published var configuration: SelectionPaletteConfiguration
 
     @Published var searchText = "" {
         didSet {
@@ -85,9 +107,9 @@ final class SelectionPaletteInteractionModel: ObservableObject {
     }
     @Published private(set) var selectedIndex = 0
 
-    private let items: [SelectionPaletteItem]
-    private let onSelect: (SelectionPaletteItem) -> Void
-    private let onDismiss: () -> Void
+    @Published private var items: [SelectionPaletteItem]
+    private var onSelect: (SelectionPaletteItem) -> Void
+    private var onDismiss: () -> Void
 
     init(
         configuration: SelectionPaletteConfiguration,
@@ -101,16 +123,35 @@ final class SelectionPaletteInteractionModel: ObservableObject {
         self.onDismiss = onDismiss
     }
 
+    /// Swaps the presented level in place: new items, handlers, and size, but
+    /// the same panel on the same screen, so drill-in/drill-out never jumps.
+    func update(
+        configuration: SelectionPaletteConfiguration,
+        items: [SelectionPaletteItem],
+        onSelect: @escaping (SelectionPaletteItem) -> Void,
+        onDismiss: @escaping () -> Void
+    ) {
+        self.configuration = configuration
+        self.items = items
+        self.onSelect = onSelect
+        self.onDismiss = onDismiss
+        searchText = ""
+        let maxIndex = max(items.count - 1, 0)
+        selectedIndex = min(configuration.initialSelectedIndex ?? 0, maxIndex)
+    }
+
     var filteredItems: [SelectionPaletteItem] {
         guard configuration.showsSearchField, !searchText.isEmpty else {
             return items
         }
 
-        return items.filter { item in
-            item.title.localizedCaseInsensitiveContains(searchText)
-                || (item.subtitle?.localizedCaseInsensitiveContains(searchText) ?? false)
-                || item.searchTokens.contains(where: { $0.localizedCaseInsensitiveContains(searchText) })
-        }
+        return items.filter(matchesSearch) + configuration.secondaryItems.filter(matchesSearch)
+    }
+
+    private func matchesSearch(_ item: SelectionPaletteItem) -> Bool {
+        item.title.localizedCaseInsensitiveContains(searchText)
+            || (item.subtitle?.localizedCaseInsensitiveContains(searchText) ?? false)
+            || item.searchTokens.contains(where: { $0.localizedCaseInsensitiveContains(searchText) })
     }
 
     func handleKeyDown(_ event: NSEvent) -> Bool {
@@ -377,6 +418,9 @@ final class SelectionPaletteController: SelectionPaletteControlling {
     private var interactionModel: SelectionPaletteInteractionModel?
     private var localClickMonitor: Any?
     private var globalClickMonitor: Any?
+    /// Bumped on every presentation, so selection/Escape handlers can tell
+    /// whether they navigated to another level instead of dismissing.
+    private var presentationID = UUID()
 
     var isVisible: Bool { panel != nil }
 
@@ -384,25 +428,60 @@ final class SelectionPaletteController: SelectionPaletteControlling {
         configuration: SelectionPaletteConfiguration,
         items: [SelectionPaletteItem],
         onSelect: @escaping (SelectionPaletteItem) -> Void,
-        onEscape: (() -> Void)? = nil
+        onEscape: (() -> Void)?
     ) {
-        hide()
-        guard !items.isEmpty else { return }
+        guard !items.isEmpty else {
+            hide()
+            return
+        }
+
+        let wrappedOnSelect: (SelectionPaletteItem) -> Void = { [weak self] item in
+            guard let self else { return }
+            let presentedID = self.presentationID
+            onSelect(item)
+            // A selection handler that navigates to another level already
+            // presents it — don't dismiss on top of it. Otherwise this
+            // selection dismisses the palette.
+            if self.presentationID == presentedID {
+                self.hide()
+            }
+        }
+        let onDismiss: () -> Void = { [weak self] in
+            guard let self else { return }
+            let presentedID = self.presentationID
+            if let onEscape {
+                onEscape()
+                // If the owner was released, onEscape is a no-op and the
+                // panel would be stranded — hide it instead.
+                if self.presentationID == presentedID {
+                    self.hide()
+                }
+            } else {
+                self.hide()
+            }
+        }
+
+        if let panel, let hostingView, let interactionModel {
+            // Level change: reuse the panel in place so it never jumps to
+            // another screen on drill-in/drill-out.
+            interactionModel.update(
+                configuration: configuration,
+                items: items,
+                onSelect: wrappedOnSelect,
+                onDismiss: onDismiss
+            )
+            let newSize = NSSize(width: configuration.panelWidth, height: configuration.panelHeight)
+            hostingView.frame = NSRect(origin: .zero, size: newSize)
+            panel.setContentSize(newSize)
+            presentationID = UUID()
+            return
+        }
 
         let interactionModel = SelectionPaletteInteractionModel(
             configuration: configuration,
             items: items,
-            onSelect: { [weak self] item in
-                self?.hide()
-                onSelect(item)
-            },
-            onDismiss: { [weak self] in
-                if let onEscape {
-                    onEscape()
-                } else {
-                    self?.hide()
-                }
-            }
+            onSelect: wrappedOnSelect,
+            onDismiss: onDismiss
         )
         self.interactionModel = interactionModel
 
@@ -429,6 +508,7 @@ final class SelectionPaletteController: SelectionPaletteControlling {
 
         panel = palettePanel
         palettePanel.makeKeyAndOrderFront(nil)
+        presentationID = UUID()
 
         localClickMonitor = NSEvent.addLocalMonitorForEvents(matching: .leftMouseDown) { [weak self] event in
             if let panel = self?.panel, !panel.frame.contains(NSEvent.mouseLocation) {

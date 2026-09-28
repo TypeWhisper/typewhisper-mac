@@ -19,8 +19,45 @@ final class PromptPaletteControllerTests: XCTestCase {
 
         XCTAssertEqual(spy.shows.count, 1)
         let titles = spy.shows[0].items.map(\.title)
-        XCTAssertEqual(titles, ["Summarize", "Recent Transcriptions"])
-        XCTAssertEqual(spy.shows[0].items[1].subtitle, "2 recent transcriptions")
+        XCTAssertEqual(
+            titles,
+            ["Summarize", localizedAppText("Recent Transcriptions", de: "Letzte Transkriptionen")]
+        )
+        XCTAssertEqual(
+            spy.shows[0].items[1].subtitle,
+            localizedAppText(
+                "2 recent transcriptions",
+                de: "2 letzte Transkriptionen",
+                ja: "最近の文字起こし2件",
+                zh: "2 条最近转录"
+            )
+        )
+    }
+
+    func testTopLevelSearchSurfacesMatchingRecentTranscriptions() {
+        let spy = SelectionPaletteControllerSpy()
+        let controller = PromptPaletteController(paletteController: spy)
+        var selected: [PromptPaletteEntry] = []
+        controller.show(
+            entries: [
+                .workflow(makeWorkflow(name: "Summarize")),
+                .recentTranscription(makeRecentEntry(text: "hello world")),
+                .recentTranscription(makeRecentEntry(text: "second note")),
+            ],
+            sourceText: nil,
+            onSelect: { selected.append($0) }
+        )
+
+        // Recent transcriptions ride along as secondary items: hidden until
+        // the user types, then matched like top-level rows.
+        let secondaryItems = spy.shows[0].configuration.secondaryItems
+        XCTAssertEqual(secondaryItems.map(\.title), ["hello world", "second note"])
+
+        spy.shows[0].onSelect(secondaryItems[0])
+        guard case .recentTranscription(let forwarded) = selected.first else {
+            return XCTFail("expected a recent transcription entry")
+        }
+        XCTAssertEqual(forwarded.finalText, "hello world")
     }
 
     func testSelectingGroupItemShowsRecentTranscriptionsList() {
@@ -43,7 +80,31 @@ final class PromptPaletteControllerTests: XCTestCase {
         let secondLevel = spy.shows[1]
         XCTAssertEqual(secondLevel.items.map(\.title), ["hello world", "second note"])
         XCTAssertEqual(secondLevel.configuration.panelWidth, 520)
-        XCTAssertEqual(secondLevel.configuration.searchPrompt, "Search recent transcriptions...")
+        XCTAssertEqual(
+            secondLevel.configuration.searchPrompt,
+            localizedAppText("Search recent transcriptions...", de: "Letzte Transkriptionen suchen...")
+        )
+    }
+
+    func testEscapeFromRecentsReselectsGroupItem() {
+        let spy = SelectionPaletteControllerSpy()
+        let controller = PromptPaletteController(paletteController: spy)
+        controller.show(
+            entries: [
+                .workflow(makeWorkflow(name: "Summarize")),
+                .recentTranscription(makeRecentEntry(text: "hello world")),
+            ],
+            sourceText: nil,
+            onSelect: { _ in }
+        )
+
+        spy.selectItem(at: 1, inShow: 0) // group item -> second level
+        spy.pressEscape(inShow: 1) // back to the workflow level
+
+        XCTAssertEqual(spy.shows.count, 3)
+        // The group item is preselected, so a habitual Return re-enters the
+        // recents instead of running the first workflow.
+        XCTAssertEqual(spy.shows[2].configuration.initialSelectedIndex, 1)
     }
 
     func testSelectingRecentTranscriptionForwardsOriginalEntry() {
@@ -57,8 +118,7 @@ final class PromptPaletteControllerTests: XCTestCase {
             onSelect: { selected.append($0) }
         )
 
-        spy.selectItem(at: 0, inShow: 0) // group item
-        spy.selectItem(at: 0, inShow: 1) // the transcription
+        spy.selectItem(at: 0, inShow: 0) // the transcription, shown directly
 
         XCTAssertEqual(selected.count, 1)
         guard case .recentTranscription(let forwarded) = selected.first else {
@@ -113,7 +173,7 @@ final class PromptPaletteControllerTests: XCTestCase {
         XCTAssertEqual(workflow.name, "Translate")
     }
 
-    func testRecentsWithoutWorkflowsShowOnlyGroupItem() {
+    func testRecentsWithoutWorkflowsShowDirectly() {
         let spy = SelectionPaletteControllerSpy()
         let controller = PromptPaletteController(paletteController: spy)
         controller.show(
@@ -122,9 +182,11 @@ final class PromptPaletteControllerTests: XCTestCase {
             onSelect: { _ in }
         )
 
+        // No workflows to list: the recents skip the group item and show
+        // directly, so a single Return inserts one.
         XCTAssertEqual(spy.shows.count, 1)
-        XCTAssertEqual(spy.shows[0].items.map(\.title), ["Recent Transcriptions"])
-        XCTAssertEqual(spy.shows[0].items[0].subtitle, "1 recent transcription")
+        XCTAssertEqual(spy.shows[0].items.map(\.title), ["hello world"])
+        XCTAssertNil(spy.shows[0].onEscape)
     }
 
     func testDisabledWorkflowsAreFilteredBeforeGrouping() {
@@ -140,7 +202,9 @@ final class PromptPaletteControllerTests: XCTestCase {
         )
 
         XCTAssertEqual(spy.shows.count, 1)
-        XCTAssertEqual(spy.shows[0].items.map(\.title), ["Recent Transcriptions"])
+        // The disabled workflow is filtered out, leaving no workflows — the
+        // recents show directly instead of behind a group item.
+        XCTAssertEqual(spy.shows[0].items.map(\.title), ["hello world"])
     }
 
     func testEmptyEntriesShowNothing() {
@@ -237,7 +301,7 @@ private final class SelectionPaletteControllerSpy: SelectionPaletteControlling {
         configuration: SelectionPaletteConfiguration,
         items: [SelectionPaletteItem],
         onSelect: @escaping (SelectionPaletteItem) -> Void,
-        onEscape: (() -> Void)? = nil
+        onEscape: (() -> Void)?
     ) {
         isVisible = true
         shows.append(ShownPalette(configuration: configuration, items: items, onSelect: onSelect, onEscape: onEscape))

@@ -1155,6 +1155,80 @@ final class SelectionPaletteInteractionModelTests: XCTestCase {
         XCTAssertEqual(dismissCount, 1)
     }
 
+    func testUpdateSwapsLevelInPlace() throws {
+        let model = SelectionPaletteInteractionModel(
+            configuration: SelectionPaletteConfiguration(emptyStateTitle: "Empty"),
+            items: [SelectionPaletteItem(id: UUID(), title: "First")],
+            onSelect: { _ in },
+            onDismiss: {}
+        )
+
+        var selectedID: UUID?
+        let secondLevelItems = [
+            SelectionPaletteItem(id: UUID(), title: "Alpha"),
+            SelectionPaletteItem(id: UUID(), title: "Beta"),
+        ]
+        model.update(
+            configuration: SelectionPaletteConfiguration(
+                emptyStateTitle: "Empty",
+                initialSelectedIndex: 1
+            ),
+            items: secondLevelItems,
+            onSelect: { selectedID = $0.id },
+            onDismiss: {}
+        )
+
+        XCTAssertEqual(model.filteredItems.map(\.title), ["Alpha", "Beta"])
+        XCTAssertEqual(model.selectedIndex, 1)
+        XCTAssertEqual(model.searchText, "")
+
+        XCTAssertTrue(model.handleKeyDown(try keyEvent(keyCode: 36, characters: "\r")))
+        XCTAssertEqual(selectedID, secondLevelItems[1].id)
+    }
+
+    func testUpdateClampsOutOfRangeInitialSelectedIndex() {
+        let model = SelectionPaletteInteractionModel(
+            configuration: SelectionPaletteConfiguration(emptyStateTitle: "Empty"),
+            items: [SelectionPaletteItem(id: UUID(), title: "First")],
+            onSelect: { _ in },
+            onDismiss: {}
+        )
+
+        model.update(
+            configuration: SelectionPaletteConfiguration(
+                emptyStateTitle: "Empty",
+                initialSelectedIndex: 99
+            ),
+            items: [SelectionPaletteItem(id: UUID(), title: "Only")],
+            onSelect: { _ in },
+            onDismiss: {}
+        )
+
+        XCTAssertEqual(model.selectedIndex, 0)
+    }
+
+    func testSecondaryItemsJoinSearchResults() throws {
+        let model = SelectionPaletteInteractionModel(
+            configuration: SelectionPaletteConfiguration(
+                searchPrompt: "Search",
+                emptyStateTitle: "Empty",
+                secondaryItems: [
+                    SelectionPaletteItem(id: UUID(), title: "hello world"),
+                    SelectionPaletteItem(id: UUID(), title: "unrelated"),
+                ]
+            ),
+            items: [SelectionPaletteItem(id: UUID(), title: "Summarize")],
+            onSelect: { _ in },
+            onDismiss: {}
+        )
+
+        // Without typing, secondary items stay hidden.
+        XCTAssertEqual(model.filteredItems.map(\.title), ["Summarize"])
+
+        XCTAssertTrue(model.handleKeyDown(try keyEvent(keyCode: 4, characters: "h")))
+        XCTAssertEqual(model.filteredItems.map(\.title), ["hello world"])
+    }
+
     private func keyEvent(
         keyCode: UInt16,
         characters: String,
@@ -1238,7 +1312,7 @@ private final class SelectionPaletteControllerSpy: SelectionPaletteControlling {
         configuration: SelectionPaletteConfiguration,
         items: [SelectionPaletteItem],
         onSelect: @escaping (SelectionPaletteItem) -> Void,
-        onEscape: (() -> Void)? = nil
+        onEscape: (() -> Void)?
     ) {
         isVisible = true
         lastConfiguration = configuration

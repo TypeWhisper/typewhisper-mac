@@ -55,15 +55,20 @@ final class PromptPaletteController: PromptPaletteControlling {
             return
         }
 
-        // Top level: workflows stay prominent, recent transcriptions collapse
-        // behind a single group item.
-        let groupItem = recentTranscriptionsGroupItem(count: recentEntries.count)
-        let workflowPairs = visibleEntries.compactMap(\.workflow).map { workflow in
-            (paletteItem(for: .workflow(workflow)), PromptPaletteEntry.workflow(workflow))
+        let workflowEntries = visibleEntries.compactMap(\.workflow)
+        if workflowEntries.isEmpty {
+            // No workflows to list: skip the lone group item and show the
+            // recent transcriptions directly, so a single Return inserts one.
+            showRecentTranscriptions(recentEntries, onSelect: onSelect)
+            return
         }
-        let entriesByID = Dictionary(uniqueKeysWithValues: workflowPairs.map { ($0.0.id, $0.1) })
+
+        // Top level: workflows stay prominent, recent transcriptions collapse
+        // behind a single group item and surface as top-level search matches.
+        let groupItem = recentTranscriptionsGroupItem(count: recentEntries.count)
+        let (workflowItems, entriesByID) = paletteIndex(for: workflowEntries.map(PromptPaletteEntry.workflow))
         showWorkflowLevel(
-            workflowItems: workflowPairs.map(\.0),
+            workflowItems: workflowItems,
             groupItem: groupItem,
             entriesByID: entriesByID,
             recentEntries: recentEntries,
@@ -78,10 +83,15 @@ final class PromptPaletteController: PromptPaletteControlling {
         groupItem: SelectionPaletteItem,
         entriesByID: [UUID: PromptPaletteEntry],
         recentEntries: [RecentTranscriptionStore.Entry],
+        initialSelectedIndex: Int? = nil,
         onSelect: @escaping (PromptPaletteEntry) -> Void
     ) {
+        let (recentItems, recentByID) = paletteIndex(for: recentEntries.map(PromptPaletteEntry.recentTranscription))
+        var configuration = workflowLevelConfiguration
+        configuration.secondaryItems = recentItems
+        configuration.initialSelectedIndex = initialSelectedIndex
         paletteController.show(
-            configuration: workflowLevelConfiguration,
+            configuration: configuration,
             items: workflowItems + [groupItem],
             onSelect: { [weak self] item in
                 guard let self else { return }
@@ -90,20 +100,23 @@ final class PromptPaletteController: PromptPaletteControlling {
                         recentEntries,
                         onSelect: onSelect,
                         onBack: { [weak self] in
+                            // Backing out reselects the group item, so a
+                            // habitual Return re-enters the recents instead of
+                            // running the first workflow.
                             self?.showWorkflowLevel(
                                 workflowItems: workflowItems,
                                 groupItem: groupItem,
                                 entriesByID: entriesByID,
                                 recentEntries: recentEntries,
+                                initialSelectedIndex: workflowItems.count,
                                 onSelect: onSelect
                             )
                         }
                     )
-                } else if let entry = entriesByID[item.id] {
+                } else if let entry = entriesByID[item.id] ?? recentByID[item.id] {
                     onSelect(entry)
                 }
-            },
-            onEscape: nil
+            }
         )
     }
 
@@ -114,43 +127,43 @@ final class PromptPaletteController: PromptPaletteControlling {
     /// The pre-submenu behavior: a flat list, used when there are no recent
     /// transcriptions to group.
     private func showFlat(entries: [PromptPaletteEntry], onSelect: @escaping (PromptPaletteEntry) -> Void) {
-        let itemPairs = entries.map { entry in
-            (paletteItem(for: entry), entry)
-        }
-        let entriesByID = Dictionary(uniqueKeysWithValues: itemPairs.map { ($0.0.id, $0.1) })
+        let (items, entriesByID) = paletteIndex(for: entries)
         paletteController.show(
             configuration: workflowLevelConfiguration,
-            items: itemPairs.map(\.0),
+            items: items,
             onSelect: { item in
                 guard let entry = entriesByID[item.id] else { return }
                 onSelect(entry)
-            },
-            onEscape: nil
+            }
         )
     }
 
     /// Second level behind the group item: the recent transcriptions list.
     /// Selecting one forwards the original entry, so insertion behavior is
-    /// unchanged. Escape backs out to the workflow list via `onBack` instead
-    /// of dismissing the palette.
+    /// unchanged. With `onBack` set, Escape backs out to the workflow list
+    /// instead of dismissing the palette; with nil it dismisses.
     private func showRecentTranscriptions(
         _ recentEntries: [RecentTranscriptionStore.Entry],
         onSelect: @escaping (PromptPaletteEntry) -> Void,
-        onBack: @escaping () -> Void
+        onBack: (() -> Void)? = nil
     ) {
-        let itemPairs = recentEntries.map { entry in
-            (paletteItem(for: .recentTranscription(entry)), entry)
-        }
-        let entriesByID = Dictionary(uniqueKeysWithValues: itemPairs.map { ($0.0.id, $0.1) })
+        let (items, entriesByID) = paletteIndex(for: recentEntries.map(PromptPaletteEntry.recentTranscription))
         paletteController.show(
             configuration: recentTranscriptionsConfiguration,
-            items: itemPairs.map(\.0),
+            items: items,
             onSelect: { item in
                 guard let entry = entriesByID[item.id] else { return }
                 onSelect(.recentTranscription(entry))
             },
             onEscape: onBack
         )
+    }
+
+    /// Builds palette items for entries and indexes them by item id, so a
+    /// selection handler can map a tapped item back to its entry.
+    private func paletteIndex(for entries: [PromptPaletteEntry]) -> (items: [SelectionPaletteItem], byID: [UUID: PromptPaletteEntry]) {
+        let pairs = entries.map { (paletteItem(for: $0), $0) }
+        return (pairs.map(\.0), Dictionary(uniqueKeysWithValues: pairs.map { ($0.0.id, $0.1) }))
     }
 
     private var workflowLevelConfiguration: SelectionPaletteConfiguration {
@@ -197,7 +210,12 @@ final class PromptPaletteController: PromptPaletteControlling {
         if count == 1 {
             return localizedAppText("1 recent transcription", de: "1 letzte Transkription")
         }
-        return localizedAppText("\(count) recent transcriptions", de: "\(count) letzte Transkriptionen")
+        return localizedAppText(
+            "\(count) recent transcriptions",
+            de: "\(count) letzte Transkriptionen",
+            ja: "最近の文字起こし\(count)件",
+            zh: "\(count) 条最近转录"
+        )
     }
 
     private func paletteItem(for entry: PromptPaletteEntry) -> SelectionPaletteItem {
