@@ -636,6 +636,21 @@ final class DictionaryService: ObservableObject {
         applyCorrections(to: [text], deferUsageCountSave: deferUsageCountSave).first ?? text
     }
 
+    /// Applies all enabled corrections, counting a correction's usage only if its id is not
+    /// already in `countedCorrectionIDs`. The post-processing pipeline shares one set across
+    /// its pre- and post-LLM passes so a dictation counts each correction at most once.
+    func applyCorrections(
+        to text: String,
+        deferUsageCountSave: Bool,
+        countedCorrectionIDs: inout Set<UUID>
+    ) -> String {
+        applyCorrections(
+            to: [text],
+            deferUsageCountSave: deferUsageCountSave,
+            countedCorrectionIDs: &countedCorrectionIDs
+        ).first ?? text
+    }
+
     /// Orders corrections for application: longest original first, ties keep the
     /// caller's (alphabetical) order so results stay deterministic.
     static func orderedForApplication(_ entries: [DictionaryEntry]) -> [DictionaryEntry] {
@@ -674,6 +689,19 @@ final class DictionaryService: ObservableObject {
 
     /// Apply all enabled corrections to related text fields while counting each correction once.
     func applyCorrections(to texts: [String], deferUsageCountSave: Bool = false) -> [String] {
+        var countedCorrectionIDs = Set<UUID>()
+        return applyCorrections(
+            to: texts,
+            deferUsageCountSave: deferUsageCountSave,
+            countedCorrectionIDs: &countedCorrectionIDs
+        )
+    }
+
+    private func applyCorrections(
+        to texts: [String],
+        deferUsageCountSave: Bool,
+        countedCorrectionIDs: inout Set<UUID>
+    ) -> [String] {
         var results = texts
         var needsSave = false
 
@@ -687,7 +715,7 @@ final class DictionaryService: ObservableObject {
                 correctionWasApplied = correctionWasApplied || results[index] != before
             }
 
-            if correctionWasApplied {
+            if correctionWasApplied, countedCorrectionIDs.insert(correction.id).inserted {
                 correction.usageCount += 1
                 needsSave = true
             }
@@ -740,15 +768,61 @@ final class DictionaryService: ObservableObject {
                 caseSensitive: correction.caseSensitive
             )
         case .substring:
-            if correction.caseSensitive {
-                return text.replacingOccurrences(of: correction.original, with: replacement)
+            let protectedRanges = protectedReplacementRanges(of: replacement, containing: correction.original, in: text)
+            guard !protectedRanges.isEmpty else {
+                if correction.caseSensitive {
+                    return text.replacingOccurrences(of: correction.original, with: replacement)
+                }
+                return text.replacingOccurrences(
+                    of: correction.original,
+                    with: replacement,
+                    options: .caseInsensitive
+                )
             }
-            return text.replacingOccurrences(
-                of: correction.original,
-                with: replacement,
-                options: .caseInsensitive
-            )
+            let options: String.CompareOptions = correction.caseSensitive ? [] : [.caseInsensitive]
+            var result = ""
+            var searchStart = text.startIndex
+            while let range = text.range(of: correction.original, options: options, range: searchStart..<text.endIndex),
+                  range.lowerBound < range.upperBound {
+                result += text[searchStart..<range.lowerBound]
+                result += Self.isInside(range, protectedRanges) ? String(text[range]) : replacement
+                searchStart = range.upperBound
+            }
+            result += text[searchStart..<text.endIndex]
+            return result
         }
+    }
+
+    /// Ranges of `text` that already hold `replacement`, when the replacement extends the
+    /// correction's own original (`GitHub` -> `GitHub.com`). A match of the original inside
+    /// such a range is the result of an earlier application, not a fresh misrecognition, so
+    /// re-applying it would expand the text again (`GitHub.com.com`). Empty otherwise,
+    /// including case-only corrections (`rake` -> `RAKE`), which cannot expand.
+    private func protectedReplacementRanges(
+        of replacement: String,
+        containing original: String,
+        in text: String
+    ) -> [Range<String.Index>] {
+        let trimmedOriginal = original.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !replacement.isEmpty,
+              !trimmedOriginal.isEmpty,
+              replacement.count > trimmedOriginal.count,
+              replacement.range(of: trimmedOriginal, options: .caseInsensitive) != nil else {
+            return []
+        }
+
+        var ranges: [Range<String.Index>] = []
+        var searchStart = text.startIndex
+        while let range = text.range(of: replacement, options: .caseInsensitive, range: searchStart..<text.endIndex),
+              range.lowerBound < range.upperBound {
+            ranges.append(range)
+            searchStart = range.upperBound
+        }
+        return ranges
+    }
+
+    private static func isInside(_ range: Range<String.Index>, _ protectedRanges: [Range<String.Index>]) -> Bool {
+        protectedRanges.contains { $0.lowerBound <= range.lowerBound && range.upperBound <= $0.upperBound }
     }
 
     private func matchPolicy(for correction: DictionaryEntry) -> DictionaryCorrectionMatchPolicy {
@@ -776,12 +850,14 @@ final class DictionaryService: ObservableObject {
         var result = ""
         var searchStart = text.startIndex
         let options: String.CompareOptions = caseSensitive ? [] : [.caseInsensitive]
+        let protectedRanges = protectedReplacementRanges(of: replacement, containing: original, in: text)
 
         while let range = text.range(of: original, options: options, range: searchStart..<text.endIndex, locale: .current) {
             guard range.lowerBound < range.upperBound else { break }
             let boundaryRange = boundaryEvaluationRange(for: range, in: text)
 
             if boundaryRange.lowerBound < boundaryRange.upperBound,
+               !Self.isInside(range, protectedRanges),
                isBoundaryMatch(boundaryRange, in: text, original: boundaryOriginal) {
                 let resolvedReplacement = boundaryReplacement(
                     for: range,

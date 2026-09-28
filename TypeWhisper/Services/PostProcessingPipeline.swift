@@ -65,6 +65,9 @@ final class PostProcessingPipeline {
 
         var result = text
         var appliedSteps: [String] = []
+        // Shared by the pre- and post-LLM correction passes so each correction's usage is
+        // counted at most once per dictation.
+        var countedCorrectionIDs = Set<UUID>()
 
         func stepName(for id: Int) -> String {
             switch id {
@@ -95,7 +98,8 @@ final class PostProcessingPipeline {
                         dictationContext: dictationContext,
                         outputFormat: outputFormat,
                         normalizeNumbers: normalizeNumbers,
-                        deferUsageCountSave: deferUsageCountSaves
+                        deferUsageCountSave: deferUsageCountSaves,
+                        countedCorrectionIDs: &countedCorrectionIDs
                     )
                 default:
                     result = try await plugins[step.id].process(text: result, context: context)
@@ -166,6 +170,7 @@ final class PostProcessingPipeline {
         // step itself is excluded by the priority filter.
         let steps = orderedSteps(includesLLMStep: true, outputFormat: outputFormat, plugins: [])
         var result = text
+        var countedCorrectionIDs = Set<UUID>()
         for step in steps where step.priority < Self.llmStepPriority {
             result = applyBuiltInStep(
                 step.id,
@@ -174,7 +179,8 @@ final class PostProcessingPipeline {
                 dictationContext: dictationContext,
                 outputFormat: outputFormat,
                 normalizeNumbers: normalizeNumbers,
-                recordsUsage: false
+                recordsUsage: false,
+                countedCorrectionIDs: &countedCorrectionIDs
             )
         }
         return result
@@ -242,7 +248,8 @@ final class PostProcessingPipeline {
         outputFormat: String?,
         normalizeNumbers: Bool?,
         deferUsageCountSave: Bool = false,
-        recordsUsage: Bool = true
+        recordsUsage: Bool = true,
+        countedCorrectionIDs: inout Set<UUID>
     ) -> String {
         switch id {
         case -6:
@@ -294,7 +301,11 @@ final class PostProcessingPipeline {
             guard recordsUsage else {
                 return dictionaryService.previewCorrections(to: text)
             }
-            return dictionaryService.applyCorrections(to: text, deferUsageCountSave: deferUsageCountSave)
+            return dictionaryService.applyCorrections(
+                to: text,
+                deferUsageCountSave: deferUsageCountSave,
+                countedCorrectionIDs: &countedCorrectionIDs
+            )
         default:
             return text
         }

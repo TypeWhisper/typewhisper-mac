@@ -151,6 +151,24 @@ final class DictionaryServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testCorrectionIsNotReappliedInsideItsOwnReplacement() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        // Boundary matching: the period after "GitHub" is a word boundary.
+        service.addEntry(type: .correction, original: "GitHub", replacement: "GitHub.com")
+        // Substring matching: the original has no word characters.
+        service.addEntry(type: .correction, original: "--", replacement: "---")
+
+        XCTAssertEqual(service.applyCorrections(to: "Visit GitHub"), "Visit GitHub.com")
+        XCTAssertEqual(service.applyCorrections(to: "Visit GitHub.com"), "Visit GitHub.com")
+        XCTAssertEqual(service.applyCorrections(to: "GitHub and GitHub.com"), "GitHub.com and GitHub.com")
+        XCTAssertEqual(service.applyCorrections(to: "a -- b"), "a --- b")
+        XCTAssertEqual(service.applyCorrections(to: "a --- b"), "a --- b")
+    }
+
+    @MainActor
     func testPreviewCorrectionsDoesNotCountUsage() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
