@@ -747,6 +747,40 @@ final class ParakeetPluginTests: XCTestCase {
         XCTAssertTrue(activity.message.contains("No previously loaded model"))
     }
 
+    /// Opt-in Core ML regression through the user-facing restore trigger: seeds the
+    /// persisted `loadedModel` marker, goes through `triggerRestoreModel()`, and verifies
+    /// the plugin configures and transcribes. Without this, a regression in the generic
+    /// trigger could leave the persisted model unloaded while the suite stays green,
+    /// because every other Parakeet restore test calls `restoreLoadedModel(...)` directly.
+    func testTriggerRestoreModelRestoresPersistedModelBeforeTranscription() async throws {
+        let audio = try regressionAudio()
+
+        let host = try PluginTestHostServices(defaults: [
+            "loadedModel": "parakeet-tdt-0.6b-v3",
+        ])
+        let plugin = makePlugin()
+        plugin.activate(host: host)
+        defer { plugin.deactivate() }
+
+        plugin.triggerRestoreModel()
+
+        let deadline = ContinuousClock.now.advanced(by: .seconds(30))
+        while !plugin.isConfigured && ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        guard plugin.isConfigured else {
+            XCTFail("triggerRestoreModel() left the persisted model unloaded: \(plugin.modelState)")
+            return
+        }
+        let result = try await plugin.transcribe(
+            audio: audio,
+            language: nil,
+            translate: false,
+            prompt: nil
+        )
+        XCTAssertFalse(result.text.isEmpty, "the restored persisted model must transcribe")
+    }
+
     func testTriggerRestoreModelForModelPublishesActivitySynchronously() throws {
         let host = try PluginTestHostServices()
         let plugin = makePlugin()
