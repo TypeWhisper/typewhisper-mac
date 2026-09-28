@@ -709,6 +709,10 @@ final class ParakeetPluginTests: XCTestCase {
         let host = try PluginTestHostServices()
         let plugin = makePlugin()
         plugin.activate(host: host)
+        // Suppress the async restore task: with nothing persisted it can finish
+        // and flip the mark to the "nothing to restore" error before the
+        // assertion below reads it, which made this test flaky in CI.
+        plugin.suppressAsyncRestoreForTests = true
 
         XCTAssertNil(plugin.currentSettingsActivity)
 
@@ -785,6 +789,8 @@ final class ParakeetPluginTests: XCTestCase {
         let host = try PluginTestHostServices()
         let plugin = makePlugin()
         plugin.activate(host: host)
+        // Same suppression as above: assert on the synchronous mark only.
+        plugin.suppressAsyncRestoreForTests = true
 
         plugin.triggerRestoreModel(forModel: "parakeet-tdt-0.6b-v3")
 

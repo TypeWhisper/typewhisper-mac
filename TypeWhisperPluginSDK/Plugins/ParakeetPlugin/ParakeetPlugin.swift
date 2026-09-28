@@ -850,8 +850,14 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
 
     @objc func triggerAutoUnload() { unloadModel(clearPersistence: false) }
 
+    /// Test hook: when true, restore triggers publish the synchronous in-flight
+    /// mark without spawning the async restore task, so tests can assert on the
+    /// mark deterministically instead of racing the task's completion.
+    var suppressAsyncRestoreForTests = false
+
     @objc func triggerRestoreModel() {
         markRestoreInFlight()
+        guard !suppressAsyncRestoreForTests else { return }
         Task {
             await restoreLoadedModel(allowDownloads: true)
             finishRestoreTrigger()
@@ -872,6 +878,7 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         host?.setUserDefault(modelId, forKey: "selectedModel")
         host?.setUserDefault(version.rawValue, forKey: "selectedVersion")
         markRestoreInFlight()
+        guard !suppressAsyncRestoreForTests else { return }
         Task {
             await loadModel()
             finishRestoreTrigger()
