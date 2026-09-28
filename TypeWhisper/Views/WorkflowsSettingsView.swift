@@ -2058,7 +2058,23 @@ private struct WorkflowEditorPage: View {
                 onRecord: { hotkey in
                     addRecordedHotkey(hotkey)
                 },
-                onClear: {}
+                onClear: {},
+                visualKeyboardExistingAssignment: { candidate in
+                    if draft.containsEquivalentHotkey(candidate) {
+                        return localizedAppText("this workflow", de: "diesem Workflow")
+                    }
+                    if let workflowId = hotkeyService.isHotkeyAssignedToWorkflow(
+                        candidate,
+                        excludingWorkflowId: workflow?.id
+                    ),
+                        let conflictWorkflow = workflowService.workflow(id: workflowId) {
+                        return localizedAppText(
+                            "the “\(conflictWorkflow.name)” workflow shortcut",
+                            de: "dem Shortcut des Workflows „\(conflictWorkflow.name)“"
+                        )
+                    }
+                    return HotkeyRecorderView.globalSlotAssignmentDescription(for: candidate)
+                }
             )
         }
     }

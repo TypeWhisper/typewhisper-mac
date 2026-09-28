@@ -1216,6 +1216,21 @@ private struct RuleReviewStep: View {
                                     onClear: {
                                         viewModel.editorHotkey = nil
                                         viewModel.editorHotkeyLabel = ""
+                                    },
+                                    hotkey: viewModel.editorHotkey,
+                                    visualKeyboardExistingAssignment: { candidate in
+                                        let service = ServiceContainer.shared.hotkeyService
+                                        if let conflictId = service.isHotkeyAssignedToProfile(
+                                            candidate,
+                                            excludingProfileId: viewModel.editingProfile?.id
+                                        ),
+                                            let conflictProfile = viewModel.profiles.first(where: { $0.id == conflictId }) {
+                                            return localizedAppText(
+                                                "the “\(conflictProfile.name)” profile shortcut",
+                                                de: "dem Shortcut des Profils „\(conflictProfile.name)“"
+                                            )
+                                        }
+                                        return nil
                                     }
                                 )
 

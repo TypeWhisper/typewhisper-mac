@@ -643,7 +643,14 @@ struct SetupWizardView: View {
                     }
                     dictation.setHotkey(hotkey, for: mode)
                 },
-                onClear: { dictation.clearHotkey(for: mode) }
+                onClear: { dictation.clearHotkey(for: mode) },
+                hotkey: dictation.hotkeys(for: mode).first,
+                visualKeyboardExistingAssignment: { candidate in
+                    guard let slot = dictation.isHotkeyAssigned(candidate, excluding: mode) else {
+                        return nil
+                    }
+                    return HotkeyRecorderView.assignmentDescription(for: slot)
+                }
             )
             .fixedSize()
 
