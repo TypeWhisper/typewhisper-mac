@@ -243,6 +243,10 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     var keyStateProvider: (UInt16) -> Bool = { keyCode in
         CGEventSource.keyState(.combinedSessionState, key: CGKeyCode(keyCode))
     }
+    var mouseButtonStateProvider: (UInt16) -> Bool = { button in
+        guard let mouseButton = CGMouseButton(rawValue: UInt32(button)) else { return false }
+        return CGEventSource.buttonState(.combinedSessionState, button: mouseButton)
+    }
     var workflowTextProcessingModifierPollInterval: TimeInterval = 0.05
     var workflowTextProcessingModifierReleaseTimeout: TimeInterval = 2.0
     var workflowTextProcessingPostReleaseDelay: TimeInterval = 0.15
@@ -380,6 +384,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
 
     private var globalMonitor: Any?
     private var localMonitor: Any?
+    private var hasEventMonitorFallback = false
     /// The CGEventTap is created and torn down on the main thread but revived
     /// from the watchdog's background queue, so the port reference and its
     /// enable/invalidate lifecycle are guarded by one lock rather than by
@@ -413,6 +418,10 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
 
         var isEnabled: Bool {
             lock.withLock { port.map { CGEvent.tapIsEnabled(tap: $0) } ?? false }
+        }
+
+        var isValid: Bool {
+            lock.withLock { port.map { CFMachPortIsValid($0) } ?? false }
         }
 
         var current: CFMachPort? {
@@ -463,6 +472,8 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     private var eventTap: CFMachPort? { eventTapHandle.current }
 #if DEBUG
     private(set) var monitorSetupCountForTesting = 0
+    private(set) var eventTapSetupAttemptCountForTesting = 0
+    var failEventTapCreationForTesting = false
 #endif
     private var runLoopSource: CFRunLoopSource?
     /// Re-arm disabled taps independently of the main run loop. Events already
@@ -852,6 +863,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     }
 
     private func installEventMonitors(includeMouse: Bool) {
+        hasEventMonitorFallback = true
         let mask = eventMonitorMask(includeMouse: includeMouse)
 
         globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: mask) { [weak self] event in
@@ -891,6 +903,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         suppressedSubmitKeyCodes.removeAll()
         tearDownCarbonHotkeys()
         stopEventTapWatchdog()
+        hasEventMonitorFallback = false
 
         if let monitor = globalMonitor {
             NSEvent.removeMonitor(monitor)
@@ -900,6 +913,12 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             NSEvent.removeMonitor(monitor)
             localMonitor = nil
         }
+        tearDownEventTap()
+        recentEventTapDispatches.removeAll()
+        capsLockOriginSuppressionUntil = nil
+    }
+
+    private func tearDownEventTap() {
         if let source = runLoopSource {
             CFRunLoopRemoveSource(CFRunLoopGetMain(), source, .commonModes)
             // Invalidate the source so it is fully unregistered, not just removed
@@ -908,8 +927,6 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             runLoopSource = nil
         }
         eventTapHandle.invalidateAndClear()
-        recentEventTapDispatches.removeAll()
-        capsLockOriginSuppressionUntil = nil
     }
 
     func suspendMonitoring() {
@@ -1245,6 +1262,10 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     /// Creates a CGEventTap to intercept and suppress hotkey events before they reach other apps.
     /// Requires Accessibility permission. Returns true if the tap was successfully created.
     private func setupEventTap(includeMouse: Bool) -> Bool {
+#if DEBUG
+        eventTapSetupAttemptCountForTesting += 1
+        if failEventTapCreationForTesting { return false }
+#endif
         let selfPtr = Unmanaged.passUnretained(self).toOpaque()
 
         // @convention(c) callback - must not capture context. Uses userInfo to access HotkeyService.
@@ -1316,9 +1337,17 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
                 self.resyncHotkeyStateAfterEventTapRecovery()
                 self.recoverReleasedActiveHotkeyAfterEventTapDisable()
             case .retrySetup:
-                guard self.accessibilityTrustedProvider() else { return }
-                self.logger.warning("Event tap unavailable while Accessibility is trusted; re-running monitor setup")
-                self.setupMonitor()
+                guard !self.eventTapHandle.isValid, self.accessibilityTrustedProvider() else { return }
+                if self.hasEventMonitorFallback {
+                    // Keep fallback monitors, Carbon registrations, pending holds,
+                    // and suppression latches intact if tap creation keeps failing.
+                    self.tearDownEventTap()
+                    _ = self.setupEventTap(includeMouse: self.needsSuppressingMouseEventTap)
+                } else {
+                    self.setupMonitor()
+                }
+                self.resyncHotkeyStateAfterEventTapRecovery()
+                self.recoverReleasedActiveHotkeyAfterEventTapDisable()
             }
         }
     }
@@ -1383,7 +1412,9 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
                 state.keyWasDown = false
                 return true
             case .mouseButton:
-                return false
+                guard state.mouseButtonWasDown, !isHotkeyPhysicallyPressed(hotkey) else { return false }
+                state.mouseButtonWasDown = false
+                return true
             }
         }
 
@@ -1406,7 +1437,8 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
                 fnComboKeyPressed: pState.fnComboKeyPressed,
                 modifierWasDown: pState.modifierWasDown,
                 lastModifierDownTimestamp: pState.lastModifierDownTimestamp,
-                keyWasDown: pState.keyWasDown
+                keyWasDown: pState.keyWasDown,
+                mouseButtonWasDown: pState.mouseButtonWasDown
             )
             if staleFlagCleared(hotkey: pState.hotkey, state: &state) {
                 pState.fnWasDown = state.fnWasDown
@@ -1414,6 +1446,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
                 pState.lastModifierDownTimestamp = state.lastModifierDownTimestamp
                 pState.modifierWasDown = state.modifierWasDown
                 pState.keyWasDown = state.keyWasDown
+                pState.mouseButtonWasDown = state.mouseButtonWasDown
                 profileSlots[profileId] = pState
                 resyncedCount += 1
             }
@@ -1429,7 +1462,8 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
                     fnComboKeyPressed: states[index].fnComboKeyPressed,
                     modifierWasDown: states[index].modifierWasDown,
                     lastModifierDownTimestamp: states[index].lastModifierDownTimestamp,
-                    keyWasDown: states[index].keyWasDown
+                    keyWasDown: states[index].keyWasDown,
+                    mouseButtonWasDown: states[index].mouseButtonWasDown
                 )
                 if staleFlagCleared(hotkey: states[index].hotkey, state: &state) {
                     states[index].fnWasDown = state.fnWasDown
@@ -1437,6 +1471,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
                     states[index].lastModifierDownTimestamp = state.lastModifierDownTimestamp
                     states[index].modifierWasDown = state.modifierWasDown
                     states[index].keyWasDown = state.keyWasDown
+                    states[index].mouseButtonWasDown = state.mouseButtonWasDown
                     changed = true
                     resyncedCount += 1
                 }
@@ -2010,6 +2045,9 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         guard isActive, currentMode == .pushToTalk else { return }
         if let workflowId = activeWorkflowId {
             guard let hotkey = activeWorkflowHotkey, !isHotkeyPhysicallyPressed(hotkey) else { return }
+            // A lost release has no timestamp. Before the hybrid threshold, retain
+            // toggle behavior; after it, stop conservatively rather than risk a
+            // runaway recording based on an unknowable physical release time.
             handleWorkflowKeyUp(workflowId: workflowId, behavior: .startDictation)
             return
         }
@@ -2052,7 +2090,8 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         case .keyWithModifiers, .bareKey:
             return keyStateProvider(hotkey.keyCode)
         case .mouseButton:
-            return true
+            guard let button = hotkey.mouseButton else { return false }
+            return mouseButtonStateProvider(button)
         }
     }
 
@@ -2332,7 +2371,8 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
            event.keyCode == hotkey.keyCode,
            state.lastModifierDownTimestamp == event.timestamp,
            let flag = Self.modifierFlagForKeyCode(hotkey.keyCode),
-           Self.specificModifierKeyIsDown(event, keyCode: hotkey.keyCode, genericFlag: flag) == true {
+           (Self.specificModifierKeyIsDown(event, keyCode: hotkey.keyCode, genericFlag: flag)
+                ?? event.modifierFlags.contains(flag)) {
             return (false, false, true)
         }
 
