@@ -97,7 +97,7 @@ struct AboutSettingsView: View {
                         openSetupWizard()
                     } label: {
                         Label(
-                            localizedAppText("Open Setup Wizard", de: "Setup-Wizard öffnen"),
+                            localizedAppText("Open Setup Wizard", de: "Einrichtungsassistent öffnen"),
                             systemImage: "sparkles"
                         )
                     }

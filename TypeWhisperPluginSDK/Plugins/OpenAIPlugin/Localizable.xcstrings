@@ -1,6 +1,214 @@
 {
   "sourceLanguage": "en",
   "strings": {
+    "Voice instructions": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anweisungen für die Stimme"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "语音生成指令"
+          }
+        }
+      }
+    },
+    "Temperature Mode": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Temperaturmodus"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "温度模式"
+          }
+        }
+      }
+    },
+    "ChatGPT login uses the supported ChatGPT/Codex model list. Use API Key mode for the full OpenAI API catalog.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die ChatGPT-Anmeldung verwendet die unterstützte ChatGPT-/Codex-Modellliste. Verwende den API-Schlüssel-Modus für den vollständigen OpenAI-API-Katalog."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ChatGPT 登录使用受支持的 ChatGPT/Codex 模型列表。如需完整的 OpenAI API 模型目录，请使用 API 密钥模式。"
+          }
+        }
+      }
+    },
+    "Could not refresh models. Keeping the current list.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modelle konnten nicht aktualisiert werden. Die aktuelle Liste bleibt erhalten."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法刷新模型，将保留当前列表。"
+          }
+        }
+      }
+    },
+    "Custom": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Benutzerdefiniert"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自定义"
+          }
+        }
+      }
+    },
+    "Custom temperature is ignored for the selected GPT-5 reasoning configuration.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die benutzerdefinierte Temperatur wird für die gewählte GPT-5-Denkkonfiguration ignoriert."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "所选的 GPT-5 推理配置不使用自定义温度。"
+          }
+        }
+      }
+    },
+    "Provider Default": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Anbieterstandard"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "提供商默认值"
+          }
+        }
+      }
+    },
+    "Refreshing": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wird aktualisiert"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在刷新"
+          }
+        }
+      }
+    },
+    "Refreshing OpenAI models...": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OpenAI-Modelle werden aktualisiert …"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正在刷新 OpenAI 模型…"
+          }
+        }
+      }
+    },
+    "Temperature": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Temperatur"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "温度"
+          }
+        }
+      }
+    },
+    "Text-to-Speech Voice": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Stimme für die Sprachausgabe"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "语音合成声音"
+          }
+        }
+      }
+    },
+    "Updated ChatGPT/Codex model list.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ChatGPT-/Codex-Modellliste aktualisiert."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已更新 ChatGPT/Codex 模型列表。"
+          }
+        }
+      }
+    },
+    "Use your existing ChatGPT Plus/Pro or Codex login for prompt processing. Transcription and text-to-speech still require an API key.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Verwende deine bestehende ChatGPT-Plus-/Pro- oder Codex-Anmeldung für die Prompt-Verarbeitung. Transkription und Sprachausgabe benötigen weiterhin einen API-Schlüssel."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用现有的 ChatGPT Plus/Pro 或 Codex 登录来处理提示词。转录和语音合成功能仍需要 API 密钥。"
+          }
+        }
+      }
+    },
     "API Key": {
       "localizations": {
         "de": {
@@ -138,7 +346,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Der ChatGPT-Login zeigt nur die unterstuetzten ChatGPT-/Codex-Modelle an."
+            "value": "Der ChatGPT-Login zeigt nur die unterstützten ChatGPT-/Codex-Modelle an."
           }
         },
         "ja": {
@@ -798,7 +1006,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Nutzen Sie Ihren bestehenden ChatGPT-Plus-/Pro- oder Codex-Login fuer Prompt-Verarbeitung. Fuer Transkription ist weiterhin ein API-Schluessel noetig."
+            "value": "Nutzen Sie Ihren bestehenden ChatGPT-Plus-/Pro- oder Codex-Login für Prompt-Verarbeitung. Für Transkription ist weiterhin ein API-Schlüssel nötig."
           }
         },
         "ja": {
@@ -820,7 +1028,7 @@
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Standardmodelle werden verwendet. Klicken Sie auf Aktualisieren, um alle verfuegbaren Modelle abzurufen."
+            "value": "Standardmodelle werden verwendet. Klicken Sie auf Aktualisieren, um alle verfügbaren Modelle abzurufen."
           }
         },
         "ja": {

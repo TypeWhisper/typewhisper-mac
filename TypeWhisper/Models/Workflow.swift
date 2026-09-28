@@ -42,7 +42,7 @@ enum WorkflowTemplate: String, CaseIterable, Codable, Sendable {
         case .translation:
             WorkflowTemplateDefinition(
                 template: self,
-                name: localizedAppText("Translation", de: "Uebersetzung"),
+                name: localizedAppText("Translation", de: "Übersetzung"),
                 description: localizedAppText(
                     "Translate dictated text into the target language.",
                     de: "Uebersetzt diktierten Text in die Zielsprache."
@@ -62,7 +62,7 @@ enum WorkflowTemplate: String, CaseIterable, Codable, Sendable {
         case .meetingNotes:
             WorkflowTemplateDefinition(
                 template: self,
-                name: localizedAppText("Meeting Notes", de: "Meeting Notes"),
+                name: localizedAppText("Meeting Notes", de: "Besprechungsnotizen"),
                 description: localizedAppText(
                     "Structure dictated notes into a meeting summary.",
                     de: "Strukturiert diktierte Notizen zu einer Meeting-Zusammenfassung."
