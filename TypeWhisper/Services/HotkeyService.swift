@@ -1202,6 +1202,13 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             isEscapeKeySuppressed = false
             return true
         }
+        if event.type == .keyUp, event.keyCode == Self.escapeKeyCode, !isCancellationAvailable {
+            // Disabled mode: the release of a passed-through Escape press must
+            // pass through as well. Otherwise it falls into slot matching and a
+            // bare-Escape toggle/workflow slot swallows it instead of the app
+            // receiving it.
+            return false
+        }
         if event.type == .keyDown && event.keyCode == Self.escapeKeyCode {
             cancelPendingHybridModifierHold()
             if isEscapeKeySuppressed { return true }
