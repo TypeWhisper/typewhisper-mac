@@ -153,7 +153,7 @@ final class PromptPaletteController: PromptPaletteControlling {
             items: items,
             onSelect: { item in
                 guard let entry = entriesByID[item.id] else { return }
-                onSelect(.recentTranscription(entry))
+                onSelect(entry)
             },
             onEscape: onBack
         )

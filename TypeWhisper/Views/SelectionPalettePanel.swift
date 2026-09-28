@@ -34,11 +34,13 @@ struct SelectionPaletteConfiguration: Equatable {
     /// Items that stay hidden until the user types in the search field, then
     /// join the filtered results. Lets a multi-level palette surface
     /// deeper-level matches (e.g. recent transcriptions) from the top level.
-    let secondaryItems: [SelectionPaletteItem]
+    /// Mutable so multi-level flows can derive a configuration from a base
+    /// one and fill in the level-specific items before presenting.
+    var secondaryItems: [SelectionPaletteItem]
     /// The row selected when the palette is (re)presented — e.g. the group
     /// item the user drilled in from when backing out with Escape. Nil selects
     /// the first row.
-    let initialSelectedIndex: Int?
+    var initialSelectedIndex: Int?
 
     init(
         panelWidth: CGFloat = 380,
