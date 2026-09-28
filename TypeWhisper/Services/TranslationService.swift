@@ -319,9 +319,15 @@ final class TranslationService: ObservableObject {
         }
     }
 
+    /// Builds the framework batch request values off the main actor, so the
+    /// non-Sendable request array handed to `translations(from:)` is a
+    /// disconnected value instead of main-actor-isolated state.
+    nonisolated private static func batchRequests(from texts: [String]) -> [TranslationSession.Request] {
+        texts.map { TranslationSession.Request(sourceText: $0) }
+    }
+
     func handleSession(_ session: sending TranslationSession) async {
         let requestId = activeRequestId
-
         // Batch path: one session translates every text via the framework's
         // batch API, so long segment lists pay the session setup cost once.
         if let batchCont = batchContinuation {
@@ -335,7 +341,7 @@ final class TranslationService: ObservableObject {
                 } catch {
                     Self.logger.warning("Translation[\(requestId)] batch prepare failed: \(error.localizedDescription)")
                 }
-                let responses = try await session.translations(from: texts.map { TranslationSession.Request(sourceText: $0) })
+                let responses = try await session.translations(from: Self.batchRequests(from: texts))
                 guard responses.count == texts.count else {
                     throw TranslationError.batchCountMismatch(expected: texts.count, actual: responses.count)
                 }
