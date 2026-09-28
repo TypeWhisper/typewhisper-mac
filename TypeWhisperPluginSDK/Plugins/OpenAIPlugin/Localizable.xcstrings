@@ -108,7 +108,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "提供商默认值"
+            "value": "提供商默认"
           }
         }
       }
@@ -172,7 +172,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "语音合成声音"
+            "value": "语音合成音色"
           }
         }
       }

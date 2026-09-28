@@ -28,7 +28,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "仍在针对 Neural Engine 进行优化…"
+            "value": "仍在优化神经引擎…"
           }
         }
       }

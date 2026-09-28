@@ -12,7 +12,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "清除余额"
+            "value": "清除余额设置"
           }
         }
       }
@@ -28,7 +28,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "上次语音识别"
+            "value": "最近识别时间"
           }
         }
       }
@@ -60,7 +60,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "余额更新后的用量"
+            "value": "余额更新后已用时长"
           }
         }
       }
@@ -76,7 +76,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "预计剩余额度"
+            "value": "预计剩余时长"
           }
         }
       }
@@ -188,7 +188,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "Studio 剩余额度"
+            "value": "Studio 剩余时长"
           }
         }
       }
@@ -204,7 +204,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "已记录的用量"
+            "value": "累计已用时长"
           }
         }
       }
@@ -364,7 +364,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "没有与搜索条件匹配的记忆。"
+            "value": "没有找到匹配的记忆。"
           }
         }
       }
@@ -380,7 +380,7 @@
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "转录内容处理完成后，记忆会显示在这里。"
+            "value": "处理转录内容后，记忆会显示在这里。"
           }
         }
       }
