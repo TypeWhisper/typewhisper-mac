@@ -14,7 +14,7 @@ final class GroqPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapa
     fileprivate var host: HostServices?
     fileprivate var _apiKey: String?
     fileprivate var _selectedModelId: String?
-    fileprivate var _sendDictionaryTerms = true
+    fileprivate var _sendDictionaryTerms = false
     fileprivate var _selectedLLMModelId: String?
     fileprivate var _llmTemperatureModeRaw: String = PluginLLMTemperatureMode.providerDefault.rawValue
     fileprivate var _llmTemperatureValue: Double = 0.3
@@ -42,7 +42,7 @@ final class GroqPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapa
         }
         _selectedModelId = host.userDefault(forKey: "selectedModel") as? String
             ?? transcriptionModels.first?.id
-        _sendDictionaryTerms = host.userDefault(forKey: Self.sendDictionaryTermsKey) as? Bool ?? true
+        _sendDictionaryTerms = host.userDefault(forKey: Self.sendDictionaryTermsKey) as? Bool ?? false
         _selectedLLMModelId = host.userDefault(forKey: "selectedLLMModel") as? String
         _llmTemperatureModeRaw = host.userDefault(forKey: "llmTemperatureMode") as? String
             ?? PluginLLMTemperatureMode.providerDefault.rawValue
@@ -307,7 +307,7 @@ private struct GroqSettingsView: View {
     @State private var validationResult: Bool?
     @State private var showApiKey = false
     @State private var selectedModel: String = ""
-    @State private var sendDictionaryTerms = true
+    @State private var sendDictionaryTerms = false
     @State private var selectedLLMModel: String = ""
     @State private var llmTemperatureMode: PluginLLMTemperatureMode = .providerDefault
     @State private var llmTemperatureValue: Double = 0.3
@@ -400,7 +400,7 @@ private struct GroqSettingsView: View {
                 .onChange(of: sendDictionaryTerms) {
                     plugin.setSendDictionaryTerms(sendDictionaryTerms)
                 }
-                Text("Turn this off to retry without dictionary context if words or passages are missing. This does not change dictionary corrections after transcription.", bundle: bundle)
+                Text("Off by default because dictionary terms can make Groq skip parts of a dictation. Dictionary corrections after transcription apply either way.", bundle: bundle)
                     .font(.caption)
                     .foregroundStyle(.secondary)
 

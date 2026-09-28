@@ -5,27 +5,38 @@ import TypeWhisperPluginSDK
 @testable import GroqPlugin
 
 final class GroqPluginTests: XCTestCase {
-    func testDictionaryContextDefaultsToExistingBehaviorAndPersistsOptOut() throws {
+    func testDictionaryContextDefaultsOffAndPersistsOptIn() throws {
         let host = try PluginTestHostServices()
         let plugin = GroqPlugin()
         plugin.activate(host: host)
-        XCTAssertTrue(plugin.sendDictionaryTerms)
-        XCTAssertEqual(plugin.dictionaryTermsSupport, .supported)
-        plugin.setSendDictionaryTerms(false)
-        XCTAssertEqual(host.userDefault(forKey: GroqPlugin.sendDictionaryTermsKey) as? Bool, false)
+        XCTAssertFalse(plugin.sendDictionaryTerms)
         XCTAssertEqual(plugin.dictionaryTermsSupport, .requiresPluginSetting)
+        XCTAssertNil(host.userDefault(forKey: GroqPlugin.sendDictionaryTermsKey))
+        plugin.setSendDictionaryTerms(true)
+        XCTAssertEqual(host.userDefault(forKey: GroqPlugin.sendDictionaryTermsKey) as? Bool, true)
+        XCTAssertEqual(plugin.dictionaryTermsSupport, .supported)
         let reloaded = GroqPlugin()
         reloaded.activate(host: host)
-        XCTAssertFalse(reloaded.sendDictionaryTerms)
-        XCTAssertEqual(reloaded.dictionaryTermsSupport, .requiresPluginSetting)
-        reloaded.setSendDictionaryTerms(true)
         XCTAssertTrue(reloaded.sendDictionaryTerms)
         XCTAssertEqual(reloaded.dictionaryTermsSupport, .supported)
+        reloaded.setSendDictionaryTerms(false)
+        XCTAssertFalse(reloaded.sendDictionaryTerms)
+        XCTAssertEqual(reloaded.dictionaryTermsSupport, .requiresPluginSetting)
     }
 
-    func testTranscribeOmitsDisabledPromptIncludingWavRetryAndRestoresUnmodifiedPrompt() async throws {
+    func testDictionaryContextKeepsExplicitlySavedChoice() throws {
+        for saved in [true, false] {
+            let host = try PluginTestHostServices(defaults: [GroqPlugin.sendDictionaryTermsKey: saved])
+            let plugin = GroqPlugin()
+            plugin.activate(host: host)
+            XCTAssertEqual(plugin.sendDictionaryTerms, saved)
+            XCTAssertEqual(plugin.dictionaryTermsSupport, saved ? .supported : .requiresPluginSetting)
+        }
+    }
+
+    func testTranscribeOmitsPromptByDefaultIncludingWavRetryAndSendsUnmodifiedPromptWhenEnabled() async throws {
         let host = try PluginTestHostServices(
-            defaults: ["selectedModel": "whisper-large-v3", "sendDictionaryTerms": false],
+            defaults: ["selectedModel": "whisper-large-v3"],
             secrets: ["api-key": "groq-key"]
         )
         let plugin = GroqPlugin()
@@ -102,7 +113,7 @@ final class GroqPluginTests: XCTestCase {
 
     func testTranscribeRetriesWithWavWhenGroqRejectsM4AUpload() async throws {
         let host = try PluginTestHostServices(
-            defaults: ["selectedModel": "whisper-large-v3"],
+            defaults: ["selectedModel": "whisper-large-v3", GroqPlugin.sendDictionaryTermsKey: true],
             secrets: ["api-key": "groq-key"]
         )
         let plugin = GroqPlugin()

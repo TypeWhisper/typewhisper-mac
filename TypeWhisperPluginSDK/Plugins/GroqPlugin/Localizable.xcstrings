@@ -23,24 +23,24 @@
         }
       }
     },
-    "Turn this off to retry without dictionary context if words or passages are missing. This does not change dictionary corrections after transcription.": {
+    "Off by default because dictionary terms can make Groq skip parts of a dictation. Dictionary corrections after transcription apply either way.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Deaktiviere diese Option, um bei fehlenden Wörtern oder Abschnitten einen neuen Versuch ohne Wörterbuchkontext zu starten. Wörterbuchkorrekturen nach der Transkription bleiben unverändert."
+            "value": "Standardmäßig aus, weil Groq mit Wörterbuchbegriffen Teile eines Diktats auslassen kann. Wörterbuchkorrekturen nach der Transkription gelten in jedem Fall."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "単語や文章が欠けている場合は、これをオフにして辞書の文脈なしで再試行してください。文字起こし後の辞書による修正には影響しません。"
+            "value": "辞書の用語を送信するとGroqが口述の一部を省略することがあるため、既定ではオフです。文字起こし後の辞書による修正は常に適用されます。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "如果缺少单词或段落，请关闭此选项，在不使用词典上下文的情况下重试。这不会改变转写后的词典纠正。"
+            "value": "默认关闭，因为发送词典术语可能导致 Groq 漏掉部分听写内容。转写后的词典纠正始终生效。"
           }
         }
       }
