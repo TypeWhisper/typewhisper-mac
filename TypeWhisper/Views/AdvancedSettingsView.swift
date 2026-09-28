@@ -26,6 +26,9 @@ struct AdvancedSettingsView: View {
     @State private var isImportingBackup = false
     @State private var exportBackupDraft: ExportBackupDraft?
     @State private var showImportSheet = false
+    @State private var isExportingAllData = false
+    @State private var isDeletingAllData = false
+    @State private var showDeleteAllDataConfirmation = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -83,6 +86,54 @@ struct AdvancedSettingsView: View {
                     SettingsInfoButton(text: localizedAppText(
                         "Exports workflows, dictionary entries, snippets, profiles, prompt actions, hotkey bindings, installed community plugins, transcription history (text only, no saved audio), the update channel, and preferences from the General, Dictation, Dictation Recovery, File Transcription, and Recorder tabs to a single file you can import on another Mac. Reinstalled plugins fetch whatever version is currently latest in the marketplace, and installing them requires network access. Provider API keys, license, Launch at Login, selected engines/models, and other machine-specific settings are not included.",
                         de: "Exportiert Workflows, Wörterbucheinträge, Snippets, Profile, Prompt-Aktionen, Hotkey-Zuordnungen, installierte Community-Plugins, den Transkriptionsverlauf (nur Text, keine gespeicherten Audioaufnahmen), den Update-Kanal sowie Einstellungen aus den Tabs Allgemein, Diktat, Diktat-Wiederherstellung, Dateitranskription und Recorder in eine Datei, die du auf einem anderen Mac importieren kannst. Wiederhergestellte Plugins laden die jeweils aktuelle Marketplace-Version, das Installieren erfordert eine Internetverbindung. Anbieter-API-Schlüssel, Lizenz, „Bei Anmeldung öffnen“, ausgewählte Engines/Modelle und andere gerätespezifische Einstellungen sind nicht enthalten."
+                    ))
+                }
+            }
+
+                // MARK: - Your Data
+                Section(localizedAppText("Your Data", de: "Deine Daten")) {
+                HStack {
+                    Button {
+                        exportAllData()
+                    } label: {
+                        Label(
+                            localizedAppText("Export All Data", de: "Alle Daten exportieren"),
+                            systemImage: "square.and.arrow.up"
+                        )
+                    }
+                    .disabled(isExportingAllData || isDeletingAllData)
+
+                    Button(role: .destructive) {
+                        showDeleteAllDataConfirmation = true
+                    } label: {
+                        Label(
+                            localizedAppText("Delete All Data…", de: "Alle Daten löschen…"),
+                            systemImage: "trash"
+                        )
+                    }
+                    .disabled(isExportingAllData || isDeletingAllData)
+
+                    if isExportingAllData || isDeletingAllData {
+                        ProgressView()
+                            .controlSize(.small)
+                    }
+
+                    SettingsInfoButton(text: localizedAppText(
+                        "Export creates a ZIP archive with everything TypeWhisper stores on this Mac: history with saved audio, dictionary, snippets, workflows, profiles, plugin data, logs, all preferences and an importable settings backup. API keys, license activations, downloaded models and installed plugins are not included. Delete removes all of this data from this Mac, including API keys and downloaded models, and quits TypeWhisper.",
+                        de: "Der Export erstellt ein ZIP-Archiv mit allem, was TypeWhisper auf diesem Mac speichert: Verlauf mit gespeicherten Audioaufnahmen, Wörterbuch, Snippets, Workflows, Profile, Plugin-Daten, Protokolle, alle Einstellungen und eine importierbare Einstellungssicherung. API-Schlüssel, Lizenzaktivierungen, heruntergeladene Modelle und installierte Plugins sind nicht enthalten. Löschen entfernt all diese Daten von diesem Mac, auch API-Schlüssel und heruntergeladene Modelle, und beendet TypeWhisper."
+                    ))
+                }
+                .confirmationDialog(
+                    localizedAppText("Delete All Data?", de: "Alle Daten löschen?"),
+                    isPresented: $showDeleteAllDataConfirmation
+                ) {
+                    Button(localizedAppText("Delete All Data and Quit", de: "Alle Daten löschen und beenden"), role: .destructive) {
+                        deleteAllData()
+                    }
+                } message: {
+                    Text(localizedAppText(
+                        "TypeWhisper deletes its history and audio, dictionary, snippets, workflows, profiles, settings, plugins, downloaded models, API keys and license activation on this Mac, then quits. Data in iCloud, a cloud sync folder, on other devices and recordings saved by the recorder stay untouched. This cannot be undone.",
+                        de: "TypeWhisper löscht Verlauf und Audioaufnahmen, Wörterbuch, Snippets, Workflows, Profile, Einstellungen, Plugins, heruntergeladene Modelle, API-Schlüssel und die Lizenzaktivierung auf diesem Mac und beendet sich danach. Daten in iCloud, in einem Cloud-Sync-Ordner, auf anderen Geräten und vom Recorder gespeicherte Aufnahmen bleiben erhalten. Das kann nicht rückgängig gemacht werden."
                     ))
                 }
             }
@@ -710,6 +761,42 @@ struct AdvancedSettingsView: View {
             lines.append(String(format: String(localized: "Preferences: %d applied"), result.preferencesApplied))
         }
         return lines.joined(separator: "\n")
+    }
+
+    // MARK: - Your Data
+
+    private func exportAllData() {
+        guard let url = UserDataExportService.presentSavePanel() else { return }
+        let container = ServiceContainer.shared
+        let settingsBackup = try? SettingsBackupExporter.encodedJSON(SettingsBackupExporter.buildBackup(
+            workflowService: container.workflowService,
+            dictionaryService: container.dictionaryService,
+            snippetService: container.snippetService,
+            profileService: container.profileService,
+            promptActionService: container.promptActionService,
+            pluginManager: container.pluginManager,
+            historyService: container.historyService
+        ))
+
+        isExportingAllData = true
+        Task {
+            defer { isExportingAllData = false }
+            do {
+                try await UserDataExportService.export(to: url, settingsBackup: settingsBackup)
+                NSWorkspace.shared.activateFileViewerSelecting([url])
+            } catch {
+                backupErrorMessage = error.localizedDescription
+                showBackupError = true
+            }
+        }
+    }
+
+    private func deleteAllData() {
+        isDeletingAllData = true
+        Task {
+            await UserDataEraser.releaseLicenseActivations(ServiceContainer.shared.licenseService)
+            UserDataEraser.eraseAllAndQuit()
+        }
     }
 
     // MARK: - CLI Installation
