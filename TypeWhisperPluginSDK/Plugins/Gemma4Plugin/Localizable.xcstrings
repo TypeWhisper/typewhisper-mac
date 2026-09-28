@@ -8,6 +8,12 @@
             "state": "translated",
             "value": "Temperaturmodus"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "温度模式"
+          }
         }
       }
     },
@@ -17,6 +23,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Kreativ"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "创意"
           }
         }
       }
@@ -28,6 +40,12 @@
             "state": "translated",
             "value": "Benutzerdefiniert"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自定义"
+          }
         }
       }
     },
@@ -37,6 +55,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Generierung"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "生成"
           }
         }
       }
@@ -48,6 +72,12 @@
             "state": "translated",
             "value": "Laden"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "加载"
+          }
         }
       }
     },
@@ -57,6 +87,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Präzise"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "精准"
           }
         }
       }
@@ -68,6 +104,12 @@
             "state": "translated",
             "value": "Anbieterstandard"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "提供商默认值"
+          }
         }
       }
     },
@@ -78,6 +120,12 @@
             "state": "translated",
             "value": "Temperatur"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "温度"
+          }
         }
       }
     },
@@ -87,6 +135,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Verwendet die integrierte Standardtemperatur von Gemma 4."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用 Gemma 4 内置的默认温度。"
           }
         }
       }
