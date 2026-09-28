@@ -10348,7 +10348,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         }
 
         pauseTask.cancel()
-        await pauseTask.value
+        _ = await pauseTask.value
         deferredCallback?(FakeMediaPlaybackController.snapshot(isPlaying: true, playbackRate: 1))
 
         XCTAssertEqual(controller.pauseCalls, 0)
