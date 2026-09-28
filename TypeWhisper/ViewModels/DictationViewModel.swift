@@ -1804,8 +1804,7 @@ final class DictationViewModel: ObservableObject {
                     return
                 }
                 if selectedInputUsesBluetooth, self.mediaPauseEnabled {
-                    self.recordingRestoresSystemAudio = true
-                    await self.mediaPlaybackService.pauseImmediatelyIfPlaying()
+                    self.recordingRestoresSystemAudio = await self.mediaPlaybackService.pauseImmediatelyIfPlaying()
                     try Task.checkCancellation()
                     guard self.activeDictationSessionID == sessionID else { return }
                 }
