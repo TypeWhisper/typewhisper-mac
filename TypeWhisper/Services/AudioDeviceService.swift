@@ -320,11 +320,7 @@ final class AudioDeviceService: ObservableObject, @unchecked Sendable {
     /// they still reference. Mirrors `AudioRecordingService.engineTeardownRetainer`.
     /// See issue #332.
     private let previewEngineTeardownRetainer = DelayedReleaseRetainer<AVAudioEngine>(label: "com.typewhisper.preview-engine-teardown")
-    // AVAudioIOUnit dispatches its property-listener blocks asynchronously, and device
-    // notifications (Bluetooth route changes especially) can arrive seconds after stop().
-    // Releasing a stopped engine before those drain crashes in AVAudioIOUnit::IOUnitPropertyListener,
-    // so hold it for 10 s; a stopped engine with its tap removed costs nothing audible.
-    private static let previewEngineTeardownRetentionInterval: TimeInterval = 10
+    private static let previewEngineTeardownRetentionInterval: TimeInterval = 0.3
     private let outputVolumeGuard: AudioOutputVolumeGuard
     private var activePreviewDeviceID: AudioDeviceID?
     private var activePreviewUsesBluetoothTransport = false

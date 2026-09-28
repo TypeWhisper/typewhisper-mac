@@ -31,3 +31,12 @@ API version required by the provider's `/v1/realtime` endpoint. Realtime
 requests always use `/v1/realtime` and ignore the Batch Transcription Endpoint
 setting. A separate profile is recommended when batch and realtime endpoints
 require different API versions.
+
+## Ollama model discovery
+
+Set **Server Kind** to `Ollama` on a profile pointing at an Ollama server
+(e.g. `http://localhost:11434`) to list installed models through the server's
+native `/api/tags` endpoint. Model names are shown exactly as reported,
+including tags (`llama3.1:8b`). If native discovery fails, the profile falls
+back to the OpenAI-compatible `/v1/models` endpoint, and manual model entry
+remains available. Generic profiles never send Ollama-specific requests.

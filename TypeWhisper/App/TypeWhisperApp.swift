@@ -769,7 +769,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
             UserDefaultsKeys.dockIconBehaviorWhenMenuBarHidden: DockIconBehavior.keepVisible.rawValue,
             UserDefaultsKeys.updateChannel: AppConstants.defaultReleaseChannel.rawValue,
             UserDefaultsKeys.appFormattingEnabled: true,
-            UserDefaultsKeys.stripFinalPeriodFromStandaloneValuesEnabled: true,
             UserDefaultsKeys.transcriptionNumberNormalizationEnabled: true,
             UserDefaultsKeys.transcriptionNumberNormalizationMinimumValue: TranscriptionNormalizationService.defaultNumberNormalizationMinimumValue,
             UserDefaultsKeys.targetAppCorrectionLearningEnabled: false,
@@ -840,12 +839,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
         }
         ServiceContainer.shared.hotkeyService.onPasteLastTranscription = {
             DictationViewModel.shared.pasteLastTranscription()
-        }
-        ServiceContainer.shared.hotkeyService.onUndoLastDictation = {
-            DictationViewModel.shared.undoLastDictation()
-        }
-        ServiceContainer.shared.hotkeyService.onRestoreRawTranscript = {
-            DictationViewModel.shared.restoreRawTranscript()
         }
         ServiceContainer.shared.hotkeyService.onRecorderToggle = {
             AudioRecorderViewModel.shared.toggleRecording()
@@ -1053,7 +1046,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, SPUUpdaterDelegate {
             return
         }
 
-        prepareScreenshotWindow(window, contentSize: NSSize(width: 1_150, height: 890))
+        prepareScreenshotWindow(window, contentSize: NSSize(width: 1_280, height: 780))
     }
 
     private func prepareScreenshotPremiumWindow(

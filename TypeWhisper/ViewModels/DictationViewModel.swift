@@ -236,7 +236,7 @@ final class DictationViewModel: ObservableObject {
 
     @Published var state: State = .idle {
         didSet {
-            refreshCancellationAvailability()
+            hotkeyService.isCancellationAvailable = cancelWarningTargetForCurrentState() != nil
             updateSubmitOnEnterAvailability()
             clearCancelWarningIfStateNoLongerMatches()
         }
@@ -292,16 +292,7 @@ final class DictationViewModel: ObservableObject {
         didSet { Self.persistTranscribeShortQuietClipsAggressively(transcribeShortQuietClipsAggressively) }
     }
     @Published var cancellationBehavior: CancellationBehavior {
-        didSet {
-            Self.persistCancellationBehavior(cancellationBehavior)
-            refreshCancellationAvailability()
-            // A Double-mode cancel warning must not survive the switch to
-            // Disabled: Escape can't cancel anymore, so the "press Esc again"
-            // indicator would lie.
-            if cancellationBehavior == .disabled {
-                clearCancelWarning()
-            }
-        }
+        didSet { Self.persistCancellationBehavior(cancellationBehavior) }
     }
     @Published var microphoneBoostEnabled: Bool {
         didSet {
@@ -323,8 +314,6 @@ final class DictationViewModel: ObservableObject {
     var copyLastTranscriptionHotkeyLabel: String { Self.loadHotkeyLabel(for: .copyLastTranscription) }
     var pasteLastTranscriptionHotkeyLabel: String { Self.loadHotkeyLabel(for: .pasteLastTranscription) }
     var recorderToggleHotkeyLabel: String { Self.loadHotkeyLabel(for: .recorderToggle) }
-    var undoLastDictationHotkeyLabel: String { Self.loadHotkeyLabel(for: .undoLastDictation) }
-    var restoreRawTranscriptHotkeyLabel: String { Self.loadHotkeyLabel(for: .restoreRawTranscript) }
     @Published var activeRuleName: String?
     @Published var activeRuleReasonLabel: String?
     @Published var activeRuleExplanation: String?
@@ -405,27 +394,6 @@ final class DictationViewModel: ObservableObject {
     private var forcedWorkflowId: UUID?
     private var capturedActiveApp: (name: String?, bundleId: String?, url: String?)?
     private var capturedSelectedText: String?
-
-    /// Session-only safe undo / raw-transcript restore for the most recent
-    /// direct text insertion (issue #999). Independent of history settings.
-    private(set) lazy var dictationUndoService: DictationUndoService = {
-        DictationUndoService(
-            textInsertionService: textInsertionService,
-            isDictationBusy: { [weak self] in
-                guard let self else { return true }
-                switch state {
-                case .idle, .error:
-                    return false
-                case .recording, .processing, .inserting,
-                     .promptSelection, .promptProcessing:
-                    return true
-                }
-            },
-            didRestoreRawTranscript: { [weak self] id, rawText in
-                self?.reflectRawTranscriptRestore(id: id, rawText: rawText)
-            }
-        )
-    }()
 
     private var cancellables = Set<AnyCancellable>()
     private var recordingTimer: Timer?
@@ -1520,8 +1488,6 @@ final class DictationViewModel: ObservableObject {
         logger.info(
             "Cancel hotkey received: state=\(String(describing: self.state), privacy: .public), inputReady=\(self.isRecordingInputReady, privacy: .public), startPending=\(self.recordingStartTask != nil, privacy: .public)"
         )
-        // Disabled mode: Escape never cancels, whatever path delivered the press.
-        guard cancellationBehavior != .disabled else { return }
         guard let target = cancelWarningTargetForCurrentState() else { return }
 
         if cancellationBehavior != .doubleEscape {
@@ -1554,13 +1520,6 @@ final class DictationViewModel: ObservableObject {
             guard self?.cancelWarningTarget == target else { return }
             self?.clearCancelWarning()
         }
-    }
-
-    private func refreshCancellationAvailability() {
-        // Disabled mode leaves Escape entirely alone: the hotkey layer must
-        // not suppress it, so it passes through to the foreground app.
-        hotkeyService.isCancellationAvailable =
-            cancellationBehavior != .disabled && cancelWarningTargetForCurrentState() != nil
     }
 
     private func cancelWarningTargetForCurrentState() -> CancelWarningTarget? {
@@ -2737,9 +2696,7 @@ final class DictationViewModel: ObservableObject {
                     let insertionText = DictationInsertionTextFormatter.textForInsertion(
                         text,
                         insertionContext: insertionContext,
-                        contextualInsertionEnabled: contextualInsertionEnabled,
-                        standaloneValueFinalPeriodCleanupEnabled: DictationInsertionTextFormatter
-                            .standaloneValueFinalPeriodCleanupEnabled()
+                        contextualInsertionEnabled: contextualInsertionEnabled
                     )
                     let shouldObservePostInsertionEdits = (
                         shouldTrackTargetAppCorrectionLearning
@@ -2747,7 +2704,6 @@ final class DictationViewModel: ObservableObject {
                     ) && resolvedOutputFormat == nil
                     var didInsertText = false
                     var shouldUseNormalInsertion = true
-                    var insertionResult: TextInsertionService.InsertionResult?
 
                     if resolvedOutputFormat == nil,
                        liveFieldTranscriptSession != nil,
@@ -2812,14 +2768,14 @@ final class DictationViewModel: ObservableObject {
                             : nil
                         // Correction learning recaptures the field after insertion, so it
                         // needs the paste to have landed before insertText returns.
-                        insertionResult = try await textInsertionService.insertText(
+                        let insertionResult = try await textInsertionService.insertText(
                             insertionText,
                             preserveClipboard: preserveClipboard,
                             autoEnter: shouldAutoEnterAfterInsertion,
                             outputFormat: resolvedOutputFormat,
                             awaitPasteVerification: learningPreInsertionObservation != nil
                         )
-                        if case .pasted(.unverified(let reason))? = insertionResult {
+                        if case .pasted(.unverified(let reason)) = insertionResult {
                             logger.info(
                                 "Text insertion paste could not be verified; continuing with clipboard paste fallback. reason=\(reason.rawValue, privacy: .public), app=\(activeApp.bundleId ?? "nil", privacy: .public)"
                             )
@@ -2839,33 +2795,6 @@ final class DictationViewModel: ObservableObject {
                             appName: activeApp.name,
                             bundleIdentifier: activeApp.bundleId
                         )))
-                        // Action-plugin runs never insert text and are out of scope for
-                        // undo/restore (issue #999). A snapshot is only recorded when the
-                        // insertion is verifiable: formatted output may transform the
-                        // text, and unverified or unawaited pastes may not have landed
-                        // yet, so neither can back a safe snapshot. The live-field
-                        // finalize path produces no insertionResult and applies the text
-                        // directly, which is verifiable.
-                        let insertionIsVerifiable: Bool
-                        if actionPluginId != nil || resolvedOutputFormat != nil {
-                            insertionIsVerifiable = false
-                        } else if let insertionResult {
-                            switch insertionResult {
-                            case .insertedViaAccessibility, .pasted(.verified):
-                                insertionIsVerifiable = true
-                            case .pasted(.unverified), .pasted(.notAwaited):
-                                insertionIsVerifiable = false
-                            }
-                        } else {
-                            insertionIsVerifiable = true
-                        }
-                        if insertionIsVerifiable {
-                            dictationUndoService.recordSnapshot(
-                                rawTranscript: result.text,
-                                insertedText: insertionText,
-                                transcriptionID: transcriptionID
-                            )
-                        }
                     }
                 }
 
@@ -4246,66 +4175,6 @@ final class DictationViewModel: ObservableObject {
         speechFeedbackService.readBack(text: text, language: lastTranscriptionLanguage)
     }
 
-    // MARK: - Undo Last Dictation / Restore Raw Transcript (issue #999)
-
-    /// Deletes the text inserted by the most recent successful dictation.
-    /// Safe no-op with user feedback unless the exact inserted text is still
-    /// immediately before the caret in the same app and field.
-    func undoLastDictation() {
-        switch dictationUndoService.perform(.undo) {
-        case .success:
-            showNotchFeedback(
-                message: localizedAppText(
-                    "Last dictation undone.",
-                    de: "Letztes Diktat rückgängig gemacht."
-                ),
-                icon: "arrow.uturn.backward",
-                errorCategory: "insertion"
-            )
-        case .failed(let failure):
-            showNotchFeedback(
-                message: failure.feedbackMessage,
-                icon: "exclamationmark.triangle",
-                isError: true,
-                errorCategory: "insertion"
-            )
-        }
-    }
-
-    /// Replaces the most recent inserted post-processed text with its raw
-    /// transcript. Unavailable when raw and inserted text are identical.
-    func restoreRawTranscript() {
-        switch dictationUndoService.perform(.restore) {
-        case .success:
-            showNotchFeedback(
-                message: localizedAppText(
-                    "Raw transcript restored.",
-                    de: "Rohtext wiederhergestellt."
-                ),
-                icon: "text.badge.checkmark",
-                errorCategory: "insertion"
-            )
-        case .failed(let failure):
-            showNotchFeedback(
-                message: failure.feedbackMessage,
-                icon: "exclamationmark.triangle",
-                isError: true,
-                errorCategory: "insertion"
-            )
-        }
-    }
-
-    /// Keeps recent-transcription state and the history record consistent with
-    /// the text that remains in the document after a raw restore. The
-    /// historical transcription record itself is never erased by an undo.
-    private func reflectRawTranscriptRestore(id: UUID, rawText: String) {
-        recentTranscriptionStore.updateFinalText(id: id, finalText: rawText)
-        if let record = historyService.record(withID: id) {
-            historyService.updateRecord(record, finalText: rawText)
-        }
-        lastTranscribedText = rawText
-    }
-
     var canRecoverLastRecording: Bool {
         audioRecordingService.latestRecoveryRecordingURL != nil
     }
@@ -4701,15 +4570,10 @@ enum DictationInsertionTextFormatter {
         defaults.bool(forKey: UserDefaultsKeys.appFormattingEnabled)
     }
 
-    static func standaloneValueFinalPeriodCleanupEnabled(defaults: UserDefaults = .standard) -> Bool {
-        defaults.bool(forKey: UserDefaultsKeys.stripFinalPeriodFromStandaloneValuesEnabled)
-    }
-
     static func textForInsertion(
         _ text: String,
         insertionContext: TextInsertionService.InsertionContext? = nil,
-        contextualInsertionEnabled: Bool = true,
-        standaloneValueFinalPeriodCleanupEnabled: Bool = true
+        contextualInsertionEnabled: Bool = true
     ) -> String {
         guard contextualInsertionEnabled, let insertionContext else {
             return text
@@ -4721,13 +4585,6 @@ enum DictationInsertionTextFormatter {
             result = lowercasingFirstWordIfSafe(result)
         }
         if shouldStripFinalPeriod(boundaries) {
-            result = strippingSingleFinalPeriod(result)
-        }
-        if shouldStripStandaloneValueFinalPeriod(
-            result,
-            boundaries: boundaries,
-            enabled: standaloneValueFinalPeriodCleanupEnabled
-        ) {
             result = strippingSingleFinalPeriod(result)
         }
 
@@ -4836,129 +4693,6 @@ enum DictationInsertionTextFormatter {
             return false
         }
         return isWordLike(next) || closingPunctuation.contains(next)
-    }
-
-    /// Strips a model-added final period when the whole transcript is a
-    /// standalone value (email address, URL, number, version string) dropped
-    /// into an empty field. Mutually exclusive with the mid-sentence rule
-    /// above — that one needs surrounding text, this one needs none — so a
-    /// period can only ever be stripped once.
-    private static func shouldStripStandaloneValueFinalPeriod(
-        _ text: String,
-        boundaries: InsertionBoundaries,
-        enabled: Bool
-    ) -> Bool {
-        guard enabled,
-              boundaries.previousNonWhitespaceCharacter == nil,
-              boundaries.nextNonWhitespaceCharacter == nil
-        else {
-            return false
-        }
-        return StandaloneValueFinalPeriodCleanup.shouldStripFinalPeriod(from: text)
-    }
-
-    /// Decides whether a transcript standing on its own is a value whose final
-    /// period was added by the model rather than dictated, as in
-    /// `name@example.com.` typed into an empty field.
-    ///
-    /// Conservative on purpose: only whole-text matches for email addresses,
-    /// bare-domain URLs, decimal numbers, phone numbers, and version strings
-    /// qualify. Abbreviations (`Dr.`, `U.S.`), prose, ambiguous numeric forms
-    /// such as dates, and URLs carrying a path, query, or fragment keep
-    /// their period — a dot is a legal part of those (RFC 3986 section 2.3).
-    private enum StandaloneValueFinalPeriodCleanup {
-        static func shouldStripFinalPeriod(from text: String) -> Bool {
-            guard text.hasSuffix("."), !text.hasSuffix("..") else { return false }
-            let candidate = String(text.dropLast())
-            guard !candidate.isEmpty else { return false }
-            if isAbbreviation(text) { return false }
-            if isDateLike(candidate) { return false }
-            return isEmailAddress(candidate)
-                || isWebAddress(candidate)
-                || isDecimalNumber(candidate)
-                || isVersionString(candidate)
-                || isPhoneNumber(candidate)
-        }
-
-        /// `Dr.`, `U.S.`, `e.g.`, `Dr.med.`, `Ph.D.` — never values. Each
-        /// dot-separated group is either a single letter or a known
-        /// abbreviation word, so `file.txt.` still counts as a value.
-        private static let abbreviationExpression = try? NSRegularExpression(
-            pattern: #"^(?:(?:[A-Za-z]|Dr|Mr|Mrs|Ms|No|St|Jr|Sr|Prof|Inc|Ltd|Co|etc|vs|bzw|ca|ggf|evtl|Nr|Tel|med|rer|nat|ing|dipl|phil|Ph)\.)+$"#,
-            options: [.caseInsensitive]
-        )
-
-        private static let emailExpression = try? NSRegularExpression(
-            pattern: #"^[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}$"#
-        )
-
-        /// Bare-domain URLs only: `example.com`, `www.example.com`,
-        /// `https://example.com`. A terminal dot directly after the host is
-        /// the classic model-added sentence period. Once a path, query, or
-        /// fragment is present the dot may belong to the resource
-        /// (`https://example.com/search?q=Dr.`), so it stays untouched.
-        private static let urlExpression = try? NSRegularExpression(
-            pattern: #"^(?:https?://|ftp://|www\.)?(?:[A-Za-z0-9](?:[A-Za-z0-9\-]*[A-Za-z0-9])?\.)+[A-Za-z]{2,}(?::\d+)?$"#,
-            options: [.caseInsensitive]
-        )
-
-        /// `3.14`, `1,5`, `1,000.50`, `1.000,50` — both English and German forms.
-        private static let decimalExpression = try? NSRegularExpression(
-            pattern: #"^\d{1,3}(?:[.,]\d{3})+(?:[.,]\d+)?$|^\d+[.,]\d+$"#
-        )
-
-        /// `19.04.2026`, `2026-09-27`, `27. 09. 2026` — ambiguous with
-        /// versions, so untouched. Whitespace around the separators is
-        /// accepted because dictation often inserts it (`27 / 09 / 2026`);
-        /// without it such dates would fall through to the phone-number
-        /// check and wrongly lose their period.
-        private static let dateExpression = try? NSRegularExpression(
-            pattern: #"^\d{1,2}\s*[./\-]\s*\d{1,2}\s*[./\-]\s*\d{2,4}$|^\d{4}\s*[./\-]\s*\d{1,2}\s*[./\-]\s*\d{1,2}$"#
-        )
-
-        private static let versionExpression = try? NSRegularExpression(
-            pattern: #"^v?\d+(?:\.\d+){2,}$"#,
-            options: [.caseInsensitive]
-        )
-
-        private static let phoneExpression = try? NSRegularExpression(
-            pattern: #"^[+\d(][\d\s\-/.()]*$"#
-        )
-
-        private static func isAbbreviation(_ text: String) -> Bool {
-            matches(abbreviationExpression, text)
-        }
-
-        private static func isEmailAddress(_ candidate: String) -> Bool {
-            matches(emailExpression, candidate)
-        }
-
-        private static func isWebAddress(_ candidate: String) -> Bool {
-            matches(urlExpression, candidate)
-        }
-
-        private static func isDecimalNumber(_ candidate: String) -> Bool {
-            matches(decimalExpression, candidate)
-        }
-
-        private static func isDateLike(_ candidate: String) -> Bool {
-            matches(dateExpression, candidate)
-        }
-
-        private static func isVersionString(_ candidate: String) -> Bool {
-            matches(versionExpression, candidate)
-        }
-
-        private static func isPhoneNumber(_ candidate: String) -> Bool {
-            guard matches(phoneExpression, candidate) else { return false }
-            return candidate.filter(\.isWholeNumber).count >= 6
-        }
-
-        private static func matches(_ expression: NSRegularExpression?, _ text: String) -> Bool {
-            guard let expression else { return false }
-            let range = NSRange(text.startIndex..<text.endIndex, in: text)
-            return expression.firstMatch(in: text, options: [], range: range) != nil
-        }
     }
 
     private static func lowercasingFirstWordIfSafe(_ text: String) -> String {

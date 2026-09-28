@@ -15511,19 +15511,6 @@ final class TypeWhisperIntegrationTests: XCTestCase {
                 let upCGEvent = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: 0x35, keyDown: false))
                 let down = try XCTUnwrap(NSEvent(cgEvent: downCGEvent))
                 let up = try XCTUnwrap(NSEvent(cgEvent: upCGEvent))
-                if behavior == .disabled {
-                    // Escape passes through to the foreground app: the hotkey
-                    // layer must not suppress it, and nothing may cancel.
-                    XCTAssertFalse(context.hotkeyService.isCancellationAvailable)
-                    XCTAssertFalse(context.hotkeyService.processEventForTesting(down, source: .eventTap))
-                    XCTAssertFalse(context.hotkeyService.processEventForTesting(up, source: .eventTap))
-                    context.dictationViewModel.handleCancelHotkey()
-                    XCTAssertEqual(context.dictationViewModel.state, state)
-                    XCTAssertNil(context.dictationViewModel.cancelWarningMessage)
-                    XCTAssertNil(context.dictationViewModel.actionFeedbackMessage)
-                    await context.dictationViewModel.testingWaitForRecordingCleanup()
-                    continue
-                }
                 XCTAssertTrue(context.hotkeyService.processEventForTesting(down, source: .eventTap))
                 await withCheckedContinuation { continuation in
                     DispatchQueue.main.async { continuation.resume() }
@@ -15553,103 +15540,6 @@ final class TypeWhisperIntegrationTests: XCTestCase {
                 await context.dictationViewModel.testingWaitForRecordingCleanup()
             }
         }
-    }
-
-    @MainActor
-    private func fnHotkey() -> UnifiedHotkey {
-        UnifiedHotkey(
-            keyCode: 0x00,
-            modifierFlags: 0,
-            isFn: true
-        )
-    }
-
-    private func makeKeyboardEvent(
-        keyCode: UInt16,
-        keyDown: Bool,
-        flags: CGEventFlags = [.maskControl, .maskAlternate, .maskShift, .maskCommand],
-        isRepeat: Bool = false
-    ) throws -> NSEvent {
-        let event = try XCTUnwrap(
-            CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(keyCode), keyDown: keyDown)
-        )
-        event.flags = flags
-        event.setIntegerValueField(.keyboardEventAutorepeat, value: isRepeat ? 1 : 0)
-        return try XCTUnwrap(NSEvent(cgEvent: event))
-    }
-
-    @MainActor
-    func testDisabledModeEscapeDuringPushToTalkRecordingPassesThrough() throws {
-        let service = HotkeyService()
-        service.suspendMonitoring()
-        service.discardPushToTalkRecordingOnExtraKeyPress = true
-        let hotkey = fnHotkey()
-        service.setHotkeyForTesting(hotkey, for: .pushToTalk)
-        service.processCarbonHotkeyForTesting(slotType: .pushToTalk, hotkey: hotkey, isPressed: true)
-        XCTAssertEqual(service.currentMode, .pushToTalk)
-
-        var interruptionCount = 0
-        service.onPushToTalkInterruption = { interruptionCount += 1 }
-        // Disabled mode: the hotkey layer must leave Escape alone.
-        service.isCancellationAvailable = false
-
-        let down = try makeKeyboardEvent(keyCode: 0x35, keyDown: true, flags: [])
-        let up = try makeKeyboardEvent(keyCode: 0x35, keyDown: false, flags: [])
-        XCTAssertFalse(service.processEventForTesting(down, source: .eventTap))
-        XCTAssertFalse(service.processEventForTesting(up, source: .eventTap))
-        XCTAssertEqual(interruptionCount, 0)
-        XCTAssertEqual(service.currentMode, .pushToTalk)
-    }
-
-    @MainActor
-    func testDisabledModeEscapePassesThroughLocalMonitor() throws {
-        let service = HotkeyService()
-        service.suspendMonitoring()
-        service.discardPushToTalkRecordingOnExtraKeyPress = true
-        let hotkey = fnHotkey()
-        service.setHotkeyForTesting(hotkey, for: .pushToTalk)
-        service.processCarbonHotkeyForTesting(slotType: .pushToTalk, hotkey: hotkey, isPressed: true)
-        XCTAssertEqual(service.currentMode, .pushToTalk)
-
-        // A bare-Escape toggle slot must not swallow the pass-through either.
-        service.setHotkeyForTesting(
-            UnifiedHotkey(keyCode: 0x35, modifierFlags: 0, isFn: false), for: .toggle)
-        var startCount = 0
-        service.onDictationStart = { _ in startCount += 1 }
-        var interruptionCount = 0
-        service.onPushToTalkInterruption = { interruptionCount += 1 }
-        service.isCancellationAvailable = false
-
-        let down = try makeKeyboardEvent(keyCode: 0x35, keyDown: true, flags: [])
-        let up = try makeKeyboardEvent(keyCode: 0x35, keyDown: false, flags: [])
-        XCTAssertFalse(service.processEventForTesting(down, source: .monitor))
-        XCTAssertFalse(service.processEventForTesting(up, source: .monitor))
-        XCTAssertEqual(interruptionCount, 0)
-        XCTAssertEqual(startCount, 0)
-        XCTAssertEqual(service.currentMode, .pushToTalk)
-    }
-
-    @MainActor
-    func testSwitchingToDisabledClearsDoubleEscapeWarning() async throws {
-        let directory = try TestSupport.makeTemporaryDirectory()
-        defer { TestSupport.remove(directory) }
-        let context = Self.makeDictationContext(appSupportDirectory: directory)
-        context.audioRecordingService.stopRecordingOverride = { _ in [] }
-        context.dictationViewModel.cancellationBehavior = .doubleEscape
-        context.dictationViewModel.state = .recording
-
-        let down = try makeKeyboardEvent(keyCode: 0x35, keyDown: true, flags: [])
-        XCTAssertTrue(context.hotkeyService.processEventForTesting(down, source: .eventTap))
-        await withCheckedContinuation { continuation in
-            DispatchQueue.main.async { continuation.resume() }
-        }
-        XCTAssertNotNil(context.dictationViewModel.cancelWarningMessage)
-
-        // Switching to Disabled mid-warning must clear the indicator: Escape
-        // can't cancel anymore.
-        context.dictationViewModel.cancellationBehavior = .disabled
-        XCTAssertNil(context.dictationViewModel.cancelWarningMessage)
-        await context.dictationViewModel.testingWaitForRecordingCleanup()
     }
 
     @MainActor

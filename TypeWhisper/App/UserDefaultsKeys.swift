@@ -35,8 +35,6 @@ enum UserDefaultsKeys {
     static let copyLastTranscriptionHotkey = "copyLastTranscriptionHotkey"
     static let pasteLastTranscriptionHotkey = "pasteLastTranscriptionHotkey"
     static let recorderToggleHotkey = "recorderToggleHotkey"
-    static let undoLastDictationHotkey = "undoLastDictationHotkey"
-    static let restoreRawTranscriptHotkey = "restoreRawTranscriptHotkey"
 
     // MARK: - Hotkeys (JSON-encoded [UnifiedHotkey] per slot)
     static let hybridHotkeys = "hybridHotkeys"
@@ -47,8 +45,6 @@ enum UserDefaultsKeys {
     static let copyLastTranscriptionHotkeys = "copyLastTranscriptionHotkeys"
     static let pasteLastTranscriptionHotkeys = "pasteLastTranscriptionHotkeys"
     static let recorderToggleHotkeys = "recorderToggleHotkeys"
-    static let undoLastDictationHotkeys = "undoLastDictationHotkeys"
-    static let restoreRawTranscriptHotkeys = "restoreRawTranscriptHotkeys"
 
     // MARK: - Model / Engine
     static let selectedEngine = "selectedEngine"
@@ -125,7 +121,6 @@ enum UserDefaultsKeys {
 
     // MARK: - Formatting
     static let appFormattingEnabled = "appFormattingEnabled"
-    static let stripFinalPeriodFromStandaloneValuesEnabled = "stripFinalPeriodFromStandaloneValuesEnabled"
     static let transcriptionNumberNormalizationEnabled = "transcriptionNumberNormalizationEnabled"
     static let transcriptionNumberNormalizationMinimumValue = "transcriptionNumberNormalizationMinimumValue"
     static let dictationPunctuationProfiles = "dictationPunctuationProfiles"

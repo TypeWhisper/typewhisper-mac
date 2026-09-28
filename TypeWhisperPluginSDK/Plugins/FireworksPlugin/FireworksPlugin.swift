@@ -519,7 +519,7 @@ private struct FireworksSettingsView: View {
                     Text("Temperature", bundle: bundle)
                         .font(.headline)
 
-                    Picker(String(localized: "Temperature Mode", bundle: bundle), selection: $llmTemperatureMode) {
+                    Picker("Temperature Mode", selection: $llmTemperatureMode) {
                         Text("Provider Default", bundle: bundle).tag(PluginLLMTemperatureMode.providerDefault)
                         Text("Custom", bundle: bundle).tag(PluginLLMTemperatureMode.custom)
                     }

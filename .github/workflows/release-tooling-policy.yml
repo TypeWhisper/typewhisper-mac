@@ -1,0 +1,25 @@
+name: Release Tooling Policy
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/release.yml'
+      - '.github/workflows/release-tooling-policy.yml'
+      - '.github/release-tools/**'
+      - 'TypeWhisper.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved'
+      - 'scripts/prepare_release_tools.py'
+      - 'scripts/cleanup_release_signing.sh'
+      - 'scripts/test_release_tooling.py'
+      - 'scripts/archive_release.sh'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: python3 scripts/test_release_tooling.py

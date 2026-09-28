@@ -1,22 +1,6 @@
 {
   "sourceLanguage": "en",
   "strings": {
-    "You are an assistant that converts spoken dictation into a structured Linear issue. Extract: 1) A concise title (max 100 chars), 2) A detailed description in markdown, 3) Priority (1=Urgent, 2=High, 3=Medium, 4=Low) - infer from context, default 3. Respond ONLY with valid JSON: {\"title\": \"...\", \"description\": \"...\", \"priority\": 3}": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Wandle gesprochene Diktate in strukturierte Linear-Issues um. Extrahiere: 1) einen prägnanten Titel mit höchstens 100 Zeichen, 2) eine ausführliche Beschreibung in Markdown, 3) die Priorität (1=Dringend, 2=Hoch, 3=Mittel, 4=Niedrig), aus dem Kontext abgeleitet, standardmäßig 3. Antworte NUR mit gültigem JSON: {\"title\": \"...\", \"description\": \"...\", \"priority\": 3}"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "你是一位将口述内容转换为结构化 Linear 问题的助手。请提取：1）简洁的标题（最多 100 个字符），2）Markdown 格式的详细描述，3）优先级（1=紧急，2=高，3=中，4=低）——根据上下文推断，默认为 3。仅回复有效的 JSON：{\"title\": \"...\", \"description\": \"...\", \"priority\": 3}"
-          }
-        }
-      }
-    },
     "API Key": {
       "localizations": {
         "de": {

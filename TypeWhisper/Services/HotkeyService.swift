@@ -101,8 +101,6 @@ enum HotkeySlotType: String, CaseIterable, Sendable {
     case copyLastTranscription
     case pasteLastTranscription
     case recorderToggle
-    case undoLastDictation
-    case restoreRawTranscript
 
     var defaultsKey: String {
         switch self {
@@ -114,8 +112,6 @@ enum HotkeySlotType: String, CaseIterable, Sendable {
         case .copyLastTranscription: return UserDefaultsKeys.copyLastTranscriptionHotkey
         case .pasteLastTranscription: return UserDefaultsKeys.pasteLastTranscriptionHotkey
         case .recorderToggle: return UserDefaultsKeys.recorderToggleHotkey
-        case .undoLastDictation: return UserDefaultsKeys.undoLastDictationHotkey
-        case .restoreRawTranscript: return UserDefaultsKeys.restoreRawTranscriptHotkey
         }
     }
 
@@ -129,21 +125,16 @@ enum HotkeySlotType: String, CaseIterable, Sendable {
         case .copyLastTranscription: return UserDefaultsKeys.copyLastTranscriptionHotkeys
         case .pasteLastTranscription: return UserDefaultsKeys.pasteLastTranscriptionHotkeys
         case .recorderToggle: return UserDefaultsKeys.recorderToggleHotkeys
-        case .undoLastDictation: return UserDefaultsKeys.undoLastDictationHotkeys
-        case .restoreRawTranscript: return UserDefaultsKeys.restoreRawTranscriptHotkeys
         }
     }
 }
 
-extension HotkeySlotType {
-    /// Whether pressing this slot's hotkey starts (or stops) dictation.
-    /// Undo/restore must stay false: those hotkeys are keyDown-only actions.
+private extension HotkeySlotType {
     var startsDictation: Bool {
         switch self {
         case .hybrid, .pushToTalk, .toggle:
             true
-        case .promptPalette, .recentTranscriptions, .copyLastTranscription, .pasteLastTranscription, .recorderToggle,
-             .undoLastDictation, .restoreRawTranscript:
+        case .promptPalette, .recentTranscriptions, .copyLastTranscription, .pasteLastTranscription, .recorderToggle:
             false
         }
     }
@@ -221,8 +212,6 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     var onCopyLastTranscription: (() -> Void)?
     var onPasteLastTranscription: (() -> Void)?
     var onRecorderToggle: (() -> Void)?
-    var onUndoLastDictation: (() -> Void)?
-    var onRestoreRawTranscript: (() -> Void)?
     var onProfileDictationStart: ((UUID, UInt64) -> Void)?
     var onWorkflowDictationStart: ((UUID, UInt64) -> Void)?
     var onWorkflowTextProcessing: ((UUID) -> Void)?
@@ -1213,24 +1202,10 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             isEscapeKeySuppressed = false
             return true
         }
-        if event.type == .keyUp, event.keyCode == Self.escapeKeyCode, !isCancellationAvailable {
-            // Disabled mode: the release of a passed-through Escape press must
-            // pass through as well. Otherwise it falls into slot matching and a
-            // bare-Escape toggle/workflow slot swallows it instead of the app
-            // receiving it.
-            return false
-        }
         if event.type == .keyDown && event.keyCode == Self.escapeKeyCode {
             cancelPendingHybridModifierHold()
             if isEscapeKeySuppressed { return true }
-            if !isCancellationAvailable {
-                // Disabled mode: Escape is never ours. Pass it straight through
-                // to the foreground app before the push-to-talk interruption
-                // check and slot matching, so it can neither discard a
-                // recording nor fire a hotkey slot.
-                return false
-            }
-            guard !event.isARepeat else { return false }
+            guard isCancellationAvailable, !event.isARepeat else { return false }
 
             isEscapeKeySuppressed = true
             // The press latch deduplicates fallback delivery without dropping a quick second press.
@@ -2176,14 +2151,6 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             onPasteLastTranscription?()
             return
         }
-        if slotType == .undoLastDictation {
-            onUndoLastDictation?()
-            return
-        }
-        if slotType == .restoreRawTranscript {
-            onRestoreRawTranscript?()
-            return
-        }
         if slotType == .recorderToggle {
             onRecorderToggle?()
             return
@@ -2263,10 +2230,6 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         case .copyLastTranscription:
             break // handled on keyDown only
         case .pasteLastTranscription:
-            break // handled on keyDown only
-        case .undoLastDictation:
-            break // handled on keyDown only
-        case .restoreRawTranscript:
             break // handled on keyDown only
         case .recorderToggle:
             break // handled on keyDown only
