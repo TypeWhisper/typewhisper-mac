@@ -180,7 +180,7 @@ struct VisualShortcutKeyboardView: View {
         case .active:
             Image(systemName: "checkmark.circle.fill")
                 .font(.system(size: 12))
-                .foregroundStyle(.white, .accentColor)
+                .foregroundStyle(.white, Color.accentColor)
                 .background(Circle().fill(.white))
         case .conflicting:
             Image(systemName: "exclamationmark.triangle.fill")
@@ -197,7 +197,7 @@ struct VisualShortcutKeyboardView: View {
     private func stateFill(_ state: VisualKeyState) -> some ShapeStyle {
         switch state {
         case .available: return AnyShapeStyle(.quaternary)
-        case .active: return AnyShapeStyle(.accentColor)
+        case .active: return AnyShapeStyle(Color.accentColor)
         case .conflicting: return AnyShapeStyle(.orange.opacity(0.25))
         case .reserved: return AnyShapeStyle(.tertiary.opacity(0.5))
         }
@@ -206,7 +206,7 @@ struct VisualShortcutKeyboardView: View {
     private func stateBorder(_ state: VisualKeyState) -> some ShapeStyle {
         switch state {
         case .available: return AnyShapeStyle(.tertiary)
-        case .active: return AnyShapeStyle(.accentColor)
+        case .active: return AnyShapeStyle(Color.accentColor)
         case .conflicting: return AnyShapeStyle(.orange)
         case .reserved: return AnyShapeStyle(.secondary.opacity(0.4))
         }
