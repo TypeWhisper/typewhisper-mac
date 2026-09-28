@@ -1114,6 +1114,12 @@
             "state": "translated",
             "value": "Server Kind"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "服务器类型"
+          }
         }
       }
     },
@@ -1124,12 +1130,24 @@
             "state": "translated",
             "value": "Generic"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "通用"
+          }
         }
       }
     },
     "Ollama": {
       "localizations": {
         "en": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ollama"
+          }
+        },
+        "zh-Hans": {
           "stringUnit": {
             "state": "translated",
             "value": "Ollama"
@@ -1144,6 +1162,12 @@
             "state": "translated",
             "value": "Choose Ollama to discover installed models through the server's native /api/tags endpoint. Generic servers only use the OpenAI-compatible /v1/models endpoint."
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "选择 Ollama 可通过服务器原生的 /api/tags 接口发现已安装的模型。通用服务器仅使用 OpenAI 兼容的 /v1/models 接口。"
+          }
         }
       }
     },
@@ -1153,6 +1177,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "The server URL is invalid."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "服务器 URL 无效。"
           }
         }
       }
@@ -1164,6 +1194,12 @@
             "state": "translated",
             "value": "Could not reach the Ollama server. Check that it is running and the URL is correct."
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "无法连接到 Ollama 服务器。请确认其正在运行且 URL 正确。"
+          }
         }
       }
     },
@@ -1173,6 +1209,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "The server rejected the request (unauthorized). Check the API key."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "服务器拒绝了请求（未授权）。请检查 API 密钥。"
           }
         }
       }
@@ -1184,6 +1226,12 @@
             "state": "translated",
             "value": "The server returned an unexpected error."
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "服务器返回了未知错误。"
+          }
         }
       }
     },
@@ -1194,6 +1242,12 @@
             "state": "translated",
             "value": "The server reported no installed models. Pull a model with `ollama pull <model>` first."
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "服务器没有报告任何已安装的模型。请先运行 `ollama pull <model>` 拉取模型。"
+          }
         }
       }
     },
@@ -1203,6 +1257,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "The server response was not a valid Ollama /api/tags payload."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "服务器返回的不是有效的 Ollama /api/tags 响应。"
           }
         }
       }
