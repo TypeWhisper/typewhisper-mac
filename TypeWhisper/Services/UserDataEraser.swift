@@ -1,4 +1,3 @@
-import AppKit
 import Foundation
 import os
 import Security
@@ -41,32 +40,53 @@ enum UserDataEraser {
     /// Stops a running recorder session without finalizing it and removes its
     /// temporary microphone and system audio tracks, which live outside the
     /// erased folders. The recorder's output folder is left alone.
-    static func discardActiveRecording(_ recorderService: AudioRecorderService) async {
-        guard recorderService.isRecording else { return }
+    static func discardActiveRecording(_ recorderService: AudioRecorderService) async -> [Failure] {
+        guard recorderService.isRecording else { return [] }
         let stoppedRecording = await recorderService.stopCapture()
+        var failures: [Failure] = []
         for url in [stoppedRecording.micTempURL, stoppedRecording.systemTempURL].compactMap({ $0 }) {
-            try? FileManager.default.removeItem(at: url)
+            do {
+                try FileManager.default.removeItem(at: url)
+            } catch CocoaError.fileNoSuchFile {
+                continue
+            } catch {
+                failures.append(Failure(item: url.path, message: error.localizedDescription))
+            }
         }
+        return failures
     }
 
     /// Deletes all data, then terminates the process immediately.
-    static func eraseAllAndQuit() -> Never {
-        let failures = eraseAll(locations: .current())
+    static func eraseAllAndQuit(earlierFailures: [Failure] = []) -> Never {
+        let failures = earlierFailures + eraseAll(locations: .current())
         // Widget timelines cache recent transcript previews.
         WidgetCenter.shared.reloadAllTimelines()
         if !failures.isEmpty {
-            let alert = NSAlert()
-            alert.alertStyle = .warning
-            alert.messageText = localizedAppText(
-                "Some data could not be deleted",
-                de: "Einige Daten konnten nicht gelöscht werden"
-            )
-            alert.informativeText = failures
-                .map { "\($0.item): \($0.message)" }
-                .joined(separator: "\n")
-            alert.runModal()
+            presentFailuresAfterExit(failures)
         }
         exit(0)
+    }
+
+    /// Shows the failures from a separate `osascript` process. A modal alert
+    /// in this process would keep the app's timers and services running after
+    /// the wipe, and they could write the deleted data back.
+    private static func presentFailuresAfterExit(_ failures: [Failure]) {
+        let title = localizedAppText(
+            "Some TypeWhisper data could not be deleted",
+            de: "Einige TypeWhisper-Daten konnten nicht gelöscht werden"
+        )
+        let message = failures
+            .map { "\($0.item): \($0.message)" }
+            .joined(separator: "\n")
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/osascript")
+        process.arguments = [
+            "-e", "on run argv",
+            "-e", "display alert (item 1 of argv) message (item 2 of argv) as warning",
+            "-e", "end run",
+            title, message,
+        ]
+        try? process.run()
     }
 
     @discardableResult

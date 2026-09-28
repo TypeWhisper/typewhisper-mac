@@ -41,7 +41,12 @@ struct UserDataLocations: Sendable {
                 isDirectory: true
             ))
         }
-        auxiliaryItems += UserDataExportService.stagingDirectories(fileManager: fileManager)
+        auxiliaryItems += UserDataExportService.abandonedStagingDirectories(fileManager: fileManager)
+        let temporaryDirectory = fileManager.temporaryDirectory
+        let temporaryNames = (try? fileManager.contentsOfDirectory(atPath: temporaryDirectory.path)) ?? []
+        auxiliaryItems += temporaryNames
+            .filter { $0.hasPrefix(APIHandlers.uploadTemporaryFilePrefix) }
+            .map { temporaryDirectory.appendingPathComponent($0) }
 
         return UserDataLocations(
             appSupportDirectory: AppConstants.appSupportDirectory,
@@ -164,11 +169,14 @@ enum UserDataExportService {
         let fileManager = FileManager.default
         // Leftovers from an export interrupted by a crash or force quit hold
         // a full unencrypted copy of the user's data.
-        for staleDirectory in stagingDirectories(fileManager: fileManager) {
+        for staleDirectory in abandonedStagingDirectories(fileManager: fileManager) {
             try? fileManager.removeItem(at: staleDirectory)
         }
         let workDirectory = fileManager.temporaryDirectory
-            .appendingPathComponent("\(stagingDirectoryPrefix)\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent(
+                "\(stagingDirectoryPrefix)\(ProcessInfo.processInfo.processIdentifier)-\(UUID().uuidString)",
+                isDirectory: true
+            )
         defer { try? fileManager.removeItem(at: workDirectory) }
 
         let root = workDirectory.appendingPathComponent(
@@ -201,12 +209,24 @@ enum UserDataExportService {
         }
     }
 
-    static func stagingDirectories(fileManager: FileManager = .default) -> [URL] {
+    /// Staging directories named `<prefix><pid>-<uuid>` whose process is gone.
+    /// Release and dev builds share the temporary directory, so a directory
+    /// of another running process may belong to an export in progress.
+    static func abandonedStagingDirectories(fileManager: FileManager = .default) -> [URL] {
         let temporaryDirectory = fileManager.temporaryDirectory
         let names = (try? fileManager.contentsOfDirectory(atPath: temporaryDirectory.path)) ?? []
         return names
-            .filter { $0.hasPrefix(stagingDirectoryPrefix) }
+            .filter { name in
+                guard name.hasPrefix(stagingDirectoryPrefix) else { return false }
+                let owner = name.dropFirst(stagingDirectoryPrefix.count).prefix { $0 != "-" }
+                guard let pid = pid_t(owner) else { return true }
+                return !isProcessRunning(pid)
+            }
             .map { temporaryDirectory.appendingPathComponent($0, isDirectory: true) }
+    }
+
+    private static func isProcessRunning(_ pid: pid_t) -> Bool {
+        kill(pid, 0) == 0 || errno == EPERM
     }
 
     static func copyUserData(from source: URL, to destination: URL) throws {

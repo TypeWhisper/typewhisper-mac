@@ -190,14 +190,26 @@ final class UserDataExportAndEraseTests: XCTestCase {
         XCTAssertEqual(sqlite3_column_int(count, 0), 3)
     }
 
-    func testCurrentLocationsIncludeAbandonedExportStagingDirectories() throws {
-        let staging = FileManager.default.temporaryDirectory
-            .appendingPathComponent("\(UserDataExportService.stagingDirectoryPrefix)\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)
-        defer { try? FileManager.default.removeItem(at: staging) }
+    func testCurrentLocationsIncludeAbandonedStagingDirectoriesAndAPIUploads() throws {
+        let fileManager = FileManager.default
+        let prefix = UserDataExportService.stagingDirectoryPrefix
+        let abandoned = fileManager.temporaryDirectory
+            .appendingPathComponent("\(prefix)999999999-\(UUID().uuidString)", isDirectory: true)
+        let live = fileManager.temporaryDirectory
+            .appendingPathComponent("\(prefix)\(ProcessInfo.processInfo.processIdentifier)-\(UUID().uuidString)", isDirectory: true)
+        let upload = fileManager.temporaryDirectory
+            .appendingPathComponent("\(APIHandlers.uploadTemporaryFilePrefix)\(UUID().uuidString).wav")
+        try fileManager.createDirectory(at: abandoned, withIntermediateDirectories: true)
+        try fileManager.createDirectory(at: live, withIntermediateDirectories: true)
+        try write("audio", to: upload)
+        defer {
+            for url in [abandoned, live, upload] { try? fileManager.removeItem(at: url) }
+        }
 
-        let items = UserDataLocations.current().auxiliaryItems.map(\.standardizedFileURL)
-        XCTAssertTrue(items.contains(staging.standardizedFileURL))
+        let items = UserDataLocations.current().auxiliaryItems.map(\.standardizedFileURL.path)
+        XCTAssertTrue(items.contains(abandoned.standardizedFileURL.path))
+        XCTAssertTrue(items.contains(upload.standardizedFileURL.path))
+        XCTAssertFalse(items.contains(live.standardizedFileURL.path))
     }
 
     // MARK: - Erase

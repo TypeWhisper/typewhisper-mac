@@ -66,7 +66,7 @@ struct AdvancedSettingsView: View {
                             systemImage: "square.and.arrow.up"
                         )
                     }
-                    .disabled(isImportingBackup)
+                    .disabled(isImportingBackup || isDeletingAllData)
 
                     Button {
                         showImportSheet = true
@@ -76,7 +76,7 @@ struct AdvancedSettingsView: View {
                             systemImage: "square.and.arrow.down"
                         )
                     }
-                    .disabled(isImportingBackup)
+                    .disabled(isImportingBackup || isDeletingAllData)
 
                     if isImportingBackup {
                         ProgressView()
@@ -111,7 +111,7 @@ struct AdvancedSettingsView: View {
                             systemImage: "trash"
                         )
                     }
-                    .disabled(isExportingAllData || isDeletingAllData)
+                    .disabled(isExportingAllData || isDeletingAllData || isImportingBackup)
 
                     if isExportingAllData || isDeletingAllData {
                         ProgressView()
@@ -804,12 +804,12 @@ struct AdvancedSettingsView: View {
         viewModel.stopServer()
         let container = ServiceContainer.shared
         Task {
-            await UserDataEraser.discardActiveRecording(container.audioRecorderService)
+            let recordingFailures = await UserDataEraser.discardActiveRecording(container.audioRecorderService)
             await UserDataEraser.releaseRemoteActivations(
                 licenseService: container.licenseService,
                 premiumAccountService: container.premiumAccountService
             )
-            UserDataEraser.eraseAllAndQuit()
+            UserDataEraser.eraseAllAndQuit(earlierFailures: recordingFailures)
         }
     }
 
