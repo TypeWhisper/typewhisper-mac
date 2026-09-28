@@ -1404,7 +1404,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
                 state.fnComboKeyPressed = false
                 return true
             case .modifierOnly, .modifierCombo:
-                guard state.modifierWasDown, !isHotkeyPhysicallyPressed(hotkey) else { return false }
+                guard state.modifierWasDown, !isHotkeyPhysicallyHeld(hotkey) else { return false }
                 state.modifierWasDown = false
                 return true
             case .keyWithModifiers, .bareKey:
@@ -1412,7 +1412,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
                 state.keyWasDown = false
                 return true
             case .mouseButton:
-                guard state.mouseButtonWasDown, !isHotkeyPhysicallyPressed(hotkey) else { return false }
+                guard state.mouseButtonWasDown, !isHotkeyPhysicallyHeld(hotkey) else { return false }
                 state.mouseButtonWasDown = false
                 return true
             }
@@ -2044,7 +2044,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         }
         guard isActive, currentMode == .pushToTalk else { return }
         if let workflowId = activeWorkflowId {
-            guard let hotkey = activeWorkflowHotkey, !isHotkeyPhysicallyPressed(hotkey) else { return }
+            guard let hotkey = activeWorkflowHotkey, !isHotkeyPhysicallyHeld(hotkey) else { return }
             // A lost release has no timestamp. Before the hybrid threshold, retain
             // toggle behavior; after it, stop conservatively rather than risk a
             // runaway recording based on an unknowable physical release time.
@@ -2055,7 +2055,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
               activeWorkflowId == nil,
               let slotType = activeSlotType,
               let hotkey = activeGlobalHotkey,
-              !isHotkeyPhysicallyPressed(hotkey) else {
+              !isHotkeyPhysicallyHeld(hotkey) else {
             return
         }
 
@@ -2065,7 +2065,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         handleKeyUp(slotType: slotType)
     }
 
-    private func isHotkeyPhysicallyPressed(_ hotkey: UnifiedHotkey) -> Bool {
+    private func isHotkeyPhysicallyHeld(_ hotkey: UnifiedHotkey) -> Bool {
         switch hotkey.kind {
         case .fn:
             return modifierFlagsStateProvider().contains(.function)
@@ -2078,21 +2078,32 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             return Self.specificModifierKeyIsDown(flags: flags, keyCode: hotkey.keyCode, genericFlag: flag)
                 ?? flags.contains(flag)
         case .modifierCombo:
-            let flags = modifierFlagsStateProvider()
-            let physicalModifiersPressed = hotkey.modifierKeyCodes.allSatisfy { keyCode in
-                guard let flag = Self.modifierFlagForKeyCode(keyCode) else { return false }
-                return Self.specificModifierKeyIsDown(flags: flags, keyCode: keyCode, genericFlag: flag)
-                    ?? flags.contains(flag)
-            }
-            let requiredFlags = NSEvent.ModifierFlags(rawValue: hotkey.modifierFlags)
-            let relevantMask: NSEvent.ModifierFlags = [.command, .option, .control, .shift, .function]
-            return physicalModifiersPressed && flags.intersection(relevantMask).isSuperset(of: requiredFlags)
+            return Self.isAnyRequiredModifierHeld(hotkey, flags: modifierFlagsStateProvider())
         case .keyWithModifiers, .bareKey:
             return keyStateProvider(hotkey.keyCode)
         case .mouseButton:
             guard let button = hotkey.mouseButton else { return false }
             return mouseButtonStateProvider(button)
         }
+    }
+
+    /// Once a modifier combination starts, it stays held until its final required
+    /// modifier is released. Recovery and normal event handling share this rule.
+    private nonisolated static func isAnyRequiredModifierHeld(
+        _ hotkey: UnifiedHotkey,
+        flags: NSEvent.ModifierFlags
+    ) -> Bool {
+        var remainingFlags = NSEvent.ModifierFlags(rawValue: hotkey.modifierFlags)
+        for keyCode in hotkey.modifierKeyCodes {
+            guard let flag = modifierFlagForKeyCode(keyCode) else { continue }
+            if specificModifierKeyIsDown(flags: flags, keyCode: keyCode, genericFlag: flag)
+                ?? flags.contains(flag) {
+                return true
+            }
+            remainingFlags.remove(flag)
+        }
+        // Includes Fn, which has no left/right device bit, and generic combos.
+        return !flags.intersection(remainingFlags).isEmpty
     }
 
     private nonisolated static func supportsCarbonHotkey(_ hotkey: UnifiedHotkey) -> Bool {
@@ -2496,9 +2507,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             let physicalModifiersMatch = hotkey.modifierKeyCodes.isEmpty
                 || activeModifierKeyCodes == hotkey.modifierKeyCodes
             let allDown = current == requiredFlags && physicalModifiersMatch
-            let anyRequiredStillDown = hotkey.modifierKeyCodes.isEmpty
-                ? !current.intersection(requiredFlags).isEmpty
-                : !activeModifierKeyCodes.intersection(hotkey.modifierKeyCodes).isEmpty
+            let anyRequiredStillDown = Self.isAnyRequiredModifierHeld(hotkey, flags: event.modifierFlags)
             if allDown, !modifierWasDown { return .down }
             if allDown, modifierWasDown { return .repeatDown }
             if modifierWasDown {

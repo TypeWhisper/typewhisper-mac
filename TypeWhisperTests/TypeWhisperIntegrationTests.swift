@@ -17206,7 +17206,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
     }
 
     @MainActor
-    func testRecoveryFallsBackPerModifierFamilyAndRequiresFn() throws {
+    func testRecoveryFallsBackPerModifierFamilyAndWaitsForFinalRelease() throws {
         let service = HotkeyService()
         service.suspendMonitoring()
         let hotkey = try decodedModifierComboHotkey(modifierFlags: [.command, .option, .function], modifierKeyCodes: [0x36, 0x3D])
@@ -17222,7 +17222,15 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         XCTAssertEqual(stopCount, 0, "Known Command side must not suppress the generic Option fallback")
         physicalFlags = flags(generic: [.command, .option], deviceKeyCodes: [0x36, 0x3D])
         service.recoverReleasedActiveHotkeyAfterEventTapDisableForTesting()
-        XCTAssertEqual(stopCount, 1, "Releasing required Fn must stop even when both physical modifiers remain held")
+        XCTAssertEqual(stopCount, 0, "A partial release must not stop the active combo")
+        physicalFlags = [.function]
+        service.resyncHotkeyStateAfterEventTapRecoveryForTesting()
+        service.recoverReleasedActiveHotkeyAfterEventTapDisableForTesting()
+        XCTAssertEqual(stopCount, 0, "Required Fn alone must keep the active combo held")
+        physicalFlags = []
+        service.resyncHotkeyStateAfterEventTapRecoveryForTesting()
+        service.recoverReleasedActiveHotkeyAfterEventTapDisableForTesting()
+        XCTAssertEqual(stopCount, 1)
     }
 
     @MainActor
@@ -17230,7 +17238,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         let service = HotkeyService()
         service.suspendMonitoring()
         service.setHotkeyForTesting(try rightCommandRightOptionComboHotkey(), for: .pushToTalk)
-        service.modifierFlagsStateProvider = { self.flags(generic: [.command, .option], deviceKeyCodes: [0x36, 0x3A]) }
+        service.modifierFlagsStateProvider = { self.flags(generic: [.command, .option], deviceKeyCodes: [0x37, 0x3A]) }
         var stopCount = 0
         service.onDictationStop = { stopCount += 1 }
         let down = try makeFlagsChangedEvent(keyCode: 0x3D, modifierFlags: flags(generic: [.command, .option], deviceKeyCodes: [0x36, 0x3D]))
@@ -17238,6 +17246,43 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         service.resyncHotkeyStateAfterEventTapRecoveryForTesting()
         service.recoverReleasedActiveHotkeyAfterEventTapDisableForTesting()
         XCTAssertEqual(stopCount, 1)
+    }
+
+    @MainActor
+    func testRecoveryPreservesPartialComboUntilNormalFinalRelease() async throws {
+        for sideSpecific in [false, true] {
+            for workflow in [false, true] {
+                let service = HotkeyService()
+                service.accessibilityTrustedProvider = { false }
+                defer { service.suspendMonitoring() }
+                let hotkey = try sideSpecific ? rightCommandRightOptionComboHotkey() : commandOptionComboHotkey()
+                if workflow {
+                    service.registerWorkflowHotkeys([(id: UUID(), hotkey: hotkey, behavior: .startDictation)])
+                } else {
+                    service.setHotkeyForTesting(hotkey, for: .pushToTalk)
+                }
+                var physicalFlags = flags(generic: [.command, .option], deviceKeyCodes: [0x36, 0x3D])
+                service.modifierFlagsStateProvider = { physicalFlags }
+                var starts = 0
+                var stops = 0
+                service.onDictationStart = { _ in starts += 1 }
+                service.onDictationStop = { stops += 1 }
+                XCTAssertTrue(service.processEventForTesting(try makeFlagsChangedEvent(keyCode: 0x3D, modifierFlags: physicalFlags), source: .monitor))
+                if workflow { try await Task.sleep(nanoseconds: 1_100_000_000) }
+                physicalFlags = flags(generic: [.command], deviceKeyCodes: [0x36])
+                service.resyncHotkeyStateAfterEventTapRecoveryForTesting()
+                service.recoverReleasedActiveHotkeyAfterEventTapDisableForTesting()
+                XCTAssertEqual(stops, 0, "Partial release during recovery must retain the active combo")
+                XCTAssertEqual(service.currentMode, .pushToTalk)
+                // A restored combination must remain a repeat, and its final normal
+                // release must still stop after recovery resynchronized slot state.
+                let restored = flags(generic: [.command, .option], deviceKeyCodes: [0x36, 0x3D])
+                XCTAssertTrue(service.processEventForTesting(try makeFlagsChangedEvent(keyCode: 0x3D, modifierFlags: restored), source: .monitor))
+                XCTAssertTrue(service.processEventForTesting(try makeFlagsChangedEvent(keyCode: 0x36, modifierFlags: []), source: .monitor))
+                XCTAssertEqual(stops, 1)
+                if !workflow { XCTAssertEqual(starts, 1) }
+            }
+        }
     }
 
     @MainActor
