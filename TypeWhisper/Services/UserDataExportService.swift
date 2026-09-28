@@ -85,6 +85,7 @@ enum UserDataExportService {
     enum ExportError: LocalizedError {
         case archiveFailed(Int32)
         case databaseSnapshotFailed(String)
+        case unreadableDirectory(String)
 
         var errorDescription: String? {
             switch self {
@@ -92,6 +93,11 @@ enum UserDataExportService {
                 return localizedAppText(
                     "The ZIP archive could not be created (ditto exit code \(status)).",
                     de: "Das ZIP-Archiv konnte nicht erstellt werden (ditto-Exit-Code \(status))."
+                )
+            case .unreadableDirectory(let path):
+                return localizedAppText(
+                    "The folder \(path) could not be read.",
+                    de: "Der Ordner \(path) konnte nicht gelesen werden."
                 )
             case .databaseSnapshotFailed(let name):
                 return localizedAppText(
@@ -229,7 +235,13 @@ enum UserDataExportService {
     static func copyUserData(from source: URL, to destination: URL) throws {
         let fileManager = FileManager.default
         try fileManager.createDirectory(at: destination, withIntermediateDirectories: true)
-        guard let enumerator = fileManager.enumerator(atPath: source.path) else { return }
+        guard fileManager.fileExists(atPath: source.path) else { return }
+        // An unreadable folder must fail the export instead of producing an
+        // archive that silently lacks the user's data.
+        guard fileManager.isReadableFile(atPath: source.path),
+              let enumerator = fileManager.enumerator(atPath: source.path) else {
+            throw ExportError.unreadableDirectory(source.path)
+        }
 
         while let relativePath = enumerator.nextObject() as? String {
             let type = enumerator.fileAttributes?[.type] as? FileAttributeType

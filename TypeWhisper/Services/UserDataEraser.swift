@@ -152,7 +152,15 @@ enum UserDataEraser {
 
         // Last, so nothing above can write a preference back.
         userDefaults.removePersistentDomain(forName: locations.preferencesDomain)
-        userDefaults.synchronize()
+        if !userDefaults.synchronize() {
+            failures.append(Failure(
+                item: locations.preferencesDomain,
+                message: localizedAppText(
+                    "The preferences could not be saved after deleting them.",
+                    de: "Die Einstellungen konnten nach dem Löschen nicht gespeichert werden."
+                )
+            ))
+        }
 
         for failure in failures {
             logger.error("Failed to delete \(failure.item, privacy: .public): \(failure.message, privacy: .public)")

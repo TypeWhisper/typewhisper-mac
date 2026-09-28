@@ -212,6 +212,32 @@ final class UserDataExportAndEraseTests: XCTestCase {
         XCTAssertFalse(items.contains(otherVariant.standardizedFileURL.path))
     }
 
+    func testCopyFailsForUnreadableSourceInsteadOfExportingNothing() throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        let source = dir.appendingPathComponent("Source", isDirectory: true)
+        try write("history", to: source.appendingPathComponent("history.store"))
+        try FileManager.default.setAttributes([.posixPermissions: 0o000], ofItemAtPath: source.path)
+        defer {
+            try? FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: source.path)
+            TestSupport.remove(dir)
+        }
+
+        XCTAssertThrowsError(try UserDataExportService.copyUserData(
+            from: source,
+            to: dir.appendingPathComponent("Destination", isDirectory: true)
+        ))
+    }
+
+    func testCopySkipsMissingSource() throws {
+        let dir = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(dir) }
+
+        XCTAssertNoThrow(try UserDataExportService.copyUserData(
+            from: dir.appendingPathComponent("Missing", isDirectory: true),
+            to: dir.appendingPathComponent("Destination", isDirectory: true)
+        ))
+    }
+
     // MARK: - Erase
 
     func testEraseAllRemovesFilesPreferencesAndKeychainItems() throws {
