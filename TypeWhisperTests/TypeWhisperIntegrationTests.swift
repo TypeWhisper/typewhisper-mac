@@ -14029,6 +14029,76 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         }
     }
 
+    func testScreenshotPluginDataFixtureProvidesLocalizedExampleData() throws {
+        let referenceDate = Date(timeIntervalSince1970: 1_787_054_400)
+
+        for isGerman in [false, true] {
+            let fixture = ScreenshotPluginDataFixture(isGerman: isGerman, referenceDate: referenceDate)
+
+            for (pluginId, fileName) in [
+                ("com.typewhisper.memory.file", "memories.json"),
+                ("com.typewhisper.memory.openai-vector", "entries.json"),
+            ] {
+                let files = fixture.files(pluginId: pluginId)
+                XCTAssertEqual(files.map(\.relativePath), [fileName])
+                let memories = try JSONDecoder.memoryDecoder.decode(
+                    [MemoryEntry].self,
+                    from: try XCTUnwrap(files.first?.data)
+                )
+                XCTAssertEqual(memories.count, 3)
+                XCTAssertTrue(memories.allSatisfy { $0.source.bundleIdentifier == nil })
+            }
+            XCTAssertEqual(
+                fixture.defaults(pluginId: "com.typewhisper.memory.openai-vector")["vectorStoreId"] as? String,
+                "vs_example_typewhisper"
+            )
+
+            let scriptFiles = fixture.files(pluginId: "com.typewhisper.script")
+            XCTAssertEqual(scriptFiles.map(\.relativePath), ["scripts.json"])
+            let scripts = try XCTUnwrap(
+                JSONSerialization.jsonObject(with: try XCTUnwrap(scriptFiles.first?.data)) as? [[String: Any]]
+            )
+            XCTAssertEqual(scripts.count, 2)
+            XCTAssertTrue(scripts.allSatisfy { UUID(uuidString: $0["id"] as? String ?? "") != nil })
+
+            let webhookFiles = fixture.files(pluginId: "com.typewhisper.webhook")
+            XCTAssertEqual(webhookFiles.map(\.relativePath), ["webhooks.json"])
+            let webhooks = try XCTUnwrap(
+                JSONSerialization.jsonObject(with: try XCTUnwrap(webhookFiles.first?.data)) as? [[String: Any]]
+            )
+            XCTAssertEqual(webhooks.count, 2)
+            for webhook in webhooks {
+                let url = try XCTUnwrap(URL(string: try XCTUnwrap(webhook["url"] as? String)))
+                XCTAssertEqual(url.host, "example.com")
+                XCTAssertEqual(webhook["headers"] as? [String: String], ["Content-Type": "application/json"])
+                XCTAssertEqual(webhook["secretHeaderNames"] as? [String], [])
+            }
+
+            let correctionFiles = fixture.files(pluginId: "com.typewhisper.improve")
+            XCTAssertEqual(correctionFiles.count, 3)
+            for file in correctionFiles {
+                let correction = try XCTUnwrap(
+                    JSONSerialization.jsonObject(with: file.data) as? [String: Any]
+                )
+                let id = try XCTUnwrap(correction["id"] as? String)
+                XCTAssertEqual(file.relativePath, "pending/\(id.lowercased()).json")
+                XCTAssertEqual(correction["status"] as? String, "local")
+                XCTAssertEqual(correction["language"] as? String, isGerman ? "de" : "en")
+                XCTAssertNotEqual(
+                    correction["originalText"] as? String,
+                    correction["correctedText"] as? String
+                )
+            }
+            XCTAssertEqual(
+                fixture.defaults(pluginId: "com.typewhisper.improve")["collectCorrections"] as? Bool,
+                true
+            )
+
+            XCTAssertTrue(fixture.files(pluginId: "com.typewhisper.groq").isEmpty)
+            XCTAssertTrue(fixture.defaults(pluginId: "com.typewhisper.groq").isEmpty)
+        }
+    }
+
     func testScreenshotAppSupportOverrideMustStayInsideTemporaryDirectory() {
         let temporaryDirectory = URL(fileURLWithPath: "/tmp/typewhisper-screenshot-root", isDirectory: true)
         let fallback = temporaryDirectory.appendingPathComponent(

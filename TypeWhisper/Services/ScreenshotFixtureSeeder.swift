@@ -105,6 +105,32 @@ extension ServiceContainer {
         default:
             break
         }
+        seedScreenshotPluginData(language: language)
+    }
+
+    private func seedScreenshotPluginData(language: ScreenshotFixtureLanguage) {
+        guard AppConstants.isScreenshotAutomation,
+              let pluginId = AppConstants.screenshotPluginId else { return }
+
+        let fixture = ScreenshotPluginDataFixture(
+            isGerman: language == .german,
+            referenceDate: AppConstants.screenshotFixtureReferenceDate
+        )
+        for (key, value) in fixture.defaults(pluginId: pluginId) {
+            UserDefaults.standard.set(value, forKey: "plugin.\(pluginId).\(key)")
+        }
+
+        let dataDirectory = AppConstants.appSupportDirectory
+            .appendingPathComponent("PluginData", isDirectory: true)
+            .appendingPathComponent(pluginId, isDirectory: true)
+        for file in fixture.files(pluginId: pluginId) {
+            let destination = dataDirectory.appendingPathComponent(file.relativePath)
+            try? FileManager.default.createDirectory(
+                at: destination.deletingLastPathComponent(),
+                withIntermediateDirectories: true
+            )
+            try? file.data.write(to: destination, options: .atomic)
+        }
     }
 
     private func seedScreenshotHistory(
@@ -319,6 +345,170 @@ extension ServiceContainer {
             ),
         ]
         termPackRegistryService.fetchState = .loaded
+    }
+}
+
+/// Example data for add-on settings windows that would otherwise open empty.
+/// Everything here is invented; nothing is read from the user's TypeWhisper data.
+struct ScreenshotPluginDataFixture {
+    struct File {
+        let relativePath: String
+        let data: Data
+    }
+
+    let isGerman: Bool
+    let referenceDate: Date
+
+    func defaults(pluginId: String) -> [String: Any] {
+        switch pluginId {
+        case "com.typewhisper.memory.openai-vector":
+            ["vectorStoreId": "vs_example_typewhisper"]
+        case "com.typewhisper.improve":
+            ["collectCorrections": true]
+        default:
+            [:]
+        }
+    }
+
+    func files(pluginId: String) -> [File] {
+        let files: [File?] = switch pluginId {
+        case "com.typewhisper.memory.file":
+            [encoded(memories, as: "memories.json")]
+        case "com.typewhisper.memory.openai-vector":
+            [encoded(memories, as: "entries.json")]
+        case "com.typewhisper.script":
+            [serialized(scripts, as: "scripts.json")]
+        case "com.typewhisper.webhook":
+            [serialized(webhooks, as: "webhooks.json")]
+        case "com.typewhisper.improve":
+            corrections.map { correction in
+                let id = (correction["id"] as? String ?? "correction").lowercased()
+                return serialized(correction, as: "pending/\(id).json")
+            }
+        default:
+            []
+        }
+        return files.compactMap { $0 }
+    }
+
+    private var memories: [MemoryEntry] {
+        let samples: [(id: String, content: String, type: MemoryType, appName: String, hoursAgo: Double)] = isGerman
+            ? [
+                ("5B0B0E4C-2D0B-4C0E-9A55-0B6C1F0A7D01", "Release Notes nennen sichtbare Änderungen zuerst und bleiben unter zehn Zeilen.", .instruction, "Notizen", 2),
+                ("5B0B0E4C-2D0B-4C0E-9A55-0B6C1F0A7D02", "Der Produktname wird in einem Wort geschrieben: TypeWhisper.", .correction, "Mail", 26),
+                ("5B0B0E4C-2D0B-4C0E-9A55-0B6C1F0A7D03", "Das wöchentliche Team-Review findet donnerstags um 10:00 Uhr statt.", .fact, "Slack", 74),
+            ]
+            : [
+                ("5B0B0E4C-2D0B-4C0E-9A55-0B6C1F0A7D01", "Release notes list user-facing changes first and stay under ten lines.", .instruction, "Notes", 2),
+                ("5B0B0E4C-2D0B-4C0E-9A55-0B6C1F0A7D02", "The product name is written as one word: TypeWhisper.", .correction, "Mail", 26),
+                ("5B0B0E4C-2D0B-4C0E-9A55-0B6C1F0A7D03", "The weekly team review takes place on Thursdays at 10:00.", .fact, "Slack", 74),
+            ]
+
+        // The memory list shows relative dates, so these are anchored to the capture time.
+        let now = Date()
+        return samples.map { sample in
+            let createdAt = now.addingTimeInterval(-sample.hoursAgo * 3_600)
+            return MemoryEntry(
+                id: UUID(uuidString: sample.id) ?? UUID(),
+                content: sample.content,
+                type: sample.type,
+                source: MemorySource(appName: sample.appName, timestamp: createdAt),
+                createdAt: createdAt,
+                lastAccessedAt: createdAt
+            )
+        }
+    }
+
+    private var scripts: [[String: Any]] {
+        [
+            [
+                "id": "8E4C6B52-1F3A-4F0B-8C11-52A7D9E31A01",
+                "name": isGerman ? "Leerzeichen am Zeilenende entfernen" : "Trim trailing spaces",
+                "command": "sed 's/[[:space:]]*$//'",
+                "isEnabled": true,
+                "profileFilter": [String](),
+            ],
+            [
+                "id": "8E4C6B52-1F3A-4F0B-8C11-52A7D9E31A02",
+                "name": isGerman ? "Bei 80 Zeichen umbrechen" : "Wrap at 80 characters",
+                "command": "fold -s -w 80",
+                "isEnabled": true,
+                "profileFilter": [String](),
+            ],
+        ]
+    }
+
+    private var webhooks: [[String: Any]] {
+        [
+            [
+                "id": "C2A1F7D4-6B3E-4D5A-9E20-7F4B1C8D2E01",
+                "name": isGerman ? "Team-Notizen" : "Team Notes",
+                "url": "https://example.com/hooks/typewhisper",
+                "httpMethod": "POST",
+                "headers": ["Content-Type": "application/json"],
+                "secretHeaderNames": [String](),
+                "isEnabled": true,
+                "profileFilter": [String](),
+            ],
+            [
+                "id": "C2A1F7D4-6B3E-4D5A-9E20-7F4B1C8D2E02",
+                "name": isGerman ? "Besprechungsarchiv" : "Meeting Archive",
+                "url": "https://example.com/hooks/meetings",
+                "httpMethod": "POST",
+                "headers": ["Content-Type": "application/json"],
+                "secretHeaderNames": [String](),
+                "isEnabled": true,
+                "profileFilter": [isGerman ? "Besprechungsnotizen" : "Meeting Notes"],
+            ],
+        ]
+    }
+
+    private var corrections: [[String: Any]] {
+        let samples: [(id: String, original: String, corrected: String, daysAgo: Double)] = isGerman
+            ? [
+                ("3F9D2A10-7C4E-4B8A-A6D3-1E5B9C0F4A01", "Bitte prüfe vor dem Release das Fast-Lane-Setup.", "Bitte prüfe vor dem Release das Fastlane-Setup.", 0),
+                ("3F9D2A10-7C4E-4B8A-A6D3-1E5B9C0F4A02", "Das Team Review ist am Donnerstag um zehn.", "Das Team-Review ist am Donnerstag um 10:00 Uhr.", 1),
+                ("3F9D2A10-7C4E-4B8A-A6D3-1E5B9C0F4A03", "Die Notizen liegen in Type Whisper bereit.", "Die Notizen liegen in TypeWhisper bereit.", 3),
+            ]
+            : [
+                ("3F9D2A10-7C4E-4B8A-A6D3-1E5B9C0F4A01", "Please check the fast lane setup before the release.", "Please check the Fastlane setup before the release.", 0),
+                ("3F9D2A10-7C4E-4B8A-A6D3-1E5B9C0F4A02", "The team review is on Thursday at ten.", "The team review is on Thursday at 10:00.", 1),
+                ("3F9D2A10-7C4E-4B8A-A6D3-1E5B9C0F4A03", "The notes are ready in Type Whisper.", "The notes are ready in TypeWhisper.", 3),
+            ]
+
+        let formatter = ISO8601DateFormatter()
+        return samples.map { sample in
+            [
+                "schemaVersion": 1,
+                "id": sample.id,
+                "capturedAt": formatter.string(
+                    from: referenceDate.addingTimeInterval(-sample.daysAgo * 86_400)
+                ),
+                "originalText": sample.original,
+                "correctedText": sample.corrected,
+                "language": isGerman ? "de" : "en",
+                "engineId": "parakeet",
+                "modelId": "parakeet-tdt-0.6b-v3",
+                "appVersion": "1.7.0",
+                "appBuild": "1",
+                "platformVersion": "macOS 26.0",
+                "sourceChannel": "production",
+                "status": "local",
+                "qualityCredit": 0,
+            ]
+        }
+    }
+
+    private func encoded(_ memories: [MemoryEntry], as relativePath: String) -> File? {
+        guard let data = try? JSONEncoder.memoryEncoder.encode(memories) else { return nil }
+        return File(relativePath: relativePath, data: data)
+    }
+
+    private func serialized(_ object: Any, as relativePath: String) -> File? {
+        guard let data = try? JSONSerialization.data(withJSONObject: object, options: [.sortedKeys]) else {
+            return nil
+        }
+        return File(relativePath: relativePath, data: data)
     }
 }
 

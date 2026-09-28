@@ -122,6 +122,15 @@ Obsidian captures include a selected example vault, and MCP Client captures
 include an example HTTP server. Both fixtures are localized and seeded only in
 the isolated screenshot defaults. The example MCP server is not connected.
 
+File Memory, OpenAI Vector Memory, Script Runner, Webhook Notifications, and
+Improve TypeWhisper would open empty, so screenshot mode writes localized
+example data into the temporary plugin data directory before the selected
+plugin loads: three memories, two scripts, two webhooks that point to
+`example.com`, and three corrections that are ready to send. Execution and
+delivery logs only exist in memory and stay empty. Claude and ElevenLabs skip
+their automatic model refresh and key check in screenshot mode, because the
+blocked request would otherwise show an error in the window.
+
 Publishing requires `cwebp`, `oxipng`, and ImageMagick's `identify`. After
 reviewing both locale images, copy and optimize the PNG/WebP assets in a local
 website checkout:
