@@ -353,7 +353,7 @@ final class Reson8Plugin: NSObject, TranscriptionEnginePlugin, @unchecked Sendab
 
     var transcriptionModels: [PluginModelInfo] {
         var list: [PluginModelInfo] = [
-            PluginModelInfo(id: Self.defaultModelSentinel, displayName: String(localized: "Default model", bundle: Bundle(for: Reson8Plugin.self)))
+            PluginModelInfo(id: Self.defaultModelSentinel, displayName: "Default model")
         ]
         list.append(contentsOf: _fetchedCustomModels.map {
             PluginModelInfo(id: $0.id, displayName: $0.name)

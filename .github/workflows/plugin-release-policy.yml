@@ -1,0 +1,31 @@
+name: Plugin Release Policy
+
+on:
+  pull_request:
+    paths:
+      - 'TypeWhisperPluginSDK/Plugins/**/manifest.json'
+      - 'scripts/*plugin*release*.py'
+      - '.github/workflows/plugin-release*.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'TypeWhisperPluginSDK/Plugins/**/manifest.json'
+      - 'scripts/*plugin*release*.py'
+      - '.github/workflows/plugin-release*.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Validate new plugin release manifests
+        run: python3 scripts/validate_plugin_release_manifest.py TypeWhisperPluginSDK/Plugins/*/manifest.json
+      - name: Test release policy and minimum host resolution
+        run: |
+          python3 scripts/test_validate_plugin_release_manifest.py
+          python3 scripts/test_resolve_plugin_host_release.py

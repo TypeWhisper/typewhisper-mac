@@ -240,7 +240,6 @@ def build_screenshot_app!
     "-configuration", "Debug",
     "-derivedDataPath", SCREENSHOT_DERIVED_DATA,
     "-destination", "platform=macOS",
-    "-skipPackagePluginValidation",
     "CODE_SIGN_IDENTITY=-",
     "CODE_SIGN_STYLE=Manual",
     "CODE_SIGNING_REQUIRED=YES",
@@ -286,7 +285,6 @@ def build_plugin_screenshot_targets!(plugins)
   command.concat([
     "-configuration", "Debug",
     "SYMROOT=#{File.join(SCREENSHOT_DERIVED_DATA, 'Build', 'Products')}",
-    "-skipPackagePluginValidation",
     "OBJROOT=#{File.join(SCREENSHOT_DERIVED_DATA, 'Build', 'Intermediates.noindex')}",
     "SDKROOT=macosx",
     "CODE_SIGN_IDENTITY=-",

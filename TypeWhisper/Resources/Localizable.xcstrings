@@ -1,1012 +1,6 @@
 {
   "sourceLanguage" : "en",
   "strings" : {
-    "Clear balance" : {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Guthaben löschen"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "清除余额"
-          }
-        }
-      }
-    },
-    "Last recognition" : {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Letzte Spracherkennung"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "上次识别"
-          }
-        }
-      }
-    },
-    "Balance updated" : {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Guthaben aktualisiert"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "余额已更新"
-          }
-        }
-      }
-    },
-    "Spent since balance update" : {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Verbrauch seit Guthabenaktualisierung"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "余额更新后已用"
-          }
-        }
-      }
-    },
-    "Estimated remaining" : {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Geschätztes Restguthaben"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "预计剩余"
-          }
-        }
-      }
-    },
-    "Authorization Key is stored securely in the Keychain. If validation fails with a certificate error, install the SaluteSpeech certificate trusted by macOS." : {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Der Autorisierungsschlüssel wird sicher im Schlüsselbund gespeichert. Falls die Prüfung wegen eines Zertifikatfehlers scheitert, installiere das von macOS als vertrauenswürdig eingestufte SaluteSpeech-Zertifikat."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "授权密钥安全存储在钥匙串中。如果验证因证书错误而失败，请安装受 macOS 信任的 SaluteSpeech 证书。"
-          }
-        }
-      }
-    },
-    "Local estimate. Update it from SaluteSpeech Studio." : {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Lokale Schätzung. Aktualisiere sie anhand von SaluteSpeech Studio."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "本地估算值。请从 SaluteSpeech Studio 更新。"
-          }
-        }
-      }
-    },
-    "Reset tracked usage" : {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Erfassten Verbrauch zurücksetzen"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "重置已跟踪用量"
-          }
-        }
-      }
-    },
-    "Save balance" : {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Guthaben speichern"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "保存余额"
-          }
-        }
-      }
-    },
-    "Valid until" : {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Gültig bis"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "有效期至"
-          }
-        }
-      }
-    },
-    "Minutes" : {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Minuten"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "分钟"
-          }
-        }
-      }
-    },
-    "Studio remaining" : {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Studio-Restguthaben"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Studio 剩余配额"
-          }
-        }
-      }
-    },
-    "Tracked spent" : {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Erfasster Verbrauch"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "已跟踪用量"
-          }
-        }
-      }
-    },
-    "Recognition Usage" : {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Spracherkennungsnutzung"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "识别用量"
-          }
-        }
-      }
-    },
-    "Corporate" : {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Unternehmen"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "企业"
-          }
-        }
-      }
-    },
-    "Personal" : {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Persönlich"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "个人"
-          }
-        }
-      }
-    },
-    "OAuth Scope" : {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "OAuth-Bereich"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "OAuth 授权范围"
-          }
-        }
-      }
-    },
-    "Authorization Key" : {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Autorisierungsschlüssel"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "授权密钥"
-          }
-        }
-      }
-    },
-    "Reset Defaults" : {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Standardwerte wiederherstellen"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "恢复默认设置"
-          }
-        }
-      }
-    },
-    "One word per line. Commas and semicolons are also accepted." : {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ein Wort pro Zeile. Kommas und Semikolons werden ebenfalls akzeptiert."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "每行一个词，也可用逗号或分号分隔。"
-          }
-        }
-      }
-    },
-    "Filler words" : {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Füllwörter"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "填充词"
-          }
-        }
-      }
-    },
-    "Connected" : {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Verbunden"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "已连接"
-          }
-        }
-      }
-    },
-    "No memories match your search." : {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Keine Erinnerungen passen zu deiner Suche."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "没有与您的搜索相匹配的记忆。"
-          }
-        }
-      }
-    },
-    "Memories will appear here after transcriptions are processed." : {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nach der Verarbeitung von Transkriptionen erscheinen hier Erinnerungen."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "转录处理完成后，记忆将显示在这里。"
-          }
-        }
-      }
-    },
-    "No Memories" : {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Keine Erinnerungen"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "暂无记忆"
-          }
-        }
-      }
-    },
-    "Search memories..." : {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Erinnerungen durchsuchen …"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "搜索记忆…"
-          }
-        }
-      }
-    },
-    "%lld memories stored" : {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%lld gespeicherte Erinnerungen"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "已存储 %lld 条记忆"
-          }
-        }
-      }
-    },
-    "Usage Statistics" : {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nutzungsstatistik"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "使用情况统计"
-          }
-        }
-      }
-    },
-    "Not enough disk space to download %@. It needs %@ of free space, but only %@ is available on “%@”.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nicht genug Speicherplatz, um %1$@ herunterzuladen. Benötigt werden %2$@ freier Speicher, auf „%4$@“ sind aber nur %3$@ verfügbar."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%1$@ をダウンロードするための空き容量が足りません。%2$@ の空き容量が必要ですが、「%4$@」で使用できるのは %3$@ だけです。"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "磁盘空间不足，无法下载 %1$@。需要 %2$@ 可用空间，但“%4$@”上只有 %3$@ 可用。"
-          }
-        }
-      }
-    },
-    "Not enough disk space to download %@. It needs %@ of free space, but only %@ is available.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nicht genug Speicherplatz, um %1$@ herunterzuladen. Benötigt werden %2$@ freier Speicher, verfügbar sind aber nur %3$@."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "%1$@ をダウンロードするための空き容量が足りません。%2$@ の空き容量が必要ですが、使用できるのは %3$@ だけです。"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "磁盘空间不足，无法下载 %1$@。需要 %2$@ 可用空间，但只有 %3$@ 可用。"
-          }
-        }
-      }
-    },
-    "Other model downloads in progress still need %@.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Andere laufende Modell-Downloads benötigen noch %@."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "実行中の他のモデルのダウンロードに、まだ %@ が必要です。"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "其他正在进行的模型下载仍需要 %@。"
-          }
-        }
-      }
-    },
-    "Free up space and try again.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Gib Speicherplatz frei und versuche es erneut."
-          }
-        },
-        "ja": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "空き容量を増やしてから、もう一度お試しください。"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "请释放空间后重试。"
-          }
-        }
-      }
-    },
-    "Selected entry content": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Inhalt des ausgewählten Eintrags"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "所选条目内容"
-          }
-        }
-      }
-    },
-    "First row is a header": {
-      "localizations": {
-        "de": { "stringUnit": { "state": "translated", "value": "Erste Zeile ist eine Kopfzeile" } },
-        "zh-Hans": { "stringUnit": { "state": "translated", "value": "首行为标题行" } }
-      }
-    },
-    "Source files found on this Mac: %@.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Quelldateien auf diesem Mac gefunden: %@."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "在此 Mac 上找到来源文件：%@。"
-          }
-        }
-      }
-    },
-    "Review Words...": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Wörter prüfen …"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "预览词语…"
-          }
-        }
-      }
-    },
-    "Review Snippets...": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Snippets prüfen …"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "预览文本片段…"
-          }
-        }
-      }
-    },
-    "Import from Wispr Flow or Handy...": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Aus Wispr Flow oder Handy importieren …"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "从 Wispr Flow 或 Handy 导入…"
-          }
-        }
-      }
-    },
-    "This file does not have a supported import format.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Diese Datei hat kein unterstütztes Importformat."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "此文件的导入格式不受支持。"
-          }
-        }
-      }
-    },
-    "The source could not be read safely. Quitting the source app and trying again may help. Nothing was imported.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Die Quelle konnte nicht sicher gelesen werden. Beende gegebenenfalls die Quell-App und versuche es erneut. Es wurde nichts importiert."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "无法安全读取来源。退出来源应用后重试可能有帮助。未导入任何内容。"
-          }
-        }
-      }
-    },
-    "The source exceeds the import limits. Nothing was imported.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Die Quelle überschreitet die Importgrenzen. Es wurde nichts importiert."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "来源超出导入限制。未导入任何内容。"
-          }
-        }
-      }
-    },
-    "The import could not be saved. Nothing was imported.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Der Import konnte nicht gespeichert werden. Es wurde nichts importiert."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "无法保存导入内容。未导入任何内容。"
-          }
-        }
-      }
-    },
-    "No source file was found. Use Choose File to locate it.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Keine Quelldatei gefunden. Suche sie über „Datei auswählen“."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "未找到来源文件。请使用“选择文件”定位文件。"
-          }
-        }
-      }
-    },
-    "Your list changed while you were reviewing. Nothing was imported. Please review the updated list.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Die Liste wurde während der Prüfung geändert. Es wurde nichts importiert. Bitte prüfe die aktualisierte Liste."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "列表在预览期间发生了变化。未导入任何内容。请检查更新后的列表。"
-          }
-        }
-      }
-    },
-    "Import Words from Another App": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Wörter aus anderer App importieren"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "从其他应用导入词语"
-          }
-        }
-      }
-    },
-    "Import Snippets from Another App": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Snippets aus anderer App importieren"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "从其他应用导入文本片段"
-          }
-        }
-      }
-    },
-    "Review the entries before importing. Existing entries will not be overwritten.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Prüfe die Einträge vor dem Import. Vorhandene Einträge werden nicht überschrieben."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "请在导入前检查条目。现有条目不会被覆盖。"
-          }
-        }
-      }
-    },
-    "Source": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Quelle"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "来源"
-          }
-        }
-      }
-    },
-    "Read from App": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Aus App lesen"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "从应用读取"
-          }
-        }
-      }
-    },
-    "Choose File...": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Datei auswählen …"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "选择文件…"
-          }
-        }
-      }
-    },
-    "Reading source...": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Quelle wird gelesen …"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "正在读取来源…"
-          }
-        }
-      }
-    },
-    "Term / Trigger": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Begriff / Auslöser"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "词语 / 触发词"
-          }
-        }
-      }
-    },
-    "Status": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Status"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "状态"
-          }
-        }
-      }
-    },
-    "Import Selected": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Auswahl importieren"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "导入所选内容"
-          }
-        }
-      }
-    },
-    "No compatible entries found. Nothing was changed.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Keine kompatiblen Einträge gefunden. Es wurde nichts geändert."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "未找到兼容条目。未进行任何更改。"
-          }
-        }
-      }
-    },
-    "Snippets containing TypeWhisper dynamic placeholders are excluded to preserve literal text.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Snippets mit dynamischen TypeWhisper-Platzhaltern werden ausgelassen, damit sich der Text nicht ungewollt verändert."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "含有 TypeWhisper 动态占位符的文本片段将被排除，以保留原始文本含义。"
-          }
-        }
-      }
-    },
-    "New": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Neu"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "新增"
-          }
-        }
-      }
-    },
-    "Duplicate": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Duplikat"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "重复"
-          }
-        }
-      }
-    },
-    "Conflict": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Konflikt"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "冲突"
-          }
-        }
-      }
-    },
-    "Import from Another App...": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Aus anderer App importieren …"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "从其他应用导入…"
-          }
-        }
-      }
-    },
-    "%lld selected, %lld duplicates, %lld conflicts.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ausgewählt: %lld · Duplikate: %lld · Konflikte: %lld"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "已选择 %lld 项，%lld 项重复，%lld 项冲突。"
-          }
-        }
-      }
-    },
-    "%lld entries excluded (deleted, another entry type, empty or incompatible).": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Ausgelassene Einträge: %lld (gelöscht, anderer Eintragstyp, leer oder inkompatibel)."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "已排除 %lld 个条目（已删除、其他类型、空白或不兼容）。"
-          }
-        }
-      }
-    },
     "Canary needs an explicit source language. Choose Greek or English for Sophea in Dictation settings." : {
       "localizations" : {
         "de" : {
@@ -1961,24 +955,24 @@
         }
       }
     },
-    "Double: press Esc twice to cancel. Single: press Esc once. Both show a cancellation banner for 1.5 seconds. Instant: press Esc once without a banner. Disabled: Esc never cancels and passes through to the app. Applies to recording and processing." : {
+    "Double: press Esc twice to cancel. Single: press Esc once. Both show a cancellation banner for 1.5 seconds. Instant: press Esc once without a banner. Applies to recording and processing." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Doppelt: Esc zweimal drücken. Einfach: Esc einmal drücken. Beide zeigen für 1,5 Sekunden eine Abbruchbestätigung. Instant: Esc einmal drücken, ohne Bestätigungsanzeige. Deaktiviert: Esc bricht nie ab und wird an die App weitergeleitet. Gilt für Aufnahme und Verarbeitung."
+            "value" : "Doppelt: Esc zweimal drücken. Einfach: Esc einmal drücken. Beide zeigen für 1,5 Sekunden eine Abbruchbestätigung. Instant: Esc einmal drücken, ohne Bestätigungsanzeige. Gilt für Aufnahme und Verarbeitung."
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "双次：按两次 Esc 取消。单次：按一次 Esc 取消。这两种方式都会显示 1.5 秒的取消提示。即时：按一次 Esc 取消，不显示提示。禁用：Esc 不会取消，并传递给应用。适用于录音和处理。"
+            "value" : "双次：按两次 Esc 取消。单次：按一次 Esc 取消。这两种方式都会显示 1.5 秒的取消提示。即时：按一次 Esc 取消，不显示提示。适用于录音和处理。"
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "2回：Escキーを2回押してキャンセルします。1回：Escキーを1回押します。どちらもキャンセル通知を1.5秒間表示します。即時：Escキーを1回押すと、通知を表示せずにキャンセルします。無効：Escを押してもキャンセルされず、アプリにそのまま渡されます。録音中と処理中の両方に適用されます。"
+            "value" : "2回：Escキーを2回押してキャンセルします。1回：Escキーを1回押します。どちらもキャンセル通知を1.5秒間表示します。即時：Escキーを1回押すと、通知を表示せずにキャンセルします。録音中と処理中の両方に適用されます。"
           }
         }
       }
@@ -2001,34 +995,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "较小的数保留原来的文字写法。小数和逐位口述的数字串仍会转换为数字。已有的数字保持不变。"
-          }
-        }
-      }
-    },
-    "cancellationBehavior.disabled" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Deaktiviert"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "禁用"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Disabled"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "無効"
           }
         }
       }
@@ -2999,7 +1965,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Importierte Einträge: %1$lld."
+            "value" : "%1$lld Einträge importiert."
           }
         },
         "ja" : {
@@ -3390,22 +2356,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "1 个已下载模型"
-          }
-        }
-      }
-    },
-    "1 recent transcription" : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "最近の文字起こし1件"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "1 条最近转录"
           }
         }
       }
@@ -4168,7 +3118,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Eigenen Sound hinzufügen"
+            "value" : "Eigenen Sound hinzufuegen"
           }
         },
         "ja" : {
@@ -7349,7 +6299,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Sounddatei auswählen"
+            "value" : "Sounddatei auswaehlen"
           }
         },
         "ja" : {
@@ -7396,7 +6346,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Wähle eine Transkriptions-Engine. Jede Engine muss ein Modell herunterladen. Öffne die Einstellungen zum Konfigurieren."
+            "value" : "Waehle eine Transkriptions-Engine. Jede Engine muss ein Modell herunterladen. Oeffne die Einstellungen zum Konfigurieren."
           }
         },
         "ja" : {
@@ -8049,12 +6999,6 @@
     },
     "Clear Usage Statistics" : {
       "localizations" : {
-        "de" : {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Nutzungsstatistik löschen"
-          }
-        },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
@@ -9189,12 +8133,6 @@
       "comment" : "Description of a dictionary support type when corrections are only supported.",
       "isCommentAutoGenerated" : true,
       "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Nur Korrekturen"
-          }
-        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -15036,12 +13974,6 @@
             "state" : "translated",
             "value" : "Lange Diktate abschnittsweise verarbeiten"
           }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "分段处理长篇听写"
-          }
         }
       }
     },
@@ -15051,12 +13983,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "Beschleunigt lange Diktate, indem der Text in Abschnitten verarbeitet wird. Mit einer Streaming-Engine und Live-Vorschau werden fertige Sätze schon während des Sprechens verarbeitet, sonst laufen die Abschnitte bei Cloud-Anbietern nach der Aufnahme parallel. Verursacht mehr Anfragen. Nicht geeignet für Workflows, die den ganzen Text auf einmal brauchen, etwa Zusammenfassungen oder JSON."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "将文本分段处理，以加快长篇听写的速度。使用流式引擎并开启实时预览时，已说完的句子会在你说话时同步处理；否则，使用云服务提供商时，各段会在录音结束后并行处理。会产生更多请求。不适用于需要一次性处理全文的工作流，例如摘要或 JSON。"
           }
         }
       }
@@ -17548,12 +16474,6 @@
     },
     "Meeting Notes" : {
       "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Besprechungsnotizen"
-          }
-        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -18946,7 +17866,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Noch keine Community-Pakete verfügbar."
+            "value" : "Noch keine Community-Pakete verfuegbar."
           }
         },
         "ja" : {
@@ -19810,7 +18730,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Keine Transkriptions-Engines verfügbar."
+            "value" : "Keine Transkriptions-Engines verfuegbar."
           }
         },
         "ja" : {
@@ -19834,7 +18754,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Keine Transkriptions-Engines installiert. Engines über Integrationen installieren."
+            "value" : "Keine Transkriptions-Engines installiert. Engines ueber Integrationen installieren."
           }
         },
         "ja" : {
@@ -20628,7 +19548,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Öffne die Einstellungen einer Engine, um ein Modell herunterzuladen."
+            "value" : "Oeffne die Einstellungen einer Engine, um ein Modell herunterzuladen."
           }
         },
         "ja" : {
@@ -20675,7 +19595,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Integrationen öffnen"
+            "value" : "Integrationen oeffnen"
           }
         },
         "ja" : {
@@ -20848,12 +19768,6 @@
     },
     "Open Setup Wizard" : {
       "localizations" : {
-        "de" : {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Einrichtungsassistent öffnen"
-          }
-        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -24535,7 +23449,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Speichert ein Transkript für Recorder-Aufnahmen. Die Auswahl unten gilt nur für den System-Audio-Recorder, nicht für normale Diktate."
+            "value" : "Speichert ein Transkript fuer Recorder-Aufnahmen. Die Auswahl unten gilt nur fuer den System Audio Recorder, nicht fuer normale Dictation."
           }
         },
         "en" : {
@@ -24676,7 +23590,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Die finale Transkription hat keinen Text zurückgegeben."
+            "value" : "Die finale Transkription hat keinen Text zurueckgegeben."
           }
         },
         "en" : {
@@ -25127,7 +24041,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Keine Engine ausgewählt"
+            "value" : "Keine Engine ausgewaehlt"
           }
         },
         "en" : {
@@ -25407,7 +24321,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Live-Transkript während der Aufnahme anzeigen"
+            "value" : "Live-Transkript waehrend der Aufnahme anzeigen"
           }
         },
         "en" : {
@@ -25743,7 +24657,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Transkription fehlgeschlagen während %@: %@"
+            "value" : "Transkription fehlgeschlagen waehrend %@: %@"
           }
         },
         "en" : {
@@ -25771,7 +24685,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Transkription fehlgeschlagen für %@, %@ während %@: %@"
+            "value" : "Transkription fehlgeschlagen fuer %@, %@ waehrend %@: %@"
           }
         },
         "en" : {
@@ -25799,7 +24713,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Aktiviere das Transkript, um Engine, Modell, Sprache und Aufgabe für Recorder-Aufnahmen zu ändern."
+            "value" : "Aktiviere das Transkript, um Engine, Modell, Sprache und Aufgabe fuer Recorder-Aufnahmen zu aendern."
           }
         },
         "en" : {
@@ -25827,7 +24741,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Diktat-Standard-Engine verwenden"
+            "value" : "Dictation-Standard-Engine verwenden"
           }
         },
         "en" : {
@@ -26860,7 +25774,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Erfordert einen laufenden API-Server. Das CLI-Tool verbindet sich mit TypeWhispers API für schnelle Transkription ohne Modell-Kaltstart."
+            "value" : "Erfordert einen laufenden API-Server. Das CLI-Tool verbindet sich mit TypeWhispers API fuer schnelle Transkription ohne Modell-Kaltstart."
           }
         },
         "ja" : {
@@ -27856,22 +26770,6 @@
         }
       }
     },
-    "Search recent transcriptions..." : {
-      "localizations" : {
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "最近の文字起こしを検索..."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "搜索最近转录…"
-          }
-        }
-      }
-    },
     "Search workflows" : {
       "localizations" : {
         "ja" : {
@@ -27884,6 +26782,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "搜索工作流"
+          }
+        }
+      }
+    },
+    "Search workflows and recent transcriptions..." : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ワークフローと最近の文字起こしを検索..."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "搜索工作流和最近转录…"
           }
         }
       }
@@ -28409,12 +27323,6 @@
     },
     "Set a spoken language to configure punctuation behavior." : {
       "localizations" : {
-        "de" : {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Wähle eine gesprochene Sprache, um die Satzzeichenerkennung zu konfigurieren."
-          }
-        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -28651,7 +27559,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ordnerüberwachung"
+            "value" : "Ordnerueberwachung"
           }
         },
         "en" : {
@@ -29399,12 +28307,6 @@
     },
     "Spoken Punctuation" : {
       "localizations" : {
-        "de" : {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Gesprochene Satzzeichen"
-          }
-        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -30719,7 +29621,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Häufige Begriffe aus Datenanalyse und KI für bessere Spracherkennung."
+            "value" : "Haeufige Begriffe aus Datenanalyse und KI fuer bessere Spracherkennung."
           }
         },
         "en" : {
@@ -30748,7 +29650,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Häufige Design-Begriffe für bessere Spracherkennung."
+            "value" : "Haeufige Design-Begriffe fuer bessere Spracherkennung."
           }
         },
         "en" : {
@@ -30777,7 +29679,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Häufige DevOps- und Cloud-Begriffe für bessere Spracherkennung."
+            "value" : "Haeufige DevOps- und Cloud-Begriffe fuer bessere Spracherkennung."
           }
         },
         "en" : {
@@ -30806,7 +29708,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Häufige iOS- und macOS-Begriffe für bessere Spracherkennung."
+            "value" : "Haeufige iOS- und macOS-Begriffe fuer bessere Spracherkennung."
           }
         },
         "en" : {
@@ -30835,7 +29737,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Häufige Begriffe aus der Webentwicklung für bessere Spracherkennung."
+            "value" : "Haeufige Begriffe aus der Webentwicklung fuer bessere Spracherkennung."
           }
         },
         "en" : {
@@ -30884,12 +29786,6 @@
       "comment" : "Badge text for a dictionary engine support row.",
       "isCommentAutoGenerated" : true,
       "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Begriffe + Korrekturen"
-          }
-        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -31008,12 +29904,6 @@
       "comment" : "Description of a dictionary engine support status when the user needs to set a plugin.",
       "isCommentAutoGenerated" : true,
       "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Begriffe erfordern eine Plugin-Einstellung"
-          }
-        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -31123,7 +30013,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Text eingefügt"
+            "value" : "Text eingefuegt"
           }
         },
         "ja" : {
@@ -32652,7 +31542,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Zu kurz, halte den Hotkey etwas länger"
+            "value" : "Zu kurz, halte den Hotkey etwas laenger"
           }
         },
         "ja" : {
@@ -32919,12 +31809,6 @@
     },
     "Transcribe short / quiet clips more aggressively" : {
       "localizations" : {
-        "de" : {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Kurze oder leise Aufnahmen stärker berücksichtigen"
-          }
-        },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
@@ -34441,7 +33325,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Update verfügbar"
+            "value" : "Update verfuegbar"
           }
         },
         "ja" : {
@@ -35309,7 +34193,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Überwachung beim App-Start beginnen"
+            "value" : "Ueberwachung beim App-Start beginnen"
           }
         },
         "en" : {
@@ -35337,7 +34221,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Quelldateien nach Transkription löschen"
+            "value" : "Quelldateien nach Transkription loeschen"
           }
         },
         "en" : {
@@ -35365,7 +34249,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Überwacht den ausgewählten Ordner auf neue Audiodateien und transkribiert sie automatisch."
+            "value" : "Ueberwacht den ausgewaehlten Ordner auf neue Audiodateien und transkribiert sie automatisch."
           }
         },
         "en" : {
@@ -35449,7 +34333,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Das gewählte Untertitel-Format benötigt Zeitstempel, aber die Engine hat keine Segmente geliefert."
+            "value" : "Das gewaehlte Untertitel-Format benoetigt Zeitstempel, aber die Engine hat keine Segmente geliefert."
           }
         },
         "en" : {
@@ -35533,7 +34417,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Verlauf löschen"
+            "value" : "Verlauf loeschen"
           }
         },
         "en" : {
@@ -35675,7 +34559,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Kein Ordner ausgewählt"
+            "value" : "Kein Ordner ausgewaehlt"
           }
         },
         "en" : {
@@ -35731,7 +34615,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Gleicher Ordner wie Überwachungsordner"
+            "value" : "Gleicher Ordner wie Ueberwachungsordner"
           }
         },
         "en" : {
@@ -35815,7 +34699,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ordner auswählen..."
+            "value" : "Ordner auswaehlen..."
           }
         },
         "en" : {
@@ -35843,7 +34727,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ordner für die Audio-Überwachung auswählen"
+            "value" : "Ordner fuer die Audio-Ueberwachung auswaehlen"
           }
         },
         "en" : {
@@ -35871,7 +34755,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Ordner für die Transkriptions-Ausgabe auswählen"
+            "value" : "Ordner fuer die Transkriptions-Ausgabe auswaehlen"
           }
         },
         "en" : {
@@ -35927,7 +34811,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Überwachung starten"
+            "value" : "Ueberwachung starten"
           }
         },
         "en" : {
@@ -35955,7 +34839,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Überwachung stoppen"
+            "value" : "Ueberwachung stoppen"
           }
         },
         "en" : {
@@ -35983,7 +34867,7 @@
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Überwachter Ordner"
+            "value" : "Ueberwachter Ordner"
           }
         },
         "en" : {

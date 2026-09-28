@@ -372,8 +372,6 @@ struct SetupWizardView: View {
                 )
             }
             .frame(maxWidth: 390, alignment: .leading)
-
-            SetupWizardImportLink()
         }
         .padding(.top, 4)
     }

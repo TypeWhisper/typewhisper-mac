@@ -23,24 +23,24 @@
         }
       }
     },
-    "Off by default because dictionary terms can make Groq skip parts of a dictation. Dictionary corrections after transcription apply either way.": {
+    "Turn this off to retry without dictionary context if words or passages are missing. This does not change dictionary corrections after transcription.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Standardmäßig aus, weil Groq mit Wörterbuchbegriffen Teile eines Diktats auslassen kann. Wörterbuchkorrekturen nach der Transkription gelten in jedem Fall."
+            "value": "Deaktiviere diese Option, um bei fehlenden Wörtern oder Abschnitten einen neuen Versuch ohne Wörterbuchkontext zu starten. Wörterbuchkorrekturen nach der Transkription bleiben unverändert."
           }
         },
         "ja": {
           "stringUnit": {
             "state": "translated",
-            "value": "辞書の用語を送信するとGroqが口述の一部を省略することがあるため、既定ではオフです。文字起こし後の辞書による修正は常に適用されます。"
+            "value": "単語や文章が欠けている場合は、これをオフにして辞書の文脈なしで再試行してください。文字起こし後の辞書による修正には影響しません。"
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "默认关闭，因为发送词典术语可能导致 Groq 漏掉部分听写内容。转写后的词典纠正始终生效。"
+            "value": "如果缺少单词或段落，请关闭此选项，在不使用词典上下文的情况下重试。这不会改变转写后的词典纠正。"
           }
         }
       }
@@ -217,134 +217,6 @@
           "stringUnit": {
             "state": "translated",
             "value": "验证中..."
-          }
-        }
-      }
-    },
-    "Custom": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Benutzerdefiniert"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "自定义"
-          }
-        }
-      }
-    },
-    "LLM Model": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "LLM-Modell"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "LLM 模型"
-          }
-        }
-      }
-    },
-    "Provider Default": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Anbieterstandard"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "提供商默认"
-          }
-        }
-      }
-    },
-    "Refresh": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Aktualisieren"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "刷新"
-          }
-        }
-      }
-    },
-    "Temperature": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Temperatur"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "温度"
-          }
-        }
-      }
-    },
-    "Temperature Mode": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Temperaturmodus"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "温度模式"
-          }
-        }
-      }
-    },
-    "Transcription Model": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Transkriptionsmodell"
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "转录模型"
-          }
-        }
-      }
-    },
-    "Using default models. Press Refresh to fetch all available models.": {
-      "localizations": {
-        "de": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "Standardmodelle werden verwendet. Klicke auf „Aktualisieren“, um alle verfügbaren Modelle abzurufen."
-          }
-        },
-        "zh-Hans": {
-          "stringUnit": {
-            "state": "translated",
-            "value": "正在使用默认模型。点击刷新以获取所有可用模型。"
           }
         }
       }

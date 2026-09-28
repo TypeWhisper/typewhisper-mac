@@ -1180,7 +1180,7 @@ private struct SaluteSpeechSettingsView: View {
 
                     Picker("Model", selection: $selectedModel) {
                         ForEach(plugin.transcriptionModels, id: \.id) { model in
-                            Text(String(localized: String.LocalizationValue(model.displayName))).tag(model.id)
+                            Text(model.displayName).tag(model.id)
                         }
                     }
                     .labelsHidden()
@@ -1361,7 +1361,7 @@ private struct SaluteSpeechSettingsView: View {
 
     private func usageMetricRow(title: String, value: String) -> some View {
         HStack {
-            Text(String(localized: String.LocalizationValue(title)))
+            Text(title)
                 .foregroundStyle(.secondary)
             Spacer()
             Text(value)

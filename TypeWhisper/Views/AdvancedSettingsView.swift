@@ -225,7 +225,7 @@ struct AdvancedSettingsView: View {
                 } label: {
                     SettingsInfoLabel(
                         title: String(localized: "Cancellation behavior"),
-                        info: String(localized: "Double: press Esc twice to cancel. Single: press Esc once. Both show a cancellation banner for 1.5 seconds. Instant: press Esc once without a banner. Disabled: Esc never cancels and passes through to the app. Applies to recording and processing.")
+                        info: String(localized: "Double: press Esc twice to cancel. Single: press Esc once. Both show a cancellation banner for 1.5 seconds. Instant: press Esc once without a banner. Applies to recording and processing.")
                     )
                 }
 
