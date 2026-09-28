@@ -222,6 +222,30 @@ final class VisualShortcutKeyboardTests: XCTestCase {
         XCTAssertNil(model.conflictNotice)
     }
 
+    func testEditingHotkey_conflictingButDifferentCandidate_surfacesNotice() throws {
+        // Regression: conflictDescription suppressed via conflicts(with:),
+        // which also matched the opposite tap mode of the same combo and hid
+        // its genuine conflict. Only the exact hotkey being edited is
+        // suppressed now.
+        let editing = commandA()
+        let model = makeModel(
+            editingHotkey: editing,
+            existingAssignmentDescription: { candidate in
+                // Another slot genuinely holds double-tap Command+A.
+                candidate.isDoubleTap && candidate.keyCode == 0x00 ? "the Push-to-Talk shortcut" : nil
+            }
+        )
+        // The composition starts as the editing hotkey (single-tap).
+        XCTAssertNil(model.conflictNotice)
+        // Switching to double-tap: it conflicts with the editing hotkey but
+        // is a different hotkey, so its real conflict must surface.
+        model.toggleDoubleTap()
+        let candidate = try XCTUnwrap(model.composedHotkey)
+        XCTAssertTrue(editing.conflicts(with: candidate))
+        XCTAssertNotEqual(candidate, editing)
+        XCTAssertEqual(model.conflictNotice, "the Push-to-Talk shortcut")
+    }
+
     func testComposedConflict_surfacesNotice() {
         let model = makeModel(existingAssignmentDescription: { candidate in
             candidate.keyCode == 0x00 ? "the Toggle shortcut" : nil
