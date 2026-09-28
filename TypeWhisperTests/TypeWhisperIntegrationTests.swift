@@ -16828,7 +16828,8 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
             XCTAssertEqual(startCount, 1)
             try await Task.sleep(for: .milliseconds(150))
             service.submitOnEnterSessionID = UUID()
-            XCTAssertTrue(service.processEventForTesting(down, source: .monitor))
+            let secondDown = try makeKeyboardEvent(keyCode: keyCode, keyDown: true, flags: [.maskCommand])
+            XCTAssertTrue(service.processEventForTesting(secondDown, source: .monitor))
             XCTAssertEqual(stopCount, 1)
             XCTAssertEqual(submitCount, 0)
             _ = service.processEventForTesting(up, source: .monitor)
@@ -16891,7 +16892,8 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         XCTAssertEqual(startCount, 1)
         try await Task.sleep(for: .milliseconds(150))
         service.submitOnEnterSessionID = UUID()
-        XCTAssertTrue(service.processEventForTesting(down, source: .monitor))
+        let secondDown = try makeKeyboardEvent(keyCode: 0x24, keyDown: true, flags: [.maskCommand])
+        XCTAssertTrue(service.processEventForTesting(secondDown, source: .monitor))
         XCTAssertEqual(stopCount, 1)
         XCTAssertEqual(submitCount, 0)
     }
@@ -17145,6 +17147,78 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         service.recoverReleasedActiveHotkeyAfterEventTapDisableForTesting()
         XCTAssertEqual(stopCount, 1)
         XCTAssertNil(service.currentMode)
+    }
+
+    @MainActor
+    func testRecoveryIgnoresDelayedKeyboardAndMousePressCopies() async throws {
+        let cases: [(UnifiedHotkey, NSEvent)] = [
+            (UnifiedHotkey(keyCode: 0x31, modifierFlags: 0, isFn: false), try makeKeyboardEvent(keyCode: 0x31, keyDown: true, flags: [])),
+            (controlSpaceHotkey(), try makeKeyboardEvent(keyCode: 0x31, keyDown: true, flags: [.maskControl])),
+            (UnifiedHotkey(mouseButton: 3), try makeOtherMouseEvent(buttonNumber: 3, isDown: true)),
+            (commandOptionComboHotkey(), try makeFlagsChangedEvent(keyCode: 0x3D, modifierFlags: [.command, .option]))
+        ]
+        for (hotkey, press) in cases {
+            let service = HotkeyService()
+            service.suspendMonitoring()
+            service.setHotkeyForTesting(hotkey, for: .toggle)
+            service.keyStateProvider = { _ in false }
+            service.mouseButtonStateProvider = { _ in false }
+            service.modifierFlagsStateProvider = { [] }
+            var stops = 0
+            service.onDictationStop = { stops += 1 }
+            XCTAssertTrue(service.processEventForTesting(press, source: .eventTap))
+            try await Task.sleep(nanoseconds: 150_000_000)
+            service.resyncHotkeyStateAfterEventTapRecoveryForTesting()
+            XCTAssertTrue(service.processEventForTesting(press, source: .monitor))
+            XCTAssertEqual(stops, 0, "A delayed original press must not toggle the session after recovery")
+            XCTAssertEqual(service.currentMode, .toggle)
+        }
+    }
+
+    @MainActor
+    func testUntimedSyntheticPressesRemainDistinctAfterRelease() async throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        service.setHotkeyForTesting(UnifiedHotkey(keyCode: 0x31, modifierFlags: 0, isFn: false), for: .toggle)
+        let event = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: 0x31, keyDown: true))
+        event.flags = []
+        event.timestamp = 0
+        let untimedPress = try XCTUnwrap(NSEvent(cgEvent: event))
+        var starts = 0
+        var stops = 0
+        service.onDictationStart = { _ in starts += 1 }
+        service.onDictationStop = { stops += 1 }
+        XCTAssertTrue(service.processEventForTesting(untimedPress, source: .monitor))
+        XCTAssertTrue(service.processEventForTesting(try makeKeyboardEvent(keyCode: 0x31, keyDown: false, flags: []), source: .monitor))
+        try await Task.sleep(nanoseconds: 150_000_000)
+        XCTAssertTrue(service.processEventForTesting(untimedPress, source: .monitor))
+        XCTAssertEqual(starts, 1)
+        XCTAssertEqual(stops, 1)
+    }
+
+    @MainActor
+    func testPermissionUpgradePreservesHeldSuppressionLatches() async throws {
+        let service = HotkeyService()
+        service.accessibilityTrustedProvider = { false }
+        service.failEventTapCreationForTesting = true
+        service.keyStateProvider = { [UInt16(0x35), 0x24].contains($0) }
+        service.resumeMonitoring()
+        defer { service.suspendMonitoring() }
+        service.isCancellationAvailable = true
+        service.submitOnEnterSessionID = UUID()
+        for code: UInt16 in [0x35, 0x24] {
+            XCTAssertTrue(service.processEventForTesting(try makeKeyboardEvent(keyCode: code, keyDown: true), source: .monitor))
+        }
+        service.isCancellationAvailable = false
+        service.submitOnEnterSessionID = nil
+        service.accessibilityTrustedProvider = { true }
+        service.runEventTapWatchdogTickForTesting()
+        try await Task.sleep(nanoseconds: 50_000_000)
+        for code: UInt16 in [0x35, 0x24] {
+            XCTAssertTrue(service.processEventForTesting(try makeKeyboardEvent(keyCode: code, keyDown: true, isRepeat: true), source: .monitor))
+            XCTAssertTrue(service.processEventForTesting(try makeKeyboardEvent(keyCode: code, keyDown: false), source: .monitor))
+            XCTAssertFalse(service.processEventForTesting(try makeKeyboardEvent(keyCode: code, keyDown: true), source: .monitor))
+        }
     }
 
     @MainActor
@@ -17487,6 +17561,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         service.resumeMonitoring()
         XCTAssertTrue(service.isEventTapWatchdogActiveForTesting, "the watchdog must run on the untrusted path so a launch-time race can be retried")
         let setupsBeforeGrant = service.monitorSetupCountForTesting
+        let attemptsBeforeGrant = service.eventTapSetupAttemptCountForTesting
 
         // A tick while still untrusted must not re-run setup.
         service.runEventTapWatchdogTickForTesting()
@@ -17496,7 +17571,8 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         trusted = true
         service.runEventTapWatchdogTickForTesting()
         try await Task.sleep(nanoseconds: 50_000_000)
-        XCTAssertEqual(service.monitorSetupCountForTesting, setupsBeforeGrant + 1, "setup must be re-run once trust flips to true")
+        XCTAssertEqual(service.monitorSetupCountForTesting, setupsBeforeGrant, "Permission upgrades must preserve existing monitoring state")
+        XCTAssertEqual(service.eventTapSetupAttemptCountForTesting, attemptsBeforeGrant + 1)
 
         service.suspendMonitoring()
     }
@@ -19808,6 +19884,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         let event = try XCTUnwrap(
             CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(keyCode), keyDown: keyDown)
         )
+        event.timestamp = DispatchTime.now().uptimeNanoseconds
         event.flags = flags
         event.setIntegerValueField(.keyboardEventAutorepeat, value: isRepeat ? 1 : 0)
         return try XCTUnwrap(NSEvent(cgEvent: event))
@@ -19824,6 +19901,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
                 mouseButton: button
             )
         )
+        event.timestamp = DispatchTime.now().uptimeNanoseconds
         return try XCTUnwrap(NSEvent(cgEvent: event))
     }
 

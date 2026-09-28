@@ -294,7 +294,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         var fnWasDown = false
         var fnComboKeyPressed = false
         var modifierWasDown = false
-        var lastModifierDownTimestamp: TimeInterval?
+        var lastDownTimestamp: TimeInterval?
         var keyWasDown = false
         var mouseButtonWasDown = false
         // Double-tap tracking
@@ -305,7 +305,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             fnWasDown = false
             fnComboKeyPressed = false
             modifierWasDown = false
-            lastModifierDownTimestamp = nil
+            lastDownTimestamp = nil
             keyWasDown = false
             mouseButtonWasDown = false
             lastTapUpTime = nil
@@ -325,7 +325,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         var fnWasDown = false
         var fnComboKeyPressed = false
         var modifierWasDown = false
-        var lastModifierDownTimestamp: TimeInterval?
+        var lastDownTimestamp: TimeInterval?
         var keyWasDown = false
         var mouseButtonWasDown = false
         // Double-tap tracking
@@ -336,7 +336,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             fnWasDown = false
             fnComboKeyPressed = false
             modifierWasDown = false
-            lastModifierDownTimestamp = nil
+            lastDownTimestamp = nil
             keyWasDown = false
             mouseButtonWasDown = false
             lastTapUpTime = nil
@@ -353,7 +353,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         var fnWasDown = false
         var fnComboKeyPressed = false
         var modifierWasDown = false
-        var lastModifierDownTimestamp: TimeInterval?
+        var lastDownTimestamp: TimeInterval?
         var keyWasDown = false
         var mouseButtonWasDown = false
         var lastTapUpTime: Date?
@@ -363,7 +363,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             fnWasDown = false
             fnComboKeyPressed = false
             modifierWasDown = false
-            lastModifierDownTimestamp = nil
+            lastDownTimestamp = nil
             keyWasDown = false
             mouseButtonWasDown = false
             lastTapUpTime = nil
@@ -811,7 +811,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             logger.info("Accessibility permission not granted, installing local hotkey monitor only")
             installLocalEventMonitor(includeMouse: includeMouse)
             // Trust is commonly still false for a moment at launch; the watchdog
-            // re-runs setup once it reports true so the session tap gets created
+            // upgrades monitoring once it reports true so the session tap gets created
             // without waiting for an explicit permission request.
             startEventTapWatchdog()
             return
@@ -863,14 +863,16 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
     }
 
     private func installEventMonitors(includeMouse: Bool) {
+        installGlobalEventMonitor(includeMouse: includeMouse)
+        installLocalEventMonitor(includeMouse: includeMouse)
+    }
+
+    private func installGlobalEventMonitor(includeMouse: Bool) {
         hasEventMonitorFallback = true
         let mask = eventMonitorMask(includeMouse: includeMouse)
-
         globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: mask) { [weak self] event in
             self?.handleGlobalMonitorEvent(event)
         }
-
-        installLocalEventMonitor(includeMouse: includeMouse)
     }
 
     private func handleGlobalMonitorEvent(_ event: NSEvent) {
@@ -1338,13 +1340,12 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
                 self.recoverReleasedActiveHotkeyAfterEventTapDisable()
             case .retrySetup:
                 guard !self.eventTapHandle.isValid, self.accessibilityTrustedProvider() else { return }
-                if self.hasEventMonitorFallback {
-                    // Keep fallback monitors, Carbon registrations, pending holds,
-                    // and suppression latches intact if tap creation keeps failing.
-                    self.tearDownEventTap()
-                    _ = self.setupEventTap(includeMouse: self.needsSuppressingMouseEventTap)
-                } else {
-                    self.setupMonitor()
+                // Preserve Carbon registrations, local monitoring, pending holds,
+                // deduplication, and press latches even during a permission upgrade.
+                self.tearDownEventTap()
+                _ = self.setupEventTap(includeMouse: self.needsSuppressingMouseEventTap)
+                if !self.hasEventMonitorFallback {
+                    self.installGlobalEventMonitor(includeMouse: self.needsMouseEventMonitoring)
                 }
                 self.resyncHotkeyStateAfterEventTapRecovery()
                 self.recoverReleasedActiveHotkeyAfterEventTapDisable()
@@ -1436,14 +1437,14 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
                 fnWasDown: pState.fnWasDown,
                 fnComboKeyPressed: pState.fnComboKeyPressed,
                 modifierWasDown: pState.modifierWasDown,
-                lastModifierDownTimestamp: pState.lastModifierDownTimestamp,
+                lastDownTimestamp: pState.lastDownTimestamp,
                 keyWasDown: pState.keyWasDown,
                 mouseButtonWasDown: pState.mouseButtonWasDown
             )
             if staleFlagCleared(hotkey: pState.hotkey, state: &state) {
                 pState.fnWasDown = state.fnWasDown
                 pState.fnComboKeyPressed = state.fnComboKeyPressed
-                pState.lastModifierDownTimestamp = state.lastModifierDownTimestamp
+                pState.lastDownTimestamp = state.lastDownTimestamp
                 pState.modifierWasDown = state.modifierWasDown
                 pState.keyWasDown = state.keyWasDown
                 pState.mouseButtonWasDown = state.mouseButtonWasDown
@@ -1461,14 +1462,14 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
                     fnWasDown: states[index].fnWasDown,
                     fnComboKeyPressed: states[index].fnComboKeyPressed,
                     modifierWasDown: states[index].modifierWasDown,
-                    lastModifierDownTimestamp: states[index].lastModifierDownTimestamp,
+                    lastDownTimestamp: states[index].lastDownTimestamp,
                     keyWasDown: states[index].keyWasDown,
                     mouseButtonWasDown: states[index].mouseButtonWasDown
                 )
                 if staleFlagCleared(hotkey: states[index].hotkey, state: &state) {
                     states[index].fnWasDown = state.fnWasDown
                     states[index].fnComboKeyPressed = state.fnComboKeyPressed
-                    states[index].lastModifierDownTimestamp = state.lastModifierDownTimestamp
+                    states[index].lastDownTimestamp = state.lastDownTimestamp
                     states[index].modifierWasDown = state.modifierWasDown
                     states[index].keyWasDown = state.keyWasDown
                     states[index].mouseButtonWasDown = state.mouseButtonWasDown
@@ -1619,7 +1620,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             var state = SlotState(hotkey: pState.hotkey, fnWasDown: pState.fnWasDown,
                                   fnComboKeyPressed: pState.fnComboKeyPressed,
                                   modifierWasDown: pState.modifierWasDown,
-                                  lastModifierDownTimestamp: pState.lastModifierDownTimestamp, keyWasDown: pState.keyWasDown,
+                                  lastDownTimestamp: pState.lastDownTimestamp, keyWasDown: pState.keyWasDown,
                                   mouseButtonWasDown: pState.mouseButtonWasDown,
                                   lastTapUpTime: pState.lastTapUpTime, tapCount: pState.tapCount)
             let (keyDown, keyUp, isMatch) = processKeyEvent(
@@ -1630,7 +1631,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             )
             pState.fnWasDown = state.fnWasDown
             pState.fnComboKeyPressed = state.fnComboKeyPressed
-            pState.lastModifierDownTimestamp = state.lastModifierDownTimestamp
+            pState.lastDownTimestamp = state.lastDownTimestamp
             pState.modifierWasDown = state.modifierWasDown
             pState.keyWasDown = state.keyWasDown
             pState.mouseButtonWasDown = state.mouseButtonWasDown
@@ -1667,7 +1668,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
                     fnWasDown: wState.fnWasDown,
                     fnComboKeyPressed: wState.fnComboKeyPressed,
                     modifierWasDown: wState.modifierWasDown,
-                    lastModifierDownTimestamp: wState.lastModifierDownTimestamp,
+                    lastDownTimestamp: wState.lastDownTimestamp,
                     keyWasDown: wState.keyWasDown,
                     mouseButtonWasDown: wState.mouseButtonWasDown,
                     lastTapUpTime: wState.lastTapUpTime,
@@ -1681,7 +1682,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
                 )
                 wState.fnWasDown = state.fnWasDown
                 wState.fnComboKeyPressed = state.fnComboKeyPressed
-                wState.lastModifierDownTimestamp = state.lastModifierDownTimestamp
+                wState.lastDownTimestamp = state.lastDownTimestamp
                 wState.modifierWasDown = state.modifierWasDown
                 wState.keyWasDown = state.keyWasDown
                 wState.mouseButtonWasDown = state.mouseButtonWasDown
@@ -2269,6 +2270,29 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         state: inout SlotState,
         fnTriggerMode: FnTriggerMode
     ) -> (keyDown: Bool, keyUp: Bool, shouldSuppress: Bool) {
+        // A compatibility-monitor copy can arrive after recovery cleared the
+        // held state and after the dispatch dedup window expired. The original
+        // event timestamp still identifies the press across every binding kind.
+        if event.timestamp > 0, state.lastDownTimestamp == event.timestamp {
+            let isPressCopy: Bool
+            switch hotkey.kind {
+            case .mouseButton:
+                isPressCopy = event.type == .otherMouseDown && event.buttonNumber == Int(hotkey.mouseButton ?? 0)
+            case .keyWithModifiers, .bareKey:
+                isPressCopy = event.type == .keyDown && event.keyCode == hotkey.keyCode
+            case .fn:
+                isPressCopy = event.type == .flagsChanged && event.modifierFlags.contains(.function)
+            case .modifierOnly:
+                isPressCopy = event.type == .flagsChanged && event.keyCode == hotkey.keyCode
+            case .modifierCombo:
+                isPressCopy = event.type == .flagsChanged
+            }
+            if isPressCopy {
+                let suppress = hotkey.mouseButton.map(Self.shouldSuppressMouseButtonHotkey) ?? true
+                return (false, false, suppress)
+            }
+        }
+
         // Mouse button hotkeys - self-contained path (no modifier interplay)
         if hotkey.kind == .mouseButton {
             guard event.type == .otherMouseDown || event.type == .otherMouseUp else {
@@ -2284,6 +2308,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
 
             if isDown && !wasDown {
                 state.mouseButtonWasDown = true
+                state.lastDownTimestamp = event.timestamp
                 guard hotkey.isDoubleTap else { return (true, false, shouldSuppress) }
                 if state.tapCount == 1,
                    let lastUp = state.lastTapUpTime,
@@ -2329,6 +2354,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
                 let fnDown = event.modifierFlags.contains(.function)
                 if fnDown, !state.fnWasDown {
                     state.fnWasDown = true
+                    state.lastDownTimestamp = event.timestamp
                     state.fnComboKeyPressed = false
                     return (true, false, true)
                 }
@@ -2353,6 +2379,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
                 let fnDown = event.modifierFlags.contains(.function)
                 if fnDown, !state.fnWasDown {
                     state.fnWasDown = true
+                    state.lastDownTimestamp = event.timestamp
                     state.fnComboKeyPressed = false
                     return (false, false, false)
                 }
@@ -2375,18 +2402,6 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             }
         }
 
-        // The tap and compatibility monitor can deliver the same press far apart
-        // during a stall. Its timestamp remains identical; a real new press does not.
-        if hotkey.kind == .modifierOnly,
-           event.type == .flagsChanged,
-           event.keyCode == hotkey.keyCode,
-           state.lastModifierDownTimestamp == event.timestamp,
-           let flag = Self.modifierFlagForKeyCode(hotkey.keyCode),
-           (Self.specificModifierKeyIsDown(event, keyCode: hotkey.keyCode, genericFlag: flag)
-                ?? event.modifierFlags.contains(flag)) {
-            return (false, false, true)
-        }
-
         let result = detectKeyEvent(
             event, hotkey: hotkey,
             fnWasDown: state.fnWasDown,
@@ -2394,8 +2409,8 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             keyWasDown: state.keyWasDown
         )
 
-        if result == .down, hotkey.kind == .modifierOnly {
-            state.lastModifierDownTimestamp = event.timestamp
+        if result == .down {
+            state.lastDownTimestamp = event.timestamp
         }
 
         let value: Bool?
