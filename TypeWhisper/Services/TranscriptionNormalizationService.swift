@@ -311,8 +311,9 @@ enum TranscriptionNormalizationService {
         /// A month name or abbreviation followed by a plausible day phrase. The
         /// day alternatives enumerate the ordinal tables instead of matching a
         /// bare word class, so a following month name (`we may June first`) can
-        /// never be swallowed into a failed match. The `(?![-'\w])` tail keeps
-        /// hyphenated compounds (`first-rate`) and possessives intact, and the
+        /// never be swallowed into a failed match. The `(?![-'\w])` tail is
+        /// grouped over every day alternative, so hyphenated compounds
+        /// (`first-rate`, `5th-place`) and possessives stay intact, and the
         /// month-day gap is spaces/tabs only, never a newline.
         private static let expression: NSRegularExpression? = {
             let full = fullMonths.keys.sorted { $0.count > $1.count }.joined(separator: "|")
@@ -323,7 +324,7 @@ enum TranscriptionNormalizationService {
             let dayAlternatives =
                 "\\d{1,2}(?:st|nd|rd|th)?|(?:twenty|thirty)[ \\t-](?:\(units))|(?:\(ordinals))"
             return try? NSRegularExpression(
-                pattern: "\\b(\(full)|\(abbreviated))[ \\t]+(\(dayAlternatives)(?![-'\\w]))",
+                pattern: "\\b(\(full)|\(abbreviated))[ \\t]+((?:\(dayAlternatives))(?![-'\\w]))",
                 options: [.caseInsensitive]
             )
         }()
@@ -430,5 +431,4 @@ enum TranscriptionNormalizationService {
             return day
         }
     }
-}
 }
