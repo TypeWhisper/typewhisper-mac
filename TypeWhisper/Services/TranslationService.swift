@@ -213,7 +213,7 @@ final class TranslationService: ObservableObject {
     /// Cancels any in-flight request, resuming it per its own strict flag.
     private func cancelPending(reason: String) {
         if let pending = continuation {
-            Self.logger.warning("Translation[\(activeRequestId)] cancelled by \(reason)")
+            Self.logger.warning("Translation[\(self.activeRequestId)] cancelled by \(reason)")
             if pendingStrict {
                 pending.resume(throwing: TranslationError.cancelled)
             } else {
@@ -223,7 +223,7 @@ final class TranslationService: ObservableObject {
             pendingStrict = false
         }
         if let pending = batchContinuation {
-            Self.logger.warning("Translation[\(activeRequestId)] batch cancelled by \(reason)")
+            Self.logger.warning("Translation[\(self.activeRequestId)] batch cancelled by \(reason)")
             if batchStrict {
                 pending.resume(throwing: TranslationError.cancelled)
             } else {
@@ -335,12 +335,12 @@ final class TranslationService: ObservableObject {
                 } catch {
                     Self.logger.warning("Translation[\(requestId)] batch prepare failed: \(error.localizedDescription)")
                 }
-                let responses = try await session.translations(from: texts)
+                let responses = try await session.translations(from: texts.map { TranslationSession.Request(sourceText: $0) })
                 guard responses.count == texts.count else {
                     throw TranslationError.batchCountMismatch(expected: texts.count, actual: responses.count)
                 }
                 Self.logger.info("Translation[\(requestId)] batch completed, count=\(responses.count)")
-                batchCont.resume(returning: responses.map(\.targetText))
+                batchCont.resume(returning: responses.map(\TranslationSession.Response.targetText))
             } catch {
                 Self.logger.error("Translation[\(requestId)] batch failed: \(error.localizedDescription), \(strict ? "throwing" : "returning source texts")")
                 if strict {
