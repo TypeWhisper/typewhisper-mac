@@ -216,6 +216,7 @@ private struct FileMemorySettingsView: View {
             }
         }
         .padding()
+        .frame(minHeight: 400)
         .onAppear { memories = plugin.getAllMemories() }
     }
 }
