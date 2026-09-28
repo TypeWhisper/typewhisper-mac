@@ -485,6 +485,8 @@ final class DictationViewModel: ObservableObject {
     private var shouldPlayRecordingStartSoundWhenReady = false
     private var pendingRecordingAudioDuckingLevel: Float?
     private var pendingRecordingAudioDuckingTask: Task<Void, Never>?
+    private var recordingUsesBluetoothInput = false
+    private var recordingRestoresSystemAudio = false
     private var dictationSessions: [UUID: DictationSessionSnapshot] = [:]
     private var dictationSessionOrder: [UUID] = []
     private let maxTrackedDictationSessions = 100
@@ -1220,12 +1222,14 @@ final class DictationViewModel: ObservableObject {
     private func restoreRecordingSideEffects() {
         audioDuckingService.restoreAudio()
         mediaPlaybackService.resumeIfWePaused()
+        recordingUsesBluetoothInput = false
+        recordingRestoresSystemAudio = false
     }
 
     private var bluetoothStopBehavior: AudioRecordingService.BluetoothStopBehavior {
         Self.bluetoothStopBehavior(
-            usesBluetoothInput: audioRecordingService.selectedInputDeviceUsesBluetoothTransport,
-            restoresSystemAudio: mediaPauseEnabled || audioDuckingEnabled
+            usesBluetoothInput: recordingUsesBluetoothInput,
+            restoresSystemAudio: recordingRestoresSystemAudio
         )
     }
 
@@ -1769,6 +1773,8 @@ final class DictationViewModel: ObservableObject {
                 await previousCleanup?.value
                 try Task.checkCancellation()
                 guard self.activeDictationSessionID == sessionID else { return }
+                self.recordingUsesBluetoothInput = selectedInputUsesBluetooth
+                self.recordingRestoresSystemAudio = false
                 var resolvedStartupApp: (name: String?, bundleId: String?, url: String?)? = needsEarlyWorkflowMatch
                     ? initialActiveApp : nil
                 if resolveWebsiteBeforeRecording {
@@ -1798,6 +1804,7 @@ final class DictationViewModel: ObservableObject {
                     return
                 }
                 if selectedInputUsesBluetooth, self.mediaPauseEnabled {
+                    self.recordingRestoresSystemAudio = true
                     await self.mediaPlaybackService.pauseImmediatelyIfPlaying()
                     try Task.checkCancellation()
                     guard self.activeDictationSessionID == sessionID else { return }
@@ -1921,9 +1928,11 @@ final class DictationViewModel: ObservableObject {
             logger.info("Skipping recording start sound for Bluetooth input device")
         }
         if mediaPauseEnabled, !selectedInputUsesBluetooth {
+            recordingRestoresSystemAudio = true
             mediaPlaybackService.pauseIfPlaying()
         }
         if audioDuckingEnabled {
+            recordingRestoresSystemAudio = true
             pendingRecordingAudioDuckingLevel = max(0, min(1, Float(audioDuckingLevel)))
         } else {
             pendingRecordingAudioDuckingLevel = nil
