@@ -81,6 +81,17 @@ final class AppVocabularyImportTests: XCTestCase {
         XCTAssertEqual(count, 6)
     }
 
+    func testHandyReportsInvalidFormatForStableUnparseableReads() throws {
+        let invalid = Data(#"[1, 2, 3]"#.utf8)
+        var reads = [invalid, invalid]
+        XCTAssertThrowsError(try AppVocabularyImport.readHandy { reads.removeFirst() }) { error in
+            guard case AppVocabularyImportError.invalidFormat = error else {
+                return XCTFail("expected invalidFormat, got \(error)")
+            }
+        }
+        XCTAssertTrue(reads.isEmpty)
+    }
+
     func testHeaderlessCSVPreservesHeaderLikeFirstEntries() throws {
         for word in ["word", "term", "phrase", "original", "trigger"] {
             let batch = try AppVocabularyImport.parseCSV(Data("\(word)\nsecond\n".utf8), destination: .dictionary)

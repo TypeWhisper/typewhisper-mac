@@ -129,6 +129,7 @@ enum AppVocabularyImport {
             if first == second {
                 do { return try parseHandy(first) }
                 catch AppVocabularyImportError.tooLarge { throw AppVocabularyImportError.tooLarge }
+                catch is DecodingError { throw AppVocabularyImportError.invalidFormat }
                 catch { continue }
             }
         }
