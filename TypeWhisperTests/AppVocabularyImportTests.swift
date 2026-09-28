@@ -92,6 +92,33 @@ final class AppVocabularyImportTests: XCTestCase {
         XCTAssertTrue(reads.isEmpty)
     }
 
+    func testHandyRetriesTruncatedJSONUntilAStablePairParses() throws {
+        // A mid-write read is a prefix of valid JSON; it must be retried
+        // until two identical reads parse.
+        let truncated = Data(#"{"settings":{"custom_words":["Stable"]"#.utf8)
+        let valid = Data(#"{"settings":{"custom_words":["Stable"]}}"#.utf8)
+        var reads = [truncated, truncated, valid, valid]
+        let batch = try AppVocabularyImport.readHandy { reads.removeFirst() }
+        XCTAssertEqual(batch.entries.first?.original, "Stable")
+        XCTAssertTrue(reads.isEmpty)
+    }
+
+    func testHandyReportsInvalidFormatForStableMalformedJSON() throws {
+        // Syntactically broken but complete input cannot settle into valid
+        // JSON, so it must fail fast as an invalid format, not unstableSource.
+        var reads = 0
+        XCTAssertThrowsError(try AppVocabularyImport.readHandy {
+            reads += 1
+            return Data("not handy json".utf8)
+        }) { error in
+            guard case AppVocabularyImportError.invalidFormat = error else {
+                return XCTFail("expected invalidFormat, got \(error)")
+            }
+        }
+        // Only the first pair is read; no retry is attempted.
+        XCTAssertEqual(reads, 2)
+    }
+
     func testHeaderlessCSVPreservesHeaderLikeFirstEntries() throws {
         for word in ["word", "term", "phrase", "original", "trigger"] {
             let batch = try AppVocabularyImport.parseCSV(Data("\(word)\nsecond\n".utf8), destination: .dictionary)

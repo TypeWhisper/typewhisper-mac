@@ -129,15 +129,48 @@ enum AppVocabularyImport {
             if first == second {
                 do { return try parseHandy(first) }
                 catch AppVocabularyImportError.tooLarge { throw AppVocabularyImportError.tooLarge }
-                // A truncated mid-write read never finishes parsing, so keep
-                // retrying for a stable pair. Stable reads that parse but are
-                // not a Handy store are an invalid format.
-                catch DecodingError.dataCorrupted { continue }
+                // A truncated mid-write read is a prefix of valid JSON, so it
+                // may settle into a parseable pair on retry. Undecodable input
+                // that is not truncated is a stable invalid format.
+                catch DecodingError.dataCorrupted where looksTruncated(first) { continue }
                 catch is DecodingError { throw AppVocabularyImportError.invalidFormat }
                 catch { continue }
             }
         }
         throw AppVocabularyImportError.unstableSource
+    }
+
+    /// Whether undecodable JSON looks like a prefix of valid JSON: it ends
+    /// inside a string, with an unclosed bracket or brace, or right after a
+    /// separator or opening bracket. Only such reads are worth retrying,
+    /// since Handy may still be writing them; anything else that fails to
+    /// parse cannot settle into a valid store.
+    private static func looksTruncated(_ data: Data) -> Bool {
+        guard let text = String(data: data, encoding: .utf8) else { return false }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        // An empty mid-write read never parses; treat it as still being written.
+        guard let last = trimmed.last else { return true }
+        // Input expecting more after a separator or opening bracket.
+        if ",:[{".contains(last) { return true }
+        var depth = 0
+        var inString = false
+        var escaped = false
+        for char in trimmed {
+            if inString {
+                if escaped { escaped = false }
+                else if char == "\\" { escaped = true }
+                else if char == "\"" { inString = false }
+            } else if char == "\"" {
+                inString = true
+            } else if char == "{" || char == "[" {
+                depth += 1
+            } else if char == "}" || char == "]" {
+                depth -= 1
+                if depth < 0 { return false }
+            }
+        }
+        // An unterminated string or unclosed structure never finishes parsing.
+        return inString || depth > 0
     }
 
     private static func boundedData(_ url: URL) throws -> Data {
