@@ -76,7 +76,7 @@ struct AdvancedSettingsView: View {
                             systemImage: "square.and.arrow.down"
                         )
                     }
-                    .disabled(isImportingBackup || isDeletingAllData)
+                    .disabled(isImportingBackup || isDeletingAllData || isExportingAllData)
 
                     if isImportingBackup {
                         ProgressView()
@@ -101,7 +101,7 @@ struct AdvancedSettingsView: View {
                             systemImage: "square.and.arrow.up"
                         )
                     }
-                    .disabled(isExportingAllData || isDeletingAllData)
+                    .disabled(isExportingAllData || isDeletingAllData || isImportingBackup)
 
                     Button(role: .destructive) {
                         showDeleteAllDataConfirmation = true
@@ -800,16 +800,12 @@ struct AdvancedSettingsView: View {
 
     private func deleteAllData() {
         isDeletingAllData = true
-        // Cancels a pending start so it cannot recreate the discovery files.
-        viewModel.stopServer()
-        let container = ServiceContainer.shared
         Task {
-            let recordingFailures = await UserDataEraser.discardActiveRecording(container.audioRecorderService)
-            await UserDataEraser.releaseRemoteActivations(
-                licenseService: container.licenseService,
-                premiumAccountService: container.premiumAccountService
+            let failures = await UserDataEraser.prepareForErase(
+                apiServer: viewModel,
+                container: ServiceContainer.shared
             )
-            UserDataEraser.eraseAllAndQuit(earlierFailures: recordingFailures)
+            UserDataEraser.eraseAllAndQuit(earlierFailures: failures)
         }
     }
 

@@ -190,26 +190,26 @@ final class UserDataExportAndEraseTests: XCTestCase {
         XCTAssertEqual(sqlite3_column_int(count, 0), 3)
     }
 
-    func testCurrentLocationsIncludeAbandonedStagingDirectoriesAndAPIUploads() throws {
+    func testCurrentLocationsIncludeOwnTemporaryItemsOnly() throws {
         let fileManager = FileManager.default
-        let prefix = UserDataExportService.stagingDirectoryPrefix
-        let abandoned = fileManager.temporaryDirectory
-            .appendingPathComponent("\(prefix)999999999-\(UUID().uuidString)", isDirectory: true)
-        let live = fileManager.temporaryDirectory
-            .appendingPathComponent("\(prefix)\(ProcessInfo.processInfo.processIdentifier)-\(UUID().uuidString)", isDirectory: true)
-        let upload = fileManager.temporaryDirectory
-            .appendingPathComponent("\(APIHandlers.uploadTemporaryFilePrefix)\(UUID().uuidString).wav")
-        try fileManager.createDirectory(at: abandoned, withIntermediateDirectories: true)
-        try fileManager.createDirectory(at: live, withIntermediateDirectories: true)
-        try write("audio", to: upload)
+        let staging = UserDataLocations.temporaryItemURL("\(UserDataExportService.stagingDirectoryName)\(UUID().uuidString)", isDirectory: true)
+        let upload = UserDataLocations.temporaryItemURL("API-Upload-\(UUID().uuidString).wav")
+        let recorderTrack = UserDataLocations.temporaryItemURL("Recorder-mic-\(UUID().uuidString).wav")
+        let otherVariant = fileManager.temporaryDirectory
+            .appendingPathComponent("TypeWhisper-com.example.other-API-Upload-\(UUID().uuidString).wav")
+        try fileManager.createDirectory(at: staging, withIntermediateDirectories: true)
+        for url in [upload, recorderTrack, otherVariant] {
+            try write("audio", to: url)
+        }
         defer {
-            for url in [abandoned, live, upload] { try? fileManager.removeItem(at: url) }
+            for url in [staging, upload, recorderTrack, otherVariant] { try? fileManager.removeItem(at: url) }
         }
 
         let items = UserDataLocations.current().auxiliaryItems.map(\.standardizedFileURL.path)
-        XCTAssertTrue(items.contains(abandoned.standardizedFileURL.path))
-        XCTAssertTrue(items.contains(upload.standardizedFileURL.path))
-        XCTAssertFalse(items.contains(live.standardizedFileURL.path))
+        for url in [staging, upload, recorderTrack] {
+            XCTAssertTrue(items.contains(url.standardizedFileURL.path), "missing \(url.lastPathComponent)")
+        }
+        XCTAssertFalse(items.contains(otherVariant.standardizedFileURL.path))
     }
 
     // MARK: - Erase
@@ -224,7 +224,7 @@ final class UserDataExportAndEraseTests: XCTestCase {
             locations: fixture.locations,
             userDefaults: fixture.userDefaults,
             deleteKeychainItems: { keychainDeleted = true },
-            resetSystemRegistrations: { systemReset = true }
+            resetSystemRegistrations: { systemReset = true; return [] }
         )
 
         XCTAssertEqual(failures, [])
@@ -246,7 +246,7 @@ final class UserDataExportAndEraseTests: XCTestCase {
             locations: fixture.locations,
             userDefaults: fixture.userDefaults,
             deleteKeychainItems: { throw KeychainError.deleteFailed(errSecInteractionNotAllowed) },
-            resetSystemRegistrations: {}
+            resetSystemRegistrations: { [] }
         )
 
         XCTAssertEqual(failures.map(\.item), ["Keychain"])

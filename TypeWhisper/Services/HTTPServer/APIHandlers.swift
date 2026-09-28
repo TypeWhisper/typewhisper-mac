@@ -4,10 +4,6 @@ import os
 private let apiLogger = Logger(subsystem: Bundle.main.bundleIdentifier ?? "typewhisper-mac", category: "APIHandlers")
 
 final class APIHandlers: @unchecked Sendable {
-    /// Uploaded audio is kept in the temporary directory while it is
-    /// transcribed; "Delete All Data" removes leftovers by this prefix.
-    static let uploadTemporaryFilePrefix = "TypeWhisper-API-Upload-"
-
     private let modelManager: ModelManagerService
     private let audioFileService: AudioFileService
     private let translationService: AnyObject? // TranslationService (macOS 15+)
@@ -280,8 +276,7 @@ final class APIHandlers: @unchecked Sendable {
             return .error(status: 400, message: "Empty audio data")
         }
 
-        let tempURL = FileManager.default.temporaryDirectory
-            .appendingPathComponent("\(Self.uploadTemporaryFilePrefix)\(UUID().uuidString).\(fileExtension)")
+        let tempURL = UserDataLocations.temporaryItemURL("API-Upload-\(UUID().uuidString).\(fileExtension)")
 
         do {
             try audioData.write(to: tempURL)
