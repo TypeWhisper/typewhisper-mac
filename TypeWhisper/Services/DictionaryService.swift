@@ -591,8 +591,13 @@ final class DictionaryService: ObservableObject {
             return PluginDictionaryTerms.prompt(from: terms)
         }
 
-        if (plugin as? any DictionaryTermsCapabilityProviding)?.dictionaryTermsSupport == .unsupported {
+        // Terms stay out of the prompt until the plugin setting enables them, so a
+        // caller-supplied prompt can still reach the plugin on its own.
+        switch (plugin as? any DictionaryTermsCapabilityProviding)?.dictionaryTermsSupport {
+        case .unsupported, .requiresPluginSetting:
             return nil
+        case .supported, nil:
+            break
         }
 
         guard let budget = (plugin as? any DictionaryTermsBudgetProviding)?.dictionaryTermsBudget else {

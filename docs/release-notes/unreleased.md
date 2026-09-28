@@ -4,7 +4,7 @@
 
 - Dictation Recovery keeps the last three successful dictations for up to 24 hours, so an incomplete provider response can be retried even when it looks successful. The Immediately retention setting disables this buffer as well. Groq's settings now let you disable dictionary context without changing post-transcription corrections. Final-transcription diagnostics include audio duration, word counts, and segment timing without logging audio, prompt contents, or transcript text. (#1352)
 
-- Groq no longer sends dictionary terms by default. In tests with German dictations, the term list made Whisper Large V3 skip most of some dictations, while the same audio without terms came back complete. Settings you changed yourself are kept, and dictionary corrections after transcription still apply. You can turn terms back on under Groq → Send dictionary terms. (#1402)
+- Groq no longer sends dictionary terms by default. In tests with German dictations, the term list made Whisper Large V3 skip most of some dictations, while the same audio without terms came back complete. Settings you changed yourself are kept, and dictionary corrections after transcription still apply. You can turn terms back on under Groq → Send dictionary terms. A prompt sent through the HTTP API still reaches Groq when terms are off. (#1402)
 
 - Administrators can provision `ManagedLicenseKey` through a macOS configuration profile or user-context script. TypeWhisper activates it automatically, reuses the activation, and displays organization-managed licensing controls. Includes the license and Keychain persistence fixes shipped in 1.6.1. See [the MDM deployment guide](../mdm/README.md). (#1314)
 

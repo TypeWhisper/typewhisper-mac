@@ -119,7 +119,7 @@ final class GroqPlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCapa
             modelName: modelId,
             language: language,
             translate: translate,
-            prompt: _sendDictionaryTerms ? prompt : nil,
+            prompt: prompt,
             requestTimeout: Self.transcriptionRequestTimeout
         )
     }
