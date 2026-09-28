@@ -161,6 +161,7 @@
 		A91F00000000000000000005 /* RecentTranscriptionPaletteHandlerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B91F00000000000000000005 /* RecentTranscriptionPaletteHandlerTests.swift */; };
 		6C1F7A8B9D2E4F5061728394 /* SoundServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7D2E4F50617283946C1F7A8B /* SoundServiceTests.swift */; };
 		BB8C1D4E5F60718293A4B5C6 /* DictationShortSpeechTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA8C1D4E5F60718293A4B5C6 /* DictationShortSpeechTests.swift */; };
+		AA00000000000000000365 /* VisualShortcutKeyboardTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000365 /* VisualShortcutKeyboardTests.swift */; };
 		76858B5B28A121356A5D9599 /* TextDiffServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 05313C25F9E79BCFC02899F2 /* TextDiffServiceTests.swift */; };
 		AA7080000000000000000002 /* TargetAppCorrectionLearningServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB7080000000000000000002 /* TargetAppCorrectionLearningServiceTests.swift */; };
 		7DADCC6E1AEA99CA48F83F50 /* CLISupportTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = FD34FDF9D999D85DA1C35375 /* CLISupportTests.swift */; };
@@ -504,6 +505,8 @@
 		F635B3F08018D57E0CB709BF /* HTTPRequestParserTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8E39448D561C47B16EEF4C6B /* HTTPRequestParserTests.swift */; };
 		AA00000000000000000260 /* HotkeyRecorderView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000248 /* HotkeyRecorderView.swift */; };
 		AA00000000000000000261 /* HotkeySettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000249 /* HotkeySettingsView.swift */; };
+		AA00000000000000000363 /* VisualShortcutKeyboardModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000363 /* VisualShortcutKeyboardModel.swift */; };
+		AA00000000000000000364 /* VisualShortcutKeyboardView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000364 /* VisualShortcutKeyboardView.swift */; };
 		AA00000000000000000262 /* AboutSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000250 /* AboutSettingsView.swift */; };
 		AA00000000000000000267 /* CerebrasPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000255 /* CerebrasPlugin.swift */; };
 		AA00000000000000000268 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000256 /* manifest.json */; };
@@ -741,6 +744,7 @@
 		B91F00000000000000000005 /* RecentTranscriptionPaletteHandlerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RecentTranscriptionPaletteHandlerTests.swift; sourceTree = "<group>"; };
 		7D2E4F50617283946C1F7A8B /* SoundServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SoundServiceTests.swift; sourceTree = "<group>"; };
 		AA8C1D4E5F60718293A4B5C6 /* DictationShortSpeechTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DictationShortSpeechTests.swift; sourceTree = "<group>"; };
+		BB00000000000000000365 /* VisualShortcutKeyboardTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VisualShortcutKeyboardTests.swift; sourceTree = "<group>"; };
 		8E39448D561C47B16EEF4C6B /* HTTPRequestParserTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HTTPRequestParserTests.swift; sourceTree = "<group>"; };
 		A1F000000000000000000101 /* PostUpdatePromptCoordinatorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PostUpdatePromptCoordinatorTests.swift; sourceTree = "<group>"; };
 		B10000000000000000000004 /* SpeechFeedbackServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SpeechFeedbackServiceTests.swift; sourceTree = "<group>"; };
@@ -822,6 +826,7 @@
 		BB00000000000000000065 /* Profile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Profile.swift; sourceTree = "<group>"; };
 		BB00000000000000000066 /* ProfileService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileService.swift; sourceTree = "<group>"; };
 		BB00000000000000000067 /* ProfilesViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfilesViewModel.swift; sourceTree = "<group>"; };
+		BB00000000000000000363 /* VisualShortcutKeyboardModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisualShortcutKeyboardModel.swift; sourceTree = "<group>"; };
 		BB00000000000000000068 /* ProfilesSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfilesSettingsView.swift; sourceTree = "<group>"; };
 		BB00000000000000000070 /* UpdateChecker.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UpdateChecker.swift; sourceTree = "<group>"; };
 		BB00000000000000000072 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -1157,6 +1162,7 @@
 		F41BD305007A3A158038C75C /* ProfileServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ProfileServiceTests.swift; sourceTree = "<group>"; };
 		FD34FDF9D999D85DA1C35375 /* CLISupportTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = CLISupportTests.swift; sourceTree = "<group>"; };
 		BB00000000000000000248 /* HotkeyRecorderView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeyRecorderView.swift; sourceTree = "<group>"; };
+		BB00000000000000000364 /* VisualShortcutKeyboardView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VisualShortcutKeyboardView.swift; sourceTree = "<group>"; };
 		BB00000000000000000249 /* HotkeySettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HotkeySettingsView.swift; sourceTree = "<group>"; };
 		BB00000000000000000250 /* AboutSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AboutSettingsView.swift; sourceTree = "<group>"; };
 		BB00000000000000000255 /* CerebrasPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CerebrasPlugin.swift; sourceTree = "<group>"; };
@@ -1984,6 +1990,7 @@
 				BB00000000000000000045 /* APIServerViewModel.swift */,
 				BB00000000000000000063 /* HistoryViewModel.swift */,
 				BB00000000000000000067 /* ProfilesViewModel.swift */,
+				BB00000000000000000363 /* VisualShortcutKeyboardModel.swift */,
 				BB00000000000000000082 /* DictionaryViewModel.swift */,
 				BB00000000000000000084 /* SnippetsViewModel.swift */,
 				BB00000000000000000090 /* HomeViewModel.swift */,
@@ -2051,6 +2058,7 @@
 				BB00000000000000000240 /* AudioRecorderView.swift */,
 				BB00000000000000000245 /* ErrorLogView.swift */,
 				BB00000000000000000248 /* HotkeyRecorderView.swift */,
+				BB00000000000000000364 /* VisualShortcutKeyboardView.swift */,
 				BB00000000000000000249 /* HotkeySettingsView.swift */,
 				BB00000000000000000250 /* AboutSettingsView.swift */,
 				BB00000000000000000287 /* LicenseSettingsView.swift */,
@@ -2871,6 +2879,7 @@
 					5A6490000000000000000001 /* ModelManagerAppleSpeechModelSelectionTests.swift */,
 					5A6500000000000000000001 /* ModelManagerLiveSessionModelOverrideTests.swift */,
 					AA8C1D4E5F60718293A4B5C6 /* DictationShortSpeechTests.swift */,
+					BB00000000000000000365 /* VisualShortcutKeyboardTests.swift */,
 				D63A42880A0BA4C84F36E873 /* DictionaryServiceTests.swift */,
 				B87000000000000000000002 /* DictionaryTrainingServiceTests.swift */,
 				BB7080000000000000000002 /* TargetAppCorrectionLearningServiceTests.swift */,
@@ -4763,6 +4772,7 @@
 					5A6490000000000000000002 /* ModelManagerAppleSpeechModelSelectionTests.swift in Sources */,
 					5A6500000000000000000002 /* ModelManagerLiveSessionModelOverrideTests.swift in Sources */,
 					BB8C1D4E5F60718293A4B5C6 /* DictationShortSpeechTests.swift in Sources */,
+					AA00000000000000000365 /* VisualShortcutKeyboardTests.swift in Sources */,
 				B4CC04DF94001FF7220789BC /* DictionaryServiceTests.swift in Sources */,
 				A87000000000000000000002 /* DictionaryTrainingServiceTests.swift in Sources */,
 				AA7080000000000000000002 /* TargetAppCorrectionLearningServiceTests.swift in Sources */,
@@ -5031,6 +5041,8 @@
 				AA00000000000000000258 /* AccessibilityAnnouncementService.swift in Sources */,
 				AA00000000000000000259 /* SpeechFeedbackService.swift in Sources */,
 				AA00000000000000000260 /* HotkeyRecorderView.swift in Sources */,
+				AA00000000000000000363 /* VisualShortcutKeyboardModel.swift in Sources */,
+				AA00000000000000000364 /* VisualShortcutKeyboardView.swift in Sources */,
 				AA00000000000000000261 /* HotkeySettingsView.swift in Sources */,
 				AA00000000000000000262 /* AboutSettingsView.swift in Sources */,
 				AA00000000000000000300 /* LicenseService.swift in Sources */,

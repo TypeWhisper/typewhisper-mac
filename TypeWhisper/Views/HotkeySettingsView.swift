@@ -143,7 +143,8 @@ private struct MultiHotkeySlotRecorder: View {
                         label: HotkeyService.displayName(for: hotkey),
                         presentation: .compactChip,
                         onRecord: { newHotkey in record(newHotkey, replacing: hotkey) },
-                        onClear: { dictation.removeHotkey(hotkey, for: slot) }
+                        onClear: { dictation.removeHotkey(hotkey, for: slot) },
+                        hotkey: hotkey
                     )
                 }
 
