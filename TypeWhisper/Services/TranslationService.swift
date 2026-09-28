@@ -9,6 +9,7 @@ import Translation
 enum TranslationError: Error {
     case timedOut
     case cancelled
+    case noTranslation
     case batchCountMismatch(expected: Int, actual: Int)
 }
 
@@ -130,8 +131,11 @@ final class TranslationService: ObservableObject {
             strict: strict
         )
         let normalizedEnglish = englishText.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !normalizedEnglish.isEmpty, normalizedEnglish != text else {
+        // A non-empty intermediate that matches the input just means the
+        // source was already English; it still needs the target leg.
+        guard !normalizedEnglish.isEmpty else {
             Self.logger.warning("Translation[\(requestId)] via-English produced no intermediate change")
+            if strict { throw TranslationError.noTranslation }
             return text
         }
 
@@ -171,6 +175,22 @@ final class TranslationService: ObservableObject {
         guard !texts.isEmpty else { return [] }
         Self.logger.info("Translation[\(requestId)] batch start \(sourceLanguage?.minimalIdentifier ?? "auto") -> \(target.minimalIdentifier), count=\(texts.count)")
 
+        // Match translate's unsupported-pair behavior: a direct batch session
+        // for an unsupported pair throws (HTTP 500 in strict mode), so go
+        // through English in two batches instead.
+        let english = Locale.Language(identifier: "en")
+        let directStatus = await availabilityStatus(
+            for: String(texts.prefix(5).joined(separator: "\n").prefix(2000)),
+            source: sourceLanguage,
+            target: target,
+            requestId: requestId
+        )
+        if directStatus == .unsupported, target.minimalIdentifier != english.minimalIdentifier {
+            Self.logger.warning("Translation[\(requestId)] batch direct \(target.minimalIdentifier) unsupported, trying via English")
+            let toEnglish = try await translateBatch(texts: texts, to: english, source: sourceLanguage, strict: strict)
+            return try await translateBatch(texts: toEnglish, to: target, source: english, strict: strict)
+        }
+
         // A batch never shares the session with another request.
         cancelPending(reason: "new batch \(requestId)")
 
@@ -194,7 +214,7 @@ final class TranslationService: ObservableObject {
             Task { [weak self] in
                 try await Task.sleep(for: timeout)
                 guard let self else { return }
-                if let pending = self.batchContinuation {
+                if self.activeRequestId == requestId, let pending = self.batchContinuation {
                     Self.logger.error("Translation[\(requestId)] batch timed out, \(strict ? "throwing" : "returning source texts")")
                     if strict {
                         pending.resume(throwing: TranslationError.timedOut)
@@ -302,7 +322,7 @@ final class TranslationService: ObservableObject {
             Task { [weak self] in
                 try await Task.sleep(for: timeout)
                 guard let self else { return }
-                if let pending = self.continuation {
+                if self.activeRequestId == requestId, let pending = self.continuation {
                     let seconds = needsInteractiveHost ? 90 : 15
                     Self.logger.error("Translation[\(requestId)] timed out after \(seconds)s, \(strict ? "throwing" : "returning original text")")
                     if strict {
@@ -355,8 +375,10 @@ final class TranslationService: ObservableObject {
                     batchCont.resume(returning: texts)
                 }
             }
-            configuration = nil
-            activeRequestId = "-"
+            if activeRequestId == requestId {
+                configuration = nil
+                activeRequestId = "-"
+            }
             return
         }
 

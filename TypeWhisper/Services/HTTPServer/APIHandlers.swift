@@ -521,6 +521,13 @@ final class APIHandlers: @unchecked Sendable {
                 ))
             }
         } catch {
+            // A strict translation preempted by a newer request is transient:
+            // report it as retryable instead of a generic server error.
+            #if canImport(Translation)
+            if case TranslationError.cancelled = error {
+                return .error(status: 503, message: "Translation superseded by a newer request; retry the request")
+            }
+            #endif
             return .error(status: 500, message: "Transcription failed: \(error.localizedDescription)")
         }
     }
