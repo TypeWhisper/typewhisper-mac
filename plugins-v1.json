@@ -68,6 +68,17 @@
       "detailsURL": "https://www.typewhisper.com/addons/whisperkit/",
       "releases": [
         {
+          "version": "1.2.1",
+          "minHostVersion": "1.7.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 1924603,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-whisperkit-v1.2.1/WhisperKitPlugin.zip",
+          "minOSVersion": "14.0",
+          "supportedArchitectures": [
+            "arm64"
+          ]
+        },
+        {
           "version": "1.2.0",
           "minHostVersion": "1.6.0",
           "sdkCompatibilityVersion": "v1",
