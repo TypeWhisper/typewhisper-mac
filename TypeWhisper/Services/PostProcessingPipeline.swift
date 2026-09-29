@@ -65,9 +65,10 @@ final class PostProcessingPipeline {
 
         var result = text
         var appliedSteps: [String] = []
-        // Shared by the pre- and post-LLM correction passes so each correction's usage is
-        // counted at most once per dictation.
-        var countedCorrectionIDs = Set<UUID>()
+        // Tracks correction usage across the pre- and post-LLM passes so each correction is
+        // counted at most once per dictation, and the pre-LLM pass counts only if processing
+        // succeeds (a fallback or cancellation inserts text without its corrections).
+        var correctionUsage = CorrectionUsageLedger()
 
         func stepName(for id: Int) -> String {
             switch id {
@@ -99,7 +100,7 @@ final class PostProcessingPipeline {
                         outputFormat: outputFormat,
                         normalizeNumbers: normalizeNumbers,
                         deferUsageCountSave: deferUsageCountSaves,
-                        countedCorrectionIDs: &countedCorrectionIDs
+                        correctionUsage: &correctionUsage
                     )
                 default:
                     result = try await plugins[step.id].process(text: result, context: context)
@@ -147,6 +148,10 @@ final class PostProcessingPipeline {
             }
         }
 
+        dictionaryService.recordUsage(
+            ofCorrectionIDs: correctionUsage.uncountedProvisionalIDs,
+            deferUsageCountSave: deferUsageCountSaves
+        )
         return PostProcessingResult(text: result, appliedSteps: appliedSteps, fallback: nil)
     }
 
@@ -170,7 +175,8 @@ final class PostProcessingPipeline {
         // step itself is excluded by the priority filter.
         let steps = orderedSteps(includesLLMStep: true, outputFormat: outputFormat, plugins: [])
         var result = text
-        var countedCorrectionIDs = Set<UUID>()
+        // Preparation never commits usage; the final `process` run counts the corrections.
+        var correctionUsage = CorrectionUsageLedger()
         for step in steps where step.priority < Self.llmStepPriority {
             result = applyBuiltInStep(
                 step.id,
@@ -179,8 +185,7 @@ final class PostProcessingPipeline {
                 dictationContext: dictationContext,
                 outputFormat: outputFormat,
                 normalizeNumbers: normalizeNumbers,
-                recordsUsage: false,
-                countedCorrectionIDs: &countedCorrectionIDs
+                correctionUsage: &correctionUsage
             )
         }
         return result
@@ -248,8 +253,7 @@ final class PostProcessingPipeline {
         outputFormat: String?,
         normalizeNumbers: Bool?,
         deferUsageCountSave: Bool = false,
-        recordsUsage: Bool = true,
-        countedCorrectionIDs: inout Set<UUID>
+        correctionUsage: inout CorrectionUsageLedger
     ) -> String {
         switch id {
         case -6:
@@ -297,17 +301,31 @@ final class PostProcessingPipeline {
             }
         case -2:
             return snippetService.applySnippets(to: text, deferUsageCountSave: deferUsageCountSave)
-        case -3, -8:
-            guard recordsUsage else {
-                return dictionaryService.previewCorrections(to: text)
-            }
+        case -8:
+            return dictionaryService.previewCorrections(
+                to: text,
+                appliedCorrectionIDs: &correctionUsage.provisionalIDs
+            )
+        case -3:
             return dictionaryService.applyCorrections(
                 to: text,
                 deferUsageCountSave: deferUsageCountSave,
-                countedCorrectionIDs: &countedCorrectionIDs
+                countedCorrectionIDs: &correctionUsage.countedIDs
             )
         default:
             return text
         }
+    }
+}
+
+/// Correction usage for one post-processing run. The post-LLM pass counts immediately
+/// (`countedIDs`); the pre-LLM pass only records what it applied (`provisionalIDs`), which is
+/// counted once the run completes, minus anything the post-LLM pass already counted.
+struct CorrectionUsageLedger {
+    var countedIDs = Set<UUID>()
+    var provisionalIDs = Set<UUID>()
+
+    var uncountedProvisionalIDs: Set<UUID> {
+        provisionalIDs.subtracting(countedIDs)
     }
 }

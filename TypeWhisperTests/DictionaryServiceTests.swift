@@ -166,6 +166,24 @@ final class DictionaryServiceTests: XCTestCase {
         XCTAssertEqual(service.applyCorrections(to: "GitHub and GitHub.com"), "GitHub.com and GitHub.com")
         XCTAssertEqual(service.applyCorrections(to: "a -- b"), "a --- b")
         XCTAssertEqual(service.applyCorrections(to: "a --- b"), "a --- b")
+        XCTAssertEqual(service.applyCorrections(to: service.applyCorrections(to: "a -- b and -- c")), "a --- b and --- c")
+    }
+
+    @MainActor
+    func testRunsThatAlreadyReadAsTheReplacementAreNotExpanded() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.addEntry(type: .correction, original: "--", replacement: "---")
+
+        // Two corrected runs back to back: a match straddling their seam is still part of
+        // an existing replacement, so a repeated pass leaves the six hyphens alone.
+        XCTAssertEqual(service.applyCorrections(to: "a ------ b"), "a ------ b")
+        XCTAssertEqual(service.applyCorrections(to: service.applyCorrections(to: "a ------ b")), "a ------ b")
+        // Policy: text that already reads as the replacement is treated as corrected, even
+        // when it was dictated that way (two raw originals back to back contain `---`).
+        XCTAssertEqual(service.applyCorrections(to: "a ---- b"), "a ---- b")
     }
 
     @MainActor

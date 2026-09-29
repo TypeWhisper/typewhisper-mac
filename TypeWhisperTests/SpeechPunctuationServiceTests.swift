@@ -563,6 +563,77 @@ final class SpeechPunctuationServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testPipelineDoesNotExpandRepeatedCharacterReplacementAcrossBothPasses() async throws {
+        let setup = try makeCorrectionPipeline(original: "--", replacement: "---")
+        defer { setup.cleanup() }
+
+        let result = try await setup.pipeline.process(
+            text: "a -- b -- c",
+            context: PostProcessingContext(language: "en"),
+            dictationContext: DictationRuntimeContext(
+                engineId: "parakeet",
+                modelId: "parakeet-v3",
+                configuredLanguage: "en",
+                detectedLanguage: nil
+            ),
+            llmHandler: { input in input },
+            llmStepName: "Workflow"
+        )
+
+        XCTAssertEqual(result.text, "a --- b --- c")
+    }
+
+    @MainActor
+    func testPreLLMCorrectionUsageIsNotCountedWhenRawFallbackIsInserted() async throws {
+        let setup = try makeCorrectionPipeline(original: "dev and think", replacement: "DEVONthink")
+        defer { setup.cleanup() }
+
+        let result = try await setup.pipeline.process(
+            text: "use dev and think",
+            context: PostProcessingContext(language: "en"),
+            dictationContext: DictationRuntimeContext(
+                engineId: "parakeet",
+                modelId: "parakeet-v3",
+                configuredLanguage: "en",
+                detectedLanguage: nil
+            ),
+            llmHandler: { _ in throw URLError(.badServerResponse) },
+            llmStepName: "Workflow",
+            llmFailureFallbackText: "use dev and think"
+        )
+
+        XCTAssertNotNil(result.fallback)
+        XCTAssertEqual(result.text, "use dev and think")
+        XCTAssertEqual(setup.dictionaryService.corrections.first?.usageCount, 0)
+    }
+
+    @MainActor
+    func testPreLLMCorrectionUsageIsNotCountedWhenProcessingIsCancelled() async throws {
+        let setup = try makeCorrectionPipeline(original: "dev and think", replacement: "DEVONthink")
+        defer { setup.cleanup() }
+
+        do {
+            _ = try await setup.pipeline.process(
+                text: "use dev and think",
+                context: PostProcessingContext(language: "en"),
+                dictationContext: DictationRuntimeContext(
+                    engineId: "parakeet",
+                    modelId: "parakeet-v3",
+                    configuredLanguage: "en",
+                    detectedLanguage: nil
+                ),
+                llmHandler: { _ in throw CancellationError() },
+                llmStepName: "Workflow",
+                llmFailureFallbackText: "use dev and think"
+            )
+            XCTFail("Expected cancellation")
+        } catch is CancellationError {
+        }
+
+        XCTAssertEqual(setup.dictionaryService.corrections.first?.usageCount, 0)
+    }
+
+    @MainActor
     func testPipelineAppliesWhitespaceFillerCorrections() async throws {
         let appSupportDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)
