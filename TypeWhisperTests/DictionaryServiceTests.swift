@@ -187,6 +187,21 @@ final class DictionaryServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testReplacementContextIsMatchedAcrossCaseFoldedLengthDifferences() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        // The replacement's prefix `ß` is spelled `ss` in the text: one Character versus two.
+        service.addEntry(type: .correction, original: "--", replacement: "ß--.")
+
+        XCTAssertEqual(service.applyCorrections(to: "a -- b"), "a ß--. b")
+        XCTAssertEqual(service.applyCorrections(to: "a ß--. b"), "a ß--. b")
+        XCTAssertEqual(service.applyCorrections(to: "a ss--. b"), "a ss--. b")
+        XCTAssertEqual(service.applyCorrections(to: service.applyCorrections(to: "a -- b")), "a ß--. b")
+    }
+
+    @MainActor
     func testRunsThatAlreadyReadAsTheReplacementAreNotExpanded() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }

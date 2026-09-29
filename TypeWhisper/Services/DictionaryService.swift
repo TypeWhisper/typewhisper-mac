@@ -883,15 +883,23 @@ final class DictionaryService: ObservableObject {
         options: String.CompareOptions,
         locale: Locale?
     ) -> Bool {
+        // Anchored searches rather than Character offsets: under case folding the text can
+        // spell a context with a different number of Characters (`ss` for `ß`).
         for context in contexts {
-            guard let start = text.index(range.lowerBound, offsetBy: -context.prefix.count, limitedBy: text.startIndex),
-                  let end = text.index(range.upperBound, offsetBy: context.suffix.count, limitedBy: text.endIndex) else {
-                continue
-            }
-            let before = String(text[start..<range.lowerBound])
-            let after = String(text[range.upperBound..<end])
-            if before.compare(context.prefix, options: options, range: nil, locale: locale) == .orderedSame,
-               after.compare(context.suffix, options: options, range: nil, locale: locale) == .orderedSame {
+            let prefixMatches = context.prefix.isEmpty || text.range(
+                of: context.prefix,
+                options: options.union([.anchored, .backwards]),
+                range: text.startIndex..<range.lowerBound,
+                locale: locale
+            ) != nil
+            guard prefixMatches else { continue }
+            let suffixMatches = context.suffix.isEmpty || text.range(
+                of: context.suffix,
+                options: options.union(.anchored),
+                range: range.upperBound..<text.endIndex,
+                locale: locale
+            ) != nil
+            if suffixMatches {
                 return true
             }
         }
