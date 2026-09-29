@@ -488,8 +488,9 @@ final class TranslationService: ObservableObject {
 
     /// Minimal batch surface of `TranslationSession` used by the batch path.
     /// Lets tests substitute a controllable double for the Apple framework.
-    /// The framework session's methods are plain non-isolated async calls,
-    /// so both the production adapter and test doubles stay non-isolated.
+    /// Main-actor bound because the translator is only ever driven from
+    /// `handleBatchSession` on the main actor.
+    @MainActor
     protocol BatchSessionTranslator {
         func prepareTranslation() async throws
         func translateTexts(_ texts: [String]) async throws -> [String]
