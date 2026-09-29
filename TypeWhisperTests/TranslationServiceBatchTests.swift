@@ -1,4 +1,5 @@
 #if canImport(Translation)
+import Translation
 import XCTest
 @testable import TypeWhisper
 
