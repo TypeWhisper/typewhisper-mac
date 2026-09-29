@@ -6,7 +6,7 @@ import Translation
 
 /// Errors for strict translation requests (used by the HTTP API path).
 /// Non-strict callers keep the historical graceful fallback to the source text.
-enum TranslationError: Error {
+enum TranslationError: Error, Equatable {
     case timedOut
     case cancelled
     case noTranslation

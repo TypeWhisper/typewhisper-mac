@@ -54,9 +54,6 @@ final class TranslationServiceBatchTests: XCTestCase {
 
     // MARK: - Helpers
 
-    private var firstOutcome: Result<[String], Error>?
-    private var secondOutcome: Result<[String], Error>?
-
     private func makeService(
         availability: ((String, Locale.Language?, Locale.Language) async -> LanguageAvailability.Status?)? = nil,
         batchTimeout: Duration? = nil
@@ -67,21 +64,35 @@ final class TranslationServiceBatchTests: XCTestCase {
         return service
     }
 
-    /// Starts a strict batch in the background, capturing its terminal outcome.
+    /// Starts a strict batch, returning a task for its terminal outcome.
     private func startBatch(
         _ service: TranslationService,
         texts: [String],
-        target: Locale.Language,
-        store: WritableKeyPath<TranslationServiceBatchTests, Result<[String], Error>?>
-    ) {
-        Task {
-            let outcome: Result<[String], Error>
+        target: Locale.Language
+    ) -> Task<Result<[String], Error>, Never> {
+        Task { @MainActor in
             do {
-                outcome = .success(try await service.translateBatch(texts: texts, to: target, strict: true))
+                return .success(try await service.translateBatch(texts: texts, to: target, strict: true))
             } catch {
-                outcome = .failure(error)
+                return .failure(error)
             }
-            self[keyPath: store] = outcome
+        }
+    }
+
+    /// Awaits a batch task, failing if it never settles — a hung batch is
+    /// exactly the regression these tests guard against.
+    private func awaitBatch(
+        _ task: Task<Result<[String], Error>, Never>,
+        timeout: Duration = .seconds(30)
+    ) async throws -> Result<[String], Error> {
+        try await withThrowingTaskGroup(of: Result<[String], Error>.self) { group in
+            group.addTask { @MainActor in await task.value }
+            group.addTask {
+                try await Task.sleep(for: timeout)
+                throw BatchTestError.timedOutWaiting
+            }
+            defer { group.cancelAll() }
+            return try await group.next() ?? .failure(BatchTestError.timedOutWaiting)
         }
     }
 
@@ -93,15 +104,17 @@ final class TranslationServiceBatchTests: XCTestCase {
         }
     }
 
-    private func awaitOutcome(
-        timeoutSeconds: Double = 10,
-        _ read: () -> Result<[String], Error>?
-    ) async throws -> Result<[String], Error> {
-        let deadline = Date(timeIntervalSinceNow: timeoutSeconds)
-        while true {
-            if let outcome = read() { return outcome }
-            guard Date() < deadline else { throw BatchTestError.timedOutWaiting }
-            try await Task.sleep(for: .milliseconds(20))
+    private func assertBatchThrows(
+        _ expected: TranslationError,
+        _ result: Result<[String], Error>,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        guard case .failure(let error) = result,
+              let translationError = error as? TranslationError,
+              translationError == expected else {
+            XCTFail("expected batch to throw \(expected), got \(result)", file: file, line: line)
+            return
         }
     }
 
@@ -111,23 +124,18 @@ final class TranslationServiceBatchTests: XCTestCase {
         let service = makeService()
         let german = Locale.Language(identifier: "de")
 
-        startBatch(service, texts: ["eins"], target: german, store: \.firstOutcome)
+        let first = startBatch(service, texts: ["eins"], target: german)
         // Start the second call inside the first call's 100 ms reset window.
         try await Task.sleep(for: .milliseconds(50))
-        startBatch(service, texts: ["zwei"], target: german, store: \.secondOutcome)
+        let second = startBatch(service, texts: ["zwei"], target: german)
 
         // The second request preempts the first, which must surface
         // cancellation instead of hanging on a lost continuation.
-        let first = try await awaitOutcome { self.firstOutcome }
-        guard case .failure(let error) = first, case TranslationError.cancelled = error else {
-            XCTFail("preempted batch should have thrown cancelled, got \(String(describing: first))")
-            return
-        }
+        assertBatchThrows(.cancelled, try await awaitBatch(first))
 
         // The surviving request completes through its own session.
         await service.handleBatchSession(ControllableBatchSession(results: { texts in texts.map { "DE:\($0)" } }))
-        let second = try await awaitOutcome { self.secondOutcome }
-        XCTAssertEqual(try second.get(), ["DE:zwei"])
+        XCTAssertEqual(try awaitBatch(second).get(), ["DE:zwei"])
     }
 
     func testNewBatchWhileSessionExecutingResolvesBothExactlyOnce() async throws {
@@ -135,22 +143,18 @@ final class TranslationServiceBatchTests: XCTestCase {
         let german = Locale.Language(identifier: "de")
         let gate = TestGate()
 
-        startBatch(service, texts: ["eins"], target: german, store: \.firstOutcome)
+        let first = startBatch(service, texts: ["eins"], target: german)
         try await awaitClaim(on: service)
         // The framework session for the first request is now executing; hold it.
-        let staleSession = Task {
+        let staleSession = Task { @MainActor in
             await service.handleBatchSession(ControllableBatchSession(gate: gate, results: { _ in ["IGNORED"] }))
         }
 
         // A new request arrives while the earlier session is executing.
-        startBatch(service, texts: ["zwei"], target: german, store: \.secondOutcome)
+        let second = startBatch(service, texts: ["zwei"], target: german)
 
         // The superseded request must surface cancellation, not hang.
-        let first = try await awaitOutcome { self.firstOutcome }
-        guard case .failure(let error) = first, case TranslationError.cancelled = error else {
-            XCTFail("superseded batch should have thrown cancelled, got \(String(describing: first))")
-            return
-        }
+        assertBatchThrows(.cancelled, try await awaitBatch(first))
 
         // Releasing the stale session: its late result must be ignored, not
         // resume anything a second time.
@@ -160,8 +164,7 @@ final class TranslationServiceBatchTests: XCTestCase {
         // The surviving request completes through its own session.
         try await awaitClaim(on: service)
         await service.handleBatchSession(ControllableBatchSession(results: { texts in texts.map { "DE:\($0)" } }))
-        let second = try await awaitOutcome { self.secondOutcome }
-        XCTAssertEqual(try second.get(), ["DE:zwei"])
+        XCTAssertEqual(try awaitBatch(second).get(), ["DE:zwei"])
     }
 
     // MARK: - P2: timeout during an executing session
@@ -171,19 +174,15 @@ final class TranslationServiceBatchTests: XCTestCase {
         let german = Locale.Language(identifier: "de")
         let gate = TestGate()
 
-        startBatch(service, texts: ["hello"], target: german, store: \.firstOutcome)
+        let first = startBatch(service, texts: ["hello"], target: german)
         try await awaitClaim(on: service)
         // Hand the claimed request to a session, then hold it past the deadline.
-        Task {
+        Task { @MainActor in
             await service.handleBatchSession(ControllableBatchSession(gate: gate, results: { _ in ["HALLO"] }))
         }
 
         // The caller must time out even though the session is still running.
-        let settled = try await awaitOutcome { self.firstOutcome }
-        guard case .failure(let error) = settled, case TranslationError.timedOut = error else {
-            XCTFail("stalled batch should have thrown timedOut, got \(String(describing: settled))")
-            return
-        }
+        assertBatchThrows(.timedOut, try await awaitBatch(first))
 
         // Release the session: the late result is safely ignored and the
         // timed-out request has released its registration.
@@ -201,7 +200,7 @@ final class TranslationServiceBatchTests: XCTestCase {
         })
         let german = Locale.Language(identifier: "de")
 
-        startBatch(service, texts: ["Hello world", "Good morning"], target: german, store: \.firstOutcome)
+        let first = startBatch(service, texts: ["Hello world", "Good morning"], target: german)
         try await awaitClaim(on: service)
 
         // The framework silently echoes the source text for the direct pair.
@@ -217,8 +216,7 @@ final class TranslationServiceBatchTests: XCTestCase {
 
         // The segments come back translated, never as source text reported
         // under the target language.
-        let settled = try await awaitOutcome { self.firstOutcome }
-        XCTAssertEqual(try settled.get(), ["Hallo Welt", "Guten Morgen"])
+        XCTAssertEqual(try awaitBatch(first).get(), ["Hallo Welt", "Guten Morgen"])
     }
 }
 #endif
