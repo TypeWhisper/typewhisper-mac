@@ -517,16 +517,26 @@ final class TranslationService: ObservableObject {
         func translateTexts(_ texts: [String]) async throws -> [String]
     }
 
-    /// Production `BatchSessionTranslator` driving the real framework session.
+    @MainActor
+    protocol SingleSessionTranslator {
+        func prepareTranslation() async throws
+        func translateText(_ text: String) async throws -> String
+    }
+
+    /// Production adapter driving the real framework session.
     /// The session is only ever constructed and driven on the main actor
-    /// (`handleSession` → `handleBatchSession`), so `nonisolated(unsafe)`
+    /// through the request-specific handlers, so `nonisolated(unsafe)`
     /// just exempts the stored handle from the actor-isolation check that
     /// would otherwise fire on the framework's nonisolated calls.
-    private struct FrameworkBatchTranslator: BatchSessionTranslator {
+    private struct FrameworkSessionTranslator: BatchSessionTranslator, SingleSessionTranslator {
         nonisolated(unsafe) let session: TranslationSession
 
         func prepareTranslation() async throws {
             try await session.prepareTranslation()
+        }
+
+        func translateText(_ text: String) async throws -> String {
+            try await session.translate(text).targetText
         }
 
         func translateTexts(_ texts: [String]) async throws -> [String] {
@@ -540,38 +550,41 @@ final class TranslationService: ObservableObject {
 
     func handleSession(_ session: sending TranslationSession) async {
         if batchRequest != nil {
-            await handleBatchSession(FrameworkBatchTranslator(session: session))
+            await handleBatchSession(FrameworkSessionTranslator(session: session))
             return
         }
 
+        await handleSingleSession(FrameworkSessionTranslator(session: session))
+    }
+
+    /// Keep the original input and request identity across suspension points.
+    /// A cancelled or timed-out session must not complete a newer request.
+    func handleSingleSession(_ translator: some SingleSessionTranslator) async {
+        guard continuation != nil else { return }
         let requestId = activeRequestId
         let strict = pendingStrict
+        let text = sourceText
+        let outcome: Result<String, Error>
         do {
             do {
-                try await session.prepareTranslation()
+                try await translator.prepareTranslation()
             } catch {
                 Self.logger.warning("Translation[\(requestId)] prepare failed: \(error.localizedDescription)")
             }
 
-            let result = try await session.translate(sourceText)
+            let result = try await translator.translateText(text)
             Self.logger.info("Translation[\(requestId)] session completed")
-            continuation?.resume(returning: result.targetText)
+            outcome = .success(result)
         } catch {
             Self.logger.error("Translation[\(requestId)] failed: \(error.localizedDescription), \(strict ? "throwing" : "returning original text")")
-            if strict {
-                continuation?.resume(throwing: error)
-            } else {
-                continuation?.resume(returning: sourceText)
-            }
+            outcome = strict ? .failure(error) : .success(text)
         }
-        // Only clear state that still belongs to this request: a stale
-        // session must never wipe a newer request's configuration.
-        if activeRequestId == requestId {
-            continuation = nil
-            pendingStrict = false
-            configuration = nil
-            activeRequestId = "-"
-        }
+        guard activeRequestId == requestId, let pending = continuation else { return }
+        continuation = nil
+        pendingStrict = false
+        configuration = nil
+        activeRequestId = "-"
+        pending.resume(with: outcome)
     }
 
     /// Drives the currently claimed batch request with a session translator.

@@ -39,10 +39,12 @@ final class TranslationServiceBatchTests: XCTestCase {
     /// Controllable stand-in for the framework batch session.
     private struct ControllableBatchSession: TranslationService.BatchSessionTranslator {
         var gate: TestGate?
+        var entered: TestGate?
         var results: ([String]) -> [String]
 
         func prepareTranslation() async throws {}
         func translateTexts(_ texts: [String]) async throws -> [String] {
+            if let entered { await entered.open() }
             if let gate { await gate.wait() }
             return results(texts)
         }
@@ -144,14 +146,16 @@ final class TranslationServiceBatchTests: XCTestCase {
         let service = makeService(batchTimeout: .seconds(30))
         let german = Locale.Language(identifier: "de")
         let gate = TestGate()
+        let entered = TestGate()
 
         let first = startBatch(service, texts: ["eins"], target: german)
         try await awaitClaim(on: service)
         // The framework session for the first request is now executing; hold it.
         let staleSession = Task { @MainActor in
-            await service.handleBatchSession(ControllableBatchSession(gate: gate, results: { _ in ["IGNORED"] }))
+            await service.handleBatchSession(ControllableBatchSession(gate: gate, entered: entered, results: { _ in ["IGNORED"] }))
         }
 
+        await entered.wait()
         // A new request arrives while the earlier session is executing.
         let second = startBatch(service, texts: ["zwei"], target: german)
 
@@ -291,5 +295,61 @@ final class TranslationServiceBatchTests: XCTestCase {
         let translated = try await awaitBatch(batch).get()
         XCTAssertEqual(translated, ["Bonjour le monde"])
     }
+    // MARK: - Stale single-text sessions
+
+    private struct ControllableSingleSession: TranslationService.SingleSessionTranslator {
+        var gate: TestGate?
+        var entered: TestGate?
+        var result: Result<String, Error>
+
+        func prepareTranslation() async throws {}
+        func translateText(_ text: String) async throws -> String {
+            if let entered { await entered.open() }
+            if let gate { await gate.wait() }
+            return try result.get()
+        }
+    }
+
+    private func verifyStaleSingleSession(_ staleResult: Result<String, Error>) async throws {
+        let service = makeService()
+        let gate = TestGate()
+        let entered = TestGate()
+        let first = Task { @MainActor in
+            do { return Result<[String], Error>.success([try await service.translate(
+                text: "erste Anfrage", to: .init(identifier: "en"), strict: true
+            )]) } catch { return .failure(error) }
+        }
+        let deadline = Date(timeIntervalSinceNow: 10)
+        while service.configuration == nil {
+            guard Date() < deadline else { throw BatchTestError.timedOutWaiting }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        let staleSession = Task { @MainActor in
+            await service.handleSingleSession(ControllableSingleSession(
+                gate: gate, entered: entered, result: staleResult
+            ))
+        }
+        await entered.wait()
+        let second = Task { @MainActor in
+            do { return Result<[String], Error>.success([try await service.translate(
+                text: "zweite Anfrage", to: .init(identifier: "en"), strict: true
+            )]) } catch { return .failure(error) }
+        }
+        assertBatchThrows(.cancelled, try await awaitBatch(first))
+        await gate.open()
+        await staleSession.value
+        await service.handleSingleSession(ControllableSingleSession(result: .success("second request")))
+        let translated = try await awaitBatch(second).get()
+        XCTAssertEqual(translated, ["second request"])
+    }
+
+    func testStaleSingleSessionSuccessCannotCompleteNewRequest() async throws {
+        try await verifyStaleSingleSession(.success("first request"))
+    }
+
+    func testStaleSingleSessionErrorCannotCompleteNewRequest() async throws {
+        try await verifyStaleSingleSession(.failure(TypeWhisper.TranslationError.noTranslation))
+    }
+
 }
 #endif
