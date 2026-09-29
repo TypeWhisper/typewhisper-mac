@@ -135,7 +135,8 @@ final class TranslationServiceBatchTests: XCTestCase {
 
         // The surviving request completes through its own session.
         await service.handleBatchSession(ControllableBatchSession(results: { texts in texts.map { "DE:\($0)" } }))
-        XCTAssertEqual(try awaitBatch(second).get(), ["DE:zwei"])
+        let secondTranslated = try awaitBatch(second).get()
+        XCTAssertEqual(secondTranslated, ["DE:zwei"])
     }
 
     func testNewBatchWhileSessionExecutingResolvesBothExactlyOnce() async throws {
@@ -164,7 +165,8 @@ final class TranslationServiceBatchTests: XCTestCase {
         // The surviving request completes through its own session.
         try await awaitClaim(on: service)
         await service.handleBatchSession(ControllableBatchSession(results: { texts in texts.map { "DE:\($0)" } }))
-        XCTAssertEqual(try awaitBatch(second).get(), ["DE:zwei"])
+        let secondTranslated = try awaitBatch(second).get()
+        XCTAssertEqual(secondTranslated, ["DE:zwei"])
     }
 
     // MARK: - P2: timeout during an executing session
@@ -216,7 +218,8 @@ final class TranslationServiceBatchTests: XCTestCase {
 
         // The segments come back translated, never as source text reported
         // under the target language.
-        XCTAssertEqual(try awaitBatch(first).get(), ["Hallo Welt", "Guten Morgen"])
+        let firstTranslated = try awaitBatch(first).get()
+        XCTAssertEqual(firstTranslated, ["Hallo Welt", "Guten Morgen"])
     }
 }
 #endif
