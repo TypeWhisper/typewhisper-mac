@@ -422,7 +422,7 @@ private struct RecordingRow: View {
                 Spacer()
 
                 HStack(spacing: 4) {
-                    if item.transcript != nil {
+                    if let transcript = item.transcript {
                         Button {
                             showTranscript.toggle()
                         } label: {
@@ -431,6 +431,17 @@ private struct RecordingRow: View {
                         }
                         .buttonStyle(.borderless)
                         .help(String(localized: "recorder.showTranscript"))
+
+                        Button {
+                            viewModel.copyTranscript(transcript)
+                        } label: {
+                            Image(systemName: "doc.on.doc")
+                        }
+                        .buttonStyle(.borderless)
+                        .foregroundStyle(.secondary)
+                        .help(String(localized: "recorder.copyTranscript"))
+                        .accessibilityLabel(String(localized: "recorder.copyTranscript"))
+                        .accessibilityIdentifier("recorder.recording.copyTranscript")
                     }
 
                     if viewModel.isRetranscribing(item) {
