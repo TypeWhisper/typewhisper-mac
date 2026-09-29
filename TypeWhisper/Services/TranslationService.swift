@@ -497,8 +497,12 @@ final class TranslationService: ObservableObject {
     }
 
     /// Production `BatchSessionTranslator` driving the real framework session.
+    /// The session is only ever constructed and driven on the main actor
+    /// (`handleSession` → `handleBatchSession`), so `nonisolated(unsafe)`
+    /// just exempts the stored handle from the actor-isolation check that
+    /// would otherwise fire on the framework's nonisolated calls.
     private struct FrameworkBatchTranslator: BatchSessionTranslator {
-        let session: TranslationSession
+        nonisolated(unsafe) let session: TranslationSession
 
         func prepareTranslation() async throws {
             try await session.prepareTranslation()
