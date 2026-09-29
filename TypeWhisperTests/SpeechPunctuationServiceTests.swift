@@ -563,6 +563,41 @@ final class SpeechPunctuationServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testPipelineDoesNotReexpandCaseFoldEquivalentOriginal() async throws {
+        // Case-insensitive matching finds `Strasse` inside `Straße.` although both have seven
+        // characters, so the post-LLM pass must still treat the corrected text as corrected.
+        let setup = try makeCorrectionPipeline(original: "Strasse", replacement: "Straße.")
+        defer { setup.cleanup() }
+        let dictationContext = DictationRuntimeContext(
+            engineId: "parakeet",
+            modelId: "parakeet-v3",
+            configuredLanguage: "de",
+            detectedLanguage: nil
+        )
+
+        var llmInput: String?
+        let withLLM = try await setup.pipeline.process(
+            text: "Die Strasse",
+            context: PostProcessingContext(language: "de"),
+            dictationContext: dictationContext,
+            llmHandler: { input in
+                llmInput = input
+                return input
+            },
+            llmStepName: "Workflow"
+        )
+        let withoutLLM = try await setup.pipeline.process(
+            text: "Die Strasse",
+            context: PostProcessingContext(language: "de"),
+            dictationContext: dictationContext
+        )
+
+        XCTAssertEqual(llmInput, "Die Straße.")
+        XCTAssertEqual(withLLM.text, "Die Straße.")
+        XCTAssertEqual(withoutLLM.text, "Die Straße.")
+    }
+
+    @MainActor
     func testPipelineDoesNotExpandRepeatedCharacterReplacementAcrossBothPasses() async throws {
         let setup = try makeCorrectionPipeline(original: "--", replacement: "---")
         defer { setup.cleanup() }

@@ -170,6 +170,23 @@ final class DictionaryServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testCaseFoldedReplacementIsNotReexpandedAndFullCaseFoldCorrectionsStillApply() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        // `Strasse` matches the `Straße` inside its own replacement (ß folds to ss).
+        service.addEntry(type: .correction, original: "Strasse", replacement: "Straße.")
+        // Here the folded match spans the whole replacement, like a case-only correction.
+        service.addEntry(type: .correction, original: "gasse", replacement: "Gaße")
+
+        XCTAssertEqual(service.applyCorrections(to: "Die Strasse"), "Die Straße.")
+        XCTAssertEqual(service.applyCorrections(to: "Die Straße."), "Die Straße.")
+        XCTAssertEqual(service.applyCorrections(to: "die gasse"), "die Gaße")
+        XCTAssertEqual(service.applyCorrections(to: service.applyCorrections(to: "die gasse")), "die Gaße")
+    }
+
+    @MainActor
     func testRunsThatAlreadyReadAsTheReplacementAreNotExpanded() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }

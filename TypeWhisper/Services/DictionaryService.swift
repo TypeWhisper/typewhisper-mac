@@ -798,8 +798,9 @@ final class DictionaryService: ObservableObject {
                 caseSensitive: correction.caseSensitive
             )
         case .substring:
-            let originalOffsets = Self.originalOffsets(of: correction.original, in: replacement)
-            guard !originalOffsets.isEmpty else {
+            let options: String.CompareOptions = correction.caseSensitive ? [] : [.caseInsensitive]
+            let contexts = Self.reexpansionContexts(of: correction.original, in: replacement, options: options, locale: nil)
+            guard !contexts.isEmpty else {
                 if correction.caseSensitive {
                     return text.replacingOccurrences(of: correction.original, with: replacement)
                 }
@@ -809,7 +810,6 @@ final class DictionaryService: ObservableObject {
                     options: .caseInsensitive
                 )
             }
-            let options: String.CompareOptions = correction.caseSensitive ? [] : [.caseInsensitive]
             var result = ""
             var searchStart = text.startIndex
             while let range = text.range(of: correction.original, options: options, range: searchStart..<text.endIndex),
@@ -818,8 +818,9 @@ final class DictionaryService: ObservableObject {
                 let alreadyCorrected = Self.isWithinExistingReplacement(
                     range,
                     in: text,
-                    replacement: replacement,
-                    originalOffsets: originalOffsets
+                    contexts: contexts,
+                    options: options,
+                    locale: nil
                 )
                 result += alreadyCorrected ? String(text[range]) : replacement
                 searchStart = range.upperBound
@@ -829,41 +830,68 @@ final class DictionaryService: ObservableObject {
         }
     }
 
-    /// Character offsets at which `original` occurs inside `replacement` when the replacement
-    /// extends the original (`GitHub` -> `GitHub.com`: [0]; `--` -> `---`: [0, 1]). Empty for
-    /// corrections that cannot expand on a repeated pass, including case-only corrections
-    /// (`rake` -> `RAKE`).
-    private static func originalOffsets(of original: String, in replacement: String) -> [Int] {
-        guard !original.isEmpty, replacement.count > original.count else { return [] }
-        var offsets: [Int] = []
-        var searchStart = replacement.startIndex
-        while searchStart < replacement.endIndex,
-              let range = replacement.range(of: original, options: .caseInsensitive, range: searchStart..<replacement.endIndex) {
-            offsets.append(replacement.distance(from: replacement.startIndex, to: range.lowerBound))
-            searchStart = replacement.index(after: range.lowerBound)
-        }
-        return offsets
+    /// Where the original re-matches inside its own replacement: the replacement text before
+    /// and after each such match. Found with the correction's own matching semantics, so a
+    /// case-folded match counts too (`Strasse` matches inside `Straße.`). A match that spans
+    /// the whole replacement is skipped: re-applying it reproduces the replacement, which is
+    /// why case-only corrections (`rake` -> `RAKE`) need no protection. Empty when a
+    /// repeated pass cannot expand the text.
+    private struct ReexpansionContext {
+        let prefix: String
+        let suffix: String
     }
 
-    /// Whether the match of the original at `range` already reads as part of the replacement:
-    /// with the replacement aligned so that one of its own occurrences of the original sits on
-    /// the match, the surrounding text spells the replacement. Replacing such a match again
-    /// would expand text that is already corrected (`GitHub.com.com`, or a run of hyphens that
-    /// grows on every pass, including where two corrected runs meet). Text that already reads
-    /// as the replacement is treated as corrected even when it was dictated that way.
+    private static func reexpansionContexts(
+        of original: String,
+        in replacement: String,
+        options: String.CompareOptions,
+        locale: Locale?
+    ) -> [ReexpansionContext] {
+        guard !original.isEmpty, !replacement.isEmpty else { return [] }
+        let wholeReplacement = replacement.startIndex..<replacement.endIndex
+        var contexts: [ReexpansionContext] = []
+        var searchStart = replacement.startIndex
+        while searchStart < replacement.endIndex,
+              let range = replacement.range(
+                  of: original,
+                  options: options,
+                  range: searchStart..<replacement.endIndex,
+                  locale: locale
+              ) {
+            if range != wholeReplacement {
+                contexts.append(ReexpansionContext(
+                    prefix: String(replacement[..<range.lowerBound]),
+                    suffix: String(replacement[range.upperBound...])
+                ))
+            }
+            searchStart = replacement.index(after: range.lowerBound)
+        }
+        return contexts
+    }
+
+    /// Whether the match of the original at `range` already sits inside the replacement: for
+    /// one of the places the original re-matches inside the replacement, the text before and
+    /// after the match equals the replacement text before and after it. Replacing such a match
+    /// again would expand text that is already corrected (`GitHub.com.com`, `Straße..`, or a
+    /// run of hyphens that grows on every pass, including where two corrected runs meet). Text
+    /// that already reads as the replacement is treated as corrected even when it was
+    /// dictated that way.
     private static func isWithinExistingReplacement(
         _ range: Range<String.Index>,
         in text: String,
-        replacement: String,
-        originalOffsets: [Int]
+        contexts: [ReexpansionContext],
+        options: String.CompareOptions,
+        locale: Locale?
     ) -> Bool {
-        let length = replacement.count
-        for offset in originalOffsets {
-            guard let start = text.index(range.lowerBound, offsetBy: -offset, limitedBy: text.startIndex),
-                  let end = text.index(start, offsetBy: length, limitedBy: text.endIndex) else {
+        for context in contexts {
+            guard let start = text.index(range.lowerBound, offsetBy: -context.prefix.count, limitedBy: text.startIndex),
+                  let end = text.index(range.upperBound, offsetBy: context.suffix.count, limitedBy: text.endIndex) else {
                 continue
             }
-            if text[start..<end].compare(replacement, options: .caseInsensitive) == .orderedSame {
+            let before = String(text[start..<range.lowerBound])
+            let after = String(text[range.upperBound..<end])
+            if before.compare(context.prefix, options: options, range: nil, locale: locale) == .orderedSame,
+               after.compare(context.suffix, options: options, range: nil, locale: locale) == .orderedSame {
                 return true
             }
         }
@@ -895,14 +923,14 @@ final class DictionaryService: ObservableObject {
         var result = ""
         var searchStart = text.startIndex
         let options: String.CompareOptions = caseSensitive ? [] : [.caseInsensitive]
-        let originalOffsets = Self.originalOffsets(of: original, in: replacement)
+        let contexts = Self.reexpansionContexts(of: original, in: replacement, options: options, locale: .current)
 
         while let range = text.range(of: original, options: options, range: searchStart..<text.endIndex, locale: .current) {
             guard range.lowerBound < range.upperBound else { break }
             let boundaryRange = boundaryEvaluationRange(for: range, in: text)
 
             if boundaryRange.lowerBound < boundaryRange.upperBound,
-               !Self.isWithinExistingReplacement(range, in: text, replacement: replacement, originalOffsets: originalOffsets),
+               !Self.isWithinExistingReplacement(range, in: text, contexts: contexts, options: options, locale: .current),
                isBoundaryMatch(boundaryRange, in: text, original: boundaryOriginal) {
                 let resolvedReplacement = boundaryReplacement(
                     for: range,
