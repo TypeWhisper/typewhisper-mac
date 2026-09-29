@@ -87,7 +87,7 @@ final class TranslationServiceBatchTests: XCTestCase {
         timeout: Duration = .seconds(30)
     ) async throws -> Result<[String], Error> {
         try await withThrowingTaskGroup(of: Result<[String], Error>.self) { group in
-            group.addTask { @MainActor in await task.value }
+            group.addTask { await task.value }
             group.addTask {
                 try await Task.sleep(for: timeout)
                 throw BatchTestError.timedOutWaiting
