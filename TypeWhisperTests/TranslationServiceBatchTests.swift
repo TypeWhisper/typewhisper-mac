@@ -135,7 +135,7 @@ final class TranslationServiceBatchTests: XCTestCase {
 
         // The surviving request completes through its own session.
         await service.handleBatchSession(ControllableBatchSession(results: { texts in texts.map { "DE:\($0)" } }))
-        let secondTranslated = try awaitBatch(second).get()
+        let secondTranslated = try await awaitBatch(second).get()
         XCTAssertEqual(secondTranslated, ["DE:zwei"])
     }
 
@@ -165,7 +165,7 @@ final class TranslationServiceBatchTests: XCTestCase {
         // The surviving request completes through its own session.
         try await awaitClaim(on: service)
         await service.handleBatchSession(ControllableBatchSession(results: { texts in texts.map { "DE:\($0)" } }))
-        let secondTranslated = try awaitBatch(second).get()
+        let secondTranslated = try await awaitBatch(second).get()
         XCTAssertEqual(secondTranslated, ["DE:zwei"])
     }
 
@@ -218,7 +218,7 @@ final class TranslationServiceBatchTests: XCTestCase {
 
         // The segments come back translated, never as source text reported
         // under the target language.
-        let firstTranslated = try awaitBatch(first).get()
+        let firstTranslated = try await awaitBatch(first).get()
         XCTAssertEqual(firstTranslated, ["Hallo Welt", "Guten Morgen"])
     }
 }
