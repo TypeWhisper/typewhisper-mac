@@ -1318,7 +1318,7 @@ private struct XAISettingsView: View {
                 plugin.selectVoice(selectedVoiceId)
             }
 
-            TextField("Custom Voice ID", text: $customVoiceId)
+            TextField(String(localized: "Custom Voice ID", bundle: bundle), text: $customVoiceId)
                 .textFieldStyle(.roundedBorder)
                 .font(.system(.body, design: .monospaced))
                 .onSubmit {

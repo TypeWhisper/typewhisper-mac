@@ -88,6 +88,13 @@ final class APIServerViewModel: ObservableObject {
         removeDiscoveryFiles()
     }
 
+    /// Used before deleting all data: also aborts requests that were already
+    /// accepted, so none of them writes an upload afterwards.
+    func stopServerAndCancelActiveRequests() {
+        stopServer()
+        httpServer.stopAndCancelActiveRequests()
+    }
+
     func restartIfNeeded() {
         if isEnabled {
             stopServer()

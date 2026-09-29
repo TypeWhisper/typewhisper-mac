@@ -3,6 +3,15 @@ import os
 import SwiftUI
 import TypeWhisperPluginSDK
 
+// Screenshot automation blocks provider requests, so an automatic refresh could only fail.
+enum ClaudeAutomaticRefreshPolicy {
+    static func allowsRefreshOnAppear(
+        arguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> Bool {
+        !arguments.contains("--store-screenshots")
+    }
+}
+
 // MARK: - Plugin Entry Point
 
 @objc(ClaudePlugin)
@@ -750,7 +759,7 @@ private struct ClaudeSettingsView: View {
                     Text("Temperature", bundle: bundle)
                         .font(.headline)
 
-                    Picker("Temperature Mode", selection: $llmTemperatureMode) {
+                    Picker(String(localized: "Temperature Mode", bundle: bundle), selection: $llmTemperatureMode) {
                         Text("Provider Default", bundle: bundle).tag(PluginLLMTemperatureMode.providerDefault)
                         Text("Custom", bundle: bundle).tag(PluginLLMTemperatureMode.custom)
                     }
@@ -791,7 +800,9 @@ private struct ClaudeSettingsView: View {
             llmTemperatureValue = plugin.llmTemperatureValue
             lastUpdated = plugin.cacheLastUpdated
             // Serve the cache immediately; refresh in the background if stale.
-            if plugin.isAvailable, !plugin.isModelCacheFresh {
+            if plugin.isAvailable,
+               !plugin.isModelCacheFresh,
+               ClaudeAutomaticRefreshPolicy.allowsRefreshOnAppear() {
                 refresh()
             }
         }

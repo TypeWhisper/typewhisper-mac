@@ -54,6 +54,7 @@ private final class UnsupportedDictionaryEnginePlugin: NSObject, TranscriptionEn
     static let pluginId = "com.typewhisper.tests.unsupported-dictionary-engine"
     static let pluginName = "Unsupported Dictionary Engine"
     var providerIdValue = "unsupported"
+    var supportValue: DictionaryTermsSupport = .unsupported
 
     required override init() {}
 
@@ -65,7 +66,7 @@ private final class UnsupportedDictionaryEnginePlugin: NSObject, TranscriptionEn
     var isConfigured: Bool { true }
     var transcriptionModels: [PluginModelInfo] { [] }
     var selectedModelId: String? { nil }
-    var dictionaryTermsSupport: DictionaryTermsSupport { .unsupported }
+    var dictionaryTermsSupport: DictionaryTermsSupport { supportValue }
     func selectModel(_ modelId: String) {}
     var supportsTranslation: Bool { false }
 
@@ -512,6 +513,24 @@ final class DictionaryServiceTests: XCTestCase {
         installPlugins([plugin], appSupportDirectory: appSupportDirectory)
 
         XCTAssertNil(service.getTermsForPrompt(providerId: plugin.providerId))
+    }
+
+    @MainActor
+    func testGetTermsForPromptReturnsNilUntilPluginSettingEnablesTerms() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.setTerms(["Alpha", "Beta"], replaceExisting: true)
+
+        let plugin = UnsupportedDictionaryEnginePlugin()
+        plugin.supportValue = .requiresPluginSetting
+        installPlugins([plugin], appSupportDirectory: appSupportDirectory)
+
+        XCTAssertNil(service.getTermsForPrompt(providerId: plugin.providerId))
+
+        plugin.supportValue = .supported
+        XCTAssertEqual(service.getTermsForPrompt(providerId: plugin.providerId), "Alpha, Beta")
     }
 
     @MainActor

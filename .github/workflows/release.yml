@@ -116,17 +116,29 @@ jobs:
         with:
           xcode-version: "26.6"
 
+      # Scheduled runs on main seed the package cache that pull request builds restore.
+      # The signed build job below always resolves packages from scratch.
+      - name: Cache Swift packages
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/SourcePackages
+          key: spm-${{ runner.os }}-xcode26.6-${{ hashFiles('TypeWhisper.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+          restore-keys: |
+            spm-${{ runner.os }}-xcode26.6-
+
       - name: Resolve Swift packages
         run: |
           xcodebuild -resolvePackageDependencies -onlyUsePackageVersionsFromResolvedFile \
             -project "$PROJECT" \
-            -scheme "$SCHEME"
+            -scheme "$SCHEME" \
+            -clonedSourcePackagesDirPath "$RUNNER_TEMP/SourcePackages"
 
       - name: Run App Tests
         run: |
           set -o pipefail
           xcodebuild test -skipPackagePluginValidation -project "$PROJECT" \
             -scheme "$SCHEME" \
+            -clonedSourcePackagesDirPath "$RUNNER_TEMP/SourcePackages" \
             -destination 'platform=macOS,arch=arm64' \
             -parallel-testing-enabled NO \
             CODE_SIGN_IDENTITY="-" \

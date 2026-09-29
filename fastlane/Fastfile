@@ -48,6 +48,7 @@ PLUGIN_SCREENSHOTS = [
   { slug: "assemblyai", target: "AssemblyAIPlugin", id: "com.typewhisper.assemblyai" },
   { slug: "authenticated-cli", target: "AuthenticatedCLIPlugin", id: "com.typewhisper.authenticated-cli" },
   { slug: "web-link", target: "WebLinkPlugin", id: "com.typewhisper.web-link" },
+  { slug: "canary-asr", target: "CanaryPlugin", id: "com.typewhisper.canary" },
   { slug: "cartesia", target: "CartesiaPlugin", id: "com.typewhisper.cartesia" },
   { slug: "cerebras", target: "CerebrasPlugin", id: "com.typewhisper.cerebras" },
   { slug: "claude", target: "ClaudePlugin", id: "com.typewhisper.claude" },
@@ -240,6 +241,7 @@ def build_screenshot_app!
     "-configuration", "Debug",
     "-derivedDataPath", SCREENSHOT_DERIVED_DATA,
     "-destination", "platform=macOS",
+    "-skipPackagePluginValidation",
     "CODE_SIGN_IDENTITY=-",
     "CODE_SIGN_STYLE=Manual",
     "CODE_SIGNING_REQUIRED=YES",
@@ -285,6 +287,7 @@ def build_plugin_screenshot_targets!(plugins)
   command.concat([
     "-configuration", "Debug",
     "SYMROOT=#{File.join(SCREENSHOT_DERIVED_DATA, 'Build', 'Products')}",
+    "-skipPackagePluginValidation",
     "OBJROOT=#{File.join(SCREENSHOT_DERIVED_DATA, 'Build', 'Intermediates.noindex')}",
     "SDKROOT=macosx",
     "CODE_SIGN_IDENTITY=-",

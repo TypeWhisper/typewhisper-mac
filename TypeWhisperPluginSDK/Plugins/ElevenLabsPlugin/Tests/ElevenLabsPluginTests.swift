@@ -11,6 +11,17 @@ final class ElevenLabsPluginTests: XCTestCase {
         super.tearDown()
     }
 
+    func testScreenshotAutomationSkipsAutomaticKeyValidation() {
+        XCTAssertFalse(
+            ElevenLabsAutomaticValidationPolicy.allowsValidationOnAppear(
+                arguments: ["TypeWhisper", "--store-screenshots"]
+            )
+        )
+        XCTAssertTrue(
+            ElevenLabsAutomaticValidationPolicy.allowsValidationOnAppear(arguments: ["TypeWhisper"])
+        )
+    }
+
     func testAPIKeyValidationAcceptsSuccessfulUserResponse() {
         XCTAssertEqual(
             ElevenLabsPlugin.apiKeyValidationResult(statusCode: 200, data: Data()),

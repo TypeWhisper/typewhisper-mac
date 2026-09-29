@@ -3,7 +3,7 @@ import CoreML
 import OSLog
 import SwiftUI
 import FluidAudio
-import TypeWhisperPluginSDK
+@_spi(FirstPartyPlugins) import TypeWhisperPluginSDK
 
 private actor AsyncTranscriptionGate {
     private var isLocked = false
@@ -423,6 +423,8 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         ctcModelState = .downloading
         do {
             applyHuggingFaceTokenToEnvironment()
+            let spaceReservation = try await reserveCtcDownloadSpace()
+            defer { spaceReservation?.release() }
             let models = try await CtcModels.downloadAndLoad(variant: .ctc110m)
             let cacheDir = CtcModels.defaultCacheDirectory(for: .ctc110m)
             let tokenizer = try await CtcTokenizer.load(from: cacheDir)
@@ -658,11 +660,13 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
 
         do {
             applyHuggingFaceTokenToEnvironment()
-            if allowDownloads {
-                try await ensureVocabularyAsset(for: version)
-            }
             let models: AsrModels
             if allowDownloads {
+                let spaceReservation = isModelDownloaded(version: version)
+                    ? nil
+                    : try await reserveDownloadSpace(for: version)
+                defer { spaceReservation?.release() }
+                try await ensureVocabularyAsset(for: version)
                 models = try await AsrModels.downloadAndLoad(version: version.asrModelVersion)
             } else {
                 models = try Self.loadInstalledModels(version: version)
@@ -845,7 +849,21 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     }
 
     @objc func triggerAutoUnload() { unloadModel(clearPersistence: false) }
-    @objc func triggerRestoreModel() { Task { await restoreLoadedModel(allowDownloads: true) } }
+
+    /// Test hook: when true, restore triggers publish the synchronous in-flight
+    /// mark without spawning the async restore task, so tests can assert on the
+    /// mark deterministically instead of racing the task's completion.
+    var suppressAsyncRestoreForTests = false
+
+    @objc func triggerRestoreModel() {
+        markRestoreInFlight()
+        guard !suppressAsyncRestoreForTests else { return }
+        Task {
+            await restoreLoadedModel(allowDownloads: true)
+            finishRestoreTrigger()
+        }
+    }
+
     @objc(triggerRestoreModelForModel:)
     func triggerRestoreModel(forModel modelId: NSString?) {
         guard let modelId = modelId.map(String.init),
@@ -859,7 +877,40 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         selectedVersion = version
         host?.setUserDefault(modelId, forKey: "selectedModel")
         host?.setUserDefault(version.rawValue, forKey: "selectedVersion")
-        Task { await loadModel() }
+        markRestoreInFlight()
+        guard !suppressAsyncRestoreForTests else { return }
+        Task {
+            await loadModel()
+            finishRestoreTrigger()
+        }
+    }
+
+    /// Marks a restore as in-flight synchronously. The host extends its restore
+    /// wait past the base window only while the plugin reports an activity, and
+    /// task scheduling can delay the unstructured task above before it publishes
+    /// its first state update. Without this mark, the host can time out and
+    /// report "no model loaded" for a restore that is still starting.
+    private func markRestoreInFlight() {
+        guard !isConfigured else { return }
+        modelState = .downloading
+        downloadProgress = 0
+    }
+
+    /// Resolves the in-flight restore mark once the restore task finishes. A
+    /// successful load already recorded `.ready` and a failed load already
+    /// recorded the underlying `.error`. Only a restore that produced nothing
+    /// (e.g. nothing was persisted to restore) needs an explicit error, so the
+    /// host surfaces it instead of polling a stale activity until its wait
+    /// expires.
+    private func finishRestoreTrigger() {
+        guard host != nil else { return }
+        switch modelState {
+        case .ready, .error:
+            return
+        case .notLoaded, .downloading:
+            break
+        }
+        modelState = isConfigured ? .ready : .error("No previously loaded model to restore.")
     }
 
     func unloadModel(clearPersistence: Bool = true) {
@@ -884,6 +935,35 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         let version = ParakeetVersion.from(modelId: savedModelId) ?? selectedVersion
         guard allowDownloads || isModelDownloaded(version: version) else { return }
         await loadModel(version: version, passively: passively)
+    }
+
+    /// FluidAudio skips complete files and resumes `.partial` files in the cache
+    /// directory, so those bytes count toward the download instead of being deleted.
+    private func reserveDownloadSpace(for version: ParakeetVersion) async throws -> PluginDownloadSpaceReservation? {
+        let cacheDir = AsrModels.defaultCacheDirectory(for: version.asrModelVersion)
+        return try await PluginDownloadDiskSpace.reserveHuggingFaceDownload(
+            repositoryID: version.repository.remotePath,
+            matching: version.requiredModelFiles.sorted().map { "\($0)/*" } + ["*vocab*.json"],
+            token: _hfToken,
+            destination: cacheDir,
+            trackedDirectory: cacheDir,
+            localRepositoryRoot: cacheDir,
+            modelName: version.modelDef.displayName
+        )
+    }
+
+    private func reserveCtcDownloadSpace() async throws -> PluginDownloadSpaceReservation? {
+        let cacheDir = CtcModels.defaultCacheDirectory(for: .ctc110m)
+        guard !CtcModels.modelsExist(at: cacheDir) else { return nil }
+        return try await PluginDownloadDiskSpace.reserveHuggingFaceDownload(
+            repositoryID: CtcModelVariant.ctc110m.repo.remotePath,
+            matching: ModelNames.CTC.requiredModels.sorted().map { "\($0)/*" } + [ModelNames.CTC.vocabularyPath],
+            token: _hfToken,
+            destination: cacheDir,
+            trackedDirectory: cacheDir,
+            localRepositoryRoot: cacheDir,
+            modelName: "Parakeet CTC 110M"
+        )
     }
 
     fileprivate func isModelDownloaded(version: ParakeetVersion) -> Bool {
@@ -955,6 +1035,21 @@ enum ParakeetVersion: String, CaseIterable {
         switch self {
         case .v2: return .v2
         case .v3: return .v3
+        }
+    }
+
+    var repository: Repo {
+        switch self {
+        case .v2: return .parakeetV2
+        case .v3: return .parakeetV3
+        }
+    }
+
+    /// Model folders `AsrModels.download` fetches with its default int8 encoder.
+    var requiredModelFiles: Set<String> {
+        switch self {
+        case .v2: return ModelNames.ASR.requiredModels
+        case .v3: return ModelNames.ASR.requiredModelsV3()
         }
     }
 

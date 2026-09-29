@@ -276,7 +276,7 @@ final class APIHandlers: @unchecked Sendable {
             return .error(status: 400, message: "Empty audio data")
         }
 
-        let tempURL = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".\(fileExtension)")
+        let tempURL = UserDataLocations.temporaryItemURL("API-Upload-\(UUID().uuidString).\(fileExtension)")
 
         do {
             try audioData.write(to: tempURL)

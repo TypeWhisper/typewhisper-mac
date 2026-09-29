@@ -569,6 +569,83 @@ final class PluginRegistryServiceTests: XCTestCase {
         XCTAssertEqual(local.resolvedHosting, .local)
     }
 
+    func testDiscoverHostingFilterAllKeepsLocalAndCloudPlugins() {
+        let filter = DiscoverPluginFilter(hosting: .all)
+
+        XCTAssertEqual(
+            filter.apply(to: Self.discoverFilterPlugins).map(\.id),
+            ["whisper", "deepgram", "community-llm", "community-tts", "memory"]
+        )
+    }
+
+    func testDiscoverHostingFilterLocalKeepsOnlyLocalPlugins() {
+        let filter = DiscoverPluginFilter(hosting: .local)
+
+        XCTAssertEqual(
+            filter.apply(to: Self.discoverFilterPlugins).map(\.id),
+            ["whisper", "community-llm", "memory"]
+        )
+    }
+
+    func testDiscoverHostingFilterCloudKeepsOnlyCloudPlugins() {
+        let filter = DiscoverPluginFilter(hosting: .cloud)
+
+        XCTAssertEqual(
+            filter.apply(to: Self.discoverFilterPlugins).map(\.id),
+            ["deepgram", "community-tts"]
+        )
+    }
+
+    func testDiscoverHostingFilterCombinesWithCapabilityFilter() {
+        let plugins = Self.discoverFilterPlugins
+
+        XCTAssertEqual(
+            DiscoverPluginFilter(hosting: .all, capabilities: [.transcription]).apply(to: plugins).map(\.id),
+            ["whisper", "deepgram"]
+        )
+        XCTAssertEqual(
+            DiscoverPluginFilter(hosting: .local, capabilities: [.transcription]).apply(to: plugins).map(\.id),
+            ["whisper"]
+        )
+        XCTAssertEqual(
+            DiscoverPluginFilter(hosting: .cloud, capabilities: [.transcription, .tts]).apply(to: plugins).map(\.id),
+            ["deepgram", "community-tts"]
+        )
+        XCTAssertTrue(DiscoverPluginFilter(hosting: .cloud, capabilities: [.memory]).apply(to: plugins).isEmpty)
+    }
+
+    func testDiscoverHostingFilterCombinesWithCommunityToggle() {
+        let plugins = Self.discoverFilterPlugins
+
+        XCTAssertEqual(
+            DiscoverPluginFilter(includeCommunityPlugins: false, hosting: .all).apply(to: plugins).map(\.id),
+            ["whisper", "deepgram", "memory"]
+        )
+        XCTAssertEqual(
+            DiscoverPluginFilter(includeCommunityPlugins: false, hosting: .local).apply(to: plugins).map(\.id),
+            ["whisper", "memory"]
+        )
+        XCTAssertEqual(
+            DiscoverPluginFilter(includeCommunityPlugins: false, hosting: .cloud).apply(to: plugins).map(\.id),
+            ["deepgram"]
+        )
+        XCTAssertEqual(
+            DiscoverPluginFilter(includeCommunityPlugins: false, hosting: .local, capabilities: [.llm])
+                .apply(to: plugins)
+                .map(\.id),
+            []
+        )
+    }
+
+    func testDiscoverScopeIgnoresCapabilityFilterForCapabilityOptions() {
+        let filter = DiscoverPluginFilter(hosting: .local, capabilities: [.transcription])
+
+        XCTAssertEqual(
+            filter.scoped(Self.discoverFilterPlugins).map(\.id),
+            ["whisper", "community-llm", "memory"]
+        )
+    }
+
     @MainActor
     func testAvailableUpdatePluginsIncludesMarketplaceUpdatesInNameOrder() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory(prefix: "PluginBulkUpdateSelection")
@@ -1705,6 +1782,47 @@ final class PluginRegistryServiceTests: XCTestCase {
             iconSystemName: nil,
             requiresAPIKey: nil,
             hosting: nil,
+            descriptions: nil,
+            downloadCount: nil
+        )
+    }
+
+    /// Two official and two community plugins with explicit and fallback hosting, plus a local memory plugin.
+    private static var discoverFilterPlugins: [RegistryPlugin] {
+        [
+            makeDiscoverFilterPlugin(id: "whisper", categories: ["transcription"], hosting: .local),
+            makeDiscoverFilterPlugin(id: "deepgram", categories: ["transcription"], hosting: .cloud),
+            makeDiscoverFilterPlugin(id: "community-llm", source: .community, categories: ["llm"]),
+            makeDiscoverFilterPlugin(id: "community-tts", source: .community, categories: ["tts"], requiresAPIKey: true),
+            makeDiscoverFilterPlugin(id: "memory", categories: ["memory", "utility"], hosting: .local),
+        ]
+    }
+
+    private static func makeDiscoverFilterPlugin(
+        id: String,
+        source: PluginDistributionSource = .official,
+        categories: [String],
+        requiresAPIKey: Bool? = nil,
+        hosting: PluginHosting? = nil
+    ) -> RegistryPlugin {
+        RegistryPlugin(
+            id: id,
+            source: source,
+            name: id,
+            version: "1.0.0",
+            minHostVersion: "1.0.0",
+            sdkCompatibilityVersion: PluginSDKCompatibility.currentVersion,
+            minOSVersion: nil,
+            supportedArchitectures: nil,
+            author: "TypeWhisper",
+            description: "Test plugin",
+            category: categories[0],
+            categories: categories,
+            size: 10,
+            downloadURL: "https://example.com/\(id).zip",
+            iconSystemName: nil,
+            requiresAPIKey: requiresAPIKey,
+            hosting: hosting,
             descriptions: nil,
             downloadCount: nil
         )

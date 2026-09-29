@@ -216,19 +216,20 @@ class MediaPlaybackService {
     }
 
     /// Pauses active media before Bluetooth capture changes the system audio route.
-    func pauseImmediatelyIfPlaying() async {
+    @discardableResult
+    func pauseImmediatelyIfPlaying() async -> Bool {
         cancelPendingResume()
-        guard !didPause, !Task.isCancelled else { return }
+        guard !didPause, !Task.isCancelled else { return didPause }
         trackInfoRequestGeneration += 1
         let generation = trackInfoRequestGeneration
         let snapshot = await currentPlaybackSnapshot()
 
-        guard !Task.isCancelled else { return }
-        guard generation == trackInfoRequestGeneration else { return }
-        guard !didPause else { return }
+        guard !Task.isCancelled else { return false }
+        guard generation == trackInfoRequestGeneration else { return false }
+        guard !didPause else { return true }
         guard let snapshot, snapshot.isActivelyPlaying else {
             logSkippedPause(stage: "immediate", snapshot: snapshot)
-            return
+            return false
         }
 
         nowPlayingBundleID = snapshot.bundleIdentifier
@@ -241,13 +242,14 @@ class MediaPlaybackService {
             matching: snapshot,
             requestGeneration: generation
         )
-        guard !Task.isCancelled, generation == trackInfoRequestGeneration else { return }
+        guard !Task.isCancelled, generation == trackInfoRequestGeneration else { return true }
 
         if pauseConfirmed {
             logger.info("Media pause confirmed before Bluetooth capture")
         } else {
             logger.warning("Media pause confirmation timed out; continuing with Bluetooth capture")
         }
+        return true
     }
 
     /// Resumes playback only if we previously paused it.
@@ -378,7 +380,8 @@ class MediaPlaybackService {
     #else
     init(startListening: Bool = true) {}
     func pauseIfPlaying() {}
-    func pauseImmediatelyIfPlaying() async {}
+    @discardableResult
+    func pauseImmediatelyIfPlaying() async -> Bool { false }
     func resumeIfWePaused() {}
     #endif
 }

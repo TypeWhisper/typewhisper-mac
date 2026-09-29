@@ -102,8 +102,22 @@ final class DictationShortSpeechTests: XCTestCase {
         XCTAssertEqual(classifyShortSpeech(rawDuration: 0.885, peakLevel: 0.0069, hasConfirmedText: false), .transcribe)
     }
 
-    func testOnePointTwoSecondsVeryQuietClip_isNoSpeech() {
-        XCTAssertEqual(classifyShortSpeech(rawDuration: 1.2, peakLevel: 0.0059, hasConfirmedText: false), .discardNoSpeech)
+    func testOnePointTwoSecondsVeryQuietClip_transcribesWhenAggressivePolicyEnabled() {
+        // Issue #732: with aggressive transcription enabled, a short quiet
+        // dictation must be transcribed rather than discarded as "no speech".
+        XCTAssertEqual(classifyShortSpeech(rawDuration: 1.2, peakLevel: 0.0059, hasConfirmedText: false), .transcribe)
+    }
+
+    func testOnePointTwoSecondsVeryQuietClip_isNoSpeechWhenAggressivePolicyDisabled() {
+        XCTAssertEqual(
+            classifyShortSpeech(
+                rawDuration: 1.2,
+                peakLevel: 0.0059,
+                hasConfirmedText: false,
+                transcribeShortQuietClipsAggressively: false
+            ),
+            .discardNoSpeech
+        )
     }
 
     func testOnePointTwoSecondsBorderlineQuietClip_nowTranscribes() {
@@ -112,6 +126,87 @@ final class DictationShortSpeechTests: XCTestCase {
 
     func testOnePointTwoSecondsVeryQuietClip_withConfirmedText_transcribes() {
         XCTAssertEqual(classifyShortSpeech(rawDuration: 1.2, peakLevel: 0.0059, hasConfirmedText: true), .transcribe)
+    }
+
+    // MARK: - Issue #732: aggressive mode must cover short (1-8s) quiet dictations
+
+    func testThreeSecondQuietClip_transcribesWhenAggressivePolicyEnabled() {
+        // The issue's scenario: a few seconds of quiet speech discarded as
+        // "No speech detected" despite aggressive transcription being enabled.
+        XCTAssertEqual(
+            classifyShortSpeech(
+                rawDuration: 3.0,
+                peakLevel: 0.004,
+                hasConfirmedText: false,
+                transcribeShortQuietClipsAggressively: true
+            ),
+            .transcribe
+        )
+    }
+
+    func testThreeSecondQuietClip_discardsWhenAggressivePolicyDisabled() {
+        XCTAssertEqual(
+            classifyShortSpeech(
+                rawDuration: 3.0,
+                peakLevel: 0.004,
+                hasConfirmedText: false,
+                transcribeShortQuietClipsAggressively: false
+            ),
+            .discardNoSpeech
+        )
+    }
+
+    func testSixAndAHalfSecondQuietClip_transcribesWhenAggressivePolicyEnabled() {
+        // Upper end of the duration range reported in the issue.
+        XCTAssertEqual(
+            classifyShortSpeech(
+                rawDuration: 6.5,
+                peakLevel: 0.005,
+                hasConfirmedText: false,
+                transcribeShortQuietClipsAggressively: true
+            ),
+            .transcribe
+        )
+    }
+
+    func testThreeSecondNearSilentClip_stillDiscardsWhenAggressivePolicyEnabled() {
+        // Genuinely silent recordings must keep reporting "No speech detected".
+        XCTAssertEqual(
+            classifyShortSpeech(
+                rawDuration: 3.0,
+                peakLevel: 0.002,
+                hasConfirmedText: false,
+                transcribeShortQuietClipsAggressively: true
+            ),
+            .discardNoSpeech
+        )
+    }
+
+    func testTenSecondQuietClip_staysStrictWhenAggressivePolicyEnabled() {
+        // Long recordings of near-silence are not short dictations: keep the
+        // strict threshold so extended silence isn't needlessly transcribed.
+        XCTAssertEqual(
+            classifyShortSpeech(
+                rawDuration: 10.0,
+                peakLevel: 0.004,
+                hasConfirmedText: false,
+                transcribeShortQuietClipsAggressively: true
+            ),
+            .discardNoSpeech
+        )
+    }
+
+    func testThreeSecondNormalClip_transcribesRegardlessOfPolicy() {
+        XCTAssertEqual(classifyShortSpeech(rawDuration: 3.0, peakLevel: 0.02, hasConfirmedText: false), .transcribe)
+        XCTAssertEqual(
+            classifyShortSpeech(
+                rawDuration: 3.0,
+                peakLevel: 0.02,
+                hasConfirmedText: false,
+                transcribeShortQuietClipsAggressively: false
+            ),
+            .transcribe
+        )
     }
 
     func testConfirmedTranscriptionResultText_requiresNonEmptyResult() {
@@ -608,6 +703,153 @@ final class DictationInsertionTextFormatterTests: XCTestCase {
         XCTAssertEqual(
             DictationInsertionTextFormatter.textForInsertion("Really?", insertionContext: context),
             " really? "
+        )
+    }
+
+    // MARK: - Standalone value final-period cleanup (#1333)
+
+    private func emptyFieldInsertionContext() -> TextInsertionService.InsertionContext {
+        TextInsertionService.InsertionContext(
+            value: "",
+            selectedRange: NSRange(location: 0, length: 0),
+            selectedText: nil,
+            previousCharacter: nil,
+            nextCharacter: nil
+        )
+    }
+
+    private func assertStandaloneCleanup(
+        _ input: String,
+        becomes expected: String,
+        enabled: Bool = true,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) {
+        XCTAssertEqual(
+            DictationInsertionTextFormatter.textForInsertion(
+                input,
+                insertionContext: emptyFieldInsertionContext(),
+                standaloneValueFinalPeriodCleanupEnabled: enabled
+            ),
+            expected,
+            file: file,
+            line: line
+        )
+    }
+
+    func testStandaloneCleanupStripsFinalPeriodFromEmail() {
+        assertStandaloneCleanup("name@example.com.", becomes: "name@example.com")
+    }
+
+    func testStandaloneCleanupStripsFinalPeriodFromURLs() {
+        assertStandaloneCleanup("https://example.com.", becomes: "https://example.com")
+        assertStandaloneCleanup("www.example.com.", becomes: "www.example.com")
+        assertStandaloneCleanup("example.com.", becomes: "example.com")
+    }
+
+    func testStandaloneCleanupPreservesTerminalPeriodInURLPathsAndQueries() {
+        // A period is a legal part of URL paths and queries (RFC 3986
+        // section 2.3), so the dot may belong to the requested resource.
+        assertStandaloneCleanup("https://example.com/docs.", becomes: "https://example.com/docs.")
+        assertStandaloneCleanup(
+            "https://example.com/files/report.",
+            becomes: "https://example.com/files/report."
+        )
+        assertStandaloneCleanup(
+            "https://example.com/search?q=Dr.",
+            becomes: "https://example.com/search?q=Dr."
+        )
+    }
+
+    func testStandaloneCleanupPreservesSpacedDates() {
+        // Dictation often inserts whitespace around date separators; those
+        // dates must not fall through to the phone-number check.
+        assertStandaloneCleanup("27. 09. 2026.", becomes: "27. 09. 2026.")
+        assertStandaloneCleanup("27 / 09 / 2026.", becomes: "27 / 09 / 2026.")
+        assertStandaloneCleanup("2026 - 09 - 27.", becomes: "2026 - 09 - 27.")
+    }
+
+    func testStandaloneCleanupStripsFinalPeriodFromDecimalNumbers() {
+        assertStandaloneCleanup("3.14.", becomes: "3.14")
+        assertStandaloneCleanup("1,5.", becomes: "1,5")
+        assertStandaloneCleanup("1,000.50.", becomes: "1,000.50")
+        assertStandaloneCleanup("1.000,50.", becomes: "1.000,50")
+    }
+
+    func testStandaloneCleanupStripsFinalPeriodFromPhoneNumbers() {
+        assertStandaloneCleanup("+49 171 2345678.", becomes: "+49 171 2345678")
+        assertStandaloneCleanup("(030) 123456.", becomes: "(030) 123456")
+    }
+
+    func testStandaloneCleanupStripsFinalPeriodFromVersionStrings() {
+        assertStandaloneCleanup("1.2.3.", becomes: "1.2.3")
+        assertStandaloneCleanup("v2.10.4.", becomes: "v2.10.4")
+    }
+
+    func testStandaloneCleanupPreservesAbbreviations() {
+        assertStandaloneCleanup("Dr.", becomes: "Dr.")
+        assertStandaloneCleanup("U.S.", becomes: "U.S.")
+        assertStandaloneCleanup("e.g.", becomes: "e.g.")
+        assertStandaloneCleanup("Dr.med.", becomes: "Dr.med.")
+        assertStandaloneCleanup("Ph.D.", becomes: "Ph.D.")
+    }
+
+    func testStandaloneCleanupPreservesProseAndSentencesEndingInValues() {
+        assertStandaloneCleanup("Hello world.", becomes: "Hello world.")
+        assertStandaloneCleanup(
+            "Contact me at name@example.com.",
+            becomes: "Contact me at name@example.com."
+        )
+    }
+
+    func testStandaloneCleanupPreservesAmbiguousNumericForms() {
+        assertStandaloneCleanup("19.04.2026.", becomes: "19.04.2026.")
+        assertStandaloneCleanup("2026-09-27.", becomes: "2026-09-27.")
+        assertStandaloneCleanup("123.", becomes: "123.")
+    }
+
+    func testStandaloneCleanupPreservesEllipsesAndOtherPunctuation() {
+        assertStandaloneCleanup("Wait...", becomes: "Wait...")
+        assertStandaloneCleanup("Really?", becomes: "Really?")
+    }
+
+    func testStandaloneCleanupRespectsOptOut() {
+        assertStandaloneCleanup("name@example.com.", becomes: "name@example.com.", enabled: false)
+    }
+
+    func testStandaloneCleanupDoesNotApplyAtEndOfExistingSentence() {
+        let context = TextInsertionService.InsertionContext(
+            value: "Email: ",
+            selectedRange: NSRange(location: 7, length: 0),
+            selectedText: nil,
+            previousCharacter: " ",
+            nextCharacter: nil
+        )
+
+        XCTAssertEqual(
+            DictationInsertionTextFormatter.textForInsertion(
+                "name@example.com.",
+                insertionContext: context
+            ),
+            "name@example.com."
+        )
+    }
+
+    func testStandaloneCleanupDoesNotDoubleStripMidSentence() {
+        let context = TextInsertionService.InsertionContext(
+            value: "ab",
+            selectedRange: NSRange(location: 1, length: 0),
+            selectedText: nil,
+            previousCharacter: "a",
+            nextCharacter: "b"
+        )
+
+        XCTAssertEqual(
+            DictationInsertionTextFormatter.textForInsertion(
+                "name@example.com.",
+                insertionContext: context
+            ),
+            " name@example.com "
         )
     }
 }

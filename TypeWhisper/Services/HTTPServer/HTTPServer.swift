@@ -5,6 +5,9 @@ final class HTTPServer: @unchecked Sendable {
     private let router: APIRouter
     private var listener: NWListener?
     private let serverQueue = DispatchQueue(label: "com.typewhisper.httpserver")
+    private let activeWork = NSLock()
+    private var activeConnections: [ObjectIdentifier: NWConnection] = [:]
+    private var activeRouteTasks: [ObjectIdentifier: Task<Void, Never>] = [:]
 
     var onStateChange: ((Bool) -> Void)?
 
@@ -45,7 +48,24 @@ final class HTTPServer: @unchecked Sendable {
         listener = nil
     }
 
+    /// Stops accepting requests and aborts the ones already accepted, so no
+    /// request can write an upload to disk afterwards.
+    func stopAndCancelActiveRequests() {
+        stop()
+        activeWork.lock()
+        let connections = Array(activeConnections.values)
+        let tasks = Array(activeRouteTasks.values)
+        activeConnections.removeAll()
+        activeRouteTasks.removeAll()
+        activeWork.unlock()
+        tasks.forEach { $0.cancel() }
+        connections.forEach { $0.cancel() }
+    }
+
     private func handleConnection(_ connection: NWConnection) {
+        activeWork.lock()
+        activeConnections[ObjectIdentifier(connection)] = connection
+        activeWork.unlock()
         connection.start(queue: serverQueue)
         receiveData(on: connection, buffer: Data())
     }
@@ -72,10 +92,13 @@ final class HTTPServer: @unchecked Sendable {
             do {
                 let request = try HTTPRequestParser.parse(accumulated)
                 let router = self.router
-                Task {
+                let task = Task {
                     let response = await router.route(request)
                     self.send(response, on: connection)
                 }
+                self.activeWork.lock()
+                self.activeRouteTasks[ObjectIdentifier(connection)] = task
+                self.activeWork.unlock()
             } catch HTTPParseError.incomplete {
                 if isComplete || error != nil {
                     let response = HTTPResponse.error(status: 400, message: "Incomplete request")
@@ -95,8 +118,13 @@ final class HTTPServer: @unchecked Sendable {
 
     private func send(_ response: HTTPResponse, on connection: NWConnection) {
         let data = response.serialized()
-        connection.send(content: data, completion: .contentProcessed { _ in
+        connection.send(content: data, completion: .contentProcessed { [weak self] _ in
             connection.cancel()
+            guard let self else { return }
+            self.activeWork.lock()
+            self.activeConnections[ObjectIdentifier(connection)] = nil
+            self.activeRouteTasks[ObjectIdentifier(connection)] = nil
+            self.activeWork.unlock()
         })
     }
 }
