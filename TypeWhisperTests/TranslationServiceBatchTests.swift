@@ -105,13 +105,13 @@ final class TranslationServiceBatchTests: XCTestCase {
     }
 
     private func assertBatchThrows(
-        _ expected: TranslationError,
+        _ expected: TypeWhisper.TranslationError,
         _ result: Result<[String], Error>,
         file: StaticString = #filePath,
         line: UInt = #line
     ) {
         guard case .failure(let error) = result,
-              let translationError = error as? TranslationError,
+              let translationError = error as? TypeWhisper.TranslationError,
               translationError == expected else {
             XCTFail("expected batch to throw \(expected), got \(result)", file: file, line: line)
             return
