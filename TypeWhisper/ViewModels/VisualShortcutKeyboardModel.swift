@@ -47,6 +47,15 @@ struct VisualShortcutComposition: Equatable {
     /// in-progress recording, so it can never be stored as a bare hotkey.
     static let reservedBareKeyCodes: Set<UInt16> = [0x35] // ⎋
 
+    /// Whether the current composition is a reserved bare key: Escape with no
+    /// modifiers. Deselecting modifiers can strand a reserved key behind, so
+    /// the model validates the final composition, not just the key tap.
+    var isReservedBareKey: Bool {
+        guard let keyCode else { return false }
+        return Self.reservedBareKeyCodes.contains(keyCode)
+            && modifierKeyCodes.isEmpty && !isFnSelected
+    }
+
     /// Left-side physical key codes used when a stored hotkey only carries
     /// generic modifier flags (legacy data without side information).
     static func leftKeyCode(for flag: NSEvent.ModifierFlags) -> UInt16? {
@@ -269,7 +278,7 @@ final class VisualShortcutKeyboardModel: ObservableObject {
     }
 
     var canSave: Bool {
-        composedHotkey != nil
+        composedHotkey != nil && !composition.isReservedBareKey
     }
 
     /// User-facing description of what the composed hotkey conflicts with, if anything.
@@ -319,6 +328,11 @@ final class VisualShortcutKeyboardModel: ObservableObject {
             } else {
                 composition.modifierKeyCodes.insert(code)
             }
+        }
+        // Removing a modifier can strand a bare Escape the recorder could
+        // never have captured: drop it rather than offer it for saving.
+        if composition.isReservedBareKey {
+            composition.keyCode = nil
         }
     }
 

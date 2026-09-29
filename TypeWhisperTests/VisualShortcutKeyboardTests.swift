@@ -201,6 +201,29 @@ final class VisualShortcutKeyboardTests: XCTestCase {
         XCTAssertEqual(model.state(forKey: 0x35), .available)
     }
 
+    func testEscapeDeselectedCommand_cannotSave() {
+        let model = makeModel()
+        model.toggleModifier(.keyCode(0x37))
+        model.toggleKey(0x35)
+        XCTAssertTrue(model.canSave)
+        // Removing the modifier strands a bare Escape the recorder cannot
+        // capture: the key is dropped and saving is disallowed.
+        model.toggleModifier(.keyCode(0x37))
+        XCTAssertNil(model.composition.keyCode)
+        XCTAssertEqual(model.state(forKey: 0x35), .reserved)
+        XCTAssertFalse(model.canSave)
+    }
+
+    func testEscapeDeselectedFn_cannotSave() {
+        let model = makeModel()
+        model.toggleModifier(.fn)
+        model.toggleKey(0x35)
+        XCTAssertTrue(model.canSave)
+        model.toggleModifier(.fn)
+        XCTAssertNil(model.composition.keyCode)
+        XCTAssertFalse(model.canSave)
+    }
+
     func testConflictingKey_reportsAssignment() {
         let model = makeModel(existingAssignmentDescription: { candidate in
             candidate.keyCode == 0x01 ? "the Toggle shortcut" : nil
