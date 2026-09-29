@@ -203,6 +203,14 @@ final class TranslationService: ObservableObject {
             availabilityStatus: toTargetStatus,
             strict: strict
         )
+        let normalizedFinal = final.trimmingCharacters(in: .whitespacesAndNewlines)
+        // An empty target-leg response is never a translation, and an
+        // unchanged English intermediate means the target pair isn't
+        // translating: strict callers fail, others keep the source text.
+        guard !normalizedFinal.isEmpty, normalizedFinal != normalizedEnglish else {
+            if strict { throw TranslationError.noTranslation }
+            return text
+        }
         Self.logger.info("Translation[\(requestId)] completed via English")
         return final
     }
@@ -362,7 +370,20 @@ final class TranslationService: ObservableObject {
                 continue
             }
             let backTranslated = toTarget[slot].trimmingCharacters(in: .whitespacesAndNewlines)
-            if strict, !backTranslated.isEmpty, backTranslated == original {
+            // An empty target-leg response is never a translation: strict
+            // callers fail, others keep the source text.
+            guard !backTranslated.isEmpty else {
+                if strict { throw TranslationError.noTranslation }
+                continue
+            }
+            // The target leg echoed the English intermediate unchanged, so
+            // the target pair isn't translating: strict callers fail, others
+            // keep the source text.
+            if backTranslated == intermediate {
+                if strict { throw TranslationError.noTranslation }
+                continue
+            }
+            if strict, backTranslated == original {
                 throw TranslationError.noTranslation
             }
             final[index] = toTarget[slot]

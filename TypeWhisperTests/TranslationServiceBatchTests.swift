@@ -64,15 +64,16 @@ final class TranslationServiceBatchTests: XCTestCase {
         return service
     }
 
-    /// Starts a strict batch, returning a task for its terminal outcome.
+    /// Starts a batch, returning a task for its terminal outcome.
     private func startBatch(
         _ service: TranslationService,
         texts: [String],
-        target: Locale.Language
+        target: Locale.Language,
+        strict: Bool = true
     ) -> Task<Result<[String], Error>, Never> {
         Task { @MainActor in
             do {
-                return .success(try await service.translateBatch(texts: texts, to: target, strict: true))
+                return .success(try await service.translateBatch(texts: texts, to: target, strict: strict))
             } catch {
                 return .failure(error)
             }
@@ -220,6 +221,75 @@ final class TranslationServiceBatchTests: XCTestCase {
         // under the target language.
         let firstTranslated = try await awaitBatch(first).get()
         XCTAssertEqual(firstTranslated, ["Hallo Welt", "Guten Morgen"])
+    }
+
+    // MARK: - P2: strict fallback rejects invalid final output
+
+    /// Drives one full fallback round: the direct leg echoes the source, the
+    /// English leg translates, and the target leg answers with `targetResults`.
+    private func driveFallbackRound(
+        _ service: TranslationService,
+        targetResults: @escaping ([String]) -> [String]
+    ) async throws {
+        try await awaitClaim(on: service)
+        // Direct leg echoes the source; the fallback retries through English.
+        await service.handleBatchSession(ControllableBatchSession(results: { $0 }))
+        try await awaitClaim(on: service)
+        await service.handleBatchSession(ControllableBatchSession(results: { _ in ["Hello world"] }))
+        try await awaitClaim(on: service)
+        await service.handleBatchSession(ControllableBatchSession(results: targetResults))
+    }
+
+    private func makeFallbackService() -> TranslationService {
+        makeService(availability: { _, _, target in
+            // Direct pair looks usable but not installed; the English legs are.
+            target.minimalIdentifier == "en" ? .installed : .supported
+        })
+    }
+
+    func testEmptyTargetLegResponseThrowsInStrictMode() async throws {
+        let service = makeFallbackService()
+        let german = Locale.Language(identifier: "de")
+
+        let batch = startBatch(service, texts: ["Bonjour le monde"], target: german, strict: true)
+        // The target leg answers empty: strict must fail, not report success.
+        try await driveFallbackRound(service, targetResults: { _ in [""] })
+
+        assertBatchThrows(.noTranslation, try await awaitBatch(batch))
+    }
+
+    func testEmptyTargetLegResponseKeepsSourceWhenNotStrict() async throws {
+        let service = makeFallbackService()
+        let german = Locale.Language(identifier: "de")
+
+        let batch = startBatch(service, texts: ["Bonjour le monde"], target: german, strict: false)
+        try await driveFallbackRound(service, targetResults: { _ in [""] })
+
+        let translated = try await awaitBatch(batch).get()
+        XCTAssertEqual(translated, ["Bonjour le monde"])
+    }
+
+    func testEchoedEnglishIntermediateThrowsInStrictMode() async throws {
+        let service = makeFallbackService()
+        let german = Locale.Language(identifier: "de")
+
+        let batch = startBatch(service, texts: ["Bonjour le monde"], target: german, strict: true)
+        // The target leg echoes the English intermediate unchanged: strict
+        // must fail instead of reporting English as German.
+        try await driveFallbackRound(service, targetResults: { _ in ["Hello world"] })
+
+        assertBatchThrows(.noTranslation, try await awaitBatch(batch))
+    }
+
+    func testEchoedEnglishIntermediateKeepsSourceWhenNotStrict() async throws {
+        let service = makeFallbackService()
+        let german = Locale.Language(identifier: "de")
+
+        let batch = startBatch(service, texts: ["Bonjour le monde"], target: german, strict: false)
+        try await driveFallbackRound(service, targetResults: { _ in ["Hello world"] })
+
+        let translated = try await awaitBatch(batch).get()
+        XCTAssertEqual(translated, ["Bonjour le monde"])
     }
 }
 #endif
