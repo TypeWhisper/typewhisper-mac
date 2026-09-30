@@ -1078,8 +1078,7 @@ final class OpenAICompatiblePlugin: NSObject,
 
     /// Keeps the settings model list and error tied to the same discovery attempt.
     func fetchModelsWithDiscoveryError(for profileId: String) async -> (models: [FetchedModel], error: OllamaDiscoveryError?) {
-        guard let profile = profile(for: profileId),
-              !profile.baseURL.isEmpty else { return ([], nil) }
+        guard let profile = profile(for: profileId) else { return ([], nil) }
 
         if profile.serverKind == .ollama {
             switch await discoverOllamaModels(for: profileId) {

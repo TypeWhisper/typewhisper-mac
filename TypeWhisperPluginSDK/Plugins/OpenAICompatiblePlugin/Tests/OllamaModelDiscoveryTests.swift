@@ -340,6 +340,19 @@ final class OllamaModelDiscoveryTests: XCTestCase {
         XCTAssertEqual(store.sessions.flatMap(\.requestedPaths), ["/api/tags", "/v1/models"])
     }
 
+    func testSettingsRefreshReportsInvalidURLForUnconfiguredOllamaProfile() async throws {
+        let host = try PluginTestHostServices()
+        let plugin = OpenAICompatiblePlugin()
+        plugin.activate(host: host)
+        let profile = plugin.addProfile()
+        plugin.setServerKind(.ollama, for: profile.id)
+
+        let result = await plugin.fetchModelsWithDiscoveryError(for: profile.id)
+
+        XCTAssertTrue(result.models.isEmpty)
+        XCTAssertEqual(result.error, .invalidURL)
+    }
+
     func testSettingsRefreshNeverProbesNativeEndpointForGenericProfile() async throws {
         let host = try PluginTestHostServices(defaults: ["baseURL": "https://example.test"])
         let plugin = OpenAICompatiblePlugin()
