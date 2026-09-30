@@ -142,9 +142,14 @@ struct R2T2ManagedAssets: Sendable {
 
     /// Downloads whatever is missing for `model`: the audio.cpp runtime, the license files and the GGUF.
     func install(_ model: R2T2ModelDefinition, progress: @Sendable @escaping (Double) -> Void) async throws {
-        #if !arch(arm64)
+        #if arch(arm64)
+        try await installAssets(model, progress: progress)
+        #else
         throw R2T2ManagedError.unsupportedArchitecture
         #endif
+    }
+
+    private func installAssets(_ model: R2T2ModelDefinition, progress: @Sendable @escaping (Double) -> Void) async throws {
         try PluginHTTPClient.ensureNetworkAccessIsAllowed()
         let fileManager = FileManager.default
         let directory = modelDirectory(model)
@@ -177,6 +182,7 @@ struct R2T2ManagedAssets: Sendable {
                 progress(0.01 + fraction * 0.98)
             }
             try Self.verify(staged, size: model.fileSize, sha256: model.sha256)
+            try Task.checkCancellation()
             try? fileManager.removeItem(at: modelFileURL(model))
             try fileManager.moveItem(at: staged, to: modelFileURL(model))
         }
@@ -214,6 +220,12 @@ struct R2T2ManagedAssets: Sendable {
             try fileManager.removeItem(at: runtimeDirectory)
         }
         try fileManager.moveItem(at: extracted, to: runtimeDirectory)
+        // Runtimes pinned by earlier plugin versions are no longer used.
+        let runtimes = runtimeDirectory.deletingLastPathComponent()
+        for entry in (try? fileManager.contentsOfDirectory(at: runtimes, includingPropertiesForKeys: nil)) ?? []
+        where entry.lastPathComponent.hasPrefix("audio.cpp-") && entry.lastPathComponent != runtimeDirectory.lastPathComponent {
+            try? fileManager.removeItem(at: entry)
+        }
     }
 
     private static func untar(_ archive: URL, into directory: URL) async throws {
@@ -240,8 +252,9 @@ struct R2T2ManagedAssets: Sendable {
         }
     }
 
+    /// Throws CancellationError when the calling task is cancelled while hashing.
     static func verify(_ file: URL, size: Int64, sha256 expected: String) throws {
-        guard fileSize(file) == size, (try? sha256(of: file)) == expected else {
+        guard fileSize(file) == size, try sha256(of: file) == expected else {
             throw R2T2ManagedError.verificationFailed(file.lastPathComponent)
         }
     }
@@ -251,6 +264,7 @@ struct R2T2ManagedAssets: Sendable {
         defer { try? handle.close() }
         var hasher = SHA256()
         while let data = try handle.read(upToCount: 4 << 20), !data.isEmpty {
+            try Task.checkCancellation()
             hasher.update(data: data)
         }
         return hasher.finalize().map { String(format: "%02x", $0) }.joined()
@@ -274,8 +288,12 @@ private final class R2T2Download: NSObject, URLSessionDownloadDelegate, @uncheck
     private let destination: URL
     private let name: String
     private let progress: (@Sendable (Double) -> Void)?
-    private var continuation: CheckedContinuation<Void, Error>?
+    /// Written only on the session's serial delegate queue.
     private var result: Result<Void, Error>?
+    /// The waiting caller and the task's outcome, whichever arrives first waits for the other.
+    private let pending = OSAllocatedUnfairLock<(continuation: CheckedContinuation<Void, Error>?, outcome: Result<Void, Error>?)>(
+        initialState: (nil, nil)
+    )
 
     private init(destination: URL, name: String, progress: (@Sendable (Double) -> Void)?) {
         self.destination = destination
@@ -290,8 +308,20 @@ private final class R2T2Download: NSObject, URLSessionDownloadDelegate, @uncheck
         let task = session.downloadTask(with: url)
         try await withTaskCancellationHandler {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                download.continuation = continuation
-                task.resume()
+                // The task may already have completed (cancelled before it started), or the caller may be
+                // cancelled before the continuation is stored; resume at once in both cases.
+                let outcome = download.pending.withLock { pending -> Result<Void, Error>? in
+                    if let outcome = pending.outcome { return outcome }
+                    if Task.isCancelled { return .failure(CancellationError()) }
+                    pending.continuation = continuation
+                    return nil
+                }
+                if let outcome {
+                    task.cancel()
+                    continuation.resume(with: outcome)
+                } else {
+                    task.resume()
+                }
             }
         } onCancel: {
             task.cancel()
@@ -319,17 +349,35 @@ private final class R2T2Download: NSObject, URLSessionDownloadDelegate, @uncheck
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-        let continuation = self.continuation
-        self.continuation = nil
-        if let error {
-            continuation?.resume(throwing: error)
-        } else {
-            continuation?.resume(with: result ?? .failure(R2T2ManagedError.httpStatus(0, name)))
+        let outcome: Result<Void, Error> = error.map { .failure($0) } ?? result ?? .failure(R2T2ManagedError.httpStatus(0, name))
+        let continuation = pending.withLock { pending -> CheckedContinuation<Void, Error>? in
+            pending.outcome = outcome
+            defer { pending.continuation = nil }
+            return pending.continuation
         }
+        continuation?.resume(with: outcome)
     }
 }
 
 // MARK: - Server Process
+
+/// Released once, explicitly or when the holder goes away.
+final class R2T2ServerLease: @unchecked Sendable {
+    private let released = OSAllocatedUnfairLock(initialState: false)
+    private let onRelease: @Sendable () -> Void
+
+    init(onRelease: @escaping @Sendable () -> Void) {
+        self.onRelease = onRelease
+    }
+
+    func release() {
+        if !released.withLock({ let was = $0; $0 = true; return was }) { onRelease() }
+    }
+
+    deinit {
+        release()
+    }
+}
 
 /// Runs `audiocpp_server` on a random loopback port for the selected model and restarts it when it
 /// exits unexpectedly, so a crash never leaves TypeWhisper without its engine.
@@ -346,6 +394,8 @@ final class R2T2ManagedServer: @unchecked Sendable {
         var starting: (model: R2T2ModelDefinition, task: Task<URL, Error>)?
         /// Bumped by stop(); starts and crash restarts from an older generation do not launch a server.
         var generation = 0
+        /// Connections using the current server; a start for another model waits until they end.
+        var leases = 0
     }
 
     private static let logger = Logger(subsystem: "com.scriptease.r2t2", category: "Server")
@@ -392,6 +442,8 @@ final class R2T2ManagedServer: @unchecked Sendable {
     private let state = OSAllocatedUnfairLock(initialState: State())
     /// Called on every start, stop and crash so the settings view can refresh.
     var onStatusChange: (@Sendable () -> Void)?
+    /// The model a crash restart should use, which may differ from the one that crashed.
+    var selectedModel: (@Sendable () -> R2T2ModelDefinition?)?
 
     init(assets: R2T2ManagedAssets) {
         self.assets = assets
@@ -406,6 +458,21 @@ final class R2T2ManagedServer: @unchecked Sendable {
     }
 
     /// Returns the URL of a ready server for `model`, starting or restarting it when needed.
+    /// Returns a ready server for `model` together with a lease that keeps it from being replaced
+    /// by a start for another model until the lease is released.
+    func acquire(model: R2T2ModelDefinition) async throws -> (URL, R2T2ServerLease) {
+        while true {
+            let url = try await ensureRunning(model: model)
+            let lease = state.withLock { state -> R2T2ServerLease? in
+                guard state.isReady, state.process?.isRunning == true, state.baseURL == url else { return nil }
+                state.leases += 1
+                return R2T2ServerLease(onRelease: { [weak self] in self?.state.withLock { $0.leases -= 1 } })
+            }
+            if let lease { return (url, lease) }
+            try Task.checkCancellation()
+        }
+    }
+
     /// Concurrent callers for the same model share one start; a start for another model waits for it.
     func ensureRunning(model: R2T2ModelDefinition) async throws -> URL {
         enum Decision { case ready(URL), wait(Task<URL, Error>) }
@@ -420,7 +487,12 @@ final class R2T2ManagedServer: @unchecked Sendable {
             let generation = state.generation
             let task = Task {
                 _ = try? await previous?.value
-                return try await self.start(model: model, generation: generation)
+                do {
+                    return try await self.start(model: model, generation: generation)
+                } catch R2T2ManagedError.serverExited(let output) where output.contains("could not bind") {
+                    // Another process took the reserved port before the server bound it; try a new one.
+                    return try await self.start(model: model, generation: generation)
+                }
             }
             state.starting = (model, task)
             return .wait(task)
@@ -496,6 +568,10 @@ final class R2T2ManagedServer: @unchecked Sendable {
     private func start(model: R2T2ModelDefinition, generation: Int) async throws -> URL {
         guard assets.isRuntimeInstalled, assets.isModelInstalled(model) else {
             throw R2T2ManagedError.modelNotInstalled
+        }
+        // Let dictations on the running server finish before it is replaced.
+        while state.withLock({ $0.leases > 0 && $0.process?.isRunning == true }) {
+            try await Task.sleep(for: .milliseconds(100))
         }
         await stopAndWait()
         let port = try Self.reserveLoopbackPort()
@@ -582,7 +658,7 @@ final class R2T2ManagedServer: @unchecked Sendable {
             try? await Task.sleep(for: .seconds(1))
             // Skip the restart when stop() was called in the meantime.
             guard state.withLock({ $0.generation }) == restart.generation else { return }
-            _ = try? await ensureRunning(model: restart.model)
+            _ = try? await ensureRunning(model: selectedModel?() ?? restart.model)
         }
     }
 

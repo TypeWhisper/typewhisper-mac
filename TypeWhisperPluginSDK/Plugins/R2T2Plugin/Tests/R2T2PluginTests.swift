@@ -122,9 +122,33 @@ final class R2T2PluginTests: XCTestCase {
         let json = #"{"error":{"message":"live transcription requires a model configured with mode=streaming: r2t2","type":"invalid_request_error"}}"#
         let wire = "HTTP/1.1 400 Bad Request\r\nContent-Type: application/json\r\nContent-Length: \(json.utf8.count)\r\n\r\n" + json
         var parser = R2T2ResponseParser()
-        let events = parser.feed(Data(wire.utf8))
+        // Split inside the JSON: the error is reported once, complete, when the connection closes.
+        let bytes = Data(wire.utf8)
+        XCTAssertEqual(parser.feed(bytes.prefix(bytes.count - 20)), [])
+        XCTAssertEqual(parser.feed(bytes.suffix(20)), [])
         XCTAssertEqual(parser.statusCode, 400)
-        XCTAssertEqual(events, [.error("HTTP 400: live transcription requires a model configured with mode=streaming: r2t2")])
+        XCTAssertEqual(parser.finish(), [.error("HTTP 400: live transcription requires a model configured with mode=streaming: r2t2")])
+    }
+
+    func testResponseParserReportsEmptyErrorBodyAndMissingResponse() {
+        var parser = R2T2ResponseParser()
+        XCTAssertEqual(parser.feed(Data("HTTP/1.1 503 Service Unavailable\r\nContent-Length: 0\r\n\r\n".utf8)), [])
+        XCTAssertEqual(parser.finish(), [.error("HTTP 503")])
+
+        var silent = R2T2ResponseParser()
+        XCTAssertEqual(silent.finish(), [.error("The server closed the connection without a response")])
+    }
+
+    func testResponseParserKeepsMultibyteCharactersSplitAcrossPackets() {
+        let body = "data: {\"type\":\"transcript.text.delta\",\"delta\":\"你好\"}\n\n"
+        let wire = "HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n\r\n" + body
+        var parser = R2T2ResponseParser()
+        var events: [R2T2Protocol.ServerEvent] = []
+        for byte in Data(wire.utf8) {
+            events += parser.feed(Data([byte]))
+        }
+        XCTAssertEqual(events, [.delta("你好")])
+        XCTAssertEqual(parser.finish(), [])
     }
 
     func testPCM16LEEncodingClampsAndUsesLittleEndian() {
@@ -185,8 +209,37 @@ final class R2T2PluginTests: XCTestCase {
         XCTAssertEqual(plugin.selectedModelId, "r2t2-q4_k_m")
         XCTAssertEqual(plugin.downloadedModels.map(\.id), ["r2t2-q4_k_m"])
 
+        // The install state is read on activation, after an install and after a delete.
         try fileManager.removeItem(at: assets.modelDirectory(model).appendingPathComponent("NOTICE"))
-        XCTAssertFalse(plugin.isConfigured, "license files are part of the install")
+        let reactivated = R2T2Plugin()
+        reactivated.activate(host: host)
+        XCTAssertFalse(reactivated.isConfigured, "license files are part of the install")
+    }
+
+    func testDeletingTheSelectedModelFallsBackToAnotherInstalledModel() async throws {
+        let host = try PluginTestHostServices(defaults: [R2T2Plugin.builtInModelKey: "r2t2-q8_0"])
+        let assets = R2T2ManagedAssets(pluginDataDirectory: host.pluginDataDirectory)
+        try Self.fakeInstall(assets: assets, models: [.q4km, .q8])
+        let plugin = R2T2Plugin()
+        plugin.activate(host: host)
+        XCTAssertEqual(plugin.selectedModelId, "r2t2-q8_0")
+
+        try await plugin.deleteDownloadedModel("r2t2-q8_0")
+        XCTAssertEqual(plugin.downloadedModels.map(\.id), ["r2t2-q4_k_m"])
+        XCTAssertEqual(plugin.selectedModelId, "r2t2-q4_k_m")
+        XCTAssertTrue(plugin.isConfigured)
+    }
+
+    func testInstallCancelledBeforeItStartsReturnsPromptly() async throws {
+        let host = try PluginTestHostServices()
+        let assets = R2T2ManagedAssets(pluginDataDirectory: host.pluginDataDirectory)
+        let task = Task { try await assets.install(.q4km) { _ in } }
+        task.cancel()
+        let started = Date()
+        let result = await task.result
+        XCTAssertThrowsError(try result.get())
+        XCTAssertLessThan(Date().timeIntervalSince(started), 5, "a cancelled download did not resume")
+        XCTAssertFalse(assets.isModelInstalled(.q4km))
     }
 
     func testVerifyRejectsWrongChecksum() throws {
@@ -232,6 +285,25 @@ final class R2T2PluginTests: XCTestCase {
         XCTAssertNil(failed)
         XCTAssertEqual(server.baseURL, running)
         XCTAssertEqual(Self.serverProcessCount(config: assets.serverConfigURL), 1)
+        // A start for another model waits until the running server's lease is released.
+        let copy = R2T2ModelDefinition(id: "r2t2-e2e-copy", displayName: "copy", repositoryId: model.repositoryId,
+                                       revision: model.revision, fileName: model.fileName, fileSize: model.fileSize,
+                                       sha256: model.sha256)
+        try fileManager.createDirectory(at: assets.modelDirectory(copy), withIntermediateDirectories: true)
+        try fileManager.linkItem(atPath: ggufPath, toPath: assets.modelFileURL(copy).path)
+        for name in R2T2ModelDefinition.licenseFileNames {
+            fileManager.createFile(atPath: assets.modelDirectory(copy).appendingPathComponent(name).path, contents: Data("license".utf8))
+        }
+        let (leasedURL, lease) = try await server.acquire(model: model)
+        let switchTask = Task { try await server.ensureRunning(model: copy) }
+        try await Task.sleep(for: .seconds(1))
+        XCTAssertEqual(server.baseURL, leasedURL, "the leased server was replaced")
+        lease.release()
+        let switchedURL = try await switchTask.value
+        XCTAssertNotEqual(switchedURL, leasedURL)
+        XCTAssertEqual(server.runningModel, copy)
+        _ = try await server.ensureRunning(model: model)
+
         // Stop within the one-second window before a crash restart: the server must stay down.
         try Self.killServer(config: assets.serverConfigURL)
         try await Task.sleep(for: .milliseconds(300))
@@ -280,6 +352,24 @@ final class R2T2PluginTests: XCTestCase {
         XCTAssertTrue(assets.isModelInstalled(.q4km))
         XCTAssertEqual(progress.withLock { $0.last }, 1)
         XCTAssertGreaterThan(progress.withLock { $0.count }, 10)
+    }
+
+    /// Creates the runtime executable, license files and sparse GGUFs of the pinned sizes.
+    private static func fakeInstall(assets: R2T2ManagedAssets, models: [R2T2ModelDefinition]) throws {
+        let fileManager = FileManager.default
+        try fileManager.createDirectory(at: assets.runtimeDirectory, withIntermediateDirectories: true)
+        fileManager.createFile(atPath: assets.serverExecutableURL.path, contents: Data("#!/bin/sh\n".utf8),
+                               attributes: [.posixPermissions: 0o755])
+        for model in models {
+            try fileManager.createDirectory(at: assets.modelDirectory(model), withIntermediateDirectories: true)
+            for name in R2T2ModelDefinition.licenseFileNames {
+                fileManager.createFile(atPath: assets.modelDirectory(model).appendingPathComponent(name).path, contents: Data("license".utf8))
+            }
+            fileManager.createFile(atPath: assets.modelFileURL(model).path, contents: nil)
+            let handle = try FileHandle(forWritingTo: assets.modelFileURL(model))
+            try handle.truncate(atOffset: UInt64(model.fileSize))
+            try handle.close()
+        }
     }
 
     private static func killServer(config: URL) throws {

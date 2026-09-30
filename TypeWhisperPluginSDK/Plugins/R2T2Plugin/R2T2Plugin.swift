@@ -154,7 +154,10 @@ struct R2T2ResponseParser {
     private var phase = Phase.head
     private var buffer = Data()
     private var isChunked = false
-    private var eventText = ""
+    /// Undecoded SSE bytes; decoding waits for a complete event so a UTF-8 character split
+    /// across packets stays intact.
+    private var eventBytes = Data()
+    private var errorBody = Data()
     private(set) var statusCode: Int?
 
     mutating func feed(_ data: Data) -> [R2T2Protocol.ServerEvent] {
@@ -181,10 +184,10 @@ struct R2T2ResponseParser {
 
         switch phase {
         case .body:
-            eventText += String(decoding: decoded, as: UTF8.self)
-            while let separator = eventText.range(of: "\n\n") {
-                let block = String(eventText[..<separator.lowerBound])
-                eventText.removeSubrange(..<separator.upperBound)
+            eventBytes.append(decoded)
+            while let separator = eventBytes.range(of: Data("\n\n".utf8)) {
+                let block = String(decoding: eventBytes[..<separator.lowerBound], as: UTF8.self)
+                eventBytes.removeSubrange(..<separator.upperBound)
                 let payload = block
                     .components(separatedBy: "\n")
                     .filter { $0.hasPrefix("data:") }
@@ -194,16 +197,31 @@ struct R2T2ResponseParser {
                     events.append(event)
                 }
             }
-        case .failedBody(let status):
-            let body = String(decoding: decoded, as: UTF8.self)
-            let message = (try? JSONSerialization.jsonObject(with: Data(body.utf8)) as? [String: Any])
-                .flatMap { ($0["error"] as? [String: Any])?["message"] as? String }
-            events.append(.error("HTTP \(status): \(message ?? body)"))
-            phase = .body
+        case .failedBody:
+            // Reported by finish() once the whole body is in.
+            errorBody.append(decoded)
         case .head:
             break
         }
         return events
+    }
+
+    /// Call when the connection closes. Reports a non-200 response, also one with an empty body,
+    /// and a connection that closed before sending a response.
+    mutating func finish() -> [R2T2Protocol.ServerEvent] {
+        switch phase {
+        case .head:
+            return [.error("The server closed the connection without a response")]
+        case .failedBody(let status):
+            phase = .body
+            let body = String(decoding: errorBody, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+            let message = (try? JSONSerialization.jsonObject(with: errorBody) as? [String: Any])
+                .flatMap { ($0["error"] as? [String: Any])?["message"] as? String }
+            let detail = message ?? body
+            return [.error(detail.isEmpty ? "HTTP \(status)" : "HTTP \(status): \(detail)")]
+        case .body:
+            return []
+        }
     }
 
     private mutating func consumeAll() -> Data {
@@ -311,8 +329,12 @@ private final class R2T2LiveConnection: @unchecked Sendable {
     private let inputs: AsyncStream<Input>.Continuation
     private let parserLock = OSAllocatedUnfairLock(initialState: R2T2ResponseParser())
     private var sentTerminator = false
+    /// Keeps the built-in server from being replaced while this connection uses it.
+    private let lease: R2T2ServerLease?
 
-    init(serverURL: URL, modelId: String, language: String?, prompt: String?, onProgress: @Sendable @escaping (String) -> Bool) async throws {
+    init(serverURL: URL, modelId: String, language: String?, prompt: String?, lease: R2T2ServerLease? = nil,
+         onProgress: @Sendable @escaping (String) -> Bool) async throws {
+        self.lease = lease
         try PluginHTTPClient.ensureNetworkAccessIsAllowed()
         guard let host = serverURL.host else { throw PluginTranscriptionError.notConfigured }
         let isTLS = serverURL.scheme == "https"
@@ -445,6 +467,10 @@ private final class R2T2LiveConnection: @unchecked Sendable {
                 let events = self.parserLock.withLock { $0.feed(data) }
                 if !events.isEmpty { self.inputs.yield(.events(events)) }
             }
+            if error != nil || isComplete {
+                let events = self.parserLock.withLock { $0.finish() }
+                if !events.isEmpty { self.inputs.yield(.events(events)) }
+            }
             if let error {
                 self.inputs.yield(.failed(error.localizedDescription))
                 self.inputs.finish()
@@ -492,6 +518,7 @@ private final class R2T2LiveConnection: @unchecked Sendable {
         }
         connection.cancel()
         inputs.finish()
+        lease?.release()
         if let error = await collector.error {
             throw PluginTranscriptionError.apiError(error)
         }
@@ -508,6 +535,7 @@ private final class R2T2LiveConnection: @unchecked Sendable {
     func cancel() {
         connection.cancel()
         inputs.finish()
+        lease?.release()
     }
 
     /// Ends the consumer task when the connection is dropped without finish() or cancel(),
@@ -551,6 +579,12 @@ enum R2T2ServerMode: String {
     case custom
 }
 
+/// What is on disk, cached so that settings and `isConfigured` do not stat files on every read.
+struct R2T2InstallState: Sendable, Equatable {
+    var runtime = false
+    var models: Set<String> = []
+}
+
 /// Download state shared with the settings view, which polls it.
 struct R2T2DownloadSnapshot: Sendable, Equatable {
     var modelId: String?
@@ -579,6 +613,7 @@ final class R2T2Plugin: NSObject, TranscriptionEnginePlugin, LiveTranscriptionCa
     fileprivate var assets: R2T2ManagedAssets?
     fileprivate var server: R2T2ManagedServer?
     fileprivate let download = OSAllocatedUnfairLock(initialState: R2T2DownloadSnapshot())
+    fileprivate let installState = OSAllocatedUnfairLock(initialState: R2T2InstallState())
     /// Only touched on the main actor, where the settings view reads it.
     @MainActor private var downloadTask: Task<Void, Never>?
 
@@ -604,7 +639,18 @@ final class R2T2Plugin: NSObject, TranscriptionEnginePlugin, LiveTranscriptionCa
         self.assets = assets
         let server = R2T2ManagedServer(assets: assets)
         server.onStatusChange = { [weak self] in self?.host?.notifyCapabilitiesChanged() }
+        server.selectedModel = { [weak self] in self?._builtInModel }
         self.server = server
+        refreshInstallState()
+    }
+
+    fileprivate func refreshInstallState() {
+        guard let assets else { return }
+        let state = R2T2InstallState(
+            runtime: assets.isRuntimeInstalled,
+            models: Set(R2T2ModelDefinition.all.filter(assets.isModelInstalled).map(\.id))
+        )
+        installState.withLock { $0 = state }
     }
 
     func deactivate() {
@@ -621,7 +667,8 @@ final class R2T2Plugin: NSObject, TranscriptionEnginePlugin, LiveTranscriptionCa
     var isConfigured: Bool {
         switch _mode {
         case .builtIn:
-            return assets.map { $0.isRuntimeInstalled && $0.isModelInstalled(_builtInModel) } ?? false
+            let state = installState.withLock { $0 }
+            return state.runtime && state.models.contains(_builtInModel.id)
         case .custom:
             return R2T2Protocol.normalizedServerURL(_serverURL) != nil && !_modelId.isEmpty
         }
@@ -656,15 +703,25 @@ final class R2T2Plugin: NSObject, TranscriptionEnginePlugin, LiveTranscriptionCa
     }
 
     var downloadedModels: [PluginModelInfo] {
-        guard let assets else { return [] }
-        return R2T2ModelDefinition.all.filter(assets.isModelInstalled).map(Self.modelInfo)
+        let installed = installState.withLock { $0.models }
+        return R2T2ModelDefinition.all.filter { installed.contains($0.id) }.map(Self.modelInfo)
     }
 
     func deleteDownloadedModel(_ modelId: String) async throws {
         guard let assets, let model = R2T2ModelDefinition.model(for: modelId) else { return }
         if server?.runningModel == model { server?.stop() }
+        defer {
+            refreshInstallState()
+            // Keep dictation working when another model is still installed.
+            if _builtInModel == model {
+                let installed = installState.withLock { $0.models }
+                if let fallback = ([R2T2ModelDefinition.recommended] + R2T2ModelDefinition.all).first(where: { installed.contains($0.id) }) {
+                    setBuiltInModel(fallback)
+                }
+            }
+            host?.notifyCapabilitiesChanged()
+        }
         try assets.deleteModel(model)
-        host?.notifyCapabilitiesChanged()
     }
 
     static func modelInfo(_ model: R2T2ModelDefinition) -> PluginModelInfo {
@@ -713,27 +770,31 @@ final class R2T2Plugin: NSObject, TranscriptionEnginePlugin, LiveTranscriptionCa
     }
 
     private func openConnection(language: String?, prompt: String?, onProgress: @Sendable @escaping (String) -> Bool) async throws -> R2T2LiveConnection {
-        let (url, modelId) = try await endpoint()
+        let (url, modelId, lease) = try await endpoint()
+        // On failure the lease is released when it goes out of scope here or with the connection.
         return try await R2T2LiveConnection(
             serverURL: url,
             modelId: modelId,
             language: R2T2Protocol.languageName(for: language),
             prompt: R2T2Protocol.contextPrompt(from: prompt),
+            lease: lease,
             onProgress: onProgress
         )
     }
 
-    /// The server to talk to; in built-in mode this starts `audiocpp_server` when it is not running.
-    private func endpoint() async throws -> (URL, String) {
+    /// The server to talk to; in built-in mode this starts `audiocpp_server` when it is not running
+    /// and returns a lease on it.
+    private func endpoint() async throws -> (URL, String, R2T2ServerLease?) {
         switch _mode {
         case .builtIn:
             guard let server else { throw PluginTranscriptionError.notConfigured }
-            return (try await server.ensureRunning(model: _builtInModel), R2T2ManagedServer.modelId)
+            let (url, lease) = try await server.acquire(model: _builtInModel)
+            return (url, R2T2ManagedServer.modelId, lease)
         case .custom:
             guard let url = R2T2Protocol.normalizedServerURL(_serverURL), !_modelId.isEmpty else {
                 throw PluginTranscriptionError.notConfigured
             }
-            return (url, _modelId)
+            return (url, _modelId, nil)
         }
     }
 
@@ -773,6 +834,7 @@ final class R2T2Plugin: NSObject, TranscriptionEnginePlugin, LiveTranscriptionCa
                     ? nil : error.localizedDescription
                 self?.download.withLock { $0 = R2T2DownloadSnapshot(error: message) }
             }
+            self?.refreshInstallState()
             self?.downloadTask = nil
             self?.host?.notifyCapabilitiesChanged()
         }
@@ -800,7 +862,8 @@ final class R2T2Plugin: NSObject, TranscriptionEnginePlugin, LiveTranscriptionCa
     /// Returns nil on success, otherwise a user-facing error message.
     fileprivate func testConnection() async -> String? {
         do {
-            let (base, modelId) = try await endpoint()
+            let (base, modelId, lease) = try await endpoint()
+            defer { lease?.release() }
             try PluginHTTPClient.ensureNetworkAccessIsAllowed()
             var request = URLRequest(url: base.appendingPathComponent("v1/models"))
             request.timeoutInterval = 5
@@ -836,6 +899,7 @@ private struct R2T2SettingsView: View {
     @State private var testSucceeded = false
     @State private var selectedModel = R2T2ModelDefinition.recommended
     @State private var installed: Set<String> = []
+    @State private var runtimeInstalled = false
     @State private var download = R2T2DownloadSnapshot()
     @State private var runningPort: Int?
     @State private var modelToDelete: R2T2ModelDefinition?
@@ -899,6 +963,18 @@ private struct R2T2SettingsView: View {
                 .font(.headline)
             ForEach(R2T2ModelDefinition.all) { model in
                 modelRow(model)
+            }
+            // After a plugin update pins a new audio.cpp release, installed models need only the runtime.
+            if !runtimeInstalled, let model = R2T2ModelDefinition.all.first(where: { installed.contains($0.id) }) {
+                HStack {
+                    Label(String(localized: "audiocpp_server \(R2T2Runtime.version) is not installed yet.", bundle: bundle),
+                          systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                    Spacer()
+                    Button(String(localized: "Download", bundle: bundle)) { plugin.startDownload(model) }
+                        .controlSize(.small)
+                        .disabled(download.modelId != nil)
+                }
             }
             if let error = download.error {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
@@ -1051,7 +1127,9 @@ private struct R2T2SettingsView: View {
 
     private func refresh() {
         selectedModel = plugin._builtInModel
-        installed = Set(plugin.downloadedModels.map(\.id))
+        let installState = plugin.installState.withLock { $0 }
+        installed = installState.models
+        runtimeInstalled = installState.runtime
         download = plugin.download.withLock { $0 }
         runningPort = plugin.server?.baseURL?.port
     }

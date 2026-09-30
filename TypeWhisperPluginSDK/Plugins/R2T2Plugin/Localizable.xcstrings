@@ -400,6 +400,22 @@
           }
         }
       }
+    },
+    "audiocpp_server %@ is not installed yet.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "audiocpp_server %@ ist noch nicht installiert."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "audiocpp_server %@ 尚未安装。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"
