@@ -279,7 +279,7 @@ If a fresh install still crashes immediately after these steps, please open an i
 
 ## Local LLM (MLX)
 
-TypeWhisper includes the Local LLM (MLX) plugin for on-device prompt processing on Apple Silicon. It recommends the dense Gemma 4 `E2B 4-bit` and `E4B 4-bit` models. Qwen3.5 2B and LFM2.5 2.6B need less memory and are available as experimental models; larger Gemma 4 variants are experimental as well. The plugin replaces the former Gemma 4 plugin.
+TypeWhisper includes the Local LLM (MLX) plugin for on-device prompt processing on Apple Silicon. It recommends the dense Gemma 4 `E2B 4-bit` and `E4B 4-bit` models. Qwen3.5 2B and LFM2.5 2.6B need less memory and are available as experimental models; larger Gemma 4 variants are experimental as well. The plugin replaces the former Gemma 4 plugin (`com.typewhisper.gemma4`) but installs separately: existing Gemma 4 installations do not update to it, and downloaded models, the HuggingFace token, and the model selection are not carried over. Workflows and prompt actions that used Gemma 4 switch to Local LLM (MLX) once the Gemma 4 plugin is removed.
 
 ## Model Recommendations
 
