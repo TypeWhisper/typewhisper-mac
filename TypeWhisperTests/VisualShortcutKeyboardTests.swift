@@ -215,6 +215,53 @@ final class VisualShortcutKeyboardTests: XCTestCase {
         XCTAssertEqual(model.state(forModifier: .keyCode(0x3D)), .active)
     }
 
+    func testLoadModifierOnly_addingFnPreservesPhysicalSide() throws {
+        // Stored Right Option shortcut: its key code identifies the physical
+        // modifier.
+        let stored = UnifiedHotkey(keyCode: 0x3D, modifierFlags: 0, isFn: false)
+        let model = makeModel(editingHotkey: stored)
+        model.toggleModifier(.fn)
+
+        let composed = try XCTUnwrap(model.composedHotkey)
+        XCTAssertEqual(composed.kind, .modifierCombo)
+        // The physical side survives adding Fn: the saved hotkey keeps the
+        // stored Right Option code instead of a generic Option+Fn combo.
+        XCTAssertEqual(composed.modifierKeyCodes, [0x3D])
+        let flags = NSEvent.ModifierFlags(rawValue: composed.modifierFlags)
+        XCTAssertTrue(flags.contains(.option))
+        XCTAssertTrue(flags.contains(.function))
+    }
+
+    func testModifierPreview_matchesEditedSelectionSpecificity() throws {
+        // Legacy generic Command+Option combo: the selection only becomes
+        // explicitly edited once the user changes it.
+        let stored = UnifiedHotkey(
+            keyCode: UnifiedHotkey.modifierComboKeyCode,
+            modifierFlags: NSEvent.ModifierFlags([.command, .option]).rawValue,
+            isFn: false
+        )
+        // The candidate the preview must NOT evaluate: generic semantics.
+        let genericCandidate = UnifiedHotkey(
+            keyCode: UnifiedHotkey.modifierComboKeyCode,
+            modifierFlags: NSEvent.ModifierFlags([.command, .option, .shift]).rawValue,
+            isFn: false
+        )
+        var previewedCandidate: UnifiedHotkey?
+        let model = makeModel(
+            editingHotkey: stored,
+            existingAssignmentDescription: { candidate in
+                previewedCandidate = candidate
+                return candidate == genericCandidate ? "a generic combo slot" : nil
+            }
+        )
+        // The preview must evaluate the same side-specific candidate the real
+        // click saves, not the generic one.
+        XCTAssertEqual(model.state(forModifier: .keyCode(0x38)), .available)
+        XCTAssertNotEqual(previewedCandidate, genericCandidate)
+        model.toggleModifier(.keyCode(0x38))
+        XCTAssertEqual(previewedCandidate, try XCTUnwrap(model.composedHotkey))
+    }
+
     func testLoadFn_preselectsFn() {
         let stored = UnifiedHotkey(keyCode: 0, modifierFlags: 0, isFn: true)
         let model = makeModel(editingHotkey: stored)

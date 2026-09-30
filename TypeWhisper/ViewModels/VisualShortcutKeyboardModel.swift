@@ -136,6 +136,10 @@ struct VisualShortcutComposition: Equatable {
             isFnSelected = true
         case .modifierOnly:
             modifierKeyCodes = [hotkey.keyCode]
+            // The stored key code already identifies the physical modifier,
+            // so further edits keep it side-specific instead of dropping it
+            // to a generic combo.
+            modifierSelectionEdited = true
         case .modifierCombo:
             isFnSelected = flags.contains(.function)
             if hotkey.modifierKeyCodes.isEmpty {
@@ -276,6 +280,9 @@ final class VisualShortcutKeyboardModel: ObservableObject {
             if composition.modifierKeyCodes.contains(code) { return .active }
             var trial = composition
             trial.modifierKeyCodes.insert(code)
+            // The tap this previews would mark the selection explicitly
+            // edited: evaluate the same side-specific candidate it saves.
+            trial.modifierSelectionEdited = true
             // A lone modifier key is itself a valid single-modifier hotkey.
             if let candidate = trial.hotkey, let assignment = conflictDescription(for: candidate) {
                 return .conflicting(assignment: assignment)
