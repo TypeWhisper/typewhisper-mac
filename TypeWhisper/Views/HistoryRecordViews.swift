@@ -335,6 +335,8 @@ struct HistoryRecordDetailView: View {
         case .keyboard: "keyboard"
         case .shortcut: "square.stack.3d.up"
         case .importedFile: "doc"
+        case .windows: "desktopcomputer"
+        case .recorder: "record.circle"
         case .other: "ellipsis.circle"
         }
     }

@@ -807,7 +807,7 @@ final class HistoryViewModel: ObservableObject {
         }
 
         let sourceOrder: [RecordingSource] = [
-            .mac, .iPhone, .iPad, .appleWatch, .keyboard, .shortcut, .importedFile, .other,
+            .mac, .windows, .recorder, .iPhone, .iPad, .appleWatch, .keyboard, .shortcut, .importedFile, .other,
         ]
         return grouped.map { id, accumulator in
             let isCurrent = id == currentDeviceID
@@ -1338,6 +1338,8 @@ final class HistoryViewModel: ObservableObject {
         case .keyboard: String(localized: "iOS Keyboard")
         case .shortcut: String(localized: "Shortcuts")
         case .importedFile: String(localized: "Imported Files")
+        case .windows: String(localized: "Windows Dictation")
+        case .recorder: String(localized: "Recorder")
         case .other: String(localized: "Other")
         }
     }
@@ -1351,6 +1353,8 @@ final class HistoryViewModel: ObservableObject {
         case .keyboard: "keyboard"
         case .shortcut: "square.stack.3d.up"
         case .importedFile: "doc"
+        case .windows: "waveform"
+        case .recorder: "record.circle"
         case .other: "ellipsis.circle"
         }
     }

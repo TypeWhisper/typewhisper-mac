@@ -456,6 +456,45 @@ final class HistoryServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testDeviceSectionsSeparateWindowsDictationAndRecorder() {
+        let windowsDeviceID = "windows-origin"
+        // Windows publishes these source values; they must not fall back to Other.
+        let records = ["windows", "windows", "recorder"].map { source in
+            let record = TranscriptionRecord(
+                rawText: "Windows note",
+                finalText: "Windows note",
+                durationSeconds: 1,
+                engineUsed: "test"
+            )
+            record.sourceRaw = source
+            record.originDeviceID = windowsDeviceID
+            record.originPlatformRaw = "Windows"
+            return record
+        }
+
+        let sections = HistoryViewModel.computeDeviceSections(
+            records: records,
+            devices: [
+                CloudFolderSyncDeviceRecord(
+                    deviceId: "transport-windows",
+                    historyOriginDeviceID: windowsDeviceID,
+                    platform: "Windows",
+                    appVersion: "test",
+                    updatedAt: Date(),
+                    name: "MARCO-PC"
+                ),
+            ],
+            currentDeviceID: "current-mac"
+        )
+
+        let windows = sections.first { $0.id == windowsDeviceID }
+        XCTAssertEqual(windows?.title, "MARCO-PC")
+        XCTAssertEqual(windows?.sources.map(\.source), [.windows, .recorder])
+        XCTAssertEqual(windows?.sources.map(\.count), [2, 1])
+        XCTAssertEqual(windows?.sources.first?.title, String(localized: "Windows Dictation"))
+    }
+
+    @MainActor
     func testUnsavedDraftBlocksRecordSwitchUntilDiscarded() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory(
             prefix: "HistoryUnsavedDraft"

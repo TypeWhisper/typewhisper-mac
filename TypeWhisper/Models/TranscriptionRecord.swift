@@ -9,6 +9,8 @@ enum RecordingSource: String, Codable, CaseIterable, Sendable, Hashable {
     case importedFile
     case keyboard
     case shortcut
+    case windows
+    case recorder
     case other
 
     var displayName: String {
@@ -20,6 +22,8 @@ enum RecordingSource: String, Codable, CaseIterable, Sendable, Hashable {
         case .importedFile: String(localized: "Imported File")
         case .keyboard: String(localized: "iOS Keyboard")
         case .shortcut: String(localized: "Shortcut")
+        case .windows: String(localized: "Windows")
+        case .recorder: String(localized: "Recorder")
         case .other: String(localized: "Other")
         }
     }
