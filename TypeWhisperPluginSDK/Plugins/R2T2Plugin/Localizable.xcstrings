@@ -80,6 +80,176 @@
           }
         }
       }
+    },
+    "%@ (recommended)": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ (empfohlen)"
+          }
+        }
+      }
+    },
+    "audiocpp_server %@ is running on 127.0.0.1:%@.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "audiocpp_server %@ läuft auf 127.0.0.1:%@."
+          }
+        }
+      }
+    },
+    "audiocpp_server %@ starts with the first dictation and restarts if it stops.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "audiocpp_server %@ startet mit dem ersten Diktat und wird neu gestartet, falls er beendet wird."
+          }
+        }
+      }
+    },
+    "Built-in": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Integriert"
+          }
+        }
+      }
+    },
+    "Cancel": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Abbrechen"
+          }
+        }
+      }
+    },
+    "Delete": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Löschen"
+          }
+        }
+      }
+    },
+    "Delete the downloaded model?": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Das geladene Modell löschen?"
+          }
+        }
+      }
+    },
+    "Download": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Laden"
+          }
+        }
+      }
+    },
+    "Full precision, largest": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Volle Präzision, am größten"
+          }
+        }
+      }
+    },
+    "Model": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modell"
+          }
+        }
+      }
+    },
+    "Model license": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Modelllizenz"
+          }
+        }
+      }
+    },
+    "Near full quality, by davidxifeng": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fast volle Qualität, von davidxifeng"
+          }
+        }
+      }
+    },
+    "Own server": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Eigener Server"
+          }
+        }
+      }
+    },
+    "Server": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Server"
+          }
+        }
+      }
+    },
+    "Show in Finder": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Im Finder zeigen"
+          }
+        }
+      }
+    },
+    "Smallest and fastest, community quant by Nairod785": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Am kleinsten und schnellsten, Community-Quantisierung von Nairod785"
+          }
+        }
+      }
+    },
+    "The model weights are licensed by NetEase Youdao under the Confucius4-R2T2 Model Use License, which is downloaded with each model (LICENSE, LICENSE_zh, NOTICE). By downloading you accept it. The server is audio.cpp, Apache-2.0.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Die Modellgewichte stehen unter der Confucius4-R2T2 Model Use License von NetEase Youdao, die mit jedem Modell geladen wird (LICENSE, LICENSE_zh, NOTICE). Mit dem Download akzeptierst du sie. Der Server ist audio.cpp, Apache-2.0."
+          }
+        }
+      }
     }
   },
   "version": "1.0"

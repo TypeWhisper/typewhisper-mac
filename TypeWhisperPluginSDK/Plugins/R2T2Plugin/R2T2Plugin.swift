@@ -482,19 +482,42 @@ private final class R2T2LiveTranscriptionSession: LiveTranscriptionSession, @unc
 
 // MARK: - Plugin Entry Point
 
+enum R2T2ServerMode: String {
+    /// The plugin downloads audio.cpp and a model and runs `audiocpp_server` itself.
+    case builtIn
+    /// The user runs `audiocpp_server` and enters its URL.
+    case custom
+}
+
+/// Download state shared with the settings view, which polls it.
+struct R2T2DownloadSnapshot: Sendable, Equatable {
+    var modelId: String?
+    var progress: Double = 0
+    var error: String?
+}
+
 @objc(R2T2Plugin)
 final class R2T2Plugin: NSObject, TranscriptionEnginePlugin, LiveTranscriptionCapablePlugin,
-    LiveTranscriptionProgressModeProviding, DictionaryTermsCapabilityProviding, @unchecked Sendable
+    LiveTranscriptionProgressModeProviding, DictionaryTermsCapabilityProviding,
+    TranscriptionModelCatalogProviding, PluginDownloadedModelManaging, @unchecked Sendable
 {
     static let pluginId = "com.scriptease.r2t2"
     static let pluginName = "Confucius4-R2T2"
     static let serverURLKey = "serverURL"
     static let modelIdKey = "modelId"
+    static let serverModeKey = "serverMode"
+    static let builtInModelKey = "builtInModel"
 
     private let logger = Logger(subsystem: "com.scriptease.r2t2", category: "Plugin")
     fileprivate var host: HostServices?
     fileprivate var _serverURL = R2T2Protocol.defaultServerURL
     fileprivate var _modelId = R2T2Protocol.defaultModelId
+    fileprivate var _mode = R2T2ServerMode.builtIn
+    fileprivate var _builtInModel = R2T2ModelDefinition.recommended
+    fileprivate var assets: R2T2ManagedAssets?
+    fileprivate var server: R2T2ManagedServer?
+    fileprivate let download = OSAllocatedUnfairLock(initialState: R2T2DownloadSnapshot())
+    private var downloadTask: Task<Void, Never>?
 
     required override init() {
         super.init()
@@ -502,15 +525,29 @@ final class R2T2Plugin: NSObject, TranscriptionEnginePlugin, LiveTranscriptionCa
 
     func activate(host: HostServices) {
         self.host = host
-        if let stored = host.userDefault(forKey: Self.serverURLKey) as? String, !stored.isEmpty {
-            _serverURL = stored
+        let storedURL = host.userDefault(forKey: Self.serverURLKey) as? String
+        if let storedURL, !storedURL.isEmpty {
+            _serverURL = storedURL
         }
         if let stored = host.userDefault(forKey: Self.modelIdKey) as? String, !stored.isEmpty {
             _modelId = stored
         }
+        // Installs from before the built-in server keep using the server they configured.
+        let storedMode = (host.userDefault(forKey: Self.serverModeKey) as? String).flatMap(R2T2ServerMode.init)
+        _mode = storedMode ?? (storedURL?.isEmpty == false ? .custom : .builtIn)
+        _builtInModel = R2T2ModelDefinition.model(for: host.userDefault(forKey: Self.builtInModelKey) as? String)
+            ?? R2T2ModelDefinition.recommended
+        let assets = R2T2ManagedAssets(pluginDataDirectory: host.pluginDataDirectory)
+        self.assets = assets
+        let server = R2T2ManagedServer(assets: assets)
+        server.onStatusChange = { [weak self] in self?.host?.notifyCapabilitiesChanged() }
+        self.server = server
     }
 
     func deactivate() {
+        downloadTask?.cancel()
+        server?.stop()
+        server = nil
         host = nil
     }
 
@@ -518,12 +555,28 @@ final class R2T2Plugin: NSObject, TranscriptionEnginePlugin, LiveTranscriptionCa
 
     var providerId: String { "r2t2" }
     var providerDisplayName: String { "Confucius4-R2T2" }
-    var isConfigured: Bool { R2T2Protocol.normalizedServerURL(_serverURL) != nil && !_modelId.isEmpty }
-    var transcriptionModels: [PluginModelInfo] {
-        [PluginModelInfo(id: _modelId, displayName: "Confucius4-R2T2 (\(_modelId))")]
+    var isConfigured: Bool {
+        switch _mode {
+        case .builtIn:
+            return assets.map { $0.isRuntimeInstalled && $0.isModelInstalled(_builtInModel) } ?? false
+        case .custom:
+            return R2T2Protocol.normalizedServerURL(_serverURL) != nil && !_modelId.isEmpty
+        }
     }
-    var selectedModelId: String? { _modelId }
-    func selectModel(_ modelId: String) {}
+    var transcriptionModels: [PluginModelInfo] {
+        switch _mode {
+        case .builtIn:
+            let installed = downloadedModels
+            return installed.isEmpty ? [Self.modelInfo(_builtInModel)] : installed
+        case .custom:
+            return [PluginModelInfo(id: _modelId, displayName: "Confucius4-R2T2 (\(_modelId))")]
+        }
+    }
+    var selectedModelId: String? { _mode == .builtIn ? _builtInModel.id : _modelId }
+    func selectModel(_ modelId: String) {
+        guard _mode == .builtIn, let model = R2T2ModelDefinition.model(for: modelId) else { return }
+        setBuiltInModel(model)
+    }
     var supportsTranslation: Bool { false }
     var supportsStreaming: Bool { true }
     var liveTranscriptionProgressMode: LiveTranscriptionProgressMode { .completeSnapshot }
@@ -532,6 +585,28 @@ final class R2T2Plugin: NSObject, TranscriptionEnginePlugin, LiveTranscriptionCa
 
     var serverURLString: String { _serverURL }
     var modelId: String { _modelId }
+
+    // MARK: TranscriptionModelCatalogProviding, PluginDownloadedModelManaging
+
+    var availableModels: [PluginModelInfo] {
+        _mode == .builtIn ? R2T2ModelDefinition.all.map(Self.modelInfo) : transcriptionModels
+    }
+
+    var downloadedModels: [PluginModelInfo] {
+        guard let assets else { return [] }
+        return R2T2ModelDefinition.all.filter(assets.isModelInstalled).map(Self.modelInfo)
+    }
+
+    func deleteDownloadedModel(_ modelId: String) async throws {
+        guard let assets, let model = R2T2ModelDefinition.model(for: modelId) else { return }
+        if server?.runningModel == model { server?.stop() }
+        try assets.deleteModel(model)
+        host?.notifyCapabilitiesChanged()
+    }
+
+    static func modelInfo(_ model: R2T2ModelDefinition) -> PluginModelInfo {
+        PluginModelInfo(id: model.id, displayName: "Confucius4-R2T2 \(model.displayName)")
+    }
 
     func transcribe(audio: AudioData, language: String?, translate: Bool, prompt: String?) async throws -> PluginTranscriptionResult {
         try await transcribe(audio: audio, language: language, translate: translate, prompt: prompt, onProgress: { _ in true })
@@ -575,22 +650,72 @@ final class R2T2Plugin: NSObject, TranscriptionEnginePlugin, LiveTranscriptionCa
     }
 
     private func openConnection(language: String?, prompt: String?, onProgress: @Sendable @escaping (String) -> Bool) async throws -> R2T2LiveConnection {
-        guard let url = R2T2Protocol.normalizedServerURL(_serverURL), !_modelId.isEmpty else {
-            throw PluginTranscriptionError.notConfigured
-        }
+        let (url, modelId) = try await endpoint()
         return try await R2T2LiveConnection(
             serverURL: url,
-            modelId: _modelId,
+            modelId: modelId,
             language: R2T2Protocol.languageName(for: language),
             prompt: R2T2Protocol.contextPrompt(from: prompt),
             onProgress: onProgress
         )
     }
 
+    /// The server to talk to; in built-in mode this starts `audiocpp_server` when it is not running.
+    private func endpoint() async throws -> (URL, String) {
+        switch _mode {
+        case .builtIn:
+            guard let server else { throw PluginTranscriptionError.notConfigured }
+            return (try await server.ensureRunning(model: _builtInModel), R2T2ManagedServer.modelId)
+        case .custom:
+            guard let url = R2T2Protocol.normalizedServerURL(_serverURL), !_modelId.isEmpty else {
+                throw PluginTranscriptionError.notConfigured
+            }
+            return (url, _modelId)
+        }
+    }
+
     // MARK: Settings
 
     var settingsView: AnyView? {
         AnyView(R2T2SettingsView(plugin: self))
+    }
+
+    fileprivate func setMode(_ mode: R2T2ServerMode) {
+        _mode = mode
+        host?.setUserDefault(mode.rawValue, forKey: Self.serverModeKey)
+        if mode == .custom { server?.stop() }
+        host?.notifyCapabilitiesChanged()
+    }
+
+    fileprivate func setBuiltInModel(_ model: R2T2ModelDefinition) {
+        _builtInModel = model
+        host?.setUserDefault(model.id, forKey: Self.builtInModelKey)
+        host?.notifyCapabilitiesChanged()
+    }
+
+    fileprivate func startDownload(_ model: R2T2ModelDefinition) {
+        guard let assets, downloadTask == nil else { return }
+        let download = self.download
+        download.withLock { $0 = R2T2DownloadSnapshot(modelId: model.id) }
+        downloadTask = Task { [weak self] in
+            do {
+                try await assets.install(model) { fraction in
+                    download.withLock { $0.progress = fraction }
+                }
+                self?.download.withLock { $0 = R2T2DownloadSnapshot() }
+                self?.setBuiltInModel(model)
+            } catch {
+                let message = error is CancellationError || (error as? URLError)?.code == .cancelled
+                    ? nil : error.localizedDescription
+                self?.download.withLock { $0 = R2T2DownloadSnapshot(error: message) }
+            }
+            self?.downloadTask = nil
+            self?.host?.notifyCapabilitiesChanged()
+        }
+    }
+
+    fileprivate func cancelDownload() {
+        downloadTask?.cancel()
     }
 
     fileprivate func setServerURL(_ value: String) {
@@ -607,11 +732,11 @@ final class R2T2Plugin: NSObject, TranscriptionEnginePlugin, LiveTranscriptionCa
         host?.notifyCapabilitiesChanged()
     }
 
-    /// Checks `/health` and that the configured model id exists with `mode: streaming`.
+    /// Checks that the server lists the model with `mode: streaming`, starting the built-in server first.
     /// Returns nil on success, otherwise a user-facing error message.
     fileprivate func testConnection() async -> String? {
-        guard let base = R2T2Protocol.normalizedServerURL(_serverURL) else { return "Invalid server URL" }
         do {
+            let (base, modelId) = try await endpoint()
             try PluginHTTPClient.ensureNetworkAccessIsAllowed()
             var request = URLRequest(url: base.appendingPathComponent("v1/models"))
             request.timeoutInterval = 5
@@ -621,12 +746,12 @@ final class R2T2Plugin: NSObject, TranscriptionEnginePlugin, LiveTranscriptionCa
             }
             let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
             let models = json?["data"] as? [[String: Any]] ?? []
-            guard let model = models.first(where: { ($0["id"] as? String) == _modelId }) else {
+            guard let model = models.first(where: { ($0["id"] as? String) == modelId }) else {
                 let ids = models.compactMap { $0["id"] as? String }.joined(separator: ", ")
-                return "Model '\(_modelId)' not found on server (available: \(ids))"
+                return "Model '\(modelId)' not found on server (available: \(ids))"
             }
             guard (model["mode"] as? String) == "streaming" else {
-                return "Model '\(_modelId)' is not configured with mode=streaming"
+                return "Model '\(modelId)' is not configured with mode=streaming"
             }
             return nil
         } catch {
@@ -639,14 +764,165 @@ final class R2T2Plugin: NSObject, TranscriptionEnginePlugin, LiveTranscriptionCa
 
 private struct R2T2SettingsView: View {
     let plugin: R2T2Plugin
+    @State private var mode = R2T2ServerMode.builtIn
     @State private var serverURL = ""
     @State private var modelId = ""
     @State private var isTesting = false
     @State private var testError: String?
     @State private var testSucceeded = false
+    @State private var selectedModel = R2T2ModelDefinition.recommended
+    @State private var installed: Set<String> = []
+    @State private var download = R2T2DownloadSnapshot()
+    @State private var runningPort: Int?
+    @State private var modelToDelete: R2T2ModelDefinition?
     private let bundle = Bundle(for: R2T2Plugin.self)
 
     var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Picker(String(localized: "Server", bundle: bundle), selection: $mode) {
+                Text("Built-in", bundle: bundle).tag(R2T2ServerMode.builtIn)
+                Text("Own server", bundle: bundle).tag(R2T2ServerMode.custom)
+            }
+            .pickerStyle(.segmented)
+            .onChange(of: mode) { _, newValue in
+                plugin.setMode(newValue)
+                testError = nil
+                testSucceeded = false
+            }
+
+            switch mode {
+            case .builtIn: builtInSection
+            case .custom: customServerSection
+            }
+
+            testRow
+
+            Text("Audio is streamed as 16 kHz PCM to your local audio.cpp server. Nothing is sent anywhere else.", bundle: bundle)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding()
+        .onAppear {
+            mode = plugin._mode
+            serverURL = plugin.serverURLString
+            modelId = plugin.modelId
+            refresh()
+        }
+        .task {
+            while !Task.isCancelled {
+                refresh()
+                try? await Task.sleep(for: .milliseconds(250))
+            }
+        }
+        .confirmationDialog(
+            String(localized: "Delete the downloaded model?", bundle: bundle),
+            isPresented: Binding(get: { modelToDelete != nil }, set: { if !$0 { modelToDelete = nil } })
+        ) {
+            Button(String(localized: "Delete", bundle: bundle), role: .destructive) {
+                if let model = modelToDelete {
+                    Task { try? await plugin.deleteDownloadedModel(model.id) }
+                }
+                modelToDelete = nil
+            }
+        }
+    }
+
+    // MARK: Built-in
+
+    private var builtInSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Model", bundle: bundle)
+                .font(.headline)
+            ForEach(R2T2ModelDefinition.all) { model in
+                modelRow(model)
+            }
+            if let error = download.error {
+                Label(error, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+            Group {
+                if let runningPort {
+                    Text("audiocpp_server \(R2T2Runtime.version) is running on 127.0.0.1:\(String(runningPort)).", bundle: bundle)
+                } else {
+                    Text("audiocpp_server \(R2T2Runtime.version) starts with the first dictation and restarts if it stops.", bundle: bundle)
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            licenseNote
+        }
+    }
+
+    private func modelRow(_ model: R2T2ModelDefinition) -> some View {
+        let isInstalled = installed.contains(model.id)
+        let isDownloading = download.modelId == model.id
+        return HStack(spacing: 10) {
+            Image(systemName: selectedModel == model ? "largecircle.fill.circle" : "circle")
+                .foregroundStyle(isInstalled ? Color.accentColor : .secondary)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(model == .recommended
+                    ? String(localized: "\(model.displayName) (recommended)", bundle: bundle)
+                    : model.displayName)
+                Text("\(ByteCountFormatter.string(fromByteCount: model.fileSize, countStyle: .file)) · \(summary(model))")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            if isDownloading {
+                ProgressView(value: download.progress)
+                    .frame(width: 100)
+                Button(String(localized: "Cancel", bundle: bundle)) { plugin.cancelDownload() }
+                    .controlSize(.small)
+            } else if isInstalled {
+                Button(String(localized: "Delete", bundle: bundle)) { modelToDelete = model }
+                    .controlSize(.small)
+            } else {
+                Button(String(localized: "Download", bundle: bundle)) { plugin.startDownload(model) }
+                    .controlSize(.small)
+                    .disabled(download.modelId != nil)
+            }
+        }
+        .contentShape(Rectangle())
+        .onTapGesture {
+            guard isInstalled else { return }
+            plugin.setBuiltInModel(model)
+            refresh()
+        }
+    }
+
+    private func summary(_ model: R2T2ModelDefinition) -> String {
+        switch model {
+        case .q4km: return String(localized: "Smallest and fastest, community quant by Nairod785", bundle: bundle)
+        case .f16: return String(localized: "Full precision, largest", bundle: bundle)
+        default: return String(localized: "Near full quality, by davidxifeng", bundle: bundle)
+        }
+    }
+
+    private var licenseNote: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("The model weights are licensed by NetEase Youdao under the Confucius4-R2T2 Model Use License, which is downloaded with each model (LICENSE, LICENSE_zh, NOTICE). By downloading you accept it. The server is audio.cpp, Apache-2.0.", bundle: bundle)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 12) {
+                Link(String(localized: "Model license", bundle: bundle),
+                     destination: selectedModel.repositoryURL.appendingPathComponent("blob/\(selectedModel.revision)/LICENSE"))
+                Link("audio.cpp \(R2T2Runtime.version)", destination: R2T2Runtime.releaseURL)
+                if let directory = plugin.assets?.modelDirectory(selectedModel), installed.contains(selectedModel.id) {
+                    Button(String(localized: "Show in Finder", bundle: bundle)) {
+                        NSWorkspace.shared.activateFileViewerSelecting([directory])
+                    }
+                    .buttonStyle(.link)
+                }
+            }
+            .font(.caption)
+        }
+    }
+
+    // MARK: Own server
+
+    private var customServerSection: some View {
         VStack(alignment: .leading, spacing: 16) {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Server URL", bundle: bundle)
@@ -671,47 +947,49 @@ private struct R2T2SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+        }
+    }
 
-            HStack(spacing: 8) {
+    private var testRow: some View {
+        HStack(spacing: 8) {
+            if mode == .custom {
                 Button(String(localized: "Save", bundle: bundle)) {
                     save()
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.small)
-
-                Button(String(localized: "Test Connection", bundle: bundle)) {
-                    save()
-                    runTest()
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .disabled(isTesting)
-
-                if isTesting {
-                    ProgressView().controlSize(.small)
-                } else if let testError {
-                    Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
-                    Text(testError)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                        .lineLimit(2)
-                } else if testSucceeded {
-                    Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
-                    Text("Connected", bundle: bundle)
-                        .font(.caption)
-                        .foregroundStyle(.green)
-                }
             }
 
-            Text("Audio is streamed as 16 kHz PCM to your local audio.cpp server. Nothing is sent anywhere else.", bundle: bundle)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            Button(String(localized: "Test Connection", bundle: bundle)) {
+                if mode == .custom { save() }
+                runTest()
+            }
+            .buttonStyle(.bordered)
+            .controlSize(.small)
+            .disabled(isTesting || (mode == .builtIn && !installed.contains(selectedModel.id)))
+
+            if isTesting {
+                ProgressView().controlSize(.small)
+            } else if let testError {
+                Image(systemName: "xmark.circle.fill").foregroundStyle(.red)
+                Text(testError)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+                    .lineLimit(2)
+            } else if testSucceeded {
+                Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                Text("Connected", bundle: bundle)
+                    .font(.caption)
+                    .foregroundStyle(.green)
+            }
         }
-        .padding()
-        .onAppear {
-            serverURL = plugin.serverURLString
-            modelId = plugin.modelId
-        }
+    }
+
+    private func refresh() {
+        selectedModel = plugin._builtInModel
+        installed = Set(plugin.downloadedModels.map(\.id))
+        download = plugin.download.withLock { $0 }
+        runningPort = plugin.server?.baseURL?.port
     }
 
     private func save() {
@@ -731,6 +1009,7 @@ private struct R2T2SettingsView: View {
                 isTesting = false
                 testError = error
                 testSucceeded = error == nil
+                refresh()
             }
         }
     }
