@@ -474,9 +474,13 @@ final class R2T2ManagedServer: @unchecked Sendable {
     }
 
     /// Concurrent callers for the same model share one start; a start for another model waits for it.
-    func ensureRunning(model: R2T2ModelDefinition) async throws -> URL {
-        enum Decision { case ready(URL), wait(Task<URL, Error>) }
+    /// With `expectedGeneration`, nothing starts once stop() has moved past that generation.
+    func ensureRunning(model: R2T2ModelDefinition, expectedGeneration: Int? = nil) async throws -> URL {
+        enum Decision { case ready(URL), wait(Task<URL, Error>), stopped }
         let decision = state.withLock { state -> Decision in
+            if let expectedGeneration, state.generation != expectedGeneration {
+                return .stopped
+            }
             if state.isReady, state.process?.isRunning == true, state.model == model, let url = state.baseURL {
                 return .ready(url)
             }
@@ -498,6 +502,8 @@ final class R2T2ManagedServer: @unchecked Sendable {
             return .wait(task)
         }
         switch decision {
+        case .stopped:
+            throw CancellationError()
         case .ready(let url):
             return url
         case .wait(let task):
@@ -656,9 +662,8 @@ final class R2T2ManagedServer: @unchecked Sendable {
         Self.logger.warning("audiocpp_server exited with status \(process.terminationStatus); restarting")
         Task {
             try? await Task.sleep(for: .seconds(1))
-            // Skip the restart when stop() was called in the meantime.
-            guard state.withLock({ $0.generation }) == restart.generation else { return }
-            _ = try? await ensureRunning(model: selectedModel?() ?? restart.model)
+            // Skipped when stop() was called in the meantime; checked inside ensureRunning's decision lock.
+            _ = try? await ensureRunning(model: selectedModel?() ?? restart.model, expectedGeneration: restart.generation)
         }
     }
 
