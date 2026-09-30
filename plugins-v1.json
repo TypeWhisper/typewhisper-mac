@@ -2055,18 +2055,29 @@
     },
     {
       "id": "com.typewhisper.gemma4",
-      "name": "Gemma 4",
+      "name": "Local LLM (MLX)",
       "author": "TypeWhisper",
-      "description": "Local LLM powered by Google Gemma 4 on Apple Silicon via MLX. No API key required.",
+      "description": "Local LLM on Apple Silicon via MLX with Gemma 4, Qwen3.5, and LFM2.5 models. No API key required.",
       "descriptions": {
-        "de": "Lokales LLM mit Google Gemma 4 auf Apple Silicon via MLX. Kein API-Key erforderlich.",
-        "ja": "Apple Silicon\u4e0a\u3067MLX\u7d4c\u7531\u3067\u52d5\u4f5c\u3059\u308bGoogle Gemma 4\u30ed\u30fc\u30ab\u30ebLLM\u3067\u3059\u3002API\u30ad\u30fc\u306f\u4e0d\u8981\u3067\u3059\u3002"
+        "de": "Lokales LLM auf Apple Silicon via MLX mit Gemma-4-, Qwen3.5- und LFM2.5-Modellen. Kein API-Key erforderlich.",
+        "ja": "Apple Silicon\u4e0a\u3067MLX\u7d4c\u7531\u3067\u52d5\u4f5c\u3059\u308b\u30ed\u30fc\u30ab\u30ebLLM\u3002Gemma 4\u3001Qwen3.5\u3001LFM2.5\u30e2\u30c7\u30eb\u306b\u5bfe\u5fdc\u3002API\u30ad\u30fc\u306f\u4e0d\u8981\u3067\u3059\u3002"
       },
       "category": "llm",
       "downloadCount": 5897,
       "iconSystemName": "cpu",
       "detailsURL": "https://www.typewhisper.com/addons/gemma4/",
       "releases": [
+        {
+          "version": "1.1.7",
+          "minHostVersion": "1.7.0",
+          "sdkCompatibilityVersion": "v1",
+          "size": 17912544,
+          "downloadURL": "https://github.com/TypeWhisper/typewhisper-mac/releases/download/plugin-gemma4-v1.1.7/Gemma4Plugin.zip",
+          "minOSVersion": "14.0",
+          "supportedArchitectures": [
+            "arm64"
+          ]
+        },
         {
           "version": "1.1.6",
           "minHostVersion": "1.6.0",
