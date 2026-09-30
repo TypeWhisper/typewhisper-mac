@@ -17,18 +17,18 @@
         }
       }
     },
-    "Audio is streamed as 16 kHz PCM to your local audio.cpp server. Nothing is sent anywhere else.": {
+    "Audio is streamed as 16 kHz PCM only to the audio.cpp server configured here.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Audio wird als 16-kHz-PCM an deinen lokalen audio.cpp-Server gestreamt. Es werden keine Daten an andere Stellen gesendet."
+            "value": "Audio wird als 16-kHz-PCM nur an den hier eingestellten audio.cpp-Server gestreamt."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "音频以 16 kHz PCM 流式传输到你本地的 audio.cpp 服务器，不会发送到其他任何地方。"
+            "value": "音频以 16 kHz PCM 流式传输，仅发送到此处配置的 audio.cpp 服务器。"
           }
         }
       }

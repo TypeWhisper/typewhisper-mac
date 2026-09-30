@@ -6,23 +6,41 @@ Transcription engine plugin that streams microphone audio to a local
 its append-only transcript. Supports batch transcription, progress streaming, and TypeWhisper
 live sessions. Runs fully on-device; no GPU server needed.
 
-## Server
+## Built-in server (default)
 
-Build audio.cpp with Metal (the Homebrew bottle may predate R2T2 support):
+Pick a model in the plugin settings and download it. The plugin fetches the pinned
+[audio.cpp v0.9.0](https://github.com/0xShug0/audio.cpp/releases/tag/v0.9.0) release
+(`audio-v0.9.0-bin-macos-arm64-metal.tar.gz`) and the GGUF at a pinned Hugging Face revision,
+checks size and SHA-256 of both, and stores them in the plugin data directory together with the
+model's `LICENSE`, `LICENSE_zh` and `NOTICE`:
+
+| Model | Size | Source |
+|---|---|---|
+| Q4_K_M | 1.19 GB | `Nairod785/Confucius4-R2T2-Q4_K_M-GGUF` |
+| Q8_0 (recommended) | 2.48 GB | `davidxifeng/Confucius4-R2T2-gguf` |
+| F16 | 4.09 GB | `davidxifeng/Confucius4-R2T2-gguf` |
+
+`audiocpp_server` then runs on `127.0.0.1` with a random port. It starts with the first dictation,
+stops with TypeWhisper (a small shell watchdog stops it even if TypeWhisper crashes), and is
+restarted after an unexpected exit, at most three times a minute. Pins are changed only by a new
+plugin release.
+
+## Own server
+
+Use audio.cpp v0.9.0 or newer, from the release archive (`chmod +x audiocpp_server` after
+unpacking, since the archive ships it without the executable bit) or built with Metal:
 
 ```sh
 git clone --recurse-submodules https://github.com/0xShug0/audio.cpp
 cd audio.cpp && scripts/build_metal.sh --build-type Release --deployment-build
 ```
 
-Get the GGUF (Q8_0 or F16; lower quantizations are rejected by audio.cpp) and make sure the
-file the server opens is named `*.gguf`. HuggingFace cache symlinks resolve to extension-less
-blobs, which audio.cpp cannot identify, so hardlink or copy it:
+Get a GGUF (Q8_0, F16, or the community Q4_K_M) and make sure the file the server opens is named
+`*.gguf`. HuggingFace cache symlinks resolve to extension-less blobs, which audio.cpp cannot
+identify, so download into a plain directory:
 
 ```sh
-hf download davidxifeng/Confucius4-R2T2-gguf r2t2-q8_0.gguf
-ln "$(readlink -f ~/.cache/huggingface/hub/models--davidxifeng--Confucius4-R2T2-gguf/snapshots/*/r2t2-q8_0.gguf)" \
-   models/Confucius4-R2T2-GGUF/r2t2-q8_0.gguf
+hf download davidxifeng/Confucius4-R2T2-gguf r2t2-q8_0.gguf --local-dir models/Confucius4-R2T2-GGUF
 ```
 
 Server config (`server.json`):
@@ -42,14 +60,12 @@ Server config (`server.json`):
 build/macos-metal-release/bin/audiocpp_server --config server.json
 ```
 
-## Settings
-
 | Setting | Default | Notes |
 |---|---|---|
-| Server URL | `http://127.0.0.1:8488` | `https://` also works |
+| Server URL | `http://127.0.0.1:8488` | `https://` also works. Audio goes to this host, so use a non-local one only if you trust it, and prefer `https://` there: plain `http://` sends the audio unencrypted over the network. |
 | Model ID | `r2t2` | Must match a model entry with `mode: "streaming"` |
 
-Test Connection checks `/v1/models` for the configured id and mode.
+Test Connection checks `/v1/models` for the model id and mode, in both modes.
 
 ## Protocol
 

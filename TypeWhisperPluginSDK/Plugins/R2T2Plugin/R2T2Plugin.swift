@@ -77,6 +77,8 @@ enum R2T2Protocol {
         var components = URLComponents()
         components.path = "/v1/audio/transcriptions/live"
         components.queryItems = items
+        // URLComponents leaves "+" alone, but the server decodes it as a space ("C++" would become "C  ").
+        components.percentEncodedQuery = components.percentEncodedQuery?.replacingOccurrences(of: "+", with: "%2B")
         return components.string ?? "/v1/audio/transcriptions/live"
     }
 
@@ -296,10 +298,17 @@ private final class R2T2LiveConnection: @unchecked Sendable {
     /// Includes model load on the server's first request after startup or idle unload.
     private static let finishTimeout: Duration = .seconds(120)
 
+    /// What the receive callbacks report; one consumer task applies these in arrival order.
+    private enum Input {
+        case events([R2T2Protocol.ServerEvent])
+        case failed(String)
+        case closed
+    }
+
     private let connection: NWConnection
     private let queue = DispatchQueue(label: "com.scriptease.r2t2.live")
-    private let collector = R2T2TranscriptCollector()
-    private let onProgress: @Sendable (String) -> Bool
+    private let collector: R2T2TranscriptCollector
+    private let inputs: AsyncStream<Input>.Continuation
     private let parserLock = OSAllocatedUnfairLock(initialState: R2T2ResponseParser())
     private var sentTerminator = false
 
@@ -313,7 +322,41 @@ private final class R2T2LiveConnection: @unchecked Sendable {
         }
         let parameters = isTLS ? NWParameters.tls : NWParameters.tcp
         connection = NWConnection(host: NWEndpoint.Host(host), port: endpointPort, using: parameters)
-        self.onProgress = onProgress
+        let collector = R2T2TranscriptCollector()
+        self.collector = collector
+        let (stream, inputs) = AsyncStream<Input>.makeStream()
+        self.inputs = inputs
+        Task {
+            for await input in stream {
+                switch input {
+                case .events(let events):
+                    for event in events {
+                        switch event {
+                        case .delta(let delta):
+                            guard !delta.isEmpty else { continue }
+                            await collector.append(delta)
+                            _ = onProgress(await collector.text)
+                        case .done(let text):
+                            await collector.setFinalText(text)
+                        case .error(let message):
+                            await collector.setError(message)
+                        case .finished:
+                            await collector.complete()
+                        }
+                    }
+                case .failed(let message):
+                    // A reset after the server already finished is just the server hanging up.
+                    if await collector.finalText == nil {
+                        await collector.setError(message)
+                    } else {
+                        await collector.complete()
+                    }
+                case .closed:
+                    await collector.complete()
+                }
+            }
+            await collector.complete()
+        }
 
         try await waitUntilReady(serverURL: serverURL)
         try await send(R2T2Protocol.makeLiveRequestHead(serverURL: serverURL, modelId: modelId, language: language, prompt: prompt))
@@ -322,42 +365,63 @@ private final class R2T2LiveConnection: @unchecked Sendable {
 
     private func waitUntilReady(serverURL: URL) async throws {
         let connection = self.connection
-        let ready: Bool = try await withThrowingTaskGroup(of: Bool.self) { group in
-            group.addTask {
-                try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Bool, Error>) in
-                    let resumed = OSAllocatedUnfairLock(initialState: false)
-                    connection.stateUpdateHandler = { state in
-                        switch state {
-                        case .ready:
-                            if !resumed.withLock({ let was = $0; $0 = true; return was }) { continuation.resume(returning: true) }
-                        case .failed(let error):
-                            if !resumed.withLock({ let was = $0; $0 = true; return was }) { continuation.resume(throwing: error) }
-                        case .cancelled:
-                            if !resumed.withLock({ let was = $0; $0 = true; return was }) {
-                                continuation.resume(throwing: CancellationError())
+        let timedOut = OSAllocatedUnfairLock(initialState: false)
+        let ready: Bool
+        do {
+            ready = try await withThrowingTaskGroup(of: Bool.self) { group in
+                group.addTask {
+                    // Without this, a caller cancelled while the connection is .waiting would wait forever.
+                    try await withTaskCancellationHandler {
+                        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Bool, Error>) in
+                            let resumed = OSAllocatedUnfairLock(initialState: false)
+                            connection.stateUpdateHandler = { state in
+                                switch state {
+                                case .ready:
+                                    if !resumed.withLock({ let was = $0; $0 = true; return was }) { continuation.resume(returning: true) }
+                                case .failed(let error):
+                                    if !resumed.withLock({ let was = $0; $0 = true; return was }) { continuation.resume(throwing: error) }
+                                case .cancelled:
+                                    if !resumed.withLock({ let was = $0; $0 = true; return was }) {
+                                        continuation.resume(throwing: CancellationError())
+                                    }
+                                default:
+                                    break
+                                }
                             }
-                        default:
-                            break
+                            guard !Task.isCancelled else {
+                                if !resumed.withLock({ let was = $0; $0 = true; return was }) {
+                                    continuation.resume(throwing: CancellationError())
+                                }
+                                return
+                            }
+                            connection.start(queue: self.queue)
                         }
+                    } onCancel: {
+                        connection.cancel()
                     }
-                    connection.start(queue: self.queue)
                 }
+                group.addTask {
+                    try await Task.sleep(for: Self.connectTimeout)
+                    // Cancelling moves the connection to .cancelled, which resumes the waiting child.
+                    timedOut.withLock { $0 = true }
+                    connection.cancel()
+                    return false
+                }
+                let first = try await group.next() ?? false
+                group.cancelAll()
+                return first
             }
-            group.addTask {
-                try await Task.sleep(for: Self.connectTimeout)
-                return false
-            }
-            let first = try await group.next() ?? false
-            group.cancelAll()
-            return first
+        } catch where timedOut.withLock({ $0 }) {
+            // The waiting child's CancellationError can arrive before the timeout child's result.
+            ready = false
         }
         guard ready else {
             connection.cancel()
             throw PluginTranscriptionError.networkError("Timed out connecting to R2T2 server at \(serverURL.absoluteString)")
         }
-        connection.stateUpdateHandler = { [collector] state in
+        connection.stateUpdateHandler = { [inputs] state in
             if case .failed(let error) = state {
-                Task { await collector.setError(error.localizedDescription) }
+                inputs.yield(.failed(error.localizedDescription))
             }
         }
     }
@@ -377,36 +441,17 @@ private final class R2T2LiveConnection: @unchecked Sendable {
     private func receiveLoop() {
         connection.receive(minimumIncompleteLength: 1, maximumLength: 65_536) { [weak self] data, _, isComplete, error in
             guard let self else { return }
-            let collector = self.collector
-            let onProgress = self.onProgress
-            let events = data.map { chunk in self.parserLock.withLock { $0.feed(chunk) } } ?? []
-            Task {
-                for event in events {
-                    switch event {
-                    case .delta(let delta):
-                        guard !delta.isEmpty else { continue }
-                        await collector.append(delta)
-                        _ = onProgress(await collector.text)
-                    case .done(let text):
-                        await collector.setFinalText(text)
-                    case .error(let message):
-                        await collector.setError(message)
-                    case .finished:
-                        await collector.complete()
-                    }
-                }
-                if let error {
-                    // A reset after the server already finished is just the server hanging up.
-                    if await collector.finalText == nil {
-                        await collector.setError(error.localizedDescription)
-                    } else {
-                        await collector.complete()
-                    }
-                } else if isComplete {
-                    await collector.complete()
-                }
+            if let data {
+                let events = self.parserLock.withLock { $0.feed(data) }
+                if !events.isEmpty { self.inputs.yield(.events(events)) }
             }
-            if error == nil && !isComplete {
+            if let error {
+                self.inputs.yield(.failed(error.localizedDescription))
+                self.inputs.finish()
+            } else if isComplete {
+                self.inputs.yield(.closed)
+                self.inputs.finish()
+            } else {
                 self.receiveLoop()
             }
         }
@@ -431,27 +476,44 @@ private final class R2T2LiveConnection: @unchecked Sendable {
         }
 
         let collector = self.collector
-        let completed = await withTaskGroup(of: Bool.self) { group in
-            group.addTask { await collector.waitForCompletion(); return true }
-            group.addTask { try? await Task.sleep(for: Self.finishTimeout); return false }
-            let first = await group.next() ?? false
+        let timedOut = OSAllocatedUnfairLock(initialState: false)
+        await withTaskGroup(of: Void.self) { group in
+            group.addTask { await collector.waitForCompletion() }
+            group.addTask {
+                // The sleep ends early when the transcript completes first or the caller is cancelled.
+                if (try? await Task.sleep(for: Self.finishTimeout)) != nil {
+                    timedOut.withLock { $0 = true }
+                }
+                // Releases the waiting child; the group cannot return while it is still suspended.
+                await collector.complete()
+            }
+            await group.next()
             group.cancelAll()
-            return first
         }
         connection.cancel()
-        if !completed {
-            Self.logger.warning("Timed out waiting for the final R2T2 transcript")
-        }
+        inputs.finish()
         if let error = await collector.error {
             throw PluginTranscriptionError.apiError(error)
         }
         if let finalText = await collector.finalText { return finalText }
-        return await collector.text
+        let text = await collector.text
+        if timedOut.withLock({ $0 }) {
+            // Keep what was already dictated; fail only when nothing arrived.
+            Self.logger.warning("Timed out waiting for the final R2T2 transcript")
+            if text.isEmpty { throw PluginTranscriptionError.networkError("Timed out waiting for the R2T2 transcript") }
+        }
+        return text
     }
 
     func cancel() {
         connection.cancel()
-        Task { await collector.complete() }
+        inputs.finish()
+    }
+
+    /// Ends the consumer task when the connection is dropped without finish() or cancel(),
+    /// for example when init throws after connecting.
+    deinit {
+        inputs.finish()
     }
 }
 
@@ -517,7 +579,8 @@ final class R2T2Plugin: NSObject, TranscriptionEnginePlugin, LiveTranscriptionCa
     fileprivate var assets: R2T2ManagedAssets?
     fileprivate var server: R2T2ManagedServer?
     fileprivate let download = OSAllocatedUnfairLock(initialState: R2T2DownloadSnapshot())
-    private var downloadTask: Task<Void, Never>?
+    /// Only touched on the main actor, where the settings view reads it.
+    @MainActor private var downloadTask: Task<Void, Never>?
 
     required override init() {
         super.init()
@@ -545,7 +608,7 @@ final class R2T2Plugin: NSObject, TranscriptionEnginePlugin, LiveTranscriptionCa
     }
 
     func deactivate() {
-        downloadTask?.cancel()
+        Task { @MainActor in self.downloadTask?.cancel() }
         server?.stop()
         server = nil
         host = nil
@@ -693,11 +756,12 @@ final class R2T2Plugin: NSObject, TranscriptionEnginePlugin, LiveTranscriptionCa
         host?.notifyCapabilitiesChanged()
     }
 
-    fileprivate func startDownload(_ model: R2T2ModelDefinition) {
+    @MainActor fileprivate func startDownload(_ model: R2T2ModelDefinition) {
         guard let assets, downloadTask == nil else { return }
         let download = self.download
         download.withLock { $0 = R2T2DownloadSnapshot(modelId: model.id) }
-        downloadTask = Task { [weak self] in
+        // Runs on the main actor; install() itself is nonisolated and does its work off the main thread.
+        downloadTask = Task { @MainActor [weak self] in
             do {
                 try await assets.install(model) { fraction in
                     download.withLock { $0.progress = fraction }
@@ -714,7 +778,7 @@ final class R2T2Plugin: NSObject, TranscriptionEnginePlugin, LiveTranscriptionCa
         }
     }
 
-    fileprivate func cancelDownload() {
+    @MainActor fileprivate func cancelDownload() {
         downloadTask?.cancel()
     }
 
@@ -797,7 +861,7 @@ private struct R2T2SettingsView: View {
 
             testRow
 
-            Text("Audio is streamed as 16 kHz PCM to your local audio.cpp server. Nothing is sent anywhere else.", bundle: bundle)
+            Text("Audio is streamed as 16 kHz PCM only to the audio.cpp server configured here.", bundle: bundle)
                 .font(.caption)
                 .foregroundStyle(.secondary)
         }

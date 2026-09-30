@@ -31,6 +31,44 @@ final class R2T2PluginTests: XCTestCase {
         XCTAssertFalse(R2T2Protocol.livePath(modelId: "r2t2", language: nil, prompt: "").contains("prompt"))
     }
 
+    func testPromptPlusIsPercentEncoded() {
+        let path = R2T2Protocol.livePath(modelId: "r2t2", language: nil, prompt: "C++, a+b")
+        XCTAssertTrue(path.contains("prompt=C%2B%2B,%20a%2Bb"), path)
+        XCTAssertFalse(path.contains("+"), path)
+    }
+
+    func testConnectTimesOutWhenNothingListens() async throws {
+        // TEST-NET-1 (RFC 5737) is not routed, so the connection neither succeeds nor fails and
+        // only the connect timeout ends it. Without a route it may also fail fast; both must not hang.
+        let host = try PluginTestHostServices(defaults: [R2T2Plugin.serverURLKey: "http://192.0.2.1:9"])
+        let plugin = R2T2Plugin()
+        plugin.activate(host: host)
+        let started = Date()
+        do {
+            _ = try await plugin.transcribe(audio: AudioData(samples: [0], wavData: Data(), duration: 0),
+                                            language: nil, translate: false, prompt: nil)
+            XCTFail("expected a connection error")
+        } catch {
+            XCTAssertFalse(error is CancellationError, "timeouts must surface as a connection error, got \(error)")
+        }
+        XCTAssertLessThan(Date().timeIntervalSince(started), 15, "connect timeout did not fire")
+    }
+
+    func testCancellingWhileConnectingEndsPromptly() async throws {
+        let host = try PluginTestHostServices(defaults: [R2T2Plugin.serverURLKey: "http://192.0.2.1:9"])
+        let plugin = R2T2Plugin()
+        plugin.activate(host: host)
+        let task = Task {
+            try await plugin.transcribe(audio: AudioData(samples: [0], wavData: Data(), duration: 0),
+                                        language: nil, translate: false, prompt: nil)
+        }
+        try await Task.sleep(for: .milliseconds(300))
+        let started = Date()
+        task.cancel()
+        _ = try? await task.value
+        XCTAssertLessThan(Date().timeIntervalSince(started), 2, "cancellation did not end the connect")
+    }
+
     func testContextPromptJoinsDictionaryTerms() {
         XCTAssertNil(R2T2Protocol.contextPrompt(from: nil))
         XCTAssertNil(R2T2Protocol.contextPrompt(from: "   "))
@@ -180,6 +218,38 @@ final class R2T2PluginTests: XCTestCase {
             fileManager.createFile(atPath: assets.modelDirectory(model).appendingPathComponent(name).path, contents: Data("license".utf8))
         }
 
+        // Concurrent starts for the same model share one server process.
+        let server = R2T2ManagedServer(assets: assets)
+        async let firstURL = server.ensureRunning(model: model)
+        async let secondURL = server.ensureRunning(model: model)
+        let urls = try await [firstURL, secondURL]
+        XCTAssertEqual(urls[0], urls[1])
+        XCTAssertEqual(Self.serverProcessCount(config: assets.serverConfigURL), 1)
+        // A start for a model that is not installed waits for the running start and leaves its server alone.
+        async let thirdURL = server.ensureRunning(model: model)
+        async let missing: URL? = try? server.ensureRunning(model: .f16)
+        let (running, failed) = try await (thirdURL, missing)
+        XCTAssertNil(failed)
+        XCTAssertEqual(server.baseURL, running)
+        XCTAssertEqual(Self.serverProcessCount(config: assets.serverConfigURL), 1)
+        // Stop within the one-second window before a crash restart: the server must stay down.
+        try Self.killServer(config: assets.serverConfigURL)
+        try await Task.sleep(for: .milliseconds(300))
+        server.stop()
+        XCTAssertNil(server.baseURL, "stop() returns at once")
+        try await Self.waitForServerProcessCount(0, config: assets.serverConfigURL)
+        try await Task.sleep(for: .seconds(2))
+        XCTAssertEqual(Self.serverProcessCount(config: assets.serverConfigURL), 0, "crash restart ran after stop()")
+
+        // Stop during an in-flight start: the start fails and leaves no server behind.
+        let inFlight = Task { try await server.ensureRunning(model: model) }
+        try await Task.sleep(for: .milliseconds(50))
+        server.stop()
+        let startResult = await inFlight.result
+        XCTAssertThrowsError(try startResult.get())
+        try await Task.sleep(for: .seconds(1))
+        try await Self.waitForServerProcessCount(0, config: assets.serverConfigURL)
+
         let plugin = R2T2Plugin()
         plugin.activate(host: host)
         defer { plugin.deactivate() }
@@ -189,12 +259,9 @@ final class R2T2PluginTests: XCTestCase {
         let first = try await plugin.transcribe(audio: audio, language: "en", translate: false, prompt: nil)
         XCTAssertTrue(first.text.lowercased().contains("mother nature"), first.text)
 
-        let pkill = Process()
-        pkill.executableURL = URL(fileURLWithPath: "/usr/bin/pkill")
-        pkill.arguments = ["-KILL", "-f", "audiocpp_server --config \(assets.serverConfigURL.path)"]
-        try pkill.run()
-        pkill.waitUntilExit()
-        XCTAssertEqual(pkill.terminationStatus, 0, "server process not found")
+        try Self.killServer(config: assets.serverConfigURL)
+        // The supervisor polls its child every 0.25 s; after that the plugin sees the exit and restarts.
+        try await Task.sleep(for: .milliseconds(500))
 
         let second = try await plugin.transcribe(audio: audio, language: "en", translate: false, prompt: nil)
         XCTAssertTrue(second.text.lowercased().contains("mother nature"), second.text)
@@ -213,6 +280,35 @@ final class R2T2PluginTests: XCTestCase {
         XCTAssertTrue(assets.isModelInstalled(.q4km))
         XCTAssertEqual(progress.withLock { $0.last }, 1)
         XCTAssertGreaterThan(progress.withLock { $0.count }, 10)
+    }
+
+    private static func killServer(config: URL) throws {
+        let pkill = Process()
+        pkill.executableURL = URL(fileURLWithPath: "/usr/bin/pkill")
+        pkill.arguments = ["-KILL", "-f", "^[^ ]*audiocpp_server --config \(config.path)"]
+        try pkill.run()
+        pkill.waitUntilExit()
+        XCTAssertEqual(pkill.terminationStatus, 0, "server process not found")
+    }
+
+    private static func waitForServerProcessCount(_ expected: Int, config: URL) async throws {
+        let deadline = Date().addingTimeInterval(10)
+        while serverProcessCount(config: config) != expected, Date() < deadline {
+            try await Task.sleep(for: .milliseconds(100))
+        }
+        XCTAssertEqual(serverProcessCount(config: config), expected)
+    }
+
+    private static func serverProcessCount(config: URL) -> Int {
+        let pgrep = Process()
+        pgrep.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
+        pgrep.arguments = ["-f", "^[^ ]*audiocpp_server --config \(config.path)"]
+        let output = Pipe()
+        pgrep.standardOutput = output
+        try? pgrep.run()
+        pgrep.waitUntilExit()
+        return String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+            .split(whereSeparator: \.isNewline).count
     }
 
     private static func sampleAudio() throws -> ([Float], Data) {

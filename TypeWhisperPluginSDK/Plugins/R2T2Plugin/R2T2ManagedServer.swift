@@ -170,16 +170,15 @@ struct R2T2ManagedAssets: Sendable {
         }
         progress(0.01)
         if needsModel {
-            let destination = modelFileURL(model)
-            try await R2T2Download.file(from: model.fileURL(model.fileName), to: destination, name: model.fileName) { fraction in
+            // Verified at a staging path first: isModelInstalled checks only the size of the final file.
+            let staged = modelFileURL(model).appendingPathExtension("partial")
+            defer { try? fileManager.removeItem(at: staged) }
+            try await R2T2Download.file(from: model.fileURL(model.fileName), to: staged, name: model.fileName) { fraction in
                 progress(0.01 + fraction * 0.98)
             }
-            do {
-                try Self.verify(destination, size: model.fileSize, sha256: model.sha256)
-            } catch {
-                try? fileManager.removeItem(at: destination)
-                throw error
-            }
+            try Self.verify(staged, size: model.fileSize, sha256: model.sha256)
+            try? fileManager.removeItem(at: modelFileURL(model))
+            try fileManager.moveItem(at: staged, to: modelFileURL(model))
         }
         progress(1)
     }
@@ -344,24 +343,47 @@ final class R2T2ManagedServer: @unchecked Sendable {
         var outputTail = ""
         var isReady = false
         var recentExits: [Date] = []
-        var starting: Task<URL, Error>?
+        var starting: (model: R2T2ModelDefinition, task: Task<URL, Error>)?
+        /// Bumped by stop(); starts and crash restarts from an older generation do not launch a server.
+        var generation = 0
     }
 
     private static let logger = Logger(subsystem: "com.scriptease.r2t2", category: "Server")
     private static let startupTimeout: TimeInterval = 60
+    /// The supervisor escalates to SIGKILL for the server after about 6 seconds.
+    private static let shutdownTimeout: TimeInterval = 10
     private static let maxRestartsPerMinute = 3
-    /// Keeps the server a child of TypeWhisper: it is stopped when TypeWhisper exits, even on a crash.
+    /// Keeps the server a child of TypeWhisper: it is stopped when TypeWhisper exits, even on a crash,
+    /// and is killed if it ignores SIGTERM for 5 seconds.
     private static let supervisorScript = """
         parent_pid="$1"
         shift
         "$@" &
         child_pid=$!
-        trap 'kill -TERM "$child_pid" 2>/dev/null; wait "$child_pid"; exit 143' TERM INT
+
+        terminate_child() {
+          trap - TERM INT
+          if kill -0 "$child_pid" 2>/dev/null; then
+            kill -TERM "$child_pid" 2>/dev/null || true
+            attempt=0
+            while kill -0 "$child_pid" 2>/dev/null && [ "$attempt" -lt 100 ]; do
+              sleep 0.05
+              attempt=$((attempt + 1))
+            done
+            if kill -0 "$child_pid" 2>/dev/null; then
+              kill -KILL "$child_pid" 2>/dev/null || true
+            fi
+          fi
+          wait "$child_pid" 2>/dev/null || true
+        }
+
+        trap 'terminate_child; exit 143' TERM INT
         while kill -0 "$parent_pid" 2>/dev/null && kill -0 "$child_pid" 2>/dev/null; do
           sleep 0.25
         done
         if ! kill -0 "$parent_pid" 2>/dev/null; then
-          kill -TERM "$child_pid" 2>/dev/null
+          terminate_child
+          exit 0
         fi
         wait "$child_pid"
         """
@@ -384,21 +406,82 @@ final class R2T2ManagedServer: @unchecked Sendable {
     }
 
     /// Returns the URL of a ready server for `model`, starting or restarting it when needed.
+    /// Concurrent callers for the same model share one start; a start for another model waits for it.
     func ensureRunning(model: R2T2ModelDefinition) async throws -> URL {
-        let (existing, pending) = state.withLock { state in
-            (state.process?.isRunning == true && state.model == model ? state.baseURL : nil, state.starting)
+        enum Decision { case ready(URL), wait(Task<URL, Error>) }
+        let decision = state.withLock { state -> Decision in
+            if state.isReady, state.process?.isRunning == true, state.model == model, let url = state.baseURL {
+                return .ready(url)
+            }
+            if let starting = state.starting, starting.model == model {
+                return .wait(starting.task)
+            }
+            let previous = state.starting?.task
+            let generation = state.generation
+            let task = Task {
+                _ = try? await previous?.value
+                return try await self.start(model: model, generation: generation)
+            }
+            state.starting = (model, task)
+            return .wait(task)
         }
-        if let existing { return existing }
-        if let pending, let url = try? await pending.value, runningModel == model {
+        switch decision {
+        case .ready(let url):
             return url
+        case .wait(let task):
+            defer { state.withLock { if $0.starting?.task == task { $0.starting = nil } } }
+            return try await task.value
         }
-        let task = Task { try await self.start(model: model) }
-        state.withLock { $0.starting = task }
-        defer { state.withLock { if $0.starting == task { $0.starting = nil } } }
-        return try await task.value
     }
 
+    /// Stops the server, an in-flight start and a pending crash restart, without blocking the caller,
+    /// which may be the main thread.
     func stop() {
+        let starting = state.withLock { state -> Task<URL, Error>? in
+            state.generation += 1
+            defer { state.starting = nil }
+            return state.starting?.task
+        }
+        starting?.cancel()
+        terminate(detachProcess())
+    }
+
+    private func terminate(_ process: Process?) {
+        guard let process else { return }
+        process.terminate()
+        escalateInBackground(process)
+        onStatusChange?()
+    }
+
+    /// SIGKILLs the supervisor only after the full deadline, so it can first escalate for its child.
+    private func escalateInBackground(_ process: Process) {
+        DispatchQueue.global(qos: .utility).async {
+            let deadline = Date().addingTimeInterval(Self.shutdownTimeout)
+            while process.isRunning, Date() < deadline {
+                Thread.sleep(forTimeInterval: 0.05)
+            }
+            if process.isRunning { kill(process.processIdentifier, SIGKILL) }
+        }
+    }
+
+    /// Stops the server and waits for it to exit, so the next one does not compete for its memory.
+    private func stopAndWait() async {
+        guard let process = detachProcess() else { return }
+        process.terminate()
+        let deadline = Date().addingTimeInterval(Self.shutdownTimeout)
+        while process.isRunning, Date() < deadline {
+            if Task.isCancelled {
+                // A cancelled start no longer needs to wait, but the supervisor still gets its full deadline.
+                escalateInBackground(process)
+                return
+            }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        if process.isRunning { kill(process.processIdentifier, SIGKILL) }
+        onStatusChange?()
+    }
+
+    private func detachProcess() -> Process? {
         let process = state.withLock { state -> Process? in
             let process = state.process
             state.process = nil
@@ -407,23 +490,14 @@ final class R2T2ManagedServer: @unchecked Sendable {
             state.isReady = false
             return process
         }
-        guard let process, process.isRunning else { return }
-        process.terminate()
-        let deadline = Date().addingTimeInterval(5)
-        while process.isRunning, Date() < deadline {
-            Thread.sleep(forTimeInterval: 0.05)
-        }
-        if process.isRunning {
-            kill(process.processIdentifier, SIGKILL)
-        }
-        onStatusChange?()
+        return process?.isRunning == true ? process : nil
     }
 
-    private func start(model: R2T2ModelDefinition) async throws -> URL {
-        stop()
+    private func start(model: R2T2ModelDefinition, generation: Int) async throws -> URL {
         guard assets.isRuntimeInstalled, assets.isModelInstalled(model) else {
             throw R2T2ManagedError.modelNotInstalled
         }
+        await stopAndWait()
         let port = try Self.reserveLoopbackPort()
         let config: [String: Any] = [
             "host": "127.0.0.1",
@@ -465,18 +539,22 @@ final class R2T2ManagedServer: @unchecked Sendable {
         }
 
         let baseURL = URL(string: "http://127.0.0.1:\(port)")!
-        state.withLock { state in
+        // Publishing and launching under the lock means a concurrent stop() either prevents the
+        // launch or finds the process and terminates it.
+        try state.withLock { state in
+            guard state.generation == generation, !Task.isCancelled else { throw CancellationError() }
+            try process.run()
             state.process = process
             state.baseURL = baseURL
             state.model = model
             state.outputTail = ""
             state.isReady = false
         }
-        try process.run()
         do {
             try await waitUntilReady(process: process, baseURL: baseURL)
         } catch {
-            stop()
+            // Clean up only this start's process; a later start may already own the state.
+            if state.withLock({ $0.process === process }) { terminate(detachProcess()) }
             throw error
         }
         state.withLock { $0.isReady = true }
@@ -486,7 +564,7 @@ final class R2T2ManagedServer: @unchecked Sendable {
     }
 
     private func handleExit(of process: Process) {
-        let restartModel = state.withLock { state -> R2T2ModelDefinition? in
+        let restart = state.withLock { state -> (model: R2T2ModelDefinition, generation: Int)? in
             // stop() clears state.process first, so only unexpected exits get here with a match.
             // A failed startup is reported by start() instead of being retried.
             guard state.process === process, state.isReady, let model = state.model else { return nil }
@@ -495,14 +573,16 @@ final class R2T2ManagedServer: @unchecked Sendable {
             state.isReady = false
             let now = Date()
             state.recentExits = state.recentExits.filter { now.timeIntervalSince($0) < 60 } + [now]
-            return state.recentExits.count <= Self.maxRestartsPerMinute ? model : nil
+            return state.recentExits.count <= Self.maxRestartsPerMinute ? (model, state.generation) : nil
         }
         onStatusChange?()
-        guard let restartModel else { return }
+        guard let restart else { return }
         Self.logger.warning("audiocpp_server exited with status \(process.terminationStatus); restarting")
         Task {
             try? await Task.sleep(for: .seconds(1))
-            _ = try? await ensureRunning(model: restartModel)
+            // Skip the restart when stop() was called in the meantime.
+            guard state.withLock({ $0.generation }) == restart.generation else { return }
+            _ = try? await ensureRunning(model: restart.model)
         }
     }
 
