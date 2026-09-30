@@ -163,6 +163,51 @@ final class VisualShortcutKeyboardTests: XCTestCase {
         XCTAssertEqual(model.composedHotkey, stored)
     }
 
+    func testLoadLegacyGenericCombo_unchangedSavePreservesGenericSemantics() {
+        // Legacy stored combo: generic flags with no side information.
+        let stored = UnifiedHotkey(
+            keyCode: UnifiedHotkey.modifierComboKeyCode,
+            modifierFlags: NSEvent.ModifierFlags([.command, .option]).rawValue,
+            isFn: false
+        )
+        let model = makeModel(editingHotkey: stored)
+        // The UI still shows left-side codes for the generic selection.
+        XCTAssertEqual(model.composition.modifierKeyCodes, [0x37, 0x3A])
+        // Opening the editor and saving unchanged must round-trip exactly:
+        // no invented side-specific codes, so a right-side combination keeps
+        // activating it.
+        XCTAssertTrue(model.canSave)
+        XCTAssertEqual(model.composedHotkey, stored)
+    }
+
+    func testLoadLegacyGenericCombo_doubleTapOnlyEditKeepsGenericSemantics() throws {
+        let stored = UnifiedHotkey(
+            keyCode: UnifiedHotkey.modifierComboKeyCode,
+            modifierFlags: NSEvent.ModifierFlags([.command, .option]).rawValue,
+            isFn: false
+        )
+        let model = makeModel(editingHotkey: stored)
+        model.toggleDoubleTap()
+        let composed = try XCTUnwrap(model.composedHotkey)
+        XCTAssertTrue(composed.isDoubleTap)
+        XCTAssertTrue(composed.modifierKeyCodes.isEmpty)
+    }
+
+    func testLoadLegacyGenericCombo_physicalChangePersistsSides() throws {
+        let stored = UnifiedHotkey(
+            keyCode: UnifiedHotkey.modifierComboKeyCode,
+            modifierFlags: NSEvent.ModifierFlags([.command, .option]).rawValue,
+            isFn: false
+        )
+        let model = makeModel(editingHotkey: stored)
+        // Explicitly changing the physical selection replaces the generic
+        // semantics with the exact side-specific codes.
+        model.toggleModifier(.keyCode(0x37)) // deselect Left Command
+        model.toggleModifier(.keyCode(0x36)) // select Right Command
+        let composed = try XCTUnwrap(model.composedHotkey)
+        XCTAssertEqual(composed.modifierKeyCodes, [0x36, 0x3A])
+    }
+
     func testLoadModifierOnly_preselectsPhysicalKey() {
         let stored = UnifiedHotkey(keyCode: 0x3D, modifierFlags: 0, isFn: false)
         let model = makeModel(editingHotkey: stored)

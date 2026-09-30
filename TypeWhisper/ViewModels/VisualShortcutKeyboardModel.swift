@@ -42,6 +42,12 @@ struct VisualShortcutComposition: Equatable {
     var modifierKeyCodes: Set<UInt16> = []
     var isFnSelected = false
     var isDoubleTap = false
+    /// Whether the physical modifier selection was explicitly set — loaded
+    /// from a stored side-specific set or changed by the user. A legacy
+    /// stored combo carries generic flags with no side information; until
+    /// the user touches the selection, saving must keep those generic
+    /// semantics instead of persisting the left-side codes shown in the UI.
+    var modifierSelectionEdited = false
 
     /// Bare key codes the recorder itself cannot capture. Escape cancels an
     /// in-progress recording, so it can never be stored as a bare hotkey.
@@ -101,13 +107,15 @@ struct VisualShortcutComposition: Equatable {
             // Mirrors the recorder's single-modifier path: physical key code, no flags.
             return UnifiedHotkey(keyCode: code, modifierFlags: 0, isFn: false, isDoubleTap: isDoubleTap)
         }
-        // Mirrors the recorder's modifier-combo path.
+        // Mirrors the recorder's modifier-combo path. A legacy generic combo
+        // keeps its side-agnostic semantics until the user explicitly changes
+        // the physical modifier selection.
         return UnifiedHotkey(
             keyCode: UnifiedHotkey.modifierComboKeyCode,
             modifierFlags: combinedFlags().rawValue,
             isFn: false,
             isDoubleTap: isDoubleTap,
-            modifierKeyCodes: modifierKeyCodes
+            modifierKeyCodes: modifierSelectionEdited ? modifierKeyCodes : []
         )
     }
 
@@ -131,9 +139,13 @@ struct VisualShortcutComposition: Equatable {
         case .modifierCombo:
             isFnSelected = flags.contains(.function)
             if hotkey.modifierKeyCodes.isEmpty {
+                // Legacy generic combo: display left-side codes but keep the
+                // stored side-agnostic semantics until the user changes them.
                 modifierKeyCodes = Set(sideSpecificKeyCodes(for: flags))
+                modifierSelectionEdited = false
             } else {
                 modifierKeyCodes = hotkey.modifierKeyCodes
+                modifierSelectionEdited = true
             }
         case .keyWithModifiers, .bareKey:
             keyCode = hotkey.keyCode
@@ -328,6 +340,9 @@ final class VisualShortcutKeyboardModel: ObservableObject {
             } else {
                 composition.modifierKeyCodes.insert(code)
             }
+            // The user explicitly changed the physical modifier selection:
+            // saves now persist these exact side-specific codes.
+            composition.modifierSelectionEdited = true
         }
         // Removing a modifier can strand a bare Escape the recorder could
         // never have captured: drop it rather than offer it for saving.
