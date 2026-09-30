@@ -41718,7 +41718,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "与 %@ 冲突。保存后将重新分配此快捷键。"
+            "value" : "与 %@ 冲突。保存后，此快捷键将改为用于当前功能。"
           }
         }
       }
@@ -41764,7 +41764,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "保留"
+            "value" : "不可用"
           }
         }
       }
@@ -41787,7 +41787,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "保留按键，无法录制"
+            "value" : "此按键不可用于设置快捷键"
           }
         }
       }
@@ -41856,7 +41856,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "跟随当前 macOS 输入法。"
+            "value" : "按键显示随当前 macOS 输入源变化。"
           }
         }
       }
@@ -42224,7 +42224,7 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "配置“%@”的快捷键"
+            "value" : "配置文件“%@”的快捷键"
           }
         }
       }
