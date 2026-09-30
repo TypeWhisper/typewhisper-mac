@@ -34947,18 +34947,18 @@
         }
       }
     },
-    "Uses this value only for this prompt. Gemma 4 supports values from 0.0 to 1.0." : {
+    "Uses this value only for this prompt. Local MLX models support values from 0.0 to 1.0." : {
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "このプロンプトでのみこの値を使用します。Gemma 4は0.0から1.0の値をサポートしています。"
+            "value" : "このプロンプトでのみこの値を使用します。ローカルMLXモデルは0.0から1.0の値をサポートしています。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "此值仅用于当前提示词。Gemma 4 支持 0.0 到 1.0 之间的值。"
+            "value" : "此值仅用于当前提示词。本地 MLX 模型支持 0.0 到 1.0 之间的值。"
           }
         }
       }

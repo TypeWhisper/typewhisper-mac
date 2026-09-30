@@ -702,9 +702,48 @@ final class Gemma4PluginModelPolicyTests: XCTestCase {
 
         XCTAssertEqual(
             experimentalModels.map(\.id),
-            ["gemma-4-e4b-it-8bit", "gemma-4-26b-a4b-it-4bit"]
+            ["gemma-4-e4b-it-8bit", "gemma-4-26b-a4b-it-4bit", "qwen3.5-2b-4bit", "lfm2.5-2.6b-4bit"]
         )
         XCTAssertTrue(experimentalModels.allSatisfy { ($0.experimentalWarning ?? "").isEmpty == false })
+    }
+
+    func testOnlyGemmaModelsStopAtGemmaTurnToken() {
+        for model in Gemma4Plugin.availableModels {
+            XCTAssertEqual(
+                model.extraEOSTokens,
+                model.id.hasPrefix("gemma-4-") ? ["<turn|>"] : [],
+                model.id
+            )
+        }
+    }
+
+    func testProviderKeepsStableIdAfterRename() {
+        let plugin = Gemma4Plugin()
+
+        XCTAssertEqual(plugin.llmProviderId, "Gemma 4 (MLX)")
+        XCTAssertEqual(plugin.providerName, "Gemma 4 (MLX)")
+        XCTAssertEqual(plugin.llmProviderDisplayName, "Local LLM (MLX)")
+    }
+
+    func testPromptDisablesHybridReasoning() {
+        XCTAssertEqual(Gemma4Plugin.promptChatTemplateContext["enable_thinking"] as? Bool, false)
+    }
+
+    func testPromptOutputDropsReasoning() {
+        XCTAssertEqual(Gemma4Plugin.finalPromptOutput("  Hallo Welt.  "), "Hallo Welt.")
+        XCTAssertEqual(
+            Gemma4Plugin.finalPromptOutput("<think>\nThe user wants a cleanup.\n</think>\n\nHallo Welt."),
+            "Hallo Welt."
+        )
+        XCTAssertEqual(
+            Gemma4Plugin.finalPromptOutput("The user wants a cleanup. Keep German.</think>Hallo Welt."),
+            "Hallo Welt."
+        )
+        XCTAssertEqual(Gemma4Plugin.finalPromptOutput("<think>Still reasoning when the budget ran out"), "")
+        XCTAssertEqual(
+            Gemma4Plugin.finalPromptOutput("Use <b>bold</b> for emphasis."),
+            "Use <b>bold</b> for emphasis."
+        )
     }
 
     func testGemma4ActivationPreservesExperimentalSelectedModel() throws {
@@ -1113,7 +1152,7 @@ final class Gemma4PluginModelPolicyTests: XCTestCase {
 
         XCTAssertEqual(
             message,
-            "Download timed out while fetching Gemma 4 from Hugging Face. Please retry. Adding an optional HuggingFace token in this plugin can also increase download rate limits."
+            "Download timed out while fetching the model from Hugging Face. Please retry. Adding an optional HuggingFace token in this plugin can also increase download rate limits."
         )
     }
 
@@ -1131,7 +1170,7 @@ final class Gemma4PluginModelPolicyTests: XCTestCase {
 
         XCTAssertEqual(
             message,
-            "The downloaded Gemma model cache appears incomplete or incompatible. Delete the cached model and download it again."
+            "The downloaded model cache appears incomplete or incompatible. Delete the cached model and download it again."
         )
     }
 
@@ -1149,7 +1188,7 @@ final class Gemma4PluginModelPolicyTests: XCTestCase {
 
         XCTAssertEqual(
             message,
-            "The downloaded Gemma model cache appears incomplete or incompatible. Delete the cached model and download it again."
+            "The downloaded model cache appears incomplete or incompatible. Delete the cached model and download it again."
         )
     }
 
@@ -1167,7 +1206,7 @@ final class Gemma4PluginModelPolicyTests: XCTestCase {
 
         XCTAssertEqual(
             message,
-            "The downloaded Gemma model cache appears incomplete or incompatible. Delete the cached model and download it again."
+            "The downloaded model cache appears incomplete or incompatible. Delete the cached model and download it again."
         )
     }
 
@@ -1181,7 +1220,7 @@ final class Gemma4PluginModelPolicyTests: XCTestCase {
 
         XCTAssertEqual(
             message,
-            "The downloaded Gemma model cache appears incomplete or incompatible. Delete the cached model and download it again."
+            "The downloaded model cache appears incomplete or incompatible. Delete the cached model and download it again."
         )
     }
 

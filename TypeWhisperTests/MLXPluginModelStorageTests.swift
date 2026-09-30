@@ -539,6 +539,16 @@ final class MLXPluginModelStorageTests: XCTestCase {
         }
     }
 
+    func testGemma4PromptKeepsInstructionsOutOfTheUserTurn() {
+        let messages = Gemma4Plugin.promptMessages(
+            systemPrompt: "Translate the following text to English.",
+            userText: "Hallo Welt"
+        )
+
+        XCTAssertEqual(messages.map(\.role), [.system, .user])
+        XCTAssertEqual(messages.map(\.content), ["Translate the following text to English.", "Hallo Welt"])
+    }
+
     func testGemma4NetworkPolicyAllowsNormalRuntime() {
         XCTAssertNoThrow(
             try Gemma4NetworkAccessPolicy.ensureAccessIsAllowed(arguments: ["TypeWhisper"])

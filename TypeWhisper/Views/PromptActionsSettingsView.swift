@@ -1853,8 +1853,8 @@ private struct PromptWizardResponseStep: View {
         case .custom:
             if effectiveProviderId == "Gemma 4 (MLX)" {
                 return localizedAppText(
-                    "Uses this value only for this prompt. Gemma 4 supports values from 0.0 to 1.0.",
-                    de: "Verwendet diesen Wert nur für diesen Prompt. Gemma 4 unterstützt Werte von 0.0 bis 1.0."
+                    "Uses this value only for this prompt. Local MLX models support values from 0.0 to 1.0.",
+                    de: "Verwendet diesen Wert nur für diesen Prompt. Lokale MLX-Modelle unterstützen Werte von 0.0 bis 1.0."
                 )
             }
             return localizedAppText(

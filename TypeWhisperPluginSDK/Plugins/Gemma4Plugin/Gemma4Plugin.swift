@@ -246,9 +246,12 @@ private struct Gemma4TokenizerLoader: TokenizerLoader {
 // MARK: - Plugin Entry Point
 
 @objc(Gemma4Plugin)
-final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemperatureControllableProvider, LLMProviderSetupStatusProviding, LLMModelSelectable, PluginSettingsActivityReporting, PluginDownloadedModelManaging, PluginRuntimeMemoryDiagnosticsReporting, @unchecked Sendable {
+final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMProviderIdentityProviding, LLMTemperatureControllableProvider, LLMProviderSetupStatusProviding, LLMModelSelectable, PluginSettingsActivityReporting, PluginDownloadedModelManaging, PluginRuntimeMemoryDiagnosticsReporting, @unchecked Sendable {
     static let pluginId = "com.typewhisper.gemma4"
-    static let pluginName = "Gemma 4"
+    static let pluginName = "Local LLM (MLX)"
+    /// Stored in workflows, prompt actions, and fallback lists. Keep it stable
+    /// even though the plugin now ships models beyond Gemma 4.
+    static let stableProviderId = "Gemma 4 (MLX)"
     static let defaultGenerationTemperature = 0.1
     static let experimentalModelWarning = "Experimental. You can try it at your own risk."
     static let promptMaxTokens = 2048
@@ -370,7 +373,9 @@ final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemp
 
     // MARK: - LLMProviderPlugin
 
-    var providerName: String { "Gemma 4 (MLX)" }
+    var providerName: String { Self.stableProviderId }
+    var providerId: String { Self.stableProviderId }
+    var providerDisplayName: String { Self.pluginName }
 
     var isAvailable: Bool {
         modelContainer != nil && loadedModelId != nil
@@ -453,18 +458,10 @@ final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemp
             }
             defer { Self.clearRuntimeCache() }
 
-            let combinedPrompt = """
-            Follow these instructions exactly:
-            \(systemPrompt)
-
-            Input text:
-            \(trimmedUserText)
-            """
-
-            let chat: [Chat.Message] = [
-                .user(combinedPrompt),
-            ]
-            let userInput = UserInput(chat: chat)
+            let userInput = UserInput(
+                chat: Self.promptMessages(systemPrompt: systemPrompt, userText: trimmedUserText),
+                additionalContext: Self.promptChatTemplateContext
+            )
             let input = try await modelContainer.prepare(input: userInput)
 
             let parameters = Self.promptGenerationParameters(
@@ -483,8 +480,41 @@ final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemp
                 }
             }
 
-            return result.trimmingCharacters(in: .whitespacesAndNewlines)
+            return Self.finalPromptOutput(result)
         }
+    }
+
+    /// Instructions go into the system turn and the text to transform into the
+    /// user turn. Small models leak or execute instructions when both share one
+    /// user message.
+    static func promptMessages(systemPrompt: String, userText: String) -> [Chat.Message] {
+        [
+            .system(systemPrompt),
+            .user(userText),
+        ]
+    }
+
+    /// Hybrid reasoning models (Qwen3, Qwen3.5) must not think for text
+    /// transformations; Gemma 4 and LFM2.5 ignore the flag.
+    static let promptChatTemplateContext: [String: any Sendable] = ["enable_thinking": false]
+
+    static func finalPromptOutput(_ output: String) -> String {
+        var result = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Templates that open the reasoning block themselves only leave the closing tag.
+        if let end = result.range(of: "</think>", options: [.caseInsensitive, .backwards]),
+           result.range(of: "<think>", options: .caseInsensitive, range: result.startIndex..<end.lowerBound) == nil {
+            result = String(result[end.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        while let start = result.range(of: "<think>", options: .caseInsensitive) {
+            if let end = result.range(of: "</think>", options: .caseInsensitive, range: start.upperBound..<result.endIndex) {
+                result.removeSubrange(start.lowerBound..<end.upperBound)
+            } else {
+                // Unterminated reasoning never contains the requested text.
+                result.removeSubrange(start.lowerBound..<result.endIndex)
+            }
+            result = result.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return result
     }
 
     // MARK: - LLMModelSelectable
@@ -526,7 +556,7 @@ final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemp
 
         let bundle = Bundle(for: Gemma4Plugin.self)
         return String(
-            localized: "Load a Gemma 4 model in Integrations before using it for prompts.",
+            localized: "Load a local model in Integrations before using it for prompts.",
             bundle: bundle
         )
     }
@@ -640,12 +670,12 @@ final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemp
             if let downloadedDirectory {
                 configuration = ModelConfiguration(
                     directory: downloadedDirectory,
-                    extraEOSTokens: ["<turn|>"]
+                    extraEOSTokens: modelDef.extraEOSTokens
                 )
             } else {
                 configuration = ModelConfiguration(
                     id: modelDef.repoId,
-                    extraEOSTokens: ["<turn|>"]
+                    extraEOSTokens: modelDef.extraEOSTokens
                 )
             }
             let loadTask = Task<ModelContainer, Error> {
@@ -1122,6 +1152,10 @@ final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemp
 
     // MARK: - Model Definitions
 
+    static let gemmaEOSTokens: Set<String> = ["<turn|>"]
+    static let qwen35ModelWarning = "Experimental. Uses less memory than Gemma 4 but translates and restructures text less reliably."
+    static let lfm25ModelWarning = "Experimental. Reasons before answering, so results take several seconds. LFM Open License: commercial use is free only below USD 10M annual revenue."
+
     static let availableModels: [Gemma4ModelDef] = [
         Gemma4ModelDef(
             id: "gemma-4-e2b-it-4bit",
@@ -1129,7 +1163,8 @@ final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemp
             repoId: "mlx-community/gemma-4-e2b-it-4bit",
             sizeDescription: "~3.6 GB",
             ramRequirement: "8 GB+",
-            availability: .supported
+            availability: .supported,
+            extraEOSTokens: gemmaEOSTokens
         ),
         Gemma4ModelDef(
             id: "gemma-4-e4b-it-4bit",
@@ -1137,7 +1172,8 @@ final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemp
             repoId: "mlx-community/gemma-4-e4b-it-4bit",
             sizeDescription: "~5.2 GB",
             ramRequirement: "16 GB+",
-            availability: .supported
+            availability: .supported,
+            extraEOSTokens: gemmaEOSTokens
         ),
         Gemma4ModelDef(
             id: "gemma-4-e4b-it-8bit",
@@ -1145,7 +1181,8 @@ final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemp
             repoId: "mlx-community/gemma-4-e4b-it-8bit",
             sizeDescription: "~8 GB",
             ramRequirement: "16 GB+",
-            availability: .experimental(warning: experimentalModelWarning)
+            availability: .experimental(warning: experimentalModelWarning),
+            extraEOSTokens: gemmaEOSTokens
         ),
         Gemma4ModelDef(
             id: "gemma-4-26b-a4b-it-4bit",
@@ -1153,7 +1190,24 @@ final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemp
             repoId: "mlx-community/gemma-4-26b-a4b-it-4bit",
             sizeDescription: "~15.6 GB",
             ramRequirement: "32 GB+",
-            availability: .experimental(warning: experimentalModelWarning)
+            availability: .experimental(warning: experimentalModelWarning),
+            extraEOSTokens: gemmaEOSTokens
+        ),
+        Gemma4ModelDef(
+            id: "qwen3.5-2b-4bit",
+            displayName: "Qwen3.5 2B (4-bit)",
+            repoId: "mlx-community/Qwen3.5-2B-4bit",
+            sizeDescription: "~1.8 GB",
+            ramRequirement: "8 GB+",
+            availability: .experimental(warning: qwen35ModelWarning)
+        ),
+        Gemma4ModelDef(
+            id: "lfm2.5-2.6b-4bit",
+            displayName: "LFM2.5 2.6B (4-bit)",
+            repoId: "LiquidAI/LFM2.5-2.6B-MLX-4bit",
+            sizeDescription: "~1.6 GB",
+            ramRequirement: "8 GB+",
+            availability: .experimental(warning: lfm25ModelWarning)
         ),
     ]
 
@@ -1187,7 +1241,7 @@ final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemp
            urlError.code == .timedOut {
             let bundle = Bundle(for: Gemma4Plugin.self)
             return String(
-                localized: "Download timed out while fetching Gemma 4 from Hugging Face. Please retry. Adding an optional HuggingFace token in this plugin can also increase download rate limits.",
+                localized: "Download timed out while fetching the model from Hugging Face. Please retry. Adding an optional HuggingFace token in this plugin can also increase download rate limits.",
                 bundle: bundle
             )
         }
@@ -1196,7 +1250,7 @@ final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemp
         if isRecoverableCacheError(rawMessage) {
             let bundle = Bundle(for: Gemma4Plugin.self)
             return String(
-                localized: "The downloaded Gemma model cache appears incomplete or incompatible. Delete the cached model and download it again.",
+                localized: "The downloaded model cache appears incomplete or incompatible. Delete the cached model and download it again.",
                 bundle: bundle
             )
         }
@@ -1274,7 +1328,7 @@ final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemp
     private static func unsupportedModelMessage(for modelDef: Gemma4ModelDef) -> String {
         let supportedModels = supportedModelDefinitions.map(\.displayName).joined(separator: ", ")
         if modelDef.isSupported {
-            return "Gemma 4 loading in this TypeWhisper release is limited to \(supportedModels). If loading still fails, update to the latest app build and try again."
+            return "Local model loading in this TypeWhisper release is limited to \(supportedModels). If loading still fails, update to the latest app build and try again."
         }
         return "\(modelDef.displayName) is experimental in this TypeWhisper release and may still fail to load. Recommended models: \(supportedModels)."
     }
@@ -1289,6 +1343,7 @@ struct Gemma4ModelDef: Identifiable {
     let sizeDescription: String
     let ramRequirement: String
     let availability: Gemma4ModelAvailability
+    var extraEOSTokens: Set<String> = []
 
     var isSupported: Bool {
         if case .supported = availability {

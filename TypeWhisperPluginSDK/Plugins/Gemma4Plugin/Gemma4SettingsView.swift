@@ -28,10 +28,10 @@ struct Gemma4SettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text("Gemma 4 (MLX)")
+            Text(Gemma4Plugin.pluginName)
                 .font(.headline)
 
-            Text("Local LLM powered by Google Gemma 4 on Apple Silicon. No API key required.", bundle: bundle)
+            Text("Local LLM on Apple Silicon with Gemma 4, Qwen3.5, and LFM2.5 models. No API key required.", bundle: bundle)
                 .font(.callout)
                 .foregroundStyle(.secondary)
 
@@ -73,7 +73,7 @@ struct Gemma4SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 } else {
-                    Text("Uses Gemma 4's built-in default temperature.", bundle: bundle)
+                    Text("Uses the model's built-in default temperature.", bundle: bundle)
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -147,7 +147,7 @@ struct Gemma4SettingsView: View {
                 }
             }
 
-            Text("Gemma 4 E2B/E4B 4-bit models are recommended. Larger variants are experimental and may fail depending on hardware.", bundle: bundle)
+            Text("Gemma 4 E2B/E4B 4-bit models are recommended. Smaller models need less memory but follow instructions less reliably. Larger variants may fail depending on hardware.", bundle: bundle)
                 .font(.caption)
                 .foregroundStyle(.secondary)
 

@@ -319,11 +319,11 @@ extension ServiceContainer {
             ),
             screenshotRegistryPlugin(
                 id: "com.typewhisper.gemma4",
-                name: "Gemma 4",
-                description: "Local LLM powered by Google Gemma 4 on Apple Silicon via MLX. No API key required.",
+                name: "Local LLM (MLX)",
+                description: "Local LLM on Apple Silicon via MLX with Gemma 4, Qwen3.5, and LFM2.5 models. No API key required.",
                 descriptions: [
-                    "de": "Lokales LLM mit Google Gemma 4 auf Apple Silicon via MLX. Kein API-Key erforderlich.",
-                    "ja": "Apple Silicon上でMLX経由で動作するGoogle Gemma 4ローカルLLMです。APIキーは不要です。",
+                    "de": "Lokales LLM auf Apple Silicon via MLX mit Gemma-4-, Qwen3.5- und LFM2.5-Modellen. Kein API-Key erforderlich.",
+                    "ja": "Apple Silicon上でMLX経由で動作するローカルLLM。Gemma 4、Qwen3.5、LFM2.5モデルに対応。APIキーは不要です。",
                 ],
                 categories: ["llm"],
                 hosting: .local
