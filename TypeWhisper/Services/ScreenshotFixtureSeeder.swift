@@ -318,7 +318,7 @@ extension ServiceContainer {
                 hosting: .local
             ),
             screenshotRegistryPlugin(
-                id: "com.typewhisper.local-llm",
+                id: "com.typewhisper.local-llm-mlx",
                 name: "Local LLM (MLX)",
                 description: "Local LLM on Apple Silicon via MLX with Gemma 4, Qwen3.5, and LFM2.5 models. No API key required.",
                 descriptions: [

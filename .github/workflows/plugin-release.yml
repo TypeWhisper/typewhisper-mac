@@ -105,7 +105,7 @@ jobs:
             gemini) TARGET="GeminiPlugin" ;;
             whisperkit) TARGET="WhisperKitPlugin" ;;
             parakeet) TARGET="ParakeetPlugin" ;;
-            local-llm) TARGET="LocalLLMPlugin" ;;
+            local-llm-mlx) TARGET="LocalLLMPlugin" ;;
             speechanalyzer) TARGET="SpeechAnalyzerPlugin" ;;
             openai-compatible) TARGET="OpenAICompatiblePlugin" ;;
             voxtral) TARGET="VoxtralPlugin" ;;

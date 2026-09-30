@@ -2212,7 +2212,7 @@ final class PluginManagerLoadOrderTests: XCTestCase {
         let enabledLocalLLM = try makePluginBundle(
             at: pluginsDirectory,
             bundleName: "LocalLLMPlugin.bundle",
-            pluginId: "com.typewhisper.local-llm",
+            pluginId: "com.typewhisper.local-llm-mlx",
             pluginName: "Local LLM (MLX)"
         )
         let enabledParakeet = try makePluginBundle(
@@ -2223,7 +2223,7 @@ final class PluginManagerLoadOrderTests: XCTestCase {
         )
 
         let voxtralKey = "plugin.com.typewhisper.voxtral.enabled"
-        let localLLMKey = "plugin.com.typewhisper.local-llm.enabled"
+        let localLLMKey = "plugin.com.typewhisper.local-llm-mlx.enabled"
         let parakeetKey = "plugin.com.typewhisper.parakeet.enabled"
 
         let defaults = UserDefaults.standard

@@ -68,7 +68,7 @@ PLUGIN_SCREENSHOTS = [
   { slug: "improve-typewhisper", target: "ContributorPlugin", id: "com.typewhisper.improve" },
   { slug: "linear", target: "LinearPlugin", id: "com.typewhisper.linear" },
   { slug: "live-transcript", target: "LiveTranscriptPlugin", id: "com.typewhisper.livetranscript" },
-  { slug: "local-llm", target: "LocalLLMPlugin", id: "com.typewhisper.local-llm", size: [560, 661] },
+  { slug: "local-llm-mlx", target: "LocalLLMPlugin", id: "com.typewhisper.local-llm-mlx", size: [560, 661] },
   { slug: "mcp-client", target: "MCPClientPlugin", id: "com.typewhisper.mcp-client" },
   { slug: "meta", target: "MetaPlugin", id: "com.typewhisper.meta" },
   {

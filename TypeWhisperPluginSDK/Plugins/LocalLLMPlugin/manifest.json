@@ -1,5 +1,5 @@
 {
-    "id": "com.typewhisper.local-llm",
+    "id": "com.typewhisper.local-llm-mlx",
     "name": "Local LLM (MLX)",
     "version": "1.0.0",
     "minHostVersion": "1.7.0",
@@ -17,5 +17,5 @@
     "category": "llm",
     "iconSystemName": "cpu",
     "principalClass": "LocalLLMPlugin",
-    "detailsURL": "https://www.typewhisper.com/addons/local-llm/"
+    "detailsURL": "https://www.typewhisper.com/addons/local-llm-mlx/"
 }

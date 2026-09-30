@@ -247,7 +247,7 @@ private struct LocalLLMTokenizerLoader: TokenizerLoader {
 
 @objc(LocalLLMPlugin)
 final class LocalLLMPlugin: NSObject, ObservableObject, LLMProviderPlugin, LLMProviderIdentityProviding, LLMTemperatureControllableProvider, LLMProviderSetupStatusProviding, LLMModelSelectable, PluginSettingsActivityReporting, PluginDownloadedModelManaging, PluginRuntimeMemoryDiagnosticsReporting, @unchecked Sendable {
-    static let pluginId = "com.typewhisper.local-llm"
+    static let pluginId = "com.typewhisper.local-llm-mlx"
     static let pluginName = "Local LLM (MLX)"
     /// Provider ID of the former Gemma 4 plugin, so stored workflows and prompt
     /// actions resolve here once that plugin is removed.
