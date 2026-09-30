@@ -726,7 +726,7 @@ final class WorkflowServiceTests: XCTestCase {
         let service = WorkflowService(appSupportDirectory: appSupportDirectory, userDefaults: defaults)
         let promptProcessingService = PromptProcessingService(userDefaults: defaults)
         promptProcessingService.addLLMFallback(
-            providerId: "Gemma 4 (MLX)",
+            providerId: "Local LLM (MLX)",
             modelId: "gemma-4-large"
         )
         _ = service.addWorkflow(

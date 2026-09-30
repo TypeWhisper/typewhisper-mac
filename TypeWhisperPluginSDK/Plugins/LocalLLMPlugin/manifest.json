@@ -1,7 +1,7 @@
 {
-    "id": "com.typewhisper.gemma4",
+    "id": "com.typewhisper.local-llm",
     "name": "Local LLM (MLX)",
-    "version": "1.1.7",
+    "version": "1.0.0",
     "minHostVersion": "1.7.0",
     "sdkCompatibilityVersion": "v1",
     "supportedArchitectures": [
@@ -16,6 +16,6 @@
     },
     "category": "llm",
     "iconSystemName": "cpu",
-    "principalClass": "Gemma4Plugin",
-    "detailsURL": "https://www.typewhisper.com/addons/gemma4/"
+    "principalClass": "LocalLLMPlugin",
+    "detailsURL": "https://www.typewhisper.com/addons/local-llm/"
 }

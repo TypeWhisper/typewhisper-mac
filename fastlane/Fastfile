@@ -61,7 +61,6 @@ PLUGIN_SCREENSHOTS = [
   { slug: "filler-words", target: "FillerWordsPlugin", id: "com.typewhisper.filler-words" },
   { slug: "fireworks", target: "FireworksPlugin", id: "com.typewhisper.fireworks" },
   { slug: "gemini", target: "GeminiPlugin", id: "com.typewhisper.gemini" },
-  { slug: "gemma4", target: "Gemma4Plugin", id: "com.typewhisper.gemma4", size: [560, 661] },
   { slug: "gladia", target: "GladiaPlugin", id: "com.typewhisper.gladia" },
   { slug: "google-cloud-stt", target: "GoogleCloudSTTPlugin", id: "com.typewhisper.google-cloud-stt" },
   { slug: "granite", target: "GranitePlugin", id: "com.typewhisper.granite" },
@@ -69,6 +68,7 @@ PLUGIN_SCREENSHOTS = [
   { slug: "improve-typewhisper", target: "ContributorPlugin", id: "com.typewhisper.improve" },
   { slug: "linear", target: "LinearPlugin", id: "com.typewhisper.linear" },
   { slug: "live-transcript", target: "LiveTranscriptPlugin", id: "com.typewhisper.livetranscript" },
+  { slug: "local-llm", target: "LocalLLMPlugin", id: "com.typewhisper.local-llm", size: [560, 661] },
   { slug: "mcp-client", target: "MCPClientPlugin", id: "com.typewhisper.mcp-client" },
   { slug: "meta", target: "MetaPlugin", id: "com.typewhisper.meta" },
   {

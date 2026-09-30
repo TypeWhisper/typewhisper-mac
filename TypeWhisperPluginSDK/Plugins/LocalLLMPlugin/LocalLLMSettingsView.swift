@@ -1,13 +1,13 @@
 import SwiftUI
 import TypeWhisperPluginSDK
 
-struct Gemma4SettingsView: View {
-    @ObservedObject var plugin: Gemma4Plugin
-    private let bundle = Bundle(for: Gemma4Plugin.self)
-    @State private var modelState: Gemma4ModelState = .notLoaded
+struct LocalLLMSettingsView: View {
+    @ObservedObject var plugin: LocalLLMPlugin
+    private let bundle = Bundle(for: LocalLLMPlugin.self)
+    @State private var modelState: LocalLLMModelState = .notLoaded
     @State private var selectedModelId: String = ""
     @State private var llmTemperatureMode: PluginLLMTemperatureMode = .custom
-    @State private var generationTemperature: Double = Gemma4Plugin.defaultGenerationTemperature
+    @State private var generationTemperature: Double = LocalLLMPlugin.defaultGenerationTemperature
     @State private var downloadProgress: Double = 0
     @State private var hfTokenInput = ""
     @State private var isValidatingToken = false
@@ -28,7 +28,7 @@ struct Gemma4SettingsView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            Text(Gemma4Plugin.pluginName)
+            Text(LocalLLMPlugin.pluginName)
                 .font(.headline)
 
             Text("Local LLM on Apple Silicon with Gemma 4, Qwen3.5, and LFM2.5 models. No API key required.", bundle: bundle)
@@ -142,7 +142,7 @@ struct Gemma4SettingsView: View {
                     .font(.subheadline)
                     .fontWeight(.medium)
 
-                ForEach(Gemma4Plugin.availableModels) { modelDef in
+                ForEach(LocalLLMPlugin.availableModels) { modelDef in
                     modelRow(modelDef)
                 }
             }
@@ -164,7 +164,7 @@ struct Gemma4SettingsView: View {
         .padding()
         .onAppear {
             modelState = plugin.modelState
-            selectedModelId = plugin.selectedLLMModelId ?? Gemma4Plugin.availableModels.first?.id ?? ""
+            selectedModelId = plugin.selectedLLMModelId ?? LocalLLMPlugin.availableModels.first?.id ?? ""
             llmTemperatureMode = plugin.llmTemperatureMode
             generationTemperature = plugin.generationTemperature
             downloadProgress = plugin.currentDownloadProgress
@@ -194,7 +194,7 @@ struct Gemma4SettingsView: View {
     }
 
     @ViewBuilder
-    private func modelRow(_ modelDef: Gemma4ModelDef) -> some View {
+    private func modelRow(_ modelDef: LocalLLMModelDef) -> some View {
         HStack {
             VStack(alignment: .leading, spacing: 2) {
                 Text(modelDef.displayName)
@@ -310,7 +310,7 @@ struct Gemma4SettingsView: View {
         .padding(.vertical, 4)
     }
 
-    private func isRecoverableCachedModelError(for modelDef: Gemma4ModelDef) -> Bool {
+    private func isRecoverableCachedModelError(for modelDef: LocalLLMModelDef) -> Bool {
         if case .error = modelState,
            selectedModelId == modelDef.id,
            plugin.hasCachedModelFiles(modelDef) {
@@ -319,7 +319,7 @@ struct Gemma4SettingsView: View {
         return false
     }
 
-    private func resetCachedModel(_ modelDef: Gemma4ModelDef) {
+    private func resetCachedModel(_ modelDef: LocalLLMModelDef) {
         loadTask?.cancel()
         loadTask = nil
         plugin.resetCachedModel(modelDef)
@@ -335,7 +335,7 @@ struct Gemma4SettingsView: View {
         downloadProgress = plugin.currentDownloadProgress
     }
 
-    private func removeDownloadedModel(_ modelDef: Gemma4ModelDef) {
+    private func removeDownloadedModel(_ modelDef: LocalLLMModelDef) {
         loadTask?.cancel()
         loadTask = nil
         Task {
@@ -343,7 +343,7 @@ struct Gemma4SettingsView: View {
                 try await plugin.deleteDownloadedModel(modelDef.id)
                 await MainActor.run {
                     if selectedModelId == modelDef.id {
-                        selectedModelId = plugin.selectedLLMModelId ?? Gemma4Plugin.availableModels.first?.id ?? ""
+                        selectedModelId = plugin.selectedLLMModelId ?? LocalLLMPlugin.availableModels.first?.id ?? ""
                     }
                     modelState = plugin.modelState
                     downloadProgress = plugin.currentDownloadProgress
@@ -357,7 +357,7 @@ struct Gemma4SettingsView: View {
         }
     }
 
-    private func startLoading(_ modelDef: Gemma4ModelDef) {
+    private func startLoading(_ modelDef: LocalLLMModelDef) {
         selectedModelId = modelDef.id
         let alreadyDownloaded = plugin.isModelDownloaded(modelDef)
         plugin.beginModelLoad(for: modelDef, isAlreadyDownloaded: alreadyDownloaded)

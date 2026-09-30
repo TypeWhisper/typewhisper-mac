@@ -152,7 +152,7 @@ The localized macOS screenshot workflow is documented in [docs/screenshot-automa
 - **Workflows** - Build reusable transformations for translation, rewriting, extraction, formatting, and app-specific automation. Workflows can run automatically by app, website, or app + website combinations, from a dedicated hotkey, as a global fallback, or manually from the Workflow Palette. Hotkey workflows can either start dictation or process the current selection/clipboard directly.
 - **LLM provider fallbacks** - Order Apple Intelligence (macOS 26+), Groq, OpenAI / ChatGPT, xAI/Grok, Gemini, OpenAI Compatible, and local providers in one global provider/model list. Prompts and workflows inherit that order by default; a workflow with an explicit provider stays on that single provider
 - **Speech providers** - System voices, xAI/Grok TTS, and experimental local Supertonic TTS can provide spoken feedback and readback
-- **Local prompt processing** - Gemma 4 via MLX runs on-device on Apple Silicon, with the current verified release path limited to the E2B/E4B 4-bit models
+- **Local prompt processing** - The Local LLM (MLX) plugin runs on-device on Apple Silicon. It recommends the Gemma 4 E2B/E4B 4-bit models and offers Qwen3.5 2B and LFM2.5 2.6B as experimental lighter models
 - **Translation** - Translate transcriptions on-device using Apple Translate
 
 ### Personalization
@@ -277,9 +277,9 @@ If a fresh install still crashes immediately after these steps, please open an i
 - 8 GB RAM minimum, 16 GB+ recommended for larger models
 - Some features (Apple Translate, improved Settings UI) require macOS 15+. Apple Intelligence and SpeechAnalyzer require macOS 26+.
 
-## Gemma 4 Support
+## Local LLM (MLX)
 
-TypeWhisper includes a bundled local Gemma 4 plugin powered by MLX for on-device prompt processing on Apple Silicon. In the current verified release path, Gemma 4 support is limited to the dense `E2B 4-bit` and `E4B 4-bit` variants; larger or unverified variants stay visible in the UI but remain disabled until they are validated end to end.
+TypeWhisper includes the Local LLM (MLX) plugin for on-device prompt processing on Apple Silicon. It recommends the dense Gemma 4 `E2B 4-bit` and `E4B 4-bit` models. Qwen3.5 2B and LFM2.5 2.6B need less memory and are available as experimental models; larger Gemma 4 variants are experimental as well. The plugin replaces the former Gemma 4 plugin.
 
 ## Model Recommendations
 

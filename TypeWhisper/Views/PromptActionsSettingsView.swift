@@ -1511,7 +1511,7 @@ private struct PromptWizardResponseStep: View {
                 Slider(
                     value: temperatureValueBinding,
                     in: supportedRange,
-                    step: effectiveProviderId == "Gemma 4 (MLX)" ? 0.05 : 0.1
+                    step: PromptActionsViewModel.isLocalMLXProvider(effectiveProviderId) ? 0.05 : 0.1
                 )
                 .disabled(isAppleIntelligence)
 
@@ -1851,7 +1851,7 @@ private struct PromptWizardResponseStep: View {
                 de: "Ignoriert deine gespeicherte Provider-Einstellung und nutzt das Standardverhalten des Providers."
             )
         case .custom:
-            if effectiveProviderId == "Gemma 4 (MLX)" {
+            if PromptActionsViewModel.isLocalMLXProvider(effectiveProviderId) {
                 return localizedAppText(
                     "Uses this value only for this prompt. Local MLX models support values from 0.0 to 1.0.",
                     de: "Verwendet diesen Wert nur für diesen Prompt. Lokale MLX-Modelle unterstützen Werte von 0.0 bis 1.0."

@@ -13252,7 +13252,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         let plugin = MockLLMProviderPlugin()
         plugin.available = false
-        plugin.configuredProviderName = "Gemma 4 (MLX)"
+        plugin.configuredProviderName = "Local LLM (MLX)"
         plugin.requiresExternalCredentials = false
         plugin.unavailableReason = "Load a Gemma 4 model in Integrations before using it for prompts."
 
@@ -13296,7 +13296,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         let plugin = MockLLMProviderPlugin()
         plugin.available = false
-        plugin.configuredProviderName = "Gemma 4 (MLX)"
+        plugin.configuredProviderName = "Local LLM (MLX)"
         plugin.requiresExternalCredentials = false
         plugin.restoreMakesAvailable = true
         plugin.unavailableReason = "Load a Gemma 4 model in Integrations before using it for prompts."
@@ -13320,7 +13320,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let result = try await service.process(
             prompt: "Fix grammar",
             text: "hello world",
-            providerOverride: "Gemma 4 (MLX)"
+            providerOverride: "Local LLM (MLX)"
         )
 
         XCTAssertEqual(result, "processed")
@@ -13336,7 +13336,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
 
         let plugin = MockLLMProviderPlugin()
-        plugin.configuredProviderName = "Gemma 4 (MLX)"
+        plugin.configuredProviderName = "Local LLM (MLX)"
         plugin.requiresExternalCredentials = false
 
         let manifest = PluginManifest(
@@ -13362,11 +13362,11 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let result = try await service.process(
             prompt: "Fix grammar",
             text: "hello world",
-            providerOverride: "Gemma 4 (MLX)"
+            providerOverride: "Local LLM (MLX)"
         )
 
         XCTAssertEqual(result, "processed")
-        XCTAssertEqual(activityManager.reasons, ["Local prompt processing with Gemma 4 (MLX)"])
+        XCTAssertEqual(activityManager.reasons, ["Local prompt processing with Local LLM (MLX)"])
     }
 
     @MainActor
@@ -13686,7 +13686,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
 
         let plugin = MockLLMProviderPlugin()
-        plugin.configuredProviderName = "Gemma 4 (MLX)"
+        plugin.configuredProviderName = "Local LLM (MLX)"
         plugin.requiresExternalCredentials = false
 
         PluginManager.shared.loadedPlugins = [
@@ -13711,7 +13711,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let result = try await service.process(
             prompt: "Fix grammar",
             text: "hello world",
-            providerOverride: "Gemma 4 (MLX)"
+            providerOverride: "Local LLM (MLX)"
         )
 
         XCTAssertEqual(result, "processed")
@@ -13788,7 +13788,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
 
         let plugin = MockLLMProviderPlugin()
-        plugin.configuredProviderName = "Gemma 4 (MLX)"
+        plugin.configuredProviderName = "Local LLM (MLX)"
         plugin.requiresExternalCredentials = false
 
         PluginManager.shared.loadedPlugins = [
@@ -13813,7 +13813,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let result = try await service.process(
             prompt: "Fix grammar",
             text: "hello world",
-            providerOverride: "Gemma 4 (MLX)"
+            providerOverride: "Local LLM (MLX)"
         )
 
         XCTAssertEqual(result, "processed")
@@ -14208,7 +14208,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
 
         let plugin = MockLLMProviderPlugin()
-        plugin.configuredProviderName = "Gemma 4 (MLX)"
+        plugin.configuredProviderName = "Local LLM (MLX)"
         plugin.requiresExternalCredentials = false
 
         PluginManager.shared.loadedPlugins = [
@@ -14268,7 +14268,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
 
         let plugin = MockLLMProviderPlugin()
-        plugin.configuredProviderName = "Gemma 4 (MLX)"
+        plugin.configuredProviderName = "Local LLM (MLX)"
         plugin.requiresExternalCredentials = false
 
         PluginManager.shared.loadedPlugins = [
@@ -14318,7 +14318,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         remotePlugin.requiresExternalCredentials = true
 
         let unavailableLocalPlugin = MockLLMProviderPlugin()
-        unavailableLocalPlugin.configuredProviderName = "Gemma 4 (MLX)"
+        unavailableLocalPlugin.configuredProviderName = "Local LLM (MLX)"
         unavailableLocalPlugin.requiresExternalCredentials = false
         unavailableLocalPlugin.available = false
 
