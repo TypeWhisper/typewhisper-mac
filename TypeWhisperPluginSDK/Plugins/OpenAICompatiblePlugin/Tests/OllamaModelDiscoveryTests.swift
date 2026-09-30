@@ -294,6 +294,73 @@ final class OllamaModelDiscoveryTests: XCTestCase {
         XCTAssertEqual(decoded.serverKindRaw, "ollama")
     }
 
+    func testSettingsRefreshUsesOneNativeRequestForModelsAndError() async throws {
+        let (plugin, profileId) = try makeOllamaPlugin(baseURL: "http://localhost:11434")
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"models":[{"name":"first:latest"}]}"#.utf8),
+                    Self.httpResponse(url: "http://localhost:11434/api/tags", statusCode: 200)
+                ),
+                .success(
+                    Data(#"{"models":[{"name":"second:latest"}]}"#.utf8),
+                    Self.httpResponse(url: "http://localhost:11434/api/tags", statusCode: 200)
+                ),
+            ])
+        }
+
+        let result = await plugin.fetchModelsWithDiscoveryError(for: profileId)
+
+        XCTAssertEqual(result.models.map(\.id), ["first:latest"])
+        XCTAssertNil(result.error)
+        XCTAssertEqual(store.sessions.flatMap(\.requestedPaths), ["/api/tags"])
+    }
+
+    func testSettingsRefreshFallsBackWithoutRepeatingFailedNativeRequest() async throws {
+        let (plugin, profileId) = try makeOllamaPlugin(baseURL: "http://localhost:11434")
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(),
+                    Self.httpResponse(url: "http://localhost:11434/api/tags", statusCode: 401)
+                ),
+                .success(
+                    Data(#"{"models":[{"name":"unexpected-second-native-result"}],"data":[{"id":"fallback-model"}]}"#.utf8),
+                    Self.httpResponse(url: "http://localhost:11434/v1/models", statusCode: 200)
+                ),
+            ])
+        }
+
+        let result = await plugin.fetchModelsWithDiscoveryError(for: profileId)
+
+        XCTAssertEqual(result.models.map(\.id), ["fallback-model"])
+        XCTAssertEqual(result.error, .unauthorized)
+        XCTAssertEqual(store.sessions.flatMap(\.requestedPaths), ["/api/tags", "/v1/models"])
+    }
+
+    func testSettingsRefreshNeverProbesNativeEndpointForGenericProfile() async throws {
+        let host = try PluginTestHostServices(defaults: ["baseURL": "https://example.test"])
+        let plugin = OpenAICompatiblePlugin()
+        plugin.activate(host: host)
+        let store = PluginHTTPClientSessionStore()
+        PluginHTTPClientTestHarness.configure { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"data":[{"id":"generic-model"}]}"#.utf8),
+                    Self.httpResponse(url: "https://example.test/v1/models", statusCode: 200)
+                ),
+            ])
+        }
+
+        let result = await plugin.fetchModelsWithDiscoveryError(for: plugin.providerId)
+
+        XCTAssertEqual(result.models.map(\.id), ["generic-model"])
+        XCTAssertNil(result.error)
+        XCTAssertEqual(store.sessions.flatMap(\.requestedPaths), ["/v1/models"])
+    }
+
     // MARK: - Helpers
 
     private func makeOllamaPlugin(baseURL: String) throws -> (OpenAICompatiblePlugin, String) {

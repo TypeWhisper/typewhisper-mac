@@ -1073,17 +1073,23 @@ final class OpenAICompatiblePlugin: NSObject,
     }
 
     func fetchModels(for profileId: String) async -> [FetchedModel] {
+        await fetchModelsWithDiscoveryError(for: profileId).models
+    }
+
+    /// Keeps the settings model list and error tied to the same discovery attempt.
+    func fetchModelsWithDiscoveryError(for profileId: String) async -> (models: [FetchedModel], error: OllamaDiscoveryError?) {
         guard let profile = profile(for: profileId),
-              !profile.baseURL.isEmpty else { return [] }
+              !profile.baseURL.isEmpty else { return ([], nil) }
 
         if profile.serverKind == .ollama {
-            // Native Ollama discovery first; fall back to the OpenAI-compatible
-            // endpoint (which Ollama also serves) when native discovery fails.
-            if case .success(let models) = await discoverOllamaModels(for: profileId) {
-                return models
+            switch await discoverOllamaModels(for: profileId) {
+            case .success(let models):
+                return (models, nil)
+            case .failure(let error):
+                return (await fetchOpenAIModels(for: profileId), error)
             }
         }
-        return await fetchOpenAIModels(for: profileId)
+        return (await fetchOpenAIModels(for: profileId), nil)
     }
 
     func fetchOpenAIModels(for profileId: String) async -> [FetchedModel] {
@@ -1146,9 +1152,7 @@ final class OpenAICompatiblePlugin: NSObject,
     /// Queries an explicitly Ollama-configured profile's native `/api/tags`
     /// endpoint and maps installed model names into `FetchedModel` entries.
     ///
-    /// Never called for generic profiles: `fetchModels(for:)` is the only
-    /// caller, and it only routes here when the profile's server kind is
-    /// `.ollama`.
+    /// Model refresh routes here only for profiles explicitly configured as Ollama.
     func discoverOllamaModels(for profileId: String) async -> Result<[FetchedModel], OllamaDiscoveryError> {
         guard let profile = profile(for: profileId),
               !profile.baseURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -2809,23 +2813,15 @@ private struct OpenAICompatibleSettingsView: View {
     private func refreshModels() {
         guard let selectedProfile else { return }
         let profileId = selectedProfile.id
-        let isOllama = selectedProfile.serverKind == .ollama
         saveServerFields(for: profileId)
 
         Task {
-            // For explicit Ollama profiles, surface the native discovery result
-            // so failures show an actionable message; fetchModels still falls
-            // back to /v1/models for the actual list.
-            var failureMessage: String? = nil
-            if isOllama, case .failure(let error) = await plugin.discoverOllamaModels(for: profileId) {
-                failureMessage = error.userMessage
-            }
-            let models = await plugin.fetchModels(for: profileId)
+            let result = await plugin.fetchModelsWithDiscoveryError(for: profileId)
             await MainActor.run {
-                plugin.setFetchedModels(models, for: profileId)
+                plugin.setFetchedModels(result.models, for: profileId)
                 reloadProfiles(selecting: profileId)
                 // Set after reload: syncFieldsFromSelectedProfile clears it.
-                discoveryError = failureMessage
+                discoveryError = result.error?.userMessage
             }
         }
     }
