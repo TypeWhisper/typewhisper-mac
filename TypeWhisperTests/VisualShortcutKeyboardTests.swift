@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import XCTest
 @testable import TypeWhisper
 
@@ -393,13 +394,48 @@ final class VisualShortcutKeyboardTests: XCTestCase {
     // MARK: - Layout
 
     func testAnsiLayout_excludesIsoKey() {
-        let rows = VisualShortcutKeyboardModel.mainRows(for: .ansi)
-        XCTAssertFalse(rows.flatMap { $0 }.contains(where: { $0.keyCode == 0x0A }))
+        let rows = VisualShortcutKeyboardModel.keyLayout(for: .ansi)
+        XCTAssertFalse(rows.contains(where: { $0.keyCode == 0x0A }))
     }
 
-    func testIsoLayout_includesExtraKey() {
-        let rows = VisualShortcutKeyboardModel.mainRows(for: .iso)
-        XCTAssertTrue(rows.flatMap { $0 }.contains(where: { $0.keyCode == 0x0A }))
+    func testIsoLayout_placesSectionAboveTabAndGraveBesideShift() throws {
+        let keys = VisualShortcutKeyboardModel.keyLayout(for: .iso)
+        let section = try XCTUnwrap(keys.first(where: { $0.keyCode == 0x0A }))
+        let grave = try XCTUnwrap(keys.first(where: { $0.keyCode == 0x32 }))
+        let tab = try XCTUnwrap(keys.first(where: { $0.keyCode == 0x30 }))
+        let shift = try XCTUnwrap(keys.first(where: { $0.content == .modifier(.keyCode(0x38)) }))
+        XCTAssertEqual(section.x, tab.x)
+        XCTAssertEqual(section.y + 1, tab.y)
+        XCTAssertEqual(grave.x, shift.x + shift.width)
+        XCTAssertEqual(grave.y, shift.y)
+    }
+
+    func testPhysicalLayouts_haveUniqueBoundedNonoverlappingHitTargets() {
+        for kind in VisualKeyboardLayoutKind.allCases {
+            let keys = VisualShortcutKeyboardModel.keyLayout(for: kind)
+            XCTAssertEqual(Set(keys.map(\.id)).count, keys.count)
+            let bounds = CGRect(x: 0, y: 0, width: VisualShortcutKeyboardModel.keyboardWidth,
+                                height: VisualShortcutKeyboardModel.keyboardHeight)
+            var hitRegions: [(VisualKey.Content, CGRect)] = []
+            for key in keys {
+                let frame = CGRect(x: key.x, y: key.y, width: key.width, height: key.height)
+                XCTAssertTrue(bounds.contains(frame), "Out-of-bounds key: \(key.content)")
+                if key.isTallReturn {
+                    hitRegions.append((key.content, CGRect(x: key.x, y: key.y, width: key.width, height: 1)))
+                    hitRegions.append((key.content, CGRect(x: key.x + 0.25, y: key.y + 1,
+                                                         width: key.width - 0.25, height: 1)))
+                } else {
+                    hitRegions.append((key.content, frame))
+                }
+            }
+            for first in hitRegions.indices {
+                for second in hitRegions.indices where second > first {
+                    let overlap = hitRegions[first].1.intersection(hitRegions[second].1)
+                    XCTAssertTrue(overlap.isNull || overlap.width < 0.0001 || overlap.height < 0.0001,
+                                  "Overlapping keys: \(hitRegions[first].0), \(hitRegions[second].0)")
+                }
+            }
+        }
     }
 
     func testKeyLabel_usesInjectedResolver() {
@@ -407,9 +443,65 @@ final class VisualShortcutKeyboardTests: XCTestCase {
         XCTAssertEqual(model.keyLabel(0x00), "K0")
     }
 
+    func testInputSourceChange_updatesLabelsAndGeometryWithoutChangingShortcut() {
+        var source = VisualKeyboardInputSource(layoutKind: .iso, name: "Deutsch", keyLabels: [0x10: "Z"])
+        let model = VisualShortcutKeyboardModel(inputSourceProvider: { source })
+        model.toggleModifier(.keyCode(0x36))
+        model.toggleKey(0x10)
+        model.toggleDoubleTap()
+        let hotkey = model.composedHotkey
+        XCTAssertEqual(model.keyLabel(0x10), "Z")
+
+        source = VisualKeyboardInputSource(layoutKind: .ansi, name: "U.S.", keyLabels: [0x10: "Y"])
+        model.refreshInputSource()
+        XCTAssertEqual(model.layoutKind, .ansi)
+        XCTAssertEqual(model.inputSource.name, "U.S.")
+        XCTAssertEqual(model.keyLabel(0x10), "Y")
+        XCTAssertEqual(model.composedHotkey, hotkey)
+
+        source = VisualKeyboardInputSource(layoutKind: .jis, name: "日本語", keyLabels: [0x10: "ん"])
+        model.refreshInputSource()
+        XCTAssertEqual(model.layoutKind, .jis)
+        XCTAssertEqual(model.keyLabel(0x10), "ん")
+        XCTAssertEqual(model.composedHotkey, hotkey)
+    }
+
+    func testSystemKeycaps_resolveGermanAndUSWithoutChangingInputSource() throws {
+        func data(for sourceID: String) throws -> CFData {
+            let filter = [kTISPropertyInputSourceID as String: sourceID] as CFDictionary
+            let sources = TISCreateInputSourceList(filter, true).takeRetainedValue() as! [TISInputSource]
+            let source = try XCTUnwrap(sources.first)
+            let property = try XCTUnwrap(TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData))
+            return unsafeBitCast(property, to: CFData.self)
+        }
+        let german = try data(for: "com.apple.keylayout.German")
+        let us = try data(for: "com.apple.keylayout.US")
+        let type = UInt32(LMGetKbdType())
+        XCTAssertEqual(HotkeyService.keycapName(for: 0x10, layoutData: german, keyboardType: type), "Z")
+        XCTAssertEqual(HotkeyService.keycapName(for: 0x10, layoutData: us, keyboardType: type), "Y")
+        XCTAssertEqual(HotkeyService.keycapName(for: 0x1B, layoutData: german, keyboardType: type), "ß")
+        XCTAssertEqual(HotkeyService.keycapName(for: 0x35, layoutData: us, keyboardType: type), "⎋")
+    }
+
+    func testJisLayout_keepsLanguageKeysAndAllModifiersReachable() throws {
+        let keys = VisualShortcutKeyboardModel.keyLayout(for: .jis)
+        for code: UInt16 in [0x5D, 0x5E, 0x66, 0x68] {
+            XCTAssertTrue(keys.contains(where: { $0.keyCode == code }))
+        }
+        let space = try XCTUnwrap(keys.first(where: { $0.keyCode == 0x31 }))
+        let eisu = try XCTUnwrap(keys.first(where: { $0.keyCode == 0x66 }))
+        let kana = try XCTUnwrap(keys.first(where: { $0.keyCode == 0x68 }))
+        XCTAssertEqual(eisu.x + eisu.width, space.x)
+        XCTAssertEqual(space.x + space.width, kana.x)
+        // Right Option and Right Control are provided in More Keys on JIS.
+        for code: UInt16 in [0x37, 0x36, 0x38, 0x3C, 0x3A, 0x3B] {
+            XCTAssertTrue(keys.contains(where: { $0.content == .modifier(.keyCode(code)) }))
+        }
+    }
+
     func testRealKeyName_resolves() {
         // Exercises the production label resolver used by default.
         XCTAssertEqual(HotkeyService.keyName(for: 0x00), "A")
-        XCTAssertEqual(HotkeyService.keyName(for: 0x3D), "Right Option")
+        XCTAssertEqual(HotkeyService.keyName(for: 0x3D), String(localized: "Right Option"))
     }
 }

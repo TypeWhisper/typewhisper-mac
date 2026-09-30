@@ -2449,6 +2449,22 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
         return hotkey.isDoubleTap ? "\(baseName) x2" : baseName
     }
 
+    /// Keycap legends keep single glyphs such as German ß instead of expanding to SS.
+    nonisolated static func keycapName(for keyCode: UInt16, layoutData: CFData?, keyboardType: UInt32) -> String {
+        switch keyCode {
+        case 0x66: return "英数"
+        case 0x68: return "かな"
+        default: break
+        }
+        if let layoutData, let character = characterForKeyCode(keyCode, layoutData: layoutData, keyboardType: keyboardType) {
+            let uppercased = character.uppercased()
+            return character.count == 1 && uppercased.count > 1 ? character : uppercased
+        }
+        if keyCode == 0x5D { return "¥" }
+        if keyCode == 0x5E { return "_" }
+        return keyName(for: keyCode)
+    }
+
     nonisolated static func keyName(for keyCode: UInt16) -> String {
         // Special keys that don't produce meaningful characters via UCKeyTranslate
         let specialKeys: [UInt16: String] = [
@@ -2458,14 +2474,15 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             0x65: "F9", 0x6D: "F10", 0x67: "F11", 0x6F: "F12",
             0x69: "F13", 0x6B: "F14", 0x71: "F15",
             0x7E: "↑", 0x7D: "↓", 0x7B: "←", 0x7C: "→",
+            0x66: "英数", 0x68: "かな",
         ]
         if let name = specialKeys[keyCode] { return name }
 
         let modifierNames: [UInt16: String] = [
-            0x37: "Left Command", 0x36: "Right Command",
-            0x38: "Left Shift", 0x3C: "Right Shift",
-            0x3A: "Left Option", 0x3D: "Right Option",
-            0x3B: "Left Control", 0x3E: "Right Control",
+            0x37: String(localized: "Left Command"), 0x36: String(localized: "Right Command"),
+            0x38: String(localized: "Left Shift"), 0x3C: String(localized: "Right Shift"),
+            0x3A: String(localized: "Left Option"), 0x3D: String(localized: "Right Option"),
+            0x3B: String(localized: "Left Control"), 0x3E: String(localized: "Right Control"),
         ]
         if let name = modifierNames[keyCode] { return name }
 
@@ -2538,11 +2555,15 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
 
     /// Resolves the character for a keyCode using the current keyboard input source.
     private nonisolated static func characterForKeyCode(_ keyCode: UInt16) -> String? {
-        let source = TISCopyCurrentKeyboardInputSource().takeRetainedValue()
-        guard let layoutDataRef = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData) else {
+        guard let source = TISCopyCurrentKeyboardLayoutInputSource()?.takeRetainedValue(),
+              let layoutDataRef = TISGetInputSourceProperty(source, kTISPropertyUnicodeKeyLayoutData) else {
             return nil
         }
         let layoutData = unsafeBitCast(layoutDataRef, to: CFData.self)
+        return characterForKeyCode(keyCode, layoutData: layoutData, keyboardType: UInt32(LMGetKbdType()))
+    }
+
+    private nonisolated static func characterForKeyCode(_ keyCode: UInt16, layoutData: CFData, keyboardType: UInt32) -> String? {
         let keyLayoutPtr = unsafeBitCast(CFDataGetBytePtr(layoutData), to: UnsafePointer<UCKeyboardLayout>.self)
 
         var deadKeyState: UInt32 = 0
@@ -2554,7 +2575,7 @@ final class HotkeyService: ObservableObject, @unchecked Sendable {
             keyCode,
             UInt16(kUCKeyActionDown),
             0, // no modifiers
-            UInt32(LMGetKbdType()),
+            keyboardType,
             UInt32(kUCKeyTranslateNoDeadKeysMask),
             &deadKeyState,
             chars.count,

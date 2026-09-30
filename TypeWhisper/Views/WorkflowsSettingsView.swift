@@ -2068,10 +2068,7 @@ private struct WorkflowEditorPage: View {
                         excludingWorkflowId: workflow?.id
                     ),
                         let conflictWorkflow = workflowService.workflow(id: workflowId) {
-                        return localizedAppText(
-                            "the “\(conflictWorkflow.name)” workflow shortcut",
-                            de: "dem Shortcut des Workflows „\(conflictWorkflow.name)“"
-                        )
+                        return String(localized: "the “\(conflictWorkflow.name)” workflow shortcut")
                     }
                     return HotkeyRecorderView.globalSlotAssignmentDescription(for: candidate)
                 }

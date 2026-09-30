@@ -199,8 +199,8 @@ struct HotkeyRecorderView: View {
                 .foregroundStyle(.secondary)
         }
         .buttonStyle(.plain)
-        .help(localizedAppText("Edit with visual keyboard", de: "Mit visueller Tastatur bearbeiten"))
-        .accessibilityLabel(localizedAppText("Edit shortcut with visual keyboard", de: "Shortcut mit visueller Tastatur bearbeiten"))
+        .help(String(localized: "Edit with visual keyboard"))
+        .accessibilityLabel(String(localized: "Edit shortcut with visual keyboard"))
     }
 
     /// Default conflict preview for the visual keyboard: the global slots, via the
@@ -212,9 +212,9 @@ struct HotkeyRecorderView: View {
         return assignmentDescription(for: slot)
     }
 
-    /// User-facing "the X shortcut" description for a conflicting global slot.
+    /// Localized name of a conflicting global slot, without an English sentence wrapper.
     static func assignmentDescription(for slot: HotkeySlotType) -> String {
-        localizedAppText("the \(globalSlotDisplayName(slot)) shortcut", de: "dem Shortcut \(globalSlotDisplayName(slot))")
+        globalSlotDisplayName(slot)
     }
 
     private static func globalSlotDisplayName(_ slot: HotkeySlotType) -> String {

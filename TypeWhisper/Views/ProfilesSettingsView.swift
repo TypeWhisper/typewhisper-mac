@@ -1225,10 +1225,7 @@ private struct RuleReviewStep: View {
                                             excludingProfileId: viewModel.editingProfile?.id
                                         ),
                                             let conflictProfile = viewModel.profiles.first(where: { $0.id == conflictId }) {
-                                            return localizedAppText(
-                                                "the “\(conflictProfile.name)” profile shortcut",
-                                                de: "dem Shortcut des Profils „\(conflictProfile.name)“"
-                                            )
+                                            return String(localized: "the “\(conflictProfile.name)” profile shortcut")
                                         }
                                         return nil
                                     }
