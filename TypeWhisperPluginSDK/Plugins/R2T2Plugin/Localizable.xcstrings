@@ -8,6 +8,12 @@
             "state": "translated",
             "value": "audiocpp_server mit einem confucius4_r2t2-Modell im Streaming-Modus."
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "运行 confucius4_r2t2 模型（流式模式）的 audiocpp_server。"
+          }
         }
       }
     },
@@ -17,6 +23,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Audio wird als 16-kHz-PCM an deinen lokalen audio.cpp-Server gestreamt. Es werden keine Daten an andere Stellen gesendet."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "音频以 16 kHz PCM 流式传输到你本地的 audio.cpp 服务器，不会发送到其他任何地方。"
           }
         }
       }
@@ -28,6 +40,12 @@
             "state": "translated",
             "value": "Verbunden"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已连接"
+          }
         }
       }
     },
@@ -37,6 +55,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Modell-ID"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型 ID"
           }
         }
       }
@@ -48,6 +72,12 @@
             "state": "translated",
             "value": "Speichern"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存"
+          }
         }
       }
     },
@@ -57,6 +87,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Server-URL"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "服务器 URL"
           }
         }
       }
@@ -68,6 +104,12 @@
             "state": "translated",
             "value": "Verbindung testen"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "测试连接"
+          }
         }
       }
     },
@@ -77,6 +119,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Die \"id\" des Modelleintrags in der Server-Konfiguration."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "服务器配置中模型条目的 \"id\"。"
           }
         }
       }
@@ -88,6 +136,12 @@
             "state": "translated",
             "value": "%@ (empfohlen)"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@（推荐）"
+          }
         }
       }
     },
@@ -97,6 +151,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "audiocpp_server %@ läuft auf 127.0.0.1:%@."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "audiocpp_server %@ 正在 127.0.0.1:%@ 上运行。"
           }
         }
       }
@@ -108,6 +168,12 @@
             "state": "translated",
             "value": "audiocpp_server %@ startet mit dem ersten Diktat und wird neu gestartet, falls er beendet wird."
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "audiocpp_server %@ 会在第一次听写时启动，停止后会自动重启。"
+          }
         }
       }
     },
@@ -117,6 +183,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Integriert"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "内置"
           }
         }
       }
@@ -128,6 +200,12 @@
             "state": "translated",
             "value": "Abbrechen"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "取消"
+          }
         }
       }
     },
@@ -137,6 +215,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Löschen"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "删除"
           }
         }
       }
@@ -148,6 +232,12 @@
             "state": "translated",
             "value": "Das geladene Modell löschen?"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "删除已下载的模型？"
+          }
         }
       }
     },
@@ -157,6 +247,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Laden"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "下载"
           }
         }
       }
@@ -168,6 +264,12 @@
             "state": "translated",
             "value": "Volle Präzision, am größten"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "全精度，体积最大"
+          }
         }
       }
     },
@@ -177,6 +279,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Modell"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型"
           }
         }
       }
@@ -188,6 +296,12 @@
             "state": "translated",
             "value": "Modelllizenz"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型许可证"
+          }
         }
       }
     },
@@ -197,6 +311,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Fast volle Qualität, von davidxifeng"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "接近全精度质量，由 davidxifeng 提供"
           }
         }
       }
@@ -208,6 +328,12 @@
             "state": "translated",
             "value": "Eigener Server"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自有服务器"
+          }
         }
       }
     },
@@ -217,6 +343,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Server"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "服务器"
           }
         }
       }
@@ -228,6 +360,12 @@
             "state": "translated",
             "value": "Im Finder zeigen"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "在访达中显示"
+          }
         }
       }
     },
@@ -238,6 +376,12 @@
             "state": "translated",
             "value": "Am kleinsten und schnellsten, Community-Quantisierung von Nairod785"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "体积最小、速度最快，由 Nairod785 提供的社区量化版本"
+          }
         }
       }
     },
@@ -247,6 +391,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Die Modellgewichte stehen unter der Confucius4-R2T2 Model Use License von NetEase Youdao, die mit jedem Modell geladen wird (LICENSE, LICENSE_zh, NOTICE). Mit dem Download akzeptierst du sie. Der Server ist audio.cpp, Apache-2.0."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "模型权重由网易有道依据 Confucius4-R2T2 模型使用许可证授权，该许可证会随每个模型一起下载（LICENSE、LICENSE_zh、NOTICE）。下载即表示你接受该许可证。服务器为 audio.cpp，采用 Apache-2.0 许可证。"
           }
         }
       }
