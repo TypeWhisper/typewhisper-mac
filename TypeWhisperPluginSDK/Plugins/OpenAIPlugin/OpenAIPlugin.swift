@@ -540,7 +540,7 @@ struct OpenAIResponsesClient: Sendable {
         case 401:
             throw PluginChatError.invalidApiKey
         case 429:
-            throw PluginChatError.rateLimited
+            throw PluginChatError.rateLimitOrQuota(from: data)
         default:
             throw PluginChatError.apiError(Self.errorMessage(from: data, statusCode: httpResponse.statusCode))
         }
@@ -856,7 +856,7 @@ private struct OpenAIContextAwareFileTranscriptionClient: Sendable {
         case 413:
             throw PluginTranscriptionError.fileTooLarge
         case 429:
-            throw PluginTranscriptionError.rateLimited
+            throw PluginTranscriptionError.rateLimitOrQuota(from: responseData)
         default:
             let error = PluginTranscriptionError.apiError(
                 Self.errorMessage(from: responseData, response: httpResponse)
@@ -2511,7 +2511,7 @@ final class OpenAIPlugin: NSObject,
             case 401:
                 throw PluginTranscriptionError.invalidApiKey
             case 429:
-                throw PluginTranscriptionError.rateLimited
+                throw PluginTranscriptionError.rateLimitOrQuota(from: data)
             default:
                 throw PluginTranscriptionError.apiError(Self.errorMessage(from: data, statusCode: httpResponse.statusCode))
             }
@@ -3025,7 +3025,7 @@ final class OpenAIPlugin: NSObject,
         case 401:
             throw PluginChatError.invalidApiKey
         case 429:
-            throw PluginChatError.rateLimited
+            throw PluginChatError.rateLimitOrQuota(from: data)
         default:
             throw PluginChatError.apiError(parseChatGPTErrorMessage(from: data, statusCode: httpResponse.statusCode))
         }
