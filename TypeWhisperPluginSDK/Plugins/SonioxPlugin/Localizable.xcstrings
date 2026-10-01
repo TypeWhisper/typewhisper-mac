@@ -484,6 +484,72 @@
           }
         }
       }
+    },
+    "Describe the recording topic, setting, or relevant context.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Beschreibe Thema, Umgebung oder relevanten Kontext der Aufnahme."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "録音のトピック、状況、関連する背景を入力してください。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "描述录音的主题、场景或相关背景。"
+          }
+        }
+      }
+    },
+    "Sent to Soniox with every transcription. Dictionary terms are added automatically.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wird bei jeder Transkription an Soniox gesendet. Wörterbuchbegriffe werden automatisch ergänzt."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文字起こしのたびにSonioxへ送信されます。辞書の用語は自動的に追加されます。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每次转录时发送给 Soniox。词典术语会自动添加。"
+          }
+        }
+      }
+    },
+    "Transcription Context": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Transkriptionskontext"
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文字起こしのコンテキスト"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "转录上下文"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

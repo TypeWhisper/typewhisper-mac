@@ -21,6 +21,7 @@ private enum SonioxDefaultsKey {
     static let selectedTTSModel = "selectedTTSModel"
     static let fetchedModels = "fetchedModels"
     static let fetchedTTSModels = "fetchedTTSModels"
+    static let transcriptionContext = "transcriptionContext"
 }
 
 private enum SonioxModelSelection {
@@ -127,6 +128,7 @@ private struct SonioxAsyncTranscriptionRequest: Sendable {
     let translate: Bool
     let apiKey: String
     let prompt: String?
+    let contextText: String?
 }
 
 private struct SonioxUploadedAudio: Sendable {
@@ -626,6 +628,7 @@ final class SonioxLiveTranscriptionSession: LiveTranscriptionSession, @unchecked
         languageSelection: PluginLanguageSelection,
         translate: Bool,
         prompt: String?,
+        contextText: String? = nil,
         onProgress: @Sendable @escaping (String) -> Bool,
         webSocketURLOverride: URL? = nil
     ) async throws -> SonioxLiveTranscriptionSession {
@@ -677,7 +680,8 @@ final class SonioxLiveTranscriptionSession: LiveTranscriptionSession, @unchecked
                 language: languageSelection.requestedLanguage,
                 languageHints: languageSelection.languageHints,
                 translate: translate,
-                prompt: prompt
+                prompt: prompt,
+                contextText: contextText
             )))
         } catch {
             receiveTask.cancel()
@@ -833,6 +837,10 @@ final class SonioxPlugin: NSObject,
     static let defaultTTSModelId = "tts-rt-v1"
     static let ttsSampleRate = 24_000
     static let defaultVoiceId = "Maya"
+    // Soniox rejects a context object above ~10,000 characters; the custom text shares that
+    // allowance with the dictionary terms.
+    static let maxContextChars = 10_000
+    static let maxTranscriptionContextChars = 6_000
     private static let cleanupLogger = Logger(subsystem: "com.typewhisper.soniox", category: "RESTCleanup")
     static let fallbackVoices: [PluginVoiceInfo] = [
         PluginVoiceInfo(id: "Maya", displayName: "Maya"),
@@ -871,6 +879,7 @@ final class SonioxPlugin: NSObject,
     fileprivate var _selectedRegion = SonioxRegion.unitedStates
     fileprivate var _selectedTTSModelId: String?
     fileprivate var _selectedVoiceId: String?
+    fileprivate var _transcriptionContext: String = ""
     fileprivate var _fetchedModels: [SonioxFetchedModel] = []
     fileprivate var _fetchedTTSModels: [SonioxFetchedTTSModel] = []
 
@@ -899,6 +908,7 @@ final class SonioxPlugin: NSObject,
             host.userDefault(forKey: SonioxDefaultsKey.selectedVoice) as? String,
             host: host
         )
+        _transcriptionContext = host.userDefault(forKey: SonioxDefaultsKey.transcriptionContext) as? String ?? ""
         if let data = host.userDefault(forKey: SonioxDefaultsKey.fetchedModels) as? Data {
             _fetchedModels = (try? JSONDecoder().decode([SonioxFetchedModel].self, from: data)) ?? []
         }
@@ -951,9 +961,24 @@ final class SonioxPlugin: NSObject,
     var supportsTranslation: Bool { true }
     var supportsStreaming: Bool { true }
     var dictionaryTermsSupport: DictionaryTermsSupport { .supported }
-    var dictionaryTermsBudget: DictionaryTermsBudget { DictionaryTermsBudget(maxTotalChars: 10_000) }
+    var dictionaryTermsBudget: DictionaryTermsBudget {
+        DictionaryTermsBudget(
+            maxTotalChars: Self.maxContextChars - (normalizedTranscriptionContext?.count ?? 0)
+        )
+    }
 
     var supportedLanguages: [String] { sonioxSupportedLanguages }
+
+    var transcriptionContext: String { _transcriptionContext }
+
+    func setTranscriptionContext(_ context: String) {
+        _transcriptionContext = context
+        host?.setUserDefault(context, forKey: SonioxDefaultsKey.transcriptionContext)
+    }
+
+    private var normalizedTranscriptionContext: String? {
+        Self.normalizedContextText(_transcriptionContext)
+    }
 
     private var normalizedAPIKey: String? {
         guard let apiKey = _apiKey?.trimmingCharacters(in: .whitespacesAndNewlines), !apiKey.isEmpty else {
@@ -1331,6 +1356,7 @@ final class SonioxPlugin: NSObject,
             languageSelection: languageSelection,
             translate: translate,
             prompt: prompt,
+            contextText: normalizedTranscriptionContext,
             onProgress: onProgress
         )
     }
@@ -1385,7 +1411,8 @@ final class SonioxPlugin: NSObject,
             languageHints: languageHints,
             translate: translate,
             apiKey: apiKey,
-            prompt: prompt
+            prompt: prompt,
+            contextText: normalizedTranscriptionContext
         )
         let uploadAudio = PluginAudioUploadEncoder.normalizedAudioForUpload(audio)
 
@@ -1718,6 +1745,7 @@ final class SonioxPlugin: NSObject,
             translate: configuration.translate,
             apiKey: configuration.apiKey,
             prompt: configuration.prompt,
+            contextText: configuration.contextText,
             modelID: configuration.modelID,
             regionID: configuration.region.id
         )
@@ -1752,6 +1780,7 @@ final class SonioxPlugin: NSObject,
         translate: Bool,
         apiKey: String,
         prompt: String?,
+        contextText: String? = nil,
         modelID: String = SonioxPlugin.defaultAsyncModelId,
         regionID: String? = nil
     ) throws -> URLRequest {
@@ -1776,7 +1805,7 @@ final class SonioxPlugin: NSObject,
                 "target_language": "en",
             ]
         }
-        if let context = Self.contextPayload(prompt: prompt) {
+        if let context = Self.contextPayload(prompt: prompt, contextText: contextText) {
             body["context"] = context
         }
 
@@ -1795,7 +1824,8 @@ final class SonioxPlugin: NSObject,
         language: String?,
         languageHints: [String] = [],
         translate: Bool,
-        prompt: String?
+        prompt: String?,
+        contextText: String? = nil
     ) -> [String: Any] {
         var config: [String: Any] = [
             "api_key": apiKey,
@@ -1821,7 +1851,7 @@ final class SonioxPlugin: NSObject,
                 "target_language": "en",
             ]
         }
-        if let context = Self.contextPayload(prompt: prompt) {
+        if let context = Self.contextPayload(prompt: prompt, contextText: contextText) {
             config["context"] = context
         }
 
@@ -1834,7 +1864,8 @@ final class SonioxPlugin: NSObject,
         language: String?,
         languageHints: [String] = [],
         translate: Bool,
-        prompt: String?
+        prompt: String?,
+        contextText: String? = nil
     ) throws -> String {
         let data = try JSONSerialization.data(withJSONObject: makeRealtimeConfigPayload(
             apiKey: apiKey,
@@ -1842,7 +1873,8 @@ final class SonioxPlugin: NSObject,
             language: language,
             languageHints: languageHints,
             translate: translate,
-            prompt: prompt
+            prompt: prompt,
+            contextText: contextText
         ))
         guard let string = String(data: data, encoding: .utf8) else {
             throw PluginTranscriptionError.apiError("Failed to encode Soniox realtime config")
@@ -1999,10 +2031,23 @@ final class SonioxPlugin: NSObject,
             .sorted { compareModelIDs($0.id, $1.id) }
     }
 
-    private static func contextPayload(prompt: String?) -> [String: Any]? {
+    private static func contextPayload(prompt: String?, contextText: String?) -> [String: Any]? {
+        var context: [String: Any] = [:]
         let terms = PluginDictionaryTerms.terms(fromPrompt: prompt)
-        guard !terms.isEmpty else { return nil }
-        return ["terms": terms]
+        if !terms.isEmpty {
+            context["terms"] = terms
+        }
+        if let text = normalizedContextText(contextText) {
+            context["text"] = text
+        }
+        return context.isEmpty ? nil : context
+    }
+
+    static func normalizedContextText(_ text: String?) -> String? {
+        guard let text = text?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty else {
+            return nil
+        }
+        return String(text.prefix(maxTranscriptionContextChars))
     }
 
     private static func resolvedLanguageHints(requestedLanguage: String?, languageHints: [String]) -> [String] {
@@ -2420,6 +2465,7 @@ private struct SonioxSettingsView: View {
     @State private var selectedTTSModel: String = ""
     @State private var selectedRegion: String = ""
     @State private var selectedVoice: String = ""
+    @State private var transcriptionContext: String = ""
     @State private var isRefreshingModels = false
     private let bundle = Bundle(for: SonioxPlugin.self)
 
@@ -2554,6 +2600,27 @@ private struct SonioxSettingsView: View {
                         .font(.caption)
                         .foregroundStyle(.secondary)
 
+                    Text("Transcription Context", bundle: bundle)
+                        .font(.subheadline.weight(.medium))
+
+                    TextField(
+                        String(
+                            localized: "Describe the recording topic, setting, or relevant context.",
+                            bundle: bundle
+                        ),
+                        text: $transcriptionContext,
+                        axis: .vertical
+                    )
+                    .lineLimit(3...6)
+                    .textFieldStyle(.roundedBorder)
+                    .onChange(of: transcriptionContext) {
+                        plugin.setTranscriptionContext(transcriptionContext)
+                    }
+
+                    Text("Sent to Soniox with every transcription. Dictionary terms are added automatically.", bundle: bundle)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
                     if isRefreshingModels {
                         HStack(spacing: 4) {
                             ProgressView().controlSize(.small)
@@ -2609,6 +2676,7 @@ private struct SonioxSettingsView: View {
             selectedTTSModel = plugin.selectedTTSModelIdForSettings
             selectedRegion = plugin.selectedRegionIdForSettings
             selectedVoice = plugin.selectedVoiceIdForSettings
+            transcriptionContext = plugin.transcriptionContext
         }
     }
 
