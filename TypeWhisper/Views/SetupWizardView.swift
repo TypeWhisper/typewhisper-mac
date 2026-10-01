@@ -12,11 +12,9 @@ struct SetupWizardView: View {
 
     @State private var currentStep: Int
     @State private var selectedHotkeyMode: HotkeySlotType
-    @State private var trialSuccess = false
+    @AppStorage(UserDefaultsKeys.setupWizardTestedSelections) private var testedSelectionsData = Data()
+    @State private var trialSignal = SetupWizardTrialSignal()
     @State private var trialText = ""
-    /// Tracks whether the current `.inserting` phase was entered from
-    /// `.processing`, i.e. a real transcription ran. See SetupWizardTrialSignal.
-    @State private var trialEnteredInsertingFromProcessing = false
     @State private var didAnnounceInitialStep = false
     @State private var isPreparingAppleSpeechFallback = false
     @State private var isActivatingParakeet = false
@@ -115,7 +113,7 @@ struct SetupWizardView: View {
     }
 
     private func restartWizardFromBeginning() {
-        trialSuccess = false
+        trialSignal.reset()
         trialText = ""
         manuallySelectedSetupProviderId = nil
         UserDefaults.standard.set(0, forKey: UserDefaultsKeys.setupWizardCurrentStep)
@@ -294,9 +292,12 @@ struct SetupWizardView: View {
             return localizedAppText("Grant Microphone Access", de: "Mikrofonzugriff erlauben")
         }
 
-        return currentWizardStep == .finish
-            ? localizedAppText("Complete Setup", de: "Setup abschließen")
-            : localizedAppText("Continue", de: "Weiter")
+        if currentWizardStep == .finish {
+            return setupReadiness.canCompleteSetup
+                ? localizedAppText("Complete Setup", de: "Setup abschließen")
+                : String(localized: "Finish Later")
+        }
+        return localizedAppText("Continue", de: "Weiter")
     }
 
     private var primaryKeyboardShortcut: KeyboardShortcut {
@@ -307,7 +308,9 @@ struct SetupWizardView: View {
 
     private var primaryActionAccessibilityHint: String {
         if currentWizardStep == .finish {
-            return localizedAppText("Press Command Return to complete setup.", de: "Drücke Befehlstaste Return, um das Setup abzuschließen.")
+            return setupReadiness.canCompleteSetup
+                ? localizedAppText("Press Command Return to complete setup.", de: "Drücke Befehlstaste Return, um das Setup abzuschließen.")
+                : String(localized: "Press Command Return to finish setup later.")
         }
 
         return localizedAppText("Press Return to continue.", de: "Drücke Return, um fortzufahren.")
@@ -335,11 +338,8 @@ struct SetupWizardView: View {
     }
 
     private func completeSetupAndOpenHome() {
-        // Issue #1335: finishing without a ready engine or a successful test
-        // is "finish later", not completion. Defer instead of marking setup
-        // complete so the wizard resurfaces with its honest state instead of
-        // implying the app is ready.
-        if trialSuccess || hasEngineReadyForSetupTest {
+        // A past test never substitutes for the current engine and permissions.
+        if setupReadiness.canCompleteSetup {
             HomeViewModel.shared.completeSetupWizard()
         } else {
             HomeViewModel.shared.deferSetupWizard()
@@ -1204,50 +1204,51 @@ struct SetupWizardView: View {
             }
         }
         .onChange(of: dictation.state) { oldValue, newValue in
-            let evaluation = SetupWizardTrialSignal.evaluate(
+            let testedSelection = trialSignal.observe(
                 oldState: oldValue,
                 newState: newValue,
-                enteredInsertingFromProcessing: trialEnteredInsertingFromProcessing
+                selection: selectedSetupModel
             )
-            trialEnteredInsertingFromProcessing = evaluation.enteredInsertingFromProcessing
-            if evaluation.granted {
+            if let testedSelection, setupReadiness.canCompleteSetup {
                 withAnimation(.spring(duration: 0.35)) {
-                    trialSuccess = true
-                }
-                if let providerId = modelManager.selectedProviderId {
-                    markSetupWizardProviderTested(providerId)
+                    markSetupWizardSelectionTested(testedSelection)
                 }
             }
         }
-        .onChange(of: modelManager.selectedProviderId) { _, newValue in
-            // The tested state belongs to the engine that passed the test.
-            trialSuccess = newValue.map { testedSetupWizardProviderIds.contains($0) } ?? false
+        .onChange(of: selectedSetupModel) { _, _ in
+            // Never attribute an in-flight test to a different provider/model.
+            trialSignal.reset()
+        }
+        .onDisappear {
+            trialSignal.reset()
         }
         .task {
-            if let providerId = modelManager.selectedProviderId,
-               testedSetupWizardProviderIds.contains(providerId) {
-                trialSuccess = true
-            }
             try? await Task.sleep(for: .milliseconds(50))
             isTrialFieldFocused = true
         }
     }
 
     private var readinessIcon: String {
-        hasEngineReadyForSetupTest && hasAnyTriggerHotkey ? "sparkles" : "exclamationmark.triangle.fill"
+        setupReadiness.canCompleteSetup && hasAnyTriggerHotkey ? "sparkles" : "exclamationmark.triangle.fill"
     }
 
     private var readinessColor: Color {
-        hasEngineReadyForSetupTest && hasAnyTriggerHotkey ? .blue : .orange
+        setupReadiness.canCompleteSetup && hasAnyTriggerHotkey ? .blue : .orange
     }
 
     private var readinessTitle: String {
-        hasEngineReadyForSetupTest && hasAnyTriggerHotkey
+        setupReadiness.canCompleteSetup && hasAnyTriggerHotkey
             ? localizedAppText("Try it out", de: "Probier es aus")
             : localizedAppText("Setup can be finished later", de: "Setup kann später abgeschlossen werden")
     }
 
     private var readinessDescription: String {
+        if dictation.needsMicPermission {
+            return String(localized: "Microphone access is required for dictation.")
+        }
+        if dictation.needsAccessibilityPermission {
+            return String(localized: "Accessibility access is required to paste text into other apps.")
+        }
         if isPreparingAppleSpeechFallback {
             return localizedAppText(
                 "Apple Speech is being prepared for this test.",
@@ -1328,17 +1329,34 @@ struct SetupWizardView: View {
         modelManager.canPrepareForTranscription(engine)
     }
 
-    /// Provider IDs whose setup dictation test completed through the real
-    /// recording/transcription/insertion path (issue #1335). Unlike
-    /// `trialSuccess`, this survives closing and reopening the wizard.
-    private var testedSetupWizardProviderIds: [String] {
-        UserDefaults.standard.stringArray(forKey: UserDefaultsKeys.setupWizardTestedProviderIds) ?? []
+    private var setupReadiness: SetupWizardReadiness {
+        SetupWizardReadiness(
+            canPrepareEngine: hasEngineReadyForSetupTest,
+            microphoneGranted: !dictation.needsMicPermission,
+            accessibilityGranted: !dictation.needsAccessibilityPermission
+        )
     }
 
-    private func markSetupWizardProviderTested(_ providerId: String) {
-        var ids = Set(testedSetupWizardProviderIds)
-        guard ids.insert(providerId).inserted else { return }
-        UserDefaults.standard.set(Array(ids), forKey: UserDefaultsKeys.setupWizardTestedProviderIds)
+    private var selectedSetupModel: SetupWizardTestedSelection? {
+        _ = pluginManager.readinessRevision
+        guard let engine = selectedTranscriptionEngineForSetup else { return nil }
+        return SetupWizardTestedSelection(providerId: engine.providerId, modelId: engine.selectedModelId)
+    }
+
+    private var trialSuccess: Bool {
+        setupReadiness.hasSuccessfulTest(
+            for: selectedSetupModel,
+            testedSelections: SetupWizardTestedSelection.decode(testedSelectionsData)
+        )
+    }
+
+    private func markSetupWizardSelectionTested(_ selection: SetupWizardTestedSelection) {
+        var selections = SetupWizardTestedSelection.decode(testedSelectionsData)
+        guard !selections.contains(selection) else { return }
+        selections.append(selection)
+        if let data = try? JSONEncoder().encode(selections) {
+            testedSelectionsData = data
+        }
     }
 
     private func canUseAppleSpeechFallbackEngine(_ engine: TranscriptionEnginePlugin?) -> Bool {
@@ -1754,6 +1772,33 @@ enum SetupWizardRecommendationUnavailableReason: Equatable {
     }
 }
 
+struct SetupWizardTestedSelection: Codable, Equatable {
+    let providerId: String
+    let modelId: String?
+
+    static func decode(_ data: Data) -> [Self] {
+        (try? JSONDecoder().decode([Self].self, from: data)) ?? []
+    }
+}
+
+struct SetupWizardReadiness {
+    let canPrepareEngine: Bool
+    let microphoneGranted: Bool
+    let accessibilityGranted: Bool
+
+    var canCompleteSetup: Bool {
+        canPrepareEngine && microphoneGranted && accessibilityGranted
+    }
+
+    func hasSuccessfulTest(
+        for selection: SetupWizardTestedSelection?,
+        testedSelections: [SetupWizardTestedSelection]
+    ) -> Bool {
+        guard canCompleteSetup, let selection else { return false }
+        return testedSelections.contains(selection)
+    }
+}
+
 /// Issue #1335: decides whether a dictation state transition counts as a
 /// successful setup-wizard dictation test.
 ///
@@ -1764,7 +1809,42 @@ enum SetupWizardRecommendationUnavailableReason: Equatable {
 /// `.inserting`, so entering `.inserting` from any state other than
 /// `.processing` — i.e. without a transcription having run — must never grant
 /// the tested state.
-enum SetupWizardTrialSignal {
+struct SetupWizardTrialSignal {
+    private var recordingSelection: SetupWizardTestedSelection?
+    private var enteredInsertingFromProcessing = false
+
+    mutating func reset() {
+        recordingSelection = nil
+        enteredInsertingFromProcessing = false
+    }
+
+    mutating func observe(
+        oldState: DictationViewModel.State,
+        newState: DictationViewModel.State,
+        selection: SetupWizardTestedSelection?
+    ) -> SetupWizardTestedSelection? {
+        if newState == .recording {
+            reset()
+            recordingSelection = selection
+        } else if selection != recordingSelection {
+            reset()
+        }
+        let evaluation = Self.evaluate(
+            oldState: oldState,
+            newState: newState,
+            enteredInsertingFromProcessing: enteredInsertingFromProcessing
+        )
+        enteredInsertingFromProcessing = evaluation.enteredInsertingFromProcessing
+        let completedSelection = evaluation.granted ? recordingSelection : nil
+        switch newState {
+        case .idle, .error:
+            reset()
+        default:
+            break
+        }
+        return completedSelection
+    }
+
     /// Evaluates one dictation state transition. Returns whether the
     /// transition grants the tested state, along with the updated
     /// `enteredInsertingFromProcessing` flag for the next transition.
