@@ -500,6 +500,28 @@
           }
         }
       }
+    },
+    "Moondream Parakeet Ultra - Parakeet TDT v3 trained further for higher accuracy. 25 European languages, no API key required.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Moondream Parakeet Ultra - weitertrainiertes Parakeet TDT v3 mit höherer Genauigkeit. 25 europäische Sprachen, kein API-Schlüssel nötig."
+          }
+        },
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Moondream Parakeet Ultra - Parakeet TDT v3を追加学習し、精度を高めたモデルです。25のヨーロッパ語、APIキー不要。"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Moondream Parakeet Ultra - 在 Parakeet TDT v3 基础上继续训练，准确率更高。支持 25 种欧洲语言，无需 API 密钥。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

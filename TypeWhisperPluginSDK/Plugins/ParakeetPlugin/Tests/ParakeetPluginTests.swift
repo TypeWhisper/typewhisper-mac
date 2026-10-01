@@ -262,6 +262,21 @@ final class ParakeetPluginTests: XCTestCase {
             ParakeetPlugin.vocabularyAssetURL(for: .v3).absoluteString,
             "https://huggingface.co/FluidInference/parakeet-tdt-0.6b-v3-coreml/resolve/main/parakeet_vocab.json"
         )
+        XCTAssertEqual(
+            ParakeetPlugin.vocabularyAssetURL(for: .ultra).absoluteString,
+            "https://huggingface.co/FluidInference/parakeet-ultra-coreml/resolve/main/parakeet_vocab.json"
+        )
+    }
+
+    func testUltraIsOfferedWithV3LanguagesAndFiles() throws {
+        let plugin = makePlugin()
+        XCTAssertEqual(
+            plugin.transcriptionModels.map(\.id),
+            ["parakeet-tdt-0.6b-v2", "parakeet-tdt-0.6b-v3", "parakeet-ultra"]
+        )
+        XCTAssertEqual(ParakeetVersion.from(modelId: "parakeet-ultra"), .ultra)
+        XCTAssertEqual(ParakeetVersion.ultra.supportedLanguages, ParakeetVersion.v3.supportedLanguages)
+        XCTAssertEqual(ParakeetVersion.ultra.requiredModelFiles, ParakeetVersion.v3.requiredModelFiles)
     }
 
     func testEnsureVocabularyAssetSkipsExistingFile() async throws {
