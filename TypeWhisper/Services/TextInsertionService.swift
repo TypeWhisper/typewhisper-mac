@@ -2167,23 +2167,34 @@ final class TextInsertionService {
     /// Selects and replaces one exact range. AX setters can succeed without changing
     /// text, and a successful write can be followed by a failed read. Keep those
     /// outcomes separate so undo/restore cannot retry an uncertain mutation.
-    func replaceRange(_ range: NSRange, in element: AXUIElement, with text: String) -> RangeReplacementResult {
-        guard let before = captureFocusedTextState(for: element)?.value else { return .notApplied }
-        let beforeNSString = before as NSString
+    /// Revalidate the caller's value and caret instead of adopting a newer baseline.
+    /// Separate Accessibility calls still cannot form an atomic transaction.
+    func replaceRange(
+        _ range: NSRange,
+        with text: String,
+        expectedState: FocusedTextObservation
+    ) -> RangeReplacementResult {
+        let element = expectedState.element
+        let beforeNSString = expectedState.value as NSString
+        guard let expectedSelection = expectedState.selectedRange,
+              let current = captureFocusedTextState(for: element),
+              current.selectedRange == expectedSelection,
+              beforeNSString.isEqual(to: current.value) else { return .notApplied }
         guard range.location >= 0, range.length >= 0,
               range.location <= beforeNSString.length,
               range.length <= beforeNSString.length - range.location else { return .notApplied }
         guard setSelectedRange(range, on: element),
               let selected = captureFocusedTextState(for: element),
               selected.selectedRange == range,
-              selected.value == before else { return .notApplied }
+              beforeNSString.isEqual(to: selected.value) else { return .notApplied }
 
         // Inspect the result even if AX reports failure: the setter result alone
         // cannot establish whether the target application changed its document.
         _ = insertTextAt(element: element, text: text)
         guard let after = captureFocusedTextState(for: element)?.value else { return .unverified }
-        if after == beforeNSString.replacingCharacters(in: range, with: text) { return .verified }
-        return after == before ? .notApplied : .unverified
+        let expectedAfter = beforeNSString.replacingCharacters(in: range, with: text) as NSString
+        if expectedAfter.isEqual(to: after) { return .verified }
+        return beforeNSString.isEqual(to: after) ? .notApplied : .unverified
     }
 
     private func setSelectedRange(_ range: NSRange, on element: AXUIElement) -> Bool {

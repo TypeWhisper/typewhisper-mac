@@ -135,7 +135,7 @@ final class DictationUndoService: ObservableObject {
 
     private let captureActiveApp: @MainActor () -> (name: String?, bundleId: String?, url: String?)
     private let focusedObservation: @MainActor () -> TextInsertionService.FocusedTextObservation?
-    private let replaceRange: @MainActor (NSRange, AXUIElement, String) -> TextInsertionService.RangeReplacementResult
+    private let replaceRange: @MainActor (NSRange, TextInsertionService.FocusedTextObservation, String) -> TextInsertionService.RangeReplacementResult
     private let isPersistencePending: @MainActor (UUID) -> Bool
     private let isDictationBusy: @MainActor () -> Bool
     private let didRestoreRawTranscript: @MainActor (UUID, String) -> Void
@@ -145,7 +145,7 @@ final class DictationUndoService: ObservableObject {
     init(
         captureActiveApp: @escaping @MainActor () -> (name: String?, bundleId: String?, url: String?),
         focusedObservation: @escaping @MainActor () -> TextInsertionService.FocusedTextObservation?,
-        replaceRange: @escaping @MainActor (NSRange, AXUIElement, String) -> TextInsertionService.RangeReplacementResult,
+        replaceRange: @escaping @MainActor (NSRange, TextInsertionService.FocusedTextObservation, String) -> TextInsertionService.RangeReplacementResult,
         isDictationBusy: @escaping @MainActor () -> Bool,
         didRestoreRawTranscript: @escaping @MainActor (UUID, String) -> Void,
         isPersistencePending: @escaping @MainActor (UUID) -> Bool = { _ in false },
@@ -171,8 +171,8 @@ final class DictationUndoService: ObservableObject {
         self.init(
             captureActiveApp: { textInsertionService.captureActiveApp() },
             focusedObservation: { textInsertionService.captureFocusedTextObservation() },
-            replaceRange: { range, element, text in
-                textInsertionService.replaceRange(range, in: element, with: text)
+            replaceRange: { range, observation, text in
+                textInsertionService.replaceRange(range, with: text, expectedState: observation)
             },
             isDictationBusy: isDictationBusy,
             didRestoreRawTranscript: didRestoreRawTranscript,
@@ -261,7 +261,7 @@ final class DictationUndoService: ObservableObject {
         }
 
         let replacement = kind == .undo ? "" : snapshot.rawTranscript
-        switch replaceRange(targetRange, observation.element, replacement) {
+        switch replaceRange(targetRange, observation, replacement) {
         case .notApplied:
             return .failed(.mutationFailed)
         case .unverified:

@@ -424,18 +424,24 @@ final class DictationUndoServiceTests: XCTestCase {
         var honorsSelection = true
         var transformedText: String?
         var callbacks: [String] = []
+        var readCount = 0
+        var selectionCount = 0
+        var beforeRead: ((Int) -> Void)?
 
         init() {
             insertion.accessibilityGrantedOverride = true
             insertion.captureActiveAppOverride = { (nil, "com.test.app", nil) }
             insertion.focusedTextElementOverride = { [unowned self] in element }
             insertion.focusedTextStateOverride = { [unowned self] _ in
+                readCount += 1
+                beforeRead?(readCount)
                 guard writeCount == 0 || readbackAvailable else { return nil }
                 return TextInsertionService.FocusedTextSnapshot(
                     value: value, selectedText: nil, selectedRange: selection
                 )
             }
             insertion.setSelectedRangeOverride = { [unowned self] _, range in
+                selectionCount += 1
                 if honorsSelection { selection = range }
                 return true
             }
@@ -459,6 +465,62 @@ final class DictationUndoServiceTests: XCTestCase {
             )
             service.recordSnapshot(rawTranscript: " raw \n", insertedText: value, transcriptionID: UUID())
             return service
+        }
+    }
+
+    func testActualRangeWriterRejectsTextChangedAfterSnapshotValidation() {
+        for kind in [DictationUndoService.Kind.undo, .restore] {
+            let harness = AXReplacementHarness()
+            let service = harness.makeService()
+            let writerRead = harness.readCount + 2
+            harness.beforeRead = { [unowned harness] read in
+                if read == writerRead { harness.value = "Unrelated." }
+            }
+
+            XCTAssertEqual(service.perform(kind), .failed(.mutationFailed))
+            XCTAssertEqual(harness.value, "Unrelated.")
+            XCTAssertEqual(harness.writeCount, 0)
+            XCTAssertEqual(harness.selectionCount, 0)
+            XCTAssertNotNil(service.snapshot)
+            XCTAssertTrue(harness.callbacks.isEmpty)
+        }
+    }
+
+    func testActualRangeWriterRejectsCaretMovedAfterSnapshotValidation() {
+        for kind in [DictationUndoService.Kind.undo, .restore] {
+            let harness = AXReplacementHarness()
+            let service = harness.makeService()
+            let writerRead = harness.readCount + 2
+            harness.beforeRead = { [unowned harness] read in
+                if read == writerRead { harness.selection = NSRange(location: 0, length: 0) }
+            }
+
+            XCTAssertEqual(service.perform(kind), .failed(.mutationFailed))
+            XCTAssertEqual(harness.value, "Processed.")
+            XCTAssertEqual(harness.selection, NSRange(location: 0, length: 0))
+            XCTAssertEqual(harness.writeCount, 0)
+            XCTAssertEqual(harness.selectionCount, 0)
+            XCTAssertNotNil(service.snapshot)
+            XCTAssertTrue(harness.callbacks.isEmpty)
+        }
+    }
+
+    func testActualRangeWriterRejectsUnicodeEncodingChangeAfterSelection() {
+        for kind in [DictationUndoService.Kind.undo, .restore] {
+            let harness = AXReplacementHarness()
+            harness.value = "Caf\u{00e9}."
+            harness.selection = NSRange(location: 5, length: 0)
+            let service = harness.makeService()
+            let selectedRead = harness.readCount + 3
+            harness.beforeRead = { [unowned harness] read in
+                if read == selectedRead { harness.value = "Cafe\u{0301}." }
+            }
+
+            XCTAssertEqual(service.perform(kind), .failed(.mutationFailed))
+            XCTAssertEqual(Array(harness.value.utf16), Array("Cafe\u{0301}.".utf16))
+            XCTAssertEqual(harness.writeCount, 0)
+            XCTAssertNotNil(service.snapshot)
+            XCTAssertTrue(harness.callbacks.isEmpty)
         }
     }
 
