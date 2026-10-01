@@ -4528,6 +4528,10 @@ final class DictationViewModel: ObservableObject {
         )
     }
 
+    nonisolated static func errorFeedbackDuration(message: String, baseDuration: TimeInterval) -> TimeInterval {
+        max(baseDuration, min(12.0, Double(message.count) / 25.0))
+    }
+
     private func showError(
         _ message: String,
         category: String = "general",
@@ -4537,7 +4541,11 @@ final class DictationViewModel: ObservableObject {
         soundService.play(.error, enabled: soundFeedbackEnabled)
         let settingsAction = settingsTab.map(ActionFeedbackAction.openSettings)
         // Setup errors need time to read and reach the button; transient errors stay brief.
-        let duration: TimeInterval = settingsAction == nil ? 3.0 : 8.0
+        // Long messages, such as a provider's own error text, get reading time on top.
+        let duration = Self.errorFeedbackDuration(
+            message: message,
+            baseDuration: settingsAction == nil ? 3.0 : 8.0
+        )
         if let recoveryPreservation {
             showRecoveryAwareFeedback(
                 message: message,

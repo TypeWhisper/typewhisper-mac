@@ -1526,6 +1526,68 @@ final class IndicatorPanelInteractionTests: XCTestCase {
         )
     }
 
+    func testShortFeedbackKeepsCompactBody() {
+        for style in [IndicatorStyle.notch, .overlay, .minimal] {
+            let body = IndicatorFeedbackPanelLayout.feedbackBody(for: style, message: "Copied to clipboard")
+
+            XCTAssertEqual(body.height, IndicatorFeedbackPanelLayout.feedbackBodyHeight)
+            XCTAssertEqual(body.lineLimit, 2)
+            XCTAssertEqual(
+                IndicatorFeedbackPanelLayout.panelSize(
+                    for: style,
+                    isFeedbackInteractive: true,
+                    feedbackMessage: "Copied to clipboard"
+                ),
+                IndicatorFeedbackPanelLayout.panelSize(for: style, isFeedbackInteractive: true)
+            )
+        }
+    }
+
+    func testLongFeedbackWidensAndGrowsWithTheMessage() {
+        let message = "API error: HTTP 429: You are using a Trial key, which is limited to 1000 API calls / month. "
+            + "You can continue to use the Trial key for free or upgrade to a Production key with higher rate limits."
+
+        for style in [IndicatorStyle.notch, .overlay, .minimal] {
+            let body = IndicatorFeedbackPanelLayout.feedbackBody(for: style, message: message)
+            let panelSize = IndicatorFeedbackPanelLayout.panelSize(
+                for: style,
+                isFeedbackInteractive: true,
+                notchClosedHeight: 30,
+                feedbackMessage: message
+            )
+
+            XCTAssertEqual(body.width, IndicatorFeedbackPanelLayout.wideFeedbackWidth)
+            XCTAssertGreaterThan(body.height, IndicatorFeedbackPanelLayout.feedbackBodyHeight)
+            XCTAssertGreaterThan(body.lineLimit, 2)
+            XCTAssertLessThanOrEqual(body.lineLimit, IndicatorFeedbackPanelLayout.feedbackMaximumLineCount)
+            XCTAssertEqual(panelSize.width, body.width)
+            XCTAssertGreaterThanOrEqual(panelSize.height, body.height)
+        }
+    }
+
+    func testFeedbackGrowthStopsAtMaximumLineCount() {
+        let message = String(repeating: "provider message ", count: 200)
+
+        let body = IndicatorFeedbackPanelLayout.feedbackBody(for: .overlay, message: message)
+        let longer = IndicatorFeedbackPanelLayout.feedbackBody(for: .overlay, message: message + message)
+
+        XCTAssertEqual(body.lineLimit, IndicatorFeedbackPanelLayout.feedbackMaximumLineCount)
+        XCTAssertEqual(body, longer)
+    }
+
+    func testErrorFeedbackDurationGrowsWithMessageLength() {
+        XCTAssertEqual(DictationViewModel.errorFeedbackDuration(message: "Short", baseDuration: 3), 3)
+        XCTAssertEqual(DictationViewModel.errorFeedbackDuration(message: "Short", baseDuration: 8), 8)
+        XCTAssertEqual(
+            DictationViewModel.errorFeedbackDuration(message: String(repeating: "a", count: 150), baseDuration: 3),
+            6
+        )
+        XCTAssertEqual(
+            DictationViewModel.errorFeedbackDuration(message: String(repeating: "a", count: 5_000), baseDuration: 3),
+            12
+        )
+    }
+
     func testOverlaySurfaceClipsFeedbackProgressToRoundedWindow() throws {
         let width = Int(IndicatorFeedbackPanelLayout.feedbackWidth)
         let height = Int(

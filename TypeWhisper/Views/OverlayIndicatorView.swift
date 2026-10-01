@@ -112,8 +112,16 @@ struct OverlayIndicatorView: View {
         }
         if hasCancelWarning { return max(closedWidth, IndicatorFeedbackPanelLayout.feedbackWidth) }
         if transcriptBodyVisible { return max(closedWidth, 400) }
-        if hasActionFeedback { return max(closedWidth, IndicatorFeedbackPanelLayout.feedbackWidth) }
+        if hasActionFeedback { return max(closedWidth, actionFeedbackBody.width) }
         return closedWidth
+    }
+
+    private var actionFeedbackBody: IndicatorFeedbackPanelLayout.FeedbackBody {
+        IndicatorFeedbackPanelLayout.feedbackBody(
+            for: .overlay,
+            message: presentation.actionFeedbackMessage,
+            actionTitle: presentation.actionFeedbackActionTitle
+        )
     }
 
     private var isTop: Bool {
@@ -296,7 +304,9 @@ struct OverlayIndicatorView: View {
                     onAction: presentation.actionFeedbackActionTitle == nil ? nil : {
                         viewModel.performActionFeedbackAction()
                     },
-                    remainingFraction: presentation.actionFeedbackRemainingFraction
+                    remainingFraction: presentation.actionFeedbackRemainingFraction,
+                    bodyHeight: actionFeedbackBody.height,
+                    lineLimit: actionFeedbackBody.lineLimit
                 )
                 .overlay(alignment: .top) {
                     Divider().background(Color.primary.opacity(0.1))
@@ -315,7 +325,9 @@ struct OverlayIndicatorView: View {
                     onAction: presentation.actionFeedbackActionTitle == nil ? nil : {
                         viewModel.performActionFeedbackAction()
                     },
-                    remainingFraction: presentation.actionFeedbackRemainingFraction
+                    remainingFraction: presentation.actionFeedbackRemainingFraction,
+                    bodyHeight: actionFeedbackBody.height,
+                    lineLimit: actionFeedbackBody.lineLimit
                 )
                 .overlay(alignment: .bottom) {
                     Divider().background(Color.primary.opacity(0.1))
