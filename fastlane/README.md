@@ -53,7 +53,7 @@ Validate the committed README screenshot gallery
 [bundle exec] fastlane mac plugin_screenshots
 ```
 
-Capture localized add-on screenshots for first-party plugin settings windows
+Capture localized add-on screenshots for plugin settings windows
 
 ### mac plugin_screenshots_publish
 

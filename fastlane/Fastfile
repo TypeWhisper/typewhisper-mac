@@ -858,7 +858,7 @@ platform :mac do
     update_readme_screenshot_block!(check: true)
   end
 
-  desc "Capture localized add-on screenshots for first-party plugin settings windows"
+  desc "Capture localized add-on screenshots for plugin settings windows"
   lane :plugin_screenshots do |options|
     languages = selected_plugin_screenshot_languages(options[:languages])
     plugins = selected_plugin_screenshots(options[:plugins])
