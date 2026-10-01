@@ -55,6 +55,7 @@ PLUGIN_SCREENSHOTS = [
   { slug: "cloudflare-asr", target: "CloudflareASRPlugin", id: "com.typewhisper.cloudflare-asr" },
   { slug: "cohere", target: "CoherePlugin", id: "com.typewhisper.cohere" },
   { slug: "cohere-local", target: "CohereLocalPlugin", id: "com.typewhisper.cohere-transcribe" },
+  { slug: "confucius4-r2t2", target: "R2T2Plugin", id: "com.scriptease.r2t2", size: [560, 372] },
   { slug: "deepgram", target: "DeepgramPlugin", id: "com.typewhisper.deepgram" },
   { slug: "elevenlabs", target: "ElevenLabsPlugin", id: "com.typewhisper.elevenlabs" },
   { slug: "file-memory", target: "FileMemoryPlugin", id: "com.typewhisper.memory.file" },
