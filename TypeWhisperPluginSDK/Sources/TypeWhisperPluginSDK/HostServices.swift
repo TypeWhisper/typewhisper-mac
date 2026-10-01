@@ -944,7 +944,7 @@ public enum PluginTranscriptionError: LocalizedError, Sendable {
         case .invalidApiKey:
             "Invalid API key. Please check your API key and try again."
         case .rateLimited:
-            "Rate limit exceeded. Please wait and try again."
+            "Rate limit or quota exceeded. Check your provider's usage limits and credit balance, or wait and try again."
         case .fileTooLarge:
             "Audio file too large for the API."
         case .apiError(let message):
@@ -1391,7 +1391,7 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
         case 401:
             throw PluginTranscriptionError.invalidApiKey
         case 429:
-            throw PluginTranscriptionError.rateLimited
+            throw PluginTranscriptionError.rateLimitOrQuota(from: responseData)
         case 413:
             throw PluginTranscriptionError.fileTooLarge
         default:
@@ -1504,7 +1504,7 @@ public enum PluginChatError: LocalizedError, Sendable {
         case .invalidApiKey:
             "Invalid API key. Please check your API key and try again."
         case .rateLimited:
-            "Rate limit exceeded. Please wait and try again."
+            "Rate limit or quota exceeded. Check your provider's usage limits and credit balance, or wait and try again."
         case .apiError(let message):
             "API error: \(message)"
         case .networkError(let message):
@@ -1658,7 +1658,7 @@ public struct PluginOpenAIChatHelper: Sendable {
         case 401:
             throw PluginChatError.invalidApiKey
         case 429:
-            throw PluginChatError.rateLimited
+            throw PluginChatError.rateLimitOrQuota(from: data)
         default:
             throw PluginChatError.apiError(Self.errorMessage(from: data, statusCode: httpResponse.statusCode))
         }

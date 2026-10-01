@@ -112,7 +112,11 @@ struct NotchIndicatorView: View {
     }
 
     private var currentWidth: CGFloat {
-        NotchIndicatorLayout.containerWidth(closedWidth: closedWidth, mode: expansionMode)
+        let width = NotchIndicatorLayout.containerWidth(closedWidth: closedWidth, mode: expansionMode)
+        guard expansionMode == .feedback, hasActionFeedback, countdownPresentation == nil, !hasCancelWarning else {
+            return width
+        }
+        return max(width, actionFeedbackBody.width)
     }
 
     private var bottomCornerRadius: CGFloat {
@@ -148,9 +152,18 @@ struct NotchIndicatorView: View {
             return processingBodyHeight
         }
         if hasActionFeedback {
-            return feedbackBodyHeight
+            return actionFeedbackBody.height
         }
         return 0
+    }
+
+    private var actionFeedbackBody: IndicatorFeedbackPanelLayout.FeedbackBody {
+        IndicatorFeedbackPanelLayout.feedbackBody(
+            for: .notch,
+            message: presentation.actionFeedbackMessage,
+            actionTitle: presentation.actionFeedbackActionTitle,
+            notchClosedWidth: closedWidth
+        )
     }
 
     private var presentationRevealScale: CGFloat {
@@ -372,7 +385,9 @@ struct NotchIndicatorView: View {
                 onAction: presentation.actionFeedbackActionTitle == nil ? nil : {
                     viewModel.performActionFeedbackAction()
                 },
-                remainingFraction: presentation.actionFeedbackRemainingFraction
+                remainingFraction: presentation.actionFeedbackRemainingFraction,
+                bodyHeight: actionFeedbackBody.height,
+                lineLimit: actionFeedbackBody.lineLimit
             )
         } else {
             Color.clear

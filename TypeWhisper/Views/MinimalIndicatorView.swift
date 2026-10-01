@@ -92,7 +92,28 @@ struct MinimalIndicatorView: View {
             || errorMessage != nil
     }
 
+    private var actionFeedbackBody: IndicatorFeedbackPanelLayout.FeedbackBody {
+        IndicatorFeedbackPanelLayout.feedbackBody(
+            for: .minimal,
+            message: actionFeedbackMessage,
+            actionTitle: presentation.actionFeedbackActionTitle
+        )
+    }
+
+    /// A capsule while the feedback is compact. Taller feedback keeps the same
+    /// corner radius so the corners do not cut into multi-line text.
+    private var surfaceShape: AnyShape {
+        guard countdownPresentation == nil,
+              actionFeedbackBody.height > IndicatorFeedbackPanelLayout.feedbackBodyHeight else {
+            return AnyShape(Capsule())
+        }
+        return AnyShape(RoundedRectangle(cornerRadius: IndicatorFeedbackPanelLayout.feedbackBodyHeight / 2))
+    }
+
     private var currentWidth: CGFloat {
+        if countdownPresentation == nil, actionFeedbackMessage != nil {
+            return actionFeedbackBody.width
+        }
         if showsExpandedMessage {
             return messageWidth
         }
@@ -171,7 +192,7 @@ struct MinimalIndicatorView: View {
         contentBody
             .indicatorSurface(
                 theme: viewModel.indicatorTheme,
-                shape: Capsule(),
+                shape: surfaceShape,
                 strokeColor: errorMessage == nil ? nil : .red.opacity(0.55)
             )
             .shadow(color: shadowColor, radius: 10, y: 4)
@@ -198,12 +219,13 @@ struct MinimalIndicatorView: View {
                     actionTitle: presentation.actionFeedbackActionTitle,
                     onAction: presentation.actionFeedbackActionTitle == nil ? nil : {
                         viewModel.performActionFeedbackAction()
-                    }
+                    },
+                    lineLimit: actionFeedbackBody.lineLimit
                 )
                 .padding(.horizontal, 14)
                 .frame(maxHeight: .infinity)
             }
-            .frame(height: IndicatorFeedbackPanelLayout.feedbackBodyHeight)
+            .frame(height: actionFeedbackBody.height)
             .contentShape(Rectangle())
             .onHover { hovered in
                 viewModel.setActionFeedbackHovered(hovered)
@@ -283,7 +305,8 @@ struct MinimalIndicatorView: View {
         icon: String,
         iconColor: Color,
         actionTitle: String? = nil,
-        onAction: (() -> Void)? = nil
+        onAction: (() -> Void)? = nil,
+        lineLimit: Int = 2
     ) -> some View {
         HStack(spacing: 8) {
             Image(systemName: icon)
@@ -294,7 +317,7 @@ struct MinimalIndicatorView: View {
             Text(text)
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(Color.primary.opacity(0.92))
-                .lineLimit(2)
+                .lineLimit(lineLimit)
                 .frame(maxWidth: .infinity, alignment: .leading)
 
             if let actionTitle, let onAction {

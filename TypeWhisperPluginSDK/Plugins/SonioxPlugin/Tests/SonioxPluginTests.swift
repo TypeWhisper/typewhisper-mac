@@ -955,7 +955,7 @@ final class SonioxPluginTests: XCTestCase {
             XCTAssertThrowsError(try SonioxPlugin.validateHTTPResponse(data: data, response: response)) { error in
                 XCTAssertEqual(
                     (error as? PluginTranscriptionError)?.localizedDescription,
-                    "Rate limit exceeded. Please wait and try again."
+                    "Rate limit or quota exceeded. Check your provider's usage limits and credit balance, or wait and try again."
                 )
             }
         }

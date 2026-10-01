@@ -118,7 +118,7 @@ final class CoherePlugin: NSObject, TranscriptionEnginePlugin, DictionaryTermsCa
         case 413:
             throw PluginTranscriptionError.fileTooLarge
         case 429:
-            throw PluginTranscriptionError.rateLimited
+            throw PluginTranscriptionError.rateLimitOrQuota(from: responseData)
         default:
             let errorBody = PluginHTTPErrorBodyFormatter.summary(from: responseData, response: httpResponse)
             throw PluginTranscriptionError.apiError("HTTP \(httpResponse.statusCode): \(errorBody)")

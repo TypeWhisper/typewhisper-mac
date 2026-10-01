@@ -16,6 +16,8 @@ class OverlayIndicatorPanel: NSPanel {
     private var cancellables = Set<AnyCancellable>()
     private var cachedScreen: NSScreen?
     private var isActionFeedbackInteractive = false
+    private var actionFeedbackMessage: String?
+    private var actionFeedbackActionTitle: String?
     private var meetingCountdownKind: CalendarMeetingCountdownKind?
 
     private var isMeetingCountdownPresented: Bool {
@@ -160,14 +162,16 @@ class OverlayIndicatorPanel: NSPanel {
             }
             .store(in: &cancellables)
 
-        Publishers.CombineLatest(vm.$state, vm.$actionFeedbackMessage)
+        Publishers.CombineLatest3(vm.$state, vm.$actionFeedbackMessage, vm.$actionFeedbackActionTitle)
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] state, message in
+            .sink { [weak self] state, message, actionTitle in
                 self?.updateFeedbackInteraction(
                     isInteractive: IndicatorFeedbackPanelLayout.isInteractive(
                         state: state,
                         message: message
-                    )
+                    ),
+                    message: message,
+                    actionTitle: actionTitle
                 )
             }
             .store(in: &cancellables)
@@ -239,7 +243,9 @@ class OverlayIndicatorPanel: NSPanel {
         let panelSize = IndicatorFeedbackPanelLayout.panelSize(
             for: .overlay,
             isFeedbackInteractive: isFeedbackInteractive,
-            countdownKind: meetingCountdownKind
+            countdownKind: meetingCountdownKind,
+            feedbackMessage: actionFeedbackMessage,
+            feedbackActionTitle: actionFeedbackActionTitle
         )
         let panelFrame = IndicatorFeedbackPanelLayout.panelFrame(
             for: .overlay,
@@ -275,12 +281,24 @@ class OverlayIndicatorPanel: NSPanel {
         show()
     }
 
-    func updateFeedbackInteraction(isInteractive: Bool) {
+    func updateFeedbackInteraction(
+        isInteractive: Bool,
+        message: String? = nil,
+        actionTitle: String? = nil
+    ) {
         if !isInteractive && !isMeetingCountdownPresented {
             ignoresMouseEvents = true
         }
-        guard isActionFeedbackInteractive != isInteractive else { return }
+        // The message decides how tall the feedback surface is, so a changed
+        // message needs a new frame even when interactivity stays the same.
+        let feedbackMessage = isInteractive ? message : nil
+        let feedbackActionTitle = isInteractive ? actionTitle : nil
+        guard isActionFeedbackInteractive != isInteractive
+            || actionFeedbackMessage != feedbackMessage
+            || actionFeedbackActionTitle != feedbackActionTitle else { return }
         isActionFeedbackInteractive = isInteractive
+        actionFeedbackMessage = feedbackMessage
+        actionFeedbackActionTitle = feedbackActionTitle
         if isVisible {
             show()
         }

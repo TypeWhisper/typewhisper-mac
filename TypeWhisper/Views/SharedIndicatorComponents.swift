@@ -418,6 +418,8 @@ struct IndicatorActionFeedback: View {
     var actionTitle: String? = nil
     var onAction: (() -> Void)? = nil
     var remainingFraction: Double? = nil
+    var bodyHeight: CGFloat = IndicatorFeedbackPanelLayout.feedbackBodyHeight
+    var lineLimit = 2
 
     var body: some View {
         VStack(spacing: 0) {
@@ -437,7 +439,7 @@ struct IndicatorActionFeedback: View {
                 Text(message)
                     .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(Color.primary.opacity(0.9))
-                    .lineLimit(2)
+                    .lineLimit(lineLimit)
 
                 if let actionTitle, let onAction {
                     Spacer(minLength: 8)
@@ -455,7 +457,7 @@ struct IndicatorActionFeedback: View {
             .padding(.horizontal, contentPadding)
         }
         .frame(maxWidth: .infinity)
-        .frame(height: IndicatorFeedbackPanelLayout.feedbackBodyHeight)
+        .frame(height: bodyHeight)
         .accessibilityElement(children: actionTitle == nil ? .combine : .contain)
         .accessibilityLabel(message)
     }

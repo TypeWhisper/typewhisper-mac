@@ -7,6 +7,95 @@ enum IndicatorFeedbackPanelLayout {
     static let minimalFeedbackProgressHorizontalInset: CGFloat = feedbackBodyHeight / 2
     static let overlayStatusHeight: CGFloat = 48
     static let screenEdgeInset: CGFloat = 20
+    static let wideFeedbackWidth: CGFloat = 520
+    static let feedbackLineCountBeforeWidening = 3
+    static let feedbackMaximumLineCount = 10
+
+    /// Size of the feedback surface for one message.
+    struct FeedbackBody: Equatable {
+        let width: CGFloat
+        let height: CGFloat
+        let lineLimit: Int
+    }
+
+    /// Short messages keep the fixed two-line body. Longer ones, such as a
+    /// provider's error text, widen the surface first and then grow line by line
+    /// up to `feedbackMaximumLineCount`.
+    static func feedbackBody(
+        for style: IndicatorStyle,
+        message: String?,
+        actionTitle: String? = nil,
+        notchClosedWidth: CGFloat = 0
+    ) -> FeedbackBody {
+        let baseWidth: CGFloat
+        switch style {
+        case .notch:
+            baseWidth = max(notchClosedWidth, feedbackWidth)
+        case .overlay:
+            baseWidth = feedbackWidth
+        case .minimal:
+            baseWidth = minimalFeedbackWidth
+        }
+        let compact = FeedbackBody(width: baseWidth, height: feedbackBodyHeight, lineLimit: 2)
+        guard let message, !message.isEmpty else { return compact }
+
+        let font = feedbackMessageFont(for: style)
+        let lineHeight = ceil(NSLayoutManager().defaultLineHeight(for: font))
+        func lineCount(surfaceWidth: CGFloat) -> Int {
+            let textWidth = surfaceWidth - feedbackChromeWidth(for: style, actionTitle: actionTitle)
+            let bounds = (message as NSString).boundingRect(
+                with: CGSize(width: max(textWidth, 1), height: .greatestFiniteMagnitude),
+                options: [.usesLineFragmentOrigin, .usesFontLeading],
+                attributes: [.font: font]
+            )
+            return max(1, Int(ceil(bounds.height / lineHeight)))
+        }
+
+        var width = baseWidth
+        var lines = lineCount(surfaceWidth: width)
+        guard lines > compact.lineLimit else { return compact }
+        if lines > feedbackLineCountBeforeWidening, width < wideFeedbackWidth {
+            width = wideFeedbackWidth
+            lines = lineCount(surfaceWidth: width)
+        }
+        lines = min(max(lines, compact.lineLimit), feedbackMaximumLineCount)
+
+        let chromeHeight = feedbackBodyHeight - CGFloat(compact.lineLimit) * lineHeight
+        return FeedbackBody(
+            width: width,
+            height: max(feedbackBodyHeight, CGFloat(lines) * lineHeight + chromeHeight),
+            lineLimit: lines
+        )
+    }
+
+    private static func feedbackMessageFont(for style: IndicatorStyle) -> NSFont {
+        .systemFont(ofSize: style == .minimal ? 12 : 13, weight: .medium)
+    }
+
+    /// Horizontal space the feedback row spends on everything but the message.
+    private static func feedbackChromeWidth(for style: IndicatorStyle, actionTitle: String?) -> CGFloat {
+        let padding: CGFloat
+        let iconWidth: CGFloat
+        let actionFontSize: CGFloat
+        let actionSpacing: CGFloat
+        switch style {
+        case .notch:
+            (padding, iconWidth, actionFontSize, actionSpacing) = (28, 20, 12, 24)
+        case .overlay:
+            (padding, iconWidth, actionFontSize, actionSpacing) = (20, 20, 12, 24)
+        case .minimal:
+            (padding, iconWidth, actionFontSize, actionSpacing) = (14, 18, 11, 8)
+        }
+
+        // Safety margin so SwiftUI never needs one more line than measured here.
+        var chrome = padding * 2 + iconWidth + 8 + 6
+        if let actionTitle, !actionTitle.isEmpty {
+            let titleFont = NSFont.systemFont(ofSize: actionFontSize, weight: .semibold)
+            let titleWidth = ceil((actionTitle as NSString).size(withAttributes: [.font: titleFont]).width)
+            chrome += titleWidth + 16 + actionSpacing
+        }
+        return chrome
+    }
 
     static func isInteractive(
         state: DictationViewModel.State,
@@ -20,7 +109,9 @@ enum IndicatorFeedbackPanelLayout {
         isFeedbackInteractive: Bool,
         countdownKind: CalendarMeetingCountdownKind? = nil,
         notchClosedWidth: CGFloat = 0,
-        notchClosedHeight: CGFloat = NotchIndicatorLayout.notchedClosedHeight
+        notchClosedHeight: CGFloat = NotchIndicatorLayout.notchedClosedHeight,
+        feedbackMessage: String? = nil,
+        feedbackActionTitle: String? = nil
     ) -> CGSize {
         guard isFeedbackInteractive else {
             switch style {
@@ -33,22 +124,22 @@ enum IndicatorFeedbackPanelLayout {
             }
         }
 
+        let body = feedbackBody(
+            for: style,
+            message: feedbackMessage,
+            actionTitle: feedbackActionTitle,
+            notchClosedWidth: notchClosedWidth
+        )
         switch style {
         case .notch:
-            return CGSize(
-                width: max(notchClosedWidth, feedbackWidth),
-                height: notchClosedHeight + feedbackBodyHeight
-            )
+            return CGSize(width: body.width, height: notchClosedHeight + body.height)
         case .overlay:
             if countdownKind?.isStart == true {
                 return CGSize(width: feedbackWidth, height: feedbackBodyHeight)
             }
-            return CGSize(
-                width: feedbackWidth,
-                height: overlayStatusHeight + feedbackBodyHeight
-            )
+            return CGSize(width: body.width, height: overlayStatusHeight + body.height)
         case .minimal:
-            return CGSize(width: minimalFeedbackWidth, height: feedbackBodyHeight)
+            return CGSize(width: body.width, height: body.height)
         }
     }
 
