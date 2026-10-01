@@ -83,7 +83,26 @@ class MinimalIndicatorPanel: NSPanel {
 
         let hostingView = MinimalFirstMouseHostingView(rootView: content())
         hostingView.sizingOptions = []
-        contentView = hostingView
+        // The minimal content lays itself out from its own metrics and never
+        // consumes the safe area.
+        hostingView.safeAreaRegions = []
+
+        // Same guard as NotchIndicatorPanel: the hosting view keeps one size
+        // inside a plain container and only the window follows the feedback.
+        // A root view that resizes with the window lets NSHostingView resize
+        // the window from windowDidLayout, and AppKit raises
+        // NSInternalInconsistencyException from
+        // _postWindowNeedsUpdateConstraints (#1441).
+        contentView = IndicatorHostingContainerView(
+            hostingView: hostingView,
+            size: initialSize,
+            hostingSize: IndicatorFeedbackPanelLayout.hostingSize(for: .minimal),
+            verticalAnchor: Self.hostingAnchor(for: overlayPositionProvider())
+        )
+    }
+
+    private static func hostingAnchor(for position: OverlayPosition) -> IndicatorHostingContainerView.VerticalAnchor {
+        position == .top ? .top : .bottom
     }
 
     override var canBecomeKey: Bool { false }
@@ -249,6 +268,7 @@ class MinimalIndicatorPanel: NSPanel {
             overlayPosition: overlayPosition
         )
 
+        (contentView as? IndicatorHostingContainerView)?.verticalAnchor = Self.hostingAnchor(for: overlayPosition)
         setFrame(panelFrame, display: true)
         ignoresMouseEvents = !isFeedbackInteractive
         FloatingPanelSpacePolicy.orderIndicatorFront(

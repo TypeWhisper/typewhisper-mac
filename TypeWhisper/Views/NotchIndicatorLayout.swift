@@ -60,11 +60,31 @@ enum IndicatorFeedbackPanelLayout {
         }
         lines = min(max(lines, compact.lineLimit), feedbackMaximumLineCount)
 
-        let chromeHeight = feedbackBodyHeight - CGFloat(compact.lineLimit) * lineHeight
         return FeedbackBody(
             width: width,
-            height: max(feedbackBodyHeight, CGFloat(lines) * lineHeight + chromeHeight),
+            height: feedbackSurfaceHeight(lineCount: lines, lineHeight: lineHeight),
             lineLimit: lines
+        )
+    }
+
+    private static func feedbackSurfaceHeight(lineCount: Int, lineHeight: CGFloat) -> CGFloat {
+        let chromeHeight = feedbackBodyHeight - 2 * lineHeight
+        return max(feedbackBodyHeight, CGFloat(lineCount) * lineHeight + chromeHeight)
+    }
+
+    /// Constant size of the SwiftUI root inside an indicator panel. The overlay
+    /// and minimal roots cover the passive panel and the largest feedback, so
+    /// the panel frame can change without ever resizing the hosting view.
+    static func hostingSize(for style: IndicatorStyle) -> CGSize {
+        let passive = panelSize(for: style, isFeedbackInteractive: false)
+        guard style != .notch else { return passive }
+
+        let lineHeight = ceil(NSLayoutManager().defaultLineHeight(for: feedbackMessageFont(for: style)))
+        let bodyHeight = feedbackSurfaceHeight(lineCount: feedbackMaximumLineCount, lineHeight: lineHeight)
+        let feedbackHeight = style == .overlay ? overlayStatusHeight + bodyHeight : bodyHeight
+        return CGSize(
+            width: max(passive.width, wideFeedbackWidth),
+            height: max(passive.height, feedbackHeight)
         )
     }
 
@@ -165,6 +185,61 @@ enum IndicatorFeedbackPanelLayout {
         }
 
         return CGRect(origin: CGPoint(x: x, y: y), size: size)
+    }
+}
+
+/// Positions a fixed-size hosting view without involving SwiftUI in window sizing.
+final class IndicatorHostingContainerView: NSView {
+    enum VerticalAnchor {
+        case top
+        case bottom
+    }
+
+    private let hostingView: NSView
+
+    /// Edge of the container the hosting view stays attached to.
+    var verticalAnchor: VerticalAnchor {
+        didSet {
+            if verticalAnchor != oldValue {
+                positionHostingView()
+            }
+        }
+    }
+
+    init(
+        hostingView: NSView,
+        size: NSSize,
+        hostingSize: NSSize? = nil,
+        verticalAnchor: VerticalAnchor = .top
+    ) {
+        self.hostingView = hostingView
+        self.verticalAnchor = verticalAnchor
+        super.init(frame: NSRect(origin: .zero, size: size))
+        hostingView.frame = NSRect(origin: .zero, size: hostingSize ?? size)
+        hostingView.autoresizingMask = []
+        addSubview(hostingView)
+        positionHostingView()
+    }
+
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func resizeSubviews(withOldSize oldSize: NSSize) {
+        // Flexible margins do not reliably center an oversized subview when
+        // both horizontal margins initially have zero width. Move only the
+        // origin: resizing the hosting view reintroduces the layout feedback loop.
+        positionHostingView()
+    }
+
+    private func positionHostingView() {
+        let origin = NSPoint(
+            x: bounds.midX - hostingView.frame.width / 2,
+            y: verticalAnchor == .top ? bounds.maxY - hostingView.frame.height : bounds.minY
+        )
+        if hostingView.frame.origin != origin {
+            hostingView.setFrameOrigin(origin)
+        }
     }
 }
 

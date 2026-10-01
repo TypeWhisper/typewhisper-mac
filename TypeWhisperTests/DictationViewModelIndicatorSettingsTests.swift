@@ -1928,6 +1928,204 @@ final class NotchIndicatorPanelLifecycleTests: XCTestCase {
     }
 }
 
+@MainActor
+final class FloatingIndicatorPanelHostingTests: XCTestCase {
+    private static let longMessage = String(repeating: "The provider rejected the request. ", count: 30)
+
+    func testOverlayFeedbackTransitionsKeepSwiftUIRootSizeAndIgnoreSystemSafeArea() async throws {
+        let model = NotchLayoutProbeModel()
+        let panel = OverlayIndicatorPanel(
+            screenResolver: try makeResolver(),
+            displayModeProvider: { .activeScreen },
+            overlayPositionProvider: { .top },
+            content: { NotchLayoutProbeView(model: model) }
+        )
+        panel.alphaValue = 0
+        defer { panel.orderOut(nil) }
+        panel.show()
+
+        try await assertRootSizeStaysConstant(model: model, panel: panel) { interactive, message in
+            panel.updateFeedbackInteraction(isInteractive: interactive, message: message)
+        }
+    }
+
+    func testMinimalFeedbackTransitionsKeepSwiftUIRootSizeAndIgnoreSystemSafeArea() async throws {
+        let model = NotchLayoutProbeModel()
+        let panel = MinimalIndicatorPanel(
+            screenResolver: try makeResolver(),
+            displayModeProvider: { .activeScreen },
+            overlayPositionProvider: { .top },
+            content: { NotchLayoutProbeView(model: model) }
+        )
+        panel.alphaValue = 0
+        defer { panel.orderOut(nil) }
+        panel.show()
+
+        try await assertRootSizeStaysConstant(model: model, panel: panel) { interactive, message in
+            panel.updateFeedbackInteraction(isInteractive: interactive, message: message)
+        }
+    }
+
+    func testHostingSizeCoversPassivePanelAndLargestFeedback() {
+        for style in [IndicatorStyle.overlay, .minimal] {
+            let hostingSize = IndicatorFeedbackPanelLayout.hostingSize(for: style)
+            let sizes = [
+                IndicatorFeedbackPanelLayout.panelSize(for: style, isFeedbackInteractive: false),
+                IndicatorFeedbackPanelLayout.panelSize(for: style, isFeedbackInteractive: true),
+                IndicatorFeedbackPanelLayout.panelSize(
+                    for: style,
+                    isFeedbackInteractive: true,
+                    feedbackMessage: Self.longMessage,
+                    feedbackActionTitle: "Undo"
+                )
+            ]
+            for size in sizes {
+                XCTAssertGreaterThanOrEqual(hostingSize.width, size.width, "\(style)")
+                XCTAssertGreaterThanOrEqual(hostingSize.height, size.height, "\(style)")
+            }
+        }
+    }
+
+    func testOverlayHostingViewKeepsItsSizeAndFollowsOverlayPosition() throws {
+        var position = OverlayPosition.top
+        let panel = OverlayIndicatorPanel(
+            screenResolver: try makeResolver(),
+            displayModeProvider: { .activeScreen },
+            overlayPositionProvider: { position },
+            content: { EmptyView() }
+        )
+        panel.alphaValue = 0
+        defer { panel.orderOut(nil) }
+
+        try assertHostingViewStaysFixed(
+            panel: panel,
+            size: IndicatorFeedbackPanelLayout.hostingSize(for: .overlay)
+        ) { newPosition, interactive, message in
+            position = newPosition
+            panel.updateFeedbackInteraction(isInteractive: interactive, message: message)
+            panel.show()
+        }
+    }
+
+    func testMinimalHostingViewKeepsItsSizeAndFollowsOverlayPosition() throws {
+        var position = OverlayPosition.top
+        let panel = MinimalIndicatorPanel(
+            screenResolver: try makeResolver(),
+            displayModeProvider: { .activeScreen },
+            overlayPositionProvider: { position },
+            content: { EmptyView() }
+        )
+        panel.alphaValue = 0
+        defer { panel.orderOut(nil) }
+
+        try assertHostingViewStaysFixed(
+            panel: panel,
+            size: IndicatorFeedbackPanelLayout.hostingSize(for: .minimal)
+        ) { newPosition, interactive, message in
+            position = newPosition
+            panel.updateFeedbackInteraction(isInteractive: interactive, message: message)
+            panel.show()
+        }
+    }
+
+    private func assertHostingViewStaysFixed(
+        panel: NSPanel,
+        size: CGSize,
+        update: (OverlayPosition, Bool, String?) -> Void,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) throws {
+        update(.top, false, nil)
+        try XCTSkipUnless(panel.isVisible, "Indicator panel is suppressed on this screen")
+        let container = try XCTUnwrap(panel.contentView)
+        let hostingView = try XCTUnwrap(container.subviews.first, file: file, line: line)
+
+        let steps: [(OverlayPosition, Bool, String?)] = [
+            (.top, true, "Undid last dictation"),
+            (.top, true, Self.longMessage),
+            (.bottom, true, Self.longMessage),
+            (.bottom, false, nil),
+            (.bottom, true, "Undid last dictation"),
+            (.top, false, nil)
+        ]
+        for (position, interactive, message) in steps {
+            update(position, interactive, message)
+            panel.layoutIfNeeded()
+
+            XCTAssertEqual(hostingView.frame.size, size, file: file, line: line)
+            XCTAssertEqual(hostingView.bounds.size, size, file: file, line: line)
+            XCTAssertEqual(hostingView.frame.midX, container.bounds.midX, accuracy: 0.01, file: file, line: line)
+            switch position {
+            case .top:
+                XCTAssertEqual(hostingView.frame.maxY, container.bounds.maxY, accuracy: 0.01, file: file, line: line)
+            case .bottom:
+                XCTAssertEqual(hostingView.frame.minY, container.bounds.minY, accuracy: 0.01, file: file, line: line)
+            }
+        }
+    }
+
+    private func assertRootSizeStaysConstant(
+        model: NotchLayoutProbeModel,
+        panel: NSPanel,
+        updateFeedback: (Bool, String?) -> Void,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async throws {
+        try XCTSkipUnless(panel.isVisible, "Indicator panel is suppressed on this screen")
+        let container = try XCTUnwrap(panel.contentView)
+
+        // Undo feedback, the next dictation, then a long provider error (#1441).
+        let steps: [(Bool, String?)] = [
+            (true, "Undid last dictation"),
+            (false, nil),
+            (true, Self.longMessage),
+            (true, "Undid last dictation"),
+            (false, nil)
+        ]
+        var panelSizes = Set<String>()
+        for (interactive, message) in steps {
+            withAnimation(.easeOut(duration: 0.24)) {
+                model.feedback = interactive
+                updateFeedback(interactive, message)
+            }
+            let expectedFrame = panel.frame
+            panelSizes.insert("\(expectedFrame.size)")
+            for inset in [CGFloat(32), 0] {
+                container.additionalSafeAreaInsets = NSEdgeInsets(top: inset, left: 0, bottom: 0, right: 0)
+                panel.layoutIfNeeded()
+                try await Task.sleep(for: .milliseconds(50))
+                XCTAssertEqual(panel.frame, expectedFrame, file: file, line: line)
+            }
+        }
+
+        XCTAssertGreaterThan(panelSizes.count, 2, "The panel frame must follow the feedback", file: file, line: line)
+        XCTAssertFalse(model.rootSizes.isEmpty, file: file, line: line)
+        XCTAssertEqual(
+            Set(model.rootSizes.map { "\($0)" }).count,
+            1,
+            "SwiftUI root resized with the panel: \(model.rootSizes)",
+            file: file,
+            line: line
+        )
+        XCTAssertEqual(model.safeArea, EdgeInsets(), file: file, line: line)
+    }
+
+    private func makeResolver() throws -> IndicatorScreenResolver {
+        guard let screen = NSScreen.screens.first else {
+            throw XCTSkip("Indicator panel tests require an available screen")
+        }
+        return IndicatorScreenResolver(
+            focusedElementPositionProvider: { nil },
+            focusedWindowFrameProvider: { nil },
+            frontmostApplicationProvider: { nil },
+            mouseLocationProvider: { CGPoint(x: screen.frame.midX, y: screen.frame.midY) },
+            screensProvider: { [screen] },
+            mainScreenProvider: { screen },
+            windowFrameProvider: { _ in nil }
+        )
+    }
+}
+
 final class MenuBarLogoMarkImageTests: XCTestCase {
     func testBarLayoutFitsWithinMenuBarSlotWithVisibleGaps() {
         let rects = MenuBarLogoMarkImage.barRects(in: CGRect(x: 0, y: 0, width: 18, height: 18))
