@@ -8031,6 +8031,28 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testRejectedUndoActionsPreserveActiveOperationState() async throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(directory) }
+        let context = Self.makeDictationContext(appSupportDirectory: directory)
+        let originalSoundFeedback = context.dictationViewModel.soundFeedbackEnabled
+        defer { context.dictationViewModel.soundFeedbackEnabled = originalSoundFeedback }
+        context.dictationViewModel.soundFeedbackEnabled = false
+        for state: DictationViewModel.State in [.recording, .processing, .inserting, .promptSelection("test"), .promptProcessing("test")] {
+            context.dictationViewModel.state = state
+            context.dictationViewModel.undoLastDictation()
+            XCTAssertEqual(context.dictationViewModel.state, state)
+            context.dictationViewModel.restoreRawTranscript()
+            XCTAssertEqual(context.dictationViewModel.state, state)
+            XCTAssertNil(context.dictationViewModel.actionFeedbackMessage)
+        }
+        context.dictationViewModel.state = .recording
+        try await Task.sleep(for: .seconds(3))
+        XCTAssertEqual(context.dictationViewModel.state, .recording, "Rejection must not schedule a dictation reset")
+        context.dictationViewModel.state = .idle
+    }
+
+    @MainActor
     func testRawRestoreWaitsForItsDeferredPersistenceWithHistoryEnabled() async throws {
         try await assertRawRestoreWaitsForDeferredPersistence(historyEnabled: true)
     }
@@ -8045,7 +8067,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let directory = try TestSupport.makeTemporaryDirectory()
         let defaults = UserDefaults.standard
         let keys = [UserDefaultsKeys.historyEnabled, UserDefaultsKeys.saveAudioWithHistory,
-                    UserDefaultsKeys.liveFieldTranscriptEnabled]
+                    UserDefaultsKeys.liveFieldTranscriptEnabled, UserDefaultsKeys.preserveClipboard]
         let originals = keys.map { defaults.object(forKey: $0) }
         defer {
             for (key, value) in zip(keys, originals) { Self.restoreUserDefault(value, forKey: key) }
@@ -8069,7 +8091,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let context = Self.makeDictationContext(appSupportDirectory: directory, browserURLResolver: resolver)
         context.dictationViewModel.preserveClipboard = true
         defer { context.dictationViewModel.flushPendingPostInsertionPersistence() }
-        context.dictionaryService.addEntry(type: .correction, original: "hello", replacement: "Processed")
+        context.dictionaryService.addEntry(type: .correction, original: "hello", replacement: "Processed greeting")
         let insertion = context.textInsertionService
         let pasteboard = NSPasteboard.withUniqueName()
         insertion.pasteboardProvider = { pasteboard }
@@ -8123,6 +8145,9 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.status, .completed)
         XCTAssertEqual(undo.perform(.restore), .success)
         XCTAssertEqual(value, snapshot.rawTranscript)
+        let restoredSession = context.dictationViewModel.apiDictationSession(id: sessionID)
+        XCTAssertEqual(restoredSession?.transcription?.text, value)
+        XCTAssertEqual(restoredSession?.transcription?.wordsCount, value.split(whereSeparator: \.isWhitespace).count)
         XCTAssertEqual(context.recentTranscriptionStore.latestEntry(historyRecords: [])?.finalText, value)
         XCTAssertEqual(context.dictationViewModel.lastTranscribedText, value)
         if historyEnabled {

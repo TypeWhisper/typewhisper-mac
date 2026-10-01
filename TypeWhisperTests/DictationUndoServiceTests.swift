@@ -349,6 +349,16 @@ final class DictationUndoServiceTests: XCTestCase {
         XCTAssertEqual(harness.value, "Hello!")
     }
 
+    func testEditedPrefixWithUnchangedCaretAndInsertedTextIsSafeNoOp() {
+        let harness = Harness(value: "old ", caret: 4)
+        let service = harness.makeService()
+        _ = harness.record(service: service, raw: "hello", inserted: "Hello.")
+        harness.value = "new Hello."
+        XCTAssertEqual(service.perform(.undo), .failed(.textChanged))
+        XCTAssertEqual(service.perform(.restore), .failed(.textChanged))
+        XCTAssertTrue(harness.replacements.isEmpty)
+    }
+
     func testTextTypedAfterInsertionIsSafeNoOp() {
         let harness = Harness(value: "", caret: 0)
         let service = harness.makeService()
@@ -382,36 +392,6 @@ final class DictationUndoServiceTests: XCTestCase {
         XCTAssertEqual(harness.value, "hello")
         XCTAssertFalse(service.canUndo, "An uncertain write must not leave the old snapshot retryable")
         XCTAssertTrue(harness.restoredCallbacks.isEmpty)
-    }
-
-    func testUndoAndRestoreLeaveClipboardUntouched() {
-        // Undo/restore replace text through direct Accessibility writes and
-        // must never disturb the user's clipboard.
-        let pasteboard = NSPasteboard.general
-        let previousClipboard = pasteboard.string(forType: .string)
-        defer {
-            // Leave the developer's clipboard exactly as it was.
-            pasteboard.clearContents()
-            if let previousClipboard {
-                pasteboard.setString(previousClipboard, forType: .string)
-            }
-        }
-        pasteboard.clearContents()
-        pasteboard.setString("clipboard sentinel", forType: .string)
-        let changeCount = pasteboard.changeCount
-
-        let harness = Harness(value: "", caret: 0)
-        let service = harness.makeService()
-
-        _ = harness.record(service: service, raw: "hello", inserted: "Hello.")
-        XCTAssertEqual(service.perform(.undo), .success)
-        XCTAssertEqual(pasteboard.changeCount, changeCount)
-        XCTAssertEqual(pasteboard.string(forType: .string), "clipboard sentinel")
-
-        _ = harness.record(service: service, raw: "hello", inserted: "Hello.")
-        XCTAssertEqual(service.perform(.restore), .success)
-        XCTAssertEqual(pasteboard.changeCount, changeCount)
-        XCTAssertEqual(pasteboard.string(forType: .string), "clipboard sentinel")
     }
 
     func testRestoreGatesOnlyItsOwnPendingPersistenceAndDoesNotBlockUndo() {

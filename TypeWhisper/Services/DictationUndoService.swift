@@ -30,9 +30,8 @@ final class DictationUndoService: ObservableObject {
         /// still be here for undo/restore — this is what makes a moved caret,
         /// even after identical text elsewhere, a safe no-op.
         let caretLocation: Int
-        /// Hash of the full post-insertion field value. Lets feedback reliably
-        /// distinguish a moved caret (value unchanged) from edited text.
-        let valueHash: Int
+        /// Full post-insertion field value, used to reject edits anywhere in the field.
+        let value: String
     }
 
     enum Kind: Equatable {
@@ -212,7 +211,7 @@ final class DictationUndoService: ObservableObject {
             applicationBundleIdentifier: captureActiveApp().bundleId,
             element: observation.element,
             caretLocation: selectedRange.location,
-            valueHash: valueNSString.hash
+            value: observation.value
         )
     }
 
@@ -245,12 +244,12 @@ final class DictationUndoService: ObservableObject {
         let valueNSString = observation.value as NSString
         guard selectedRange.length == 0,
               selectedRange.location == snapshot.caretLocation else {
-            // The value hash reliably distinguishes a moved caret (document
-            // untouched) from edited text.
+            // Compare the complete field, even when the inserted substring is unchanged.
             return .failed(
-                valueNSString.hash == snapshot.valueHash ? .caretMoved : .textChanged
+                valueNSString.isEqual(to: snapshot.value) ? .caretMoved : .textChanged
             )
         }
+        guard valueNSString.isEqual(to: snapshot.value) else { return .failed(.textChanged) }
         let insertedLength = (snapshot.insertedText as NSString).length
         let targetRange = NSRange(
             location: snapshot.caretLocation - insertedLength,

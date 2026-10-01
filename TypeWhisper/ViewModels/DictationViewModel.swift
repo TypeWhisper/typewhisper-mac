@@ -14,7 +14,7 @@ private struct CorrectionContributionContext: Sendable {
 }
 
 struct DictationSessionTranscription: Sendable, Equatable {
-    let text: String
+    var text: String
     let rawText: String
     let timestamp: Date
     let appName: String?
@@ -24,7 +24,7 @@ struct DictationSessionTranscription: Sendable, Equatable {
     let language: String?
     let engine: String
     let model: String?
-    let wordsCount: Int
+    var wordsCount: Int
 }
 
 struct DictationSessionSnapshot: Sendable, Equatable {
@@ -4315,12 +4315,7 @@ final class DictationViewModel: ObservableObject {
                 errorCategory: "insertion"
             )
         case .failed(let failure):
-            showNotchFeedback(
-                message: failure.feedbackMessage,
-                icon: "exclamationmark.triangle",
-                isError: true,
-                errorCategory: "insertion"
-            )
+            reportDictationUndoFailure(failure)
         }
     }
 
@@ -4338,12 +4333,25 @@ final class DictationViewModel: ObservableObject {
                 errorCategory: "insertion"
             )
         case .failed(let failure):
+            reportDictationUndoFailure(failure)
+        }
+    }
+
+    private func reportDictationUndoFailure(_ failure: DictationUndoService.Failure) {
+        switch state {
+        case .idle, .error:
             showNotchFeedback(
                 message: failure.feedbackMessage,
                 icon: "exclamationmark.triangle",
                 isError: true,
                 errorCategory: "insertion"
             )
+        case .recording, .processing, .inserting, .promptSelection, .promptProcessing:
+            // A rejected shortcut must not replace an active operation with an
+            // insertion-feedback timer that later cancels its recording/tasks.
+            errorLogService.addEntry(message: failure.feedbackMessage, category: "insertion")
+            accessibilityAnnouncementService.announceError(failure.feedbackMessage)
+            soundService.play(.error, enabled: soundFeedbackEnabled)
         }
     }
 
@@ -4354,6 +4362,14 @@ final class DictationViewModel: ObservableObject {
         recentTranscriptionStore.updateFinalText(id: id, finalText: rawText)
         if let record = historyService.record(withID: id) {
             historyService.updateRecord(record, finalText: rawText)
+        }
+        if let session = dictationSessions[id], session.status == .completed,
+           var transcription = session.transcription {
+            transcription.text = rawText
+            transcription.wordsCount = rawText.split(whereSeparator: \.isWhitespace).count
+            storeDictationSession(DictationSessionSnapshot(
+                id: session.id, status: session.status, transcription: transcription, error: session.error
+            ))
         }
         lastTranscribedText = rawText
     }
