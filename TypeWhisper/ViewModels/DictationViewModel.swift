@@ -41,6 +41,12 @@ struct DictationSessionSnapshot: Sendable, Equatable {
     let error: String?
 }
 
+struct DictationInsertionCompletion: Sendable, Equatable {
+    let id: UUID
+    let providerId: String
+    let modelId: String?
+}
+
 @MainActor
 enum DictationLanguageResolver {
     static func resolve(
@@ -305,6 +311,8 @@ final class DictationViewModel: ObservableObject {
     }
     @Published private(set) var lastTranscribedText: String?
     @Published private(set) var lastTranscriptionLanguage: String?
+    /// Updated only by the completed text-insertion path, never by indicator feedback.
+    @Published private(set) var lastSuccessfulDictationInsertion: DictationInsertionCompletion?
     @Published var hotkeyLabelsVersion = 0
     var hybridHotkeyLabel: String { Self.loadHotkeyLabel(for: .hybrid) }
     var pttHotkeyLabel: String { Self.loadHotkeyLabel(for: .pushToTalk) }
@@ -2789,6 +2797,11 @@ final class DictationViewModel: ObservableObject {
                     self.pinnedInsertionTarget = nil
 
                     if didInsertText {
+                        lastSuccessfulDictationInsertion = DictationInsertionCompletion(
+                            id: transcriptionID,
+                            providerId: result.engineUsed,
+                            modelId: transcription.modelId
+                        )
                         logger.info("Stop timing: text inserted elapsedMs=\(stopElapsedMs(), privacy: .public)")
                         EventBus.shared.emit(.textInserted(TextInsertedPayload(
                             text: insertionText,

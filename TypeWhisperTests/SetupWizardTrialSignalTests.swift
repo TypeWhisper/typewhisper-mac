@@ -138,6 +138,10 @@ final class SetupWizardTrialSignalTests: XCTestCase {
     private let ready = SetupWizardReadiness(
         canPrepareEngine: true, microphoneGranted: true, accessibilityGranted: true)
 
+    private func insertion(for selection: SetupWizardTestedSelection) -> DictationInsertionCompletion {
+        DictationInsertionCompletion(id: UUID(), providerId: selection.providerId, modelId: selection.modelId)
+    }
+
     func testPreviouslyTestedProviderCannotCompleteAfterCredentialsOrAssetsAreRemoved() {
         let unavailable = SetupWizardReadiness(
             canPrepareEngine: false, microphoneGranted: true, accessibilityGranted: true)
@@ -202,9 +206,46 @@ final class SetupWizardTrialSignalTests: XCTestCase {
         XCTAssertNil(signal.observe(oldState: .idle, newState: .recording, selection: modelA))
         XCTAssertNil(signal.observe(oldState: .recording, newState: .processing, selection: modelA))
         XCTAssertNil(signal.observe(oldState: .processing, newState: .inserting, selection: modelA))
-        XCTAssertEqual(signal.observe(oldState: .inserting, newState: .idle, selection: modelA), modelA)
+        XCTAssertEqual(signal.observe(
+            oldState: .inserting, newState: .idle, selection: modelA,
+            completedInsertion: insertion(for: modelA)), modelA)
         XCTAssertNil(signal.observe(oldState: .idle, newState: .inserting, selection: modelA))
         XCTAssertNil(signal.observe(oldState: .inserting, newState: .idle, selection: modelA))
+    }
+
+    func testPreviousSuccessfulInsertionCannotCreditCancelledRecording() {
+        let previousInsertion = insertion(for: modelA)
+        var signal = SetupWizardTrialSignal()
+        _ = signal.observe(oldState: .idle, newState: .recording, selection: modelA,
+                           completedInsertion: previousInsertion)
+        _ = signal.observe(oldState: .recording, newState: .processing, selection: modelA,
+                           completedInsertion: previousInsertion)
+        _ = signal.observe(oldState: .processing, newState: .inserting, selection: modelA,
+                           completedInsertion: previousInsertion)
+        XCTAssertNil(signal.observe(oldState: .inserting, newState: .idle, selection: modelA,
+                                    completedInsertion: previousInsertion))
+    }
+
+    func testActualInsertionMustMatchTheTestedProviderAndModel() {
+        let otherProvider = SetupWizardTestedSelection(providerId: "fallback", modelId: modelA.modelId)
+        for actualSelection in [modelB, otherProvider] {
+            var signal = SetupWizardTrialSignal()
+            _ = signal.observe(oldState: .idle, newState: .recording, selection: modelA)
+            _ = signal.observe(oldState: .recording, newState: .processing, selection: modelA)
+            _ = signal.observe(oldState: .processing, newState: .inserting, selection: modelA)
+            XCTAssertNil(signal.observe(oldState: .inserting, newState: .idle, selection: modelA,
+                                        completedInsertion: insertion(for: actualSelection)))
+        }
+    }
+
+    func testNewInsertionForPreviouslyTestedModelCanSucceed() {
+        var signal = SetupWizardTrialSignal()
+        _ = signal.observe(oldState: .idle, newState: .recording, selection: modelA,
+                           completedInsertion: insertion(for: modelA))
+        _ = signal.observe(oldState: .recording, newState: .processing, selection: modelA)
+        _ = signal.observe(oldState: .processing, newState: .inserting, selection: modelA)
+        XCTAssertEqual(signal.observe(oldState: .inserting, newState: .idle, selection: modelA,
+                                      completedInsertion: insertion(for: modelA)), modelA)
     }
 
     func testModelSwitchDuringRecordingDoesNotCreditEitherModel() {
@@ -213,7 +254,8 @@ final class SetupWizardTrialSignalTests: XCTestCase {
         _ = signal.observe(oldState: .recording, newState: .processing, selection: modelB)
         // Switching back must not revive the original attempt.
         _ = signal.observe(oldState: .processing, newState: .inserting, selection: modelA)
-        XCTAssertNil(signal.observe(oldState: .inserting, newState: .idle, selection: modelA))
+        XCTAssertNil(signal.observe(oldState: .inserting, newState: .idle, selection: modelA,
+                                    completedInsertion: insertion(for: modelA)))
     }
 
     func testModelSwitchAfterInsertionDoesNotCreditTheNewModel() {
@@ -221,7 +263,22 @@ final class SetupWizardTrialSignalTests: XCTestCase {
         _ = signal.observe(oldState: .idle, newState: .recording, selection: modelA)
         _ = signal.observe(oldState: .recording, newState: .processing, selection: modelA)
         _ = signal.observe(oldState: .processing, newState: .inserting, selection: modelA)
-        XCTAssertNil(signal.observe(oldState: .inserting, newState: .idle, selection: modelB))
+        XCTAssertNil(signal.observe(oldState: .inserting, newState: .idle, selection: modelB,
+                                    completedInsertion: insertion(for: modelB)))
+    }
+
+    func testProcessingCancellationFeedbackDoesNotPersistTestedSelection() throws {
+        var signal = SetupWizardTrialSignal()
+        let originalData = try JSONEncoder().encode([modelB])
+        var testedSelectionsData = originalData
+        _ = signal.observe(oldState: .idle, newState: .recording, selection: modelA)
+        _ = signal.observe(oldState: .recording, newState: .processing, selection: modelA)
+        // Non-instant cancellation displays its feedback through .inserting.
+        _ = signal.observe(oldState: .processing, newState: .inserting, selection: modelA)
+        if let selection = signal.observe(oldState: .inserting, newState: .idle, selection: modelA) {
+            testedSelectionsData = try JSONEncoder().encode([modelB, selection])
+        }
+        XCTAssertEqual(testedSelectionsData, originalData)
     }
 
     func testCancelledOrFailedAttemptCannotCreditALaterFeedbackCycle() {
@@ -241,7 +298,8 @@ final class SetupWizardTrialSignalTests: XCTestCase {
         _ = signal.observe(oldState: .recording, newState: .processing, selection: modelA)
         _ = signal.observe(oldState: .processing, newState: .inserting, selection: modelA)
         signal.reset()
-        XCTAssertNil(signal.observe(oldState: .inserting, newState: .idle, selection: modelA))
+        XCTAssertNil(signal.observe(oldState: .inserting, newState: .idle, selection: modelA,
+                                    completedInsertion: insertion(for: modelA)))
     }
 
     @MainActor

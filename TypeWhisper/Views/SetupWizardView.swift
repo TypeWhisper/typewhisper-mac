@@ -1207,7 +1207,8 @@ struct SetupWizardView: View {
             let testedSelection = trialSignal.observe(
                 oldState: oldValue,
                 newState: newValue,
-                selection: selectedSetupModel
+                selection: selectedSetupModel,
+                completedInsertion: dictation.lastSuccessfulDictationInsertion
             )
             if let testedSelection, setupReadiness.canCompleteSetup {
                 withAnimation(.spring(duration: 0.35)) {
@@ -1802,30 +1803,30 @@ struct SetupWizardReadiness {
 /// Issue #1335: decides whether a dictation state transition counts as a
 /// successful setup-wizard dictation test.
 ///
-/// A successful test must use the real recording/transcription/insertion path
-/// and grant no success state when insertion fails. Insertion failures surface
-/// as `.error`, which never passes through `.inserting` on its way to `.idle`.
-/// However, notch/toast feedback (`showNotchFeedback`) also passes through
-/// `.inserting`, so entering `.inserting` from any state other than
-/// `.processing` — i.e. without a transcription having run — must never grant
-/// the tested state.
+/// Indicator feedback, including processing cancellation, can use the same
+/// state transitions as successful dictation. A completed cycle therefore also
+/// requires a new explicit insertion result for the selection being tested.
 struct SetupWizardTrialSignal {
     private var recordingSelection: SetupWizardTestedSelection?
+    private var insertionIDAtRecordingStart: UUID?
     private var enteredInsertingFromProcessing = false
 
     mutating func reset() {
         recordingSelection = nil
+        insertionIDAtRecordingStart = nil
         enteredInsertingFromProcessing = false
     }
 
     mutating func observe(
         oldState: DictationViewModel.State,
         newState: DictationViewModel.State,
-        selection: SetupWizardTestedSelection?
+        selection: SetupWizardTestedSelection?,
+        completedInsertion: DictationInsertionCompletion? = nil
     ) -> SetupWizardTestedSelection? {
         if newState == .recording {
             reset()
             recordingSelection = selection
+            insertionIDAtRecordingStart = completedInsertion?.id
         } else if selection != recordingSelection {
             reset()
         }
@@ -1835,7 +1836,17 @@ struct SetupWizardTrialSignal {
             enteredInsertingFromProcessing: enteredInsertingFromProcessing
         )
         enteredInsertingFromProcessing = evaluation.enteredInsertingFromProcessing
-        let completedSelection = evaluation.granted ? recordingSelection : nil
+        let completedSelection: SetupWizardTestedSelection?
+        if evaluation.granted,
+           let recordingSelection,
+           let completedInsertion,
+           completedInsertion.id != insertionIDAtRecordingStart,
+           completedInsertion.providerId == recordingSelection.providerId,
+           completedInsertion.modelId == recordingSelection.modelId {
+            completedSelection = recordingSelection
+        } else {
+            completedSelection = nil
+        }
         switch newState {
         case .idle, .error:
             reset()
@@ -1845,9 +1856,8 @@ struct SetupWizardTrialSignal {
         return completedSelection
     }
 
-    /// Evaluates one dictation state transition. Returns whether the
-    /// transition grants the tested state, along with the updated
-    /// `enteredInsertingFromProcessing` flag for the next transition.
+    /// Identifies a potential completed cycle. `observe` must additionally
+    /// verify an explicit insertion result before granting the tested state.
     static func evaluate(
         oldState: DictationViewModel.State,
         newState: DictationViewModel.State,
