@@ -426,7 +426,7 @@ struct SetupWizardView: View {
                 description: localizedAppText("Required to type into other apps.", de: "Erforderlich, um in andere Apps zu schreiben."),
                 systemImage: "figure.stand",
                 isGranted: !dictation.needsAccessibilityPermission,
-                isRequired: false,
+                isRequired: true,
                 action: { dictation.requestAccessibilityPermission() }
             )
 
