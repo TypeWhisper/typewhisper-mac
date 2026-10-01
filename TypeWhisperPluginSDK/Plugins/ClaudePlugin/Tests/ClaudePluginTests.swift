@@ -15,6 +15,15 @@ final class ClaudePluginTests: XCTestCase {
         super.tearDown()
     }
 
+    func testScreenshotAutomationSkipsAutomaticModelRefresh() {
+        XCTAssertFalse(
+            ClaudeAutomaticRefreshPolicy.allowsRefreshOnAppear(
+                arguments: ["TypeWhisper", "--store-screenshots"]
+            )
+        )
+        XCTAssertTrue(ClaudeAutomaticRefreshPolicy.allowsRefreshOnAppear(arguments: ["TypeWhisper"]))
+    }
+
     // MARK: - Existing selection behavior
 
     func testPreferredModelIdReflectsSelectedLLMModel() throws {

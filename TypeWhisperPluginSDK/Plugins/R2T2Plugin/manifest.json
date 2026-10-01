@@ -1,0 +1,22 @@
+{
+    "id": "com.scriptease.r2t2",
+    "name": "Confucius4-R2T2",
+    "version": "0.2.0",
+    "minHostVersion": "1.7.0",
+    "sdkCompatibilityVersion": "v1",
+    "minOSVersion": "14.0",
+    "author": "scriptease",
+    "description": "On-device real-time streaming transcription with Confucius4-R2T2 (NetEase Youdao). Downloads the audio.cpp server and a model of your choice (Q4_K_M, Q8_0 or F16) and runs them locally on Metal, or connects to your own audio.cpp server. Append-only output, Chinese and English optimized.",
+    "descriptions": {
+        "de": "Lokale Echtzeit-Streaming-Transkription mit Confucius4-R2T2 (NetEase Youdao). Lädt den audio.cpp-Server und ein Modell deiner Wahl (Q4_K_M, Q8_0 oder F16) herunter und führt sie lokal mit Metal aus, oder verbindet sich mit deinem eigenen audio.cpp-Server. Append-only-Ausgabe, optimiert für Chinesisch und Englisch."
+    },
+    "category": "transcription",
+    "capabilities": [
+        "live-dictation"
+    ],
+    "hosting": "local",
+    "iconSystemName": "waveform.badge.mic",
+    "principalClass": "R2T2Plugin",
+    "requiresAPIKey": false,
+    "detailsURL": "https://github.com/netease-youdao/Confucius4-R2T2"
+}

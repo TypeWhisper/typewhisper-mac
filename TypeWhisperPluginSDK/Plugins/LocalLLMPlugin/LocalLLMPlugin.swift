@@ -11,7 +11,7 @@ import Tokenizers
 import os
 
 // Keep this policy plugin-local because the SDK network guard was added after TypeWhisper 1.6.0.
-enum Gemma4NetworkAccessPolicy {
+enum LocalLLMNetworkAccessPolicy {
     static func ensureAccessIsAllowed(
         arguments: [String] = ProcessInfo.processInfo.arguments
     ) throws {
@@ -21,25 +21,25 @@ enum Gemma4NetworkAccessPolicy {
     }
 }
 
-private struct Gemma4DownloadProgressReport: Equatable {
+private struct LocalLLMDownloadProgressReport: Equatable {
     let completedUnitCount: Int64
     let totalUnitCount: Int64
     let isSnapshotComplete: Bool
 }
 
-private struct Gemma4DownloadProgressAccumulator {
+private struct LocalLLMDownloadProgressAccumulator {
     private var snapshotCompletedUnitCount: Int64 = 0
     private var snapshotTotalUnitCount: Int64 = 0
     private var snapshotFraction: Double = 0
     private var isSnapshotComplete = false
     private var receivedBytesByTask: [Int: Int64] = [:]
-    private var lastReport: Gemma4DownloadProgressReport?
+    private var lastReport: LocalLLMDownloadProgressReport?
 
     mutating func observeSnapshot(
         completedUnitCount: Int64,
         totalUnitCount: Int64,
         fraction: Double
-    ) -> Gemma4DownloadProgressReport? {
+    ) -> LocalLLMDownloadProgressReport? {
         let normalizedFraction = fraction.isFinite
             ? max(0.0, min(fraction, 1.0))
             : 0.0
@@ -55,7 +55,7 @@ private struct Gemma4DownloadProgressAccumulator {
 
     mutating func observeNetworkTasks(
         receivedBytes: [Int: Int64]
-    ) -> Gemma4DownloadProgressReport? {
+    ) -> LocalLLMDownloadProgressReport? {
         for (taskIdentifier, byteCount) in receivedBytes {
             receivedBytesByTask[taskIdentifier] = max(
                 receivedBytesByTask[taskIdentifier] ?? 0,
@@ -65,7 +65,7 @@ private struct Gemma4DownloadProgressAccumulator {
         return makeReport()
     }
 
-    private mutating func makeReport() -> Gemma4DownloadProgressReport? {
+    private mutating func makeReport() -> LocalLLMDownloadProgressReport? {
         guard snapshotTotalUnitCount > 0 else { return nil }
 
         let fractionCompletedUnitCount = Int64(
@@ -87,7 +87,7 @@ private struct Gemma4DownloadProgressAccumulator {
             completedUnitCount = min(completedUnitCount, max(snapshotTotalUnitCount - 1, 0))
         }
 
-        let report = Gemma4DownloadProgressReport(
+        let report = LocalLLMDownloadProgressReport(
             completedUnitCount: completedUnitCount,
             totalUnitCount: snapshotTotalUnitCount,
             isSnapshotComplete: isSnapshotComplete
@@ -98,10 +98,10 @@ private struct Gemma4DownloadProgressAccumulator {
     }
 }
 
-private final class Gemma4DownloadProgressSampler: @unchecked Sendable {
+private final class LocalLLMDownloadProgressSampler: @unchecked Sendable {
     private let session: URLSession
     private let progressHandler: @Sendable (Progress) -> Void
-    private let state = OSAllocatedUnfairLock(initialState: Gemma4DownloadProgressAccumulator())
+    private let state = OSAllocatedUnfairLock(initialState: LocalLLMDownloadProgressAccumulator())
 
     init(
         session: URLSession,
@@ -148,7 +148,7 @@ private final class Gemma4DownloadProgressSampler: @unchecked Sendable {
         emit(report)
     }
 
-    private func emit(_ report: Gemma4DownloadProgressReport?) {
+    private func emit(_ report: LocalLLMDownloadProgressReport?) {
         guard let report else { return }
         let progress = Progress(totalUnitCount: report.totalUnitCount)
         progress.completedUnitCount = report.completedUnitCount
@@ -163,7 +163,7 @@ private final class Gemma4DownloadProgressSampler: @unchecked Sendable {
     }
 }
 
-private struct Gemma4HubDownloader: Downloader {
+private struct LocalLLMHubDownloader: Downloader {
     let client: HubClient
     let session: URLSession
 
@@ -175,10 +175,10 @@ private struct Gemma4HubDownloader: Downloader {
         progressHandler: @Sendable @escaping (Progress) -> Void
     ) async throws -> URL {
         guard let repoID = Repo.ID(rawValue: id) else {
-            throw Gemma4Plugin.DownloadError.invalidRepositoryID(id)
+            throw LocalLLMPlugin.DownloadError.invalidRepositoryID(id)
         }
 
-        let progressSampler = Gemma4DownloadProgressSampler(
+        let progressSampler = LocalLLMDownloadProgressSampler(
             session: session,
             progressHandler: progressHandler
         )
@@ -196,7 +196,7 @@ private struct Gemma4HubDownloader: Downloader {
     }
 }
 
-private struct Gemma4TokenizerBridge: MLXLMCommon.Tokenizer {
+private struct LocalLLMTokenizerBridge: MLXLMCommon.Tokenizer {
     let upstream: any Tokenizers.Tokenizer
 
     func encode(text: String, addSpecialTokens: Bool) -> [Int] {
@@ -236,19 +236,22 @@ private struct Gemma4TokenizerBridge: MLXLMCommon.Tokenizer {
     }
 }
 
-private struct Gemma4TokenizerLoader: TokenizerLoader {
+private struct LocalLLMTokenizerLoader: TokenizerLoader {
     func load(from directory: URL) async throws -> any MLXLMCommon.Tokenizer {
         let tokenizer = try await AutoTokenizer.from(modelFolder: directory)
-        return Gemma4TokenizerBridge(upstream: tokenizer)
+        return LocalLLMTokenizerBridge(upstream: tokenizer)
     }
 }
 
 // MARK: - Plugin Entry Point
 
-@objc(Gemma4Plugin)
-final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemperatureControllableProvider, LLMProviderSetupStatusProviding, LLMModelSelectable, PluginSettingsActivityReporting, PluginDownloadedModelManaging, PluginRuntimeMemoryDiagnosticsReporting, @unchecked Sendable {
-    static let pluginId = "com.typewhisper.gemma4"
-    static let pluginName = "Gemma 4"
+@objc(LocalLLMPlugin)
+final class LocalLLMPlugin: NSObject, ObservableObject, LLMProviderPlugin, LLMProviderIdentityProviding, LLMTemperatureControllableProvider, LLMProviderSetupStatusProviding, LLMModelSelectable, PluginSettingsActivityReporting, PluginDownloadedModelManaging, PluginRuntimeMemoryDiagnosticsReporting, @unchecked Sendable {
+    static let pluginId = "com.typewhisper.local-llm-mlx"
+    static let pluginName = "Local LLM (MLX)"
+    /// Provider ID of the former Gemma 4 plugin, so stored workflows and prompt
+    /// actions resolve here once that plugin is removed.
+    static let legacyProviderId = "Gemma 4 (MLX)"
     static let defaultGenerationTemperature = 0.1
     static let experimentalModelWarning = "Experimental. You can try it at your own risk."
     static let promptMaxTokens = 2048
@@ -300,7 +303,7 @@ final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemp
 
     private func modelsDirectory() -> URL {
         host?.pluginDataDirectory.appendingPathComponent("models")
-            ?? FileManager.default.temporaryDirectory.appendingPathComponent("gemma4-models")
+            ?? FileManager.default.temporaryDirectory.appendingPathComponent("local-llm-models")
     }
 
     private func localModelDirectory(for repoId: String) -> URL {
@@ -312,7 +315,7 @@ final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemp
     }
     @Published var downloadProgress: Double = 0
 
-    @Published var modelState: Gemma4ModelState = .notLoaded
+    @Published var modelState: LocalLLMModelState = .notLoaded
 
     required override init() {
         super.init()
@@ -370,7 +373,10 @@ final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemp
 
     // MARK: - LLMProviderPlugin
 
-    var providerName: String { "Gemma 4 (MLX)" }
+    var providerName: String { Self.pluginName }
+    var providerId: String { Self.pluginName }
+    var providerDisplayName: String { Self.pluginName }
+    var providerLegacyAliases: [String] { [Self.legacyProviderId] }
 
     var isAvailable: Bool {
         modelContainer != nil && loadedModelId != nil
@@ -441,7 +447,7 @@ final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemp
     ) async throws -> String {
         let trimmedUserText = userText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedUserText.isEmpty else {
-            throw Gemma4PluginError.noInputText
+            throw LocalLLMPluginError.noInputText
         }
 
         let resolvedTemperature = providerTemperatureDirective
@@ -453,18 +459,10 @@ final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemp
             }
             defer { Self.clearRuntimeCache() }
 
-            let combinedPrompt = """
-            Follow these instructions exactly:
-            \(systemPrompt)
-
-            Input text:
-            \(trimmedUserText)
-            """
-
-            let chat: [Chat.Message] = [
-                .user(combinedPrompt),
-            ]
-            let userInput = UserInput(chat: chat)
+            let userInput = UserInput(
+                chat: Self.promptMessages(systemPrompt: systemPrompt, userText: trimmedUserText),
+                additionalContext: Self.promptChatTemplateContext
+            )
             let input = try await modelContainer.prepare(input: userInput)
 
             let parameters = Self.promptGenerationParameters(
@@ -483,8 +481,41 @@ final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemp
                 }
             }
 
-            return result.trimmingCharacters(in: .whitespacesAndNewlines)
+            return Self.finalPromptOutput(result)
         }
+    }
+
+    /// Instructions go into the system turn and the text to transform into the
+    /// user turn. Small models leak or execute instructions when both share one
+    /// user message.
+    static func promptMessages(systemPrompt: String, userText: String) -> [Chat.Message] {
+        [
+            .system(systemPrompt),
+            .user(userText),
+        ]
+    }
+
+    /// Hybrid reasoning models (Qwen3, Qwen3.5) must not think for text
+    /// transformations; Gemma 4 and LFM2.5 ignore the flag.
+    static let promptChatTemplateContext: [String: any Sendable] = ["enable_thinking": false]
+
+    static func finalPromptOutput(_ output: String) -> String {
+        var result = output.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Templates that open the reasoning block themselves only leave the closing tag.
+        if let end = result.range(of: "</think>", options: [.caseInsensitive, .backwards]),
+           result.range(of: "<think>", options: .caseInsensitive, range: result.startIndex..<end.lowerBound) == nil {
+            result = String(result[end.upperBound...]).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        while let start = result.range(of: "<think>", options: .caseInsensitive) {
+            if let end = result.range(of: "</think>", options: .caseInsensitive, range: start.upperBound..<result.endIndex) {
+                result.removeSubrange(start.lowerBound..<end.upperBound)
+            } else {
+                // Unterminated reasoning never contains the requested text.
+                result.removeSubrange(start.lowerBound..<result.endIndex)
+            }
+            result = result.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return result
     }
 
     // MARK: - LLMModelSelectable
@@ -524,9 +555,9 @@ final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemp
             return message
         }
 
-        let bundle = Bundle(for: Gemma4Plugin.self)
+        let bundle = Bundle(for: LocalLLMPlugin.self)
         return String(
-            localized: "Load a Gemma 4 model in Integrations before using it for prompts.",
+            localized: "Load a local model in Integrations before using it for prompts.",
             bundle: bundle
         )
     }
@@ -574,11 +605,11 @@ final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemp
         await PluginHuggingFaceTokenHelper.validateToken(token, dataFetcher: dataFetcher)
     }
 
-    func isModelDownloaded(_ modelDef: Gemma4ModelDef) -> Bool {
+    func isModelDownloaded(_ modelDef: LocalLLMModelDef) -> Bool {
         isUsableDownloadedModel(modelDef)
     }
 
-    func hasCachedModelFiles(_ modelDef: Gemma4ModelDef) -> Bool {
+    func hasCachedModelFiles(_ modelDef: LocalLLMModelDef) -> Bool {
         modelStore().hasCachedModelFiles(
             for: modelDef.repoId,
             legacyDirectories: [localModelDirectory(for: modelDef.repoId)]
@@ -586,7 +617,7 @@ final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemp
     }
 
     @discardableResult
-    func beginModelLoad(for modelDef: Gemma4ModelDef, isAlreadyDownloaded: Bool) -> Int {
+    func beginModelLoad(for modelDef: LocalLLMModelDef, isAlreadyDownloaded: Bool) -> Int {
         let generation = beginModelLoad(
             phase: isAlreadyDownloaded ? .preparing : .downloading,
             initialDownloadFraction: isAlreadyDownloaded ? 1.0 : 0.0
@@ -607,12 +638,12 @@ final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemp
 
     // MARK: - Model Management
 
-    func loadModel(_ modelDef: Gemma4ModelDef) async throws {
+    func loadModel(_ modelDef: LocalLLMModelDef) async throws {
         try Task.checkCancellation()
         let downloadedDirectory = usableModelDirectory(for: modelDef)
         let isAlreadyDownloaded = downloadedDirectory != nil
         if !isAlreadyDownloaded {
-            try Gemma4NetworkAccessPolicy.ensureAccessIsAllowed()
+            try LocalLLMNetworkAccessPolicy.ensureAccessIsAllowed()
         }
         let loadGeneration = beginModelLoad(for: modelDef, isAlreadyDownloaded: isAlreadyDownloaded)
         startModelLoadTimeout(generation: loadGeneration, modelName: modelDef.displayName)
@@ -632,7 +663,7 @@ final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemp
                 bearerToken: token?.isEmpty == false ? token : nil,
                 cache: HubCache(cacheDirectory: modelsDir)
             )
-            let downloader = Gemma4HubDownloader(
+            let downloader = LocalLLMHubDownloader(
                 client: hubClient,
                 session: hubSession
             )
@@ -640,18 +671,18 @@ final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemp
             if let downloadedDirectory {
                 configuration = ModelConfiguration(
                     directory: downloadedDirectory,
-                    extraEOSTokens: ["<turn|>"]
+                    extraEOSTokens: modelDef.extraEOSTokens
                 )
             } else {
                 configuration = ModelConfiguration(
                     id: modelDef.repoId,
-                    extraEOSTokens: ["<turn|>"]
+                    extraEOSTokens: modelDef.extraEOSTokens
                 )
             }
             let loadTask = Task<ModelContainer, Error> {
                 try await LLMModelFactory.shared.loadContainer(
                     from: downloader,
-                    using: Gemma4TokenizerLoader(),
+                    using: LocalLLMTokenizerLoader(),
                     configuration: configuration
                 ) { progress in
                     guard !Task.isCancelled else { return }
@@ -727,14 +758,14 @@ final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemp
         host?.notifyCapabilitiesChanged()
     }
 
-    func deleteModelFiles(_ modelDef: Gemma4ModelDef) throws {
+    func deleteModelFiles(_ modelDef: LocalLLMModelDef) throws {
         try modelStore().deleteModelFiles(
             for: modelDef.repoId,
             legacyDirectories: [localModelDirectory(for: modelDef.repoId)]
         )
     }
 
-    func resetCachedModel(_ modelDef: Gemma4ModelDef) {
+    func resetCachedModel(_ modelDef: LocalLLMModelDef) {
         invalidateModelLoad()
         modelContainer = nil
         loadedModelId = nil
@@ -953,7 +984,7 @@ final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemp
         return true
     }
 
-    private func isUsableDownloadedModel(_ modelDef: Gemma4ModelDef) -> Bool {
+    private func isUsableDownloadedModel(_ modelDef: LocalLLMModelDef) -> Bool {
         usableModelDirectory(for: modelDef) != nil
     }
 
@@ -962,12 +993,12 @@ final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemp
             .isUsableModelDirectory(repoDir, requirements: modelRequirements)
     }
 
-    private func removeIncompleteModelIfNeeded(_ modelDef: Gemma4ModelDef) {
+    private func removeIncompleteModelIfNeeded(_ modelDef: LocalLLMModelDef) {
         guard hasCachedModelFiles(modelDef), !isModelDownloaded(modelDef) else { return }
         try? deleteModelFiles(modelDef)
     }
 
-    private func usableModelDirectory(for modelDef: Gemma4ModelDef) -> URL? {
+    private func usableModelDirectory(for modelDef: LocalLLMModelDef) -> URL? {
         modelStore().usableModelDirectory(
             for: modelDef.repoId,
             legacyDirectories: [localModelDirectory(for: modelDef.repoId)],
@@ -1051,7 +1082,7 @@ final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemp
         snapshotFraction: Double,
         receivedBytesByTask: [Int: Int64]
     ) -> (completedUnitCount: Int64, totalUnitCount: Int64, isSnapshotComplete: Bool)? {
-        var accumulator = Gemma4DownloadProgressAccumulator()
+        var accumulator = LocalLLMDownloadProgressAccumulator()
         let snapshotReport = accumulator.observeSnapshot(
             completedUnitCount: snapshotCompletedUnitCount,
             totalUnitCount: snapshotTotalUnitCount,
@@ -1117,51 +1148,75 @@ final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemp
     // MARK: - Settings View
 
     var settingsView: AnyView? {
-        AnyView(Gemma4SettingsView(plugin: self))
+        AnyView(LocalLLMSettingsView(plugin: self))
     }
 
     // MARK: - Model Definitions
 
-    static let availableModels: [Gemma4ModelDef] = [
-        Gemma4ModelDef(
+    static let gemmaEOSTokens: Set<String> = ["<turn|>"]
+    static let qwen35ModelWarning = "Experimental. Uses less memory than Gemma 4 but translates and restructures text less reliably."
+    static let lfm25ModelWarning = "Experimental. Reasons before answering, so results take several seconds. LFM Open License: commercial use is free only below USD 10M annual revenue."
+
+    static let availableModels: [LocalLLMModelDef] = [
+        LocalLLMModelDef(
             id: "gemma-4-e2b-it-4bit",
             displayName: "Gemma 4 E2B (4-bit)",
             repoId: "mlx-community/gemma-4-e2b-it-4bit",
             sizeDescription: "~3.6 GB",
             ramRequirement: "8 GB+",
-            availability: .supported
+            availability: .supported,
+            extraEOSTokens: gemmaEOSTokens
         ),
-        Gemma4ModelDef(
+        LocalLLMModelDef(
             id: "gemma-4-e4b-it-4bit",
             displayName: "Gemma 4 E4B (4-bit)",
             repoId: "mlx-community/gemma-4-e4b-it-4bit",
             sizeDescription: "~5.2 GB",
             ramRequirement: "16 GB+",
-            availability: .supported
+            availability: .supported,
+            extraEOSTokens: gemmaEOSTokens
         ),
-        Gemma4ModelDef(
+        LocalLLMModelDef(
             id: "gemma-4-e4b-it-8bit",
             displayName: "Gemma 4 E4B (8-bit)",
             repoId: "mlx-community/gemma-4-e4b-it-8bit",
             sizeDescription: "~8 GB",
             ramRequirement: "16 GB+",
-            availability: .experimental(warning: experimentalModelWarning)
+            availability: .experimental(warning: experimentalModelWarning),
+            extraEOSTokens: gemmaEOSTokens
         ),
-        Gemma4ModelDef(
+        LocalLLMModelDef(
             id: "gemma-4-26b-a4b-it-4bit",
             displayName: "Gemma 4 26B-A4B (4-bit, MoE)",
             repoId: "mlx-community/gemma-4-26b-a4b-it-4bit",
             sizeDescription: "~15.6 GB",
             ramRequirement: "32 GB+",
-            availability: .experimental(warning: experimentalModelWarning)
+            availability: .experimental(warning: experimentalModelWarning),
+            extraEOSTokens: gemmaEOSTokens
+        ),
+        LocalLLMModelDef(
+            id: "qwen3.5-2b-4bit",
+            displayName: "Qwen3.5 2B (4-bit)",
+            repoId: "mlx-community/Qwen3.5-2B-4bit",
+            sizeDescription: "~1.8 GB",
+            ramRequirement: "8 GB+",
+            availability: .experimental(warning: qwen35ModelWarning)
+        ),
+        LocalLLMModelDef(
+            id: "lfm2.5-2.6b-4bit",
+            displayName: "LFM2.5 2.6B (4-bit)",
+            repoId: "LiquidAI/LFM2.5-2.6B-MLX-4bit",
+            sizeDescription: "~1.6 GB",
+            ramRequirement: "8 GB+",
+            availability: .experimental(warning: lfm25ModelWarning)
         ),
     ]
 
-    static var supportedModelDefinitions: [Gemma4ModelDef] {
+    static var supportedModelDefinitions: [LocalLLMModelDef] {
         availableModels.filter(\.isSupported)
     }
 
-    static func modelDefinition(for id: String?) -> Gemma4ModelDef? {
+    static func modelDefinition(for id: String?) -> LocalLLMModelDef? {
         guard let id else { return nil }
         return availableModels.first(where: { $0.id == id })
     }
@@ -1177,26 +1232,26 @@ final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemp
         modelDefinition(for: id) != nil
     }
 
-    static func userFacingLoadErrorMessage(for error: Error, modelDef: Gemma4ModelDef) -> String {
-        if let pluginError = error as? Gemma4PluginError,
+    static func userFacingLoadErrorMessage(for error: Error, modelDef: LocalLLMModelDef) -> String {
+        if let pluginError = error as? LocalLLMPluginError,
            let description = pluginError.errorDescription {
             return description
         }
 
         if let urlError = error as? URLError,
            urlError.code == .timedOut {
-            let bundle = Bundle(for: Gemma4Plugin.self)
+            let bundle = Bundle(for: LocalLLMPlugin.self)
             return String(
-                localized: "Download timed out while fetching Gemma 4 from Hugging Face. Please retry. Adding an optional HuggingFace token in this plugin can also increase download rate limits.",
+                localized: "Download timed out while fetching the model from Hugging Face. Please retry. Adding an optional HuggingFace token in this plugin can also increase download rate limits.",
                 bundle: bundle
             )
         }
 
         let rawMessage = "\(String(describing: error))\n\(error.localizedDescription)".lowercased()
         if isRecoverableCacheError(rawMessage) {
-            let bundle = Bundle(for: Gemma4Plugin.self)
+            let bundle = Bundle(for: LocalLLMPlugin.self)
             return String(
-                localized: "The downloaded Gemma model cache appears incomplete or incompatible. Delete the cached model and download it again.",
+                localized: "The downloaded model cache appears incomplete or incompatible. Delete the cached model and download it again.",
                 bundle: bundle
             )
         }
@@ -1219,7 +1274,7 @@ final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemp
             locale: Locale(identifier: "en_US_POSIX"),
             max(0.0, min(lastDownloadFraction, 1.0)) * 100
         )
-        let bundle = Bundle(for: Gemma4Plugin.self)
+        let bundle = Bundle(for: LocalLLMPlugin.self)
         switch phase {
         case .downloading:
             let format = String(
@@ -1271,10 +1326,10 @@ final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemp
         )
     }
 
-    private static func unsupportedModelMessage(for modelDef: Gemma4ModelDef) -> String {
+    private static func unsupportedModelMessage(for modelDef: LocalLLMModelDef) -> String {
         let supportedModels = supportedModelDefinitions.map(\.displayName).joined(separator: ", ")
         if modelDef.isSupported {
-            return "Gemma 4 loading in this TypeWhisper release is limited to \(supportedModels). If loading still fails, update to the latest app build and try again."
+            return "Local model loading in this TypeWhisper release is limited to \(supportedModels). If loading still fails, update to the latest app build and try again."
         }
         return "\(modelDef.displayName) is experimental in this TypeWhisper release and may still fail to load. Recommended models: \(supportedModels)."
     }
@@ -1282,13 +1337,14 @@ final class Gemma4Plugin: NSObject, ObservableObject, LLMProviderPlugin, LLMTemp
 
 // MARK: - Model Types
 
-struct Gemma4ModelDef: Identifiable {
+struct LocalLLMModelDef: Identifiable {
     let id: String
     let displayName: String
     let repoId: String
     let sizeDescription: String
     let ramRequirement: String
-    let availability: Gemma4ModelAvailability
+    let availability: LocalLLMModelAvailability
+    var extraEOSTokens: Set<String> = []
 
     var isSupported: Bool {
         if case .supported = availability {
@@ -1305,12 +1361,12 @@ struct Gemma4ModelDef: Identifiable {
     }
 }
 
-enum Gemma4ModelAvailability: Equatable {
+enum LocalLLMModelAvailability: Equatable {
     case supported
     case experimental(warning: String)
 }
 
-enum Gemma4PluginError: LocalizedError {
+enum LocalLLMPluginError: LocalizedError {
     case noInputText
 
     var errorDescription: String? {
@@ -1321,14 +1377,14 @@ enum Gemma4PluginError: LocalizedError {
     }
 }
 
-enum Gemma4ModelState: Equatable {
+enum LocalLLMModelState: Equatable {
     case notLoaded
     case downloading
     case loading
     case ready(String)
     case error(String)
 
-    static func == (lhs: Gemma4ModelState, rhs: Gemma4ModelState) -> Bool {
+    static func == (lhs: LocalLLMModelState, rhs: LocalLLMModelState) -> Bool {
         switch (lhs, rhs) {
         case (.notLoaded, .notLoaded): true
         case (.downloading, .downloading): true

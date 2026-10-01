@@ -523,7 +523,7 @@ final class MLXPluginModelStorageTests: XCTestCase {
 
     func testGemma4SourceAvoidsSDKSymbolsUnavailableInHost16() throws {
         let pluginDirectory = TestSupport.repoRoot.appendingPathComponent(
-            "TypeWhisperPluginSDK/Plugins/Gemma4Plugin"
+            "TypeWhisperPluginSDK/Plugins/LocalLLMPlugin"
         )
         let sourceURLs = try FileManager.default.contentsOfDirectory(
             at: pluginDirectory,
@@ -539,15 +539,25 @@ final class MLXPluginModelStorageTests: XCTestCase {
         }
     }
 
+    func testGemma4PromptKeepsInstructionsOutOfTheUserTurn() {
+        let messages = LocalLLMPlugin.promptMessages(
+            systemPrompt: "Translate the following text to English.",
+            userText: "Hallo Welt"
+        )
+
+        XCTAssertEqual(messages.map(\.role), [.system, .user])
+        XCTAssertEqual(messages.map(\.content), ["Translate the following text to English.", "Hallo Welt"])
+    }
+
     func testGemma4NetworkPolicyAllowsNormalRuntime() {
         XCTAssertNoThrow(
-            try Gemma4NetworkAccessPolicy.ensureAccessIsAllowed(arguments: ["TypeWhisper"])
+            try LocalLLMNetworkAccessPolicy.ensureAccessIsAllowed(arguments: ["TypeWhisper"])
         )
     }
 
     func testGemma4NetworkPolicyBlocksScreenshotAutomation() {
         XCTAssertThrowsError(
-            try Gemma4NetworkAccessPolicy.ensureAccessIsAllowed(
+            try LocalLLMNetworkAccessPolicy.ensureAccessIsAllowed(
                 arguments: ["TypeWhisper", "--store-screenshots"]
             )
         ) { error in
@@ -612,11 +622,11 @@ final class MLXPluginModelStorageTests: XCTestCase {
             requiredFiles: ["config.json", "tekken.json"]
         )
 
-        let gemmaModel = try XCTUnwrap(Gemma4Plugin.modelDefinition(for: "gemma-4-e2b-it-4bit"))
+        let gemmaModel = try XCTUnwrap(LocalLLMPlugin.modelDefinition(for: "gemma-4-e2b-it-4bit"))
         let gemmaFixture = try Fixture()
         defer { gemmaFixture.remove() }
         let gemmaHost = MockHostServices(pluginDataDirectory: gemmaFixture.root)
-        let gemma = Gemma4Plugin()
+        let gemma = LocalLLMPlugin()
         gemma.activate(host: gemmaHost)
         let gemmaLegacy = gemmaFixture.legacyDirectory(repositoryID: gemmaModel.repoId, usesMLXAudio: false)
         try gemmaFixture.writeModel(at: gemmaLegacy, requiredFiles: ["config.json", "tokenizer.json"])
@@ -650,9 +660,9 @@ final class MLXPluginModelStorageTests: XCTestCase {
             usesMLXAudio: true
         )
 
-        let model = try XCTUnwrap(Gemma4Plugin.modelDefinition(for: "gemma-4-e2b-it-4bit"))
+        let model = try XCTUnwrap(LocalLLMPlugin.modelDefinition(for: "gemma-4-e2b-it-4bit"))
         try assertActivationRemovesDuplicate(
-            plugin: Gemma4Plugin(),
+            plugin: LocalLLMPlugin(),
             repositoryID: model.repoId,
             requiredFiles: ["config.json", "tokenizer.json"],
             usesMLXAudio: false
@@ -682,9 +692,9 @@ final class MLXPluginModelStorageTests: XCTestCase {
             usesMLXAudio: true
         )
 
-        let model = try XCTUnwrap(Gemma4Plugin.modelDefinition(for: "gemma-4-e2b-it-4bit"))
+        let model = try XCTUnwrap(LocalLLMPlugin.modelDefinition(for: "gemma-4-e2b-it-4bit"))
         try await assertDeletionRemovesAllArtifacts(
-            plugin: Gemma4Plugin(),
+            plugin: LocalLLMPlugin(),
             modelID: model.id,
             repositoryID: model.repoId,
             requiredFiles: ["config.json", "tokenizer.json"],
@@ -727,7 +737,7 @@ final class MLXPluginModelStorageTests: XCTestCase {
         let qwen = Qwen3Plugin.availableModels[0]
         let granite = GranitePlugin.availableModels[0]
         let voxtral = VoxtralPlugin.availableModels[0]
-        let gemma = try XCTUnwrap(Gemma4Plugin.modelDefinition(for: "gemma-4-e2b-it-4bit"))
+        let gemma = try XCTUnwrap(LocalLLMPlugin.modelDefinition(for: "gemma-4-e2b-it-4bit"))
         let plugins: [(TypeWhisperPlugin, MockHostServices)] = [
             (Qwen3Plugin(), MockHostServices(
                 pluginDataDirectory: fixture.root.appendingPathComponent("qwen"),
@@ -744,7 +754,7 @@ final class MLXPluginModelStorageTests: XCTestCase {
                 defaults: ["loadedModel": voxtral.id],
                 shouldRestoreLoadedModelsPassively: true
             )),
-            (Gemma4Plugin(), MockHostServices(
+            (LocalLLMPlugin(), MockHostServices(
                 pluginDataDirectory: fixture.root.appendingPathComponent("gemma"),
                 defaults: ["loadedModel": gemma.id],
                 shouldRestoreLoadedModelsPassively: true

@@ -80,7 +80,7 @@ separate from the Settings-window matrix.
 
 ## Plugin screenshots for typewhisper.com
 
-The plugin lane covers the 47 current first-party bundles. It builds each
+The plugin lane covers the 48 current first-party bundles and the community Confucius4-R2T2 bundle. It builds each
 selected bundle, stages only that bundle in a temporary Application Support
 directory, opens its native settings window, and captures English and German
 website assets:
@@ -121,6 +121,15 @@ key or live service.
 Obsidian captures include a selected example vault, and MCP Client captures
 include an example HTTP server. Both fixtures are localized and seeded only in
 the isolated screenshot defaults. The example MCP server is not connected.
+
+File Memory, OpenAI Vector Memory, Script Runner, Webhook Notifications, and
+Improve TypeWhisper would open empty, so screenshot mode writes localized
+example data into the temporary plugin data directory before the selected
+plugin loads: three memories, two scripts, two webhooks that point to
+`example.com`, and three corrections that are ready to send. Execution and
+delivery logs only exist in memory and stay empty. Claude and ElevenLabs skip
+their automatic model refresh and key check in screenshot mode, because the
+blocked request would otherwise show an error in the window.
 
 Publishing requires `cwebp`, `oxipng`, and ImageMagick's `identify`. After
 reviewing both locale images, copy and optimize the PNG/WebP assets in a local

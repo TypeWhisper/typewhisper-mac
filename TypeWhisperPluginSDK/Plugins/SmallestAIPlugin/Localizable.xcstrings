@@ -8,6 +8,12 @@
             "state": "translated",
             "value": "Automatisch (europäisch)"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自动（欧洲语言）"
+          }
         }
       }
     },
@@ -17,6 +23,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Automatisch (mehrsprachig)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自动（多语言）"
           }
         }
       }
@@ -28,6 +40,12 @@
             "state": "translated",
             "value": "Automatisch (indisch)"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自动（南亚语言）"
+          }
         }
       }
     },
@@ -37,6 +55,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Automatisch (asiatisch)"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自动（亚洲语言）"
           }
         }
       }

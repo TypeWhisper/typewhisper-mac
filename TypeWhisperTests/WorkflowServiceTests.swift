@@ -726,7 +726,7 @@ final class WorkflowServiceTests: XCTestCase {
         let service = WorkflowService(appSupportDirectory: appSupportDirectory, userDefaults: defaults)
         let promptProcessingService = PromptProcessingService(userDefaults: defaults)
         promptProcessingService.addLLMFallback(
-            providerId: "Gemma 4 (MLX)",
+            providerId: "Local LLM (MLX)",
             modelId: "gemma-4-large"
         )
         _ = service.addWorkflow(
@@ -1571,6 +1571,55 @@ final class WorkflowServiceTests: XCTestCase {
         XCTAssertEqual(capturedProvider, "Groq")
         XCTAssertEqual(capturedModel, "llama-3.3")
         XCTAssertEqual(capturedTemperature, workflow.behavior.temperatureDirective)
+    }
+
+    func testWorkflowTextProcessingServiceAppendsProtectedVocabularyToLLMPrompt() async throws {
+        let workflow = Workflow(
+            name: "ct",
+            template: .cleanedText,
+            trigger: .global(),
+            behavior: WorkflowBehavior(fineTuning: "Keep it casual.")
+        )
+
+        var capturedPrompt: String?
+        let service = WorkflowTextProcessingService(
+            promptProcessor: { prompt, _, _, _, _ in
+                capturedPrompt = prompt
+                return "Cleaned"
+            },
+            appleTranslator: nil,
+            vocabularyProvider: { ["DEVONthink", "Claude Code", "Wikipeadia"] }
+        )
+
+        let result = try await service.process(workflow: workflow, text: "hello")
+        let prompt = try XCTUnwrap(capturedPrompt)
+
+        XCTAssertEqual(result, "Cleaned")
+        XCTAssertTrue(prompt.contains("Fine-tuning:\nKeep it casual."))
+        XCTAssertTrue(prompt.contains("Protected vocabulary:"))
+        XCTAssertTrue(prompt.hasSuffix("DEVONthink, Claude Code, Wikipeadia"))
+
+        // Segmented processing builds its request separately; it must carry the same prompt.
+        let segmented = try XCTUnwrap(service.segmentedPromptRequest(workflow: workflow))
+        XCTAssertEqual(segmented.systemPrompt, prompt)
+    }
+
+    func testWorkflowTextProcessingServiceOmitsVocabularyBlockWhenEmpty() async throws {
+        let workflow = Workflow(name: "ct", template: .cleanedText, trigger: .global())
+
+        var capturedPrompt: String?
+        let service = WorkflowTextProcessingService(
+            promptProcessor: { prompt, _, _, _, _ in
+                capturedPrompt = prompt
+                return "Cleaned"
+            },
+            appleTranslator: nil,
+            vocabularyProvider: { ["  ", ""] }
+        )
+
+        _ = try await service.process(workflow: workflow, text: "hello")
+        let prompt = try XCTUnwrap(capturedPrompt)
+        XCTAssertFalse(prompt.contains("Protected vocabulary"))
     }
 
     func testWorkflowTextProcessingServiceForwardsRawInputToCentralProcessor() async throws {

@@ -8,6 +8,12 @@
             "state": "translated",
             "value": "Guthaben löschen"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "清除余额设置"
+          }
         }
       }
     },
@@ -17,6 +23,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Letzte Spracherkennung"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最近识别时间"
           }
         }
       }
@@ -28,6 +40,12 @@
             "state": "translated",
             "value": "Guthaben aktualisiert"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "余额更新时间"
+          }
         }
       }
     },
@@ -37,6 +55,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Verbrauch seit Guthabenaktualisierung"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "余额更新后已用时长"
           }
         }
       }
@@ -48,6 +72,12 @@
             "state": "translated",
             "value": "Geschätztes Restguthaben"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "预计剩余时长"
+          }
         }
       }
     },
@@ -57,6 +87,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Der Autorisierungsschlüssel wird sicher im Schlüsselbund gespeichert. Falls die Prüfung wegen eines Zertifikatfehlers scheitert, installiere das von macOS als vertrauenswürdig eingestufte SaluteSpeech-Zertifikat."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "授权密钥安全地存储在钥匙串中。如果验证因证书错误而失败，请安装受 macOS 信任的 SaluteSpeech 证书。"
           }
         }
       }
@@ -68,6 +104,12 @@
             "state": "translated",
             "value": "Lokale Schätzung. Aktualisiere sie anhand von SaluteSpeech Studio."
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "此为本地估算值。请根据 SaluteSpeech Studio 中的数据更新。"
+          }
         }
       }
     },
@@ -77,6 +119,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Erfassten Verbrauch zurücksetzen"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "重置已记录的用量"
           }
         }
       }
@@ -88,6 +136,12 @@
             "state": "translated",
             "value": "Guthaben speichern"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存余额"
+          }
         }
       }
     },
@@ -97,6 +151,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Gültig bis"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有效期至"
           }
         }
       }
@@ -108,6 +168,12 @@
             "state": "translated",
             "value": "Minuten"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "分钟"
+          }
         }
       }
     },
@@ -117,6 +183,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Studio-Restguthaben"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Studio 剩余时长"
           }
         }
       }
@@ -128,6 +200,12 @@
             "state": "translated",
             "value": "Erfasster Verbrauch"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "累计已用时长"
+          }
         }
       }
     },
@@ -137,6 +215,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Spracherkennungsnutzung"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "语音识别用量"
           }
         }
       }
@@ -148,6 +232,12 @@
             "state": "translated",
             "value": "Unternehmen"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "企业"
+          }
         }
       }
     },
@@ -157,6 +247,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Persönlich"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "个人"
           }
         }
       }
@@ -168,6 +264,12 @@
             "state": "translated",
             "value": "OAuth-Bereich"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OAuth 权限范围"
+          }
         }
       }
     },
@@ -177,6 +279,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Autorisierungsschlüssel"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "授权密钥"
           }
         }
       }
@@ -188,6 +296,12 @@
             "state": "translated",
             "value": "Standardwerte wiederherstellen"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "恢复默认设置"
+          }
         }
       }
     },
@@ -197,6 +311,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Ein Wort pro Zeile. Kommas und Semikolons werden ebenfalls akzeptiert."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "每行一个词，也可使用逗号或分号分隔。"
           }
         }
       }
@@ -208,6 +328,12 @@
             "state": "translated",
             "value": "Füllwörter"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "填充词"
+          }
         }
       }
     },
@@ -217,6 +343,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Verbunden"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已连接"
           }
         }
       }
@@ -228,6 +360,12 @@
             "state": "translated",
             "value": "Keine Erinnerungen passen zu deiner Suche."
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "没有找到匹配的记忆。"
+          }
         }
       }
     },
@@ -237,6 +375,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nach der Verarbeitung von Transkriptionen erscheinen hier Erinnerungen."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "处理转录内容后，记忆会显示在这里。"
           }
         }
       }
@@ -248,6 +392,12 @@
             "state": "translated",
             "value": "Keine Erinnerungen"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "暂无记忆"
+          }
         }
       }
     },
@@ -257,6 +407,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Erinnerungen durchsuchen …"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "搜索记忆…"
           }
         }
       }
@@ -268,6 +424,12 @@
             "state": "translated",
             "value": "%lld gespeicherte Erinnerungen"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "已存储 %lld 条记忆"
+          }
         }
       }
     },
@@ -277,6 +439,12 @@
           "stringUnit": {
             "state": "translated",
             "value": "Nutzungsstatistik"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "使用统计"
           }
         }
       }
@@ -13108,6 +13276,35 @@
         }
       }
     },
+    "Finish Later" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Finish Later"
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Später abschließen"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "後で完了"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "稍后完成"
+          }
+        }
+      }
+    },
     "Finish the Discord authorization flow in your browser, then refresh the status here." : {
       "comment" : "A message that instructs the user to finish the Discord authorization flow and refresh the status.",
       "isCommentAutoGenerated" : true,
@@ -16878,6 +17075,22 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "本地"
+          }
+        }
+      }
+    },
+    "Local & Cloud" : {
+      "localizations" : {
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ローカルとクラウド"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "本地和云端"
           }
         }
       }
@@ -22703,6 +22916,35 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "录音期间按 Enter 可停止录音、插入文本并发送。正常停止只会插入文本。"
+          }
+        }
+      }
+    },
+    "Press Command Return to finish setup later." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Press Command Return to finish setup later."
+          }
+        },
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Drücke Befehlstaste Return, um das Setup später abzuschließen."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Command＋Returnキーを押すと、設定の完了を後回しにできます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按 Command＋Return 键，稍后再完成设置。"
           }
         }
       }
@@ -34763,18 +35005,18 @@
         }
       }
     },
-    "Uses this value only for this prompt. Gemma 4 supports values from 0.0 to 1.0." : {
+    "Uses this value only for this prompt. Local MLX models support values from 0.0 to 1.0." : {
       "localizations" : {
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "このプロンプトでのみこの値を使用します。Gemma 4は0.0から1.0の値をサポートしています。"
+            "value" : "このプロンプトでのみこの値を使用します。ローカルMLXモデルは0.0から1.0の値をサポートしています。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "此值仅用于当前提示词。Gemma 4 支持 0.0 到 1.0 之间的值。"
+            "value" : "此值仅用于当前提示词。本地 MLX 模型支持 0.0 到 1.0 之间的值。"
           }
         }
       }
@@ -42521,6 +42763,9 @@
     "iPad App" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"iPad-App"}},"ja":{"stringUnit":{"state":"translated","value":"iPadアプリ"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"iPad App"}}}},
     "iPhone App" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"iPhone-App"}},"ja":{"stringUnit":{"state":"translated","value":"iPhoneアプリ"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"iPhone App"}}}},
     "Mac Dictation" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Mac-Diktat"}},"ja":{"stringUnit":{"state":"translated","value":"Macの音声入力"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"Mac 听写"}}}},
+    "Windows Dictation" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Windows-Diktat"}},"ja":{"stringUnit":{"state":"translated","value":"Windowsの音声入力"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"Windows 听写"}}}},
+    "Windows" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Windows"}},"ja":{"stringUnit":{"state":"translated","value":"Windows"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"Windows"}}}},
+    "Recorder" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Recorder"}},"ja":{"stringUnit":{"state":"translated","value":"レコーダー"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"录音"}}}},
     "More History Options" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Weitere Verlaufsoptionen"}},"ja":{"stringUnit":{"state":"translated","value":"その他の履歴オプション"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"更多历史记录选项"}}}},
     "No Failed Entries" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Keine fehlgeschlagenen Einträge"}},"ja":{"stringUnit":{"state":"translated","value":"失敗した項目はありません"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"没有失败的条目"}}}},
     "Save Changes?" : {"localizations":{"de":{"stringUnit":{"state":"translated","value":"Änderungen speichern?"}},"ja":{"stringUnit":{"state":"translated","value":"変更を保存しますか？"}},"zh-Hans":{"stringUnit":{"state":"translated","value":"保存更改？"}}}},
@@ -42552,6 +42797,627 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "只有当 Mac 检测到你已加入匹配的预定会议后，TypeWhisper 才会启动。"
+          }
+        }
+      }
+    },
+    "Visual Keyboard" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Visuelle Tastatur"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ビジュアルキーボード"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "可视化键盘"
+          }
+        }
+      }
+    },
+    "Click modifiers, then a key." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Klicke auf Modifikatoren und dann auf eine Taste."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "修飾キーを選んでから、キーをクリックしてください。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "先点击修饰键，再点击其他按键。"
+          }
+        }
+      }
+    },
+    "Current combination: %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Aktuelle Kombination: %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "現在の組み合わせ：%@"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "当前组合：%@"
+          }
+        }
+      }
+    },
+    "Conflicts with %@" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Konflikt mit %@"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ と競合しています"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "与 %@ 冲突"
+          }
+        }
+      }
+    },
+    "Conflicts with %@. Saving will reassign it." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Konflikt mit %@. Beim Speichern wird er neu zugewiesen."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%@ と競合しています。保存すると割り当てが変更されます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "与 %@ 冲突。保存后，此快捷键将改为用于当前功能。"
+          }
+        }
+      }
+    },
+    "Conflicting" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In Konflikt"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "競合"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "冲突"
+          }
+        }
+      }
+    },
+    "Reserved" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reserviert"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "予約済み"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "不可用"
+          }
+        }
+      }
+    },
+    "Reserved, cannot be recorded" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Reserviert, kann nicht aufgenommen werden"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "予約済みのため、登録できません"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "此按键不可用于设置快捷键"
+          }
+        }
+      }
+    },
+    "Double-tap" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Doppeltippen"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "2回押し"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "连按两次"
+          }
+        }
+      }
+    },
+    "More Keys" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Weitere Tasten"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "その他のキー"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "更多按键"
+          }
+        }
+      }
+    },
+    "Follows your current macOS input source." : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Folgt der aktuellen macOS-Eingabequelle."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "現在のmacOSの入力ソースに合わせて表示します。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "按键显示随当前 macOS 输入源变化。"
+          }
+        }
+      }
+    },
+    "Space" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Leertaste"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "スペース"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "空格"
+          }
+        }
+      }
+    },
+    "Clear composed shortcut" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zusammengestellten Shortcut löschen"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "編集中のショートカットをクリア"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "清除当前快捷键组合"
+          }
+        }
+      }
+    },
+    "Save Shortcut" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shortcut speichern"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ショートカットを保存"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存快捷键"
+          }
+        }
+      }
+    },
+    "Save composed shortcut" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zusammengestellten Shortcut speichern"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "編集中のショートカットを保存"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存当前快捷键组合"
+          }
+        }
+      }
+    },
+    "Edit with visual keyboard" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mit visueller Tastatur bearbeiten"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ビジュアルキーボードで編集"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用可视化键盘编辑"
+          }
+        }
+      }
+    },
+    "Edit shortcut with visual keyboard" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Shortcut mit visueller Tastatur bearbeiten"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ビジュアルキーボードでショートカットを編集"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "使用可视化键盘编辑快捷键"
+          }
+        }
+      }
+    },
+    "Left Command" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Linke Command-Taste"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "左Command"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "左 Command"
+          }
+        }
+      }
+    },
+    "Right Command" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rechte Command-Taste"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "右Command"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "右 Command"
+          }
+        }
+      }
+    },
+    "Left Option" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Linke Option-Taste"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "左Option"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "左 Option"
+          }
+        }
+      }
+    },
+    "Right Option" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rechte Option-Taste"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "右Option"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "右 Option"
+          }
+        }
+      }
+    },
+    "Left Control" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Linke Control-Taste"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "左Control"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "左 Control"
+          }
+        }
+      }
+    },
+    "Right Control" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rechte Control-Taste"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "右Control"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "右 Control"
+          }
+        }
+      }
+    },
+    "Left Shift" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Linke Umschalttaste"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "左Shift"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "左 Shift"
+          }
+        }
+      }
+    },
+    "Right Shift" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Rechte Umschalttaste"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "右Shift"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "右 Shift"
+          }
+        }
+      }
+    },
+    "the “%@” workflow shortcut" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "dem Shortcut des Workflows „%@“"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ワークフロー「%@」のショートカット"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "工作流“%@”的快捷键"
+          }
+        }
+      }
+    },
+    "the “%@” profile shortcut" : {
+      "extractionState" : "manual",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "dem Shortcut des Profils „%@“"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "プロファイル「%@」のショートカット"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "配置文件“%@”的快捷键"
           }
         }
       }

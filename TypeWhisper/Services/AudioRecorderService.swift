@@ -834,7 +834,6 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
             }
         } else {
             // Setup temp files
-            let tempDir = FileManager.default.temporaryDirectory
             let sessionId = UUID().uuidString
 
             do {
@@ -844,14 +843,14 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
                         throw RecorderError.microphonePermissionDenied
                     }
 
-                    let micURL = tempDir.appendingPathComponent("mic-\(sessionId).wav")
+                    let micURL = UserDataLocations.temporaryItemURL("Recorder-mic-\(sessionId).wav")
                     self.micTempURL = micURL
                     try startMicRecording(outputURL: micURL, microphoneSelection: microphoneSelection)
                 }
 
                 // Start system audio recording
                 if systemAudioEnabled {
-                    let sysURL = tempDir.appendingPathComponent("sys-\(sessionId).wav")
+                    let sysURL = UserDataLocations.temporaryItemURL("Recorder-sys-\(sessionId).wav")
                     self.systemTempURL = sysURL
                     try await startSystemAudioRecording(outputURL: sysURL)
                 }

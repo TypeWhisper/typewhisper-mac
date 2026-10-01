@@ -129,10 +129,75 @@ enum AppVocabularyImport {
             if first == second {
                 do { return try parseHandy(first) }
                 catch AppVocabularyImportError.tooLarge { throw AppVocabularyImportError.tooLarge }
+                // A truncated mid-write read is a prefix of valid JSON, so it
+                // may settle into a parseable pair on retry. Undecodable input
+                // that is not truncated is a stable invalid format.
+                catch DecodingError.dataCorrupted where looksTruncated(first) { continue }
+                catch is DecodingError { throw AppVocabularyImportError.invalidFormat }
                 catch { continue }
             }
         }
         throw AppVocabularyImportError.unstableSource
+    }
+
+    /// Whether undecodable JSON looks like a prefix of valid JSON: it ends
+    /// inside a string, with an unclosed bracket or brace, right after a
+    /// separator or opening bracket, or inside a multibyte UTF-8 character.
+    /// Only such reads are worth retrying, since Handy may still be writing
+    /// them; anything else that fails to parse cannot settle into a valid store.
+    private static func looksTruncated(_ data: Data) -> Bool {
+        // A read can stop in the middle of a multibyte character. The trailing
+        // bytes may still complete on retry, so treat that as truncated, not invalid.
+        if hasIncompleteUTF8Suffix(data) { return true }
+        guard let text = String(data: data, encoding: .utf8) else { return false }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        // An empty mid-write read never parses; treat it as still being written.
+        guard let last = trimmed.last else { return true }
+        // Input expecting more after a separator or opening bracket.
+        if ",:[{".contains(last) { return true }
+        var depth = 0
+        var inString = false
+        var escaped = false
+        for char in trimmed {
+            if inString {
+                if escaped { escaped = false }
+                else if char == "\\" { escaped = true }
+                else if char == "\"" { inString = false }
+            } else if char == "\"" {
+                inString = true
+            } else if char == "{" || char == "[" {
+                depth += 1
+            } else if char == "}" || char == "]" {
+                depth -= 1
+                if depth < 0 { return false }
+            }
+        }
+        // An unterminated string or unclosed structure never finishes parsing.
+        return inString || depth > 0
+    }
+
+    /// Whether the data ends inside a multibyte UTF-8 character: trailing
+    /// continuation bytes (10xxxxxx) preceded by a lead byte that expects
+    /// more of them. Such a suffix is potentially incomplete rather than
+    /// irrecoverably invalid, so the read is worth retrying.
+    private static func hasIncompleteUTF8Suffix(_ data: Data) -> Bool {
+        guard !data.isEmpty else { return false }
+        var offset = data.count
+        var continuations = 0
+        while offset > 0, (data[offset - 1] & 0xC0) == 0x80 {
+            continuations += 1
+            offset -= 1
+        }
+        // Continuation bytes with no lead byte are invalid, not incomplete.
+        guard offset > 0 else { return false }
+        let expected: Int
+        switch data[offset - 1] {
+        case 0xC2...0xDF: expected = 1
+        case 0xE0...0xEF: expected = 2
+        case 0xF0...0xF4: expected = 3
+        default: return false
+        }
+        return continuations < expected
     }
 
     private static func boundedData(_ url: URL) throws -> Data {

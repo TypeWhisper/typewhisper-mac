@@ -8,6 +8,12 @@
             "state": "translated",
             "value": "Wandle gesprochene Diktate in strukturierte Linear-Issues um. Extrahiere: 1) einen prägnanten Titel mit höchstens 100 Zeichen, 2) eine ausführliche Beschreibung in Markdown, 3) die Priorität (1=Dringend, 2=Hoch, 3=Mittel, 4=Niedrig), aus dem Kontext abgeleitet, standardmäßig 3. Antworte NUR mit gültigem JSON: {\"title\": \"...\", \"description\": \"...\", \"priority\": 3}"
           }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "你是一名助手，负责将口述内容转换为结构化的 Linear Issue。请提取：1）简明的标题（最多 100 个字符）；2）Markdown 格式的详细描述；3）优先级（1=紧急、2=高、3=中、4=低），根据上下文推断，默认为 3。仅返回有效的 JSON：{\"title\": \"...\", \"description\": \"...\", \"priority\": 3}"
+          }
         }
       }
     },

@@ -48,19 +48,20 @@ PLUGIN_SCREENSHOTS = [
   { slug: "assemblyai", target: "AssemblyAIPlugin", id: "com.typewhisper.assemblyai" },
   { slug: "authenticated-cli", target: "AuthenticatedCLIPlugin", id: "com.typewhisper.authenticated-cli" },
   { slug: "web-link", target: "WebLinkPlugin", id: "com.typewhisper.web-link" },
+  { slug: "canary-asr", target: "CanaryPlugin", id: "com.typewhisper.canary" },
   { slug: "cartesia", target: "CartesiaPlugin", id: "com.typewhisper.cartesia" },
   { slug: "cerebras", target: "CerebrasPlugin", id: "com.typewhisper.cerebras" },
   { slug: "claude", target: "ClaudePlugin", id: "com.typewhisper.claude" },
   { slug: "cloudflare-asr", target: "CloudflareASRPlugin", id: "com.typewhisper.cloudflare-asr" },
   { slug: "cohere", target: "CoherePlugin", id: "com.typewhisper.cohere" },
   { slug: "cohere-local", target: "CohereLocalPlugin", id: "com.typewhisper.cohere-transcribe" },
+  { slug: "confucius4-r2t2", target: "R2T2Plugin", id: "com.scriptease.r2t2", size: [560, 372] },
   { slug: "deepgram", target: "DeepgramPlugin", id: "com.typewhisper.deepgram" },
   { slug: "elevenlabs", target: "ElevenLabsPlugin", id: "com.typewhisper.elevenlabs" },
   { slug: "file-memory", target: "FileMemoryPlugin", id: "com.typewhisper.memory.file" },
   { slug: "filler-words", target: "FillerWordsPlugin", id: "com.typewhisper.filler-words" },
   { slug: "fireworks", target: "FireworksPlugin", id: "com.typewhisper.fireworks" },
   { slug: "gemini", target: "GeminiPlugin", id: "com.typewhisper.gemini" },
-  { slug: "gemma4", target: "Gemma4Plugin", id: "com.typewhisper.gemma4", size: [560, 661] },
   { slug: "gladia", target: "GladiaPlugin", id: "com.typewhisper.gladia" },
   { slug: "google-cloud-stt", target: "GoogleCloudSTTPlugin", id: "com.typewhisper.google-cloud-stt" },
   { slug: "granite", target: "GranitePlugin", id: "com.typewhisper.granite" },
@@ -68,6 +69,7 @@ PLUGIN_SCREENSHOTS = [
   { slug: "improve-typewhisper", target: "ContributorPlugin", id: "com.typewhisper.improve" },
   { slug: "linear", target: "LinearPlugin", id: "com.typewhisper.linear" },
   { slug: "live-transcript", target: "LiveTranscriptPlugin", id: "com.typewhisper.livetranscript" },
+  { slug: "local-llm-mlx", target: "LocalLLMPlugin", id: "com.typewhisper.local-llm-mlx", size: [560, 661] },
   { slug: "mcp-client", target: "MCPClientPlugin", id: "com.typewhisper.mcp-client" },
   { slug: "meta", target: "MetaPlugin", id: "com.typewhisper.meta" },
   {
@@ -856,7 +858,7 @@ platform :mac do
     update_readme_screenshot_block!(check: true)
   end
 
-  desc "Capture localized add-on screenshots for first-party plugin settings windows"
+  desc "Capture localized add-on screenshots for plugin settings windows"
   lane :plugin_screenshots do |options|
     languages = selected_plugin_screenshot_languages(options[:languages])
     plugins = selected_plugin_screenshots(options[:plugins])

@@ -133,7 +133,7 @@ final class PromptProcessingModelResolutionTests: XCTestCase {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
         defer { defaults.removePersistentDomain(forName: suiteName) }
 
-        defaults.set("Gemma 4 (MLX)", forKey: UserDefaultsKeys.workflowDefaultLLMProviderId)
+        defaults.set("Local LLM (MLX)", forKey: UserDefaultsKeys.workflowDefaultLLMProviderId)
         defaults.set("gemma-4-large", forKey: UserDefaultsKeys.workflowDefaultLLMCloudModel)
         defaults.set("Groq", forKey: "llmProviderType")
         defaults.set("llama-3.3", forKey: "llmCloudModel")
@@ -142,7 +142,7 @@ final class PromptProcessingModelResolutionTests: XCTestCase {
 
         XCTAssertEqual(
             service.fallbackPriorityList.map { ($0.providerId, $0.modelId) }.map { "\($0.0)|\($0.1 ?? "")" },
-            ["Gemma 4 (MLX)|gemma-4-large", "Groq|llama-3.3"]
+            ["Local LLM (MLX)|gemma-4-large", "Groq|llama-3.3"]
         )
         XCTAssertNotEqual(service.fallbackPriorityList[0].id, service.fallbackPriorityList[1].id)
         XCTAssertNotNil(defaults.data(forKey: UserDefaultsKeys.llmFallbackPriorityList))

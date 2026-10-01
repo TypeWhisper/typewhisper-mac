@@ -4,6 +4,14 @@ import XCTest
 
 @MainActor
 final class PromptActionTemperaturePersistenceTests: XCTestCase {
+    func testLocalMLXProvidersKeepTheirTemperatureRangeAfterRename() {
+        for providerId in ["Local LLM (MLX)", "Gemma 4 (MLX)"] {
+            XCTAssertTrue(PromptActionsViewModel.isLocalMLXProvider(providerId), providerId)
+        }
+        XCTAssertFalse(PromptActionsViewModel.isLocalMLXProvider("Groq"))
+        XCTAssertFalse(PromptActionsViewModel.isLocalMLXProvider(nil))
+    }
+
     func testAddActionDefaultsToInheritProviderSetting() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }

@@ -3,6 +3,15 @@ import SwiftUI
 import os
 import TypeWhisperPluginSDK
 
+// Screenshot automation blocks provider requests, so an automatic key check could only fail.
+enum ElevenLabsAutomaticValidationPolicy {
+    static func allowsValidationOnAppear(
+        arguments: [String] = ProcessInfo.processInfo.arguments
+    ) -> Bool {
+        !arguments.contains("--store-screenshots")
+    }
+}
+
 private let elevenLabsSupportedLanguages = [
     "af", "am", "ar", "as", "az", "ba", "be", "bg", "bn", "bo",
     "br", "bs", "ca", "cs", "cy", "da", "de", "el", "en", "es",
@@ -1010,12 +1019,14 @@ private struct ElevenLabsSettingsView: View {
         .onAppear {
             if let key = plugin._apiKey, !key.isEmpty {
                 apiKeyInput = key
-                isValidating = true
-                Task {
-                    let result = await plugin.validateApiKey(key)
-                    await MainActor.run {
-                        isValidating = false
-                        validationResult = result
+                if ElevenLabsAutomaticValidationPolicy.allowsValidationOnAppear() {
+                    isValidating = true
+                    Task {
+                        let result = await plugin.validateApiKey(key)
+                        await MainActor.run {
+                            isValidating = false
+                            validationResult = result
+                        }
                     }
                 }
             }

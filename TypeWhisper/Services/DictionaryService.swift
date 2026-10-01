@@ -54,6 +54,10 @@ final class DictionaryService: ObservableObject {
     @Published private(set) var entries: [DictionaryEntry] = []
     @Published private(set) var terms: [DictionaryEntry] = []
     @Published private(set) var corrections: [DictionaryEntry] = []
+    /// Enabled corrections in application order: longer originals first, so a multi-word
+    /// correction ("clawed code" → "Claude Code") wins over a shorter prefix correction
+    /// ("clawed" → "Claude") that would otherwise consume part of the longer match.
+    private(set) var correctionsForApplication: [DictionaryEntry] = []
     @Published private(set) var termsCount: Int = 0
     @Published private(set) var correctionsCount: Int = 0
     @Published private(set) var enabledTermsCount: Int = 0
@@ -121,6 +125,7 @@ final class DictionaryService: ObservableObject {
 
             terms = newTerms
             corrections = newCorrections
+            correctionsForApplication = Self.orderedForApplication(newCorrections)
             termsCount = newTermsCount
             correctionsCount = newCorrectionsCount
             enabledTermsCount = newEnabledTermsCount
@@ -631,12 +636,76 @@ final class DictionaryService: ObservableObject {
         applyCorrections(to: [text], deferUsageCountSave: deferUsageCountSave).first ?? text
     }
 
+    /// Applies all enabled corrections, counting a correction's usage only if its id is not
+    /// already in `countedCorrectionIDs`. The post-processing pipeline shares one set across
+    /// its pre- and post-LLM passes so a dictation counts each correction at most once.
+    func applyCorrections(
+        to text: String,
+        deferUsageCountSave: Bool,
+        countedCorrectionIDs: inout Set<UUID>
+    ) -> String {
+        applyCorrections(
+            to: [text],
+            deferUsageCountSave: deferUsageCountSave,
+            countedCorrectionIDs: &countedCorrectionIDs
+        ).first ?? text
+    }
+
+    /// Orders corrections for application: longest original first, ties keep the
+    /// caller's (alphabetical) order so results stay deterministic.
+    static func orderedForApplication(_ entries: [DictionaryEntry]) -> [DictionaryEntry] {
+        entries.enumerated()
+            .sorted { lhs, rhs in
+                let lhsLength = lhs.element.original.trimmingCharacters(in: .whitespacesAndNewlines).count
+                let rhsLength = rhs.element.original.trimmingCharacters(in: .whitespacesAndNewlines).count
+                if lhsLength != rhsLength {
+                    return lhsLength > rhsLength
+                }
+                return lhs.offset < rhs.offset
+            }
+            .map(\.element)
+    }
+
+    /// Spellings that LLM post-processing must preserve: enabled terms plus the target
+    /// spellings of enabled corrections, de-duplicated case- and diacritic-insensitively
+    /// (terms win ties) and sorted for a stable prompt.
+    func vocabularyForPrompt(limit: Int = 400) -> [String] {
+        var seenKeys = Set<String>()
+        var result: [String] = []
+        let candidates = terms.map(\.original) + corrections.compactMap(\.replacement)
+        for candidate in candidates {
+            let trimmed = candidate.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !trimmed.isEmpty else { continue }
+            let key = trimmed.folding(options: [.caseInsensitive, .diacriticInsensitive], locale: .current)
+            guard seenKeys.insert(key).inserted else { continue }
+            result.append(trimmed)
+        }
+        return Array(
+            result
+                .sorted { $0.localizedCaseInsensitiveCompare($1) == .orderedAscending }
+                .prefix(limit)
+        )
+    }
+
     /// Apply all enabled corrections to related text fields while counting each correction once.
     func applyCorrections(to texts: [String], deferUsageCountSave: Bool = false) -> [String] {
+        var countedCorrectionIDs = Set<UUID>()
+        return applyCorrections(
+            to: texts,
+            deferUsageCountSave: deferUsageCountSave,
+            countedCorrectionIDs: &countedCorrectionIDs
+        )
+    }
+
+    private func applyCorrections(
+        to texts: [String],
+        deferUsageCountSave: Bool,
+        countedCorrectionIDs: inout Set<UUID>
+    ) -> [String] {
         var results = texts
         var needsSave = false
 
-        for correction in corrections {
+        for correction in correctionsForApplication {
             guard let replacement = correction.replacement else { continue }
 
             var correctionWasApplied = false
@@ -646,7 +715,7 @@ final class DictionaryService: ObservableObject {
                 correctionWasApplied = correctionWasApplied || results[index] != before
             }
 
-            if correctionWasApplied {
+            if correctionWasApplied, countedCorrectionIDs.insert(correction.id).inserted {
                 correction.usageCount += 1
                 needsSave = true
             }
@@ -661,6 +730,45 @@ final class DictionaryService: ObservableObject {
         }
 
         return results
+    }
+
+    /// Applies all enabled corrections without touching usage counters, for text that is
+    /// prepared repeatedly while recording and will be corrected again when dictation stops.
+    func previewCorrections(to text: String) -> String {
+        var appliedCorrectionIDs = Set<UUID>()
+        return previewCorrections(to: text, appliedCorrectionIDs: &appliedCorrectionIDs)
+    }
+
+    /// Like `previewCorrections(to:)`, and adds the id of every correction that changed the
+    /// text to `appliedCorrectionIDs`, so a caller can count their usage later with
+    /// `recordUsage(ofCorrectionIDs:deferUsageCountSave:)` once the result is actually used.
+    func previewCorrections(to text: String, appliedCorrectionIDs: inout Set<UUID>) -> String {
+        var result = text
+        for correction in correctionsForApplication {
+            guard let replacement = correction.replacement else { continue }
+            let before = result
+            result = applyCorrection(correction, to: before, replacement: replacement)
+            if result != before {
+                appliedCorrectionIDs.insert(correction.id)
+            }
+        }
+        return result
+    }
+
+    /// Counts one use for each enabled correction whose id is in `correctionIDs`.
+    func recordUsage(ofCorrectionIDs correctionIDs: Set<UUID>, deferUsageCountSave: Bool) {
+        guard !correctionIDs.isEmpty else { return }
+        var needsSave = false
+        for correction in corrections where correctionIDs.contains(correction.id) {
+            correction.usageCount += 1
+            needsSave = true
+        }
+        guard needsSave else { return }
+        if deferUsageCountSave {
+            hasDeferredUsageCountChanges = true
+        } else {
+            saveUsageCounts()
+        }
     }
 
     /// Saves usage counters left unsaved by `applyCorrections(to:deferUsageCountSave:)`.
@@ -690,15 +798,112 @@ final class DictionaryService: ObservableObject {
                 caseSensitive: correction.caseSensitive
             )
         case .substring:
-            if correction.caseSensitive {
-                return text.replacingOccurrences(of: correction.original, with: replacement)
+            let options: String.CompareOptions = correction.caseSensitive ? [] : [.caseInsensitive]
+            let contexts = Self.reexpansionContexts(of: correction.original, in: replacement, options: options, locale: nil)
+            guard !contexts.isEmpty else {
+                if correction.caseSensitive {
+                    return text.replacingOccurrences(of: correction.original, with: replacement)
+                }
+                return text.replacingOccurrences(
+                    of: correction.original,
+                    with: replacement,
+                    options: .caseInsensitive
+                )
             }
-            return text.replacingOccurrences(
-                of: correction.original,
-                with: replacement,
-                options: .caseInsensitive
-            )
+            var result = ""
+            var searchStart = text.startIndex
+            while let range = text.range(of: correction.original, options: options, range: searchStart..<text.endIndex),
+                  range.lowerBound < range.upperBound {
+                result += text[searchStart..<range.lowerBound]
+                let alreadyCorrected = Self.isWithinExistingReplacement(
+                    range,
+                    in: text,
+                    contexts: contexts,
+                    options: options,
+                    locale: nil
+                )
+                result += alreadyCorrected ? String(text[range]) : replacement
+                searchStart = range.upperBound
+            }
+            result += text[searchStart..<text.endIndex]
+            return result
         }
+    }
+
+    /// Where the original re-matches inside its own replacement: the replacement text before
+    /// and after each such match. Found with the correction's own matching semantics, so a
+    /// case-folded match counts too (`Strasse` matches inside `Straße.`). A match that spans
+    /// the whole replacement is skipped: re-applying it reproduces the replacement, which is
+    /// why case-only corrections (`rake` -> `RAKE`) need no protection. Empty when a
+    /// repeated pass cannot expand the text.
+    private struct ReexpansionContext {
+        let prefix: String
+        let suffix: String
+    }
+
+    private static func reexpansionContexts(
+        of original: String,
+        in replacement: String,
+        options: String.CompareOptions,
+        locale: Locale?
+    ) -> [ReexpansionContext] {
+        guard !original.isEmpty, !replacement.isEmpty else { return [] }
+        let wholeReplacement = replacement.startIndex..<replacement.endIndex
+        var contexts: [ReexpansionContext] = []
+        var searchStart = replacement.startIndex
+        while searchStart < replacement.endIndex,
+              let range = replacement.range(
+                  of: original,
+                  options: options,
+                  range: searchStart..<replacement.endIndex,
+                  locale: locale
+              ) {
+            if range != wholeReplacement {
+                contexts.append(ReexpansionContext(
+                    prefix: String(replacement[..<range.lowerBound]),
+                    suffix: String(replacement[range.upperBound...])
+                ))
+            }
+            searchStart = replacement.index(after: range.lowerBound)
+        }
+        return contexts
+    }
+
+    /// Whether the match of the original at `range` already sits inside the replacement: for
+    /// one of the places the original re-matches inside the replacement, the text before and
+    /// after the match equals the replacement text before and after it. Replacing such a match
+    /// again would expand text that is already corrected (`GitHub.com.com`, `Straße..`, or a
+    /// run of hyphens that grows on every pass, including where two corrected runs meet). Text
+    /// that already reads as the replacement is treated as corrected even when it was
+    /// dictated that way.
+    private static func isWithinExistingReplacement(
+        _ range: Range<String.Index>,
+        in text: String,
+        contexts: [ReexpansionContext],
+        options: String.CompareOptions,
+        locale: Locale?
+    ) -> Bool {
+        // Anchored searches rather than Character offsets: under case folding the text can
+        // spell a context with a different number of Characters (`ss` for `ß`).
+        for context in contexts {
+            let prefixMatches = context.prefix.isEmpty || text.range(
+                of: context.prefix,
+                options: options.union([.anchored, .backwards]),
+                range: text.startIndex..<range.lowerBound,
+                locale: locale
+            ) != nil
+            guard prefixMatches else { continue }
+            let suffixMatches = context.suffix.isEmpty || text.range(
+                of: context.suffix,
+                options: options.union(.anchored),
+                range: range.upperBound..<text.endIndex,
+                locale: locale
+            ) != nil
+            if suffixMatches {
+                return true
+            }
+        }
+        return false
     }
 
     private func matchPolicy(for correction: DictionaryEntry) -> DictionaryCorrectionMatchPolicy {
@@ -726,12 +931,14 @@ final class DictionaryService: ObservableObject {
         var result = ""
         var searchStart = text.startIndex
         let options: String.CompareOptions = caseSensitive ? [] : [.caseInsensitive]
+        let contexts = Self.reexpansionContexts(of: original, in: replacement, options: options, locale: .current)
 
         while let range = text.range(of: original, options: options, range: searchStart..<text.endIndex, locale: .current) {
             guard range.lowerBound < range.upperBound else { break }
             let boundaryRange = boundaryEvaluationRange(for: range, in: text)
 
             if boundaryRange.lowerBound < boundaryRange.upperBound,
+               !Self.isWithinExistingReplacement(range, in: text, contexts: contexts, options: options, locale: .current),
                isBoundaryMatch(boundaryRange, in: text, original: boundaryOriginal) {
                 let resolvedReplacement = boundaryReplacement(
                     for: range,

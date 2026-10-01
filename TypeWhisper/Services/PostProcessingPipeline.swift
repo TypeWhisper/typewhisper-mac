@@ -65,6 +65,10 @@ final class PostProcessingPipeline {
 
         var result = text
         var appliedSteps: [String] = []
+        // Tracks correction usage across the pre- and post-LLM passes so each correction is
+        // counted at most once per dictation, and the pre-LLM pass counts only if processing
+        // succeeds (a fallback or cancellation inserts text without its corrections).
+        var correctionUsage = CorrectionUsageLedger()
 
         func stepName(for id: Int) -> String {
             switch id {
@@ -74,7 +78,7 @@ final class PostProcessingPipeline {
             case -5: return "Speech Punctuation"
             case -1: return llmStepName ?? "Prompt"
             case -2: return "Snippets"
-            case -3: return "Corrections"
+            case -3, -8: return "Corrections"
             default: return plugins[id].processorName
             }
         }
@@ -95,14 +99,15 @@ final class PostProcessingPipeline {
                         dictationContext: dictationContext,
                         outputFormat: outputFormat,
                         normalizeNumbers: normalizeNumbers,
-                        deferUsageCountSave: deferUsageCountSaves
+                        deferUsageCountSave: deferUsageCountSaves,
+                        correctionUsage: &correctionUsage
                     )
                 default:
                     result = try await plugins[step.id].process(text: result, context: context)
                 }
                 let changed = result != before
                 logger.info("Post-processing step '\(name)' finished in \(ContinuousClock.now - stepStart), changed: \(changed)")
-                if changed {
+                if changed, !appliedSteps.contains(name) {
                     appliedSteps.append(name)
                 }
             } catch {
@@ -143,6 +148,10 @@ final class PostProcessingPipeline {
             }
         }
 
+        dictionaryService.recordUsage(
+            ofCorrectionIDs: correctionUsage.uncountedProvisionalIDs,
+            deferUsageCountSave: deferUsageCountSaves
+        )
         return PostProcessingResult(text: result, appliedSteps: appliedSteps, fallback: nil)
     }
 
@@ -162,8 +171,12 @@ final class PostProcessingPipeline {
         outputFormat: String?,
         normalizeNumbers: Bool?
     ) -> String {
-        let steps = orderedSteps(includesLLMStep: false, outputFormat: outputFormat, plugins: [])
+        // Ordered as for an LLM run so the pre-LLM correction pass is included; the LLM
+        // step itself is excluded by the priority filter.
+        let steps = orderedSteps(includesLLMStep: true, outputFormat: outputFormat, plugins: [])
         var result = text
+        // Preparation never commits usage; the final `process` run counts the corrections.
+        var correctionUsage = CorrectionUsageLedger()
         for step in steps where step.priority < Self.llmStepPriority {
             result = applyBuiltInStep(
                 step.id,
@@ -171,7 +184,8 @@ final class PostProcessingPipeline {
                 context: context,
                 dictationContext: dictationContext,
                 outputFormat: outputFormat,
-                normalizeNumbers: normalizeNumbers
+                normalizeNumbers: normalizeNumbers,
+                correctionUsage: &correctionUsage
             )
         }
         return result
@@ -180,7 +194,8 @@ final class PostProcessingPipeline {
     private static let llmStepPriority = 300
 
     /// Builds the priority-ordered step list: (priority, id).
-    /// IDs: -1 = LLM, -2 = snippets, -3 = dictionary, -4 = app formatter, -5 = punctuation, -6 = normalization, -7 = time notation (late), 0+ = plugin index
+    /// IDs: -1 = LLM, -2 = snippets, -3 = dictionary, -4 = app formatter, -5 = punctuation, -6 = normalization, -7 = time notation (late),
+    /// -8 = dictionary (pre-LLM pass), 0+ = plugin index
     private func orderedSteps(
         includesLLMStep: Bool,
         outputFormat: String?,
@@ -199,6 +214,10 @@ final class PostProcessingPipeline {
         steps.append((200, -5))
 
         if includesLLMStep {
+            // Apply dictionary corrections before the LLM sees the text as well as after it.
+            // The LLM otherwise rewrites the raw misrecognition (re-punctuates it, swaps a
+            // hyphen, drops a word) and the exact-match correction at 600 no longer fires.
+            steps.append((250, -8))
             steps.append((Self.llmStepPriority, -1))
         }
         for (index, plugin) in plugins.enumerated() {
@@ -233,7 +252,8 @@ final class PostProcessingPipeline {
         dictationContext: DictationRuntimeContext?,
         outputFormat: String?,
         normalizeNumbers: Bool?,
-        deferUsageCountSave: Bool = false
+        deferUsageCountSave: Bool = false,
+        correctionUsage: inout CorrectionUsageLedger
     ) -> String {
         switch id {
         case -6:
@@ -281,10 +301,31 @@ final class PostProcessingPipeline {
             }
         case -2:
             return snippetService.applySnippets(to: text, deferUsageCountSave: deferUsageCountSave)
+        case -8:
+            return dictionaryService.previewCorrections(
+                to: text,
+                appliedCorrectionIDs: &correctionUsage.provisionalIDs
+            )
         case -3:
-            return dictionaryService.applyCorrections(to: text, deferUsageCountSave: deferUsageCountSave)
+            return dictionaryService.applyCorrections(
+                to: text,
+                deferUsageCountSave: deferUsageCountSave,
+                countedCorrectionIDs: &correctionUsage.countedIDs
+            )
         default:
             return text
         }
+    }
+}
+
+/// Correction usage for one post-processing run. The post-LLM pass counts immediately
+/// (`countedIDs`); the pre-LLM pass only records what it applied (`provisionalIDs`), which is
+/// counted once the run completes, minus anything the post-LLM pass already counted.
+struct CorrectionUsageLedger {
+    var countedIDs = Set<UUID>()
+    var provisionalIDs = Set<UUID>()
+
+    var uncountedProvisionalIDs: Set<UUID> {
+        provisionalIDs.subtracting(countedIDs)
     }
 }

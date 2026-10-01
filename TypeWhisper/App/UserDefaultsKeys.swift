@@ -77,6 +77,9 @@ enum UserDefaultsKeys {
     // MARK: - Home / Setup
     static let setupWizardCompleted = "setupWizardCompleted"
     static let setupWizardCurrentStep = "setupWizardCurrentStep"
+    /// Exact provider/model selections tested through the real dictation path.
+    /// Older provider-only records cannot establish which model was tested.
+    static let setupWizardTestedSelections = "setupWizardTestedSelections"
     /// Dev-tool launch mode that defers startup reads of privacy-protected app data.
     static let devPrivacyQuietMode = "devPrivacyQuietMode"
 

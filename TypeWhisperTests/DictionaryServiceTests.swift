@@ -133,6 +133,124 @@ final class DictionaryServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testLongerCorrectionOriginalsApplyBeforeShorterPrefixes() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        // Alphabetical order would apply "clawed" first and leave "Claude code".
+        service.addEntry(type: .correction, original: "clawed", replacement: "Claude")
+        service.addEntry(type: .correction, original: "clawed code", replacement: "Claude Code")
+
+        XCTAssertEqual(service.corrections.map(\.original), ["clawed", "clawed code"])
+        XCTAssertEqual(service.correctionsForApplication.map(\.original), ["clawed code", "clawed"])
+        XCTAssertEqual(
+            service.applyCorrections(to: "Clawed code is not Clawed desktop"),
+            "Claude Code is not Claude desktop"
+        )
+    }
+
+    @MainActor
+    func testCorrectionIsNotReappliedInsideItsOwnReplacement() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        // Boundary matching: the period after "GitHub" is a word boundary.
+        service.addEntry(type: .correction, original: "GitHub", replacement: "GitHub.com")
+        // Substring matching: the original has no word characters.
+        service.addEntry(type: .correction, original: "--", replacement: "---")
+
+        XCTAssertEqual(service.applyCorrections(to: "Visit GitHub"), "Visit GitHub.com")
+        XCTAssertEqual(service.applyCorrections(to: "Visit GitHub.com"), "Visit GitHub.com")
+        XCTAssertEqual(service.applyCorrections(to: "GitHub and GitHub.com"), "GitHub.com and GitHub.com")
+        XCTAssertEqual(service.applyCorrections(to: "a -- b"), "a --- b")
+        XCTAssertEqual(service.applyCorrections(to: "a --- b"), "a --- b")
+        XCTAssertEqual(service.applyCorrections(to: service.applyCorrections(to: "a -- b and -- c")), "a --- b and --- c")
+    }
+
+    @MainActor
+    func testCaseFoldedReplacementIsNotReexpandedAndFullCaseFoldCorrectionsStillApply() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        // `Strasse` matches the `Straße` inside its own replacement (ß folds to ss).
+        service.addEntry(type: .correction, original: "Strasse", replacement: "Straße.")
+        // Here the folded match spans the whole replacement, like a case-only correction.
+        service.addEntry(type: .correction, original: "gasse", replacement: "Gaße")
+
+        XCTAssertEqual(service.applyCorrections(to: "Die Strasse"), "Die Straße.")
+        XCTAssertEqual(service.applyCorrections(to: "Die Straße."), "Die Straße.")
+        XCTAssertEqual(service.applyCorrections(to: "die gasse"), "die Gaße")
+        XCTAssertEqual(service.applyCorrections(to: service.applyCorrections(to: "die gasse")), "die Gaße")
+    }
+
+    @MainActor
+    func testReplacementContextIsMatchedAcrossCaseFoldedLengthDifferences() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        // The replacement's prefix `ß` is spelled `ss` in the text: one Character versus two.
+        service.addEntry(type: .correction, original: "--", replacement: "ß--.")
+
+        XCTAssertEqual(service.applyCorrections(to: "a -- b"), "a ß--. b")
+        XCTAssertEqual(service.applyCorrections(to: "a ß--. b"), "a ß--. b")
+        XCTAssertEqual(service.applyCorrections(to: "a ss--. b"), "a ss--. b")
+        XCTAssertEqual(service.applyCorrections(to: service.applyCorrections(to: "a -- b")), "a ß--. b")
+    }
+
+    @MainActor
+    func testRunsThatAlreadyReadAsTheReplacementAreNotExpanded() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.addEntry(type: .correction, original: "--", replacement: "---")
+
+        // Two corrected runs back to back: a match straddling their seam is still part of
+        // an existing replacement, so a repeated pass leaves the six hyphens alone.
+        XCTAssertEqual(service.applyCorrections(to: "a ------ b"), "a ------ b")
+        XCTAssertEqual(service.applyCorrections(to: service.applyCorrections(to: "a ------ b")), "a ------ b")
+        // Policy: text that already reads as the replacement is treated as corrected, even
+        // when it was dictated that way (two raw originals back to back contain `---`).
+        XCTAssertEqual(service.applyCorrections(to: "a ---- b"), "a ---- b")
+    }
+
+    @MainActor
+    func testPreviewCorrectionsDoesNotCountUsage() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.addEntry(type: .correction, original: "clawed", replacement: "Claude")
+        service.addEntry(type: .correction, original: "clawed code", replacement: "Claude Code")
+
+        XCTAssertEqual(service.previewCorrections(to: "clawed code and clawed"), "Claude Code and Claude")
+        XCTAssertEqual(service.corrections.map(\.usageCount), [0, 0])
+    }
+
+    @MainActor
+    func testVocabularyForPromptMergesTermsAndCorrectionTargets() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let service = DictionaryService(appSupportDirectory: appSupportDirectory)
+        service.addEntry(type: .term, original: "Wikipeadia")
+        service.addEntry(type: .term, original: "Claude")
+        service.addEntry(type: .correction, original: "dev and think", replacement: "DEVONthink")
+        service.addEntry(type: .correction, original: "claw", replacement: "claude")
+        service.addEntry(type: .correction, original: "um", replacement: "")
+        service.addEntry(type: .term, original: "Disabled Term")
+        let disabledTerm = try XCTUnwrap(service.terms.first { $0.original == "Disabled Term" })
+        service.setEntryEnabled(disabledTerm, enabled: false)
+
+        XCTAssertEqual(service.vocabularyForPrompt(), ["Claude", "DEVONthink", "Wikipeadia"])
+        XCTAssertEqual(service.vocabularyForPrompt(limit: 2), ["Claude", "DEVONthink"])
+    }
+
+    @MainActor
     func testBatchCorrectionsUpdateRelatedTextsAndCountEachCorrectionOnce() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }

@@ -702,4 +702,99 @@ final class ParakeetPluginTests: XCTestCase {
             XCTAssertEqual(getenv(key).map { String(cString: $0) }, "hf_env_parakeet")
         }
     }
+
+    // MARK: - Restore trigger activity (issue #840)
+
+    func testTriggerRestoreModelPublishesActivitySynchronously() throws {
+        let host = try PluginTestHostServices()
+        let plugin = makePlugin()
+        plugin.activate(host: host)
+        // Suppress the async restore task: with nothing persisted it can finish
+        // and flip the mark to the "nothing to restore" error before the
+        // assertion below reads it, which made this test flaky in CI.
+        plugin.suppressAsyncRestoreForTests = true
+
+        XCTAssertNil(plugin.currentSettingsActivity)
+
+        plugin.triggerRestoreModel()
+
+        // The activity must be visible synchronously: the host only extends its
+        // restore wait past the base window while an activity is reported, and
+        // task scheduling can delay the async restore task before it publishes
+        // its first state update.
+        let activity = try XCTUnwrap(plugin.currentSettingsActivity)
+        XCTAssertFalse(activity.isError)
+    }
+
+    func testTriggerRestoreModelWithoutPersistedModelSurfacesError() async throws {
+        let host = try PluginTestHostServices()
+        let plugin = makePlugin()
+        plugin.activate(host: host)
+
+        // No `loadedModel` persisted, so the async restore has nothing to load.
+        plugin.triggerRestoreModel()
+
+        let deadline = ContinuousClock.now.advanced(by: .seconds(5))
+        var errorActivity: PluginSettingsActivity?
+        while ContinuousClock.now < deadline {
+            if let current = plugin.currentSettingsActivity, current.isError {
+                errorActivity = current
+                break
+            }
+            try await Task.sleep(for: .milliseconds(20))
+        }
+
+        let activity = try XCTUnwrap(
+            errorActivity,
+            "a restore with nothing persisted must surface an error, not stay silent"
+        )
+        XCTAssertTrue(activity.message.contains("No previously loaded model"))
+    }
+
+    /// Opt-in Core ML regression through the user-facing restore trigger: seeds the
+    /// persisted `loadedModel` marker, goes through `triggerRestoreModel()`, and verifies
+    /// the plugin configures and transcribes. Without this, a regression in the generic
+    /// trigger could leave the persisted model unloaded while the suite stays green,
+    /// because every other Parakeet restore test calls `restoreLoadedModel(...)` directly.
+    func testTriggerRestoreModelRestoresPersistedModelBeforeTranscription() async throws {
+        let audio = try regressionAudio()
+
+        let host = try PluginTestHostServices(defaults: [
+            "loadedModel": "parakeet-tdt-0.6b-v3",
+        ])
+        let plugin = makePlugin()
+        plugin.activate(host: host)
+        defer { plugin.deactivate() }
+
+        plugin.triggerRestoreModel()
+
+        let deadline = ContinuousClock.now.advanced(by: .seconds(30))
+        while !plugin.isConfigured && ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        guard plugin.isConfigured else {
+            XCTFail("triggerRestoreModel() left the persisted model unloaded: \(plugin.modelState)")
+            return
+        }
+        let result = try await plugin.transcribe(
+            audio: audio,
+            language: nil,
+            translate: false,
+            prompt: nil
+        )
+        XCTAssertFalse(result.text.isEmpty, "the restored persisted model must transcribe")
+    }
+
+    func testTriggerRestoreModelForModelPublishesActivitySynchronously() throws {
+        let host = try PluginTestHostServices()
+        let plugin = makePlugin()
+        plugin.activate(host: host)
+        // Same suppression as above: assert on the synchronous mark only.
+        plugin.suppressAsyncRestoreForTests = true
+
+        plugin.triggerRestoreModel(forModel: "parakeet-tdt-0.6b-v3")
+
+        // Same synchronous-activity contract as the parameterless trigger.
+        XCTAssertNotNil(plugin.currentSettingsActivity)
+    }
 }

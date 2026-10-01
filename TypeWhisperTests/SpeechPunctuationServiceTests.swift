@@ -371,6 +371,304 @@ final class SpeechPunctuationServiceTests: XCTestCase {
     }
 
     @MainActor
+    func testPipelineAppliesDictionaryCorrectionsBeforeAndAfterLLMStep() async throws {
+        let appSupportDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: appSupportDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: appSupportDirectory) }
+
+        let dictionaryService = DictionaryService(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        let profileStore = DictationPunctuationProfileStore(defaults: UserDefaults(suiteName: #function)!, storageKey: #function)
+        let strategyResolver = PunctuationStrategyResolver(profileStore: profileStore)
+        dictionaryService.addEntry(type: .correction, original: "dev and think", replacement: "DEVONthink")
+
+        let pipeline = PostProcessingPipeline(
+            snippetService: SnippetService(),
+            dictionaryService: dictionaryService,
+            appFormatterService: nil,
+            speechPunctuationService: SpeechPunctuationService(rulesLoader: makeRulesLoader()),
+            punctuationStrategyResolver: strategyResolver
+        )
+
+        var llmInput: String?
+        let result = try await pipeline.process(
+            text: "go into dev and think for me",
+            context: PostProcessingContext(language: "en"),
+            dictationContext: DictationRuntimeContext(
+                engineId: "parakeet",
+                modelId: "parakeet-v3",
+                configuredLanguage: "en",
+                detectedLanguage: nil
+            ),
+            llmHandler: { input in
+                llmInput = input
+                // The LLM re-punctuates and introduces a fresh misrecognition of its own.
+                return input.replacingOccurrences(of: "DEVONthink for me", with: "DEVONthink, for me, in dev and think")
+            },
+            llmStepName: "Workflow"
+        )
+
+        XCTAssertEqual(llmInput, "go into DEVONthink for me")
+        XCTAssertEqual(result.text, "go into DEVONthink, for me, in DEVONthink")
+        XCTAssertEqual(result.appliedSteps, ["Corrections", "Workflow"])
+    }
+
+    @MainActor
+    func testTextBeforeLLMStepIncludesPreLLMCorrectionsWithoutCountingUsage() async throws {
+        let appSupportDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: appSupportDirectory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: appSupportDirectory) }
+
+        let dictionaryService = DictionaryService(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        let profileStore = DictationPunctuationProfileStore(defaults: UserDefaults(suiteName: #function)!, storageKey: #function)
+        let strategyResolver = PunctuationStrategyResolver(profileStore: profileStore)
+        dictionaryService.addEntry(type: .correction, original: "dev and think", replacement: "DEVONthink")
+
+        let pipeline = PostProcessingPipeline(
+            snippetService: SnippetService(),
+            dictionaryService: dictionaryService,
+            appFormatterService: nil,
+            speechPunctuationService: SpeechPunctuationService(rulesLoader: makeRulesLoader()),
+            punctuationStrategyResolver: strategyResolver
+        )
+        let context = PostProcessingContext(language: "en")
+        let dictationContext = DictationRuntimeContext(
+            engineId: "parakeet",
+            modelId: "parakeet-v3",
+            configuredLanguage: "en",
+            detectedLanguage: nil
+        )
+
+        // Segmented workflow processing prepares text during recording with this path;
+        // it must match the final LLM input, or the prefix check at stop discards the work.
+        let prepared = pipeline.textBeforeLLMStep(
+            "go into dev and think for me",
+            context: context,
+            dictationContext: dictationContext,
+            outputFormat: nil,
+            normalizeNumbers: nil
+        )
+        XCTAssertEqual(dictionaryService.corrections.first?.usageCount, 0)
+
+        var llmInput: String?
+        _ = try await pipeline.process(
+            text: "go into dev and think for me",
+            context: context,
+            dictationContext: dictationContext,
+            llmHandler: { input in
+                llmInput = input
+                return input
+            },
+            llmStepName: "Workflow"
+        )
+
+        XCTAssertEqual(prepared, "go into DEVONthink for me")
+        XCTAssertEqual(prepared, llmInput)
+        XCTAssertEqual(dictionaryService.corrections.first?.usageCount, 1)
+    }
+
+    @MainActor
+    private func makeCorrectionPipeline(
+        original: String,
+        replacement: String,
+        function: String = #function
+    ) throws -> (pipeline: PostProcessingPipeline, dictionaryService: DictionaryService, cleanup: () -> Void) {
+        let appSupportDirectory = FileManager.default.temporaryDirectory
+            .appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: appSupportDirectory, withIntermediateDirectories: true)
+
+        let dictionaryService = DictionaryService(appSupportDirectory: appSupportDirectory)
+        PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
+        let profileStore = DictationPunctuationProfileStore(defaults: UserDefaults(suiteName: function)!, storageKey: function)
+        dictionaryService.addEntry(type: .correction, original: original, replacement: replacement)
+
+        let pipeline = PostProcessingPipeline(
+            snippetService: SnippetService(),
+            dictionaryService: dictionaryService,
+            appFormatterService: nil,
+            speechPunctuationService: SpeechPunctuationService(rulesLoader: makeRulesLoader()),
+            punctuationStrategyResolver: PunctuationStrategyResolver(profileStore: profileStore)
+        )
+        return (pipeline, dictionaryService, { try? FileManager.default.removeItem(at: appSupportDirectory) })
+    }
+
+    @MainActor
+    func testPipelineDoesNotReexpandCorrectionWhoseReplacementContainsItsOriginal() async throws {
+        let setup = try makeCorrectionPipeline(original: "GitHub", replacement: "GitHub.com")
+        defer { setup.cleanup() }
+        let dictationContext = DictationRuntimeContext(
+            engineId: "parakeet",
+            modelId: "parakeet-v3",
+            configuredLanguage: "en",
+            detectedLanguage: nil
+        )
+
+        var llmInput: String?
+        let withLLM = try await setup.pipeline.process(
+            text: "Visit GitHub",
+            context: PostProcessingContext(language: "en"),
+            dictationContext: dictationContext,
+            llmHandler: { input in
+                llmInput = input
+                return input
+            },
+            llmStepName: "Workflow"
+        )
+        let withoutLLM = try await setup.pipeline.process(
+            text: "Visit GitHub",
+            context: PostProcessingContext(language: "en"),
+            dictationContext: dictationContext
+        )
+
+        XCTAssertEqual(llmInput, "Visit GitHub.com")
+        XCTAssertEqual(withLLM.text, "Visit GitHub.com")
+        XCTAssertEqual(withoutLLM.text, "Visit GitHub.com")
+    }
+
+    @MainActor
+    func testPipelineCountsCorrectionUsageOncePerDictationAcrossBothPasses() async throws {
+        let setup = try makeCorrectionPipeline(original: "dev and think", replacement: "DEVONthink")
+        defer { setup.cleanup() }
+        let dictationContext = DictationRuntimeContext(
+            engineId: "parakeet",
+            modelId: "parakeet-v3",
+            configuredLanguage: "en",
+            detectedLanguage: nil
+        )
+
+        // The LLM reintroduces the misrecognition, so both passes apply the correction.
+        let reverted = try await setup.pipeline.process(
+            text: "use dev and think",
+            context: PostProcessingContext(language: "en"),
+            dictationContext: dictationContext,
+            llmHandler: { _ in "use dev and think" },
+            llmStepName: "Workflow"
+        )
+        XCTAssertEqual(reverted.text, "use DEVONthink")
+        XCTAssertEqual(setup.dictionaryService.corrections.first?.usageCount, 1)
+
+        // The LLM keeps the corrected text, so only the pre-LLM pass applies; it still counts.
+        let kept = try await setup.pipeline.process(
+            text: "use dev and think",
+            context: PostProcessingContext(language: "en"),
+            dictationContext: dictationContext,
+            llmHandler: { input in input },
+            llmStepName: "Workflow"
+        )
+        XCTAssertEqual(kept.text, "use DEVONthink")
+        XCTAssertEqual(setup.dictionaryService.corrections.first?.usageCount, 2)
+    }
+
+    @MainActor
+    func testPipelineDoesNotReexpandCaseFoldEquivalentOriginal() async throws {
+        // Case-insensitive matching finds `Strasse` inside `Straße.` although both have seven
+        // characters, so the post-LLM pass must still treat the corrected text as corrected.
+        let setup = try makeCorrectionPipeline(original: "Strasse", replacement: "Straße.")
+        defer { setup.cleanup() }
+        let dictationContext = DictationRuntimeContext(
+            engineId: "parakeet",
+            modelId: "parakeet-v3",
+            configuredLanguage: "de",
+            detectedLanguage: nil
+        )
+
+        var llmInput: String?
+        let withLLM = try await setup.pipeline.process(
+            text: "Die Strasse",
+            context: PostProcessingContext(language: "de"),
+            dictationContext: dictationContext,
+            llmHandler: { input in
+                llmInput = input
+                return input
+            },
+            llmStepName: "Workflow"
+        )
+        let withoutLLM = try await setup.pipeline.process(
+            text: "Die Strasse",
+            context: PostProcessingContext(language: "de"),
+            dictationContext: dictationContext
+        )
+
+        XCTAssertEqual(llmInput, "Die Straße.")
+        XCTAssertEqual(withLLM.text, "Die Straße.")
+        XCTAssertEqual(withoutLLM.text, "Die Straße.")
+    }
+
+    @MainActor
+    func testPipelineDoesNotExpandRepeatedCharacterReplacementAcrossBothPasses() async throws {
+        let setup = try makeCorrectionPipeline(original: "--", replacement: "---")
+        defer { setup.cleanup() }
+
+        let result = try await setup.pipeline.process(
+            text: "a -- b -- c",
+            context: PostProcessingContext(language: "en"),
+            dictationContext: DictationRuntimeContext(
+                engineId: "parakeet",
+                modelId: "parakeet-v3",
+                configuredLanguage: "en",
+                detectedLanguage: nil
+            ),
+            llmHandler: { input in input },
+            llmStepName: "Workflow"
+        )
+
+        XCTAssertEqual(result.text, "a --- b --- c")
+    }
+
+    @MainActor
+    func testPreLLMCorrectionUsageIsNotCountedWhenRawFallbackIsInserted() async throws {
+        let setup = try makeCorrectionPipeline(original: "dev and think", replacement: "DEVONthink")
+        defer { setup.cleanup() }
+
+        let result = try await setup.pipeline.process(
+            text: "use dev and think",
+            context: PostProcessingContext(language: "en"),
+            dictationContext: DictationRuntimeContext(
+                engineId: "parakeet",
+                modelId: "parakeet-v3",
+                configuredLanguage: "en",
+                detectedLanguage: nil
+            ),
+            llmHandler: { _ in throw URLError(.badServerResponse) },
+            llmStepName: "Workflow",
+            llmFailureFallbackText: "use dev and think"
+        )
+
+        XCTAssertNotNil(result.fallback)
+        XCTAssertEqual(result.text, "use dev and think")
+        XCTAssertEqual(setup.dictionaryService.corrections.first?.usageCount, 0)
+    }
+
+    @MainActor
+    func testPreLLMCorrectionUsageIsNotCountedWhenProcessingIsCancelled() async throws {
+        let setup = try makeCorrectionPipeline(original: "dev and think", replacement: "DEVONthink")
+        defer { setup.cleanup() }
+
+        do {
+            _ = try await setup.pipeline.process(
+                text: "use dev and think",
+                context: PostProcessingContext(language: "en"),
+                dictationContext: DictationRuntimeContext(
+                    engineId: "parakeet",
+                    modelId: "parakeet-v3",
+                    configuredLanguage: "en",
+                    detectedLanguage: nil
+                ),
+                llmHandler: { _ in throw CancellationError() },
+                llmStepName: "Workflow",
+                llmFailureFallbackText: "use dev and think"
+            )
+            XCTFail("Expected cancellation")
+        } catch is CancellationError {
+        }
+
+        XCTAssertEqual(setup.dictionaryService.corrections.first?.usageCount, 0)
+    }
+
+    @MainActor
     func testPipelineAppliesWhitespaceFillerCorrections() async throws {
         let appSupportDirectory = FileManager.default.temporaryDirectory
             .appendingPathComponent(UUID().uuidString, isDirectory: true)

@@ -21,7 +21,7 @@ enum WisprFlowImportReader {
         afterCopy: (() throws -> Void)? = nil
     ) throws -> AppVocabularyImport.Batch {
         let fm = FileManager.default
-        let scratch = scratchParent.appendingPathComponent("typewhisper-import-" + UUID().uuidString)
+        let scratch = scratchParent.appendingPathComponent(UserDataLocations.temporaryItemPrefix + "Import-" + UUID().uuidString)
         try fm.createDirectory(at: scratch, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
         defer { try? fm.removeItem(at: scratch) }
 

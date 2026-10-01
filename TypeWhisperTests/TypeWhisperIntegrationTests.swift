@@ -4202,6 +4202,10 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(workflowPlugin.restoredModelId, "beta")
         XCTAssertEqual(workflowPlugin.transcribedModelId, "beta")
         XCTAssertEqual(workflowPlugin.selectedModelId, "alpha")
+        let insertion = await MainActor.run { apiContext.dictationViewModel.lastSuccessfulDictationInsertion }
+        XCTAssertEqual(insertion?.id.uuidString, startID)
+        XCTAssertEqual(insertion?.providerId, workflowPlugin.providerId)
+        XCTAssertEqual(insertion?.modelId, "beta")
     }
 
     func testDictationEndpointsSpeakCompletedTranscriptionOnly() async throws {
@@ -13252,7 +13256,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         let plugin = MockLLMProviderPlugin()
         plugin.available = false
-        plugin.configuredProviderName = "Gemma 4 (MLX)"
+        plugin.configuredProviderName = "Local LLM (MLX)"
         plugin.requiresExternalCredentials = false
         plugin.unavailableReason = "Load a Gemma 4 model in Integrations before using it for prompts."
 
@@ -13296,7 +13300,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         let plugin = MockLLMProviderPlugin()
         plugin.available = false
-        plugin.configuredProviderName = "Gemma 4 (MLX)"
+        plugin.configuredProviderName = "Local LLM (MLX)"
         plugin.requiresExternalCredentials = false
         plugin.restoreMakesAvailable = true
         plugin.unavailableReason = "Load a Gemma 4 model in Integrations before using it for prompts."
@@ -13320,7 +13324,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let result = try await service.process(
             prompt: "Fix grammar",
             text: "hello world",
-            providerOverride: "Gemma 4 (MLX)"
+            providerOverride: "Local LLM (MLX)"
         )
 
         XCTAssertEqual(result, "processed")
@@ -13336,7 +13340,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
 
         let plugin = MockLLMProviderPlugin()
-        plugin.configuredProviderName = "Gemma 4 (MLX)"
+        plugin.configuredProviderName = "Local LLM (MLX)"
         plugin.requiresExternalCredentials = false
 
         let manifest = PluginManifest(
@@ -13362,11 +13366,11 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let result = try await service.process(
             prompt: "Fix grammar",
             text: "hello world",
-            providerOverride: "Gemma 4 (MLX)"
+            providerOverride: "Local LLM (MLX)"
         )
 
         XCTAssertEqual(result, "processed")
-        XCTAssertEqual(activityManager.reasons, ["Local prompt processing with Gemma 4 (MLX)"])
+        XCTAssertEqual(activityManager.reasons, ["Local prompt processing with Local LLM (MLX)"])
     }
 
     @MainActor
@@ -13686,7 +13690,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
 
         let plugin = MockLLMProviderPlugin()
-        plugin.configuredProviderName = "Gemma 4 (MLX)"
+        plugin.configuredProviderName = "Local LLM (MLX)"
         plugin.requiresExternalCredentials = false
 
         PluginManager.shared.loadedPlugins = [
@@ -13711,7 +13715,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let result = try await service.process(
             prompt: "Fix grammar",
             text: "hello world",
-            providerOverride: "Gemma 4 (MLX)"
+            providerOverride: "Local LLM (MLX)"
         )
 
         XCTAssertEqual(result, "processed")
@@ -13788,7 +13792,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
 
         let plugin = MockLLMProviderPlugin()
-        plugin.configuredProviderName = "Gemma 4 (MLX)"
+        plugin.configuredProviderName = "Local LLM (MLX)"
         plugin.requiresExternalCredentials = false
 
         PluginManager.shared.loadedPlugins = [
@@ -13813,7 +13817,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         let result = try await service.process(
             prompt: "Fix grammar",
             text: "hello world",
-            providerOverride: "Gemma 4 (MLX)"
+            providerOverride: "Local LLM (MLX)"
         )
 
         XCTAssertEqual(result, "processed")
@@ -14029,6 +14033,76 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         }
     }
 
+    func testScreenshotPluginDataFixtureProvidesLocalizedExampleData() throws {
+        let referenceDate = Date(timeIntervalSince1970: 1_787_054_400)
+
+        for isGerman in [false, true] {
+            let fixture = ScreenshotPluginDataFixture(isGerman: isGerman, referenceDate: referenceDate)
+
+            for (pluginId, fileName) in [
+                ("com.typewhisper.memory.file", "memories.json"),
+                ("com.typewhisper.memory.openai-vector", "entries.json"),
+            ] {
+                let files = fixture.files(pluginId: pluginId)
+                XCTAssertEqual(files.map(\.relativePath), [fileName])
+                let memories = try JSONDecoder.memoryDecoder.decode(
+                    [MemoryEntry].self,
+                    from: try XCTUnwrap(files.first?.data)
+                )
+                XCTAssertEqual(memories.count, 3)
+                XCTAssertTrue(memories.allSatisfy { $0.source.bundleIdentifier == nil })
+            }
+            XCTAssertEqual(
+                fixture.defaults(pluginId: "com.typewhisper.memory.openai-vector")["vectorStoreId"] as? String,
+                "vs_example_typewhisper"
+            )
+
+            let scriptFiles = fixture.files(pluginId: "com.typewhisper.script")
+            XCTAssertEqual(scriptFiles.map(\.relativePath), ["scripts.json"])
+            let scripts = try XCTUnwrap(
+                JSONSerialization.jsonObject(with: try XCTUnwrap(scriptFiles.first?.data)) as? [[String: Any]]
+            )
+            XCTAssertEqual(scripts.count, 2)
+            XCTAssertTrue(scripts.allSatisfy { UUID(uuidString: $0["id"] as? String ?? "") != nil })
+
+            let webhookFiles = fixture.files(pluginId: "com.typewhisper.webhook")
+            XCTAssertEqual(webhookFiles.map(\.relativePath), ["webhooks.json"])
+            let webhooks = try XCTUnwrap(
+                JSONSerialization.jsonObject(with: try XCTUnwrap(webhookFiles.first?.data)) as? [[String: Any]]
+            )
+            XCTAssertEqual(webhooks.count, 2)
+            for webhook in webhooks {
+                let url = try XCTUnwrap(URL(string: try XCTUnwrap(webhook["url"] as? String)))
+                XCTAssertEqual(url.host, "example.com")
+                XCTAssertEqual(webhook["headers"] as? [String: String], ["Content-Type": "application/json"])
+                XCTAssertEqual(webhook["secretHeaderNames"] as? [String], [])
+            }
+
+            let correctionFiles = fixture.files(pluginId: "com.typewhisper.improve")
+            XCTAssertEqual(correctionFiles.count, 3)
+            for file in correctionFiles {
+                let correction = try XCTUnwrap(
+                    JSONSerialization.jsonObject(with: file.data) as? [String: Any]
+                )
+                let id = try XCTUnwrap(correction["id"] as? String)
+                XCTAssertEqual(file.relativePath, "pending/\(id.lowercased()).json")
+                XCTAssertEqual(correction["status"] as? String, "local")
+                XCTAssertEqual(correction["language"] as? String, isGerman ? "de" : "en")
+                XCTAssertNotEqual(
+                    correction["originalText"] as? String,
+                    correction["correctedText"] as? String
+                )
+            }
+            XCTAssertEqual(
+                fixture.defaults(pluginId: "com.typewhisper.improve")["collectCorrections"] as? Bool,
+                true
+            )
+
+            XCTAssertTrue(fixture.files(pluginId: "com.typewhisper.groq").isEmpty)
+            XCTAssertTrue(fixture.defaults(pluginId: "com.typewhisper.groq").isEmpty)
+        }
+    }
+
     func testScreenshotAppSupportOverrideMustStayInsideTemporaryDirectory() {
         let temporaryDirectory = URL(fileURLWithPath: "/tmp/typewhisper-screenshot-root", isDirectory: true)
         let fallback = temporaryDirectory.appendingPathComponent(
@@ -14138,7 +14212,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
 
         let plugin = MockLLMProviderPlugin()
-        plugin.configuredProviderName = "Gemma 4 (MLX)"
+        plugin.configuredProviderName = "Local LLM (MLX)"
         plugin.requiresExternalCredentials = false
 
         PluginManager.shared.loadedPlugins = [
@@ -14198,7 +14272,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         PluginManager.shared = PluginManager(appSupportDirectory: appSupportDirectory)
 
         let plugin = MockLLMProviderPlugin()
-        plugin.configuredProviderName = "Gemma 4 (MLX)"
+        plugin.configuredProviderName = "Local LLM (MLX)"
         plugin.requiresExternalCredentials = false
 
         PluginManager.shared.loadedPlugins = [
@@ -14248,7 +14322,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         remotePlugin.requiresExternalCredentials = true
 
         let unavailableLocalPlugin = MockLLMProviderPlugin()
-        unavailableLocalPlugin.configuredProviderName = "Gemma 4 (MLX)"
+        unavailableLocalPlugin.configuredProviderName = "Local LLM (MLX)"
         unavailableLocalPlugin.requiresExternalCredentials = false
         unavailableLocalPlugin.available = false
 
@@ -16122,6 +16196,7 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             context.dictationViewModel.actionFeedbackMessage,
             try TestSupport.localizedCatalogValueForCurrentLocale(for: "Cancelled")
         )
+        XCTAssertNil(context.dictationViewModel.lastSuccessfulDictationInsertion)
     }
 
     @MainActor
@@ -16993,7 +17068,8 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
             XCTAssertEqual(startCount, 1)
             try await Task.sleep(for: .milliseconds(150))
             service.submitOnEnterSessionID = UUID()
-            XCTAssertTrue(service.processEventForTesting(down, source: .monitor))
+            let secondDown = try makeKeyboardEvent(keyCode: keyCode, keyDown: true, flags: [.maskCommand])
+            XCTAssertTrue(service.processEventForTesting(secondDown, source: .monitor))
             XCTAssertEqual(stopCount, 1)
             XCTAssertEqual(submitCount, 0)
             _ = service.processEventForTesting(up, source: .monitor)
@@ -17056,7 +17132,8 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         XCTAssertEqual(startCount, 1)
         try await Task.sleep(for: .milliseconds(150))
         service.submitOnEnterSessionID = UUID()
-        XCTAssertTrue(service.processEventForTesting(down, source: .monitor))
+        let secondDown = try makeKeyboardEvent(keyCode: 0x24, keyDown: true, flags: [.maskCommand])
+        XCTAssertTrue(service.processEventForTesting(secondDown, source: .monitor))
         XCTAssertEqual(stopCount, 1)
         XCTAssertEqual(submitCount, 0)
     }
@@ -17232,6 +17309,579 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
 
         physicalKeyIsDown = false
         service.recoverReleasedActiveHotkeyAfterEventTapDisableForTesting()
+        XCTAssertEqual(stopCount, 1)
+        XCTAssertNil(service.currentMode)
+    }
+
+    @MainActor
+    func testFailedTapRetriesPreserveFallbackMonitoringAndEscapeLatch() async throws {
+        let service = HotkeyService()
+        service.accessibilityTrustedProvider = { true }
+        service.failEventTapCreationForTesting = true
+        service.keyStateProvider = { $0 == 0x35 }
+        service.resumeMonitoring()
+        defer { service.suspendMonitoring() }
+        let setups = service.monitorSetupCountForTesting
+        let attempts = service.eventTapSetupAttemptCountForTesting
+        service.isCancellationAvailable = true
+        XCTAssertTrue(service.processEventForTesting(try makeKeyboardEvent(keyCode: 0x35, keyDown: true), source: .monitor))
+        service.isCancellationAvailable = false
+        for _ in 0..<2 {
+            service.runEventTapWatchdogTickForTesting()
+            try await Task.sleep(nanoseconds: 50_000_000)
+        }
+        XCTAssertEqual(service.eventTapSetupAttemptCountForTesting, attempts + 2)
+        XCTAssertEqual(service.monitorSetupCountForTesting, setups)
+        XCTAssertTrue(service.processEventForTesting(try makeKeyboardEvent(keyCode: 0x35, keyDown: false), source: .monitor), "The held Escape release must remain suppressed across failed tap retries")
+    }
+
+    @MainActor
+    func testInvalidTapReplacementReconcilesLostRelease() async throws {
+        for slot: HotkeySlotType in [.toggle, .pushToTalk] {
+            let service = HotkeyService()
+            service.accessibilityTrustedProvider = { false }
+            service.setHotkeyForTesting(rightOptionModifierHotkey(), for: slot)
+            service.modifierFlagsStateProvider = { [] }
+            defer { service.suspendMonitoring() }
+            var stopCount = 0
+            service.onDictationStop = { stopCount += 1 }
+            let press = try makeFlagsChangedEvent(keyCode: 0x3D, modifierFlags: [.option])
+            XCTAssertTrue(service.processEventForTesting(press, source: .monitor))
+            XCTAssertNotNil(service.currentMode)
+            // An invalid Mach port exercises the runtime replacement branch without
+            // requiring Accessibility permission to create a real event tap.
+            let port = try XCTUnwrap(CFMachPortCreate(nil, nil, nil, nil))
+            CFMachPortInvalidate(port)
+            service.installWatchdogTapForTesting(port)
+            service.accessibilityTrustedProvider = { true }
+            service.runEventTapWatchdogTickForTesting()
+            try await Task.sleep(nanoseconds: 150_000_000)
+            if slot == .toggle {
+                XCTAssertEqual(stopCount, 0)
+                let nextPress = try makeFlagsChangedEvent(keyCode: 0x3D, modifierFlags: [.option])
+                XCTAssertTrue(service.processEventForTesting(nextPress, source: .monitor))
+            }
+            XCTAssertEqual(stopCount, 1, "Replacement must reconcile both toggle and push-to-talk state")
+            XCTAssertNil(service.currentMode)
+        }
+    }
+
+    @MainActor
+    func testRecoveryStopsReleasedWorkflowMouseBinding() async throws {
+        let service = HotkeyService()
+        service.accessibilityTrustedProvider = { false }
+        defer { service.suspendMonitoring() }
+        let workflowId = UUID()
+        service.registerWorkflowHotkeys([(id: workflowId, hotkey: UnifiedHotkey(mouseButton: 3), behavior: .startDictation)])
+        var held = true
+        service.mouseButtonStateProvider = { $0 == 3 && held }
+        var stopCount = 0
+        service.onDictationStop = { stopCount += 1 }
+        XCTAssertTrue(service.processEventForTesting(try makeOtherMouseEvent(buttonNumber: 3, isDown: true), source: .monitor))
+        try await Task.sleep(nanoseconds: 1_100_000_000)
+        service.resyncHotkeyStateAfterEventTapRecoveryForTesting()
+        service.recoverReleasedActiveHotkeyAfterEventTapDisableForTesting()
+        XCTAssertEqual(stopCount, 0)
+        held = false
+        service.resyncHotkeyStateAfterEventTapRecoveryForTesting()
+        service.recoverReleasedActiveHotkeyAfterEventTapDisableForTesting()
+        XCTAssertEqual(stopCount, 1)
+        XCTAssertNil(service.currentMode)
+    }
+
+    @MainActor
+    func testRecoveryIgnoresDelayedKeyboardAndMousePressCopies() async throws {
+        let cases: [(UnifiedHotkey, NSEvent)] = [
+            (UnifiedHotkey(keyCode: 0x31, modifierFlags: 0, isFn: false), try makeKeyboardEvent(keyCode: 0x31, keyDown: true, flags: [])),
+            (controlSpaceHotkey(), try makeKeyboardEvent(keyCode: 0x31, keyDown: true, flags: [.maskControl])),
+            (UnifiedHotkey(mouseButton: 3), try makeOtherMouseEvent(buttonNumber: 3, isDown: true)),
+            (commandOptionComboHotkey(), try makeFlagsChangedEvent(keyCode: 0x3D, modifierFlags: [.command, .option]))
+        ]
+        for (hotkey, press) in cases {
+            let service = HotkeyService()
+            service.suspendMonitoring()
+            service.setHotkeyForTesting(hotkey, for: .toggle)
+            service.keyStateProvider = { _ in false }
+            service.mouseButtonStateProvider = { _ in false }
+            service.modifierFlagsStateProvider = { [] }
+            var stops = 0
+            service.onDictationStop = { stops += 1 }
+            XCTAssertTrue(service.processEventForTesting(press, source: .eventTap))
+            try await Task.sleep(nanoseconds: 150_000_000)
+            service.resyncHotkeyStateAfterEventTapRecoveryForTesting()
+            XCTAssertTrue(service.processEventForTesting(press, source: .monitor))
+            XCTAssertEqual(stops, 0, "A delayed original press must not toggle the session after recovery")
+            XCTAssertEqual(service.currentMode, .toggle)
+        }
+    }
+
+    @MainActor
+    func testUntimedSyntheticPressesRemainDistinctAfterRelease() async throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        service.setHotkeyForTesting(UnifiedHotkey(keyCode: 0x31, modifierFlags: 0, isFn: false), for: .toggle)
+        let event = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: 0x31, keyDown: true))
+        event.flags = []
+        event.timestamp = 0
+        let untimedPress = try XCTUnwrap(NSEvent(cgEvent: event))
+        var starts = 0
+        var stops = 0
+        service.onDictationStart = { _ in starts += 1 }
+        service.onDictationStop = { stops += 1 }
+        XCTAssertTrue(service.processEventForTesting(untimedPress, source: .monitor))
+        XCTAssertTrue(service.processEventForTesting(try makeKeyboardEvent(keyCode: 0x31, keyDown: false, flags: []), source: .monitor))
+        try await Task.sleep(nanoseconds: 150_000_000)
+        XCTAssertTrue(service.processEventForTesting(untimedPress, source: .monitor))
+        XCTAssertEqual(starts, 1)
+        XCTAssertEqual(stops, 1)
+    }
+
+    @MainActor
+    func testPermissionUpgradePreservesHeldSuppressionLatches() async throws {
+        let service = HotkeyService()
+        service.accessibilityTrustedProvider = { false }
+        service.failEventTapCreationForTesting = true
+        service.keyStateProvider = { [UInt16(0x35), 0x24].contains($0) }
+        service.resumeMonitoring()
+        defer { service.suspendMonitoring() }
+        service.isCancellationAvailable = true
+        service.submitOnEnterSessionID = UUID()
+        for code: UInt16 in [0x35, 0x24] {
+            XCTAssertTrue(service.processEventForTesting(try makeKeyboardEvent(keyCode: code, keyDown: true), source: .monitor))
+        }
+        service.isCancellationAvailable = false
+        service.submitOnEnterSessionID = nil
+        service.accessibilityTrustedProvider = { true }
+        service.runEventTapWatchdogTickForTesting()
+        try await Task.sleep(nanoseconds: 50_000_000)
+        for code: UInt16 in [0x35, 0x24] {
+            XCTAssertTrue(service.processEventForTesting(try makeKeyboardEvent(keyCode: code, keyDown: true, isRepeat: true), source: .monitor))
+            XCTAssertTrue(service.processEventForTesting(try makeKeyboardEvent(keyCode: code, keyDown: false), source: .monitor))
+            XCTAssertFalse(service.processEventForTesting(try makeKeyboardEvent(keyCode: code, keyDown: true), source: .monitor))
+        }
+    }
+
+    @MainActor
+    func testGenericModifierDuplicateAfterResyncIsIgnored() async throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        service.setHotkeyForTesting(rightOptionModifierHotkey(), for: .toggle)
+        service.modifierFlagsStateProvider = { [] }
+        var stopCount = 0
+        service.onDictationStop = { stopCount += 1 }
+        let press = try makeFlagsChangedEvent(keyCode: 0x3D, modifierFlags: [.option])
+        XCTAssertTrue(service.processEventForTesting(press, source: .monitor))
+        try await Task.sleep(nanoseconds: 150_000_000)
+        service.resyncHotkeyStateAfterEventTapRecoveryForTesting()
+        XCTAssertTrue(service.processEventForTesting(press, source: .monitor))
+        XCTAssertEqual(stopCount, 0, "An old press remains a duplicate even when its device bits are unavailable")
+        XCTAssertEqual(service.currentMode, .toggle)
+    }
+
+    @MainActor
+    func testRecoveryUsesTheWorkflowBindingThatStartedDictation() async throws {
+        let service = HotkeyService()
+        service.accessibilityTrustedProvider = { false }
+        defer { service.suspendMonitoring() }
+        let workflowId = UUID()
+        service.registerWorkflowHotkeys([
+            (id: workflowId, hotkey: UnifiedHotkey(keyCode: 0x00, modifierFlags: 0, isFn: false), behavior: .startDictation),
+            (id: workflowId, hotkey: spaceHotkey(), behavior: .startDictation)
+        ])
+        var heldKey: UInt16 = 0x31
+        service.keyStateProvider = { $0 == heldKey }
+        var stopCount = 0
+        service.onDictationStop = { stopCount += 1 }
+        XCTAssertTrue(service.processEventForTesting(try makeKeyboardEvent(keyCode: 0x31, keyDown: true), source: .monitor))
+        try await Task.sleep(nanoseconds: 1_100_000_000)
+        service.resyncHotkeyStateAfterEventTapRecoveryForTesting()
+        service.recoverReleasedActiveHotkeyAfterEventTapDisableForTesting()
+        XCTAssertEqual(stopCount, 0, "An unpressed alternate binding must not stop the held initiating binding")
+        heldKey = 0x00
+        service.resyncHotkeyStateAfterEventTapRecoveryForTesting()
+        service.recoverReleasedActiveHotkeyAfterEventTapDisableForTesting()
+        XCTAssertEqual(stopCount, 1, "A held alternate binding must not mask the initiating binding's lost release")
+    }
+
+    @MainActor
+    func testRecoveryPreservesShortWorkflowPressAsToggle() throws {
+        let service = HotkeyService()
+        service.accessibilityTrustedProvider = { false }
+        defer { service.suspendMonitoring() }
+        service.registerWorkflowHotkeys([(id: UUID(), hotkey: spaceHotkey(), behavior: .startDictation)])
+        service.keyStateProvider = { _ in false }
+        var stopCount = 0
+        service.onDictationStop = { stopCount += 1 }
+        XCTAssertTrue(service.processEventForTesting(try makeKeyboardEvent(keyCode: 0x31, keyDown: true), source: .monitor))
+        service.resyncHotkeyStateAfterEventTapRecoveryForTesting()
+        service.recoverReleasedActiveHotkeyAfterEventTapDisableForTesting()
+        XCTAssertEqual(service.currentMode, .toggle)
+        XCTAssertEqual(stopCount, 0)
+    }
+
+    @MainActor
+    func testRecoveryFallsBackPerModifierFamilyAndWaitsForFinalRelease() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        let hotkey = try decodedModifierComboHotkey(modifierFlags: [.command, .option, .function], modifierKeyCodes: [0x36, 0x3D])
+        service.setHotkeyForTesting(hotkey, for: .pushToTalk)
+        var physicalFlags = flags(generic: [.command, .option, .function], deviceKeyCodes: [0x36])
+        service.modifierFlagsStateProvider = { physicalFlags }
+        var stopCount = 0
+        service.onDictationStop = { stopCount += 1 }
+        let down = try makeFlagsChangedEvent(keyCode: 0x3D, modifierFlags: flags(generic: [.command, .option, .function], deviceKeyCodes: [0x36, 0x3D]))
+        XCTAssertTrue(service.processEventForTesting(down, source: .monitor))
+        service.resyncHotkeyStateAfterEventTapRecoveryForTesting()
+        service.recoverReleasedActiveHotkeyAfterEventTapDisableForTesting()
+        XCTAssertEqual(stopCount, 0, "Known Command side must not suppress the generic Option fallback")
+        physicalFlags = flags(generic: [.command, .option], deviceKeyCodes: [0x36, 0x3D])
+        service.recoverReleasedActiveHotkeyAfterEventTapDisableForTesting()
+        XCTAssertEqual(stopCount, 0, "A partial release must not stop the active combo")
+        physicalFlags = [.function]
+        service.resyncHotkeyStateAfterEventTapRecoveryForTesting()
+        service.recoverReleasedActiveHotkeyAfterEventTapDisableForTesting()
+        XCTAssertEqual(stopCount, 0, "Required Fn alone must keep the active combo held")
+        physicalFlags = []
+        service.resyncHotkeyStateAfterEventTapRecoveryForTesting()
+        service.recoverReleasedActiveHotkeyAfterEventTapDisableForTesting()
+        XCTAssertEqual(stopCount, 1)
+    }
+
+    @MainActor
+    func testRecoveryRejectsOppositeSideForModifierCombo() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        service.setHotkeyForTesting(try rightCommandRightOptionComboHotkey(), for: .pushToTalk)
+        service.modifierFlagsStateProvider = { self.flags(generic: [.command, .option], deviceKeyCodes: [0x37, 0x3A]) }
+        var stopCount = 0
+        service.onDictationStop = { stopCount += 1 }
+        let down = try makeFlagsChangedEvent(keyCode: 0x3D, modifierFlags: flags(generic: [.command, .option], deviceKeyCodes: [0x36, 0x3D]))
+        XCTAssertTrue(service.processEventForTesting(down, source: .monitor))
+        service.resyncHotkeyStateAfterEventTapRecoveryForTesting()
+        service.recoverReleasedActiveHotkeyAfterEventTapDisableForTesting()
+        XCTAssertEqual(stopCount, 1)
+    }
+
+    @MainActor
+    func testRecoveryPreservesPartialComboUntilNormalFinalRelease() async throws {
+        for sideSpecific in [false, true] {
+            for workflow in [false, true] {
+                let service = HotkeyService()
+                service.accessibilityTrustedProvider = { false }
+                defer { service.suspendMonitoring() }
+                let hotkey = try sideSpecific ? rightCommandRightOptionComboHotkey() : commandOptionComboHotkey()
+                if workflow {
+                    service.registerWorkflowHotkeys([(id: UUID(), hotkey: hotkey, behavior: .startDictation)])
+                } else {
+                    service.setHotkeyForTesting(hotkey, for: .pushToTalk)
+                }
+                var physicalFlags = flags(generic: [.command, .option], deviceKeyCodes: [0x36, 0x3D])
+                service.modifierFlagsStateProvider = { physicalFlags }
+                var starts = 0
+                var stops = 0
+                service.onDictationStart = { _ in starts += 1 }
+                service.onDictationStop = { stops += 1 }
+                XCTAssertTrue(service.processEventForTesting(try makeFlagsChangedEvent(keyCode: 0x3D, modifierFlags: physicalFlags), source: .monitor))
+                if workflow { try await Task.sleep(nanoseconds: 1_100_000_000) }
+                physicalFlags = flags(generic: [.command], deviceKeyCodes: [0x36])
+                service.resyncHotkeyStateAfterEventTapRecoveryForTesting()
+                service.recoverReleasedActiveHotkeyAfterEventTapDisableForTesting()
+                XCTAssertEqual(stops, 0, "Partial release during recovery must retain the active combo")
+                XCTAssertEqual(service.currentMode, .pushToTalk)
+                // A restored combination must remain a repeat, and its final normal
+                // release must still stop after recovery resynchronized slot state.
+                let restored = flags(generic: [.command, .option], deviceKeyCodes: [0x36, 0x3D])
+                XCTAssertTrue(service.processEventForTesting(try makeFlagsChangedEvent(keyCode: 0x3D, modifierFlags: restored), source: .monitor))
+                XCTAssertTrue(service.processEventForTesting(try makeFlagsChangedEvent(keyCode: 0x36, modifierFlags: []), source: .monitor))
+                XCTAssertEqual(stops, 1)
+                if !workflow { XCTAssertEqual(starts, 1) }
+            }
+        }
+    }
+
+    @MainActor
+    func testCancelledWatchdogCannotRetryAfterResume() async throws {
+        let service = HotkeyService()
+        service.accessibilityTrustedProvider = { false }
+        defer { service.suspendMonitoring() }
+        service.resumeMonitoring()
+        let oldTick = service.capturedWatchdogTickForTesting()
+        oldTick() // Its main-queue callback is already pending.
+        service.suspendMonitoring()
+        service.resumeMonitoring()
+        let setups = service.monitorSetupCountForTesting
+        service.accessibilityTrustedProvider = { true }
+        oldTick() // A cancelled dispatch source may still deliver an in-flight tick.
+        try await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(service.monitorSetupCountForTesting, setups)
+        XCTAssertTrue(service.isEventTapWatchdogActiveForTesting)
+    }
+
+    @MainActor
+    func testWatchdogReenablesRealEventTapWhileMainThreadIsBlocked() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        defer { service.suspendMonitoring() }
+        guard let tap = CGEvent.tapCreate(
+            tap: .cgSessionEventTap,
+            place: .headInsertEventTap,
+            options: .listenOnly,
+            eventsOfInterest: CGEventMask(1) << CGEventType.keyDown.rawValue,
+            callback: { _, _, event, _ in Unmanaged.passUnretained(event) },
+            userInfo: nil
+        ) else {
+            throw XCTSkip("Real event-tap smoke requires local Accessibility/Input Monitoring permission")
+        }
+        service.installWatchdogTapForTesting(tap)
+        CGEvent.tapEnable(tap: tap, enable: false)
+        XCTAssertFalse(service.isEventTapEnabledForTesting)
+        let recovered = DispatchSemaphore(value: 0)
+        DispatchQueue.global().async {
+            for _ in 0..<100 {
+                if service.isEventTapEnabledForTesting {
+                    recovered.signal()
+                    return
+                }
+                Thread.sleep(forTimeInterval: 0.01)
+            }
+        }
+        // Deliberately block the main run loop: only the background timer can revive the tap.
+        XCTAssertEqual(recovered.wait(timeout: .now() + 2), .success)
+        XCTAssertTrue(service.isEventTapEnabledForTesting)
+    }
+
+    @MainActor
+    func testRecoveryStopsWorkflowAfterLostRelease() async throws {
+        let service = HotkeyService()
+        service.accessibilityTrustedProvider = { false }
+        defer { service.suspendMonitoring() }
+        let workflowId = UUID()
+        service.registerWorkflowHotkeys([(id: workflowId, hotkey: spaceHotkey(), behavior: .startDictation)])
+        service.keyStateProvider = { _ in false }
+        var stopCount = 0
+        service.onDictationStop = { stopCount += 1 }
+        XCTAssertTrue(service.processEventForTesting(try makeKeyboardEvent(keyCode: 0x31, keyDown: true), source: .monitor))
+        XCTAssertEqual(service.activeWorkflowId, workflowId)
+        try await Task.sleep(nanoseconds: 1_100_000_000)
+        service.resyncHotkeyStateAfterEventTapRecoveryForTesting()
+        service.recoverReleasedActiveHotkeyAfterEventTapDisableForTesting()
+        XCTAssertEqual(stopCount, 1)
+        XCTAssertNil(service.currentMode)
+        service.recoverReleasedActiveHotkeyAfterEventTapDisableForTesting()
+        XCTAssertEqual(stopCount, 1, "Repeated recovery must not stop twice")
+    }
+
+    @MainActor
+    func testRecoveryPreservesHeldComboWithGenericFlags() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        service.setHotkeyForTesting(try rightCommandRightOptionComboHotkey(), for: .pushToTalk)
+        service.modifierFlagsStateProvider = { [.command, .option] }
+        var stopCount = 0
+        service.onDictationStop = { stopCount += 1 }
+        let down = try makeFlagsChangedEvent(keyCode: 0x3D, modifierFlags: flags(generic: [.command, .option], deviceKeyCodes: [0x36, 0x3D]))
+        XCTAssertTrue(service.processEventForTesting(down, source: .monitor))
+        XCTAssertEqual(service.currentMode, .pushToTalk)
+        service.resyncHotkeyStateAfterEventTapRecoveryForTesting()
+        service.recoverReleasedActiveHotkeyAfterEventTapDisableForTesting()
+        XCTAssertEqual(stopCount, 0)
+        XCTAssertEqual(service.currentMode, .pushToTalk)
+    }
+
+    @MainActor
+    func testQueuedWatchdogRetryDoesNotUndoSuspension() async throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        defer { service.suspendMonitoring() }
+        service.accessibilityTrustedProvider = { false }
+        service.resumeMonitoring()
+        let setups = service.monitorSetupCountForTesting
+        service.accessibilityTrustedProvider = { true }
+        service.runEventTapWatchdogTickForTesting()
+        service.suspendMonitoring()
+        try await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(service.monitorSetupCountForTesting, setups)
+        XCTAssertFalse(service.isEventTapWatchdogActiveForTesting)
+    }
+
+    @MainActor
+    func testDelayedMonitorDuplicateDoesNotToggleModifierHotkeyAgain() async throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        service.setHotkeyForTesting(rightOptionModifierHotkey(), for: .toggle)
+        var startCount = 0
+        var stopCount = 0
+        service.onDictationStart = { _ in startCount += 1 }
+        service.onDictationStop = { stopCount += 1 }
+        let press = try makeFlagsChangedEvent(keyCode: 0x3D, modifierFlags: flags(generic: .option, deviceKeyCodes: [0x3D]))
+        XCTAssertTrue(service.processEventForTesting(press, source: .eventTap))
+        try await Task.sleep(nanoseconds: 150_000_000)
+        XCTAssertTrue(service.processEventForTesting(press, source: .monitor))
+        XCTAssertEqual(startCount, 1)
+        XCTAssertEqual(stopCount, 0, "A delayed compatibility-monitor copy is not a fresh physical press")
+        XCTAssertEqual(service.currentMode, .toggle)
+    }
+
+    @MainActor
+    func testLostModifierReleaseDoesNotSwallowNextTogglePressWithDeviceBits() async throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeyForTesting(
+            UnifiedHotkey(keyCode: 0x3D, modifierFlags: 0, isFn: false),
+            for: .toggle
+        )
+
+        var startCount = 0
+        var stopCount = 0
+        service.onDictationStart = { _ in startCount += 1 }
+        service.onDictationStop = { stopCount += 1 }
+
+        let pressFlags = flags(generic: .option, deviceKeyCodes: [0x3D])
+        let firstPress = try makeFlagsChangedEvent(keyCode: 0x3D, modifierFlags: pressFlags)
+        XCTAssertTrue(service.processEventForTesting(firstPress, source: .eventTap))
+        await Task.yield()
+        XCTAssertEqual(startCount, 1)
+        XCTAssertEqual(service.currentMode, .toggle)
+
+        // The release is lost (event tap disabled mid-gesture) — no keyUp event.
+        // The user presses again to stop; the device bit proves this is a real press,
+        // so it must not be classified as a repeat and swallowed.
+        try await Task.sleep(nanoseconds: 150_000_000) // clear the dispatch dedup window
+        let secondPress = try makeFlagsChangedEvent(keyCode: 0x3D, modifierFlags: pressFlags)
+        XCTAssertTrue(service.processEventForTesting(secondPress, source: .eventTap))
+        await Task.yield()
+        XCTAssertEqual(stopCount, 1)
+        XCTAssertNil(service.currentMode)
+    }
+
+    @MainActor
+    func testLostRightOptionReleaseIsRecoveredWhileLeftOptionStaysHeld() async throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeyForTesting(rightOptionModifierHotkey(), for: .pushToTalk)
+
+        // Physical state after the lost release: left Option is still held, so the
+        // generic .option flag stays set; only the device bit tells the keys apart.
+        var currentFlags = flags(generic: .option, deviceKeyCodes: [0x3D, 0x3A])
+        service.modifierFlagsStateProvider = { currentFlags }
+
+        var startCount = 0
+        var stopCount = 0
+        service.onDictationStart = { _ in startCount += 1 }
+        service.onDictationStop = { stopCount += 1 }
+
+        let rightDown = try makeFlagsChangedEvent(
+            keyCode: 0x3D,
+            modifierFlags: flags(generic: .option, deviceKeyCodes: [0x3D, 0x3A])
+        )
+        XCTAssertTrue(service.processEventForTesting(rightDown, source: .eventTap))
+        await Task.yield()
+        XCTAssertEqual(startCount, 1)
+        XCTAssertEqual(service.currentMode, .pushToTalk)
+
+        // The right key is released while the tap is disabled; left stays down.
+        currentFlags = flags(generic: .option, deviceKeyCodes: [0x3A])
+        service.resyncHotkeyStateAfterEventTapRecoveryForTesting()
+        service.recoverReleasedActiveHotkeyAfterEventTapDisableForTesting()
+
+        XCTAssertEqual(stopCount, 1, "the generic Option flag must not mask the released right key")
+        XCTAssertNil(service.currentMode)
+    }
+
+    @MainActor
+    func testWatchdogStartsWhileUntrustedAndRetriesSetupOnceAccessibilityIsGranted() async throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        var trusted = false
+        service.accessibilityTrustedProvider = { trusted }
+
+        service.resumeMonitoring()
+        XCTAssertTrue(service.isEventTapWatchdogActiveForTesting, "the watchdog must run on the untrusted path so a launch-time race can be retried")
+        let setupsBeforeGrant = service.monitorSetupCountForTesting
+        let attemptsBeforeGrant = service.eventTapSetupAttemptCountForTesting
+
+        // A tick while still untrusted must not re-run setup.
+        service.runEventTapWatchdogTickForTesting()
+        try await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(service.monitorSetupCountForTesting, setupsBeforeGrant)
+
+        trusted = true
+        service.runEventTapWatchdogTickForTesting()
+        try await Task.sleep(nanoseconds: 50_000_000)
+        XCTAssertEqual(service.monitorSetupCountForTesting, setupsBeforeGrant, "Permission upgrades must preserve existing monitoring state")
+        XCTAssertEqual(service.eventTapSetupAttemptCountForTesting, attemptsBeforeGrant + 1)
+
+        service.suspendMonitoring()
+    }
+
+    @MainActor
+    func testResyncClearsStaleModifierStateAfterEventTapRecovery() async throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeyForTesting(
+            UnifiedHotkey(keyCode: 0x3D, modifierFlags: 0, isFn: false),
+            for: .toggle
+        )
+        service.modifierFlagsStateProvider = { [] } // key is physically up
+
+        var startCount = 0
+        var stopCount = 0
+        service.onDictationStart = { _ in startCount += 1 }
+        service.onDictationStop = { stopCount += 1 }
+
+        // Press delivered without device-dependent bits (some devices omit them),
+        // then the release is lost — modifierWasDown is left stale.
+        let genericPress = try makeFlagsChangedEvent(keyCode: 0x3D, modifierFlags: [.option])
+        XCTAssertTrue(service.processEventForTesting(genericPress, source: .eventTap))
+        await Task.yield()
+        XCTAssertEqual(startCount, 1)
+
+        // Without the resync, this press classifies as a key repeat and is dropped.
+        service.resyncHotkeyStateAfterEventTapRecoveryForTesting()
+        try await Task.sleep(nanoseconds: 150_000_000)
+        let nextPress = try makeFlagsChangedEvent(keyCode: 0x3D, modifierFlags: [.option])
+        XCTAssertTrue(service.processEventForTesting(nextPress, source: .eventTap))
+        await Task.yield()
+        XCTAssertEqual(stopCount, 1)
+        XCTAssertNil(service.currentMode)
+    }
+
+    @MainActor
+    func testRightOptionReleaseWithLeftOptionHeldStopsPushToTalk() async throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+
+        service.setHotkeyForTesting(
+            UnifiedHotkey(keyCode: 0x3D, modifierFlags: 0, isFn: false),
+            for: .pushToTalk
+        )
+
+        var startCount = 0
+        var stopCount = 0
+        service.onDictationStart = { _ in startCount += 1 }
+        service.onDictationStop = { stopCount += 1 }
+
+        let press = try makeFlagsChangedEvent(
+            keyCode: 0x3D,
+            modifierFlags: flags(generic: .option, deviceKeyCodes: [0x3D, 0x3A])
+        )
+        XCTAssertTrue(service.processEventForTesting(press, source: .eventTap))
+        await Task.yield()
+        XCTAssertEqual(startCount, 1)
+
+        // Right Option released while left Option is still held: the generic .option
+        // flag stays set, but the device bit shows this key went up. Previously this
+        // was misread as a repeat and push-to-talk never stopped.
+        let release = try makeFlagsChangedEvent(
+            keyCode: 0x3D,
+            modifierFlags: flags(generic: .option, deviceKeyCodes: [0x3A])
+        )
+        XCTAssertTrue(service.processEventForTesting(release, source: .eventTap))
+        await Task.yield()
         XCTAssertEqual(stopCount, 1)
         XCTAssertNil(service.currentMode)
     }
@@ -18464,11 +19114,15 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         XCTAssertTrue(service.processEventForTesting(keyUp, source: .monitor))
         XCTAssertEqual(startCount, 0)
 
-        XCTAssertTrue(service.processEventForTesting(keyDown, source: .monitor))
+        // A physical second tap has a new event timestamp; reusing keyDown
+        // would model delayed duplicate delivery of the first press.
+        let secondDown = try makeControlModifierEvent(isDown: true)
+        let secondUp = try makeControlModifierEvent(isDown: false)
+        XCTAssertTrue(service.processEventForTesting(secondDown, source: .monitor))
         XCTAssertEqual(startCount, 1)
         XCTAssertEqual(service.currentMode, .pushToTalk)
 
-        XCTAssertTrue(service.processEventForTesting(keyUp, source: .monitor))
+        XCTAssertTrue(service.processEventForTesting(secondUp, source: .monitor))
         XCTAssertEqual(stopCount, 0)
         XCTAssertEqual(service.currentMode, .toggle)
     }
@@ -19470,6 +20124,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
         let event = try XCTUnwrap(
             CGEvent(keyboardEventSource: nil, virtualKey: CGKeyCode(keyCode), keyDown: keyDown)
         )
+        event.timestamp = DispatchTime.now().uptimeNanoseconds
         event.flags = flags
         event.setIntegerValueField(.keyboardEventAutorepeat, value: isRepeat ? 1 : 0)
         return try XCTUnwrap(NSEvent(cgEvent: event))
@@ -19486,6 +20141,7 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
                 mouseButton: button
             )
         )
+        event.timestamp = DispatchTime.now().uptimeNanoseconds
         return try XCTUnwrap(NSEvent(cgEvent: event))
     }
 

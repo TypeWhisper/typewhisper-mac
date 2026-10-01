@@ -1,0 +1,21 @@
+{
+    "id": "com.typewhisper.local-llm-mlx",
+    "name": "Local LLM (MLX)",
+    "version": "1.0.0",
+    "minHostVersion": "1.7.0",
+    "sdkCompatibilityVersion": "v1",
+    "supportedArchitectures": [
+        "arm64"
+    ],
+    "minOSVersion": "14.0",
+    "author": "TypeWhisper",
+    "description": "Local LLM on Apple Silicon via MLX with Gemma 4, Qwen3.5, and LFM2.5 models. No API key required.",
+    "descriptions": {
+        "de": "Lokales LLM auf Apple Silicon via MLX mit Gemma-4-, Qwen3.5- und LFM2.5-Modellen. Kein API-Key erforderlich.",
+        "ja": "Apple Silicon上でMLX経由で動作するローカルLLM。Gemma 4、Qwen3.5、LFM2.5モデルに対応。APIキーは不要です。"
+    },
+    "category": "llm",
+    "iconSystemName": "cpu",
+    "principalClass": "LocalLLMPlugin",
+    "detailsURL": "https://www.typewhisper.com/addons/local-llm-mlx/"
+}

@@ -448,15 +448,22 @@ class PromptActionsViewModel: ObservableObject {
         editTemperatureValue = min(max(editTemperatureValue, range.lowerBound), range.upperBound)
     }
 
+    /// The local MLX LLM plugin and its predecessor, the Gemma 4 plugin.
+    static let localMLXProviderIds: Set<String> = ["Local LLM (MLX)", "Gemma 4 (MLX)"]
+
+    static func isLocalMLXProvider(_ providerId: String?) -> Bool {
+        providerId.map(localMLXProviderIds.contains) ?? false
+    }
+
     func supportedTemperatureRange(for providerId: String?) -> ClosedRange<Double> {
-        guard providerId == "Gemma 4 (MLX)" else {
+        guard Self.isLocalMLXProvider(providerId) else {
             return 0.0...2.0
         }
         return 0.0...1.0
     }
 
     func defaultTemperatureValue(for providerId: String?) -> Double {
-        providerId == "Gemma 4 (MLX)" ? 0.1 : 0.3
+        Self.isLocalMLXProvider(providerId) ? 0.1 : 0.3
     }
 
     private var profilesForAssignmentStatus: [Profile] {

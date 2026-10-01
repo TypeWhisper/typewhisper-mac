@@ -102,8 +102,22 @@ final class DictationShortSpeechTests: XCTestCase {
         XCTAssertEqual(classifyShortSpeech(rawDuration: 0.885, peakLevel: 0.0069, hasConfirmedText: false), .transcribe)
     }
 
-    func testOnePointTwoSecondsVeryQuietClip_isNoSpeech() {
-        XCTAssertEqual(classifyShortSpeech(rawDuration: 1.2, peakLevel: 0.0059, hasConfirmedText: false), .discardNoSpeech)
+    func testOnePointTwoSecondsVeryQuietClip_transcribesWhenAggressivePolicyEnabled() {
+        // Issue #732: with aggressive transcription enabled, a short quiet
+        // dictation must be transcribed rather than discarded as "no speech".
+        XCTAssertEqual(classifyShortSpeech(rawDuration: 1.2, peakLevel: 0.0059, hasConfirmedText: false), .transcribe)
+    }
+
+    func testOnePointTwoSecondsVeryQuietClip_isNoSpeechWhenAggressivePolicyDisabled() {
+        XCTAssertEqual(
+            classifyShortSpeech(
+                rawDuration: 1.2,
+                peakLevel: 0.0059,
+                hasConfirmedText: false,
+                transcribeShortQuietClipsAggressively: false
+            ),
+            .discardNoSpeech
+        )
     }
 
     func testOnePointTwoSecondsBorderlineQuietClip_nowTranscribes() {
@@ -112,6 +126,87 @@ final class DictationShortSpeechTests: XCTestCase {
 
     func testOnePointTwoSecondsVeryQuietClip_withConfirmedText_transcribes() {
         XCTAssertEqual(classifyShortSpeech(rawDuration: 1.2, peakLevel: 0.0059, hasConfirmedText: true), .transcribe)
+    }
+
+    // MARK: - Issue #732: aggressive mode must cover short (1-8s) quiet dictations
+
+    func testThreeSecondQuietClip_transcribesWhenAggressivePolicyEnabled() {
+        // The issue's scenario: a few seconds of quiet speech discarded as
+        // "No speech detected" despite aggressive transcription being enabled.
+        XCTAssertEqual(
+            classifyShortSpeech(
+                rawDuration: 3.0,
+                peakLevel: 0.004,
+                hasConfirmedText: false,
+                transcribeShortQuietClipsAggressively: true
+            ),
+            .transcribe
+        )
+    }
+
+    func testThreeSecondQuietClip_discardsWhenAggressivePolicyDisabled() {
+        XCTAssertEqual(
+            classifyShortSpeech(
+                rawDuration: 3.0,
+                peakLevel: 0.004,
+                hasConfirmedText: false,
+                transcribeShortQuietClipsAggressively: false
+            ),
+            .discardNoSpeech
+        )
+    }
+
+    func testSixAndAHalfSecondQuietClip_transcribesWhenAggressivePolicyEnabled() {
+        // Upper end of the duration range reported in the issue.
+        XCTAssertEqual(
+            classifyShortSpeech(
+                rawDuration: 6.5,
+                peakLevel: 0.005,
+                hasConfirmedText: false,
+                transcribeShortQuietClipsAggressively: true
+            ),
+            .transcribe
+        )
+    }
+
+    func testThreeSecondNearSilentClip_stillDiscardsWhenAggressivePolicyEnabled() {
+        // Genuinely silent recordings must keep reporting "No speech detected".
+        XCTAssertEqual(
+            classifyShortSpeech(
+                rawDuration: 3.0,
+                peakLevel: 0.002,
+                hasConfirmedText: false,
+                transcribeShortQuietClipsAggressively: true
+            ),
+            .discardNoSpeech
+        )
+    }
+
+    func testTenSecondQuietClip_staysStrictWhenAggressivePolicyEnabled() {
+        // Long recordings of near-silence are not short dictations: keep the
+        // strict threshold so extended silence isn't needlessly transcribed.
+        XCTAssertEqual(
+            classifyShortSpeech(
+                rawDuration: 10.0,
+                peakLevel: 0.004,
+                hasConfirmedText: false,
+                transcribeShortQuietClipsAggressively: true
+            ),
+            .discardNoSpeech
+        )
+    }
+
+    func testThreeSecondNormalClip_transcribesRegardlessOfPolicy() {
+        XCTAssertEqual(classifyShortSpeech(rawDuration: 3.0, peakLevel: 0.02, hasConfirmedText: false), .transcribe)
+        XCTAssertEqual(
+            classifyShortSpeech(
+                rawDuration: 3.0,
+                peakLevel: 0.02,
+                hasConfirmedText: false,
+                transcribeShortQuietClipsAggressively: false
+            ),
+            .transcribe
+        )
     }
 
     func testConfirmedTranscriptionResultText_requiresNonEmptyResult() {
