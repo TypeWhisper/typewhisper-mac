@@ -419,6 +419,13 @@ final class DictationViewModel: ObservableObject {
     private(set) lazy var dictationUndoService: DictationUndoService = {
         DictationUndoService(
             textInsertionService: textInsertionService,
+            isPersistencePending: { [weak self] id in
+                guard let self else { return true }
+                // The indicator may already be idle while this dictation is still
+                // awaiting URL/audio persistence. Gate the relevant ID, including
+                // history-disabled sessions, before reflecting a verified restore.
+                return pendingPostInsertionDictationIndex(id: id) != nil
+            },
             isDictationBusy: { [weak self] in
                 guard let self else { return true }
                 switch state {

@@ -99,7 +99,7 @@ final class RecentTranscriptionStore: ObservableObject {
         let entry = sessionEntries[index]
         sessionEntries[index] = Entry(
             id: entry.id,
-            finalText: trimmedText,
+            finalText: finalText,
             timestamp: entry.timestamp,
             appName: entry.appName,
             appBundleIdentifier: entry.appBundleIdentifier,

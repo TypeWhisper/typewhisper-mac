@@ -8031,6 +8031,109 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testRawRestoreWaitsForItsDeferredPersistenceWithHistoryEnabled() async throws {
+        try await assertRawRestoreWaitsForDeferredPersistence(historyEnabled: true)
+    }
+
+    @MainActor
+    func testRawRestoreWaitsForItsDeferredPersistenceWithHistoryDisabled() async throws {
+        try await assertRawRestoreWaitsForDeferredPersistence(historyEnabled: false)
+    }
+
+    @MainActor
+    private func assertRawRestoreWaitsForDeferredPersistence(historyEnabled: Bool) async throws {
+        let directory = try TestSupport.makeTemporaryDirectory()
+        let defaults = UserDefaults.standard
+        let keys = [UserDefaultsKeys.historyEnabled, UserDefaultsKeys.saveAudioWithHistory,
+                    UserDefaultsKeys.liveFieldTranscriptEnabled]
+        let originals = keys.map { defaults.object(forKey: $0) }
+        defer {
+            for (key, value) in zip(keys, originals) { Self.restoreUserDefault(value, forKey: key) }
+            MockTranscriptionPlugin.reset()
+            TestSupport.remove(directory)
+        }
+        defaults.set(historyEnabled, forKey: UserDefaultsKeys.historyEnabled)
+        defaults.set(false, forKey: UserDefaultsKeys.saveAudioWithHistory)
+        defaults.set(false, forKey: UserDefaultsKeys.liveFieldTranscriptEnabled)
+        MockTranscriptionPlugin.reset()
+        let raw = "  hello world \n"
+        MockTranscriptionPlugin.setResponseText(raw)
+        let requested = expectation(description: "Deferred URL requested")
+        let gate = DispatchSemaphore(value: 0)
+        defer { gate.signal() }
+        let resolver = BrowserURLResolver { _, _ in
+            requested.fulfill()
+            gate.wait()
+            return BrowserResolution(url: URL(string: "https://example.com/undo-test"), title: nil)
+        }
+        let context = Self.makeDictationContext(appSupportDirectory: directory, browserURLResolver: resolver)
+        context.dictationViewModel.preserveClipboard = true
+        defer { context.dictationViewModel.flushPendingPostInsertionPersistence() }
+        context.dictionaryService.addEntry(type: .correction, original: "hello", replacement: "Processed")
+        let insertion = context.textInsertionService
+        let pasteboard = NSPasteboard.withUniqueName()
+        insertion.pasteboardProvider = { pasteboard }
+        insertion.pasteSimulatorOverride = {}
+        let element = AXUIElementCreateApplication(1234)
+        var value = ""
+        var selection = NSRange(location: 0, length: 0)
+        insertion.captureActiveAppOverride = { ("Chrome", "com.google.Chrome", nil) }
+        insertion.accessibilityGrantedOverride = true
+        insertion.selectedTextOverride = { nil }
+        insertion.focusedTextElementOverride = { element }
+        insertion.focusedTextStateOverride = { _ in
+            TextInsertionService.FocusedTextSnapshot(value: value, selectedText: nil, selectedRange: selection)
+        }
+        insertion.setSelectedRangeOverride = { _, range in selection = range; return true }
+        insertion.insertTextAtOverride = { _, text in
+            value = (value as NSString).replacingCharacters(in: selection, with: text)
+            selection = NSRange(location: selection.location + (text as NSString).length, length: 0)
+            return true
+        }
+        context.audioRecordingService.hasMicrophonePermissionOverride = true
+        context.audioRecordingService.inputAvailabilityOverride = { _ in true }
+        context.audioRecordingService.startRecordingOverride = {}
+        context.audioRecordingService.stopRecordingOverride = { _ in
+            Array(repeating: 0.25, count: Int(AudioRecordingService.targetSampleRate))
+        }
+        let inserted = expectation(description: "Insertion completed before persistence")
+        inserted.assertForOverFulfill = false
+        let observation = context.dictationViewModel.$state.sink { state in
+            if state == .inserting { inserted.fulfill() }
+        }
+        defer { observation.cancel() }
+        let sessionID = context.dictationViewModel.apiStartRecording()
+        await context.dictationViewModel.testingWaitForRecordingStart()
+        await fulfillment(of: [requested], timeout: 5)
+        _ = context.dictationViewModel.apiStopRecording()
+        await fulfillment(of: [inserted], timeout: 5)
+        // Simulate the indicator timeout while URL/history persistence is still blocked.
+        context.dictationViewModel.state = .idle
+        let undo = context.dictationViewModel.dictationUndoService
+        let snapshot = try XCTUnwrap(undo.snapshot)
+        let processed = value
+        XCTAssertNotEqual(processed, raw)
+        XCTAssertEqual(context.historyService.totalRecords, 0)
+        XCTAssertNotEqual(undo.perform(.restore), .success)
+        XCTAssertEqual(value, processed, "Restore must wait for this transcription's persistence")
+        XCTAssertNotNil(undo.snapshot)
+
+        gate.signal()
+        await context.dictationViewModel.testingWaitForPostInsertionPersistence()
+        XCTAssertEqual(context.dictationViewModel.apiDictationSession(id: sessionID)?.status, .completed)
+        XCTAssertEqual(undo.perform(.restore), .success)
+        XCTAssertEqual(value, snapshot.rawTranscript)
+        XCTAssertEqual(context.recentTranscriptionStore.latestEntry(historyRecords: [])?.finalText, value)
+        XCTAssertEqual(context.dictationViewModel.lastTranscribedText, value)
+        if historyEnabled {
+            XCTAssertEqual(context.historyService.record(withID: snapshot.transcriptionID)?.finalText, value)
+        } else {
+            XCTAssertEqual(context.historyService.totalRecords, 0)
+        }
+        XCTAssertNil(undo.snapshot)
+    }
+
+    @MainActor
     func testDictationInsertsBeforeUnusedBrowserURLResolvesAndAddsURLToHistoryLater() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         var dictationContext: DictationContext?

@@ -15,7 +15,7 @@ import Foundation
 /// searches the document and never synthesizes repeated deletions.
 ///
 /// The snapshot is independent of transcription history and is invalidated
-/// after a successful undo or restore, or once it goes stale.
+/// after a verified or uncertain write, or once it goes stale.
 @MainActor
 final class DictationUndoService: ObservableObject {
     /// Captured right after a successful direct text insertion.
@@ -45,11 +45,13 @@ final class DictationUndoService: ObservableObject {
         case nothingToRestore
         case staleSnapshot
         case dictationBusy
+        case persistencePending
         case accessibilityUnavailable
         case targetChanged
         case caretMoved
         case textChanged
         case mutationFailed
+        case mutationUnverified
 
         var feedbackMessage: String {
             switch self {
@@ -72,6 +74,16 @@ final class DictationUndoService: ObservableObject {
                 localizedAppText(
                     "Dictation is active. Try again when it finishes.",
                     de: "Das Diktat ist aktiv. Versuche es erneut, wenn es beendet ist."
+                )
+            case .persistencePending:
+                localizedAppText(
+                    "The last dictation is still being saved. Try again shortly.",
+                    de: "Das letzte Diktat wird noch gespeichert. Versuche es gleich erneut."
+                )
+            case .mutationUnverified:
+                localizedAppText(
+                    "The text may have changed, but the result couldn't be verified. Check the text field.",
+                    de: "Der Text wurde möglicherweise geändert, aber das Ergebnis konnte nicht geprüft werden. Prüfe das Textfeld."
                 )
             case .accessibilityUnavailable:
                 localizedAppText(
@@ -124,7 +136,8 @@ final class DictationUndoService: ObservableObject {
 
     private let captureActiveApp: @MainActor () -> (name: String?, bundleId: String?, url: String?)
     private let focusedObservation: @MainActor () -> TextInsertionService.FocusedTextObservation?
-    private let replaceRange: @MainActor (NSRange, AXUIElement, String) -> Bool
+    private let replaceRange: @MainActor (NSRange, AXUIElement, String) -> TextInsertionService.RangeReplacementResult
+    private let isPersistencePending: @MainActor (UUID) -> Bool
     private let isDictationBusy: @MainActor () -> Bool
     private let didRestoreRawTranscript: @MainActor (UUID, String) -> Void
     private let now: @MainActor () -> Date
@@ -133,9 +146,10 @@ final class DictationUndoService: ObservableObject {
     init(
         captureActiveApp: @escaping @MainActor () -> (name: String?, bundleId: String?, url: String?),
         focusedObservation: @escaping @MainActor () -> TextInsertionService.FocusedTextObservation?,
-        replaceRange: @escaping @MainActor (NSRange, AXUIElement, String) -> Bool,
+        replaceRange: @escaping @MainActor (NSRange, AXUIElement, String) -> TextInsertionService.RangeReplacementResult,
         isDictationBusy: @escaping @MainActor () -> Bool,
         didRestoreRawTranscript: @escaping @MainActor (UUID, String) -> Void,
+        isPersistencePending: @escaping @MainActor (UUID) -> Bool = { _ in false },
         now: @escaping @MainActor () -> Date = { Date() },
         maximumSnapshotAge: TimeInterval = DictationUndoService.defaultMaximumSnapshotAge
     ) {
@@ -143,6 +157,7 @@ final class DictationUndoService: ObservableObject {
         self.focusedObservation = focusedObservation
         self.replaceRange = replaceRange
         self.isDictationBusy = isDictationBusy
+        self.isPersistencePending = isPersistencePending
         self.didRestoreRawTranscript = didRestoreRawTranscript
         self.now = now
         self.maximumSnapshotAge = maximumSnapshotAge
@@ -150,6 +165,7 @@ final class DictationUndoService: ObservableObject {
 
     convenience init(
         textInsertionService: TextInsertionService,
+        isPersistencePending: @escaping @MainActor (UUID) -> Bool,
         isDictationBusy: @escaping @MainActor () -> Bool,
         didRestoreRawTranscript: @escaping @MainActor (UUID, String) -> Void
     ) {
@@ -160,7 +176,8 @@ final class DictationUndoService: ObservableObject {
                 textInsertionService.replaceRange(range, in: element, with: text)
             },
             isDictationBusy: isDictationBusy,
-            didRestoreRawTranscript: didRestoreRawTranscript
+            didRestoreRawTranscript: didRestoreRawTranscript,
+            isPersistencePending: isPersistencePending
         )
     }
 
@@ -200,7 +217,7 @@ final class DictationUndoService: ObservableObject {
     }
 
     /// Performs the undo or restore action, returning `.success` only when the
-    /// document was actually modified. The snapshot is invalidated on success
+    /// document change was verified. An uncertain write also consumes the snapshot
     /// so the action can never affect unrelated text on a second invocation.
     @discardableResult
     func perform(_ kind: Kind) -> Result {
@@ -211,6 +228,9 @@ final class DictationUndoService: ObservableObject {
             return .failed(.staleSnapshot)
         }
         guard !isDictationBusy() else { return .failed(.dictationBusy) }
+        if kind == .restore, isPersistencePending(snapshot.transcriptionID) {
+            return .failed(.persistencePending)
+        }
         guard let observation = focusedObservation() else {
             return .failed(.accessibilityUnavailable)
         }
@@ -242,8 +262,14 @@ final class DictationUndoService: ObservableObject {
         }
 
         let replacement = kind == .undo ? "" : snapshot.rawTranscript
-        guard replaceRange(targetRange, observation.element, replacement) else {
+        switch replaceRange(targetRange, observation.element, replacement) {
+        case .notApplied:
             return .failed(.mutationFailed)
+        case .unverified:
+            self.snapshot = nil
+            return .failed(.mutationUnverified)
+        case .verified:
+            break
         }
 
         self.snapshot = nil

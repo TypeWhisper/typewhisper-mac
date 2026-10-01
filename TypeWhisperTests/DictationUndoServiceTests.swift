@@ -15,9 +15,11 @@ final class DictationUndoServiceTests: XCTestCase {
         var element: AXUIElement
         var bundleId: String?
         var busy = false
+        var pendingPersistenceIDs = Set<UUID>()
         var focusedElementAvailable = true
         var observationAvailable = true
         var replaceSucceeds = true
+        var verifiesReplacement = true
         var now = Date()
         var maximumSnapshotAge: TimeInterval = DictationUndoService.defaultMaximumSnapshotAge
         var replacements: [(range: NSRange, text: String)] = []
@@ -47,21 +49,22 @@ final class DictationUndoServiceTests: XCTestCase {
                     )
                 },
                 replaceRange: { [weak self] range, _, text in
-                    guard let self, self.replaceSucceeds else { return false }
+                    guard let self, self.replaceSucceeds else { return .notApplied }
                     let nsValue = self.value as NSString
-                    guard NSMaxRange(range) <= nsValue.length else { return false }
+                    guard NSMaxRange(range) <= nsValue.length else { return .notApplied }
                     self.replacements.append((range, text))
                     self.value = nsValue.replacingCharacters(in: range, with: text)
                     self.selectedRange = NSRange(
                         location: range.location + (text as NSString).length,
                         length: 0
                     )
-                    return true
+                    return self.verifiesReplacement ? .verified : .unverified
                 },
                 isDictationBusy: { [weak self] in self?.busy ?? true },
                 didRestoreRawTranscript: { [weak self] id, rawText in
                     self?.restoredCallbacks.append((id, rawText))
                 },
+                isPersistencePending: { [weak self] id in self?.pendingPersistenceIDs.contains(id) ?? true },
                 now: { [weak self] in self?.now ?? Date() },
                 maximumSnapshotAge: maximumSnapshotAge
             )
@@ -369,6 +372,18 @@ final class DictationUndoServiceTests: XCTestCase {
         XCTAssertTrue(service.canUndo)
     }
 
+    func testAppliedButUnverifiedRestoreConsumesSnapshotWithoutClaimingSuccess() {
+        let harness = Harness(value: "", caret: 0)
+        let service = harness.makeService()
+        _ = harness.record(service: service, raw: "hello", inserted: "Hello.")
+        harness.verifiesReplacement = false
+
+        XCTAssertNotEqual(service.perform(.restore), .success)
+        XCTAssertEqual(harness.value, "hello")
+        XCTAssertFalse(service.canUndo, "An uncertain write must not leave the old snapshot retryable")
+        XCTAssertTrue(harness.restoredCallbacks.isEmpty)
+    }
+
     func testUndoAndRestoreLeaveClipboardUntouched() {
         // Undo/restore replace text through direct Accessibility writes and
         // must never disturb the user's clipboard.
@@ -399,13 +414,135 @@ final class DictationUndoServiceTests: XCTestCase {
         XCTAssertEqual(pasteboard.string(forType: .string), "clipboard sentinel")
     }
 
+    func testRestoreGatesOnlyItsOwnPendingPersistenceAndDoesNotBlockUndo() {
+        let harness = Harness(value: "", caret: 0)
+        let service = harness.makeService()
+        let id = harness.record(service: service, raw: "raw", inserted: "Processed.")
+        harness.pendingPersistenceIDs = [id]
+        XCTAssertEqual(service.perform(.restore), .failed(.persistencePending))
+        XCTAssertEqual(harness.value, "Processed.")
+        XCTAssertTrue(harness.replacements.isEmpty)
+        XCTAssertTrue(service.canUndo)
+        XCTAssertEqual(service.perform(.undo), .success)
+
+        _ = harness.record(service: service, raw: "new raw", inserted: "New processed.")
+        // An older pending record cannot hold up this already-persisted snapshot.
+        XCTAssertEqual(service.perform(.restore), .success)
+        XCTAssertEqual(harness.value, "new raw")
+    }
+
+    @MainActor
+    private final class AXReplacementHarness {
+        let insertion = TextInsertionService()
+        let element = AXUIElementCreateApplication(1234)
+        var value = "Processed."
+        var selection = NSRange(location: 10, length: 0)
+        var writeCount = 0
+        var readbackAvailable = true
+        var appliesWrite = true
+        var acknowledgesWrite = true
+        var honorsSelection = true
+        var transformedText: String?
+        var callbacks: [String] = []
+
+        init() {
+            insertion.accessibilityGrantedOverride = true
+            insertion.captureActiveAppOverride = { (nil, "com.test.app", nil) }
+            insertion.focusedTextElementOverride = { [unowned self] in element }
+            insertion.focusedTextStateOverride = { [unowned self] _ in
+                guard writeCount == 0 || readbackAvailable else { return nil }
+                return TextInsertionService.FocusedTextSnapshot(
+                    value: value, selectedText: nil, selectedRange: selection
+                )
+            }
+            insertion.setSelectedRangeOverride = { [unowned self] _, range in
+                if honorsSelection { selection = range }
+                return true
+            }
+            insertion.insertTextAtOverride = { [unowned self] _, text in
+                writeCount += 1
+                if appliesWrite {
+                    let replacement = transformedText ?? text
+                    value = (value as NSString).replacingCharacters(in: selection, with: replacement)
+                    selection = NSRange(location: selection.location + (replacement as NSString).length, length: 0)
+                }
+                return acknowledgesWrite
+            }
+        }
+
+        func makeService() -> DictationUndoService {
+            let service = DictationUndoService(
+                textInsertionService: insertion,
+                isPersistencePending: { _ in false },
+                isDictationBusy: { false },
+                didRestoreRawTranscript: { [unowned self] _, raw in callbacks.append(raw) }
+            )
+            service.recordSnapshot(rawTranscript: " raw \n", insertedText: value, transcriptionID: UUID())
+            return service
+        }
+    }
+
+    func testActualRangeWriterConsumesSnapshotWhenPostWriteReadFails() {
+        let harness = AXReplacementHarness()
+        let service = harness.makeService()
+        harness.readbackAvailable = false
+        XCTAssertEqual(service.perform(.restore), .failed(.mutationUnverified))
+        XCTAssertEqual(harness.writeCount, 1)
+        XCTAssertEqual(harness.value, " raw \n")
+        XCTAssertNil(service.snapshot)
+        XCTAssertTrue(harness.callbacks.isEmpty)
+        XCTAssertEqual(service.perform(.restore), .failed(.noSnapshot))
+        XCTAssertEqual(harness.writeCount, 1)
+    }
+
+    func testActualRangeWriterKeepsSnapshotWhenApplicationIgnoresWrite() {
+        let harness = AXReplacementHarness()
+        let service = harness.makeService()
+        harness.appliesWrite = false
+        XCTAssertEqual(service.perform(.restore), .failed(.mutationFailed))
+        XCTAssertEqual(harness.value, "Processed.")
+        XCTAssertEqual(harness.writeCount, 1)
+        XCTAssertNotNil(service.snapshot)
+        XCTAssertTrue(harness.callbacks.isEmpty)
+    }
+
+    func testActualRangeWriterRejectsIgnoredSelectionBeforeWriting() {
+        let harness = AXReplacementHarness()
+        let service = harness.makeService()
+        harness.honorsSelection = false
+        XCTAssertEqual(service.perform(.undo), .failed(.mutationFailed))
+        XCTAssertEqual(harness.value, "Processed.")
+        XCTAssertEqual(harness.writeCount, 0)
+        XCTAssertNotNil(service.snapshot)
+    }
+
+    func testActualRangeWriterDoesNotClaimTransformedResultAsRestored() {
+        let harness = AXReplacementHarness()
+        let service = harness.makeService()
+        harness.transformedText = "RAW"
+        XCTAssertEqual(service.perform(.restore), .failed(.mutationUnverified))
+        XCTAssertEqual(harness.value, "RAW")
+        XCTAssertNil(service.snapshot)
+        XCTAssertTrue(harness.callbacks.isEmpty)
+    }
+
+    func testActualRangeWriterTrustsVerifiedValueEvenWhenSetterReportsFailure() {
+        let harness = AXReplacementHarness()
+        let service = harness.makeService()
+        harness.acknowledgesWrite = false
+        XCTAssertEqual(service.perform(.restore), .success)
+        XCTAssertEqual(harness.callbacks, [" raw \n"])
+        XCTAssertEqual(harness.value, " raw \n")
+        XCTAssertNil(service.snapshot)
+    }
+
     // MARK: - Feedback and hotkeys
 
     func testAllFailuresHaveFeedbackMessages() {
         let failures: [DictationUndoService.Failure] = [
             .noSnapshot, .nothingToRestore, .staleSnapshot, .dictationBusy,
             .accessibilityUnavailable, .targetChanged, .caretMoved,
-            .textChanged, .mutationFailed,
+            .textChanged, .mutationFailed, .mutationUnverified, .persistencePending,
         ]
         for failure in failures {
             XCTAssertFalse(
