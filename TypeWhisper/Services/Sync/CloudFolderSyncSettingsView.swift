@@ -1366,6 +1366,17 @@ struct CloudFolderSyncSettingsView: View {
     @State private var confirmingSyncFolderDeletion = false
     @State private var confirmingHistorySync = false
 
+    private var modePicker: some View {
+        Picker(String(localized: "premium.window.sync.modePicker"), selection: Binding(
+            get: { controller.mode },
+            set: { mode in Task { await controller.setMode(mode) } }
+        )) {
+            ForEach(controller.availableModes) { mode in
+                Text(mode.displayName).tag(mode)
+            }
+        }
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
             PremiumSettingsDetailHeader(
@@ -1382,15 +1393,12 @@ struct CloudFolderSyncSettingsView: View {
                     Text(String(localized: "premium.window.sync.modeTitle"))
                         .font(.headline)
 
-                    Picker(String(localized: "premium.window.sync.modePicker"), selection: Binding(
-                        get: { controller.mode },
-                        set: { mode in Task { await controller.setMode(mode) } }
-                    )) {
-                        ForEach(controller.availableModes) { mode in
-                            Text(mode.displayName).tag(mode)
-                        }
+                    // Long mode names do not fit side by side in a narrow window.
+                    ViewThatFits(in: .horizontal) {
+                        modePicker.pickerStyle(.segmented)
+                        modePicker.pickerStyle(.menu).fixedSize()
                     }
-                    .pickerStyle(.segmented)
+                    .labelsHidden()
                     .disabled(controller.isSyncing)
                     .accessibilityIdentifier("premium.sync.mode")
 

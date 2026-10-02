@@ -248,7 +248,7 @@ private final class PremiumSettingsWindowDelegate: NSObject, NSWindowDelegate {
 }
 
 @MainActor
-private struct PremiumCalendarMeetingSettingsWindow: View {
+struct PremiumCalendarMeetingSettingsWindow: View {
     @ObservedObject private var license: LicenseService
     @ObservedObject private var premiumAccount: PremiumAccountService
     private let controllerFactory: @MainActor () -> CalendarMeetingAutomationController
@@ -282,7 +282,7 @@ private struct PremiumCalendarMeetingSettingsWindow: View {
 }
 
 @MainActor
-private struct PremiumCloudSyncSettingsWindow: View {
+struct PremiumCloudSyncSettingsWindow: View {
     @ObservedObject private var license: LicenseService
     @ObservedObject private var premiumAccount: PremiumAccountService
     @ObservedObject private var syncController: CloudFolderSyncController
@@ -320,5 +320,32 @@ private struct PremiumCloudSyncSettingsWindow: View {
             return String(localized: "premium.window.sync.linkRequired")
         }
         return String(localized: "premium.window.sync.locked")
+    }
+}
+
+/// A Premium feature's settings inside the Settings page where the feature
+/// is used, with the way back to that page.
+struct SettingsPremiumPart<Content: View>: View {
+    let backTitle: String
+    let onBack: () -> Void
+    @ViewBuilder let content: Content
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 12) {
+                Button(action: onBack) {
+                    Label(backTitle, systemImage: "chevron.left")
+                        .font(.callout.weight(.medium))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(Color.accentColor)
+                .keyboardShortcut(.cancelAction)
+
+                content
+            }
+            .padding(SettingsLayoutMetrics.pagePadding)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 }

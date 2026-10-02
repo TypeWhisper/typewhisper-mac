@@ -296,6 +296,22 @@ struct PremiumActiveFeatureOverview: View {
     @AppStorage(UserDefaultsKeys.targetAppCorrectionLearningEnabled) private var learningEnabled = false
 
     private let windowPresenter: any PremiumSettingsWindowPresenting
+    private let features: [PremiumFeatureID]
+    private let showsHeading: Bool
+
+    /// The row of one feature for the Settings page where that feature lives.
+    static func link(to feature: PremiumFeatureID) -> PremiumActiveFeatureOverview {
+        PremiumActiveFeatureOverview(
+            licenseService: .shared,
+            premiumAccount: ServiceContainer.shared.premiumAccountService,
+            syncController: ServiceContainer.shared.cloudFolderSyncController,
+            correctionLearningService: ServiceContainer.shared.targetAppCorrectionLearningService,
+            calendarController: ServiceContainer.shared.calendarMeetingAutomationController,
+            windowPresenter: PremiumSettingsWindowManager.shared,
+            features: [feature],
+            showsHeading: false
+        )
+    }
 
     init(
         licenseService: LicenseService,
@@ -303,8 +319,12 @@ struct PremiumActiveFeatureOverview: View {
         syncController: CloudFolderSyncController,
         correctionLearningService: TargetAppCorrectionLearningService,
         calendarController: CalendarMeetingAutomationController,
-        windowPresenter: any PremiumSettingsWindowPresenting
+        windowPresenter: any PremiumSettingsWindowPresenting,
+        features: [PremiumFeatureID] = PremiumFeatureID.allCases,
+        showsHeading: Bool = true
     ) {
+        self.features = features
+        self.showsHeading = showsHeading
         self.license = licenseService
         self.premiumAccount = premiumAccount
         self.syncController = syncController
@@ -324,29 +344,45 @@ struct PremiumActiveFeatureOverview: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text(String(localized: "premium.hub.active.title"))
-                    .font(.title2.weight(.semibold))
-                Text(String(localized: "premium.hub.active.description"))
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
+            if showsHeading {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(String(localized: "premium.hub.active.title"))
+                        .font(.title2.weight(.semibold))
+                    Text(String(localized: "premium.hub.active.description"))
+                        .font(.callout)
+                        .foregroundStyle(.secondary)
+                }
             }
 
-            PremiumFeatureGrid(cards: activeCards)
+            VStack(spacing: 0) {
+                ForEach(activeRows.indices, id: \.self) { index in
+                    if index > 0 {
+                        Divider().padding(.leading, 58)
+                    }
+                    activeRows[index]
+                }
+            }
+            .background(
+                RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius, style: .continuous)
+                    .fill(Color(nsColor: .controlBackgroundColor))
+            )
+            .clipShape(RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius, style: .continuous))
         }
     }
 
-    private var activeCards: [AnyView] {
-        [
-            AnyView(calendarCard),
-            AnyView(learningCard),
-            AnyView(syncCard)
-        ]
+    private var activeRows: [AnyView] {
+        features.map { feature in
+            switch feature {
+            case .calendarMeeting: AnyView(calendarCard)
+            case .correctionLearning: AnyView(learningCard)
+            case .cloudSync: AnyView(syncCard)
+            }
+        }
     }
 
     private var calendarCard: some View {
         let action = access.action(for: .calendarMeeting)
-        return PremiumFeatureCard(
+        return PremiumFeatureRow(
             feature: .calendarMeeting,
             icon: "calendar.badge.clock",
             accent: .blue,
@@ -362,7 +398,7 @@ struct PremiumActiveFeatureOverview: View {
 
     private var learningCard: some View {
         let action = access.action(for: .correctionLearning)
-        return PremiumFeatureCard(
+        return PremiumFeatureRow(
             feature: .correctionLearning,
             icon: "wand.and.sparkles",
             accent: .yellow,
@@ -378,7 +414,7 @@ struct PremiumActiveFeatureOverview: View {
 
     private var syncCard: some View {
         let action = access.action(for: .cloudSync)
-        return PremiumFeatureCard(
+        return PremiumFeatureRow(
             feature: .cloudSync,
             icon: "cloud",
             accent: .cyan,
@@ -533,7 +569,8 @@ struct PremiumActiveFeatureOverview: View {
         case .none:
             break
         case .openSettings(let destination):
-            windowPresenter.present(destination)
+            // Each feature's settings live on the page where it is used.
+            SettingsNavigationCoordinator.shared.navigate(to: destination)
         case .manageAccess:
             windowPresenter.present(.access)
         }
@@ -552,6 +589,8 @@ private struct PremiumFeatureGrid: View {
     }
 }
 
+/// Lays the cards out in equal columns and wraps them into balanced rows
+/// when they do not fit side by side: four cards become two rows of two.
 private struct PremiumFeatureResponsiveLayout: Layout {
     let spacing: CGFloat
     let minimumColumnWidth: CGFloat
@@ -566,23 +605,10 @@ private struct PremiumFeatureResponsiveLayout: Layout {
         let availableWidth = proposal.width
             ?? subviews.map { $0.sizeThatFits(.unspecified).width }.max()
             ?? minimumColumnWidth
-
-        if usesColumns(width: availableWidth, count: subviews.count) {
-            let columnWidth = columnWidth(for: availableWidth, count: subviews.count)
-            let height = subviews
-                .map { $0.sizeThatFits(ProposedViewSize(width: columnWidth, height: nil)).height }
-                .max()
-                ?? 0
-            return CGSize(width: availableWidth, height: height)
-        }
-
-        let sizes = subviews.map {
-            $0.sizeThatFits(ProposedViewSize(width: availableWidth, height: nil))
-        }
+        let heights = rowHeights(width: availableWidth, subviews: subviews)
         return CGSize(
             width: availableWidth,
-            height: sizes.reduce(0) { $0 + $1.height }
-                + spacing * CGFloat(max(0, subviews.count - 1))
+            height: heights.reduce(0, +) + spacing * CGFloat(max(0, heights.count - 1))
         )
     }
 
@@ -594,42 +620,44 @@ private struct PremiumFeatureResponsiveLayout: Layout {
     ) {
         guard !subviews.isEmpty else { return }
 
-        if usesColumns(width: bounds.width, count: subviews.count) {
-            let width = columnWidth(for: bounds.width, count: subviews.count)
-            var x = bounds.minX
+        let columns = columnCount(width: bounds.width, count: subviews.count)
+        let width = columnWidth(for: bounds.width, columns: columns)
+        let heights = rowHeights(width: bounds.width, subviews: subviews)
+        var y = bounds.minY
 
-            for subview in subviews {
+        for (row, height) in heights.enumerated() {
+            var x = bounds.minX
+            for subview in subviews[(row * columns)..<min(subviews.count, (row + 1) * columns)] {
                 subview.place(
-                    at: CGPoint(x: x, y: bounds.minY),
+                    at: CGPoint(x: x, y: y),
                     anchor: .topLeading,
-                    proposal: ProposedViewSize(width: width, height: bounds.height)
+                    proposal: ProposedViewSize(width: width, height: height)
                 )
                 x += width + spacing
             }
-            return
-        }
-
-        var y = bounds.minY
-        for subview in subviews {
-            let size = subview.sizeThatFits(
-                ProposedViewSize(width: bounds.width, height: nil)
-            )
-            subview.place(
-                at: CGPoint(x: bounds.minX, y: y),
-                anchor: .topLeading,
-                proposal: ProposedViewSize(width: bounds.width, height: size.height)
-            )
-            y += size.height + spacing
+            y += height + spacing
         }
     }
 
-    private func usesColumns(width: CGFloat, count: Int) -> Bool {
-        width >= minimumColumnWidth * CGFloat(count)
-            + spacing * CGFloat(max(0, count - 1))
+    /// Every card in a row is as tall as the tallest one in it.
+    private func rowHeights(width: CGFloat, subviews: Subviews) -> [CGFloat] {
+        let columns = columnCount(width: width, count: subviews.count)
+        let columnWidth = columnWidth(for: width, columns: columns)
+        return stride(from: 0, to: subviews.count, by: columns).map { start in
+            subviews[start..<min(subviews.count, start + columns)]
+                .map { $0.sizeThatFits(ProposedViewSize(width: columnWidth, height: nil)).height }
+                .max() ?? 0
+        }
     }
 
-    private func columnWidth(for availableWidth: CGFloat, count: Int) -> CGFloat {
-        (availableWidth - spacing * CGFloat(max(0, count - 1))) / CGFloat(count)
+    private func columnCount(width: CGFloat, count: Int) -> Int {
+        let fitting = max(1, min(count, Int((width + spacing) / (minimumColumnWidth + spacing))))
+        let rows = Int((Double(count) / Double(fitting)).rounded(.up))
+        return Int((Double(count) / Double(rows)).rounded(.up))
+    }
+
+    private func columnWidth(for availableWidth: CGFloat, columns: Int) -> CGFloat {
+        (availableWidth - spacing * CGFloat(max(0, columns - 1))) / CGFloat(columns)
     }
 }
 
@@ -775,6 +803,81 @@ private struct PremiumFeatureCard: View {
                 )
         )
         .accessibilityElement(children: .contain)
+        .accessibilityIdentifier("premium.feature.\(feature.rawValue)")
+    }
+}
+
+/// One Premium feature as a compact row: what it is, its current state, and
+/// a click through to its settings.
+private struct PremiumFeatureRow: View {
+    let feature: PremiumFeatureID
+    let icon: String
+    let accent: Color
+    let title: String
+    let description: String
+    let status: String
+    let statusTone: PremiumFeatureStatusTone
+    let previewLines: [String]
+    var actionTitle: String?
+    var action: (() -> Void)?
+
+    @State private var isHovered = false
+
+    var body: some View {
+        Button {
+            action?()
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(accent)
+                    .frame(width: 32, height: 32)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(accent.opacity(0.13))
+                    )
+                    .accessibilityHidden(true)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.body.weight(.medium))
+                        .lineLimit(1)
+                    Text(previewLines.joined(separator: " · "))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                Spacer(minLength: 12)
+
+                Text(status)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(statusTone.color)
+                    .lineLimit(1)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Capsule().fill(statusTone.color.opacity(0.12)))
+
+                if actionTitle != nil {
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(isHovered ? AnyShapeStyle(accent) : AnyShapeStyle(.tertiary))
+                        .offset(x: isHovered ? 2 : 0)
+                        .accessibilityHidden(true)
+                }
+            }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(accent.opacity(isHovered && actionTitle != nil ? 0.1 : 0))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(actionTitle == nil)
+        .onHover { hovering in
+            withAnimation(.easeOut(duration: 0.15)) { isHovered = hovering }
+        }
+        .help(description)
+        .accessibilityHint(actionTitle ?? "")
         .accessibilityIdentifier("premium.feature.\(feature.rawValue)")
     }
 }

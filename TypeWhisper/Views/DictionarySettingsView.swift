@@ -10,6 +10,7 @@ struct DictionarySettingsView: View {
     @ObservedObject private var termPackRegistryService: TermPackRegistryService
     @ObservedObject private var pluginManager: PluginManager
     @ObservedObject private var trainingService = ServiceContainer.shared.dictionaryTrainingService
+    @ObservedObject private var settingsNavigation = SettingsNavigationCoordinator.shared
     @State private var expandedCorrectionGroups = Set<String>()
     @State private var isTrainingPresented = false
     @State private var isAppImportPresented = false
@@ -23,6 +24,30 @@ struct DictionarySettingsView: View {
         VStack(spacing: 0) {
             SettingsPageHeader(String(localized: "Dictionary"))
             Divider()
+
+            if settingsNavigation.dictionaryPart == .learning {
+                SettingsPremiumPart(
+                    backTitle: String(localized: "Dictionary"),
+                    onBack: { settingsNavigation.dictionaryPart = .dictionary }
+                ) {
+                    PremiumCorrectionLearningSettingsView(
+                        licenseService: .shared,
+                        correctionLearningService: ServiceContainer.shared.targetAppCorrectionLearningService,
+                        onManageAccess: { PremiumSettingsWindowManager.shared.present(.access) }
+                    )
+                }
+            } else {
+                dictionaryPart
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    }
+
+    private var dictionaryPart: some View {
+        VStack(spacing: 0) {
+            PremiumActiveFeatureOverview.link(to: .correctionLearning)
+                .padding(.horizontal, SettingsLayoutMetrics.pagePadding)
+                .padding(.vertical, 12)
 
             dictionaryHeader
 

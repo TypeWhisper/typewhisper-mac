@@ -5,6 +5,7 @@ struct HistorySettingsView: View {
     @AppStorage(UserDefaultsKeys.historyRetentionDays) private var historyRetentionDays = 0
     @AppStorage(UserDefaultsKeys.saveAudioWithHistory) private var saveAudioWithHistory = false
     @ObservedObject private var syncController = ServiceContainer.shared.cloudFolderSyncController
+    @ObservedObject private var settingsNavigation = SettingsNavigationCoordinator.shared
     @State private var confirmingHistorySync = false
     @State private var confirmingClearHistory = false
 
@@ -12,6 +13,23 @@ struct HistorySettingsView: View {
         VStack(spacing: 0) {
             SettingsPageHeader(String(localized: "History & Sync"))
             Divider()
+
+            if settingsNavigation.historyPart == .sync {
+                SettingsPremiumPart(
+                    backTitle: String(localized: "History & Sync"),
+                    onBack: { settingsNavigation.historyPart = .history }
+                ) {
+                    PremiumCloudSyncSettingsWindow(
+                        licenseService: .shared,
+                        premiumAccount: ServiceContainer.shared.premiumAccountService,
+                        syncController: syncController,
+                        onManageAccess: { PremiumSettingsWindowManager.shared.present(.access) }
+                    )
+                }
+            } else {
+            PremiumActiveFeatureOverview.link(to: .cloudSync)
+                .padding(.horizontal, SettingsLayoutMetrics.pagePadding)
+                .padding(.top, SettingsLayoutMetrics.pagePadding)
 
             Form {
                 Section(String(localized: "History Workspace")) {
@@ -71,6 +89,7 @@ struct HistorySettingsView: View {
                 }
             }
             .formStyle(.grouped)
+            }
         }
         .confirmationDialog(
             String(localized: "Sync History & Inbox?"),
