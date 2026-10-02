@@ -114,8 +114,7 @@ struct SpeakerTranscriptSegment: Codable, Equatable, Sendable {
 
 /// A transcript split by speaker for one diarization run.
 ///
-/// Mirrors the `transcript` history sync component described in
-/// `docs/specs/2026-10-01-speaker-diarization-workspace-design.md`.
+/// Mirrors the `transcript` history sync component.
 struct SpeakerTranscript: Codable, Equatable, Sendable {
     struct Source: Codable, Equatable, Sendable {
         enum Kind: String, Codable, Sendable {
