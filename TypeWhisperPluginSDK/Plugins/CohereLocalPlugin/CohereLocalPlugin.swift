@@ -850,12 +850,12 @@ private struct CohereLocalSettingsView: View {
         string: "https://huggingface.co/ggml-org/whisper-vad"
     )!
 
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.pluginSettingsClose) private var closeSettings
     @State private var modelState: CohereLocalModelState = .notLoaded
     @State private var selectedModelId = CohereLocalPlugin.fastModel.id
-    @State private var isDownloaded = false
+    @State private var downloadedModelIds: Set<String> = []
     @State private var showDeleteConfirmation = false
+    @State private var modelIdPendingRemoval: String?
     @State private var huggingFaceTokenInput = ""
     @State private var showHuggingFaceToken = false
     @State private var isValidatingHuggingFaceToken = false
@@ -874,20 +874,19 @@ private struct CohereLocalSettingsView: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
             }
 
-            Divider()
+            // Embedded in the host's settings page there is nothing to close.
+            if let closeSettings {
+                Divider()
 
-            HStack {
-                Spacer()
-                Button(String(localized: "Done", bundle: bundle)) {
-                    if let closeSettings {
+                HStack {
+                    Spacer()
+                    Button(String(localized: "Done", bundle: bundle)) {
                         closeSettings()
-                    } else {
-                        dismiss()
                     }
+                    .keyboardShortcut(.defaultAction)
                 }
-                .keyboardShortcut(.defaultAction)
+                .padding(16)
             }
-            .padding(16)
         }
         .onAppear {
             refresh()
@@ -902,16 +901,17 @@ private struct CohereLocalSettingsView: View {
         }
         .alert(
             String(localized: "Remove downloaded model?", bundle: bundle),
-            isPresented: $showDeleteConfirmation
-        ) {
+            isPresented: $showDeleteConfirmation,
+            presenting: modelIdPendingRemoval
+        ) { modelId in
             Button(String(localized: "Cancel", bundle: bundle), role: .cancel) {}
             Button(String(localized: "Remove Model", bundle: bundle), role: .destructive) {
                 Task {
-                    try? await plugin.deleteDownloadedModel(selectedModelId)
+                    try? await plugin.deleteDownloadedModel(modelId)
                     refresh()
                 }
             }
-        } message: {
+        } message: { _ in
             Text(
                 "This removes the selected Cohere model. Shared runtime files remain while another variant is installed.",
                 bundle: bundle
@@ -921,20 +921,23 @@ private struct CohereLocalSettingsView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 10) {
-                Image(systemName: "waveform.badge.mic")
-                    .font(.title2)
-                    .foregroundStyle(.tint)
-                Text("Cohere Transcribe (Local)", bundle: bundle)
-                    .font(.title2)
-                    .fontWeight(.semibold)
-                Spacer()
-                Text("LOCAL · BATCH", bundle: bundle)
-                    .font(.caption2)
-                    .fontWeight(.semibold)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background(.quaternary, in: Capsule())
+            // The host's settings page already shows the name and the badges.
+            if closeSettings != nil {
+                HStack(spacing: 10) {
+                    Image(systemName: "waveform.badge.mic")
+                        .font(.title2)
+                        .foregroundStyle(.tint)
+                    Text("Cohere Transcribe (Local)", bundle: bundle)
+                        .font(.title2)
+                        .fontWeight(.semibold)
+                    Spacer()
+                    Text("LOCAL · BATCH", bundle: bundle)
+                        .font(.caption2)
+                        .fontWeight(.semibold)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.quaternary, in: Capsule())
+                }
             }
 
             Text(
@@ -949,79 +952,132 @@ private struct CohereLocalSettingsView: View {
     private var modelCard: some View {
         GroupBox {
             VStack(alignment: .leading, spacing: 14) {
-                Picker(
-                    String(localized: "Model", bundle: bundle),
-                    selection: $selectedModelId
-                ) {
-                    ForEach(CohereLocalPlugin.models, id: \.id) { model in
-                        Text(CohereLocalPlugin.localizedString(model.displayName, bundle: bundle))
-                            .tag(model.id)
-                    }
-                }
-                .onChange(of: selectedModelId) { _, newValue in
-                    guard newValue != plugin.selectedModelId else { return }
-                    plugin.selectModel(newValue)
-                    refresh()
-                }
+                Text("Model", bundle: bundle)
+                    .font(.headline)
 
-                HStack(alignment: .top) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(CohereLocalPlugin.localizedString(
-                            selectedModel.displayName,
-                            bundle: bundle
-                        ))
-                            .font(.headline)
-                        Text(
-                            "\(CohereLocalPlugin.localizedString(selectedModel.sizeDescription, bundle: bundle)) · \(CohereLocalPlugin.localizedString(selectedModel.ramRequirement, bundle: bundle))"
-                        )
+                ForEach(CohereLocalPlugin.models, id: \.id) { model in
+                    modelRow(for: model)
+                }
+            }
+            .padding(4)
+        }
+    }
+
+    private func modelRow(for model: CohereLocalModelDefinition) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .top) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(CohereLocalPlugin.localizedString(model.displayName, bundle: bundle))
+                        .font(.body)
+                    Text(
+                        "\(CohereLocalPlugin.localizedString(model.sizeDescription, bundle: bundle)) · \(CohereLocalPlugin.localizedString(model.ramRequirement, bundle: bundle))"
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    Text(CohereLocalPlugin.localizedString(model.detail, bundle: bundle))
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                        Text(CohereLocalPlugin.localizedString(
-                            selectedModel.detail,
-                            bundle: bundle
-                        ))
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                    Spacer()
-                    statusLabel
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
-                if case .downloading(let progress) = modelState {
-                    VStack(alignment: .leading, spacing: 5) {
-                        ProgressView(value: progress)
-                        Text("\(Int(progress * 100))%")
-                            .font(.caption.monospacedDigit())
-                            .foregroundStyle(.secondary)
+                Spacer()
+
+                VStack(alignment: .trailing, spacing: 6) {
+                    modelAction(for: model)
+                    if downloadedModelIds.contains(model.id), !isBusy {
+                        Button(String(localized: "Remove Model", bundle: bundle), role: .destructive) {
+                            modelIdPendingRemoval = model.id
+                            showDeleteConfirmation = true
+                        }
+                        .controlSize(.small)
                     }
-                } else if case .preparing = modelState {
-                    HStack(spacing: 8) {
-                        ProgressView()
-                            .controlSize(.small)
-                        Text(
-                            "Starting CrispASR with Metal and warming up the model. Dictation is ready when this finishes.",
-                            bundle: bundle
-                        )
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                    }
+                }
+            }
+
+            if model.id == selectedModelId {
+                if case .preparing = modelState {
+                    Text(
+                        "Starting CrispASR with Metal and warming up the model. Dictation is ready when this finishes.",
+                        bundle: bundle
+                    )
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
                 } else if case .error(let message) = modelState {
                     Text(message)
                         .font(.caption)
                         .foregroundStyle(.red)
                         .textSelection(.enabled)
                 }
-
-                HStack {
-                    primaryModelButton
-                    if isDownloaded, !isBusy {
-                        Button(String(localized: "Remove Model", bundle: bundle), role: .destructive) {
-                            showDeleteConfirmation = true
-                        }
-                    }
-                }
             }
-            .padding(4)
+        }
+    }
+
+    @ViewBuilder
+    private func modelAction(for model: CohereLocalModelDefinition) -> some View {
+        // The plugin holds one model at a time; its state belongs to the selected model.
+        switch model.id == selectedModelId ? modelState : .notLoaded {
+        case .notLoaded:
+            loadButton(for: model)
+
+        case .downloading(let progress):
+            HStack(spacing: 8) {
+                ProgressView(value: progress)
+                    .frame(width: 80)
+                Text("\(Int(progress * 100))%")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
+            }
+
+        case .preparing:
+            ProgressView()
+                .controlSize(.small)
+
+        case .ready:
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                Button(String(localized: "Unload", bundle: bundle)) {
+                    plugin.unloadModel()
+                    refresh()
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+
+        case .error:
+            HStack(spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundStyle(.red)
+                loadButton(for: model)
+            }
+        }
+    }
+
+    private func loadButton(for model: CohereLocalModelDefinition) -> some View {
+        Button(
+            downloadedModelIds.contains(model.id)
+                ? String(localized: "Load", bundle: bundle)
+                : String(localized: "Download & Load", bundle: bundle)
+        ) {
+            load(model)
+        }
+        .buttonStyle(.borderedProminent)
+        .controlSize(.small)
+        .disabled(isBusy)
+    }
+
+    private func load(_ model: CohereLocalModelDefinition) {
+        let needsSelection = plugin.selectedModelId != model.id
+        if needsSelection {
+            plugin.selectModel(model.id)
+        }
+        refresh()
+        // Selecting a downloaded model already starts loading it.
+        if needsSelection, plugin.isModelDownloaded { return }
+        Task {
+            await plugin.loadModel()
+            refresh()
         }
     }
 
@@ -1097,56 +1153,6 @@ private struct CohereLocalSettingsView: View {
                 }
             }
             .padding(4)
-        }
-    }
-
-    @ViewBuilder
-    private var statusLabel: some View {
-        switch modelState {
-        case .ready:
-            Label(String(localized: "Ready", bundle: bundle), systemImage: "checkmark.circle.fill")
-                .foregroundStyle(.green)
-        case .downloading:
-            Label(String(localized: "Downloading", bundle: bundle), systemImage: "arrow.down.circle")
-                .foregroundStyle(.secondary)
-        case .preparing:
-            Label(String(localized: "Preparing", bundle: bundle), systemImage: "gearshape.2")
-                .foregroundStyle(.secondary)
-        case .error:
-            Label(String(localized: "Error", bundle: bundle), systemImage: "exclamationmark.triangle.fill")
-                .foregroundStyle(.red)
-        case .notLoaded:
-            Label(
-                String(localized: isDownloaded ? "Downloaded" : "Not Downloaded", bundle: bundle),
-                systemImage: isDownloaded ? "internaldrive" : "icloud.and.arrow.down"
-            )
-            .foregroundStyle(.secondary)
-        }
-    }
-
-    @ViewBuilder
-    private var primaryModelButton: some View {
-        switch modelState {
-        case .ready:
-            Button(String(localized: "Unload", bundle: bundle)) {
-                plugin.unloadModel()
-                refresh()
-            }
-            .buttonStyle(.bordered)
-        case .downloading, .preparing:
-            Button(String(localized: "Working…", bundle: bundle)) {}
-                .buttonStyle(.borderedProminent)
-                .disabled(true)
-        case .notLoaded, .error:
-            Button(
-                String(localized: isDownloaded ? "Load" : "Download & Load", bundle: bundle)
-            ) {
-                Task {
-                    await plugin.loadModel()
-                    refresh()
-                }
-            }
-            .buttonStyle(.borderedProminent)
         }
     }
 
@@ -1239,14 +1245,10 @@ private struct CohereLocalSettingsView: View {
         }
     }
 
-    private var selectedModel: CohereLocalModelDefinition {
-        CohereLocalPlugin.model(for: selectedModelId) ?? CohereLocalPlugin.fastModel
-    }
-
     private func refresh() {
         modelState = plugin.modelState
         selectedModelId = plugin.selectedModelId ?? CohereLocalPlugin.fastModel.id
-        isDownloaded = plugin.isModelDownloaded
+        downloadedModelIds = Set(plugin.downloadedModels.map(\.id))
     }
 
     private func validateAndSaveHuggingFaceToken() {

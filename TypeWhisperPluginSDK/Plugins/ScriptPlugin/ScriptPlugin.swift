@@ -318,7 +318,6 @@ enum ScriptError: LocalizedError {
 
 struct ScriptSettingsView: View {
     @ObservedObject var service: ScriptService
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.pluginSettingsClose) private var closeSettings
     @State private var editingScript: ScriptConfig?
 
@@ -377,20 +376,19 @@ struct ScriptSettingsView: View {
                 .listStyle(.inset)
             }
 
-            Divider()
+            // Embedded in the host's settings page there is nothing to close.
+            if let closeSettings {
+                Divider()
 
-            HStack {
-                Spacer()
-                Button(String(localized: "Done", bundle: bundle)) {
-                    if let closeSettings {
+                HStack {
+                    Spacer()
+                    Button(String(localized: "Done", bundle: bundle)) {
                         closeSettings()
-                    } else {
-                        dismiss()
                     }
+                    .keyboardShortcut(.cancelAction)
                 }
-                .keyboardShortcut(.cancelAction)
+                .padding()
             }
-            .padding()
         }
         .sheet(item: $editingScript) { script in
             ScriptEditView(

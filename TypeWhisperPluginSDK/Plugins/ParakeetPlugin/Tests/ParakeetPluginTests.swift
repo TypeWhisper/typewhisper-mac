@@ -527,6 +527,18 @@ final class ParakeetPluginTests: XCTestCase {
         XCTAssertNil(ParakeetPlugin.sourceProgress(fromFraction: 0.5, totalDuration: 0))
     }
 
+    func testDownloadProgressFollowsDownloadWithinLoadingBand() {
+        XCTAssertEqual(ParakeetPlugin.downloadProgress(after: 0.1, downloadFraction: 0.25), 0.4, accuracy: 0.0001)
+        XCTAssertEqual(ParakeetPlugin.downloadProgress(after: 0.1, downloadFraction: 0.5), 0.7, accuracy: 0.0001)
+        XCTAssertEqual(ParakeetPlugin.downloadProgress(after: 0.1, downloadFraction: 1), 0.7, accuracy: 0.0001)
+    }
+
+    func testDownloadProgressNeverMovesBackwards() {
+        XCTAssertEqual(ParakeetPlugin.downloadProgress(after: 0.55, downloadFraction: 0), 0.55)
+        XCTAssertEqual(ParakeetPlugin.downloadProgress(after: 0.55, downloadFraction: -1), 0.55)
+        XCTAssertEqual(ParakeetPlugin.downloadProgress(after: 0.3, downloadFraction: .nan), 0.3)
+    }
+
     func testSourceProgressObservationOnlyStartsForFluidAudioProgressRange() {
         XCTAssertFalse(ParakeetPlugin.shouldObserveSourceProgress(sampleCount: 160_000))
         XCTAssertFalse(ParakeetPlugin.shouldObserveSourceProgress(sampleCount: 240_000))

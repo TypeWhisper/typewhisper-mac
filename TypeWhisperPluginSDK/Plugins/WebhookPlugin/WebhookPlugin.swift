@@ -494,7 +494,6 @@ struct ExampleWebhookEditorState {
 
 struct ExampleWebhookSettingsView: View {
     @ObservedObject var service: ExampleWebhookService
-    @Environment(\.dismiss) private var dismiss
     @Environment(\.pluginSettingsClose) private var closeSettings
     @State private var editorPresentation = ExampleWebhookEditorPresentation()
 
@@ -568,20 +567,19 @@ struct ExampleWebhookSettingsView: View {
                 .listStyle(.inset)
             }
 
-            Divider()
+            // Embedded in the host's settings page there is nothing to close.
+            if let closeSettings {
+                Divider()
 
-            HStack {
-                Spacer()
-                Button(String(localized: "Done", bundle: bundle)) {
-                    if let closeSettings {
+                HStack {
+                    Spacer()
+                    Button(String(localized: "Done", bundle: bundle)) {
                         closeSettings()
-                    } else {
-                        dismiss()
                     }
+                    .keyboardShortcut(.cancelAction)
                 }
-                .keyboardShortcut(.cancelAction)
+                .padding()
             }
-            .padding()
         }
     }
 }
