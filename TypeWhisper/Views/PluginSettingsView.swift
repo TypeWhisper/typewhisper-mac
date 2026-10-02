@@ -288,29 +288,6 @@ private final class PluginSettingsWindowDelegate: NSObject, NSWindowDelegate {
     }
 }
 
-private enum IntegrationTab: String, CaseIterable {
-    case installed
-    case discover
-
-    var title: String {
-        switch self {
-        case .installed:
-            return localizedAppText("My Plugins", de: "Meine Plugins")
-        case .discover:
-            return localizedAppText("Discover", de: "Entdecken")
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .installed:
-            return "checkmark.circle"
-        case .discover:
-            return "sparkles"
-        }
-    }
-}
-
 private enum DiscoverSort: String, CaseIterable {
     case popularity
     case name
@@ -447,7 +424,9 @@ private enum IntegrationPluginSource: Equatable {
 struct PluginSettingsView: View {
     @ObservedObject private var pluginManager = PluginManager.shared
     @ObservedObject private var registryService = PluginRegistryService.shared
-    @AppStorage(UserDefaultsKeys.selectedIntegrationTab) private var selectedTab: IntegrationTab = .discover
+    @ObservedObject private var modelManager = ServiceContainer.shared.modelManagerService
+    /// Set when the view shows one installed plugin from the sidebar instead of the marketplace.
+    private let focusedPluginId: String?
     @State private var showUninstallAlert = false
     @State private var pluginToUninstall: LoadedPlugin?
     @State private var pendingBoundaryUpgradePlugin: RegistryPlugin?
@@ -463,34 +442,35 @@ struct PluginSettingsView: View {
     @State private var discoverSort: DiscoverSort = .popularity
     @State private var discoverHostingFilter: DiscoverHostingFilter = PluginSettingsView.initialDiscoverHostingFilter
 
+    init(focusedPluginId: String? = nil) {
+        self.focusedPluginId = focusedPluginId
+    }
+
     private static var initialDiscoverHostingFilter: DiscoverHostingFilter {
         AppConstants.screenshotState == "integrations-local" ? .local : .all
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            integrationsHeader
+        Group {
+            if let focusedPluginId {
+                installedPluginPage(pluginId: focusedPluginId)
+            } else {
+                VStack(spacing: 0) {
+                    integrationsHeader
 
-            Divider()
+                    Divider()
 
-            ScrollView {
-                VStack(alignment: .leading, spacing: SettingsLayoutMetrics.sectionSpacing) {
-                    integrationTabHeader
-
-                    switch selectedTab {
-                    case .installed:
-                        installedTab
-                    case .discover:
-                        availableTab
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: SettingsLayoutMetrics.sectionSpacing) {
+                            incompatibleBundleRows
+                            availableTab
+                        }
+                        .padding(SettingsLayoutMetrics.pagePadding)
                     }
                 }
-                .padding(SettingsLayoutMetrics.pagePadding)
             }
         }
         .frame(minWidth: 560, minHeight: 420)
-        .onChange(of: selectedTab) { _, _ in
-            normalizeDiscoverState()
-        }
         .alert(String(localized: "Uninstall Plugin"), isPresented: $showUninstallAlert, presenting: pluginToUninstall) { plugin in
             Button(String(localized: "Uninstall"), role: .destructive) {
                 do {
@@ -605,7 +585,7 @@ struct PluginSettingsView: View {
 
     private var integrationsHeader: some View {
         SettingsPageHeader(
-            String(localized: "Integrations"),
+            localizedAppText("Discover plugins", de: "Plugins entdecken"),
             summary: integrationSummaryText
         ) {
             ViewThatFits(in: .horizontal) {
@@ -689,125 +669,6 @@ struct PluginSettingsView: View {
         )
     }
 
-    private func normalizeDiscoverState() {
-        if selectedTab != .discover {
-            searchText = ""
-            selectedCapabilityFilters.removeAll()
-            discoverHostingFilter = .all
-        }
-    }
-
-    private var integrationTabHeader: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .center, spacing: 12) {
-                integrationTabBar
-                    .frame(width: 580)
-
-                HostingSummaryInline(localCount: localPluginCount, cloudCount: cloudPluginCount)
-
-                Spacer(minLength: 0)
-            }
-
-            VStack(alignment: .leading, spacing: 10) {
-                integrationTabBar
-                    .frame(maxWidth: .infinity)
-
-                HostingSummaryInline(localCount: localPluginCount, cloudCount: cloudPluginCount)
-            }
-        }
-        .padding(.bottom, 4)
-    }
-
-    private var integrationTabBar: some View {
-        HStack(spacing: 12) {
-            ForEach(IntegrationTab.allCases, id: \.self) { tab in
-                integrationTabCard(tab)
-                    .frame(maxWidth: .infinity)
-            }
-        }
-    }
-
-    private func integrationTabCard(_ tab: IntegrationTab) -> some View {
-        let isSelected = selectedTab == tab
-        let isDiscover = tab == .discover
-        let inactiveTint = isDiscover ? Color.blue.opacity(1.0) : Color.primary.opacity(0.84)
-        let inactiveTitle = isDiscover ? Color.primary.opacity(1.0) : Color.primary.opacity(0.92)
-        let inactiveSubtitle = isDiscover ? Color.primary.opacity(0.72) : Color.primary.opacity(0.62)
-        let inactiveBorder = isDiscover ? Color.blue.opacity(0.50) : Color.white.opacity(0.18)
-        let inactiveBadgeFill = isDiscover ? Color.blue.opacity(0.22) : Color.white.opacity(0.10)
-        let inactiveBadgeForeground = isDiscover ? Color.blue.opacity(1.0) : Color.primary.opacity(0.82)
-
-        return Button {
-            withAnimation(.easeInOut(duration: 0.16)) {
-                selectedTab = tab
-            }
-        } label: {
-            HStack(alignment: .center, spacing: 10) {
-                Image(systemName: tab.systemImage)
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(isSelected ? .white : inactiveTint)
-                    .frame(width: 22, height: 22)
-
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(tab.title)
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(isSelected ? .white : inactiveTitle)
-                        .lineLimit(1)
-
-                    Text(integrationTabSubtitle(for: tab))
-                        .font(.caption2)
-                        .foregroundStyle(isSelected ? .white.opacity(0.82) : inactiveSubtitle)
-                        .lineLimit(1)
-                }
-
-                Spacer(minLength: 8)
-
-                Text("\(integrationTabCount(for: tab))")
-                    .font(.caption.weight(.bold))
-                    .monospacedDigit()
-                    .foregroundStyle(isSelected ? Color.accentColor : inactiveBadgeForeground)
-                    .padding(.horizontal, 8)
-                    .padding(.vertical, 4)
-                    .background {
-                        Capsule(style: .continuous)
-                            .fill(isSelected ? Color.white.opacity(0.95) : inactiveBadgeFill)
-                    }
-            }
-            .padding(.horizontal, 14)
-            .frame(maxWidth: .infinity, minHeight: 54, maxHeight: 56, alignment: .leading)
-            .background {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(isSelected ? Color.accentColor.opacity(0.88) : Color.black.opacity(0.16))
-            }
-            .overlay {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .stroke(isSelected ? Color.white.opacity(0.32) : inactiveBorder, lineWidth: isSelected ? 1.25 : 1.1)
-            }
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel(tab.title)
-        .accessibilityValue(integrationTabSubtitle(for: tab))
-    }
-
-    private func integrationTabCount(for tab: IntegrationTab) -> Int {
-        switch tab {
-        case .installed:
-            return pluginManager.loadedPlugins.count
-        case .discover:
-            return availablePlugins.count
-        }
-    }
-
-    private func integrationTabSubtitle(for tab: IntegrationTab) -> String {
-        let count = integrationTabCount(for: tab)
-        switch tab {
-        case .installed:
-            return localizedAppText("\(count) installed", de: "\(count) installiert", ja: "\(count)件インストール済み")
-        case .discover:
-            return localizedAppText("\(count) available", de: "\(count) verfügbar", ja: "\(count)件利用可能")
-        }
-    }
-
     // MARK: - Installed Tab
 
     private func categoriesForPlugin(_ plugin: LoadedPlugin, registryPlugin: RegistryPlugin?) -> [PluginCategory] {
@@ -871,92 +732,328 @@ struct PluginSettingsView: View {
         pluginDetailURLString(pluginId: plugin.id, registryDetailsURL: plugin.detailsURL)
     }
 
-    private var localPluginCount: Int {
-        pluginManager.loadedPlugins.count { plugin in
-            let registryPlugin = registryService.registry.first(where: { $0.id == plugin.id })
-            return resolvedHosting(for: plugin, registryPlugin: registryPlugin) == .local
-        }
-    }
-
-    private var cloudPluginCount: Int {
-        pluginManager.loadedPlugins.count { plugin in
-            let registryPlugin = registryService.registry.first(where: { $0.id == plugin.id })
-            return resolvedHosting(for: plugin, registryPlugin: registryPlugin) == .cloud
-        }
-    }
-
-    private var filteredInstalledPlugins: [LoadedPlugin] {
-        pluginManager.loadedPlugins
-            .sorted { $0.manifest.name.localizedCompare($1.manifest.name) == .orderedAscending }
-    }
-
-    private var installedTab: some View {
-        LazyVStack(spacing: 12) {
-            if filteredInstalledPlugins.isEmpty {
-                IntegrationEmptyState(
-                    title: String(localized: "No installed plugins yet."),
-                    systemImage: "puzzlepiece.extension"
-                )
-                .background {
-                    integrationGroupedSurface(cornerRadius: 16)
+    private func installedPluginRow(_ plugin: LoadedPlugin) -> some View {
+        let registryPlugin = registryService.registry.first(where: { $0.id == plugin.id })
+        return InstalledPluginRow(
+            plugin: plugin,
+            installInfo: registryService.installInfo(for: plugin.id),
+            installState: registryService.installStates[plugin.id],
+            externalNotice: pluginManager.externalBundleNotice(
+                for: plugin.id,
+                registryPlugin: registryPlugin
+            ),
+            registryPlugin: registryPlugin,
+            onUpdate: {
+                if let registryPlugin = registryService.registry.first(where: { $0.id == plugin.id }) {
+                    startInstall(registryPlugin)
                 }
-            } else {
-                ForEach(filteredInstalledPlugins, id: \.id) { plugin in
-                    let registryPlugin = registryService.registry.first(where: { $0.id == plugin.id })
-                    InstalledPluginRow(
-                        plugin: plugin,
-                        categories: categoriesForPlugin(plugin, registryPlugin: registryPlugin),
-                        source: integrationSource(for: plugin, registryPlugin: registryPlugin),
-                        installInfo: registryService.installInfo(for: plugin.id),
-                        installState: registryService.installStates[plugin.id],
-                        externalNotice: pluginManager.externalBundleNotice(
-                            for: plugin.id,
-                            registryPlugin: registryPlugin
-                        ),
-                        hosting: resolvedHosting(for: plugin, registryPlugin: registryPlugin),
-                        registryPlugin: registryPlugin,
-                        onUpdate: {
-                            if let registryPlugin = registryService.registry.first(where: { $0.id == plugin.id }) {
-                                startInstall(registryPlugin)
+            },
+            onReplace: {
+                if let registryPlugin = registryService.registry.first(where: { $0.id == plugin.id }) {
+                    startInstall(registryPlugin)
+                }
+            }
+        )
+        .disabled(registryService.isBulkUpdating)
+    }
+
+    @ViewBuilder
+    private func installedPluginPage(pluginId: String) -> some View {
+        if let plugin = pluginManager.loadedPlugins.first(where: { $0.id == pluginId }) {
+            let layout = plugin.instance as? any PluginSettingsWindowLayoutProviding
+            let settingsView = plugin.supportsSettingsWindow ? plugin.instance.settingsView : nil
+
+            VStack(spacing: 0) {
+                installedPluginHeader(plugin)
+
+                Divider()
+
+                if settingsView == nil || !plugin.isEnabled {
+                    VStack(alignment: .leading, spacing: 0) {
+                        installedPluginRow(plugin)
+                        installedPluginPlaceholder(plugin)
+                    }
+                    .padding(SettingsLayoutMetrics.pagePadding)
+                } else if let settingsView, layout?.settingsViewManagesScrolling == true {
+                    VStack(alignment: .leading, spacing: 0) {
+                        installedPluginRow(plugin)
+                        installedPluginSettings(settingsView)
+                            .frame(maxHeight: .infinity, alignment: .topLeading)
+                    }
+                    .padding(SettingsLayoutMetrics.pagePadding)
+                } else {
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 0) {
+                            installedPluginRow(plugin)
+                            if let settingsView {
+                                installedPluginSettings(settingsView)
                             }
-                        },
-                        onReplace: {
-                            if let registryPlugin = registryService.registry.first(where: { $0.id == plugin.id }) {
-                                startInstall(registryPlugin)
-                            }
-                        },
-                        onUninstall: {
-                            pluginToUninstall = plugin
-                            showUninstallAlert = true
                         }
-                    )
-                    .disabled(registryService.isBulkUpdating)
-                    .background {
-                        integrationGroupedSurface(cornerRadius: 14)
+                        .padding(SettingsLayoutMetrics.pagePadding)
                     }
                 }
             }
+            .task {
+                await registryService.fetchRegistry()
+            }
+        } else {
+            ContentUnavailableView(
+                String(localized: "Integration Unavailable"),
+                systemImage: "puzzlepiece.extension"
+            )
+        }
+    }
 
-            if !pluginManager.incompatibleExternalBundles.isEmpty {
-                ForEach(pluginManager.incompatibleExternalBundles.values.sorted { $0.pluginName < $1.pluginName }, id: \.bundleURL) { bundle in
-                    IncompatibleBundleRow(
-                        bundle: bundle,
-                        onRemove: {
-                            incompatibleBundleToRemove = bundle
-                        }
-                    )
-                        .background {
-                            integrationGroupedSurface(cornerRadius: 14)
-                        }
+    /// Logo, name and badges share one bar with the actions, so the settings start right below.
+    private func installedPluginHeader(_ plugin: LoadedPlugin) -> some View {
+        let registryPlugin = registryService.registry.first(where: { $0.id == plugin.id })
+        let source = integrationSource(for: plugin, registryPlugin: registryPlugin)
+        let hosting = resolvedHosting(for: plugin, registryPlugin: registryPlugin)
+        let categories = categoriesForPlugin(plugin, registryPlugin: registryPlugin)
+
+        return HStack(alignment: .center, spacing: 12) {
+            IntegrationIcon(
+                systemName: registryPlugin?.iconSystemName ?? plugin.manifest.iconSystemName ?? "puzzlepiece.extension",
+                tint: source.tint,
+                imageURL: validatedHTTPSURL(registryPlugin?.iconURL)
+                    ?? validatedHTTPSURL(plugin.manifest.iconURL)
+                    ?? plugin.iconResourceURL,
+                darkImageURL: validatedHTTPSURL(registryPlugin?.iconDarkURL)
+                    ?? validatedHTTPSURL(plugin.manifest.iconDarkURL)
+            )
+
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(plugin.manifest.name)
+                        .font(.title2.weight(.semibold))
+                        .lineLimit(1)
+                    Text(installedPluginSummary(plugin))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
+                // Category badges give way before the name or the actions get cut off.
+                ViewThatFits(in: .horizontal) {
+                    ForEach(Array(stride(from: categories.count, through: 0, by: -1)), id: \.self) { count in
+                        PluginBadgeLine(
+                            source: source,
+                            hosting: hosting,
+                            categories: Array(categories.prefix(count))
+                        )
+                    }
                 }
             }
+            .layoutPriority(1)
 
-            if !availablePlugins.isEmpty {
-                installedDiscoverBanner
+            Spacer(minLength: 16)
+
+            installedPluginActions(plugin)
+                .controlSize(.small)
+        }
+        .padding(.horizontal, SettingsLayoutMetrics.pagePadding)
+        .padding(.vertical, 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background {
+            if #available(macOS 27, *) {
+                Color.clear
+            } else {
+                Rectangle()
+                    .fill(.bar)
             }
         }
-        .task {
-            await registryService.fetchRegistry()
+    }
+
+    /// Fills the page of a plugin that has no settings to show: a disabled plugin gets a
+    /// prominent way to enable it, an enabled one says that there is nothing to configure.
+    private func installedPluginPlaceholder(_ plugin: LoadedPlugin) -> some View {
+        let registryPlugin = registryService.registry.first(where: { $0.id == plugin.id })
+        let restartRequired = registryService.installStates[plugin.id]?.requiresRestart == true
+
+        return VStack(spacing: 14) {
+            Image(systemName: plugin.isEnabled ? "checkmark.circle" : "power.circle")
+                .font(.system(size: 44, weight: .light))
+                .foregroundStyle(.secondary)
+                .accessibilityHidden(true)
+
+            Text(plugin.isEnabled
+                ? localizedAppText("This plugin has no settings.", de: "Dieses Plugin hat keine Einstellungen.", ja: "このプラグインには設定がありません。")
+                : localizedAppText("This plugin is disabled.", de: "Dieses Plugin ist deaktiviert.", ja: "このプラグインは無効です。"))
+                .font(.title3.weight(.semibold))
+
+            if let description = registryPlugin?.localizedDescription {
+                Text(description)
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 460)
+            }
+
+            if !plugin.isEnabled {
+                Button {
+                    PluginManager.shared.setPluginEnabled(plugin.id, enabled: true)
+                } label: {
+                    Text(localizedAppText("Enable", de: "Aktivieren", ja: "有効にする"))
+                        .frame(minWidth: 140)
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+                .keyboardShortcut(.defaultAction)
+                .disabled(restartRequired || registryService.isBulkUpdating)
+                .padding(.top, 4)
+
+                if !plugin.isBundled {
+                    Button(role: .destructive) {
+                        pluginToUninstall = plugin
+                        showUninstallAlert = true
+                    } label: {
+                        Label(String(localized: "Uninstall"), systemImage: "trash")
+                            .frame(minWidth: 140)
+                    }
+                    .controlSize(.large)
+                    .disabled(registryService.isBulkUpdating)
+                }
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func installedPluginSummary(_ plugin: LoadedPlugin) -> String {
+        let version = "v\(plugin.manifest.version)"
+        guard let author = plugin.manifest.author, !author.isEmpty else { return version }
+        return "\(version) · \(author)"
+    }
+
+    /// The buttons keep their titles while there is room, then fall back to icons:
+    /// first the secondary actions, then the engine control as well.
+    private func installedPluginActions(_ plugin: LoadedPlugin) -> some View {
+        ViewThatFits(in: .horizontal) {
+            installedPluginActionRow(plugin, compactSecondary: false, compactEngine: false)
+            installedPluginActionRow(plugin, compactSecondary: true, compactEngine: false)
+            installedPluginActionRow(plugin, compactSecondary: true, compactEngine: true)
+        }
+    }
+
+    private func installedPluginActionRow(
+        _ plugin: LoadedPlugin,
+        compactSecondary: Bool,
+        compactEngine: Bool
+    ) -> some View {
+        let registryPlugin = registryService.registry.first(where: { $0.id == plugin.id })
+        let restartRequired = registryService.installStates[plugin.id]?.requiresRestart == true
+        let detailsURL = validatedExternalURL(pluginDetailURLString(
+            pluginId: plugin.id,
+            registryDetailsURL: registryPlugin?.detailsURL,
+            manifestDetailsURL: plugin.manifest.detailsURL
+        ))
+        let homepageURL = validatedExternalURL(registryPlugin?.homepageURL ?? plugin.manifest.homepageURL)
+
+        let detailsTitle = localizedAppText("Details", de: "Details")
+        let homepageTitle = localizedAppText("Homepage", de: "Homepage")
+        let uninstallTitle = String(localized: "Uninstall")
+
+        return HStack(spacing: 8) {
+            if plugin.isEnabled {
+                installedPluginEngineControl(plugin, compact: compactEngine)
+            }
+
+            if let detailsURL {
+                Button {
+                    NSWorkspace.shared.open(detailsURL)
+                } label: {
+                    installedPluginActionLabel(detailsTitle, systemImage: "arrow.up.right.square", compact: compactSecondary)
+                }
+                .help(detailsTitle)
+            }
+
+            if let homepageURL {
+                Button {
+                    NSWorkspace.shared.open(homepageURL)
+                } label: {
+                    installedPluginActionLabel(homepageTitle, systemImage: "globe", compact: compactSecondary)
+                }
+                .help(homepageTitle)
+            }
+
+            // A disabled plugin offers both in the middle of its page instead.
+            if plugin.isEnabled, !plugin.isBundled {
+                Button(role: .destructive) {
+                    pluginToUninstall = plugin
+                    showUninstallAlert = true
+                } label: {
+                    installedPluginActionLabel(uninstallTitle, systemImage: "trash", compact: compactSecondary)
+                }
+                .help(uninstallTitle)
+            }
+
+            if plugin.isEnabled {
+                Button(localizedAppText("Disable", de: "Deaktivieren", ja: "無効にする")) {
+                    PluginManager.shared.setPluginEnabled(plugin.id, enabled: false)
+                }
+                .disabled(restartRequired)
+            }
+        }
+        .fixedSize()
+        .disabled(registryService.isBulkUpdating)
+    }
+
+    @ViewBuilder
+    private func installedPluginActionLabel(_ title: String, systemImage: String, compact: Bool) -> some View {
+        if compact {
+            Label(title, systemImage: systemImage)
+                .labelStyle(.iconOnly)
+        } else {
+            Label(title, systemImage: systemImage)
+        }
+    }
+
+    /// Lets a transcription plugin become the dictation engine without a detour through
+    /// the dictation settings, and shows when it already is.
+    @ViewBuilder
+    private func installedPluginEngineControl(_ plugin: LoadedPlugin, compact: Bool) -> some View {
+        let providerIds = pluginManager.transcriptionProviderIds(exposedBy: plugin.instance)
+        let activeTitle = localizedAppText("Active engine", de: "Aktive Engine", ja: "使用中のエンジン")
+        let useTitle = localizedAppText("Use as engine", de: "Als Engine verwenden", ja: "エンジンとして使用")
+        if let selectedProviderId = modelManager.selectedProviderId, providerIds.contains(selectedProviderId) {
+            installedPluginActionLabel(activeTitle, systemImage: "checkmark.circle.fill", compact: compact)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.green)
+                .help(activeTitle)
+        } else if let engine = plugin.instance as? any TranscriptionEnginePlugin {
+            Button {
+                modelManager.selectProvider(engine.providerId)
+            } label: {
+                installedPluginActionLabel(useTitle, systemImage: "waveform", compact: compact)
+            }
+            .disabled(!modelManager.canPrepareForTranscription(engine))
+            .help(localizedAppText(
+                "Use this plugin for dictation. Set it up first if the button is disabled.",
+                de: "Dieses Plugin für das Diktat verwenden. Richte es zuerst ein, falls der Button deaktiviert ist.",
+                ja: "このプラグインを音声入力に使用します。ボタンが無効な場合は先に設定してください。"
+            ))
+        }
+    }
+
+    private func installedPluginSettings(_ settingsView: AnyView) -> some View {
+        settingsView
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .background {
+                integrationGroupedSurface(cornerRadius: 14)
+            }
+    }
+
+    @ViewBuilder
+    private var incompatibleBundleRows: some View {
+        ForEach(pluginManager.incompatibleExternalBundles.values.sorted { $0.pluginName < $1.pluginName }, id: \.bundleURL) { bundle in
+            IncompatibleBundleRow(
+                bundle: bundle,
+                onRemove: {
+                    incompatibleBundleToRemove = bundle
+                }
+            )
+            .background {
+                integrationGroupedSurface(cornerRadius: 14)
+            }
         }
     }
 
@@ -1155,62 +1252,6 @@ struct PluginSettingsView: View {
             .labelStyle(.titleAndIcon)
             .font(.caption.weight(.semibold))
             .foregroundStyle(.secondary)
-    }
-
-    private var installedDiscoverBanner: some View {
-        Button {
-            selectedTab = .discover
-        } label: {
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 18) {
-                    installedDiscoverBannerCopy
-
-                    Spacer(minLength: 12)
-
-                    discoverHeroImage(width: 120, height: 82)
-                }
-
-                installedDiscoverBannerCopy
-            }
-            .padding(18)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background {
-                RoundedRectangle(cornerRadius: 16, style: .continuous)
-                    .fill(
-                        LinearGradient(
-                            colors: [
-                                Color(nsColor: .controlBackgroundColor),
-                                Color.blue.opacity(0.10),
-                                Color.purple.opacity(0.12)
-                            ],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16, style: .continuous)
-                            .stroke(Color.blue.opacity(0.22), lineWidth: 1)
-                    )
-            }
-        }
-        .buttonStyle(.plain)
-        .help(localizedAppText("Discover plugins", de: "Plugins entdecken"))
-        .accessibilityLabel(localizedAppText("Discover plugins", de: "Plugins entdecken"))
-    }
-
-    private var installedDiscoverBannerCopy: some View {
-        discoverHeroCopy(
-            title: localizedAppText("Discover new plugins", de: "Neue Plugins entdecken"),
-            subtitle: localizedAppText(
-                "Browse available add-ons and install the next integration directly here.",
-                de: "Durchsuche verfügbare Add-ons und installiere die nächste Integration direkt hier."
-            ),
-            actionTitle: localizedAppText("Discover plugins", de: "Plugins entdecken"),
-            actionSystemImage: "arrow.right",
-            titleFont: .headline.weight(.semibold),
-            subtitleFont: .caption,
-            actionFont: .caption.weight(.semibold)
-        )
     }
 
     private func discoverHeroCopy(
@@ -1466,7 +1507,6 @@ struct PluginSettingsView: View {
     private func startBulkUpdate() {
         guard !registryService.isBulkUpdating, !registryService.hasInstallInProgress else { return }
 
-        selectedTab = .installed
         Task {
             let result = await registryService.updateAllAvailablePlugins()
             if result.shouldRelaunch {
@@ -1486,20 +1526,14 @@ struct PluginSettingsView: View {
 
     @MainActor
     private func completeSuccessfulInstall(pluginId: String, registryPlugin: RegistryPlugin?) {
-        selectedTab = .installed
-
-        let resolvedRegistryPlugin = registryPlugin ?? registryService.registry.first { $0.id == pluginId }
         if registryService.installStates[pluginId]?.requiresRestart == true {
             return
         }
         enableInstalledPluginIfNeeded(pluginId)
 
-        guard let installedPlugin = pluginManager.loadedPlugins.first(where: { $0.id == pluginId }),
-              shouldOpenSettingsAfterInstall(installedPlugin, registryPlugin: resolvedRegistryPlugin) else {
-            return
-        }
+        guard pluginManager.loadedPlugins.contains(where: { $0.id == pluginId }) else { return }
 
-        PluginSettingsWindowManager.shared.present(installedPlugin)
+        SettingsNavigationCoordinator.shared.navigate(to: .installedPlugin(pluginId: pluginId))
     }
 
     @MainActor
@@ -1510,32 +1544,6 @@ struct PluginSettingsView: View {
         }
 
         PluginManager.shared.setPluginEnabled(pluginId, enabled: true)
-    }
-
-    @MainActor
-    private func shouldOpenSettingsAfterInstall(_ plugin: LoadedPlugin, registryPlugin: RegistryPlugin?) -> Bool {
-        guard plugin.supportsSettingsWindow else { return false }
-
-        if registryPlugin?.requiresAPIKey == true || plugin.manifest.requiresAPIKey == true {
-            return true
-        }
-
-        if let engine = plugin.instance as? any TranscriptionEnginePlugin,
-           !engine.isConfigured {
-            return true
-        }
-
-        if let provider = plugin.instance as? any LLMProviderPlugin,
-           !provider.isAvailable {
-            return true
-        }
-
-        if let provider = plugin.instance as? any TTSProviderPlugin,
-           !provider.isConfigured {
-            return true
-        }
-
-        return false
     }
 
     private func openExternalURL(_ urlString: String?) {
@@ -1669,31 +1677,6 @@ private func pluginDetailURLString(
     return nil
 }
 
-private struct HostingSummaryInline: View {
-    let localCount: Int
-    let cloudCount: Int
-
-    var body: some View {
-        HStack(spacing: 8) {
-            Label(localizedAppText("\(localCount) Local", de: "\(localCount) lokal", ja: "\(localCount)件ローカル"), systemImage: "desktopcomputer")
-                .foregroundStyle(.green)
-            Label(localizedAppText("\(cloudCount) Cloud", de: "\(cloudCount) Cloud", ja: "\(cloudCount)件クラウド"), systemImage: "cloud")
-                .foregroundStyle(.cyan)
-        }
-        .font(.caption.weight(.medium))
-        .padding(.horizontal, 10)
-        .padding(.vertical, 7)
-        .background {
-            Capsule(style: .continuous)
-                .fill(Color.black.opacity(0.10))
-        }
-        .overlay {
-            Capsule(style: .continuous)
-                .stroke(Color.white.opacity(0.10), lineWidth: 1)
-        }
-    }
-}
-
 private func integrationGroupedSurface(cornerRadius: CGFloat) -> some View {
     RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
         .fill(Color(nsColor: .controlBackgroundColor))
@@ -1703,7 +1686,7 @@ private func integrationGroupedSurface(cornerRadius: CGFloat) -> some View {
         )
 }
 
-private func validatedExternalURL(_ urlString: String?) -> URL? {
+func validatedExternalURL(_ urlString: String?) -> URL? {
     guard let value = urlString?.trimmingCharacters(in: .whitespacesAndNewlines),
           !value.isEmpty,
           let components = URLComponents(string: value),
@@ -1716,7 +1699,7 @@ private func validatedExternalURL(_ urlString: String?) -> URL? {
     return url
 }
 
-private func validatedHTTPSURL(_ urlString: String?) -> URL? {
+func validatedHTTPSURL(_ urlString: String?) -> URL? {
     guard let url = validatedExternalURL(urlString),
           url.scheme?.lowercased() == "https" else {
         return nil
@@ -1890,7 +1873,7 @@ private struct IntegrationIcon: View {
     }
 }
 
-private extension LoadedPlugin {
+extension LoadedPlugin {
     var iconResourceURL: URL? {
         guard let resourceName = manifest.iconResourceName?.trimmingCharacters(in: .whitespacesAndNewlines),
               !resourceName.isEmpty else {
@@ -1920,18 +1903,16 @@ private extension LoadedPlugin {
     }
 }
 
+/// Update, install, activity and downloaded-model status of an installed plugin.
+/// Takes no space while there is nothing to report.
 private struct InstalledPluginRow: View {
     let plugin: LoadedPlugin
-    let categories: [PluginCategory]
-    let source: IntegrationPluginSource
     let installInfo: PluginInstallInfo
     let installState: PluginRegistryService.InstallState?
     let externalNotice: ExternalBundleNotice?
-    let hosting: PluginHosting
     let registryPlugin: RegistryPlugin?
     let onUpdate: () -> Void
     let onReplace: () -> Void
-    let onUninstall: () -> Void
     @State private var pluginActivity: PluginSettingsActivity?
     @State private var modelsExpanded = false
     @State private var modelPendingDeletion: PluginModelInfo?
@@ -1944,38 +1925,9 @@ private struct InstalledPluginRow: View {
         let models = downloadedModels
 
         VStack(spacing: 0) {
-            HStack(alignment: .top, spacing: 12) {
-                IntegrationIcon(
-                    systemName: registryPlugin?.iconSystemName ?? plugin.manifest.iconSystemName ?? "puzzlepiece.extension",
-                    tint: source.tint,
-                    imageURL: iconURL,
-                    darkImageURL: iconDarkURL
-                )
-
+            if hasStatus(models: models) {
+            VStack(spacing: 0) {
                 VStack(alignment: .leading, spacing: 5) {
-                    HStack(spacing: 6) {
-                        Text(plugin.manifest.name)
-                            .font(.headline)
-                            .lineLimit(1)
-                        Text("v\(plugin.manifest.version)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    PluginBadgeLine(source: source, hosting: hosting, categories: categories)
-
-                    if let description = registryPlugin?.localizedDescription {
-                        Text(description)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    } else if let author = plugin.manifest.author {
-                        Text(author)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                    }
-
                     if !models.isEmpty {
                         Button {
                             modelsExpanded.toggle()
@@ -2003,74 +1955,9 @@ private struct InstalledPluginRow: View {
 
                     pluginActions
                 }
-
-                Spacer(minLength: 12)
-
-                HStack(spacing: 8) {
-                    if plugin.supportsSettingsWindow && !restartRequired {
-                        Button {
-                            PluginSettingsWindowManager.shared.present(plugin)
-                        } label: {
-                            Label(String(localized: "Settings"), systemImage: "gearshape")
-                        }
-                        .buttonStyle(.bordered)
-                        .controlSize(.small)
-                        .accessibilityLabel(String(localized: "Settings for \(plugin.manifest.name)"))
-                    }
-
-                    Toggle("", isOn: Binding(
-                        get: { plugin.isEnabled },
-                        set: { enabled in
-                            PluginManager.shared.setPluginEnabled(plugin.id, enabled: enabled)
-                        }
-                    ))
-                    .labelsHidden()
-                    .disabled(restartRequired)
-                    .accessibilityLabel(String(localized: "Enable \(plugin.manifest.name)"))
-
-                    if hasOverflowActions {
-                        Menu {
-                            if let detailsURL {
-                                Button {
-                                    NSWorkspace.shared.open(detailsURL)
-                                } label: {
-                                    Label(localizedAppText("Details", de: "Details"), systemImage: "arrow.up.right.square")
-                                }
-                            }
-
-                            if let homepageURL {
-                                Button {
-                                    NSWorkspace.shared.open(homepageURL)
-                                } label: {
-                                    Label(localizedAppText("Homepage", de: "Homepage"), systemImage: "globe")
-                                }
-                            }
-
-                            if (detailsURL != nil || homepageURL != nil) && !plugin.isBundled {
-                                Divider()
-                            }
-
-                            if !plugin.isBundled {
-                                Button(role: .destructive) {
-                                    onUninstall()
-                                } label: {
-                                    Label(String(localized: "Uninstall"), systemImage: "trash")
-                                }
-                            }
-                        } label: {
-                            Image(systemName: "ellipsis")
-                                .font(.system(size: 13, weight: .semibold))
-                                .frame(width: 26, height: 24)
-                        }
-                        .menuStyle(.borderlessButton)
-                        .fixedSize()
-                        .help(localizedAppText("More Actions", de: "Weitere Aktionen"))
-                        .accessibilityLabel(localizedAppText("More Actions for \(plugin.manifest.name)", de: "Weitere Aktionen für \(plugin.manifest.name)", ja: "\(plugin.manifest.name)のその他の操作"))
-                    }
-                }
-            }
-            .padding(.horizontal, 14)
-            .padding(.vertical, 10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 14)
+                .padding(.vertical, 10)
 
             if modelsExpanded && !models.isEmpty {
                 VStack(spacing: 0) {
@@ -2086,11 +1973,17 @@ private struct InstalledPluginRow: View {
 
                         if index < models.count - 1 {
                             Divider()
-                                .padding(.leading, 96)
+                                .padding(.leading, 57)
                         }
                     }
                 }
                 .padding(.bottom, 8)
+            }
+            }
+            .background {
+                integrationGroupedSurface(cornerRadius: 14)
+            }
+            .padding(.bottom, SettingsLayoutMetrics.sectionSpacing)
             }
         }
         .onAppear {
@@ -2176,35 +2069,12 @@ private struct InstalledPluginRow: View {
         )
     }
 
-    private var detailsURL: URL? {
-        validatedExternalURL(pluginDetailURLString(
-            pluginId: plugin.id,
-            registryDetailsURL: registryPlugin?.detailsURL,
-            manifestDetailsURL: plugin.manifest.detailsURL
-        ))
-    }
-
-    private var homepageURL: URL? {
-        validatedExternalURL(registryPlugin?.homepageURL ?? plugin.manifest.homepageURL)
-    }
-
-    private var iconURL: URL? {
-        validatedHTTPSURL(registryPlugin?.iconURL)
-            ?? validatedHTTPSURL(plugin.manifest.iconURL)
-            ?? plugin.iconResourceURL
-    }
-
-    private var iconDarkURL: URL? {
-        validatedHTTPSURL(registryPlugin?.iconDarkURL)
-            ?? validatedHTTPSURL(plugin.manifest.iconDarkURL)
-    }
-
-    private var hasOverflowActions: Bool {
-        detailsURL != nil || homepageURL != nil || !plugin.isBundled
-    }
-
-    private var restartRequired: Bool {
-        installState?.requiresRestart == true
+    private func hasStatus(models: [PluginModelInfo]) -> Bool {
+        if !models.isEmpty || externalNotice != nil || installState != nil || pluginActivity != nil {
+            return true
+        }
+        if case .updateAvailable = installInfo { return true }
+        return canReplaceIncompatibleExternalBundle
     }
 
     private func downloadedModelCountTitle(_ count: Int) -> String {
@@ -2293,7 +2163,7 @@ private struct DownloadedPluginModelRow: View {
                 .accessibilityLabel(String(localized: "Remove \(model.displayName)"))
             }
         }
-        .padding(.leading, 62)
+        .padding(.leading, 29)
         .padding(.trailing, 14)
         .padding(.vertical, 7)
     }

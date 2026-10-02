@@ -189,10 +189,11 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, @
 
     func openPluginSettings() {
         DispatchQueue.main.async { [pluginId] in
-            guard let plugin = PluginManager.shared?.loadedPlugins.first(where: {
+            guard PluginManager.shared?.loadedPlugins.contains(where: {
                 $0.id == pluginId && $0.isEnabled && $0.isRuntimeLoaded
-            }) else { return }
-            PluginSettingsWindowManager.shared.present(plugin)
+            }) == true else { return }
+            SettingsNavigationCoordinator.shared.navigate(to: .installedPlugin(pluginId: pluginId))
+            ManagedAppWindowOpener.shared.open(id: "settings")
         }
     }
 

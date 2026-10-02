@@ -139,7 +139,6 @@ enum UserDefaultsKeys {
 
     // MARK: - Plugin Registry
     static let pluginRegistryLastFetch = "pluginRegistryLastFetch"
-    static let selectedIntegrationTab = "selectedIntegrationTab"
     static let improveTypeWhisperCaptureEnabled = "plugin.com.typewhisper.improve.collectCorrections"
 
     // MARK: - Recorder
