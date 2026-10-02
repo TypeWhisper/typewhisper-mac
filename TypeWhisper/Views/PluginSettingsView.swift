@@ -743,11 +743,6 @@ struct PluginSettingsView: View {
                 registryPlugin: registryPlugin
             ),
             registryPlugin: registryPlugin,
-            onUpdate: {
-                if let registryPlugin = registryService.registry.first(where: { $0.id == plugin.id }) {
-                    startInstall(registryPlugin)
-                }
-            },
             onReplace: {
                 if let registryPlugin = registryService.registry.first(where: { $0.id == plugin.id }) {
                     startInstall(registryPlugin)
@@ -953,6 +948,15 @@ struct PluginSettingsView: View {
         let uninstallTitle = String(localized: "Uninstall")
 
         return HStack(spacing: 8) {
+            if installedPluginOffersUpdate(plugin, registryPlugin: registryPlugin) {
+                Button {
+                    if let registryPlugin { startInstall(registryPlugin) }
+                } label: {
+                    Label(String(localized: "Update"), systemImage: "arrow.down.circle")
+                }
+                .buttonStyle(.borderedProminent)
+            }
+
             if plugin.isEnabled {
                 installedPluginEngineControl(plugin, compact: compactEngine)
             }
@@ -995,6 +999,20 @@ struct PluginSettingsView: View {
         }
         .fixedSize()
         .disabled(registryService.isBulkUpdating)
+    }
+
+    /// True while an update waits and nothing else, such as a running install or
+    /// the replacement of an incompatible bundle, takes its place.
+    private func installedPluginOffersUpdate(_ plugin: LoadedPlugin, registryPlugin: RegistryPlugin?) -> Bool {
+        let installInfo = registryService.installInfo(for: plugin.id)
+        let installState = registryService.installStates[plugin.id]
+        guard case .updateAvailable = installInfo, installState == nil else { return false }
+        return !PluginRegistryService.canReplaceIncompatibleExternalBundle(
+            registryPlugin: registryPlugin,
+            installInfo: installInfo,
+            installState: installState,
+            externalNotice: pluginManager.externalBundleNotice(for: plugin.id, registryPlugin: registryPlugin)
+        )
     }
 
     @ViewBuilder
@@ -1911,7 +1929,6 @@ private struct InstalledPluginRow: View {
     let installState: PluginRegistryService.InstallState?
     let externalNotice: ExternalBundleNotice?
     let registryPlugin: RegistryPlugin?
-    let onUpdate: () -> Void
     let onReplace: () -> Void
     @State private var pluginActivity: PluginSettingsActivity?
     @State private var modelsExpanded = false
@@ -2046,14 +2063,8 @@ private struct InstalledPluginRow: View {
             .buttonStyle(.bordered)
             .controlSize(.small)
             .accessibilityLabel(String(localized: "Replace \(plugin.manifest.name) with the Marketplace version"))
-        } else if case .updateAvailable = installInfo {
-            Button {
-                onUpdate()
-            } label: {
-                Label(String(localized: "Update"), systemImage: "arrow.down.circle")
-            }
-            .controlSize(.small)
         } else {
+            // An available update is offered in the page header.
             if let pluginActivity {
                 PluginSettingsActivityView(activity: pluginActivity)
             }
@@ -2073,7 +2084,6 @@ private struct InstalledPluginRow: View {
         if !models.isEmpty || externalNotice != nil || installState != nil || pluginActivity != nil {
             return true
         }
-        if case .updateAvailable = installInfo { return true }
         return canReplaceIncompatibleExternalBundle
     }
 
