@@ -245,6 +245,9 @@ final class DictationViewModel: ObservableObject {
             refreshCancellationAvailability()
             updateSubmitOnEnterAvailability()
             clearCancelWarningIfStateNoLongerMatches()
+            if state != .recording, state != .processing {
+                modelManager.endDictationModelPrewarm()
+            }
         }
     }
     @Published var audioLevel: Float = 0
@@ -2043,6 +2046,11 @@ final class DictationViewModel: ObservableObject {
                 || externalStreamingDisplayCount > 0
         )
         refreshIncrementalWorkflowPostProcessing(forceRestart: true)
+        // A pending website workflow can still switch the engine; the URL resolution
+        // prewarms once the workflow is settled.
+        if !hiddenLiveSessionAwaitsWebsiteWorkflow {
+            prewarmDictationModel()
+        }
         scheduleDeferredRecordingMetadataCapture(
             sessionID: sessionID,
             activeApp: activeApp,
@@ -2144,6 +2152,7 @@ final class DictationViewModel: ObservableObject {
 
             guard let resolvedURL else {
                 logger.info("URL resolution: no URL resolved")
+                prewarmDictationModel()
                 if hiddenLiveSessionWasDeferred, refreshLiveStreamingIfParamsChanged() {
                     refreshIncrementalWorkflowPostProcessing(forceRestart: true)
                 }
@@ -2153,11 +2162,13 @@ final class DictationViewModel: ObservableObject {
             if let workflowMatch = workflowService.matchWorkflow(bundleIdentifier: bundleId, url: resolvedURL) {
                 logger.info("URL resolution: matched workflow '\(workflowMatch.workflow.name)'")
                 applyWorkflowMatch(workflowMatch, activeApp: capturedActiveApp)
+                prewarmDictationModel()
                 let restartedLiveStreaming = refreshLiveStreamingIfParamsChanged()
                 refreshIncrementalWorkflowPostProcessing(forceRestart: restartedLiveStreaming)
                 return resolvedURL
             }
 
+            prewarmDictationModel()
             // The URL can change the resolved output format of the current workflow.
             let startedDeferredLiveSession = hiddenLiveSessionWasDeferred
                 && refreshLiveStreamingIfParamsChanged()
@@ -2280,6 +2291,13 @@ final class DictationViewModel: ObservableObject {
             logger.warning("Live replay did not finish, using batch transcription: \(error.localizedDescription, privacy: .public)")
             return nil
         }
+    }
+
+    private func prewarmDictationModel() {
+        modelManager.beginDictationModelPrewarm(
+            engineOverrideId: effectiveEngineOverrideId,
+            cloudModelOverride: effectiveCloudModelOverride
+        )
     }
 
     private func hasApplicableWebsiteWorkflow(bundleIdentifier: String?) -> Bool {
