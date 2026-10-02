@@ -855,6 +855,7 @@ final class TargetAppCorrectionLearningServiceTests: XCTestCase {
             selectedRange: NSRange(location: 19, length: 0)
         )
 
+        var dictionaryStorageFails = false
         func trackCommittedCorrection() async -> TargetAppCorrectionLearningResult {
             let commitEmitter = CommitEmitterBox()
             var sleepCount = 0
@@ -871,6 +872,11 @@ final class TargetAppCorrectionLearningServiceTests: XCTestCase {
                     }
                 },
                 makeCommitObserver: commitObserver(capturing: commitEmitter),
+                learnCorrections: { suggestions in
+                    dictionaryStorageFails
+                        ? DictionaryCorrectionLearningResult(learnedCorrections: [], duplicateCount: 0, failed: true)
+                        : dictionaryService.learnCorrectionsWithResult(suggestions)
+                },
                 defaults: defaults,
                 persistLatestAttempt: true
             )
@@ -891,6 +897,13 @@ final class TargetAppCorrectionLearningServiceTests: XCTestCase {
         let second = await trackCommittedCorrection()
         XCTAssertEqual(second.snapshot.outcome, .awaitingRepeat)
         XCTAssertEqual(dictionaryService.correctionsCount, 0)
+
+        // A failed dictionary write must not reset the count.
+        dictionaryStorageFails = true
+        let failed = await trackCommittedCorrection()
+        XCTAssertEqual(failed.snapshot.outcome, .failed)
+        XCTAssertEqual(dictionaryService.correctionsCount, 0)
+        dictionaryStorageFails = false
 
         let third = await trackCommittedCorrection()
         XCTAssertEqual(third.snapshot.outcome, .learned)

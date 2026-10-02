@@ -41251,7 +41251,7 @@
         "en" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "With a higher count, a correction is only saved to the Dictionary once you have made the same one that often within 30 days. One-off edits are ignored."
+            "value" : "With a higher count, a correction is only saved to the Dictionary after you have made the same correction that many times within 30 days. One-off edits are ignored."
           }
         },
         "ja" : {

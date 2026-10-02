@@ -461,6 +461,9 @@ final class TargetAppCorrectionLearningService: ObservableObject {
         }
 
         let dictionaryResult = learnCorrections(suggestions)
+        if !dictionaryResult.failed {
+            clearObservations(of: suggestions)
+        }
         let outcome: TargetAppCorrectionLearningOutcome
         if dictionaryResult.failed {
             outcome = .failed
@@ -517,19 +520,24 @@ final class TargetAppCorrectionLearningService: ObservableObject {
         let expiry = timestamp.addingTimeInterval(-Self.pendingObservationLifetime)
         pendingObservations = pendingObservations.filter { $0.value.lastSeen >= expiry }
 
+        // The count stays until the dictionary accepted the correction, so a failed
+        // write does not send the user back to the start.
         let key = Self.pendingObservationKey(for: suggestion)
         let count = (pendingObservations[key]?.count ?? 0) + 1
-        if count >= requiredObservations {
-            pendingObservations[key] = nil
-        } else {
-            pendingObservations[key] = PendingCorrectionObservation(count: count, lastSeen: timestamp)
-            if pendingObservations.count > Self.maxPendingObservations,
-               let oldest = pendingObservations.min(by: { $0.value.lastSeen < $1.value.lastSeen }) {
-                pendingObservations[oldest.key] = nil
-            }
+        pendingObservations[key] = PendingCorrectionObservation(count: count, lastSeen: timestamp)
+        if pendingObservations.count > Self.maxPendingObservations,
+           let oldest = pendingObservations.min(by: { $0.value.lastSeen < $1.value.lastSeen }) {
+            pendingObservations[oldest.key] = nil
         }
         persistPendingObservations()
         return count >= requiredObservations
+    }
+
+    private func clearObservations(of suggestions: [CorrectionSuggestion]) {
+        let keys = suggestions.map(Self.pendingObservationKey(for:))
+        guard keys.contains(where: { pendingObservations[$0] != nil }) else { return }
+        keys.forEach { pendingObservations[$0] = nil }
+        persistPendingObservations()
     }
 
     private static func pendingObservationKey(for suggestion: CorrectionSuggestion) -> String {
