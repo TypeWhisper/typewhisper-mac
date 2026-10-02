@@ -955,6 +955,7 @@ struct PluginSettingsView: View {
                     Label(String(localized: "Update"), systemImage: "arrow.down.circle")
                 }
                 .buttonStyle(.borderedProminent)
+                .accessibilityLabel(String(localized: "Update \(plugin.manifest.name)"))
             }
 
             if plugin.isEnabled {
