@@ -911,11 +911,17 @@ private struct CohereLocalSettingsView: View {
                     refresh()
                 }
             }
-        } message: { _ in
-            Text(
-                "This removes the selected Cohere model. Shared runtime files remain while another variant is installed.",
-                bundle: bundle
-            )
+        } message: { modelId in
+            let modelName = CohereLocalPlugin.model(for: modelId).map {
+                CohereLocalPlugin.localizedString($0.displayName, bundle: bundle)
+            } ?? modelId
+            Text(String.localizedStringWithFormat(
+                String(
+                    localized: "This removes %@. Shared runtime files remain while another variant is installed.",
+                    bundle: bundle
+                ),
+                modelName
+            ))
         }
     }
 

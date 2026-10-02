@@ -1025,18 +1025,18 @@
         }
       }
     },
-    "This removes the selected Cohere model. Shared runtime files remain while another variant is installed.": {
+    "This removes %@. Shared runtime files remain while another variant is installed.": {
       "localizations": {
         "de": {
           "stringUnit": {
             "state": "translated",
-            "value": "Dadurch wird das ausgewählte Cohere-Modell entfernt. Gemeinsam genutzte Laufzeitdateien bleiben erhalten, solange eine andere Variante installiert ist."
+            "value": "Dadurch wird %@ entfernt. Gemeinsam genutzte Laufzeitdateien bleiben erhalten, solange eine andere Variante installiert ist."
           }
         },
         "zh-Hans": {
           "stringUnit": {
             "state": "translated",
-            "value": "这将移除选定的 Cohere 模型。如果安装了其他变体，共享运行时文件将保留。"
+            "value": "这将移除 %@。如果安装了其他变体，共享运行时文件将保留。"
           }
         }
       }
