@@ -1558,7 +1558,7 @@ private struct WhisperKitSettingsView: View {
             }
         } else {
             HStack(spacing: 8) {
-                if isDownloaded, modelDef.id == onDemandModelId {
+                if isDownloaded, modelDef.id == onDemandModelId, modelState == .notLoaded {
                     PluginModelLoadsOnDemandStatus(bundle: bundle)
                 } else {
                     Button(

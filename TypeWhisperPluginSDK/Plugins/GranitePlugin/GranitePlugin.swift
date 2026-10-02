@@ -917,7 +917,7 @@ private struct GraniteSettingsView: View {
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                 }
-            } else if modelDef.id == onDemandModelId {
+            } else if modelDef.id == onDemandModelId, modelState == .notLoaded {
                 PluginModelLoadsOnDemandStatus(bundle: bundle)
             } else {
                 Button(modelDef.id.hasPrefix("custom-") ? String(localized: "Load", bundle: bundle) : String(localized: "Download & Load", bundle: bundle)) {

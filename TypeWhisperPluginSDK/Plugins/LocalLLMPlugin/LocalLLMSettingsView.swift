@@ -261,7 +261,7 @@ struct LocalLLMSettingsView: View {
                 .controlSize(.small)
             } else if isDownloaded || hasCachedModelFiles {
                 HStack(spacing: 8) {
-                    if isDownloaded, modelDef.id == plugin.modelIdLoadedOnDemand {
+                    if isDownloaded, modelDef.id == plugin.modelIdLoadedOnDemand, modelState == .notLoaded {
                         PluginModelLoadsOnDemandStatus(bundle: bundle)
                     } else {
                         Button(
