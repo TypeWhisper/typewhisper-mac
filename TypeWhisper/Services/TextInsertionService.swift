@@ -418,6 +418,11 @@ final class TextInsertionService {
         let selectedText: String?
         let selectedRange: NSRange?
 
+        /// False when the element exposes none of its text attributes.
+        var hasReadableText: Bool {
+            value != nil || selectedText != nil || selectedRange != nil
+        }
+
         static func == (lhs: FocusedTextState, rhs: FocusedTextState) -> Bool {
             lhs.element == rhs.element &&
             lhs.value == rhs.value &&
@@ -1270,9 +1275,9 @@ final class TextInsertionService {
         if canRestoreClipboard(afterPasteUsing: state) {
             return .verified
         }
-        // A field that stopped being readable is not proof that the paste missed it.
-        guard let initialState = state.focusedTextState,
-              captureFocusedTextState(for: initialState.element) != nil else {
+        // Only a field readable before and after the paste proves that the paste missed it.
+        guard let initialState = state.focusedTextState, initialState.hasReadableText,
+              captureFocusedTextState(for: initialState.element)?.hasReadableText == true else {
             return .unverified(.focusedTextStateUnavailable)
         }
         return .unverified(.focusedTextUnchanged)

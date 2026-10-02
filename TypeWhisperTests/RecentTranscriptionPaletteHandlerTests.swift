@@ -192,12 +192,13 @@ final class RecentTranscriptionPaletteHandlerTests: XCTestCase {
     }
 
     func testInsertLatestReportsInsertionOnlyWhenFocusedTextChangesOrIsUnreadable() async throws {
-        enum FocusedField { case changesOnPaste, staysUnchanged, unreadable, unreadableAfterPaste }
+        enum FocusedField { case changesOnPaste, staysUnchanged, unreadable, unreadableAfterPaste, exposesNoText }
         let cases: [(FocusedField, String, String)] = [
             (.changesOnPaste, "Text inserted", "checkmark.circle.fill"),
             (.staysUnchanged, "Text may not have been inserted", "exclamationmark.circle.fill"),
             (.unreadable, "Text inserted", "checkmark.circle.fill"),
             (.unreadableAfterPaste, "Text inserted", "checkmark.circle.fill"),
+            (.exposesNoText, "Text inserted", "checkmark.circle.fill"),
         ]
 
         for (field, expectedKey, expectedIcon) in cases {
@@ -220,6 +221,9 @@ final class RecentTranscriptionPaletteHandlerTests: XCTestCase {
                 }
                 if field == .unreadableAfterPaste, pasteCount > 0 {
                     return nil
+                }
+                if field == .exposesNoText {
+                    return (value: nil, selectedText: nil, selectedRange: nil)
                 }
                 return (value: "", selectedText: nil, selectedRange: NSRange(location: 0, length: 0))
             }
