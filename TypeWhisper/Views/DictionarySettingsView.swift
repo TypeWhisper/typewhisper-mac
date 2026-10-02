@@ -41,6 +41,8 @@ struct DictionarySettingsView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        // Coming back to the page later starts on the page itself.
+        .onDisappear { settingsNavigation.dictionaryPart = .dictionary }
     }
 
     private var dictionaryPart: some View {

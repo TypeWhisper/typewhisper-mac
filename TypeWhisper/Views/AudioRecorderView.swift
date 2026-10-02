@@ -338,6 +338,8 @@ struct AudioRecorderView: View {
             }
         }
         .frame(minWidth: 500, minHeight: 400)
+        // Coming back to the page later starts on the page itself.
+        .onDisappear { settingsNavigation.recorderPart = .recorder }
         .onAppear {
             viewModel.loadRecordingsIfNeeded()
         }

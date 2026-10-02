@@ -91,6 +91,8 @@ struct HistorySettingsView: View {
             .formStyle(.grouped)
             }
         }
+        // Coming back to the page later starts on the page itself.
+        .onDisappear { settingsNavigation.historyPart = .history }
         .confirmationDialog(
             String(localized: "Sync History & Inbox?"),
             isPresented: $confirmingHistorySync,
