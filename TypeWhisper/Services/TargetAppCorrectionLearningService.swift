@@ -1,5 +1,6 @@
 import AppKit
 import Combine
+import CryptoKit
 import Foundation
 
 enum TargetAppCorrectionCommitSignal: String, Codable, Equatable, Sendable {
@@ -37,6 +38,7 @@ enum TargetAppCorrectionLearningOutcome: String, Codable, Equatable, Sendable {
     case ambiguousEdit
     case noCommitBeforeTimeout
     case duplicateCorrection
+    case awaitingRepeat
     case cancelled
     case failed
 }
@@ -211,9 +213,20 @@ private final class TargetAppCorrectionWakeCoordinator: @unchecked Sendable {
     }
 }
 
+/// How often a correction was seen while corrections are only learned after repeats.
+/// Keyed by a digest, so the corrected words themselves are never stored.
+private struct PendingCorrectionObservation: Codable, Equatable {
+    var count: Int
+    var lastSeen: Date
+}
+
 @MainActor
 final class TargetAppCorrectionLearningService: ObservableObject {
     private static let defaultPollSchedule: [Duration] = (1...30).map { .seconds($0) }
+    /// Choices offered for how often the same correction must be made before it is learned.
+    static let requiredObservationChoices = [1, 2, 3, 5]
+    private static let pendingObservationLifetime: TimeInterval = 30 * 24 * 60 * 60
+    private static let maxPendingObservations = 500
 
     private let textInsertionService: TextInsertionService
     private let textDiffService: TextDiffService
@@ -225,6 +238,7 @@ final class TargetAppCorrectionLearningService: ObservableObject {
     private let shouldPersistLatestAttempt: Bool
     private let now: @MainActor () -> Date
     private var activeAttemptID: UUID?
+    private var pendingObservations: [String: PendingCorrectionObservation]
 
     @Published private(set) var latestAttempt: TargetAppCorrectionLearningAttemptSnapshot?
 
@@ -255,6 +269,7 @@ final class TargetAppCorrectionLearningService: ObservableObject {
         self.defaults = defaults
         self.shouldPersistLatestAttempt = persistLatestAttempt
         self.now = now
+        self.pendingObservations = Self.loadPendingObservations(from: defaults)
         self.latestAttempt = Self.loadLatestAttempt(from: defaults)
     }
 
@@ -435,6 +450,16 @@ final class TargetAppCorrectionLearningService: ObservableObject {
             )
         }
 
+        let suggestions = suggestions.filter(hasEnoughObservations)
+        guard !suggestions.isEmpty else {
+            return completeAttempt(
+                id: id,
+                outcome: .awaitingRepeat,
+                commitSignal: commitSignal,
+                correctionObservation: correctionObservation
+            )
+        }
+
         let dictionaryResult = learnCorrections(suggestions)
         let outcome: TargetAppCorrectionLearningOutcome
         if dictionaryResult.failed {
@@ -478,6 +503,51 @@ final class TargetAppCorrectionLearningService: ObservableObject {
             learnedCorrections: learnedCorrections,
             correctionObservation: correctionObservation
         )
+    }
+
+    /// A correction is held back until the same edit was committed as often as the user
+    /// asked for; with the default of one, every confident correction is learned right away.
+    private func hasEnoughObservations(_ suggestion: CorrectionSuggestion) -> Bool {
+        let requiredObservations = defaults.integer(
+            forKey: UserDefaultsKeys.targetAppCorrectionLearningRequiredObservations
+        )
+        guard requiredObservations > 1 else { return true }
+
+        let timestamp = now()
+        let expiry = timestamp.addingTimeInterval(-Self.pendingObservationLifetime)
+        pendingObservations = pendingObservations.filter { $0.value.lastSeen >= expiry }
+
+        let key = Self.pendingObservationKey(for: suggestion)
+        let count = (pendingObservations[key]?.count ?? 0) + 1
+        if count >= requiredObservations {
+            pendingObservations[key] = nil
+        } else {
+            pendingObservations[key] = PendingCorrectionObservation(count: count, lastSeen: timestamp)
+            if pendingObservations.count > Self.maxPendingObservations,
+               let oldest = pendingObservations.min(by: { $0.value.lastSeen < $1.value.lastSeen }) {
+                pendingObservations[oldest.key] = nil
+            }
+        }
+        persistPendingObservations()
+        return count >= requiredObservations
+    }
+
+    private static func pendingObservationKey(for suggestion: CorrectionSuggestion) -> String {
+        let identity = suggestion.original.lowercased() + "\u{1F}" + suggestion.replacement
+        return SHA256.hash(data: Data(identity.utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+
+    private func persistPendingObservations() {
+        guard shouldPersistLatestAttempt else { return }
+        guard let data = try? JSONEncoder().encode(pendingObservations) else { return }
+        defaults.set(data, forKey: UserDefaultsKeys.targetAppCorrectionLearningPendingObservations)
+    }
+
+    private static func loadPendingObservations(from defaults: UserDefaults) -> [String: PendingCorrectionObservation] {
+        guard let data = defaults.data(forKey: UserDefaultsKeys.targetAppCorrectionLearningPendingObservations) else {
+            return [:]
+        }
+        return (try? JSONDecoder().decode([String: PendingCorrectionObservation].self, from: data)) ?? [:]
     }
 
     private func persistLatestAttempt(_ snapshot: TargetAppCorrectionLearningAttemptSnapshot) {

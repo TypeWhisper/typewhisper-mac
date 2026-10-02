@@ -41156,6 +41156,118 @@
         }
       }
     },
+    "premium.window.learning.repeatCount.label" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Korrektur speichern"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Save a correction"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "修正を保存するタイミング"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存修正的时机"
+          }
+        }
+      }
+    },
+    "premium.window.learning.repeatCount.immediately" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sofort"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Immediately"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "すぐに"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "立即"
+          }
+        }
+      }
+    },
+    "premium.window.learning.repeatCount.afterFormat" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nach %lld Korrekturen"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "After %lld corrections"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "%lld回修正した後"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "修正 %lld 次后"
+          }
+        }
+      }
+    },
+    "premium.window.learning.repeatCount.help" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bei einer höheren Anzahl wird eine Korrektur erst im Wörterbuch gespeichert, wenn du dieselbe innerhalb von 30 Tagen so oft vorgenommen hast. Einmalige Änderungen werden ignoriert."
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "With a higher count, a correction is only saved to the Dictionary once you have made the same one that often within 30 days. One-off edits are ignored."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "回数を増やすと、同じ修正を30日以内にその回数行ったときにだけ辞書へ保存されます。1回限りの編集は無視されます。"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "次数设得更高时，只有在 30 天内做了相同次数的同一修正，才会保存到词典。一次性的编辑会被忽略。"
+          }
+        }
+      }
+    },
     "premium.window.learning.noActivity" : {
       "localizations" : {
         "de" : {
@@ -41404,6 +41516,34 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "修正已存在"
+          }
+        }
+      }
+    },
+    "premium.window.learning.outcome.awaitingRepeat" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Korrektur vorgemerkt, wird bei Wiederholung gespeichert"
+          }
+        },
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Correction noted, saved when repeated"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "修正を記録しました。繰り返されると保存されます"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已记录修正，再次出现时保存"
           }
         }
       }

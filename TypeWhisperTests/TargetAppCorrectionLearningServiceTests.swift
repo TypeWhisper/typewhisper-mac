@@ -831,6 +831,74 @@ final class TargetAppCorrectionLearningServiceTests: XCTestCase {
         XCTAssertEqual(dictionaryService.correctionsCount, 1)
     }
 
+    func testRepeatRequirementLearnsCorrectionOnceItWasMadeOftenEnough() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        let suiteName = "TargetAppCorrectionLearningServiceTests.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+            return XCTFail("Could not create isolated defaults")
+        }
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set(3, forKey: UserDefaultsKeys.targetAppCorrectionLearningRequiredObservations)
+
+        let element = AXUIElementCreateSystemWide()
+        let textInsertionService = TextInsertionService()
+        textInsertionService.focusedTextElementOverride = { element }
+        textInsertionService.focusedTextStateOverride = { _ in
+            (value: "Please use the word", selectedText: nil, selectedRange: NSRange(location: 19, length: 0))
+        }
+        let dictionaryService = DictionaryService(appSupportDirectory: appSupportDirectory)
+        let baseline = TextInsertionService.FocusedTextObservation(
+            element: element,
+            value: "Please use teh word",
+            selectedText: nil,
+            selectedRange: NSRange(location: 19, length: 0)
+        )
+
+        func trackCommittedCorrection() async -> TargetAppCorrectionLearningResult {
+            let commitEmitter = CommitEmitterBox()
+            var sleepCount = 0
+            // A new service per dictation also proves the count survives a relaunch.
+            let service = TargetAppCorrectionLearningService(
+                textInsertionService: textInsertionService,
+                textDiffService: TextDiffService(),
+                dictionaryService: dictionaryService,
+                pollSchedule: [.milliseconds(0), .milliseconds(0)],
+                sleep: { _ in
+                    sleepCount += 1
+                    if sleepCount == 2 {
+                        commitEmitter.emit(.returnKey)
+                    }
+                },
+                makeCommitObserver: commitObserver(capturing: commitEmitter),
+                defaults: defaults,
+                persistLatestAttempt: true
+            )
+            return await service.trackInsertion(insertedText: "teh", baseline: baseline)
+        }
+
+        let first = await trackCommittedCorrection()
+        XCTAssertEqual(first.snapshot.outcome, .awaitingRepeat)
+        XCTAssertTrue(first.learnedCorrections.isEmpty)
+        XCTAssertEqual(dictionaryService.correctionsCount, 0)
+
+        let pendingData = try XCTUnwrap(defaults.data(
+            forKey: UserDefaultsKeys.targetAppCorrectionLearningPendingObservations
+        ))
+        let pendingJSON = try XCTUnwrap(String(data: pendingData, encoding: .utf8))
+        XCTAssertFalse(pendingJSON.contains("teh"))
+
+        let second = await trackCommittedCorrection()
+        XCTAssertEqual(second.snapshot.outcome, .awaitingRepeat)
+        XCTAssertEqual(dictionaryService.correctionsCount, 0)
+
+        let third = await trackCommittedCorrection()
+        XCTAssertEqual(third.snapshot.outcome, .learned)
+        XCTAssertEqual(third.learnedCorrections.first?.original, "teh")
+        XCTAssertEqual(third.learnedCorrections.first?.replacement, "the")
+        XCTAssertEqual(dictionaryService.correctionsCount, 1)
+    }
+
     func testCancelsStaleTrackingBeforeLearning() async throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }

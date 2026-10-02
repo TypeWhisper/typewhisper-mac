@@ -149,6 +149,26 @@ final class TextDiffServiceTests: XCTestCase {
         XCTAssertEqual(suggestions.first?.replacement, "the")
     }
 
+    func testExtractionSkipsNumberToNumberEdits() {
+        let service = TextDiffService()
+
+        XCTAssertTrue(service.extractHighConfidenceCorrections(
+            original: "accuracy was 90% today",
+            edited: "accuracy was 95% today"
+        ).isEmpty)
+        XCTAssertTrue(service.extractCorrections(
+            original: "accuracy was 90% today",
+            edited: "accuracy was 95% today"
+        ).isEmpty)
+
+        let suggestions = service.extractHighConfidenceCorrections(
+            original: "deploy to Kates now",
+            edited: "deploy to K8s now"
+        )
+        XCTAssertEqual(suggestions.first?.original, "Kates")
+        XCTAssertEqual(suggestions.first?.replacement, "K8s")
+    }
+
     func testHighConfidenceExtractionSkipsAmbiguousAndLowSignalEdits() {
         let service = TextDiffService()
 

@@ -90,6 +90,8 @@ enum UserDefaultsKeys {
     static let selectedIndustryPreset = "selectedIndustryPreset"
     static let targetAppCorrectionLearningEnabled = "targetAppCorrectionLearningEnabled"
     static let targetAppCorrectionLearningLatestAttempt = "targetAppCorrectionLearningLatestAttempt"
+    static let targetAppCorrectionLearningRequiredObservations = "targetAppCorrectionLearningRequiredObservations"
+    static let targetAppCorrectionLearningPendingObservations = "targetAppCorrectionLearningPendingObservations"
 
     // MARK: - Calendar Meeting Automation (machine-local; intentionally not synced/exported)
     static let calendarMeetingStartMode = "calendarMeetingStartMode"

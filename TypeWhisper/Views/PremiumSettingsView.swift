@@ -263,6 +263,7 @@ struct PremiumCorrectionLearningSettingsView: View {
     @ObservedObject private var license: LicenseService
     @ObservedObject private var correctionLearningService: TargetAppCorrectionLearningService
     @AppStorage(UserDefaultsKeys.targetAppCorrectionLearningEnabled) private var learningEnabled = false
+    @AppStorage(UserDefaultsKeys.targetAppCorrectionLearningRequiredObservations) private var requiredObservations = 1
 
     private let onManageAccess: () -> Void
 
@@ -310,6 +311,30 @@ struct PremiumCorrectionLearningSettingsView: View {
                     .accessibilityIdentifier("premium.learning.enabled")
 
                     Text(String(localized: "premium.window.learning.help"))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+
+                    Divider()
+
+                    Picker(
+                        String(localized: "premium.window.learning.repeatCount.label"),
+                        selection: $requiredObservations
+                    ) {
+                        ForEach(TargetAppCorrectionLearningService.requiredObservationChoices, id: \.self) { count in
+                            Text(count == 1
+                                ? String(localized: "premium.window.learning.repeatCount.immediately")
+                                : String.localizedStringWithFormat(
+                                    String(localized: "premium.window.learning.repeatCount.afterFormat"),
+                                    count
+                                ))
+                                .tag(count)
+                        }
+                    }
+                    .fixedSize()
+                    .disabled(!learningEnabled)
+                    .accessibilityIdentifier("premium.learning.repeatCount")
+
+                    Text(String(localized: "premium.window.learning.repeatCount.help"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
