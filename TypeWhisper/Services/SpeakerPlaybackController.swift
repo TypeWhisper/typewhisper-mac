@@ -12,6 +12,9 @@ final class SpeakerPlaybackController: ObservableObject {
     @Published private(set) var currentTime: TimeInterval = 0
     @Published private(set) var duration: TimeInterval = 0
     @Published private(set) var rate: Float = 1
+    @Published var volume: Float = 1 {
+        didSet { player?.volume = volume }
+    }
 
     /// The stretches that play; everything else is jumped over.
     var ranges: [ClosedRange<TimeInterval>] = [] {
@@ -30,6 +33,7 @@ final class SpeakerPlaybackController: ObservableObject {
         let item = AVPlayerItem(url: url)
         item.audioTimePitchAlgorithm = .timeDomain
         let player = AVPlayer(playerItem: item)
+        player.volume = volume
         self.player = player
         loadedURL = url
 

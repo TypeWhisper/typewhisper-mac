@@ -15,6 +15,8 @@ final class SpeakerWorkspaceModel: ObservableObject {
         var id: Int { paragraph.id }
     }
 
+    typealias WordToken = SpeakerTimedWord
+
     let playback = SpeakerPlaybackController()
 
     @Published private(set) var transcript: SpeakerTranscript?
@@ -26,8 +28,8 @@ final class SpeakerWorkspaceModel: ObservableObject {
     @Published private(set) var speakerIDs: [String] = []
     @Published private(set) var activeTurnIndex: Int?
     @Published private(set) var activeParagraphID: Int?
-    /// The word being spoken, as a range in the active paragraph's text.
-    @Published private(set) var activeWordRange: NSRange?
+    /// The word being spoken, as an index into the active paragraph's words.
+    @Published private(set) var activeWordIndex: Int?
 
     @Published var selectedTurns: Set<Int> = []
     @Published var soloedSpeakers: Set<String> = [] { didSet { updatePlaybackPlan() } }
@@ -44,7 +46,7 @@ final class SpeakerWorkspaceModel: ObservableObject {
     private var lastSelectedTurn: Int?
     /// Word timing of the recording, by start time; empty without it.
     private var words: [TranscriptionWord] = []
-    private var activeParagraphWords: (id: Int, entries: [TimedTextEntry])?
+    private var wordTokens: [Int: [WordToken]] = [:]
 
     init(recordID: UUID, historyService: HistoryService, voices: SpeakerVoiceProfileService? = nil) {
         self.recordID = recordID
@@ -78,7 +80,7 @@ final class SpeakerWorkspaceModel: ObservableObject {
         self.transcript = transcript
         self.names = names
         words = record.speakerWords.sorted { $0.start < $1.start }
-        activeParagraphWords = nil
+        wordTokens = [:]
         let turns = transcript.map(SpeakerTranscriptPresentation.turns(of:)) ?? []
         self.turns = turns
         rows = turns.flatMap { turn in
@@ -147,24 +149,34 @@ final class SpeakerWorkspaceModel: ObservableObject {
             rows.last { $0.paragraph.turnIndex == turn.index && $0.paragraph.start <= time + 0.05 }?.id
         }
         if paragraph != activeParagraphID { activeParagraphID = paragraph }
-        let wordRange = paragraph.flatMap { spokenWordRange(inParagraph: $0, at: time) }
-        if wordRange != activeWordRange { activeWordRange = wordRange }
+        let word = paragraph.flatMap { id in
+            rows.first { $0.id == id }.flatMap { row in
+                words(of: row.paragraph).lastIndex { $0.start <= time + 0.05 }
+            }
+        }
+        if word != activeWordIndex { activeWordIndex = word }
     }
 
     private func words(from start: TimeInterval, until end: TimeInterval) -> [TranscriptionWord] {
         words.filter { $0.start >= start - 0.05 && $0.start < end + 0.05 }
     }
 
-    private func spokenWordRange(inParagraph id: Int, at time: TimeInterval) -> NSRange? {
-        guard !words.isEmpty, let row = rows.first(where: { $0.id == id }) else { return nil }
-        if activeParagraphWords?.id != id {
-            let spoken = words(from: row.paragraph.start, until: row.paragraph.end)
-            activeParagraphWords = (id, TimedTextEntry.map(
-                textParts: spoken.map { ($0.text, $0.start, $0.end) },
-                in: row.paragraph.text
-            ))
-        }
-        return activeParagraphWords?.entries.last { $0.start <= time + 0.05 }?.range
+    /// The paragraph's words with their times, for marking the spoken word and
+    /// for playing from a word.
+    func words(of paragraph: SpeakerParagraph) -> [WordToken] {
+        if let tokens = wordTokens[paragraph.id] { return tokens }
+        let tokens = SpeakerTranscriptPresentation.timedWords(
+            of: paragraph,
+            segments: transcript?.segments ?? [],
+            words: words
+        )
+        wordTokens[paragraph.id] = tokens
+        return tokens
+    }
+
+    func play(from word: WordToken) {
+        followsPlayback = true
+        playback.play(from: word.start)
     }
 
     // MARK: - Split at the playback position

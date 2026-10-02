@@ -405,3 +405,72 @@ final class SpeakerWorkspaceModelTests: XCTestCase {
         XCTAssertTrue(model.isAudible("S1"))
     }
 }
+
+final class SpeakerTimedWordsTests: XCTestCase {
+    private func paragraph(_ text: String, start: TimeInterval, end: TimeInterval) -> SpeakerParagraph {
+        SpeakerParagraph(turnIndex: 0, speakerID: "S1", start: start, end: end, text: text, segmentRange: 0..<1)
+    }
+
+    func testWordsOfAnotherEngineGiveTheirTimesDespiteCaseAndPunctuation() {
+        let paragraph = paragraph("herzlich willkommen bei welt tv", start: 0, end: 20)
+        let words = [
+            TranscriptionWord(text: "Herzlich", start: 11.0, end: 11.5),
+            TranscriptionWord(text: "willkommen", start: 11.7, end: 12.2),
+            TranscriptionWord(text: "bei", start: 16.0, end: 16.1),
+            TranscriptionWord(text: "Welt", start: 16.2, end: 16.4),
+            TranscriptionWord(text: "TV.", start: 16.5, end: 16.9),
+        ]
+
+        let timed = SpeakerTranscriptPresentation.timedWords(of: paragraph, segments: [], words: words)
+
+        XCTAssertEqual(timed.map(\.text), ["herzlich", "willkommen", "bei", "welt", "tv"])
+        XCTAssertEqual(timed.map(\.start), [11.0, 11.7, 16.0, 16.2, 16.5])
+    }
+
+    func testWordsTheOtherEngineHeardDifferentlyAreSpreadBetweenTheirNeighbours() {
+        // "vier" was heard as "4" and "dem" is missing: both lie between "unter" and "Kolumnisten".
+        let paragraph = paragraph("unter vier dem Kolumnisten Talk", start: 10, end: 20)
+        let words = [
+            TranscriptionWord(text: "Unter", start: 13.0, end: 13.3),
+            TranscriptionWord(text: "4", start: 14.0, end: 14.1),
+            TranscriptionWord(text: "Kolumnisten", start: 16.0, end: 16.6),
+            TranscriptionWord(text: "Talk", start: 17.0, end: 17.3),
+        ]
+
+        let timed = SpeakerTranscriptPresentation.timedWords(of: paragraph, segments: [], words: words)
+
+        XCTAssertEqual(timed.map(\.start), [13.0, 14.0, 15.0, 16.0, 17.0])
+    }
+
+    func testARepeatedWordDoesNotPullLaterWordsBackToTheStart() {
+        let paragraph = paragraph("die Reform und die Wahl", start: 0, end: 10)
+        let words = [
+            TranscriptionWord(text: "Reform", start: 2, end: 2.5),
+            TranscriptionWord(text: "und", start: 3, end: 3.2),
+            TranscriptionWord(text: "die", start: 4, end: 4.2),
+            TranscriptionWord(text: "Wahl", start: 5, end: 5.5),
+        ]
+
+        let timed = SpeakerTranscriptPresentation.timedWords(of: paragraph, segments: [], words: words)
+
+        XCTAssertEqual(Array(timed.map(\.start).dropFirst()), [2, 3, 4, 5])
+        XCTAssertLessThanOrEqual(timed[0].start, 2)
+    }
+
+    func testWithoutWordTimingTimesAreSpreadOverEachSegment() {
+        let segments = [
+            SpeakerTranscriptSegment(text: "eins zwei", start: 0, end: 2, speakerID: "S1"),
+            SpeakerTranscriptSegment(text: "drei vier", start: 10, end: 12, speakerID: "S1"),
+        ]
+        let paragraph = SpeakerParagraph(
+            turnIndex: 0, speakerID: "S1", start: 0, end: 12, text: "eins zwei drei vier", segmentRange: 0..<2
+        )
+
+        let timed = SpeakerTranscriptPresentation.timedWords(of: paragraph, segments: segments, words: [])
+
+        XCTAssertEqual(timed.map(\.text), ["eins", "zwei", "drei", "vier"])
+        XCTAssertEqual(timed[0].start, 0, accuracy: 0.01)
+        XCTAssertEqual(timed[2].start, 10, accuracy: 0.01)
+        XCTAssertGreaterThan(timed[3].start, 10)
+    }
+}

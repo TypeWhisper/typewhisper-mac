@@ -134,6 +134,8 @@ struct SettingsView: View {
         }
 
         let installedPluginDestinations = pluginManager.loadedPlugins
+            // Speaker detection is managed on the Speakers page, not as a plugin.
+            .filter { $0.id != SpeakerTranscriptCoordinator.bundledPluginID }
             .sorted { lhs, rhs in
                 // Disabled plugins sink below the ones in use.
                 if lhs.isEnabled != rhs.isEnabled { return lhs.isEnabled }

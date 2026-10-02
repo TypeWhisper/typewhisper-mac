@@ -5,6 +5,7 @@ struct AudioRecorderView: View {
     @ObservedObject var viewModel: AudioRecorderViewModel
     @ObservedObject private var pluginManager = PluginManager.shared
     @ObservedObject private var modelManager = ServiceContainer.shared.modelManagerService
+    @ObservedObject private var settingsNavigation = SettingsNavigationCoordinator.shared
 
     private var isEditingLocked: Bool {
         viewModel.state != .idle
@@ -36,6 +37,23 @@ struct AudioRecorderView: View {
         VStack(spacing: 0) {
             SettingsPageHeader(String(localized: "settings.tab.recorder"))
             Divider()
+
+            if settingsNavigation.recorderPart == .meetings {
+                SettingsPremiumPart(
+                    backTitle: String(localized: "settings.tab.recorder"),
+                    onBack: { settingsNavigation.recorderPart = .recorder }
+                ) {
+                    PremiumCalendarMeetingSettingsWindow(
+                        licenseService: .shared,
+                        premiumAccount: ServiceContainer.shared.premiumAccountService,
+                        controllerFactory: { ServiceContainer.shared.calendarMeetingAutomationController },
+                        onManageAccess: { PremiumSettingsWindowManager.shared.present(.access) }
+                    )
+                }
+            } else {
+            PremiumActiveFeatureOverview.link(to: .calendarMeeting)
+                .padding(.horizontal, SettingsLayoutMetrics.pagePadding)
+                .padding(.top, SettingsLayoutMetrics.pagePadding)
 
             Form {
             // Recording Controls
@@ -322,8 +340,11 @@ struct AudioRecorderView: View {
             .formStyle(.grouped)
             .padding(.horizontal, SettingsLayoutMetrics.pagePadding)
             .padding(.bottom, SettingsLayoutMetrics.pagePadding)
+            }
         }
         .frame(minWidth: 500, minHeight: 400)
+        // Coming back to the page later starts on the page itself.
+        .onDisappear { settingsNavigation.recorderPart = .recorder }
         .onAppear {
             viewModel.loadRecordingsIfNeeded()
         }

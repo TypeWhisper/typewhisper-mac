@@ -202,6 +202,7 @@
 		822253A6675EDE763C21987D /* SpeakerTranscript.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C49EB68A11DC0D45E0EBF0F /* SpeakerTranscript.swift */; };
 		6BB1C85C28D6969E4183EB83 /* VoiceProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CA59FC6363A584E600C570D /* VoiceProfile.swift */; };
 		0898E366C7EA44D70414C480 /* SpeakerWorkspace.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FDE617FFF7F3755C5FFA85A /* SpeakerWorkspace.swift */; };
+		8B59F9C84788D3306CB3CCF2 /* SpeakerWordTimes.swift in Sources */ = {isa = PBXBuildFile; fileRef = B9C48F9F1E786942C1CE96B8 /* SpeakerWordTimes.swift */; };
 		AA00000000000000000009 /* ModelManagerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000009 /* ModelManagerService.swift */; };
 		AA00000000000000000010 /* AudioFileService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000010 /* AudioFileService.swift */; };
 		AA00000000000000000012 /* FileTranscriptionViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000012 /* FileTranscriptionViewModel.swift */; };
@@ -250,6 +251,7 @@
 		09720EF3F2B66441E50D5C57 /* SpeakerWorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 705BCAD53351C34BD14BE861 /* SpeakerWorkspaceView.swift */; };
 		2B115FBD9FDCCE5988E3DEF0 /* SpeakerDetectionToggle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C3D542A77A5D6D078CD236E /* SpeakerDetectionToggle.swift */; };
 		6E5940D00E5E748B3A9C3748 /* SpeakersView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3364403DC95BF1D330DF482F /* SpeakersView.swift */; };
+		86B807DCDFD9BC383134C10E /* SpeakerRecordingRow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 58A7090514EE1B744E60CE86 /* SpeakerRecordingRow.swift */; };
 		0C5FF116A9AD4C4FDD734D6C /* SpeakerDetectionSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = B26BFEA6D6999A0B24C2B23B /* SpeakerDetectionSettingsSection.swift */; };
 		F83600000000000000000002 /* HistorySettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F83600000000000000000012 /* HistorySettingsView.swift */; };
 		AA00000000000000000065 /* Profile.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000065 /* Profile.swift */; };
@@ -825,6 +827,7 @@
 		7C49EB68A11DC0D45E0EBF0F /* SpeakerTranscript.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerTranscript.swift; sourceTree = "<group>"; };
 		8CA59FC6363A584E600C570D /* VoiceProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceProfile.swift; sourceTree = "<group>"; };
 		9FDE617FFF7F3755C5FFA85A /* SpeakerWorkspace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerWorkspace.swift; sourceTree = "<group>"; };
+		B9C48F9F1E786942C1CE96B8 /* SpeakerWordTimes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerWordTimes.swift; sourceTree = "<group>"; };
 		BB00000000000000000330 /* DictationPunctuationProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationPunctuationProfile.swift; sourceTree = "<group>"; };
 		BB00000000000000000331 /* PunctuationRules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PunctuationRules.swift; sourceTree = "<group>"; };
 		BB00000000000000000332 /* DictationRuntimeContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationRuntimeContext.swift; sourceTree = "<group>"; };
@@ -908,6 +911,7 @@
 		705BCAD53351C34BD14BE861 /* SpeakerWorkspaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerWorkspaceView.swift; sourceTree = "<group>"; };
 		7C3D542A77A5D6D078CD236E /* SpeakerDetectionToggle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerDetectionToggle.swift; sourceTree = "<group>"; };
 		3364403DC95BF1D330DF482F /* SpeakersView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakersView.swift; sourceTree = "<group>"; };
+		58A7090514EE1B744E60CE86 /* SpeakerRecordingRow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerRecordingRow.swift; sourceTree = "<group>"; };
 		B26BFEA6D6999A0B24C2B23B /* SpeakerDetectionSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerDetectionSettingsSection.swift; sourceTree = "<group>"; };
 		F83600000000000000000012 /* HistorySettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistorySettingsView.swift; sourceTree = "<group>"; };
 		BB00000000000000000065 /* Profile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Profile.swift; sourceTree = "<group>"; };
@@ -1965,6 +1969,7 @@
 				7C49EB68A11DC0D45E0EBF0F /* SpeakerTranscript.swift */,
 				8CA59FC6363A584E600C570D /* VoiceProfile.swift */,
 				9FDE617FFF7F3755C5FFA85A /* SpeakerWorkspace.swift */,
+				B9C48F9F1E786942C1CE96B8 /* SpeakerWordTimes.swift */,
 				BB00000000000000000330 /* DictationPunctuationProfile.swift */,
 				BB00000000000000000331 /* PunctuationRules.swift */,
 				BB00000000000000000332 /* DictationRuntimeContext.swift */,
@@ -2174,6 +2179,7 @@
 				705BCAD53351C34BD14BE861 /* SpeakerWorkspaceView.swift */,
 				7C3D542A77A5D6D078CD236E /* SpeakerDetectionToggle.swift */,
 				3364403DC95BF1D330DF482F /* SpeakersView.swift */,
+				58A7090514EE1B744E60CE86 /* SpeakerRecordingRow.swift */,
 				B26BFEA6D6999A0B24C2B23B /* SpeakerDetectionSettingsSection.swift */,
 				F83600000000000000000012 /* HistorySettingsView.swift */,
 				BB00000000000000000068 /* ProfilesSettingsView.swift */,
@@ -5122,6 +5128,7 @@
 				822253A6675EDE763C21987D /* SpeakerTranscript.swift in Sources */,
 				6BB1C85C28D6969E4183EB83 /* VoiceProfile.swift in Sources */,
 				0898E366C7EA44D70414C480 /* SpeakerWorkspace.swift in Sources */,
+				8B59F9C84788D3306CB3CCF2 /* SpeakerWordTimes.swift in Sources */,
 				AA00000000000000000330 /* DictationPunctuationProfile.swift in Sources */,
 				AA00000000000000000331 /* PunctuationRules.swift in Sources */,
 				AA00000000000000000009 /* ModelManagerService.swift in Sources */,
@@ -5199,6 +5206,7 @@
 				09720EF3F2B66441E50D5C57 /* SpeakerWorkspaceView.swift in Sources */,
 				2B115FBD9FDCCE5988E3DEF0 /* SpeakerDetectionToggle.swift in Sources */,
 				6E5940D00E5E748B3A9C3748 /* SpeakersView.swift in Sources */,
+				86B807DCDFD9BC383134C10E /* SpeakerRecordingRow.swift in Sources */,
 				0C5FF116A9AD4C4FDD734D6C /* SpeakerDetectionSettingsSection.swift in Sources */,
 				F83600000000000000000002 /* HistorySettingsView.swift in Sources */,
 				AA00000000000000000065 /* Profile.swift in Sources */,

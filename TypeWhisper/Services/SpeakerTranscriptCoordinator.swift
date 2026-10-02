@@ -113,6 +113,19 @@ enum SpeakerTranscriptBuilder {
 
     /// The label a speaker gets in output that carries no name table: API
     /// responses and watch-folder files. Not localized, so scripts can rely on it.
+    /// The language code of what an engine stored as a record's language:
+    /// "de" for "de", "de-DE" or "German".
+    static func languageCode(from stored: String?) -> String? {
+        guard let stored = stored?.trimmingCharacters(in: .whitespacesAndNewlines), !stored.isEmpty else { return nil }
+        let primary = stored.split(whereSeparator: { $0 == "-" || $0 == "_" }).first.map { $0.lowercased() } ?? stored
+        let codes = Locale.LanguageCode.isoLanguageCodes.map(\.identifier)
+        if codes.contains(primary) { return primary }
+        let english = Locale(identifier: "en")
+        return codes.first {
+            english.localizedString(forLanguageCode: $0)?.caseInsensitiveCompare(stored) == .orderedSame
+        }
+    }
+
     static func outputLabel(for speakerID: String) -> String {
         "Speaker \(SpeakerTranscript.speakerNumber(of: speakerID) ?? 0)"
     }
@@ -156,6 +169,9 @@ typealias SpeakerRecordIntake = @MainActor (SpeakerRecordingInput) async -> UUID
 /// the Premium check, model download, alignment, and storage.
 @MainActor
 final class SpeakerTranscriptCoordinator: ObservableObject {
+    /// The plugin that ships in the app and provides the detection.
+    static let bundledPluginID = "com.typewhisper.speaker-diarization"
+
     enum Stage: Equatable {
         case waiting
         /// Transcribing again, for a record stored without timestamps.
@@ -183,6 +199,10 @@ final class SpeakerTranscriptCoordinator: ObservableObject {
     /// Transcribes a record's audio again to get segment timing, for records
     /// stored without it (dictations). Parameters: audio file and language.
     var timingSource: (@MainActor (URL, String?) async throws -> TranscriptionResult)?
+    /// Word timing for a recording whose engine reported none, from a second
+    /// pass with a local engine. Parameters: audio file and language. An
+    /// empty result leaves the record with segment timing.
+    var wordTimingSource: (@MainActor (URL, String?) async throws -> [TranscriptionWord])?
     /// Voice profiles; nil leaves every speaker anonymous.
     var voices: SpeakerVoiceProfileService?
     private var tasks: [UUID: Task<Void, Never>] = [:]
@@ -399,7 +419,9 @@ final class SpeakerTranscriptCoordinator: ObservableObject {
         let text = record.rawText
         var timedText = record.timedText
         var granularity = record.timedTextGranularity
-        var words = record.speakerWords
+        // Words of a second pass belong to another engine's text.
+        var words = record.speakerWordsAreFromSecondPass == true ? [] : record.speakerWords
+        var hasWordTiming = !record.speakerWords.isEmpty
         let ownSpeech = record.speakerOwnSpeech
         let duration = record.durationSeconds
         let language = record.language
@@ -411,8 +433,30 @@ final class SpeakerTranscriptCoordinator: ObservableObject {
                 timedText = SpeakerTranscriptBuilder.timedText(from: result.segments)
                 granularity = timedText.isEmpty ? .none : .segment
                 words = result.words
+                hasWordTiming = !words.isEmpty
                 try Task.checkCancellation()
                 historyService.setTimedText(timedText, granularity: granularity, words: words, forRecordID: recordID)
+            }
+            if !hasWordTiming, granularity != .none, let wordTimingSource {
+                stages[recordID] = .transcribing
+                // Without word timing the detection still runs on segments.
+                var timed: [TranscriptionWord] = []
+                do {
+                    timed = try await wordTimingSource(audioURL, language)
+                } catch {
+                    speakerLogger.info("No word timing from the second pass: \(error.localizedDescription, privacy: .public)")
+                }
+                try Task.checkCancellation()
+                speakerLogger.info("Second pass for word timing returned \(timed.count) words")
+                if !timed.isEmpty {
+                    historyService.setTimedText(
+                        timedText,
+                        granularity: granularity,
+                        words: timed,
+                        wordsAreFromSecondPass: true,
+                        forRecordID: recordID
+                    )
+                }
             }
             if !provider.areDiarizationModelsInstalled {
                 stages[recordID] = .downloadingModels(0)

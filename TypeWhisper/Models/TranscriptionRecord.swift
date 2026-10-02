@@ -97,6 +97,10 @@ final class TranscriptionRecord {
     var timedTextGranularityRaw: String?
     /// Word timing of the transcription, when the engine reported it: `[TranscriptionWord]` as JSON.
     var speakerWordsData: Data?
+    /// True when the word timing comes from a second pass with another engine
+    /// than the text. It then places words in time but does not decide where
+    /// a speaker's sentence ends.
+    var speakerWordsAreFromSecondPass: Bool?
     /// When the microphone carried the user's own speech: `[[start, end]]` as JSON.
     var speakerOwnSpeechData: Data?
     /// When the speaker transcript and the speaker names last changed, for

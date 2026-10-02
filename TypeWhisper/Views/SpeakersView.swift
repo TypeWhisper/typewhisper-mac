@@ -2,18 +2,40 @@ import SwiftUI
 import UniformTypeIdentifiers
 import TypeWhisperPluginSDK
 
-/// The home of speaker detection: transcribe files by speaker, open the
-/// recordings that have speakers, and manage the people recognized by voice.
+/// The home of speaker detection: add recordings and watch them turn into
+/// speaker transcripts, manage the people recognized by voice, and choose
+/// where speakers are detected without asking.
 struct SpeakersView: View {
+    enum Section: String, CaseIterable, Identifiable {
+        case recordings, people, setup
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .recordings: String(localized: "speakers.page.tab.recordings")
+            case .people: String(localized: "speakers.page.tab.people")
+            case .setup: String(localized: "speakers.page.tab.setup")
+            }
+        }
+    }
+
     @ObservedObject private var viewModel = ServiceContainer.shared.speakerTranscriptionViewModel
     @ObservedObject private var coordinator = ServiceContainer.shared.speakerTranscriptCoordinator
     @ObservedObject private var historyService = ServiceContainer.shared.historyService
     @ObservedObject private var license = ServiceContainer.shared.licenseService
     @ObservedObject private var premiumAccount = ServiceContainer.shared.premiumAccountService
     @ObservedObject private var recorder = AudioRecorderViewModel.shared
+    @ObservedObject private var watchFolders = ServiceContainer.shared.watchFolderViewModel
+    @ObservedObject private var voiceStore = ServiceContainer.shared.speakerVoiceProfileService.store
+    @AppStorage(UserDefaultsKeys.calendarMeetingDetectSpeakers) private var detectsInCalendarMeetings = true
 
+    @State private var section: Section = .recordings
     @State private var isDragTargeted = false
     @State private var showFilePicker = false
+    @State private var deletedProfile: VoiceProfile?
+
+    private static let shownRecordings = 30
 
     private var hasAccess: Bool {
         SpeakerWorkspacePremiumAccess.isGranted(
@@ -27,21 +49,32 @@ struct SpeakersView: View {
             SettingsPageHeader(
                 String(localized: "speakers.page.title"),
                 summary: String(localized: "speakers.page.summary")
-            )
+            ) {
+                if hasAccess {
+                    Picker(String(localized: "speakers.page.title"), selection: $section) {
+                        ForEach(Section.allCases) { section in
+                            Text(section.title).tag(section)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                    .fixedSize()
+                }
+            }
             Divider()
 
             ScrollView {
                 VStack(alignment: .leading, spacing: SettingsLayoutMetrics.sectionSpacing) {
-                    if hasAccess {
-                        transcribeSection
-                        recordingsSection
-                        VoiceProfilesCard()
-                        sourcesCard
-                        SpeakerModelCard(coordinator: coordinator)
-                        SpeakerPrivacyNote()
-                    } else {
+                    if !hasAccess {
                         lockedCard
-                        recordingsSection
+                        howItWorks
+                        recordingsList
+                    } else {
+                        switch section {
+                        case .recordings: recordingsTab
+                        case .people: peopleTab
+                        case .setup: setupTab
+                        }
                     }
                 }
                 .padding(SettingsLayoutMetrics.pagePadding)
@@ -58,8 +91,25 @@ struct SpeakersView: View {
             allowsMultipleSelection: true
         ) { result in
             if case .success(let urls) = result {
-                viewModel.addFiles(urls)
+                add(urls)
             }
+        }
+        .onChange(of: viewModel.batchState) { _, state in
+            switch state {
+            case .cancelled:
+                // Cancelling stops one file; the rest of the queue carries on.
+                for item in viewModel.files where item.state == .cancelled {
+                    viewModel.removeFile(item)
+                }
+                startPending()
+            case .done:
+                startPending()
+            default:
+                break
+            }
+        }
+        .onChange(of: viewModel.selectedEngine) { _, _ in
+            startPending()
         }
     }
 
@@ -82,150 +132,100 @@ struct SpeakersView: View {
         }
     }
 
-    // MARK: - Transcribe files
+    // MARK: - Recordings
+
+    private struct RowModel: Identifiable {
+        let id: UUID
+        let file: FileTranscriptionViewModel.FileItem?
+        let record: TranscriptionRecord?
+    }
+
+    /// Files added on this page first, in queue order, then the other
+    /// recordings with speakers from History.
+    private var rowModels: [RowModel] {
+        // Reading `recentRecords` keeps the list current when History changes.
+        _ = historyService.recentRecords.count
+        var claimed = Set<UUID>()
+        var models = viewModel.files.map { item in
+            let record = item.historyRecordID.flatMap { historyService.record(withID: $0) }
+            if let record { claimed.insert(record.id) }
+            return RowModel(id: item.id, file: item, record: record)
+        }
+        models += historyService.speakerRecords(limit: Self.shownRecordings)
+            .filter { !claimed.contains($0.id) }
+            .map { RowModel(id: $0.id, file: nil, record: $0) }
+        return models
+    }
 
     @ViewBuilder
-    private var transcribeSection: some View {
-        if viewModel.files.isEmpty {
-            dropZone
+    private var recordingsTab: some View {
+        addCard
+        if rowModels.isEmpty {
+            howItWorks
         } else {
-            VStack(alignment: .leading, spacing: SettingsLayoutMetrics.cardSpacing) {
-                ForEach(viewModel.files) { item in
-                    fileRow(item)
-                }
-                controls
-            }
+            recordingsList
         }
     }
 
-    private var dropZone: some View {
-        VStack(spacing: 8) {
-            Image(systemName: "person.2.wave.2")
-                .font(.largeTitle)
-                .foregroundStyle(isDragTargeted ? .blue : .secondary)
+    private var engineIsReady: Bool {
+        viewModel.resolvedEngine.map { viewModel.canUseForTranscription($0) } ?? false
+    }
+
+    private var addCard: some View {
+        HStack(spacing: 14) {
+            Image(systemName: isDragTargeted ? "arrow.down" : "person.2.wave.2.fill")
+                .font(.system(size: 20, weight: .medium))
+                .foregroundStyle(.white)
+                .frame(width: 48, height: 48)
+                .background(Circle().fill(Color.purple.gradient))
+                .scaleEffect(isDragTargeted ? 1.12 : 1)
+                .contentTransition(.symbolEffect(.replace))
                 .accessibilityHidden(true)
-            Text(String(localized: "speakers.page.drop.title"))
-                .font(.headline)
-            Text(String(localized: "speakers.page.drop.description"))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-                .multilineTextAlignment(.center)
-            Button(String(localized: "Choose Files...")) {
-                showFilePicker = true
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(String(localized: isDragTargeted ? "speakers.page.add.drop" : "speakers.page.add.title"))
+                    .font(.headline)
+                Text(String(localized: "speakers.page.add.description"))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                if !engineIsReady {
+                    Label(String(localized: "speakers.page.engine.notReady"), systemImage: "exclamationmark.triangle.fill")
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .padding(.top, 2)
+                }
             }
-            .buttonStyle(.bordered)
-            Text(String(localized: "WAV, MP3, M4A, FLAC, MP4, MOV"))
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
+
+            Spacer(minLength: 12)
+
+            VStack(alignment: .trailing, spacing: 6) {
+                Button(String(localized: "Choose Files...")) {
+                    showFilePicker = true
+                }
+                .buttonStyle(.borderedProminent)
+                .controlSize(.large)
+
+                engineMenu
+            }
         }
-        .padding(.vertical, 28)
-        .frame(maxWidth: .infinity)
+        .padding(SettingsLayoutMetrics.cardPadding)
         .background(
-            RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius)
-                .fill(isDragTargeted ? Color.blue.opacity(0.1) : Color(nsColor: .controlBackgroundColor))
-                .overlay(
-                    RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius)
-                        .strokeBorder(
-                            isDragTargeted ? Color.blue : Color.secondary.opacity(0.3),
-                            style: StrokeStyle(lineWidth: 2, dash: [8])
-                        )
+            RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius, style: .continuous)
+                .fill(Color.purple.opacity(isDragTargeted ? 0.16 : 0.07))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius, style: .continuous)
+                .strokeBorder(
+                    Color.purple.opacity(isDragTargeted ? 1 : 0.35),
+                    style: StrokeStyle(lineWidth: 1.5, dash: [6, 4])
                 )
         )
+        .animation(.spring(response: 0.3, dampingFraction: 0.7), value: isDragTargeted)
     }
 
-    private func fileRow(_ item: FileTranscriptionViewModel.FileItem) -> some View {
-        let recordID = item.historyRecordID
-        let stage = recordID.flatMap { coordinator.stages[$0] }
-        let record = recordID.flatMap { historyService.record(withID: $0) }
-        return HStack(spacing: 8) {
-            switch item.state {
-            case .loading, .transcribing:
-                ProgressView().controlSize(.small)
-            case .done where stage != nil:
-                ProgressView().controlSize(.small)
-            case .done:
-                Image(systemName: record?.speakerTranscriptState == .ready ? "checkmark.circle.fill" : "exclamationmark.circle.fill")
-                    .foregroundStyle(record?.speakerTranscriptState == .ready ? .green : .orange)
-            case .error:
-                Image(systemName: "exclamationmark.circle.fill").foregroundStyle(.red)
-            case .pending, .cancelled:
-                Image(systemName: "circle").foregroundStyle(.secondary)
-            }
-
-            VStack(alignment: .leading, spacing: 1) {
-                Text(item.fileName)
-                    .font(.body.weight(.medium))
-                    .lineLimit(1)
-                Text(status(of: item, stage: stage, record: record))
-                    .font(.caption)
-                    .foregroundStyle(item.state == .error ? .red : .secondary)
-                    .lineLimit(1)
-            }
-
-            Spacer()
-
-            if let recordID, record != nil {
-                Button(String(localized: "speakers.page.openInHistory")) {
-                    SpeakerNavigation.openInHistory(recordID)
-                }
-                .controlSize(.small)
-            }
-            if viewModel.batchState != .processing {
-                Button {
-                    viewModel.removeFile(item)
-                } label: {
-                    Image(systemName: "xmark")
-                        .foregroundStyle(.secondary)
-                        .font(.caption)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(String(localized: "Remove \(item.fileName)"))
-            }
-        }
-        .padding(10)
-        .background(
-            RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius)
-                .fill(Color(nsColor: .controlBackgroundColor))
-        )
-    }
-
-    private func status(
-        of item: FileTranscriptionViewModel.FileItem,
-        stage: SpeakerTranscriptCoordinator.Stage?,
-        record: TranscriptionRecord?
-    ) -> String {
-        if let error = item.errorMessage { return error }
-        switch stage {
-        case .waiting: return String(localized: "speakers.status.waiting")
-        case .transcribing: return String(localized: "speakers.status.transcribing")
-        case .downloadingModels: return String(localized: "speakers.status.downloadingModel")
-        case .detecting: return String(localized: "speakers.status.detecting")
-        case nil: break
-        }
-        guard item.state == .done else {
-            return item.phaseDescription ?? String(localized: "Pending")
-        }
-        guard let record else { return String(localized: "speakers.page.file.notSaved") }
-        return Self.speakerSummary(of: record)
-    }
-
-    /// "3 speakers" for a finished record, or why there are none.
-    static func speakerSummary(of record: TranscriptionRecord) -> String {
-        switch record.speakerTranscriptState {
-        case .ready:
-            String.localizedStringWithFormat(
-                String(localized: "speakers.page.speakerCount"),
-                Int64(record.speakerTranscript?.speakerIDs.count ?? 0)
-            )
-        case .pending:
-            String(localized: "speakers.status.waiting")
-        case .failed, nil:
-            String(localized: "speakers.status.failed")
-        }
-    }
-
-    private var controls: some View {
-        VStack(alignment: .leading, spacing: 12) {
+    private var engineMenu: some View {
+        Menu {
             Picker(String(localized: "Engine"), selection: $viewModel.selectedEngine) {
                 Text(String(localized: "Default Engine")).tag(nil as String?)
                 Divider()
@@ -235,125 +235,309 @@ struct SpeakersView: View {
                         .disabled(!viewModel.canUseForTranscription(engine))
                 }
             }
-            .controlSize(.small)
-            .frame(maxWidth: 320)
-            .disabled(viewModel.batchState == .processing)
+            .pickerStyle(.inline)
+            .labelsHidden()
+        } label: {
+            Text(verbatim: "\(String(localized: "Engine")): \(viewModel.resolvedEngine?.providerDisplayName ?? String(localized: "Default Engine"))")
+        }
+        .menuStyle(.borderlessButton)
+        .controlSize(.small)
+        .fixedSize()
+        .disabled(viewModel.batchState == .processing)
+    }
 
-            HStack {
-                Button(String(localized: "Add Files...")) {
-                    showFilePicker = true
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.small)
-                .disabled(viewModel.batchState == .processing)
-
-                Spacer()
-
-                if viewModel.batchState == .processing {
-                    Button(String(localized: "Cancel")) {
-                        viewModel.cancelTranscription()
-                    }
-                    .controlSize(.small)
-                } else {
-                    Button(String(localized: "speakers.page.transcribe")) {
-                        viewModel.transcribeAll()
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    .disabled(!viewModel.canTranscribe)
-                }
-            }
+    private var howItWorks: some View {
+        HStack(alignment: .top, spacing: SettingsLayoutMetrics.cardSpacing) {
+            howStep(
+                "square.and.arrow.down",
+                String(localized: "speakers.page.add.title"),
+                String(localized: "speakers.page.how.add")
+            )
+            howStep(
+                "person.crop.circle.badge.checkmark",
+                String(localized: "speakers.page.how.name.title"),
+                String(localized: "speakers.page.how.name")
+            )
+            howStep(
+                "person.wave.2",
+                String(localized: "speakers.page.how.recognize.title"),
+                String(localized: "speakers.page.how.recognize")
+            )
         }
     }
 
-    // MARK: - Recordings
+    private func howStep(_ systemImage: String, _ title: String, _ caption: String) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Image(systemName: systemImage)
+                .font(.title2)
+                .foregroundStyle(.purple)
+                .frame(height: 26)
+                .accessibilityHidden(true)
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+            Text(caption)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(SettingsLayoutMetrics.cardPadding)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(
+            RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius, style: .continuous)
+                .fill(Color(nsColor: .controlBackgroundColor))
+        )
+    }
 
-    private var recordingsSection: some View {
-        // Reading `recentRecords` keeps the list current when History changes.
-        _ = historyService.recentRecords.count
-        let records = historyService.speakerRecords(limit: 8)
-        return SettingsCard {
-            VStack(alignment: .leading, spacing: 10) {
+    @ViewBuilder
+    private var recordingsList: some View {
+        let models = rowModels
+        if !models.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
                 Text(String(localized: "speakers.page.recordings.title"))
                     .font(.headline)
 
-                if records.isEmpty {
-                    Text(String(localized: "speakers.page.recordings.empty"))
-                        .font(.callout)
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                } else {
-                    ForEach(records, id: \.id) { record in
-                        HStack(spacing: 8) {
-                            Image(systemName: record.source == .recorder ? "record.circle" : "doc")
-                                .foregroundStyle(.secondary)
-                                .accessibilityHidden(true)
-                            VStack(alignment: .leading, spacing: 1) {
-                                Text(record.appName ?? record.source.displayName)
-                                    .lineLimit(1)
-                                Text(recordingDetail(of: record))
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
-                            Spacer()
-                            Button(String(localized: "speakers.page.openInHistory")) {
-                                SpeakerNavigation.openInHistory(record.id)
-                            }
-                            .controlSize(.small)
+                VStack(spacing: 0) {
+                    ForEach(Array(models.enumerated()), id: \.element.id) { index, model in
+                        if index > 0 {
+                            Divider().padding(.leading, 62)
                         }
+                        row(model)
                     }
                 }
-            }
-        }
-    }
-
-    private func recordingDetail(of record: TranscriptionRecord) -> String {
-        var parts = [
-            record.timestamp.formatted(date: .abbreviated, time: .shortened),
-            SpeakerTranscriptPresentation.timestamp(record.durationSeconds),
-        ]
-        if let stage = coordinator.stages[record.id] {
-            parts.append(stage == .waiting
-                ? String(localized: "speakers.status.waiting")
-                : String(localized: "speakers.status.detecting"))
-        } else {
-            parts.append(Self.speakerSummary(of: record))
-            if let names = record.speakerNames?.entries.map(\.displayName), !names.isEmpty {
-                parts.append(names.joined(separator: ", "))
-            }
-        }
-        return parts.joined(separator: " · ")
-    }
-
-    // MARK: - Other sources
-
-    private var sourcesCard: some View {
-        SettingsCard {
-            VStack(alignment: .leading, spacing: 10) {
-                Text(String(localized: "speakers.page.sources.title"))
-                    .font(.headline)
-
-                Toggle(String(localized: "speakers.page.sources.recorder"), isOn: $recorder.detectSpeakers)
-                Toggle(
-                    String(localized: "premium.window.speakers.automatic.calendarMeetings"),
-                    isOn: Binding(
-                        get: {
-                            UserDefaults.standard.object(forKey: UserDefaultsKeys.calendarMeetingDetectSpeakers) as? Bool ?? true
-                        },
-                        set: { UserDefaults.standard.set($0, forKey: UserDefaultsKeys.calendarMeetingDetectSpeakers) }
-                    )
+                .background(
+                    RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius, style: .continuous)
+                        .fill(Color(nsColor: .controlBackgroundColor))
                 )
+                .clipShape(RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius, style: .continuous))
+                .animation(.spring(response: 0.4, dampingFraction: 0.85), value: models.map(\.id))
+            }
+        }
+    }
 
-                Text(String(localized: "speakers.page.sources.description"))
+    @ViewBuilder
+    private func row(_ model: RowModel) -> some View {
+        if let record = model.record {
+            recordRow(record, isFresh: model.file != nil)
+        } else if let item = model.file {
+            fileRow(item)
+        }
+    }
+
+    private func recordRow(_ record: TranscriptionRecord, isFresh: Bool) -> some View {
+        let phase = phase(of: record)
+        let isWorking = coordinator.stages[record.id] != nil
+        var canRetry = false
+        if case .failed = phase { canRetry = coordinator.startError(for: record) == nil }
+        return SpeakerRecordingRow(
+            title: record.appName ?? record.source.displayName,
+            detail: [
+                record.timestamp.formatted(date: .abbreviated, time: .shortened),
+                SpeakerTranscriptPresentation.timestamp(record.durationSeconds),
+            ].joined(separator: " · "),
+            systemImage: record.source == .recorder ? "mic.fill" : "doc.fill",
+            phase: phase,
+            isFresh: isFresh,
+            onOpen: { SpeakerNavigation.openInHistory(record.id) },
+            onCancel: isWorking ? { coordinator.cancel(recordID: record.id) } : nil,
+            onRetry: canRetry ? { _ = coordinator.start(recordID: record.id) } : nil
+        )
+    }
+
+    private func phase(of record: TranscriptionRecord) -> SpeakerRecordingRow.Phase {
+        switch coordinator.stages[record.id] {
+        case .waiting:
+            return .working(step: 2, detail: String(localized: "speakers.status.waiting"), fraction: nil)
+        case .transcribing:
+            return .working(step: 1, detail: String(localized: "speakers.status.transcribing"), fraction: nil)
+        case .downloadingModels:
+            return .working(step: 2, detail: String(localized: "speakers.status.downloadingModel"), fraction: nil)
+        case .detecting(let fraction):
+            return .working(step: 2, detail: "", fraction: fraction)
+        case nil:
+            break
+        }
+        switch record.speakerTranscriptState {
+        case .ready: return .ready(NamedSpeakerShare.shares(of: record))
+        case .pending: return .queued
+        case .failed, nil: return .failed(String(localized: "speakers.status.failed"))
+        }
+    }
+
+    private func fileRow(_ item: FileTranscriptionViewModel.FileItem) -> some View {
+        let isProcessing = viewModel.batchState == .processing
+        let remove: (() -> Void)? = isProcessing ? nil : { viewModel.removeFile(item) }
+        let phase: SpeakerRecordingRow.Phase
+        var onCancel: (() -> Void)?
+        var onRetry: (() -> Void)?
+        var onRemove: (() -> Void)?
+        switch item.state {
+        case .pending, .cancelled:
+            phase = .queued
+            onRemove = remove
+        case .loading:
+            phase = .working(step: 1, detail: item.phaseDescription ?? "", fraction: nil)
+            onCancel = { viewModel.cancelTranscription() }
+        case .transcribing:
+            phase = .working(step: 1, detail: item.progressText ?? "", fraction: item.progressFraction)
+            onCancel = { viewModel.cancelTranscription() }
+        case .error:
+            phase = .failed(item.errorMessage ?? String(localized: "Error"))
+            onRetry = isProcessing ? nil : { viewModel.transcribeAll() }
+            onRemove = remove
+        case .done:
+            phase = .failed(String(localized: "speakers.page.file.notSaved"))
+            onRemove = remove
+        }
+        return SpeakerRecordingRow(
+            title: item.fileName,
+            detail: "",
+            systemImage: "doc.fill",
+            phase: phase,
+            onCancel: onCancel,
+            onRetry: onRetry,
+            onRemove: onRemove
+        )
+    }
+
+    // MARK: - People
+
+    @ViewBuilder
+    private var peopleTab: some View {
+        if voiceStore.profiles.isEmpty {
+            VStack(spacing: 10) {
+                Image(systemName: "person.wave.2")
+                    .font(.system(size: 34))
+                    .foregroundStyle(.purple)
+                    .accessibilityHidden(true)
+                Text(String(localized: "speakers.page.people.emptyTitle"))
+                    .font(.headline)
+                Text(String(localized: "speakers.page.people.empty"))
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 420)
+                    .fixedSize(horizontal: false, vertical: true)
+                Button(String(localized: "speakers.page.people.showRecordings")) {
+                    section = .recordings
+                }
+                .padding(.top, 4)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 44)
+        } else {
+            LazyVGrid(
+                columns: [GridItem(.adaptive(minimum: 250), spacing: SettingsLayoutMetrics.cardSpacing, alignment: .top)],
+                alignment: .leading,
+                spacing: SettingsLayoutMetrics.cardSpacing
+            ) {
+                ForEach(voiceStore.profiles) { profile in
+                    SpeakerPersonCard(profile: profile) { deletedProfile = profile }
+                }
+            }
+            .confirmationDialog(
+                String.localizedStringWithFormat(
+                    String(localized: "premium.window.speakers.profiles.deleteTitle"),
+                    deletedProfile?.name ?? ""
+                ),
+                isPresented: Binding(get: { deletedProfile != nil }, set: { if !$0 { deletedProfile = nil } }),
+                presenting: deletedProfile
+            ) { profile in
+                Button(String(localized: "premium.window.speakers.profiles.delete"), role: .destructive) {
+                    ServiceContainer.shared.speakerVoiceProfileService.deleteProfile(profile.id)
+                }
+            } message: { _ in
+                Text(String(localized: "premium.window.speakers.profiles.deleteMessage"))
+            }
+        }
+
+        Text(String(localized: "premium.window.speakers.profiles.footer"))
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .frame(maxWidth: .infinity, alignment: voiceStore.profiles.isEmpty ? .center : .leading)
+    }
+
+    // MARK: - Setup
+
+    @ViewBuilder
+    private var setupTab: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(String(localized: "speakers.page.sources.title"))
+                .font(.headline)
+
+            VStack(spacing: 0) {
+                sourceRow(
+                    "mic.fill",
+                    String(localized: "speakers.page.sources.recorder.title"),
+                    String(localized: "speakers.page.sources.recorder.caption"),
+                    isOn: $recorder.detectSpeakers
+                )
+                Divider().padding(.leading, 50)
+                sourceRow(
+                    "calendar",
+                    String(localized: "speakers.page.sources.calendar.title"),
+                    String(localized: "speakers.page.sources.calendar.caption"),
+                    isOn: $detectsInCalendarMeetings
+                )
+                Divider().padding(.leading, 50)
+                sourceRow(
+                    "folder.fill",
+                    String(localized: "speakers.page.sources.watch.title"),
+                    String(localized: "speakers.page.sources.watch.caption"),
+                    isOn: $watchFolders.detectSpeakers
+                )
+            }
+            .background(
+                RoundedRectangle(cornerRadius: SettingsLayoutMetrics.cardCornerRadius, style: .continuous)
+                    .fill(Color(nsColor: .controlBackgroundColor))
+            )
+
+            Text(String(localized: "speakers.page.sources.description"))
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+
+        SpeakerModelCard(coordinator: coordinator)
+        SpeakerPrivacyNote()
+    }
+
+    private func sourceRow(_ systemImage: String, _ title: String, _ caption: String, isOn: Binding<Bool>) -> some View {
+        HStack(spacing: 12) {
+            Image(systemName: systemImage)
+                .foregroundStyle(.purple)
+                .frame(width: 24)
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                Text(caption)
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
             }
+            Spacer(minLength: 12)
+            Toggle(title, isOn: isOn)
+                .labelsHidden()
+                .toggleStyle(.switch)
+                .controlSize(.small)
         }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
     }
 
-    // MARK: - Drop handling
+    // MARK: - Adding files
+
+    /// Adds the files and starts on them right away.
+    private func add(_ urls: [URL]) {
+        viewModel.addFiles(urls)
+        section = .recordings
+        startPending()
+    }
+
+    /// Files added while a batch runs are picked up when it ends.
+    private func startPending() {
+        guard viewModel.files.contains(where: { $0.state == .pending }) else { return }
+        viewModel.transcribeAll()
+    }
 
     private func handleDrop(_ providers: [NSItemProvider]) -> Bool {
         var handled = false
@@ -363,7 +547,7 @@ struct SpeakersView: View {
                       let url = URL(dataRepresentation: data, relativeTo: nil),
                       AudioFileService.supportedExtensions.contains(url.pathExtension.lowercased()) else { return }
                 Task { @MainActor in
-                    viewModel.addFiles([url])
+                    add([url])
                 }
             }
             handled = true

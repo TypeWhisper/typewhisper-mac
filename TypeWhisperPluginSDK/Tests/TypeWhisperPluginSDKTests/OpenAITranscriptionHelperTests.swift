@@ -433,6 +433,90 @@ final class OpenAITranscriptionHelperTests: XCTestCase {
         XCTAssertTrue(store.sessions.isEmpty)
     }
 
+    private func oneSecondAudio() -> AudioData {
+        let samples = [Float](repeating: 0.1, count: 16_000)
+        return AudioData(samples: samples, wavData: PluginWavEncoder.encode(samples), duration: 1.0)
+    }
+
+    func testWordTimestampsAreRequestedAndReportedWhenTheHostCollectsThem() async throws {
+        PluginOpenAITranscriptionHelper.resetWordTimingSupportForTesting()
+        let store = OpenAITranscriptionMockSessionStore()
+        PluginHTTPClient.configureForTesting { _ in
+            store.makeSession(outcomes: [
+                .success(
+                    Data(#"{"text":"Hello there","language":"en","segments":[{"start":0,"end":1,"text":"Hello there"}],"words":[{"word":" Hello","start":0.1,"end":0.4},{"word":"there","start":0.5,"end":0.9}]}"#.utf8),
+                    200
+                ),
+            ])
+        }
+        let helper = PluginOpenAITranscriptionHelper(baseURL: "https://words.example.test")
+        let collector = PluginWordTimingCollector()
+
+        let result = try await PluginWordTimings.$collector.withValue(collector) {
+            try await helper.transcribe(
+                audio: oneSecondAudio(), apiKey: "k", modelName: "whisper-1",
+                language: "en", translate: false, prompt: nil
+            )
+        }
+
+        XCTAssertEqual(result.text, "Hello there")
+        XCTAssertEqual(collector.words, [
+            PluginWordTiming(text: "Hello", start: 0.1, end: 0.4),
+            PluginWordTiming(text: "there", start: 0.5, end: 0.9),
+        ])
+        let body = String(decoding: try XCTUnwrap(store.sessions.first?.requestedRequests.first?.httpBody), as: UTF8.self)
+        XCTAssertTrue(body.contains("name=\"timestamp_granularities[]\"\r\n\r\nword"))
+        XCTAssertTrue(body.contains("name=\"timestamp_granularities[]\"\r\n\r\nsegment"))
+    }
+
+    func testWordTimestampsAreNotRequestedWithoutAHostCollector() async throws {
+        PluginOpenAITranscriptionHelper.resetWordTimingSupportForTesting()
+        let store = OpenAITranscriptionMockSessionStore()
+        PluginHTTPClient.configureForTesting { _ in
+            store.makeSession(outcomes: [.success(Data(#"{"text":"Hello"}"#.utf8), 200)])
+        }
+        let helper = PluginOpenAITranscriptionHelper(baseURL: "https://words.example.test")
+
+        _ = try await helper.transcribe(
+            audio: oneSecondAudio(), apiKey: "k", modelName: "whisper-1",
+            language: nil, translate: false, prompt: nil
+        )
+
+        let body = String(decoding: try XCTUnwrap(store.sessions.first?.requestedRequests.first?.httpBody), as: UTF8.self)
+        XCTAssertFalse(body.contains("timestamp_granularities"))
+    }
+
+    func testAServerThatRejectsWordTimestampsIsAskedAgainWithoutThemAndRemembered() async throws {
+        PluginOpenAITranscriptionHelper.resetWordTimingSupportForTesting()
+        let store = OpenAITranscriptionMockSessionStore()
+        PluginHTTPClient.configureForTesting { _ in
+            store.makeSession(outcomes: [
+                .success(Data(#"{"error":"unknown parameter timestamp_granularities"}"#.utf8), 400),
+                .success(Data(#"{"text":"first"}"#.utf8), 200),
+                .success(Data(#"{"text":"second"}"#.utf8), 200),
+            ])
+        }
+        let helper = PluginOpenAITranscriptionHelper(baseURL: "https://plain.example.test")
+        let collector = PluginWordTimingCollector()
+
+        let texts = try await PluginWordTimings.$collector.withValue(collector) {
+            var texts: [String] = []
+            for _ in 0..<2 {
+                texts.append(try await helper.transcribe(
+                    audio: oneSecondAudio(), apiKey: "k", modelName: "whisper-1",
+                    language: nil, translate: false, prompt: nil
+                ).text)
+            }
+            return texts
+        }
+
+        XCTAssertEqual(texts, ["first", "second"])
+        XCTAssertTrue(collector.words.isEmpty)
+        let requests = try XCTUnwrap(store.sessions.first?.requestedRequests)
+        let bodies = requests.map { String(decoding: $0.httpBody ?? Data(), as: UTF8.self) }
+        XCTAssertEqual(bodies.map { $0.contains("timestamp_granularities") }, [true, false, false])
+    }
+
     func testCompressedAudioWithWavFallbackRetriesUnsupportedMediaAndPreservesFields() async throws {
         let store = OpenAITranscriptionMockSessionStore()
         PluginHTTPClient.configureForTesting { _ in

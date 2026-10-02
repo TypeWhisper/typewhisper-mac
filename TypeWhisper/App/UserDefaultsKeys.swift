@@ -156,6 +156,7 @@ enum UserDefaultsKeys {
     static let recorderTrackMode = "recorderTrackMode"
     static let recorderDetectSpeakers = "recorderDetectSpeakers"
     static let calendarMeetingDetectSpeakers = "calendarMeetingDetectSpeakers"
+    static let speakerStripCollapsed = "speakerStripCollapsed"
 
     // MARK: - File Transcription
     static let fileTranscriptionEngine = "fileTranscriptionEngine"

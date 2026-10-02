@@ -43,22 +43,21 @@ struct SpeakerWorkspaceView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(spacing: 0) {
-                transcript
-                Divider()
-                SpeakerInspector(
-                    model: model,
-                    coordinator: coordinator,
-                    record: record,
-                    hasAudio: audioURL != nil,
-                    onDetectAgain: { pendingSpeakerCount = $0.map(SpeakerCountChoice.fixed) ?? .automatic }
-                )
-                .frame(width: 250)
-            }
+            SpeakerStrip(
+                model: model,
+                coordinator: coordinator,
+                record: record,
+                hasAudio: audioURL != nil,
+                onDetectAgain: { pendingSpeakerCount = $0.map(SpeakerCountChoice.fixed) ?? .automatic }
+            )
+            Divider()
+            transcript
             if audioURL != nil {
-                Divider()
-                SpeakerTimelineView(model: model, playback: model.playback)
-                SpeakerTransportBar(model: model, playback: model.playback)
+                SpeakerPlayerBar(
+                    model: model,
+                    playback: model.playback,
+                    title: record.appName ?? record.source.displayName
+                )
             }
         }
         .focusable()
@@ -162,25 +161,26 @@ struct SpeakerWorkspaceView: View {
                     .font(.caption.monospacedDigit())
                     .foregroundStyle(isActive ? Color.accentColor : .secondary)
                     .frame(width: 46, alignment: .trailing)
-                Text(paragraphText(paragraph, isActive: isActive))
-                    .font(.body)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                SpeakerParagraphWords(
+                    words: model.words(of: paragraph),
+                    activeIndex: isActive ? model.activeWordIndex : nil,
+                    isActive: isActive,
+                    isPlayable: audioURL != nil
+                ) { word in
+                    if !selectWithModifiers(paragraph) { model.play(from: word) }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
             .padding(.vertical, 4)
             .padding(.horizontal, 6)
             .background(
                 RoundedRectangle(cornerRadius: 5)
-                    .fill(isActive ? Color.accentColor.opacity(0.16) : .clear)
+                    .fill(isActive ? Color.accentColor.opacity(0.08) : .clear)
             )
             .contentShape(Rectangle())
+            // Clicks beside the words: the time and the empty rest of a line.
             .onTapGesture {
-                if NSEvent.modifierFlags.contains(.command) || NSEvent.modifierFlags.contains(.shift) {
-                    model.select(
-                        turn: paragraph.turnIndex,
-                        extending: NSEvent.modifierFlags.contains(.shift),
-                        toggling: NSEvent.modifierFlags.contains(.command)
-                    )
-                } else if audioURL != nil {
+                if !selectWithModifiers(paragraph), audioURL != nil {
                     model.followsPlayback = true
                     model.playback.play(from: paragraph.start)
                 }
@@ -205,15 +205,16 @@ struct SpeakerWorkspaceView: View {
         .accessibilityAddTraits(isSelected ? .isSelected : [])
     }
 
-    /// The paragraph's text, with the word being spoken marked while it plays.
-    private func paragraphText(_ paragraph: SpeakerParagraph, isActive: Bool) -> AttributedString {
-        var text = AttributedString(paragraph.text)
-        guard isActive, let wordRange = model.activeWordRange,
-              let range = Range(wordRange, in: paragraph.text),
-              let lower = AttributedString.Index(range.lowerBound, within: text),
-              let upper = AttributedString.Index(range.upperBound, within: text) else { return text }
-        text[lower..<upper].backgroundColor = Color.accentColor.opacity(0.45)
-        return text
+    /// Command- and Shift-clicks select the turn instead of playing.
+    private func selectWithModifiers(_ paragraph: SpeakerParagraph) -> Bool {
+        let flags = NSEvent.modifierFlags
+        guard flags.contains(.command) || flags.contains(.shift) else { return false }
+        model.select(
+            turn: paragraph.turnIndex,
+            extending: flags.contains(.shift),
+            toggling: flags.contains(.command)
+        )
+        return true
     }
 
     @ViewBuilder
@@ -358,79 +359,180 @@ private struct FollowPlaybackOnScroll: ViewModifier {
 
 // MARK: - Inspector
 
-private struct SpeakerInspector: View {
+/// The speakers of the recording as a row above the transcript. A speaker
+/// opens its details: name, share, solo and mute, merging, voice.
+private struct SpeakerStrip: View {
     @ObservedObject var model: SpeakerWorkspaceModel
     @ObservedObject var coordinator: SpeakerTranscriptCoordinator
     let record: TranscriptionRecord
     let hasAudio: Bool
     let onDetectAgain: (Int?) -> Void
-    @Environment(\.undoManager) private var undoManager
+    @AppStorage(UserDefaultsKeys.speakerStripCollapsed) private var isCollapsed = true
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text(String(localized: "speakers.view.speakers"))
-                    .font(.headline)
-                Spacer()
-                if model.filteredSpeaker != nil {
-                    Button(String(localized: "speakers.filter.clear")) { model.filteredSpeaker = nil }
-                        .buttonStyle(.link)
-                        .font(.caption)
-                }
-            }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-
-            ScrollView {
-                VStack(spacing: 6) {
-                    ForEach(model.speakerIDs, id: \.self) { speakerID in
-                        SpeakerInspectorRow(
-                            model: model,
-                            speakerID: speakerID,
-                            share: model.shares.first { $0.speakerID == speakerID },
-                            hasAudio: hasAudio,
-                            canCorrect: coordinator.hasPremiumAccess
-                        )
+        HStack(spacing: 8) {
+            Button {
+                withAnimation(reduceMotion ? nil : .spring(response: 0.35, dampingFraction: 0.82)) { isCollapsed.toggle() }
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "chevron.right")
+                        .font(.caption2.weight(.semibold))
+                        .rotationEffect(.degrees(isCollapsed ? 0 : 90))
+                    if isCollapsed {
+                        HStack(spacing: -5) {
+                            ForEach(model.speakerIDs, id: \.self) { speakerID in
+                                SpeakerBadge(speakerID: speakerID, name: model.names?.displayName(for: speakerID))
+                            }
+                        }
+                        Text(verbatim: "\(String(localized: "speakers.view.speakers")) · \(model.speakerIDs.count)")
+                            .font(.caption)
                     }
                 }
-                .padding(.horizontal, 8)
+                .foregroundStyle(.secondary)
+                .contentShape(Rectangle())
             }
+            .buttonStyle(.plain)
+            .help(String(localized: isCollapsed ? "speakers.strip.show" : "speakers.strip.hide"))
+            .accessibilityLabel(String(localized: isCollapsed ? "speakers.strip.show" : "speakers.strip.hide"))
 
-            Divider()
-            VStack(alignment: .leading, spacing: 8) {
-                Menu {
-                    let startError = coordinator.startError(for: record)
-                    Section(String(localized: "speakers.count.title")) {
-                        Button(String(localized: "speakers.count.automatic")) { onDetectAgain(nil) }
-                        ForEach(coordinator.selectableSpeakerCounts, id: \.self) { count in
-                            Button(count.formatted()) { onDetectAgain(count) }
+            if isCollapsed {
+                Spacer(minLength: 0)
+            } else {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 6) {
+                        ForEach(Array(model.speakerIDs.enumerated()), id: \.element) { index, speakerID in
+                            SpeakerChip(
+                                model: model,
+                                speakerID: speakerID,
+                                share: model.shares.first { $0.speakerID == speakerID },
+                                hasAudio: hasAudio,
+                                canCorrect: coordinator.hasPremiumAccess
+                            )
+                            // The speakers come in from the left, one after the other.
+                            .transition(
+                                .asymmetric(
+                                    insertion: .opacity
+                                        .combined(with: .offset(x: -14))
+                                        .animation(reduceMotion ? nil : .easeOut(duration: 0.25).delay(Double(index) * 0.05)),
+                                    removal: .opacity
+                                )
+                            )
                         }
                     }
-                    .disabled(startError != nil)
-                    if startError == .premiumRequired {
-                        Button(String(localized: "speakers.premium.required")) {
-                            SettingsNavigationCoordinator.shared.navigate(to: .premium)
-                        }
-                    }
-                } label: {
-                    Label(String(localized: "speakers.action.detectAgain"), systemImage: "person.2.badge.gearshape")
+                    .padding(.vertical, 1)
                 }
-                .menuStyle(.borderlessButton)
-
-                Menu {
-                    Button(String(localized: "speakers.action.copyWithNames")) { model.copyWithNames() }
-                    Divider()
-                    ForEach(SpeakerTranscriptExportFormat.allCases) { format in
-                        Button(format.displayName) { model.export(format, title: record.appName) }
-                    }
-                } label: {
-                    Label(String(localized: "speakers.export.title"), systemImage: "square.and.arrow.up")
-                }
-                .menuStyle(.borderlessButton)
+                .transition(.opacity)
             }
-            .padding(12)
+
+            if model.filteredSpeaker != nil {
+                Button(String(localized: "speakers.filter.clear")) { model.filteredSpeaker = nil }
+                    .buttonStyle(.link)
+                    .font(.caption)
+            }
+
+            Menu {
+                let startError = coordinator.startError(for: record)
+                Section(String(localized: "speakers.count.title")) {
+                    Button(String(localized: "speakers.count.automatic")) { onDetectAgain(nil) }
+                    ForEach(coordinator.selectableSpeakerCounts, id: \.self) { count in
+                        Button(count.formatted()) { onDetectAgain(count) }
+                    }
+                }
+                .disabled(startError != nil)
+                if startError == .premiumRequired {
+                    Button(String(localized: "speakers.premium.required")) {
+                        SettingsNavigationCoordinator.shared.navigate(to: .premium)
+                    }
+                }
+            } label: {
+                Image(systemName: "person.2.badge.gearshape")
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help(String(localized: "speakers.action.detectAgain"))
+            .accessibilityLabel(String(localized: "speakers.action.detectAgain"))
+
+            Menu {
+                Button(String(localized: "speakers.action.copyWithNames")) { model.copyWithNames() }
+                Divider()
+                ForEach(SpeakerTranscriptExportFormat.allCases) { format in
+                    Button(format.displayName) { model.export(format, title: record.appName) }
+                }
+            } label: {
+                Image(systemName: "square.and.arrow.up")
+            }
+            .menuStyle(.borderlessButton)
+            .menuIndicator(.hidden)
+            .fixedSize()
+            .help(String(localized: "speakers.export.title"))
+            .accessibilityLabel(String(localized: "speakers.export.title"))
         }
-        .background(.bar)
+        .padding(.horizontal, 14)
+        .padding(.vertical, 7)
+    }
+}
+
+/// One speaker in the strip. A click opens the speaker's details.
+private struct SpeakerChip: View {
+    @ObservedObject var model: SpeakerWorkspaceModel
+    let speakerID: String
+    let share: SpeakerShare?
+    let hasAudio: Bool
+    let canCorrect: Bool
+    @State private var showsDetails = false
+    @State private var isHovered = false
+
+    var body: some View {
+        let isFiltered = model.filteredSpeaker == speakerID
+        Button {
+            showsDetails = true
+        } label: {
+            HStack(spacing: 6) {
+                SpeakerBadge(speakerID: speakerID, name: model.names?.displayName(for: speakerID))
+                Text(model.name(of: speakerID))
+                    .font(.callout.weight(.medium))
+                    .lineLimit(1)
+                if let share {
+                    Text(share.fraction, format: .percent.precision(.fractionLength(0)))
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
+                }
+                if model.soloedSpeakers.contains(speakerID) {
+                    Image(systemName: "headphones").font(.caption2).foregroundStyle(Color.accentColor)
+                }
+                if model.mutedSpeakers.contains(speakerID) {
+                    Image(systemName: "speaker.slash.fill").font(.caption2).foregroundStyle(.secondary)
+                }
+                if model.voiceState(of: speakerID) == .suggestion {
+                    Image(systemName: "waveform.badge.magnifyingglass").font(.caption2).foregroundStyle(.orange)
+                }
+            }
+            .padding(.leading, 4)
+            .padding(.trailing, 9)
+            .padding(.vertical, 4)
+            .background(
+                Capsule().fill(
+                    isFiltered ? Color.accentColor.opacity(0.2) : Color.primary.opacity(isHovered || showsDetails ? 0.12 : 0.06)
+                )
+            )
+            .contentShape(Capsule())
+        }
+        .buttonStyle(.plain)
+        .opacity(model.isAudible(speakerID) ? 1 : 0.55)
+        .onHover { isHovered = $0 }
+        .popover(isPresented: $showsDetails, arrowEdge: .bottom) {
+            SpeakerInspectorRow(
+                model: model,
+                speakerID: speakerID,
+                share: share,
+                hasAudio: hasAudio,
+                canCorrect: canCorrect
+            )
+            .frame(width: 270)
+            .padding(8)
+        }
     }
 }
 
@@ -448,12 +550,13 @@ private struct SpeakerInspectorRow: View {
     var body: some View {
         let isFiltered = model.filteredSpeaker == speakerID
         let voiceState = model.voiceState(of: speakerID)
+        let isSoloed = model.soloedSpeakers.contains(speakerID)
+        let isMuted = model.mutedSpeakers.contains(speakerID)
         VStack(alignment: .leading, spacing: 5) {
-            HStack(spacing: 6) {
+            HStack(spacing: 7) {
                 SpeakerBadge(speakerID: speakerID, name: model.names?.displayName(for: speakerID))
                 TextField(SpeakerTranscriptPresentation.defaultName(for: speakerID), text: $nameDraft)
-                    .textFieldStyle(.plain)
-                    .font(.subheadline.weight(.medium))
+                    .textFieldStyle(.roundedBorder)
                     .focused($isNameFocused)
                     .onSubmit { commitName() }
                     .onChange(of: isNameFocused) { _, focused in
@@ -466,6 +569,11 @@ private struct SpeakerInspectorRow: View {
                         .foregroundStyle(.secondary)
                         .help(String(localized: "speakers.voice.linked"))
                         .accessibilityLabel(String(localized: "speakers.voice.linked"))
+                }
+                if let share {
+                    Text(share.fraction, format: .percent.precision(.fractionLength(0)))
+                        .font(.caption.monospacedDigit())
+                        .foregroundStyle(.secondary)
                 }
             }
 
@@ -482,22 +590,22 @@ private struct SpeakerInspectorRow: View {
                 }
             }
 
-            HStack(spacing: 4) {
+            HStack(spacing: 8) {
                 if let share {
-                    Text(share.fraction, format: .percent.precision(.fractionLength(0)))
-                    Text("·")
                     Text(SpeakerTranscriptPresentation.timestamp(share.seconds))
                 }
                 Spacer(minLength: 4)
                 if hasAudio {
-                    iconButton("play.circle", help: "speakers.excerpt.play") {
-                        model.playExcerpt(of: speakerID)
-                    }
-                    toggleButton("S", isOn: model.soloedSpeakers.contains(speakerID), help: "speakers.playback.solo") {
-                        model.toggleSolo(speakerID)
-                    }
-                    toggleButton("M", isOn: model.mutedSpeakers.contains(speakerID), help: "speakers.playback.mute") {
-                        model.toggleMute(speakerID)
+                    Group {
+                        iconButton("play.circle", help: "speakers.excerpt.play") {
+                            model.playExcerpt(of: speakerID)
+                        }
+                        toggleButton("headphones", isOn: isSoloed, help: "speakers.playback.solo") {
+                            model.toggleSolo(speakerID)
+                        }
+                        toggleButton("speaker.slash.fill", isOn: isMuted, help: "speakers.playback.mute") {
+                            model.toggleMute(speakerID)
+                        }
                     }
                 }
                 Menu {
@@ -529,17 +637,24 @@ private struct SpeakerInspectorRow: View {
             }
             .font(.caption.monospacedDigit())
             .foregroundStyle(.secondary)
+            .padding(.leading, 25)
 
             if let share {
-                ProgressView(value: share.fraction)
-                    .tint(SpeakerBadge.color(for: speakerID))
-                    .accessibilityHidden(true)
+                GeometryReader { geometry in
+                    Capsule()
+                        .fill(SpeakerBadge.color(for: speakerID))
+                        .frame(width: max(3, geometry.size.width * share.fraction))
+                }
+                .frame(height: 3)
+                .background(Capsule().fill(Color.primary.opacity(0.08)))
+                .accessibilityHidden(true)
             }
         }
-        .padding(8)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 7)
         .background(
             RoundedRectangle(cornerRadius: 7)
-                .fill(isFiltered ? Color.accentColor.opacity(0.14) : Color.primary.opacity(0.04))
+                .fill(isFiltered ? Color.accentColor.opacity(0.14) : Color.clear)
         )
         .opacity(model.isAudible(speakerID) ? 1 : 0.55)
         .confirmationDialog(
@@ -568,11 +683,11 @@ private struct SpeakerInspectorRow: View {
             .accessibilityLabel(String(localized: help))
     }
 
-    private func toggleButton(_ title: String, isOn: Bool, help: String.LocalizationValue, action: @escaping () -> Void) -> some View {
+    private func toggleButton(_ systemImage: String, isOn: Bool, help: String.LocalizationValue, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text(title)
+            Image(systemName: systemImage)
                 .font(.caption2.weight(.bold))
-                .frame(width: 18, height: 18)
+                .frame(width: 20, height: 18)
                 .foregroundStyle(isOn ? Color.white : .secondary)
                 .background(RoundedRectangle(cornerRadius: 4).fill(isOn ? Color.accentColor : Color.primary.opacity(0.08)))
         }
@@ -583,109 +698,263 @@ private struct SpeakerInspectorRow: View {
     }
 }
 
-// MARK: - Timeline
+// MARK: - Words
 
-private struct SpeakerTimelineView: View {
-    @ObservedObject var model: SpeakerWorkspaceModel
-    @ObservedObject var playback: SpeakerPlaybackController
-
-    private let laneHeight: CGFloat = 12
-    private let laneSpacing: CGFloat = 3
-    private let labelWidth: CGFloat = 26
+/// A paragraph as words that can be played from, with the spoken word marked.
+private struct SpeakerParagraphWords: View {
+    let words: [SpeakerWorkspaceModel.WordToken]
+    /// The word being spoken; nil in every paragraph but the active one.
+    let activeIndex: Int?
+    let isActive: Bool
+    let isPlayable: Bool
+    let onPlay: (SpeakerWorkspaceModel.WordToken) -> Void
 
     var body: some View {
-        let speakers = model.speakerIDs
-        let height = CGFloat(speakers.count) * (laneHeight + laneSpacing) + laneSpacing
-        HStack(alignment: .top, spacing: 6) {
-            VStack(spacing: laneSpacing) {
-                ForEach(speakers, id: \.self) { speakerID in
-                    SpeakerBadge(speakerID: speakerID, name: model.names?.displayName(for: speakerID))
-                        .scaleEffect(laneHeight / 18)
-                        .frame(width: laneHeight, height: laneHeight)
-                        .opacity(model.isAudible(speakerID) ? 1 : 0.4)
-                }
-            }
-            .padding(.top, laneSpacing)
-            .frame(width: labelWidth)
-
-            GeometryReader { geometry in
-                let width = geometry.size.width
-                let duration = max(playback.duration, model.turns.last?.end ?? 0, 0.001)
-                ZStack(alignment: .topLeading) {
-                    Canvas { context, size in
-                        for (lane, speakerID) in speakers.enumerated() {
-                            let y = laneSpacing + CGFloat(lane) * (laneHeight + laneSpacing)
-                            let track = CGRect(x: 0, y: y, width: size.width, height: laneHeight)
-                            context.fill(Path(roundedRect: track, cornerRadius: 3), with: .color(.primary.opacity(0.05)))
-                            let color = SpeakerBadge.color(for: speakerID).opacity(model.isAudible(speakerID) ? 0.9 : 0.3)
-                            for turn in model.turns where turn.speakerID == speakerID {
-                                let x = size.width * turn.start / duration
-                                let turnWidth = max(1.5, size.width * (turn.end - turn.start) / duration)
-                                let rect = CGRect(x: x, y: y, width: turnWidth, height: laneHeight)
-                                context.fill(Path(roundedRect: rect, cornerRadius: 2), with: .color(color))
-                            }
-                        }
-                    }
-                    Rectangle()
-                        .fill(Color.primary)
-                        .frame(width: 1.5, height: height)
-                        .offset(x: width * min(max(playback.currentTime / duration, 0), 1))
-                        .accessibilityHidden(true)
-                }
-                .contentShape(Rectangle())
-                .gesture(
-                    DragGesture(minimumDistance: 0)
-                        .onChanged { value in
-                            model.followsPlayback = true
-                            playback.seek(to: duration * min(max(value.location.x / width, 0), 1))
-                        }
+        SpeakerWordFlow(lineSpacing: 1) {
+            ForEach(words) { word in
+                SpeakerWordView(
+                    word: word,
+                    phase: phase(of: word),
+                    isPlayable: isPlayable,
+                    onPlay: onPlay
                 )
             }
-            .frame(height: height)
         }
-        .padding(.horizontal, 12)
-        .padding(.top, 8)
-        .accessibilityElement()
-        .accessibilityLabel(String(localized: "speakers.timeline.title"))
-        .accessibilityValue(SpeakerTranscriptPresentation.timestamp(playback.currentTime))
-        .accessibilityAdjustableAction { direction in
-            playback.skip(by: direction == .increment ? 5 : -5)
-        }
+    }
+
+    private func phase(of word: SpeakerWorkspaceModel.WordToken) -> SpeakerWordView.Phase {
+        guard isActive, let activeIndex else { return .idle }
+        if word.id == activeIndex { return .current }
+        return word.id < activeIndex ? .spoken : .upcoming
     }
 }
 
-// MARK: - Transport
+private struct SpeakerWordView: View {
+    enum Phase {
+        case idle, spoken, current, upcoming
+    }
 
-private struct SpeakerTransportBar: View {
-    @ObservedObject var model: SpeakerWorkspaceModel
-    @ObservedObject var playback: SpeakerPlaybackController
+    let word: SpeakerWorkspaceModel.WordToken
+    let phase: Phase
+    let isPlayable: Bool
+    let onPlay: (SpeakerWorkspaceModel.WordToken) -> Void
+
+    @State private var isHovered = false
 
     var body: some View {
-        HStack(spacing: 14) {
-            button("backward.end.fill", help: "speakers.playback.previousTurn") { model.playTurn(offset: -1) }
-            button("gobackward.5", help: "speakers.playback.back") { playback.skip(by: -5) }
-            Button {
-                playback.togglePlayPause()
-            } label: {
-                Image(systemName: playback.isPlaying ? "pause.fill" : "play.fill")
-                    .font(.title3)
-                    .frame(width: 24)
+        Text(word.text)
+            .font(.body)
+            .foregroundStyle(foreground)
+            // The padding makes room for the mark and stands in for the space.
+            .padding(.horizontal, word.isFollowedBySpace ? 1.6 : 0)
+            .padding(.vertical, 1)
+            .background(
+                RoundedRectangle(cornerRadius: 4, style: .continuous)
+                    .fill(background)
+            )
+            .contentShape(Rectangle())
+            .onHover { isHovered = isPlayable && $0 }
+            .onTapGesture { onPlay(word) }
+            .animation(.easeOut(duration: 0.12), value: phase)
+    }
+
+    private var foreground: Color {
+        switch phase {
+        case .current: .white
+        case .upcoming: .secondary
+        case .idle, .spoken: .primary
+        }
+    }
+
+    private var background: Color {
+        if phase == .current { return .accentColor }
+        return isHovered ? Color.primary.opacity(0.12) : .clear
+    }
+}
+
+/// Wraps words like running text.
+private struct SpeakerWordFlow: Layout {
+    let lineSpacing: CGFloat
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let lines = arrange(subviews, width: proposal.width ?? .infinity)
+        return CGSize(width: proposal.width ?? lines.width, height: lines.height)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let lines = arrange(subviews, width: bounds.width)
+        for (subview, origin) in zip(subviews, lines.origins) {
+            subview.place(
+                at: CGPoint(x: bounds.minX + origin.x, y: bounds.minY + origin.y),
+                anchor: .topLeading,
+                proposal: .unspecified
+            )
+        }
+    }
+
+    private func arrange(_ subviews: Subviews, width: CGFloat) -> (origins: [CGPoint], width: CGFloat, height: CGFloat) {
+        var origins: [CGPoint] = []
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var lineHeight: CGFloat = 0
+        var widest: CGFloat = 0
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x > 0, x + size.width > width {
+                y += lineHeight + lineSpacing
+                x = 0
+                lineHeight = 0
             }
-            .buttonStyle(.borderless)
-            .accessibilityLabel(playback.isPlaying ? String(localized: "Pause") : String(localized: "Play"))
-            button("goforward.5", help: "speakers.playback.forward") { playback.skip(by: 5) }
-            button("forward.end.fill", help: "speakers.playback.nextTurn") { model.playTurn(offset: 1) }
+            origins.append(CGPoint(x: x, y: y))
+            x += size.width
+            lineHeight = max(lineHeight, size.height)
+            widest = max(widest, x)
+        }
+        return (origins, widest, y + lineHeight)
+    }
+}
 
-            Text(SpeakerTranscriptPresentation.timestamp(playback.currentTime)
-                + " / " + SpeakerTranscriptPresentation.timestamp(playback.duration))
-                .font(.caption.monospacedDigit())
-                .foregroundStyle(.secondary)
+// MARK: - Player
 
-            Spacer(minLength: 8)
+/// The player at the bottom of the workspace: who is speaking, the transport
+/// with a scrubber in the speakers' colours, and speed and volume.
+private struct SpeakerPlayerBar: View {
+    @ObservedObject var model: SpeakerWorkspaceModel
+    @ObservedObject var playback: SpeakerPlaybackController
+    let title: String
 
-            Toggle(String(localized: "speakers.playback.skipSilence"), isOn: $model.skipsSilence)
-                .toggleStyle(.checkbox)
+    var body: some View {
+        ViewThatFits(in: .horizontal) {
+            layout(showsNowPlaying: true, showsVolume: true)
+            layout(showsNowPlaying: true, showsVolume: false)
+            layout(showsNowPlaying: false, showsVolume: false)
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .fill(.regularMaterial)
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.08))
+        )
+        .shadow(color: .black.opacity(0.18), radius: 10, y: 3)
+        .padding(.horizontal, 12)
+        .padding(.top, 6)
+        .padding(.bottom, 10)
+    }
+
+    private func layout(showsNowPlaying: Bool, showsVolume: Bool) -> some View {
+        HStack(spacing: 16) {
+            if showsNowPlaying {
+                nowPlaying
+                    .frame(width: 180, alignment: .leading)
+            }
+            transport
+                .frame(minWidth: 300, idealWidth: 300, maxWidth: .infinity)
+            options(showsVolume: showsVolume, compact: false)
+                .fixedSize()
+        }
+    }
+
+    // MARK: Now playing
+
+    private var nowPlaying: some View {
+        let speakerID = model.activeTurnIndex.flatMap { index in
+            model.turns.first { $0.index == index }?.speakerID
+        }
+        return HStack(spacing: 10) {
+            Group {
+                if let speakerID {
+                    SpeakerBadge(speakerID: speakerID, name: model.names?.displayName(for: speakerID))
+                        .scaleEffect(30.0 / 18.0)
+                } else {
+                    Image(systemName: "waveform")
+                        .font(.body.weight(.medium))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(width: 30, height: 30)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(speakerID.map(model.name(of:)) ?? title)
+                    .font(.callout.weight(.semibold))
+                    .lineLimit(1)
+                if speakerID != nil {
+                    Text(title)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+            }
+        }
+        .animation(.easeOut(duration: 0.15), value: speakerID)
+        .accessibilityElement(children: .combine)
+    }
+
+    // MARK: Transport
+
+    private var transport: some View {
+        VStack(spacing: 5) {
+            HStack(spacing: 20) {
+                button("backward.end.fill", help: "speakers.playback.previousTurn") { model.playTurn(offset: -1) }
+                button("gobackward.5", help: "speakers.playback.back") { playback.skip(by: -5) }
+                Button {
+                    playback.togglePlayPause()
+                } label: {
+                    Image(systemName: playback.isPlaying ? "pause.fill" : "play.fill")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(Color(nsColor: .windowBackgroundColor))
+                        .frame(width: 34, height: 34)
+                        .background(Circle().fill(Color.primary))
+                        .contentTransition(.symbolEffect(.replace))
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(playback.isPlaying ? String(localized: "Pause") : String(localized: "Play"))
+                button("goforward.5", help: "speakers.playback.forward") { playback.skip(by: 5) }
+                button("forward.end.fill", help: "speakers.playback.nextTurn") { model.playTurn(offset: 1) }
+            }
+
+            HStack(spacing: 8) {
+                Text(SpeakerTranscriptPresentation.timestamp(playback.currentTime))
+                    .frame(width: 46, alignment: .trailing)
+                SpeakerScrubber(model: model, playback: playback)
+                Text("-" + SpeakerTranscriptPresentation.timestamp(max(0, playback.duration - playback.currentTime)))
+                    .frame(width: 50, alignment: .leading)
+            }
+            .font(.caption2.monospacedDigit())
+            .foregroundStyle(.secondary)
+        }
+    }
+
+    // MARK: Options
+
+    private func options(showsVolume: Bool, compact: Bool) -> some View {
+        HStack(spacing: 10) {
+            Button {
+                model.skipsSilence.toggle()
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "forward.frame.fill")
+                    if !compact {
+                        Text(String(localized: "speakers.playback.skipSilence"))
+                            .lineLimit(1)
+                    }
+                }
                 .font(.caption)
+                .foregroundStyle(model.skipsSilence ? Color.white : Color.secondary)
+                .padding(.horizontal, 8)
+                .frame(height: 20)
+                .background(
+                    Capsule().fill(model.skipsSilence ? Color.accentColor : Color.primary.opacity(0.08))
+                )
+            }
+            .buttonStyle(.plain)
+            .help(String(localized: "speakers.playback.skipSilence"))
+            .accessibilityLabel(String(localized: "speakers.playback.skipSilence"))
+            .accessibilityAddTraits(model.skipsSilence ? .isSelected : [])
 
             Menu {
                 ForEach(SpeakerPlaybackController.rates, id: \.self) { rate in
@@ -701,15 +970,27 @@ private struct SpeakerTransportBar: View {
                 }
             } label: {
                 Text(Self.rateTitle(playback.rate))
-                    .font(.caption.monospacedDigit())
+                    .font(.caption.monospacedDigit().weight(.medium))
             }
             .menuStyle(.borderlessButton)
             .fixedSize()
             .help(String(localized: "speakers.playback.speed"))
             .accessibilityLabel(String(localized: "speakers.playback.speed"))
+
+            if showsVolume {
+                HStack(spacing: 4) {
+                    Image(systemName: playback.volume == 0 ? "speaker.slash.fill" : "speaker.wave.2.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.secondary)
+                        .frame(width: 16)
+                        .accessibilityHidden(true)
+                    Slider(value: $playback.volume, in: 0...1)
+                        .controlSize(.mini)
+                        .frame(width: 64)
+                        .accessibilityLabel(String(localized: "speakers.playback.volume"))
+                }
+            }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 8)
     }
 
     private static func rateTitle(_ rate: Float) -> String {
@@ -717,9 +998,114 @@ private struct SpeakerTransportBar: View {
     }
 
     private func button(_ systemImage: String, help: String.LocalizationValue, action: @escaping () -> Void) -> some View {
-        Button(action: action) { Image(systemName: systemImage) }
-            .buttonStyle(.borderless)
-            .help(String(localized: help))
-            .accessibilityLabel(String(localized: help))
+        Button(action: action) {
+            Image(systemName: systemImage)
+                .font(.system(size: 14, weight: .medium))
+                .frame(width: 24, height: 24)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(.primary)
+        .help(String(localized: help))
+        .accessibilityLabel(String(localized: help))
+    }
+}
+
+/// The playback position over the whole recording. Each turn has its
+/// speaker's colour; what has played is filled in.
+private struct SpeakerScrubber: View {
+    @ObservedObject var model: SpeakerWorkspaceModel
+    @ObservedObject var playback: SpeakerPlaybackController
+
+    @State private var hoverX: CGFloat?
+    @State private var isDragging = false
+
+    var body: some View {
+        GeometryReader { geometry in
+            let width = geometry.size.width
+            let duration = max(playback.duration, model.turns.last?.end ?? 0, 0.001)
+            let progress = min(max(playback.currentTime / duration, 0), 1)
+            let isExpanded = hoverX != nil || isDragging
+
+            ZStack(alignment: .leading) {
+                Canvas { context, size in
+                    context.fill(Path(CGRect(origin: .zero, size: size)), with: .color(.primary.opacity(0.1)))
+                    let played = size.width * progress
+                    for turn in model.turns {
+                        let x = size.width * turn.start / duration
+                        let turnWidth = max(1, size.width * (turn.end - turn.start) / duration)
+                        let color = SpeakerBadge.color(for: turn.speakerID)
+                        let isAudible = model.isAudible(turn.speakerID)
+                        context.fill(
+                            Path(CGRect(x: x, y: 0, width: turnWidth, height: size.height)),
+                            with: .color(color.opacity(isAudible ? 0.32 : 0.1))
+                        )
+                        if x < played {
+                            context.fill(
+                                Path(CGRect(x: x, y: 0, width: min(turnWidth, played - x), height: size.height)),
+                                with: .color(color.opacity(isAudible ? 1 : 0.3))
+                            )
+                        }
+                    }
+                }
+                .frame(height: isExpanded ? 9 : 5)
+                .clipShape(Capsule())
+
+                Circle()
+                    .fill(.white)
+                    .shadow(color: .black.opacity(0.35), radius: 1.5, y: 0.5)
+                    .frame(width: 12, height: 12)
+                    .offset(x: width * progress - 6)
+                    .opacity(isExpanded ? 1 : 0)
+            }
+            .frame(width: width, alignment: .leading)
+            .frame(maxHeight: .infinity)
+            // Above the bar, centred on the pointer, without taking part in the layout.
+            .overlay(alignment: .topLeading) {
+                if let hoverX {
+                    Text(hint(at: duration * min(max(hoverX / width, 0), 1)))
+                        .font(.caption2.monospacedDigit())
+                        .foregroundStyle(.primary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Capsule().fill(.thickMaterial))
+                        .fixedSize()
+                        .position(x: hoverX, y: -9)
+                        .allowsHitTesting(false)
+                }
+            }
+            .contentShape(Rectangle())
+            .onContinuousHover { phase in
+                switch phase {
+                case .active(let point): hoverX = point.x
+                case .ended: hoverX = nil
+                }
+            }
+            .gesture(
+                DragGesture(minimumDistance: 0)
+                    .onChanged { value in
+                        isDragging = true
+                        hoverX = min(max(value.location.x, 0), width)
+                        model.followsPlayback = true
+                        playback.seek(to: duration * min(max(value.location.x / width, 0), 1))
+                    }
+                    .onEnded { _ in isDragging = false }
+            )
+            .animation(.easeOut(duration: 0.12), value: isExpanded)
+        }
+        .frame(height: 16)
+        .accessibilityElement()
+        .accessibilityLabel(String(localized: "speakers.timeline.title"))
+        .accessibilityValue(SpeakerTranscriptPresentation.timestamp(playback.currentTime))
+        .accessibilityAdjustableAction { direction in
+            playback.skip(by: direction == .increment ? 5 : -5)
+        }
+    }
+
+    /// The time under the pointer and who speaks there.
+    private func hint(at time: TimeInterval) -> String {
+        let stamp = SpeakerTranscriptPresentation.timestamp(time)
+        guard let turn = SpeakerTranscriptPresentation.spokenTurn(in: model.turns, at: time) else { return stamp }
+        return stamp + " · " + model.name(of: turn.speakerID)
     }
 }

@@ -499,12 +499,14 @@ final class HistoryService: ObservableObject {
         _ timedText: [TimedTextEntry],
         granularity: TimedTextGranularity,
         words: [TranscriptionWord] = [],
+        wordsAreFromSecondPass: Bool = false,
         forRecordID id: UUID
     ) {
         guard let record = record(withID: id) else { return }
         record.timedText = timedText
         record.timedTextGranularity = granularity
         record.speakerWords = words
+        record.speakerWordsAreFromSecondPass = wordsAreFromSecondPass ? true : nil
         save()
     }
 

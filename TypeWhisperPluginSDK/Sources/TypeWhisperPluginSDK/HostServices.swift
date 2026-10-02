@@ -1314,7 +1314,8 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
         requestTimeout: TimeInterval,
         uploadFile: PluginAudioUploadFile? = nil,
         apiVersion: String? = nil,
-        allowsWavFallback: Bool = false
+        allowsWavFallback: Bool = false,
+        requestsWordTimings: Bool? = nil
     ) async throws -> PluginTranscriptionResult {
         let path = translate ? "/v1/audio/translations" : "/v1/audio/transcriptions"
         guard let url = requestURL(path: path, apiVersion: apiVersion) else {
@@ -1345,6 +1346,18 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
         // response_format field
         let format = responseFormat ?? self.responseFormat
         body.appendFormField(boundary: boundary, name: "response_format", value: format)
+
+        // Word timestamps, when the host collects them and the server takes the parameter.
+        let requestsWordTimings = requestsWordTimings ?? (
+            PluginWordTimings.collector != nil
+                && format == "verbose_json"
+                && !translate
+                && !Self.serversWithoutWordTimings.withLock { $0.contains(baseURL) }
+        )
+        if requestsWordTimings {
+            body.appendFormField(boundary: boundary, name: "timestamp_granularities[]", value: "word")
+            body.appendFormField(boundary: boundary, name: "timestamp_granularities[]", value: "segment")
+        }
 
         // language field (only for transcription)
         if !translate, let language, !language.isEmpty {
@@ -1385,6 +1398,26 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
             )
         }
 
+        // A server that does not know the word timestamp parameter gets the
+        // request again without it, and is not asked for words again.
+        if requestsWordTimings, [400, 422].contains(httpResponse.statusCode) {
+            Self.serversWithoutWordTimings.withLock { _ = $0.insert(baseURL) }
+            return try await performTranscribe(
+                audio: audio,
+                apiKey: apiKey,
+                modelName: modelName,
+                language: language,
+                translate: translate,
+                prompt: prompt,
+                responseFormat: responseFormat,
+                requestTimeout: requestTimeout,
+                uploadFile: uploadFile,
+                apiVersion: apiVersion,
+                allowsWavFallback: allowsWavFallback,
+                requestsWordTimings: false
+            )
+        }
+
         switch httpResponse.statusCode {
         case 200:
             break
@@ -1403,6 +1436,13 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
         }
 
         return try parseResponse(responseData, response: httpResponse)
+    }
+
+    /// Base URLs whose server rejected the word timestamp parameter.
+    private static let serversWithoutWordTimings = OSAllocatedUnfairLock<Set<String>>(initialState: [])
+
+    @_spi(Testing) public static func resetWordTimingSupportForTesting() {
+        serversWithoutWordTimings.withLock { $0 = [] }
     }
 
     public func validateApiKey(_ apiKey: String) async -> Bool {
@@ -1450,10 +1490,17 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
         let text: String
     }
 
+    private struct APIWord: Decodable {
+        let word: String
+        let start: Double
+        let end: Double
+    }
+
     private struct APIResponse: Decodable {
         let text: String
         let language: String?
         let segments: [APISegment]?
+        let words: [APIWord]?
     }
 
     private func parseResponse(
@@ -1473,6 +1520,12 @@ public struct PluginOpenAITranscriptionHelper: Sendable {
             let response = try JSONDecoder().decode(APIResponse.self, from: data)
             let segments = (response.segments ?? []).map {
                 PluginTranscriptionSegment(text: $0.text, start: $0.start, end: $0.end)
+            }
+            if let words = response.words, !words.isEmpty {
+                PluginWordTimings.report(words.compactMap {
+                    let text = $0.word.trimmingCharacters(in: .whitespacesAndNewlines)
+                    return text.isEmpty ? nil : PluginWordTiming(text: text, start: $0.start, end: $0.end)
+                })
             }
             return PluginTranscriptionResult(text: response.text, detectedLanguage: response.language, segments: segments)
         } catch {

@@ -92,7 +92,7 @@ struct SpeakerBadge: View {
     let speakerID: String
     let name: String?
 
-    private static let palette: [Color] = [.blue, .orange, .green, .purple, .pink, .teal, .indigo, .brown]
+    static let palette: [Color] = [.blue, .orange, .green, .purple, .pink, .teal, .indigo, .brown]
 
     static func color(for speakerID: String) -> Color {
         let number = SpeakerTranscript.speakerNumber(of: speakerID) ?? 1

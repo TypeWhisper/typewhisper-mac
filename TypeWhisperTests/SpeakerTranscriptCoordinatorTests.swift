@@ -35,6 +35,15 @@ final class SpeakerTranscriptBuilderMacTests: XCTestCase {
         XCTAssertTrue(transcript.isValid)
     }
 
+    func testStoredLanguageNamesAndLocalesBecomeLanguageCodes() {
+        XCTAssertEqual(SpeakerTranscriptBuilder.languageCode(from: "de"), "de")
+        XCTAssertEqual(SpeakerTranscriptBuilder.languageCode(from: "de-DE"), "de")
+        XCTAssertEqual(SpeakerTranscriptBuilder.languageCode(from: "German"), "de")
+        XCTAssertEqual(SpeakerTranscriptBuilder.languageCode(from: "english"), "en")
+        XCTAssertNil(SpeakerTranscriptBuilder.languageCode(from: "not a language"))
+        XCTAssertNil(SpeakerTranscriptBuilder.languageCode(from: nil))
+    }
+
     func testSegmentsWithoutLabelsGiveNoProviderTranscript() {
         XCTAssertNil(SpeakerTranscriptBuilder.providerTranscript(
             from: [TranscriptionSegment(text: "Hello", start: 0, end: 1)],
@@ -330,6 +339,43 @@ final class SpeakerTranscriptCoordinatorTests: XCTestCase {
         XCTAssertEqual(record.speakerTranscriptState, .ready)
         XCTAssertEqual(record.speakerTranscript?.segments.map(\.speakerID), ["S1"])
         XCTAssertEqual(record.finalText, "Hello there")
+    }
+
+    func testRecordingWithoutWordTimingGetsItFromTheSecondPass() async throws {
+        provider.turns = [PluginSpeakerTurn(speakerLabel: "x", start: 0, end: 3)]
+        let coordinator = makeCoordinator()
+        var requestedLanguage: String?
+        coordinator.wordTimingSource = { _, language in
+            requestedLanguage = language
+            return [
+                TranscriptionWord(text: "Good", start: 0.1, end: 0.3),
+                TranscriptionWord(text: "morning", start: 0.4, end: 0.9),
+            ]
+        }
+
+        let addedID = await coordinator.addRecording(input())
+        let id = try XCTUnwrap(addedID)
+        try await waitUntilIdle(coordinator)
+
+        let record = try XCTUnwrap(history.record(withID: id))
+        XCTAssertEqual(requestedLanguage, "en")
+        XCTAssertEqual(record.speakerWords.map(\.text), ["Good", "morning"])
+        XCTAssertEqual(record.speakerWordsAreFromSecondPass, true)
+        XCTAssertEqual(record.speakerTranscriptState, .ready)
+    }
+
+    func testAFailingSecondPassLeavesSegmentTimingAndStillDetectsSpeakers() async throws {
+        provider.turns = [PluginSpeakerTurn(speakerLabel: "x", start: 0, end: 3)]
+        let coordinator = makeCoordinator()
+        coordinator.wordTimingSource = { _, _ in throw TranscriptionEngineError.noEngineSelected }
+
+        let addedID = await coordinator.addRecording(input())
+        let id = try XCTUnwrap(addedID)
+        try await waitUntilIdle(coordinator)
+
+        let record = try XCTUnwrap(history.record(withID: id))
+        XCTAssertTrue(record.speakerWords.isEmpty)
+        XCTAssertEqual(record.speakerTranscriptState, .ready)
     }
 
     func testVoicesAreStoredUnderTheNumberedSpeakersOfTheTranscript() async throws {
