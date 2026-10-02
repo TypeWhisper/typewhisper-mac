@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 
 enum DictationRecoveryRetentionPolicy: Int, CaseIterable, Sendable {
@@ -35,14 +36,70 @@ struct DictationRecoveryPreservationResult: Equatable, Sendable {
     let newlyPreservedURL: URL?
 }
 
+enum DictationRecoveryAudioCompressorError: Error, Equatable {
+    case emptyAudio
+    case invalidBuffer
+    case lengthMismatch
+}
+
+/// Transcodes a finished PCM16 WAV recovery recording to AAC. Recording itself stays
+/// WAV because an unfinished `.m4a` is unreadable.
+enum DictationRecoveryAudioCompressor {
+    static let fileExtension = "m4a"
+    /// An eighth of 16 kHz mono PCM16 (256 kbit/s).
+    static let bitRate = 32_000
+
+    private static let chunkFrameCount: AVAudioFrameCount = 65_536
+    /// AAC rounds the frame count to its packet size.
+    private static let lengthToleranceFrames: AVAudioFramePosition = 4_096
+
+    static func compress(wavURL: URL, to destinationURL: URL) throws {
+        let source = try AVAudioFile(forReading: wavURL)
+        let format = source.processingFormat
+        guard source.length > 0 else { throw DictationRecoveryAudioCompressorError.emptyAudio }
+        guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: chunkFrameCount) else {
+            throw DictationRecoveryAudioCompressorError.invalidBuffer
+        }
+
+        let settings: [String: Any] = [
+            AVFormatIDKey: kAudioFormatMPEG4AAC,
+            AVSampleRateKey: format.sampleRate,
+            AVNumberOfChannelsKey: format.channelCount,
+            AVEncoderBitRateKey: bitRate,
+        ]
+        // The file is finalized when `output` is released.
+        do {
+            let output = try AVAudioFile(
+                forWriting: destinationURL,
+                settings: settings,
+                commonFormat: format.commonFormat,
+                interleaved: format.isInterleaved
+            )
+            while source.framePosition < source.length {
+                try source.read(into: buffer)
+                guard buffer.frameLength > 0 else { break }
+                try output.write(from: buffer)
+            }
+        }
+
+        let written = try AVAudioFile(forReading: destinationURL)
+        guard abs(written.length - source.length) <= lengthToleranceFrames else {
+            throw DictationRecoveryAudioCompressorError.lengthMismatch
+        }
+    }
+}
+
 /// Persists the active dictation as a temporary 16 kHz mono PCM WAV so the
 /// audio can be recovered after a failure or an apparently successful but incomplete result.
+/// Preserved recordings are transcoded to AAC; a recording stays WAV if that fails.
 ///
 /// Appended samples are batched in memory and written in chunks of `writeBatchSampleCount`.
 /// Preservation always flushes the remainder first, so preserved files contain every
 /// appended sample. The active file itself is never recoverable after a crash (it is
 /// deleted on launch because its header is only finalized on preservation).
 final class DictationRecoveryAudioStore: @unchecked Sendable {
+    typealias Compressor = @Sendable (_ wavURL: URL, _ destinationURL: URL) throws -> Void
+
     /// About one second of 16 kHz audio (32 KiB of PCM16) per file write.
     static let writeBatchSampleCount = 16_384
 
@@ -53,17 +110,21 @@ final class DictationRecoveryAudioStore: @unchecked Sendable {
         static let bytesPerSample = 2
         static let wavHeaderByteCount = 44
         static let activeFileName = "active-dictation-recovery.wav"
+        static let compressingFileName = "active-dictation-recovery.partial.m4a"
         static let legacyLatestFileName = "last-dictation-recovery.wav"
         static let recoveryFilePrefix = "dictation-recovery-"
         static let recentSuccessPrefix = "recent-dictation-"
         static let maximumRecentSuccesses = 3
         static let recentSuccessLifetime: TimeInterval = 24 * 60 * 60
-        static let recoveryFileExtension = "wav"
+        static let wavFileExtension = "wav"
+        static let recoveryFileExtensions = [wavFileExtension, DictationRecoveryAudioCompressor.fileExtension]
     }
 
     private let directory: URL
     private let activeFileURL: URL
+    private let compressingFileURL: URL
     private let fileManager: FileManager
+    private let compressor: Compressor?
     private let now: @Sendable () -> Date
     private let queue = DispatchQueue(label: "com.typewhisper.dictation-recovery-audio", qos: .utility)
 
@@ -80,6 +141,7 @@ final class DictationRecoveryAudioStore: @unchecked Sendable {
             .appendingPathComponent("dictation-recovery", isDirectory: true),
         fileManager: FileManager = .default,
         retentionPolicy: DictationRecoveryRetentionPolicy = .defaultPolicy,
+        compressor: Compressor? = DictationRecoveryAudioCompressor.compress,
         now: @escaping @Sendable () -> Date = Date.init
     ) {
         let standardizedInput = directory.standardizedFileURL
@@ -97,13 +159,16 @@ final class DictationRecoveryAudioStore: @unchecked Sendable {
         }
         self.directory = standardizedDirectory
         self.activeFileURL = standardizedDirectory.appendingPathComponent(Constants.activeFileName)
+        self.compressingFileURL = standardizedDirectory.appendingPathComponent(Constants.compressingFileName)
         self.fileManager = fileManager
+        self.compressor = compressor
         self.retentionPolicy = retentionPolicy
         self.now = now
 
         // An active file cannot be recovered safely because its WAV header is
         // finalized only after recording stops. Never leave crash residue on disk.
         removeItemIfExists(at: activeFileURL)
+        removeItemIfExists(at: compressingFileURL)
         applyRetentionPolicy()
     }
 
@@ -247,10 +312,17 @@ final class DictationRecoveryAudioStore: @unchecked Sendable {
         }
 
         finalizeActiveWavHeader(sampleCount: activeSampleCount)
-        let recoveryURL = makeUniqueRecoveryFileURL(successful: successful)
+        let compressed = compressActiveRecording()
+        let recoveryURL = makeUniqueRecoveryFileURL(
+            successful: successful,
+            fileExtension: compressed ? DictationRecoveryAudioCompressor.fileExtension : Constants.wavFileExtension
+        )
 
         do {
-            try fileManager.moveItem(at: activeFileURL, to: recoveryURL)
+            try fileManager.moveItem(at: compressed ? compressingFileURL : activeFileURL, to: recoveryURL)
+            if compressed {
+                removeItemIfExists(at: activeFileURL)
+            }
             activeSampleCount = 0
             applyRetentionPolicy()
             let canonicalRecoveryURL = canonicalFileURL(recoveryURL)
@@ -262,10 +334,27 @@ final class DictationRecoveryAudioStore: @unchecked Sendable {
         } catch {
             activeSampleCount = 0
             removeItemIfExists(at: activeFileURL)
+            removeItemIfExists(at: compressingFileURL)
             return DictationRecoveryPreservationResult(
                 latestRecoveryURL: storedRecoveryURLs().first,
                 newlyPreservedURL: nil
             )
+        }
+    }
+
+    /// Writes an AAC copy of the finalized active WAV. Returns false, leaving the WAV
+    /// as the recording to preserve, when compression is off or fails.
+    private func compressActiveRecording() -> Bool {
+        guard let compressor else { return false }
+        removeItemIfExists(at: compressingFileURL)
+        guard !itemExists(at: compressingFileURL) else { return false }
+
+        do {
+            try compressor(activeFileURL, compressingFileURL)
+            return isRegularNonSymlinkFile(compressingFileURL)
+        } catch {
+            removeItemIfExists(at: compressingFileURL)
+            return false
         }
     }
 
@@ -351,10 +440,13 @@ final class DictationRecoveryAudioStore: @unchecked Sendable {
     }
 
     private func isGeneratedRecoveryFileName(_ fileName: String) -> Bool {
-        let suffix = ".\(Constants.recoveryFileExtension)"
         let prefix = fileName.hasPrefix(Constants.recentSuccessPrefix)
             ? Constants.recentSuccessPrefix : Constants.recoveryFilePrefix
-        guard fileName.hasPrefix(prefix), fileName.hasSuffix(suffix) else { return false }
+        guard fileName.hasPrefix(prefix),
+              let suffix = Constants.recoveryFileExtensions.map({ ".\($0)" }).first(where: fileName.hasSuffix)
+        else {
+            return false
+        }
 
         let stemStart = fileName.index(fileName.startIndex, offsetBy: prefix.count)
         let stemEnd = fileName.index(fileName.endIndex, offsetBy: -suffix.count)
@@ -403,20 +495,20 @@ final class DictationRecoveryAudioStore: @unchecked Sendable {
         url.lastPathComponent.hasPrefix(Constants.recentSuccessPrefix)
     }
 
-    private func makeUniqueRecoveryFileURL(successful: Bool) -> URL {
+    private func makeUniqueRecoveryFileURL(successful: Bool, fileExtension: String) -> URL {
         try? fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
         recoverySerialNumber += 1
         let prefix = successful ? Constants.recentSuccessPrefix : Constants.recoveryFilePrefix
         let baseName = "\(prefix)\(Self.recoveryTimestamp(from: now()))-\(String(format: "%04llu", recoverySerialNumber))"
         var candidate = directory
             .appendingPathComponent(baseName)
-            .appendingPathExtension(Constants.recoveryFileExtension)
+            .appendingPathExtension(fileExtension)
         var collisionIndex = 2
 
         while fileManager.fileExists(atPath: candidate.path) {
             candidate = directory
                 .appendingPathComponent("\(baseName)-\(collisionIndex)")
-                .appendingPathExtension(Constants.recoveryFileExtension)
+                .appendingPathExtension(fileExtension)
             collisionIndex += 1
         }
 

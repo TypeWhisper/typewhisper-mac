@@ -2754,7 +2754,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         }
     }
 
-    /// Blocks until queued recovery preservation has finalized its WAV file, for example before
+    /// Blocks until queued recovery preservation has finalized its audio file, for example before
     /// the app terminates. Otherwise the next launch deletes the unfinished active file.
     func waitForPendingRecoveryPreservation() {
         recoveryAudioStore.waitForPendingOperations()

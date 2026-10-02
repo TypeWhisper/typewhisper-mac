@@ -1,4 +1,5 @@
 import AppKit
+import AVFoundation
 import Carbon.HIToolbox
 import Combine
 import CoreAudio
@@ -11124,7 +11125,9 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         if shouldKeepAudio {
             let url = try XCTUnwrap(recoveryStore.latestRecoveryURL)
             XCTAssertTrue(DictationRecoveryAudioStore.isRecentSuccessfulRecording(url))
-            XCTAssertEqual(try Data(contentsOf: url).count, 44 + samples.count * 2)
+            // The preserved recording is AAC, which rounds the frame count to its packet size.
+            let recoveryFile = try AVAudioFile(forReading: url)
+            XCTAssertLessThanOrEqual(abs(recoveryFile.length - AVAudioFramePosition(samples.count)), 4_096)
             XCTAssertEqual(context.audioRecordingService.recoveryRecordingURLs, [url])
         } else {
             XCTAssertTrue(recoveryStore.recoveryURLs.isEmpty)

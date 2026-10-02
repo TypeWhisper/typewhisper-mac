@@ -33,7 +33,7 @@ struct DictationRecoveryView: View {
                 }
                 .disabled(viewModel.isProcessing)
 
-                Text(String(localized: "Recovery recordings are stored only on this Mac. Immediately prevents TypeWhisper from creating local recovery WAV files. History audio is controlled separately, and cloud engines may still receive audio for transcription."))
+                Text(String(localized: "Recovery recordings are stored only on this Mac. Immediately prevents TypeWhisper from creating local recovery audio files. History audio is controlled separately, and cloud engines may still receive audio for transcription."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
 

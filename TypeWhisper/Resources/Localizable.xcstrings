@@ -6115,24 +6115,24 @@
         }
       }
     },
-    "Recovery recordings are stored only on this Mac. Immediately prevents TypeWhisper from creating local recovery WAV files. History audio is controlled separately, and cloud engines may still receive audio for transcription." : {
+    "Recovery recordings are stored only on this Mac. Immediately prevents TypeWhisper from creating local recovery audio files. History audio is controlled separately, and cloud engines may still receive audio for transcription." : {
       "localizations" : {
         "de" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "Wiederherstellungsaufnahmen werden nur auf diesem Mac gespeichert. „Sofort“ verhindert, dass TypeWhisper lokale Wiederherstellungs-WAV-Dateien erstellt. Verlaufs-Audio wird separat gesteuert und Cloud-Engines können weiterhin Audio zur Transkription erhalten."
+            "value" : "Wiederherstellungsaufnahmen werden nur auf diesem Mac gespeichert. „Sofort“ verhindert, dass TypeWhisper lokale Wiederherstellungs-Audiodateien erstellt. Verlaufs-Audio wird separat gesteuert und Cloud-Engines können weiterhin Audio zur Transkription erhalten."
           }
         },
         "ja" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "復元用録音はこのMacにのみ保存されます。「すぐに」を選ぶと、TypeWhisperはローカルの復元用WAVファイルを作成しません。履歴の音声保存は別に管理され、クラウドエンジンは文字起こしのために音声を受信する場合があります。"
+            "value" : "復元用録音はこのMacにのみ保存されます。「すぐに」を選ぶと、TypeWhisperはローカルの復元用音声ファイルを作成しません。履歴の音声保存は別に管理され、クラウドエンジンは文字起こしのために音声を受信する場合があります。"
           }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "恢复录音仅存储在这台 Mac 上。选择“立即”后，TypeWhisper 不会创建本地恢复 WAV 文件。历史记录中的音频由单独的设置控制，云端引擎仍可能接收音频以进行转录。"
+            "value" : "恢复录音仅存储在这台 Mac 上。选择“立即”后，TypeWhisper 不会创建本地恢复音频文件。历史记录中的音频由单独的设置控制，云端引擎仍可能接收音频以进行转录。"
           }
         }
       }
