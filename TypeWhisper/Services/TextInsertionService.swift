@@ -1267,9 +1267,15 @@ final class TextInsertionService {
             try? await Task.sleep(for: pasteVerificationPollingDelay)
         }
 
-        return canRestoreClipboard(afterPasteUsing: state)
-            ? .verified
-            : .unverified(.focusedTextUnchanged)
+        if canRestoreClipboard(afterPasteUsing: state) {
+            return .verified
+        }
+        // A field that stopped being readable is not proof that the paste missed it.
+        guard let initialState = state.focusedTextState,
+              captureFocusedTextState(for: initialState.element) != nil else {
+            return .unverified(.focusedTextStateUnavailable)
+        }
+        return .unverified(.focusedTextUnchanged)
     }
 
     private func logPasteVerification(_ verification: PasteVerification, bundleId: String?) {
