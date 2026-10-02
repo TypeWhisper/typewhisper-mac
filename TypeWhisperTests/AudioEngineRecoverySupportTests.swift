@@ -700,7 +700,7 @@ final class AudioEngineRecoverySupportTests: XCTestCase {
 
     func testTranscriptionFailureCanPreserveStoppedRecoveryAudio() async throws {
         let directory = makeRecoveryTestDirectory()
-        let store = DictationRecoveryAudioStore(directory: directory)
+        let store = DictationRecoveryAudioStore(directory: directory, compressor: nil)
         let service = AudioRecordingService(recoveryAudioStore: store)
         service.hasMicrophonePermissionOverride = true
         service.startRecordingOverride = {}
@@ -738,7 +738,7 @@ final class AudioEngineRecoverySupportTests: XCTestCase {
 
     func testRecoveryCircuitBreakerPreservesBufferedRecoveryAudio() throws {
         let directory = makeRecoveryTestDirectory()
-        let store = DictationRecoveryAudioStore(directory: directory)
+        let store = DictationRecoveryAudioStore(directory: directory, compressor: nil)
         let service = AudioRecordingService(recoveryAudioStore: store)
         service.hasMicrophonePermissionOverride = true
         service.startRecordingOverride = {}
@@ -4670,10 +4670,9 @@ final class AudioRecordingServiceInputOnlyCaptureTests: XCTestCase {
         XCTAssertEqual(samples, expected)
 
         let recoveryURL = try XCTUnwrap(service.preserveActiveRecoveryRecording())
-        let recoveryData = try Data(contentsOf: recoveryURL)
-        let recoveryByteCount = recoveryData[40..<44].reversed().reduce(UInt32(0)) { ($0 << 8) | UInt32($1) }
-        XCTAssertEqual(recoveryByteCount, UInt32(expected.count * 2))
-        XCTAssertEqual(recoveryData.count, 44 + expected.count * 2)
+        // The preserved recording is AAC, which rounds the frame count to its packet size.
+        let recoveryFile = try AVAudioFile(forReading: recoveryURL)
+        XCTAssertLessThanOrEqual(abs(recoveryFile.length - AVAudioFramePosition(expected.count)), 4_096)
     }
 }
 

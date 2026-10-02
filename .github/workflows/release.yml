@@ -10,7 +10,11 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
+<<<<<<< HEAD
         description: Optional exact release tag (for example v1.8.0-daily.20261001.1)
+=======
+        description: Optional exact release tag (for example v1.8.0-daily.20261003.1)
+>>>>>>> origin/main
         required: false
         type: string
 
@@ -647,23 +651,80 @@ jobs:
     steps:
       - name: Update Homebrew Cask
         env:
-          HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          GH_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+          TAP_REPO: TypeWhisper/homebrew-tap
+          VALIDATION_CHECK: Validate Homebrew Cask
+          CHECK_TIMEOUT_SECONDS: "1200"
+          CHECK_POLL_SECONDS: "20"
         run: |
-          TAG="${{ needs.prepare.outputs.tag }}"
-          VERSION="${TAG#v}"
-          DMG_URL="https://github.com/TypeWhisper/typewhisper-mac/releases/download/${TAG}/TypeWhisper-${TAG}.dmg"
+          VERSION="${RELEASE_TAG#v}"
+          DMG_URL="https://github.com/TypeWhisper/typewhisper-mac/releases/download/${RELEASE_TAG}/TypeWhisper-${RELEASE_TAG}.dmg"
 
           curl --fail --show-error --silent --location --proto '=https' --proto-redir '=https' -o TypeWhisper.dmg "$DMG_URL"
           SHA256=$(shasum -a 256 TypeWhisper.dmg | awk '{print $1}')
 
-          git clone "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/TypeWhisper/homebrew-tap.git"
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/${TAP_REPO}.git" homebrew-tap
           cd homebrew-tap
 
-          sed -i "s/^  version \".*\"/  version \"${VERSION}\"/" Casks/typewhisper.rb
-          sed -i "s/^  sha256 \".*\"/  sha256 \"${SHA256}\"/" Casks/typewhisper.rb
+          sed -i.bak "s/^  version \".*\"/  version \"${VERSION}\"/" Casks/typewhisper.rb
+          sed -i.bak "s/^  sha256 \".*\"/  sha256 \"${SHA256}\"/" Casks/typewhisper.rb
+          rm -f Casks/typewhisper.rb.bak
 
+          # A reformatted cask would leave both lines untouched and look like a no-op.
+          if ! grep -qF "  version \"${VERSION}\"" Casks/typewhisper.rb ||
+             ! grep -qF "  sha256 \"${SHA256}\"" Casks/typewhisper.rb; then
+            echo "Could not set the cask version or SHA-256 in Casks/typewhisper.rb." >&2
+            exit 1
+          fi
+
+          if git diff --quiet -- Casks/typewhisper.rb; then
+            echo "Cask already lists TypeWhisper ${VERSION}; nothing to update."
+            exit 0
+          fi
+
+          # The tap's main branch requires status checks, so a direct push is
+          # rejected. The update goes through a pull request that is merged once
+          # the required checks and the cask validation have passed.
+          BRANCH="release/typewhisper-${VERSION}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$BRANCH"
           git add Casks/typewhisper.rb
-          git diff --cached --quiet || git commit -m "Update TypeWhisper to ${VERSION}"
-          git push
+          git commit -m "Update TypeWhisper to ${VERSION}"
+          git push origin "$BRANCH"
+
+          PR_URL=$(gh pr create --repo "$TAP_REPO" --base main --head "$BRANCH" \
+            --title "Update TypeWhisper to ${VERSION}" \
+            --body "Updates the cask to TypeWhisper ${VERSION} with the SHA-256 of the published DMG. Opened by the release workflow of TypeWhisper/typewhisper-mac for ${RELEASE_TAG}.")
+          echo "Opened $PR_URL"
+
+          deadline=$((SECONDS + CHECK_TIMEOUT_SECONDS))
+          while :; do
+            required=$(gh pr checks "$PR_URL" --required --json name,bucket 2>/dev/null || true)
+            all=$(gh pr checks "$PR_URL" --json name,bucket 2>/dev/null || true)
+            [ -n "$required" ] || required='[]'
+            [ -n "$all" ] || all='[]'
+
+            failed=$(jq -r --arg validation "$VALIDATION_CHECK" -n --argjson required "$required" --argjson all "$all" \
+              '[$required[], ($all[] | select(.name == $validation))] | map(select(.bucket == "fail" or .bucket == "cancel")) | map(.name) | unique | join(", ")')
+            if [ -n "$failed" ]; then
+              echo "Checks failed on $PR_URL: $failed" >&2
+              exit 1
+            fi
+
+            required_pending=$(jq 'map(select(.bucket != "pass" and .bucket != "skipping")) | length' <<<"$required")
+            required_count=$(jq 'length' <<<"$required")
+            validation=$(jq -r --arg validation "$VALIDATION_CHECK" '[.[] | select(.name == $validation)][0].bucket // "missing"' <<<"$all")
+            if [ "$required_count" -gt 0 ] && [ "$required_pending" -eq 0 ] && [ "$validation" = "pass" ]; then
+              break
+            fi
+
+            if [ "$SECONDS" -ge "$deadline" ]; then
+              echo "Timed out waiting for checks on $PR_URL (required pending: $required_pending, $VALIDATION_CHECK: $validation)" >&2
+              exit 1
+            fi
+            sleep "$CHECK_POLL_SECONDS"
+          done
+
+          gh pr merge "$PR_URL" --squash --delete-branch

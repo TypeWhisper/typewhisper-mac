@@ -14,7 +14,7 @@ private struct CorrectionContributionContext: Sendable {
 }
 
 struct DictationSessionTranscription: Sendable, Equatable {
-    let text: String
+    var text: String
     let rawText: String
     let timestamp: Date
     let appName: String?
@@ -24,7 +24,7 @@ struct DictationSessionTranscription: Sendable, Equatable {
     let language: String?
     let engine: String
     let model: String?
-    let wordsCount: Int
+    var wordsCount: Int
 }
 
 struct DictationSessionSnapshot: Sendable, Equatable {
@@ -39,6 +39,12 @@ struct DictationSessionSnapshot: Sendable, Equatable {
     let status: Status
     let transcription: DictationSessionTranscription?
     let error: String?
+}
+
+struct DictationInsertionCompletion: Sendable, Equatable {
+    let id: UUID
+    let providerId: String
+    let modelId: String?
 }
 
 @MainActor
@@ -239,6 +245,9 @@ final class DictationViewModel: ObservableObject {
             refreshCancellationAvailability()
             updateSubmitOnEnterAvailability()
             clearCancelWarningIfStateNoLongerMatches()
+            if state != .recording, state != .processing {
+                modelManager.endDictationModelPrewarm()
+            }
         }
     }
     @Published var audioLevel: Float = 0
@@ -314,6 +323,8 @@ final class DictationViewModel: ObservableObject {
     }
     @Published private(set) var lastTranscribedText: String?
     @Published private(set) var lastTranscriptionLanguage: String?
+    /// Updated only by the completed text-insertion path, never by indicator feedback.
+    @Published private(set) var lastSuccessfulDictationInsertion: DictationInsertionCompletion?
     @Published var hotkeyLabelsVersion = 0
     var hybridHotkeyLabel: String { Self.loadHotkeyLabel(for: .hybrid) }
     var pttHotkeyLabel: String { Self.loadHotkeyLabel(for: .pushToTalk) }
@@ -323,6 +334,8 @@ final class DictationViewModel: ObservableObject {
     var copyLastTranscriptionHotkeyLabel: String { Self.loadHotkeyLabel(for: .copyLastTranscription) }
     var pasteLastTranscriptionHotkeyLabel: String { Self.loadHotkeyLabel(for: .pasteLastTranscription) }
     var recorderToggleHotkeyLabel: String { Self.loadHotkeyLabel(for: .recorderToggle) }
+    var undoLastDictationHotkeyLabel: String { Self.loadHotkeyLabel(for: .undoLastDictation) }
+    var restoreRawTranscriptHotkeyLabel: String { Self.loadHotkeyLabel(for: .restoreRawTranscript) }
     @Published var activeRuleName: String?
     @Published var activeRuleReasonLabel: String?
     @Published var activeRuleExplanation: String?
@@ -403,6 +416,34 @@ final class DictationViewModel: ObservableObject {
     private var forcedWorkflowId: UUID?
     private var capturedActiveApp: (name: String?, bundleId: String?, url: String?)?
     private var capturedSelectedText: String?
+
+    /// Session-only safe undo / raw-transcript restore for the most recent
+    /// direct text insertion (issue #999). Independent of history settings.
+    private(set) lazy var dictationUndoService: DictationUndoService = {
+        DictationUndoService(
+            textInsertionService: textInsertionService,
+            isPersistencePending: { [weak self] id in
+                guard let self else { return true }
+                // The indicator may already be idle while this dictation is still
+                // awaiting URL/audio persistence. Gate the relevant ID, including
+                // history-disabled sessions, before reflecting a verified restore.
+                return pendingPostInsertionDictationIndex(id: id) != nil
+            },
+            isDictationBusy: { [weak self] in
+                guard let self else { return true }
+                switch state {
+                case .idle, .error:
+                    return false
+                case .recording, .processing, .inserting,
+                     .promptSelection, .promptProcessing:
+                    return true
+                }
+            },
+            didRestoreRawTranscript: { [weak self] id, rawText in
+                self?.reflectRawTranscriptRestore(id: id, rawText: rawText)
+            }
+        )
+    }()
 
     private var cancellables = Set<AnyCancellable>()
     private var recordingTimer: Timer?
@@ -2005,6 +2046,11 @@ final class DictationViewModel: ObservableObject {
                 || externalStreamingDisplayCount > 0
         )
         refreshIncrementalWorkflowPostProcessing(forceRestart: true)
+        // A pending website workflow can still switch the engine; the URL resolution
+        // prewarms once the workflow is settled.
+        if !hiddenLiveSessionAwaitsWebsiteWorkflow {
+            prewarmDictationModel()
+        }
         scheduleDeferredRecordingMetadataCapture(
             sessionID: sessionID,
             activeApp: activeApp,
@@ -2106,6 +2152,7 @@ final class DictationViewModel: ObservableObject {
 
             guard let resolvedURL else {
                 logger.info("URL resolution: no URL resolved")
+                prewarmDictationModel()
                 if hiddenLiveSessionWasDeferred, refreshLiveStreamingIfParamsChanged() {
                     refreshIncrementalWorkflowPostProcessing(forceRestart: true)
                 }
@@ -2115,11 +2162,13 @@ final class DictationViewModel: ObservableObject {
             if let workflowMatch = workflowService.matchWorkflow(bundleIdentifier: bundleId, url: resolvedURL) {
                 logger.info("URL resolution: matched workflow '\(workflowMatch.workflow.name)'")
                 applyWorkflowMatch(workflowMatch, activeApp: capturedActiveApp)
+                prewarmDictationModel()
                 let restartedLiveStreaming = refreshLiveStreamingIfParamsChanged()
                 refreshIncrementalWorkflowPostProcessing(forceRestart: restartedLiveStreaming)
                 return resolvedURL
             }
 
+            prewarmDictationModel()
             // The URL can change the resolved output format of the current workflow.
             let startedDeferredLiveSession = hiddenLiveSessionWasDeferred
                 && refreshLiveStreamingIfParamsChanged()
@@ -2242,6 +2291,13 @@ final class DictationViewModel: ObservableObject {
             logger.warning("Live replay did not finish, using batch transcription: \(error.localizedDescription, privacy: .public)")
             return nil
         }
+    }
+
+    private func prewarmDictationModel() {
+        modelManager.beginDictationModelPrewarm(
+            engineOverrideId: effectiveEngineOverrideId,
+            cloudModelOverride: effectiveCloudModelOverride
+        )
     }
 
     private func hasApplicableWebsiteWorkflow(bundleIdentifier: String?) -> Bool {
@@ -2756,6 +2812,7 @@ final class DictationViewModel: ObservableObject {
                     ) && resolvedOutputFormat == nil
                     var didInsertText = false
                     var shouldUseNormalInsertion = true
+                    var insertionResult: TextInsertionService.InsertionResult?
 
                     if resolvedOutputFormat == nil,
                        liveFieldTranscriptSession != nil,
@@ -2820,14 +2877,14 @@ final class DictationViewModel: ObservableObject {
                             : nil
                         // Correction learning recaptures the field after insertion, so it
                         // needs the paste to have landed before insertText returns.
-                        let insertionResult = try await textInsertionService.insertText(
+                        insertionResult = try await textInsertionService.insertText(
                             insertionText,
                             preserveClipboard: preserveClipboard,
                             autoEnter: shouldAutoEnterAfterInsertion,
                             outputFormat: resolvedOutputFormat,
                             awaitPasteVerification: learningPreInsertionObservation != nil
                         )
-                        if case .pasted(.unverified(let reason)) = insertionResult {
+                        if case .pasted(.unverified(let reason))? = insertionResult {
                             logger.info(
                                 "Text insertion paste could not be verified; continuing with clipboard paste fallback. reason=\(reason.rawValue, privacy: .public), app=\(activeApp.bundleId ?? "nil", privacy: .public)"
                             )
@@ -2841,12 +2898,44 @@ final class DictationViewModel: ObservableObject {
                     self.pinnedInsertionTarget = nil
 
                     if didInsertText {
+                        lastSuccessfulDictationInsertion = DictationInsertionCompletion(
+                            id: transcriptionID,
+                            providerId: result.engineUsed,
+                            modelId: transcription.modelId
+                        )
                         logger.info("Stop timing: text inserted elapsedMs=\(stopElapsedMs(), privacy: .public)")
                         EventBus.shared.emit(.textInserted(TextInsertedPayload(
                             text: insertionText,
                             appName: activeApp.name,
                             bundleIdentifier: activeApp.bundleId
                         )))
+                        // Action-plugin runs never insert text and are out of scope for
+                        // undo/restore (issue #999). A snapshot is only recorded when the
+                        // insertion is verifiable: formatted output may transform the
+                        // text, and unverified or unawaited pastes may not have landed
+                        // yet, so neither can back a safe snapshot. The live-field
+                        // finalize path produces no insertionResult and applies the text
+                        // directly, which is verifiable.
+                        let insertionIsVerifiable: Bool
+                        if actionPluginId != nil || resolvedOutputFormat != nil {
+                            insertionIsVerifiable = false
+                        } else if let insertionResult {
+                            switch insertionResult {
+                            case .insertedViaAccessibility, .pasted(.verified):
+                                insertionIsVerifiable = true
+                            case .pasted(.unverified), .pasted(.notAwaited):
+                                insertionIsVerifiable = false
+                            }
+                        } else {
+                            insertionIsVerifiable = true
+                        }
+                        if insertionIsVerifiable {
+                            dictationUndoService.recordSnapshot(
+                                rawTranscript: result.text,
+                                insertedText: insertionText,
+                                transcriptionID: transcriptionID
+                            )
+                        }
                     }
                 }
 
@@ -4227,6 +4316,82 @@ final class DictationViewModel: ObservableObject {
         speechFeedbackService.readBack(text: text, language: lastTranscriptionLanguage)
     }
 
+    // MARK: - Undo Last Dictation / Restore Raw Transcript (issue #999)
+
+    /// Deletes the text inserted by the most recent successful dictation.
+    /// Safe no-op with user feedback unless the exact inserted text is still
+    /// immediately before the caret in the same app and field.
+    func undoLastDictation() {
+        switch dictationUndoService.perform(.undo) {
+        case .success:
+            showNotchFeedback(
+                message: localizedAppText(
+                    "Last dictation undone.",
+                    de: "Letztes Diktat rückgängig gemacht."
+                ),
+                icon: "arrow.uturn.backward",
+                errorCategory: "insertion"
+            )
+        case .failed(let failure):
+            reportDictationUndoFailure(failure)
+        }
+    }
+
+    /// Replaces the most recent inserted post-processed text with its raw
+    /// transcript. Unavailable when raw and inserted text are identical.
+    func restoreRawTranscript() {
+        switch dictationUndoService.perform(.restore) {
+        case .success:
+            showNotchFeedback(
+                message: localizedAppText(
+                    "Raw transcript restored.",
+                    de: "Rohtext wiederhergestellt."
+                ),
+                icon: "text.badge.checkmark",
+                errorCategory: "insertion"
+            )
+        case .failed(let failure):
+            reportDictationUndoFailure(failure)
+        }
+    }
+
+    private func reportDictationUndoFailure(_ failure: DictationUndoService.Failure) {
+        switch state {
+        case .idle, .error:
+            showNotchFeedback(
+                message: failure.feedbackMessage,
+                icon: "exclamationmark.triangle",
+                isError: true,
+                errorCategory: "insertion"
+            )
+        case .recording, .processing, .inserting, .promptSelection, .promptProcessing:
+            // A rejected shortcut must not replace an active operation with an
+            // insertion-feedback timer that later cancels its recording/tasks.
+            errorLogService.addEntry(message: failure.feedbackMessage, category: "insertion")
+            accessibilityAnnouncementService.announceError(failure.feedbackMessage)
+            soundService.play(.error, enabled: soundFeedbackEnabled)
+        }
+    }
+
+    /// Keeps recent-transcription state and the history record consistent with
+    /// the text that remains in the document after a raw restore. The
+    /// historical transcription record itself is never erased by an undo.
+    private func reflectRawTranscriptRestore(id: UUID, rawText: String) {
+        recentTranscriptionStore.updateFinalText(id: id, finalText: rawText)
+        if let record = historyService.record(withID: id) {
+            historyService.updateRecord(record, finalText: rawText)
+        }
+        if let session = dictationSessions[id], session.status == .completed,
+           var transcription = session.transcription {
+            transcription.text = rawText
+            transcription.wordsCount = rawText.split(whereSeparator: \.isWhitespace).count
+            storeDictationSession(DictationSessionSnapshot(
+                id: session.id, status: session.status, transcription: transcription, error: session.error
+            ))
+        }
+        lastTranscribedText = rawText
+    }
+
     var canRecoverLastRecording: Bool {
         audioRecordingService.latestRecoveryRecordingURL != nil
     }
@@ -4515,6 +4680,10 @@ final class DictationViewModel: ObservableObject {
         )
     }
 
+    nonisolated static func errorFeedbackDuration(message: String, baseDuration: TimeInterval) -> TimeInterval {
+        max(baseDuration, min(12.0, Double(message.count) / 25.0))
+    }
+
     private func showError(
         _ message: String,
         category: String = "general",
@@ -4524,7 +4693,11 @@ final class DictationViewModel: ObservableObject {
         soundService.play(.error, enabled: soundFeedbackEnabled)
         let settingsAction = settingsTab.map(ActionFeedbackAction.openSettings)
         // Setup errors need time to read and reach the button; transient errors stay brief.
-        let duration: TimeInterval = settingsAction == nil ? 3.0 : 8.0
+        // Long messages, such as a provider's own error text, get reading time on top.
+        let duration = Self.errorFeedbackDuration(
+            message: message,
+            baseDuration: settingsAction == nil ? 3.0 : 8.0
+        )
         if let recoveryPreservation {
             showRecoveryAwareFeedback(
                 message: message,

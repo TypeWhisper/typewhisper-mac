@@ -367,7 +367,9 @@ struct AdvancedSettingsView: View {
                            let plugin = pluginManager.loadedTTSPlugin(for: activeProviderId),
                            plugin.instance.settingsView != nil {
                             Button(String(localized: "Configure Voice & Speed…")) {
-                                PluginSettingsWindowManager.shared.present(plugin)
+                                SettingsNavigationCoordinator.shared.navigate(
+                                    to: .installedPlugin(pluginId: plugin.id)
+                                )
                             }
                         }
                     }

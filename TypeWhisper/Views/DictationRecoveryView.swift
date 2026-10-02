@@ -4,6 +4,7 @@ import TypeWhisperPluginSDK
 struct DictationRecoveryView: View {
     @ObservedObject private var viewModel = DictationRecoveryViewModel.shared
     @Environment(\.openWindow) private var openWindow
+    @State private var showDiscardAllConfirmation = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -33,7 +34,7 @@ struct DictationRecoveryView: View {
                 }
                 .disabled(viewModel.isProcessing)
 
-                Text(String(localized: "Recovery recordings are stored only on this Mac. Immediately prevents TypeWhisper from creating local recovery WAV files. History audio is controlled separately, and cloud engines may still receive audio for transcription."))
+                Text(String(localized: "Recovery recordings are stored only on this Mac. Immediately prevents TypeWhisper from creating local recovery audio files. History audio is controlled separately, and cloud engines may still receive audio for transcription."))
                     .font(.caption)
                     .foregroundStyle(.secondary)
 
@@ -71,20 +72,34 @@ struct DictationRecoveryView: View {
 
             if viewModel.hasRecovery {
                 Section(String(localized: "Recordings")) {
-                    if viewModel.recoveries.count > 1 {
-                        Picker(
-                            localizedAppText("Recording", de: "Aufnahme"),
-                            selection: $viewModel.selectedRecoveryID
-                        ) {
-                            ForEach(viewModel.recoveries) { recovery in
-                                Text(recovery.fileName).tag(recovery.id as String?)
-                            }
-                        }
-                        .disabled(viewModel.isProcessing)
+                    ForEach(viewModel.recoveries) { recovery in
+                        recoveryRow(recovery)
                     }
 
-                    if let recovery = viewModel.selectedRecovery {
-                        recoveryRow(recovery)
+                    if viewModel.recoveries.count > 1 {
+                        HStack {
+                            Spacer()
+
+                            Button(role: .destructive) {
+                                showDiscardAllConfirmation = true
+                            } label: {
+                                Label(localizedAppText("Discard All", de: "Alle verwerfen"), systemImage: "trash")
+                            }
+                            .disabled(viewModel.isProcessing)
+                            .confirmationDialog(
+                                localizedAppText("Discard All Recordings?", de: "Alle Aufnahmen verwerfen?"),
+                                isPresented: $showDiscardAllConfirmation
+                            ) {
+                                Button(localizedAppText("Discard All", de: "Alle verwerfen"), role: .destructive) {
+                                    viewModel.discardAllRecoveries()
+                                }
+                            } message: {
+                                Text(localizedAppText(
+                                    "This will permanently delete all \(viewModel.recoveries.count) recovery recordings.",
+                                    de: "Dadurch werden alle \(viewModel.recoveries.count) Wiederherstellungsaufnahmen dauerhaft gelöscht."
+                                ))
+                            }
+                        }
                     }
                 }
             } else if viewModel.isRecoveryStorageDisabled {
@@ -224,31 +239,52 @@ struct DictationRecoveryView: View {
     }
 
     private func recoveryRow(_ recovery: DictationRecoveryViewModel.RecoveryItem) -> some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: statusSystemImage(for: recovery.state))
-                .foregroundStyle(statusColor(for: recovery.state))
-                .accessibilityHidden(true)
+        let isSelectable = viewModel.recoveries.count > 1
+        let isSelected = viewModel.selectedRecovery?.id == recovery.id
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text(recovery.fileName)
-                    .font(.body.weight(.medium))
-                    .lineLimit(1)
+        return HStack(alignment: .top, spacing: 10) {
+            // The row itself picks the recording that Transcribe acts on, so
+            // every recording stays visible with its own Discard button.
+            Button {
+                viewModel.selectedRecoveryID = recovery.id
+            } label: {
+                HStack(alignment: .top, spacing: 10) {
+                    if isSelectable {
+                        Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
+                            .foregroundStyle(isSelected ? Color.accentColor : Color.secondary)
+                            .accessibilityHidden(true)
+                    }
 
-                if DictationRecoveryAudioStore.isRecentSuccessfulRecording(recovery.url) {
-                    Text(String(localized: "Recent successful dictation"))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
+                    Image(systemName: statusSystemImage(for: recovery.state))
+                        .foregroundStyle(statusColor(for: recovery.state))
+                        .accessibilityHidden(true)
+
+                    VStack(alignment: .leading, spacing: 3) {
+                        Text(recovery.fileName)
+                            .font(.body.weight(.medium))
+                            .lineLimit(1)
+
+                        if DictationRecoveryAudioStore.isRecentSuccessfulRecording(recovery.url) {
+                            Text(String(localized: "Recent successful dictation"))
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                        }
+
+                        if let errorMessage = recovery.errorMessage {
+                            Text(errorMessage)
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                                .lineLimit(2)
+                        }
+                    }
+
+                    Spacer()
                 }
-
-                if let errorMessage = recovery.errorMessage {
-                    Text(errorMessage)
-                        .font(.caption)
-                        .foregroundStyle(.red)
-                        .lineLimit(2)
-                }
+                .contentShape(Rectangle())
             }
-
-            Spacer()
+            .buttonStyle(.plain)
+            .disabled(!isSelectable || viewModel.isProcessing)
+            .accessibilityAddTraits(isSelectable && isSelected ? .isSelected : [])
 
             Button(role: .destructive) {
                 viewModel.discardRecovery(recovery)
@@ -256,6 +292,10 @@ struct DictationRecoveryView: View {
                 Label(localizedAppText("Discard", de: "Verwerfen"), systemImage: "trash")
             }
             .disabled(viewModel.isProcessing)
+            .accessibilityLabel(localizedAppText(
+                "Discard \(recovery.fileName)",
+                de: "\(recovery.fileName) verwerfen"
+            ))
         }
     }
 

@@ -16,6 +16,8 @@ class MinimalIndicatorPanel: NSPanel {
     private var cancellables = Set<AnyCancellable>()
     private var cachedScreen: NSScreen?
     private var isActionFeedbackInteractive = false
+    private var actionFeedbackMessage: String?
+    private var actionFeedbackActionTitle: String?
     private var isMeetingCountdownPresented = false
 
     private var isFeedbackInteractive: Bool {
@@ -81,7 +83,26 @@ class MinimalIndicatorPanel: NSPanel {
 
         let hostingView = MinimalFirstMouseHostingView(rootView: content())
         hostingView.sizingOptions = []
-        contentView = hostingView
+        // The minimal content lays itself out from its own metrics and never
+        // consumes the safe area.
+        hostingView.safeAreaRegions = []
+
+        // Same guard as NotchIndicatorPanel: the hosting view keeps one size
+        // inside a plain container and only the window follows the feedback.
+        // A root view that resizes with the window lets NSHostingView resize
+        // the window from windowDidLayout, and AppKit raises
+        // NSInternalInconsistencyException from
+        // _postWindowNeedsUpdateConstraints (#1441).
+        contentView = IndicatorHostingContainerView(
+            hostingView: hostingView,
+            size: initialSize,
+            hostingSize: IndicatorFeedbackPanelLayout.hostingSize(for: .minimal),
+            verticalAnchor: Self.hostingAnchor(for: overlayPositionProvider())
+        )
+    }
+
+    private static func hostingAnchor(for position: OverlayPosition) -> IndicatorHostingContainerView.VerticalAnchor {
+        position == .top ? .top : .bottom
     }
 
     override var canBecomeKey: Bool { false }
@@ -156,14 +177,16 @@ class MinimalIndicatorPanel: NSPanel {
             }
             .store(in: &cancellables)
 
-        Publishers.CombineLatest(vm.$state, vm.$actionFeedbackMessage)
+        Publishers.CombineLatest3(vm.$state, vm.$actionFeedbackMessage, vm.$actionFeedbackActionTitle)
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] state, message in
+            .sink { [weak self] state, message, actionTitle in
                 self?.updateFeedbackInteraction(
                     isInteractive: IndicatorFeedbackPanelLayout.isInteractive(
                         state: state,
                         message: message
-                    )
+                    ),
+                    message: message,
+                    actionTitle: actionTitle
                 )
             }
             .store(in: &cancellables)
@@ -234,7 +257,9 @@ class MinimalIndicatorPanel: NSPanel {
         let screenFrame = screen.visibleFrame
         let panelSize = IndicatorFeedbackPanelLayout.panelSize(
             for: .minimal,
-            isFeedbackInteractive: isFeedbackInteractive
+            isFeedbackInteractive: isFeedbackInteractive,
+            feedbackMessage: actionFeedbackMessage,
+            feedbackActionTitle: actionFeedbackActionTitle
         )
         let panelFrame = IndicatorFeedbackPanelLayout.panelFrame(
             for: .minimal,
@@ -243,6 +268,7 @@ class MinimalIndicatorPanel: NSPanel {
             overlayPosition: overlayPosition
         )
 
+        (contentView as? IndicatorHostingContainerView)?.verticalAnchor = Self.hostingAnchor(for: overlayPosition)
         setFrame(panelFrame, display: true)
         ignoresMouseEvents = !isFeedbackInteractive
         FloatingPanelSpacePolicy.orderIndicatorFront(
@@ -270,12 +296,24 @@ class MinimalIndicatorPanel: NSPanel {
         show()
     }
 
-    func updateFeedbackInteraction(isInteractive: Bool) {
+    func updateFeedbackInteraction(
+        isInteractive: Bool,
+        message: String? = nil,
+        actionTitle: String? = nil
+    ) {
         if !isInteractive && !isMeetingCountdownPresented {
             ignoresMouseEvents = true
         }
-        guard isActionFeedbackInteractive != isInteractive else { return }
+        // The message decides how tall the feedback surface is, so a changed
+        // message needs a new frame even when interactivity stays the same.
+        let feedbackMessage = isInteractive ? message : nil
+        let feedbackActionTitle = isInteractive ? actionTitle : nil
+        guard isActionFeedbackInteractive != isInteractive
+            || actionFeedbackMessage != feedbackMessage
+            || actionFeedbackActionTitle != feedbackActionTitle else { return }
         isActionFeedbackInteractive = isInteractive
+        actionFeedbackMessage = feedbackMessage
+        actionFeedbackActionTitle = feedbackActionTitle
         if isVisible {
             show()
         }

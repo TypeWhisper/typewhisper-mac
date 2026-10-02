@@ -35,6 +35,8 @@ enum UserDefaultsKeys {
     static let copyLastTranscriptionHotkey = "copyLastTranscriptionHotkey"
     static let pasteLastTranscriptionHotkey = "pasteLastTranscriptionHotkey"
     static let recorderToggleHotkey = "recorderToggleHotkey"
+    static let undoLastDictationHotkey = "undoLastDictationHotkey"
+    static let restoreRawTranscriptHotkey = "restoreRawTranscriptHotkey"
 
     // MARK: - Hotkeys (JSON-encoded [UnifiedHotkey] per slot)
     static let hybridHotkeys = "hybridHotkeys"
@@ -45,6 +47,8 @@ enum UserDefaultsKeys {
     static let copyLastTranscriptionHotkeys = "copyLastTranscriptionHotkeys"
     static let pasteLastTranscriptionHotkeys = "pasteLastTranscriptionHotkeys"
     static let recorderToggleHotkeys = "recorderToggleHotkeys"
+    static let undoLastDictationHotkeys = "undoLastDictationHotkeys"
+    static let restoreRawTranscriptHotkeys = "restoreRawTranscriptHotkeys"
 
     // MARK: - Model / Engine
     static let selectedEngine = "selectedEngine"
@@ -73,6 +77,9 @@ enum UserDefaultsKeys {
     // MARK: - Home / Setup
     static let setupWizardCompleted = "setupWizardCompleted"
     static let setupWizardCurrentStep = "setupWizardCurrentStep"
+    /// Exact provider/model selections tested through the real dictation path.
+    /// Older provider-only records cannot establish which model was tested.
+    static let setupWizardTestedSelections = "setupWizardTestedSelections"
     /// Dev-tool launch mode that defers startup reads of privacy-protected app data.
     static let devPrivacyQuietMode = "devPrivacyQuietMode"
 
@@ -83,6 +90,8 @@ enum UserDefaultsKeys {
     static let selectedIndustryPreset = "selectedIndustryPreset"
     static let targetAppCorrectionLearningEnabled = "targetAppCorrectionLearningEnabled"
     static let targetAppCorrectionLearningLatestAttempt = "targetAppCorrectionLearningLatestAttempt"
+    static let targetAppCorrectionLearningRequiredObservations = "targetAppCorrectionLearningRequiredObservations"
+    static let targetAppCorrectionLearningPendingObservations = "targetAppCorrectionLearningPendingObservations"
 
     // MARK: - Calendar Meeting Automation (machine-local; intentionally not synced/exported)
     static let calendarMeetingStartMode = "calendarMeetingStartMode"
@@ -132,7 +141,6 @@ enum UserDefaultsKeys {
 
     // MARK: - Plugin Registry
     static let pluginRegistryLastFetch = "pluginRegistryLastFetch"
-    static let selectedIntegrationTab = "selectedIntegrationTab"
     static let improveTypeWhisperCaptureEnabled = "plugin.com.typewhisper.improve.collectCorrections"
 
     // MARK: - Recorder

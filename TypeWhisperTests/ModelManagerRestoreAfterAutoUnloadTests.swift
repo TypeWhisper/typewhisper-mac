@@ -139,7 +139,121 @@ final class ModelManagerRestoreAfterAutoUnloadTests: XCTestCase {
         XCTAssertEqual(plugin.restoreCount, 0)
     }
 
+    func testDictationPrewarmRestoresUnloadedEngineAndTranscribeJoinsTheRestore() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        setPersistedLoadedModel("tiny")
+        defer { setPersistedLoadedModel(nil) }
+
+        let plugin = RestoreAfterUnloadMockPlugin(
+            configured: false,
+            restoreResult: .succeedAfter(.milliseconds(300)),
+            publishesActivitySynchronously: true
+        )
+        let modelManager = installPlugin(plugin, appSupportDirectory: appSupportDirectory)
+        modelManager.setPluginRestoreWaitConfigurationForTesting(
+            initialAttempts: 2,
+            busyAttempts: 200,
+            pollInterval: .milliseconds(50)
+        )
+
+        // Recording start: the restore begins before any audio is transcribed.
+        modelManager.beginDictationModelPrewarm()
+        XCTAssertEqual(plugin.restoreCount, 1)
+
+        modelManager.beginDictationModelPrewarm()
+        XCTAssertEqual(plugin.restoreCount, 1, "a repeated prewarm must not restart the restore")
+
+        let result = try await modelManager.transcribe(
+            audioSamples: [Float](repeating: 0, count: 1_600),
+            language: nil,
+            task: .transcribe
+        )
+        modelManager.endDictationModelPrewarm()
+
+        XCTAssertEqual(result.text, "restored-transcript")
+        XCTAssertEqual(plugin.restoreCount, 1, "transcribe must wait for the prewarm instead of restoring again")
+    }
+
+    func testDictationPrewarmSkipsEngineWithoutPersistedModel() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        setPersistedLoadedModel(nil)
+
+        let plugin = RestoreAfterUnloadMockPlugin(
+            configured: false,
+            restoreResult: .succeedAfter(.milliseconds(0)),
+            publishesActivitySynchronously: true
+        )
+        let modelManager = installPlugin(plugin, appSupportDirectory: appSupportDirectory)
+
+        modelManager.beginDictationModelPrewarm()
+        modelManager.endDictationModelPrewarm()
+
+        XCTAssertEqual(plugin.restoreCount, 0)
+    }
+
+    func testDictationPrewarmSkipsLoadedEngineAndModelOverride() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        setPersistedLoadedModel("tiny")
+        defer { setPersistedLoadedModel(nil) }
+
+        let loadedPlugin = RestoreAfterUnloadMockPlugin(
+            configured: true,
+            restoreResult: .succeedAfter(.milliseconds(0)),
+            publishesActivitySynchronously: true
+        )
+        let loadedModelManager = installPlugin(loadedPlugin, appSupportDirectory: appSupportDirectory)
+        loadedModelManager.beginDictationModelPrewarm()
+        loadedModelManager.endDictationModelPrewarm()
+        XCTAssertEqual(loadedPlugin.restoreCount, 0)
+
+        let unloadedPlugin = RestoreAfterUnloadMockPlugin(
+            configured: false,
+            restoreResult: .succeedAfter(.milliseconds(0)),
+            publishesActivitySynchronously: true
+        )
+        let unloadedModelManager = installPlugin(unloadedPlugin, appSupportDirectory: appSupportDirectory)
+        unloadedModelManager.beginDictationModelPrewarm(cloudModelOverride: "large")
+        unloadedModelManager.endDictationModelPrewarm()
+        XCTAssertEqual(unloadedPlugin.restoreCount, 0)
+    }
+
+    func testDictationPrewarmProtectsLoadedEngineFromAutoUnloadUntilItEnds() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let plugin = RestoreAfterUnloadMockPlugin(
+            configured: true,
+            restoreResult: .succeedAfter(.milliseconds(0)),
+            publishesActivitySynchronously: true
+        )
+        let modelManager = installPlugin(plugin, appSupportDirectory: appSupportDirectory)
+        let previousAutoUnload = UserDefaults.standard.object(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+        defer {
+            modelManager.cancelAutoUnloadTimer()
+            UserDefaults.standard.set(previousAutoUnload, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+        }
+        modelManager.autoUnloadSeconds = 60
+
+        modelManager.beginDictationModelPrewarm()
+        // Anything that reschedules during the recording must leave the engine alone.
+        modelManager.scheduleAutoUnloadIfNeeded()
+        XCTAssertTrue(modelManager.autoUnloadDiagnosticsSnapshot().entries.isEmpty)
+
+        modelManager.endDictationModelPrewarm()
+        XCTAssertEqual(modelManager.autoUnloadDiagnosticsSnapshot().entries.count, 1)
+    }
+
     // MARK: - Helpers
+
+    private func setPersistedLoadedModel(_ modelId: String?) {
+        UserDefaults.standard.set(
+            modelId,
+            forKey: "plugin.\(RestoreAfterUnloadMockPlugin.pluginId).loadedModel"
+        )
+    }
 
     private func installPlugin(
         _ plugin: RestoreAfterUnloadMockPlugin,

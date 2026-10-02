@@ -665,7 +665,17 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
                     : try await reserveDownloadSpace(for: version)
                 defer { spaceReservation?.release() }
                 try await ensureVocabularyAsset(for: version)
-                models = try await AsrModels.downloadAndLoad(version: version.asrModelVersion)
+                models = try await AsrModels.downloadAndLoad(
+                    version: version.asrModelVersion,
+                    progressHandler: { [weak self] progress in
+                        guard let self, self.modelState == .downloading,
+                              case .downloading = progress.phase else { return }
+                        self.downloadProgress = Self.downloadProgress(
+                            after: self.downloadProgress,
+                            downloadFraction: progress.fractionCompleted
+                        )
+                    }
+                )
             } else {
                 models = try Self.loadInstalledModels(version: version)
             }
@@ -708,6 +718,15 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         }
     }
 
+    /// Maps a FluidAudio download-phase fraction onto the 10-70% band that precedes model
+    /// loading. FluidAudio spends the first half of each operation on the download and
+    /// restarts its fraction for every model file it loads, so the value never moves backwards.
+    static func downloadProgress(after current: Double, downloadFraction: Double) -> Double {
+        guard downloadFraction.isFinite else { return current }
+        let fraction = min(max(downloadFraction * 2, 0), 1)
+        return max(current, 0.1 + fraction * 0.6)
+    }
+
     /// FluidAudio's high-level loaders can delete and re-download a corrupt cache,
     /// even when every file exists. Passive restore must use local Core ML loading.
     static func loadInstalledModels(version: ParakeetVersion, directory: URL? = nil) throws -> AsrModels {
@@ -725,7 +744,7 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         let preprocessorConfiguration = MLModelConfiguration()
         preprocessorConfiguration.computeUnits = .cpuOnly
         preprocessorConfiguration.allowLowPrecisionAccumulationOnGPU = true
-        let jointFile = version == .v3 ? ModelNames.ASR.jointV3File : ModelNames.ASR.jointFile
+        let jointFile = version.asrModelVersion.isV3Family ? ModelNames.ASR.jointV3File : ModelNames.ASR.jointFile
         return try AsrModels(
             encoder: MLModel(contentsOf: directory.appendingPathComponent(ModelNames.ASR.encoderFile), configuration: configuration),
             preprocessor: MLModel(contentsOf: directory.appendingPathComponent(ModelNames.ASR.preprocessorFile), configuration: preprocessorConfiguration),
@@ -738,14 +757,7 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     }
 
     static func vocabularyAssetURL(for version: ParakeetVersion) -> URL {
-        let repo: String
-        switch version {
-        case .v2:
-            repo = "FluidInference/parakeet-tdt-0.6b-v2-coreml"
-        case .v3:
-            repo = "FluidInference/parakeet-tdt-0.6b-v3-coreml"
-        }
-        return URL(string: "https://huggingface.co/\(repo)/resolve/main/\(vocabularyAssetFileName)")!
+        URL(string: "https://huggingface.co/\(version.repository.remotePath)/resolve/main/\(vocabularyAssetFileName)")!
     }
 
     static func vocabularyAssetDirectory(for version: ParakeetVersion) -> URL {
@@ -1028,11 +1040,13 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
 enum ParakeetVersion: String, CaseIterable {
     case v2
     case v3
+    case ultra
 
     var asrModelVersion: AsrModelVersion {
         switch self {
         case .v2: return .v2
         case .v3: return .v3
+        case .ultra: return .ultra
         }
     }
 
@@ -1040,6 +1054,7 @@ enum ParakeetVersion: String, CaseIterable {
         switch self {
         case .v2: return .parakeetV2
         case .v3: return .parakeetV3
+        case .ultra: return .parakeetUltra
         }
     }
 
@@ -1047,7 +1062,7 @@ enum ParakeetVersion: String, CaseIterable {
     var requiredModelFiles: Set<String> {
         switch self {
         case .v2: return ModelNames.ASR.requiredModels
-        case .v3: return ModelNames.ASR.requiredModelsV3()
+        case .v3, .ultra: return ModelNames.ASR.requiredModelsV3()
         }
     }
 
@@ -1067,6 +1082,13 @@ enum ParakeetVersion: String, CaseIterable {
                 sizeDescription: "~600 MB",
                 ramRequirement: "8 GB+"
             )
+        case .ultra:
+            return ParakeetModelDef(
+                id: "parakeet-ultra",
+                displayName: "Parakeet Ultra",
+                sizeDescription: "~630 MB",
+                ramRequirement: "8 GB+"
+            )
         }
     }
 
@@ -1074,7 +1096,7 @@ enum ParakeetVersion: String, CaseIterable {
         switch self {
         case .v2:
             return ["en"]
-        case .v3:
+        case .v3, .ultra:
             return ["bg", "hr", "cs", "da", "nl", "en", "et", "fi", "fr", "de", "el", "hu", "it", "lv", "lt", "mt", "pl", "pt", "ro", "sk", "sl", "es", "sv", "ru", "uk"]
         }
     }
@@ -1089,6 +1111,8 @@ enum ParakeetVersion: String, CaseIterable {
             return String(localized: "NVIDIA Parakeet TDT V2 - extremely fast on Apple Silicon. English only, highest recall. No API key required.", bundle: bundle)
         case .v3:
             return String(localized: "NVIDIA Parakeet TDT - extremely fast on Apple Silicon. 25 European languages, no API key required.", bundle: bundle)
+        case .ultra:
+            return String(localized: "Moondream Parakeet Ultra - Parakeet TDT v3 trained further for higher accuracy. 25 European languages, no API key required.", bundle: bundle)
         }
     }
 
@@ -1159,7 +1183,7 @@ private struct ParakeetSettingsView: View {
     @State private var selectedVersion: ParakeetVersion = .v3
     @State private var modelState: ParakeetModelState = .notLoaded
     @State private var downloadProgress: Double = 0
-    @State private var selectedModelDownloaded = false
+    @State private var downloadedVersions: Set<ParakeetVersion> = []
     @State private var hfTokenInput = ""
     @State private var showHfToken = false
     @State private var isValidatingToken = false
@@ -1185,15 +1209,6 @@ private struct ParakeetSettingsView: View {
     var body: some View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 16) {
-                Text("Parakeet")
-                    .font(.headline)
-
-                Text(selectedVersion.settingsDescription(bundle: bundle))
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-
-                Divider()
-
                 VStack(alignment: .leading, spacing: 8) {
                     Text("Hugging Face Token", bundle: bundle)
                         .font(.subheadline)
@@ -1263,96 +1278,15 @@ private struct ParakeetSettingsView: View {
 
                 Divider()
 
-                // Model version picker
-                HStack {
+                VStack(alignment: .leading, spacing: 12) {
                     Text("Model Version", bundle: bundle)
-                    Spacer()
-                    Picker("", selection: $selectedVersion) {
-                        ForEach(ParakeetVersion.allCases, id: \.self) { version in
-                            Text(version.modelDef.displayName).tag(version)
-                        }
-                    }
-                    .labelsHidden()
-                    .pickerStyle(.segmented)
-                    .fixedSize()
-                    .disabled(modelState == .downloading)
-                }
+                        .font(.subheadline)
+                        .fontWeight(.medium)
 
-                // Model info and action
-                HStack {
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(selectedVersion.modelDef.displayName)
-                            .font(.body)
-                        Text("\(selectedVersion.modelDef.sizeDescription) - RAM: \(selectedVersion.modelDef.ramRequirement)")
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-
-                    Spacer()
-
-                    switch modelState {
-                    case .notLoaded:
-                        Button(
-                            selectedModelDownloaded
-                                ? String(localized: "Load", bundle: bundle)
-                                : String(localized: "Download & Load", bundle: bundle)
-                        ) {
-                            modelState = .downloading
-                            downloadProgress = 0.05
-                            Task {
-                                await plugin.loadModel()
-                                syncViewStateFromPlugin()
-                            }
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .controlSize(.small)
-
-                    case .downloading:
-                        HStack(spacing: 8) {
-                            ProgressView(value: downloadProgress)
-                                .frame(width: 80)
-                            Text("\(Int(downloadProgress * 100))%")
-                                .font(.caption)
-                                .monospacedDigit()
-                        }
-
-                    case .ready:
-                        HStack(spacing: 8) {
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundStyle(.green)
-                            Button(String(localized: "Unload", bundle: bundle)) {
-                                plugin.unloadModel()
-                                modelState = plugin.modelState
-                                ctcModelState = plugin.ctcModelState
-                                boostingTermCount = 0
-                            }
-                            .buttonStyle(.bordered)
-                            .controlSize(.small)
-                        }
-
-                    case .error(let message):
-                        VStack(alignment: .trailing, spacing: 4) {
-                            HStack(spacing: 4) {
-                                Image(systemName: "exclamationmark.triangle.fill")
-                                    .foregroundStyle(.orange)
-                                Text(message)
-                                    .font(.caption)
-                                    .foregroundStyle(.secondary)
-                                    .lineLimit(1)
-                            }
-                            Button(String(localized: "Retry", bundle: bundle)) {
-                                modelState = .downloading
-                                Task {
-                                    await plugin.loadModel()
-                                    syncViewStateFromPlugin()
-                                }
-                            }
-                            .buttonStyle(.bordered)
-                            .controlSize(.mini)
-                        }
+                    ForEach(ParakeetVersion.allCases, id: \.self) { version in
+                        modelRow(for: version)
                     }
                 }
-                .padding(.vertical, 4)
 
                 if case .ready = modelState {
                     Divider()
@@ -1362,7 +1296,8 @@ private struct ParakeetSettingsView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding()
 
-            if plugin.canDismissSettingsAfterSetup {
+            // Embedded in the host's settings page there is nothing to close.
+            if plugin.canDismissSettingsAfterSetup, closeSettings != nil {
                 Divider()
 
                 HStack {
@@ -1384,22 +1319,6 @@ private struct ParakeetSettingsView: View {
                 hfTokenInput = token
             }
         }
-        .onChange(of: selectedVersion) { _, newVersion in
-            guard newVersion != plugin.selectedVersion else { return }
-            plugin.selectedVersion = newVersion
-            plugin.host?.setUserDefault(newVersion.rawValue, forKey: "selectedVersion")
-            selectedModelDownloaded = plugin.isModelDownloaded(version: newVersion)
-            if plugin.loadedModelId != nil {
-                // Reload with new version
-                modelState = .downloading
-                downloadProgress = 0.05
-                Task {
-                    plugin.unloadModel(clearPersistence: false)
-                    await plugin.loadModel()
-                    syncViewStateFromPlugin()
-                }
-            }
-        }
         .onReceive(pollTimer) { _ in
             syncViewStateFromPlugin()
         }
@@ -1408,6 +1327,99 @@ private struct ParakeetSettingsView: View {
             if trimmedValue != storedHfToken {
                 tokenValidationResult = nil
             }
+        }
+    }
+
+    private func modelRow(for version: ParakeetVersion) -> some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(version.modelDef.displayName)
+                    .font(.body)
+                Text("\(version.modelDef.sizeDescription) - RAM: \(version.modelDef.ramRequirement)")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                Text(version.settingsDescription(bundle: bundle))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer()
+
+            modelAction(for: version)
+        }
+    }
+
+    @ViewBuilder
+    private func modelAction(for version: ParakeetVersion) -> some View {
+        // The plugin holds one model at a time; its state belongs to the selected version.
+        switch version == selectedVersion ? modelState : .notLoaded {
+        case .notLoaded:
+            Button(
+                downloadedVersions.contains(version)
+                    ? String(localized: "Load", bundle: bundle)
+                    : String(localized: "Download & Load", bundle: bundle)
+            ) {
+                load(version)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+            .disabled(modelState == .downloading)
+
+        case .downloading:
+            HStack(spacing: 8) {
+                ProgressView(value: downloadProgress)
+                    .frame(width: 80)
+                Text("\(Int(downloadProgress * 100))%")
+                    .font(.caption)
+                    .monospacedDigit()
+            }
+
+        case .ready:
+            HStack(spacing: 8) {
+                Image(systemName: "checkmark.circle.fill")
+                    .foregroundStyle(.green)
+                Button(String(localized: "Unload", bundle: bundle)) {
+                    plugin.unloadModel()
+                    modelState = plugin.modelState
+                    ctcModelState = plugin.ctcModelState
+                    boostingTermCount = 0
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
+            }
+
+        case .error(let message):
+            VStack(alignment: .trailing, spacing: 4) {
+                HStack(spacing: 4) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
+                    Text(message)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+                Button(String(localized: "Retry", bundle: bundle)) {
+                    load(version)
+                }
+                .buttonStyle(.bordered)
+                .controlSize(.mini)
+            }
+        }
+    }
+
+    private func load(_ version: ParakeetVersion) {
+        selectedVersion = version
+        modelState = .downloading
+        downloadProgress = 0.05
+        if plugin.loadedModelId != nil, plugin.selectedVersion != version {
+            plugin.unloadModel(clearPersistence: false)
+        }
+        plugin.selectedVersion = version
+        plugin.host?.setUserDefault(version.rawValue, forKey: "selectedVersion")
+        Task {
+            await plugin.loadModel(version: version)
+            syncViewStateFromPlugin()
         }
     }
 
@@ -1496,7 +1508,7 @@ private struct ParakeetSettingsView: View {
         selectedVersion = plugin.selectedVersion
         modelState = plugin.modelState
         downloadProgress = plugin.downloadProgress
-        selectedModelDownloaded = plugin.isModelDownloaded(version: plugin.selectedVersion)
+        downloadedVersions = Set(ParakeetVersion.allCases.filter(plugin.isModelDownloaded(version:)))
         boostingEnabled = plugin.vocabularyBoostingEnabled
         ctcModelState = plugin.ctcModelState
         boostingTermCount = plugin.lastBoostingTermCount

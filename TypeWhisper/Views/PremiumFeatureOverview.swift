@@ -918,6 +918,8 @@ enum PremiumCorrectionLearningCopy {
             String(localized: "premium.window.learning.outcome.noCommitBeforeTimeout")
         case .duplicateCorrection:
             String(localized: "premium.window.learning.outcome.duplicateCorrection")
+        case .awaitingRepeat:
+            String(localized: "premium.window.learning.outcome.awaitingRepeat")
         case .cancelled:
             String(localized: "premium.window.learning.outcome.cancelled")
         case .failed:
@@ -933,7 +935,7 @@ enum PremiumCorrectionLearningCopy {
             "exclamationmark.triangle.fill"
         case .unsupportedTextObservation, .ambiguousEdit, .noCommitBeforeTimeout:
             "info.circle.fill"
-        case .noEdit, .duplicateCorrection, .cancelled:
+        case .noEdit, .duplicateCorrection, .awaitingRepeat, .cancelled:
             "minus.circle.fill"
         }
     }
@@ -946,7 +948,7 @@ enum PremiumCorrectionLearningCopy {
             .red
         case .unsupportedTextObservation, .ambiguousEdit, .noCommitBeforeTimeout:
             .yellow
-        case .noEdit, .duplicateCorrection, .cancelled:
+        case .noEdit, .duplicateCorrection, .awaitingRepeat, .cancelled:
             .secondary
         }
     }

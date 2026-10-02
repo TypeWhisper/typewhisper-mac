@@ -311,6 +311,21 @@ final class ParakeetPluginTests: XCTestCase {
             ParakeetPlugin.vocabularyAssetURL(for: .v3).absoluteString,
             "https://huggingface.co/FluidInference/parakeet-tdt-0.6b-v3-coreml/resolve/main/parakeet_vocab.json"
         )
+        XCTAssertEqual(
+            ParakeetPlugin.vocabularyAssetURL(for: .ultra).absoluteString,
+            "https://huggingface.co/FluidInference/parakeet-ultra-coreml/resolve/main/parakeet_vocab.json"
+        )
+    }
+
+    func testUltraIsOfferedWithV3LanguagesAndFiles() throws {
+        let plugin = makePlugin()
+        XCTAssertEqual(
+            plugin.transcriptionModels.map(\.id),
+            ["parakeet-tdt-0.6b-v2", "parakeet-tdt-0.6b-v3", "parakeet-ultra"]
+        )
+        XCTAssertEqual(ParakeetVersion.from(modelId: "parakeet-ultra"), .ultra)
+        XCTAssertEqual(ParakeetVersion.ultra.supportedLanguages, ParakeetVersion.v3.supportedLanguages)
+        XCTAssertEqual(ParakeetVersion.ultra.requiredModelFiles, ParakeetVersion.v3.requiredModelFiles)
     }
 
     func testEnsureVocabularyAssetSkipsExistingFile() async throws {
@@ -559,6 +574,18 @@ final class ParakeetPluginTests: XCTestCase {
         )
         XCTAssertNil(ParakeetPlugin.sourceProgress(fromFraction: .nan, totalDuration: 10))
         XCTAssertNil(ParakeetPlugin.sourceProgress(fromFraction: 0.5, totalDuration: 0))
+    }
+
+    func testDownloadProgressFollowsDownloadWithinLoadingBand() {
+        XCTAssertEqual(ParakeetPlugin.downloadProgress(after: 0.1, downloadFraction: 0.25), 0.4, accuracy: 0.0001)
+        XCTAssertEqual(ParakeetPlugin.downloadProgress(after: 0.1, downloadFraction: 0.5), 0.7, accuracy: 0.0001)
+        XCTAssertEqual(ParakeetPlugin.downloadProgress(after: 0.1, downloadFraction: 1), 0.7, accuracy: 0.0001)
+    }
+
+    func testDownloadProgressNeverMovesBackwards() {
+        XCTAssertEqual(ParakeetPlugin.downloadProgress(after: 0.55, downloadFraction: 0), 0.55)
+        XCTAssertEqual(ParakeetPlugin.downloadProgress(after: 0.55, downloadFraction: -1), 0.55)
+        XCTAssertEqual(ParakeetPlugin.downloadProgress(after: 0.3, downloadFraction: .nan), 0.3)
     }
 
     func testSourceProgressObservationOnlyStartsForFluidAudioProgressRange() {

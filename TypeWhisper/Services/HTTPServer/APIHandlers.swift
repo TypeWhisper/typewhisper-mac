@@ -959,7 +959,11 @@ final class APIHandlers: @unchecked Sendable {
                     words_count: record.wordsCount,
                     speaker_state: record.speakerTranscriptState?.rawValue,
                     speakers: transcript?.speakerIDs.map {
-                        SpeakerEntry(id: $0, name: SpeakerTranscriptPresentation.name(for: $0, names: names))
+                        // Unnamed speakers get the fixed `Speaker N`, not the localized default name.
+                        SpeakerEntry(
+                            id: $0,
+                            name: names?.displayName(for: $0) ?? SpeakerTranscriptBuilder.outputLabel(for: $0)
+                        )
                     },
                     speaker_segments: includesSpeakerSegments
                         ? transcript?.segments.map {

@@ -155,6 +155,9 @@ final class SpeakerWorkspaceTests: XCTestCase {
 
     // MARK: - Export
 
+    /// The default name of the unnamed second speaker in the app's language.
+    private var unnamed: String { SpeakerTranscriptPresentation.defaultName(for: "S2") }
+
     private var exportTranscript: SpeakerTranscript {
         transcript([segment("Good morning.", 0, 1.5, "S1"), segment("Morning.", 65, 66.25, "S2")])
     }
@@ -166,11 +169,11 @@ final class SpeakerWorkspaceTests: XCTestCase {
 
         XCTAssertEqual(
             SpeakerTranscriptExporter.content(of: transcript, names: names, title: "Meeting", format: .plainText),
-            "[0:00] Anna: Good morning.\n\n[1:05] Speaker 2: Morning."
+            "[0:00] Anna: Good morning.\n\n[1:05] \(unnamed): Morning."
         )
         XCTAssertEqual(
             SpeakerTranscriptExporter.content(of: transcript, names: names, title: "Meeting", format: .markdown),
-            "# Meeting\n\n**Anna** (0:00)\n\nGood morning.\n\n**Speaker 2** (1:05)\n\nMorning."
+            "# Meeting\n\n**Anna** (0:00)\n\nGood morning.\n\n**\(unnamed)** (1:05)\n\nMorning."
         )
     }
 
@@ -184,7 +187,7 @@ final class SpeakerWorkspaceTests: XCTestCase {
 
         XCTAssertEqual(
             srt,
-            "1\n00:00:00,000 --> 00:00:01,500\nAnna: Good morning.\n\n2\n00:01:05,000 --> 00:01:06,250\nSpeaker 2: Morning."
+            "1\n00:00:00,000 --> 00:00:01,500\nAnna: Good morning.\n\n2\n00:01:05,000 --> 00:01:06,250\n\(unnamed): Morning."
         )
         XCTAssertTrue(vtt.hasPrefix("WEBVTT\n\n1\n00:00:00.000 --> 00:00:01.500\nAnna: Good morning."))
     }
@@ -200,7 +203,7 @@ final class SpeakerWorkspaceTests: XCTestCase {
         let segments = try XCTUnwrap(object["segments"] as? [[String: Any]])
 
         XCTAssertEqual(object["title"] as? String, "Meeting")
-        XCTAssertEqual(speakers, [["id": "S1", "name": "Anna"], ["id": "S2", "name": "Speaker 2"]])
+        XCTAssertEqual(speakers, [["id": "S1", "name": "Anna"], ["id": "S2", "name": unnamed]])
         XCTAssertEqual(segments.count, 2)
         XCTAssertEqual(segments[1]["speaker"] as? String, "S2")
         XCTAssertEqual(segments[1]["start"] as? Double, 65)

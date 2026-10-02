@@ -57,7 +57,7 @@ candidate with the
 <p align="center">
   <a href=".github/screenshots/dictionary-term-packs.png"><img src=".github/screenshots/dictionary-term-packs.png" width="270" alt="Dictionary Term Packs"></a>
   <a href=".github/screenshots/snippets.png"><img src=".github/screenshots/snippets.png" width="270" alt="Snippets"></a>
-  <a href=".github/screenshots/plugins.png"><img src=".github/screenshots/plugins.png" width="270" alt="Installed Integrations"></a>
+  <a href=".github/screenshots/plugins.png"><img src=".github/screenshots/plugins.png" width="270" alt="Plugin Settings"></a>
 </p>
 
 <p align="center">
@@ -88,45 +88,36 @@ candidate with the
 
 The localized macOS screenshot workflow is documented in [docs/screenshot-automation.md](docs/screenshot-automation.md).
 
-## What's New in 1.6
+## What's New in 1.7
 
-- **Redesigned Settings, statistics, and backups** - A consistent native
-  Settings experience now includes privacy-friendly usage insights plus portable
-  Backup & Restore for workflows, dictionary entries, snippets, profiles, prompt
-  actions, hotkeys, installed community plugins, history text, and supported
-  preferences
-- **Faster, more resilient recording** - Recording startup moved off the main
-  actor, eligible microphones are prewarmed, microphone priorities and route
-  recovery are more robust, and controlled tests measured lower
-  request-to-first-buffer times for built-in, USB, and AirPods inputs
-- **Calendar-aware meeting automation** - Optional reminders, countdown
-  controls, local meeting-activity checks, automatic Recorder sessions, sortable
-  filenames, transcript metadata, and Obsidian-ready Markdown sidecars support
-  Zoom, Microsoft Teams, Google Meet, and FaceTime meetings
-- **Improved dictation and indicators** - Live transcript updates can write
-  into active text fields, final insertion remains authoritative, contextual
-  insertion and target-app correction learning are more reliable, and Notch,
-  Overlay, and Minimal indicators gained better placement, visibility,
-  interaction, and screen-capture controls
-- **Expanded workflows and automation** - Ordered LLM provider fallbacks,
-  explicit API-driven dictation, the MCP Client action add-on, Obsidian live
-  sync and templates, bulk plugin updates, and clearer active-provider status
-  extend local automation
-- **Broader model and provider support** - Soniox live transcription, local
-  Cohere Transcribe, context-aware OpenAI transcription, dynamic ChatGPT model
-  discovery, richer OpenAI-compatible profiles, and reliability work across
-  Qwen3, Gemma 4, Granite, Voxtral, Parakeet, and WhisperKit expand the engine
-  ecosystem
-- **Localization and platform polish** - Simplified Chinese joins the existing
-  English, German, and Japanese UI, while macOS 27 Settings compatibility,
-  calendar permissions, distributed-build entitlements, and stable release
-  packaging received dedicated fixes
+- **iCloud sync and a redesigned History** - History and Inbox sync between
+  your Macs through TypeWhisper's private iCloud container, and History groups
+  entries by device with filters and search
+- **Undo and recovery** - Undo Last Dictation and Restore Raw Transcript are
+  available from the menu bar and as global hotkeys, and Dictation Recovery
+  keeps the last three successful dictations for up to 24 hours so an
+  incomplete provider response can be retried
+- **Shortcuts and cancellation** - Shortcuts are set on a visual Mac keyboard
+  that follows the active input source and shows conflicts, and cancellation
+  can use double Escape, single Escape, immediate cancellation, or be disabled
+- **Indicator themes** - Classic, Glass, and Light indicators with a live
+  preview on the new Appearance settings page
+- **Import and export** - Vocabulary import from Wispr Flow, Handy, and
+  compatible CSV files, export or deletion of all app data in Advanced
+  settings, and settings backups from the CLI with `typewhisper export` and
+  `typewhisper import`
+- **More ways to transcribe** - File transcription from Finder, web media
+  through the optional Web Link plugin, custom local speech models from
+  Hugging Face or a local folder, the Canary ASR plugin, and Parakeet Ultra
+- **Text handling** - A minimum threshold for number formatting, dictionary
+  corrections before workflow LLM processing, and segmented processing for
+  long dictations
 
 ## Features
 
 ### Transcription
 
-- **Local and cloud engines** - Choose from WhisperKit, Parakeet TDT v3, Apple
+- **Local and cloud engines** - Choose from WhisperKit, Parakeet (TDT v3 and Ultra), Apple
   SpeechAnalyzer, Granite Speech, Qwen3 ASR, Voxtral, Cohere Transcribe, Groq
   Whisper, OpenAI Whisper, Soniox, Smallest Pulse, xAI/Grok STT, OpenAI
   Compatible, and additional bundled or community providers
@@ -135,7 +126,8 @@ The localized macOS screenshot workflow is documented in [docs/screenshot-automa
   choices
 - **Streaming preview** - See partial transcription in real-time while speaking (WhisperKit)
 - **Short-clip handling** - Better retention of brief utterances and fewer false no-speech discards
-- **File transcription** - Batch-process multiple audio/video files with drag & drop
+- **File transcription** - Batch-process multiple audio/video files with drag & drop, or start from Finder
+- **Custom local models** - Import compatible speech models from a Hugging Face repository or a local folder in the settings of local plugins
 - **Subtitle export** - Export transcriptions as SRT or WebVTT with timestamps
 
 ### Dictation
@@ -143,7 +135,11 @@ The localized macOS screenshot workflow is documented in [docs/screenshot-automa
 - **System-wide** - Push-to-talk, toggle, or hybrid mode via global hotkey, auto-pastes into any app
 - **Modifier-key hotkeys** - Use a single modifier key (Command, Shift, Option, Control) as your hotkey
 - **Last-transcription actions** - Copy or paste your latest transcription with configurable global hotkeys
-- **Indicator styles** - Choose Notch, Overlay, or Minimal, with optional live transcript preview where supported
+- **Undo and raw restore** - Undo Last Dictation removes the last inserted dictation, and Restore Raw Transcript replaces it with the unprocessed text, without touching the clipboard
+- **Dictation Recovery** - Keeps failed recordings and the last three successful dictations for up to 24 hours so they can be retried
+- **Cancellation** - Cancel with double Escape, single Escape, or immediately, or turn cancellation off
+- **Visual shortcut editor** - Set shortcuts on a Mac keyboard that follows the active input source and shows conflicts and unavailable keys
+- **Indicator styles** - Choose Notch, Overlay, or Minimal in Classic, Glass, or Light, with optional live transcript preview where supported
 - **Sound feedback** - Audio cues for recording start, transcription success, and errors
 - **Microphone selection** - Choose a specific input device with live preview and improved recovery after route changes
 
@@ -158,10 +154,10 @@ The localized macOS screenshot workflow is documented in [docs/screenshot-automa
 ### Personalization
 
 - **Workflow triggers** - Per-app, per-website, combined app + website, hotkey, global fallback, and manual palette-only triggers for language, task, engine, prompt, and auto-submit behavior. Website matching supports subdomains
-- **Dictionary** - Terms improve cloud recognition accuracy. Corrections fix common transcription mistakes automatically. Auto-learns high-confidence local single-word manual corrections, while broader rewrites and deletions are skipped. Includes importable term packs
+- **Dictionary** - Terms improve cloud recognition accuracy. Corrections fix common transcription mistakes automatically. Auto-learns high-confidence local single-word manual corrections, while broader rewrites and deletions are skipped. Includes importable term packs and vocabulary import from Wispr Flow, Handy, and compatible CSV files
 - **Localized term packs** - Built-in term pack names and descriptions are localized in English and German
 - **Snippets** - Text shortcuts with trigger/replacement. Supports placeholders like `{{DATE}}`, `{{TIME}}`, and `{{CLIPBOARD}}`
-- **History** - Searchable transcription history with inline editing, correction detection, app context tracking, timeline grouping, filters, bulk delete, multi-select export, auto-retention, and a standalone window accessible from the tray menu
+- **History** - Searchable transcription history with inline editing, correction detection, app context tracking, timeline grouping, device grouping, filters, bulk delete, multi-select export, auto-retention, and a standalone window accessible from the tray menu
 
 ### Premium
 
@@ -170,9 +166,10 @@ The localized macOS screenshot workflow is documented in [docs/screenshot-automa
   transcript output for supported meeting providers
 - **Correction learning** - Learn deliberate manual corrections in supported
   target apps using conservative local matching and dictionary integration
+- **iCloud sync** - Sync History and Inbox between your Macs automatically
+  through TypeWhisper's private iCloud container
 - **Cloud Folder Sync** - Sync Dictionary and Snippets data through a
-  user-selected iCloud Drive, Dropbox, OneDrive, Syncthing, or custom folder;
-  automatic private iCloud sync remains disabled in current distributed builds
+  user-selected iCloud Drive, Dropbox, OneDrive, Syncthing, or custom folder
 - **Clear entitlement states** - The Premium hub shows account access and the
   exact availability of each feature for the current license or signed-in
   Premium account
@@ -195,6 +192,7 @@ The localized macOS screenshot workflow is documented in [docs/screenshot-automa
 - **Home dashboard** - Usage statistics, activity chart, and onboarding tutorial
 - **Statistics and backups** - Inspect local aggregate usage and export or
   restore supported settings and user data without uploading them to TypeWhisper
+- **Your data** - Export all app data as a ZIP or delete it in Advanced settings
 - **Auto-update** - Built-in updates via Sparkle with stable, release-candidate, and daily channels
 - **Universal binary** - Runs natively on Apple Silicon and Intel Macs
 - **Widgets** - Desktop widgets for usage stats, last transcription, activity chart, and transcription history

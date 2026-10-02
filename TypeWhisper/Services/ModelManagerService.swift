@@ -230,6 +230,7 @@ final class ModelManagerService: ObservableObject {
     private var pluginConfiguredPollInterval: Duration = .milliseconds(100)
 
     private var passiveRestoreSelection: (providerId: String, instance: ObjectIdentifier)?
+    private var dictationPrewarm: (key: ObjectIdentifier, plugin: any TranscriptionEnginePlugin)?
     private let providerKey = UserDefaultsKeys.selectedEngine
     private let modelKey = UserDefaultsKeys.selectedModelId
 
@@ -1084,6 +1085,57 @@ final class ModelManagerService: ObservableObject {
         return normalized
     }
 
+    // MARK: - Dictation Prewarm
+
+    /// Protects the dictation engine from auto-unload for the whole recording and starts
+    /// restoring an auto-unloaded local model right away, so the load overlaps with speaking
+    /// instead of delaying the transcript after the stop. Ends with `endDictationModelPrewarm()`.
+    func beginDictationModelPrewarm(engineOverrideId: String? = nil, cloudModelOverride: String? = nil) {
+        guard let providerId = engineOverrideId ?? selectedProviderId,
+              let plugin = PluginManager.shared.transcriptionEngine(for: providerId),
+              let nsPlugin = plugin as? NSObject else {
+            endDictationModelPrewarm()
+            return
+        }
+        let key = ObjectIdentifier(nsPlugin)
+        guard dictationPrewarm?.key != key else { return }
+        endDictationModelPrewarm()
+
+        beginAutoUnloadProtectedUse(of: plugin)
+        dictationPrewarm = (key, plugin)
+
+        // A model override goes through selectModel() at transcription time, and Apple
+        // Speech prepares per language; both keep their existing on-demand path.
+        let restoreSelector = NSSelectorFromString("triggerRestoreModel")
+        guard cloudModelOverride == nil,
+              plugin.providerId != AppleSpeechModelSelection.providerId,
+              !plugin.isConfigured,
+              canPrepareForTranscription(plugin),
+              pluginSettingsActivity(plugin) == nil,
+              nsPlugin.responds(to: restoreSelector) else {
+            return
+        }
+
+        _ = nsPlugin.perform(restoreSelector)
+    }
+
+    func endDictationModelPrewarm() {
+        guard let prewarm = dictationPrewarm else { return }
+        dictationPrewarm = nil
+        endAutoUnloadProtectedUse(of: prewarm.plugin)
+    }
+
+    /// True while a restore for the protected engine is visibly running, so the
+    /// transcription can wait for it instead of asking the plugin to restore a second time.
+    private func isDictationPrewarmInFlight(for plugin: TranscriptionEnginePlugin) -> Bool {
+        guard let nsPlugin = plugin as? NSObject,
+              dictationPrewarm?.key == ObjectIdentifier(nsPlugin),
+              let activity = pluginSettingsActivity(plugin) else {
+            return false
+        }
+        return !activity.isError
+    }
+
     // MARK: - Auto-Unload
 
     func scheduleAutoUnloadIfNeeded() {
@@ -1705,7 +1757,10 @@ final class ModelManagerService: ObservableObject {
                     throw modelNotLoadedError(for: plugin)
                 }
             } else if !plugin.isConfigured {
-                let restoreResult = await triggerRestoreModel(plugin)
+                let restoreResult = await triggerRestoreModel(
+                    plugin,
+                    joiningInFlightRestore: isDictationPrewarmInFlight(for: plugin)
+                )
                 if case .failed(let message) = restoreResult {
                     throw TranscriptionEngineError.modelLoadFailed(message)
                 }
@@ -1770,20 +1825,23 @@ final class ModelManagerService: ObservableObject {
     /// with dynamically loaded plugin bundles) and poll until ready.
     private func triggerRestoreModel(
         _ plugin: TranscriptionEnginePlugin,
-        preferredModelId: String? = nil
+        preferredModelId: String? = nil,
+        joiningInFlightRestore: Bool = false
     ) async -> PluginRestoreResult {
         guard let nsPlugin = plugin as? NSObject else {
             return .unavailable
         }
 
-        let preferredRestoreSelector = NSSelectorFromString("triggerRestoreModelForModel:")
-        let genericRestoreSelector = NSSelectorFromString("triggerRestoreModel")
-        if let preferredModelId, nsPlugin.responds(to: preferredRestoreSelector) {
-            _ = nsPlugin.perform(preferredRestoreSelector, with: preferredModelId as NSString)
-        } else if nsPlugin.responds(to: genericRestoreSelector) {
-            _ = nsPlugin.perform(genericRestoreSelector)
-        } else {
-            return .unavailable
+        if !joiningInFlightRestore {
+            let preferredRestoreSelector = NSSelectorFromString("triggerRestoreModelForModel:")
+            let genericRestoreSelector = NSSelectorFromString("triggerRestoreModel")
+            if let preferredModelId, nsPlugin.responds(to: preferredRestoreSelector) {
+                _ = nsPlugin.perform(preferredRestoreSelector, with: preferredModelId as NSString)
+            } else if nsPlugin.responds(to: genericRestoreSelector) {
+                _ = nsPlugin.perform(genericRestoreSelector)
+            } else {
+                return .unavailable
+            }
         }
 
         let identityCheckModelId = plugin.selectedModelId == nil ? nil : preferredModelId

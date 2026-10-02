@@ -166,6 +166,8 @@ final class TextDiffService {
                 // Skip if only punctuation or case changed
                 if origStripped.lowercased() == replStripped.lowercased() { continue }
 
+                if Self.isNumericValue(origStripped), Self.isNumericValue(replStripped) { continue }
+
                 suggestions.append(CorrectionSuggestion(
                     original: origStripped,
                     replacement: replStripped
@@ -213,6 +215,10 @@ final class TextDiffService {
                 return []
             }
 
+            guard !(Self.isNumericValue(originalStripped) && Self.isNumericValue(editedStripped)) else {
+                return []
+            }
+
             suggestion = CorrectionSuggestion(
                 original: originalStripped,
                 replacement: editedStripped
@@ -229,6 +235,12 @@ final class TextDiffService {
 
     private static func strippedWordToken(_ token: String) -> String {
         token.trimmingCharacters(in: .punctuationCharacters)
+    }
+
+    /// A number changed into another number ("90%" -> "95%") is a content edit,
+    /// not a misrecognized word worth replacing in every future dictation.
+    private static func isNumericValue(_ token: String) -> Bool {
+        token.contains(where: \.isNumber) && !token.contains(where: \.isLetter)
     }
 
     private static func isPunctuationOnly(_ token: String) -> Bool {

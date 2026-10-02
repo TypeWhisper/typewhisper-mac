@@ -138,6 +138,7 @@
 		2F4D6A8B0C1E3F5A7B9D2C50 /* IndicatorTranscriptPreviewSizingTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2F4D6A8B0C1E3F5A7B9D2C51 /* IndicatorTranscriptPreviewSizingTests.swift */; };
 		91B4D7E2C5A809F1632E4B7C /* PluginRegistryServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91B4D7E2C5A809F1632E4B7D /* PluginRegistryServiceTests.swift */; };
 		545000000000000000000002 /* SetupWizardRecommendationAvailabilityTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 545000000000000000000001 /* SetupWizardRecommendationAvailabilityTests.swift */; };
+		545000000000000000000004 /* SetupWizardTrialSignalTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 545000000000000000000003 /* SetupWizardTrialSignalTests.swift */; };
 		91B4D7E2C5A809F1632E4B7E /* StreamingHandlerTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91B4D7E2C5A809F1632E4B7F /* StreamingHandlerTests.swift */; };
 		9A584149706C7567496E0100 /* XAIPluginTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A584149706C7567496E0101 /* XAIPluginTests.swift */; };
 		9A584149706C7567496E0200 /* XAIPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A584149706C7567496E0210 /* XAIPlugin.swift */; };
@@ -163,6 +164,7 @@
 			B6C2E690A4C76857A9A8CD73 /* VoiceProfileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C143E8755CF578D1A031D6D /* VoiceProfileTests.swift */; };
 			F92ADEC58CD75E4A7F7104BE /* SpeakerWorkspaceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DB6D5FB6E1D82AED2AEFA14 /* SpeakerWorkspaceTests.swift */; };
 			F6B7AC0B593EA5D7A46CB096 /* SpeakerTranscriptCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 595AA87933B4B6985DA867A0 /* SpeakerTranscriptCoordinatorTests.swift */; };
+		D99900000000000000000002 /* DictationUndoServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = D99900000000000000000001 /* DictationUndoServiceTests.swift */; };
 		AA8390000000000000000001 /* UsageStatisticsDay.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB8390000000000000000001 /* UsageStatisticsDay.swift */; };
 		AA8390000000000000000002 /* UsageStatisticsMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB8390000000000000000002 /* UsageStatisticsMetadata.swift */; };
 		3EB9E72F54D54A6288ACC2C1 /* UsageStatisticsKeys.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91F0023647194EC3A838E6B1 /* UsageStatisticsKeys.swift */; };
@@ -262,6 +264,7 @@
 		AA00000000000000000077 /* DictionaryEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000077 /* DictionaryEntry.swift */; };
 		AA00000000000000000078 /* TermPack.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000078 /* TermPack.swift */; };
 		AA00000000000000000079 /* DictionaryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000079 /* DictionaryService.swift */; };
+		AA00000000000000000999 /* DictationUndoService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000999 /* DictationUndoService.swift */; };
 		A87000000000000000000001 /* DictionaryTrainingService.swift in Sources */ = {isa = PBXBuildFile; fileRef = B87000000000000000000001 /* DictionaryTrainingService.swift */; };
 		A87000000000000000000002 /* DictionaryTrainingServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = B87000000000000000000002 /* DictionaryTrainingServiceTests.swift */; };
 		AA00000000000000000080 /* Snippet.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000080 /* Snippet.swift */; };
@@ -799,6 +802,7 @@
 			6C143E8755CF578D1A031D6D /* VoiceProfileTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VoiceProfileTests.swift; sourceTree = "<group>"; };
 			4DB6D5FB6E1D82AED2AEFA14 /* SpeakerWorkspaceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SpeakerWorkspaceTests.swift; sourceTree = "<group>"; };
 			595AA87933B4B6985DA867A0 /* SpeakerTranscriptCoordinatorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SpeakerTranscriptCoordinatorTests.swift; sourceTree = "<group>"; };
+			D99900000000000000000001 /* DictationUndoServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DictationUndoServiceTests.swift; sourceTree = "<group>"; };
 		BB8390000000000000000004 /* UsageStatisticsServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = UsageStatisticsServiceTests.swift; sourceTree = "<group>"; };
 		B91F00000000000000000001 /* SelectionPalettePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectionPalettePanel.swift; sourceTree = "<group>"; };
 		B91F00000000000000000002 /* RecentTranscriptionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentTranscriptionStore.swift; sourceTree = "<group>"; };
@@ -917,6 +921,7 @@
 		BB00000000000000000077 /* DictionaryEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictionaryEntry.swift; sourceTree = "<group>"; };
 		BB00000000000000000078 /* TermPack.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TermPack.swift; sourceTree = "<group>"; };
 		BB00000000000000000079 /* DictionaryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictionaryService.swift; sourceTree = "<group>"; };
+		BB00000000000000000999 /* DictationUndoService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationUndoService.swift; sourceTree = "<group>"; };
 		B87000000000000000000001 /* DictionaryTrainingService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictionaryTrainingService.swift; sourceTree = "<group>"; };
 		B87000000000000000000002 /* DictionaryTrainingServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = DictionaryTrainingServiceTests.swift; sourceTree = "<group>"; };
 		BB7080000000000000000002 /* TargetAppCorrectionLearningServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = TargetAppCorrectionLearningServiceTests.swift; sourceTree = "<group>"; };
@@ -1235,6 +1240,7 @@
 		2A7B3C4D5E6F708192A3B4C7 /* PromptActionsViewModelWizardTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PromptActionsViewModelWizardTests.swift; sourceTree = "<group>"; };
 		91B4D7E2C5A809F1632E4B7D /* PluginRegistryServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = PluginRegistryServiceTests.swift; sourceTree = "<group>"; };
 		545000000000000000000001 /* SetupWizardRecommendationAvailabilityTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SetupWizardRecommendationAvailabilityTests.swift; sourceTree = "<group>"; };
+		545000000000000000000003 /* SetupWizardTrialSignalTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SetupWizardTrialSignalTests.swift; sourceTree = "<group>"; };
 		D4A100000000000000000004 /* RecorderTranscriptionBufferTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = RecorderTranscriptionBufferTests.swift; sourceTree = "<group>"; };
 		91B4D7E2C5A809F1632E4B7F /* StreamingHandlerTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = StreamingHandlerTests.swift; sourceTree = "<group>"; };
 		9A584149706C7567496E0101 /* XAIPluginTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = XAIPluginTests.swift; sourceTree = "<group>"; };
@@ -2028,6 +2034,7 @@
 				BB00000000000000000074 /* AudioDuckingService.swift */,
 				BB00000000000000000273 /* MediaPlaybackService.swift */,
 				BB00000000000000000079 /* DictionaryService.swift */,
+				BB00000000000000000999 /* DictationUndoService.swift */,
 				B87000000000000000000001 /* DictionaryTrainingService.swift */,
 				BB00000000000000000271 /* DictionaryExporter.swift */,
 				712206232DC54730919D4B8B /* WisprFlowImportReader.swift */,
@@ -3049,6 +3056,7 @@
 				6C143E8755CF578D1A031D6D /* VoiceProfileTests.swift */,
 				4DB6D5FB6E1D82AED2AEFA14 /* SpeakerWorkspaceTests.swift */,
 				595AA87933B4B6985DA867A0 /* SpeakerTranscriptCoordinatorTests.swift */,
+				D99900000000000000000001 /* DictationUndoServiceTests.swift */,
 				BB8390000000000000000004 /* UsageStatisticsServiceTests.swift */,
 				B91F00000000000000000005 /* RecentTranscriptionPaletteHandlerTests.swift */,
 				B91F00000000000000000006 /* PromptPaletteControllerTests.swift */,
@@ -3060,6 +3068,7 @@
 				103600000000000000000002 /* MLXPluginModelStorageTests.swift */,
 				91B4D7E2C5A809F1632E4B7D /* PluginRegistryServiceTests.swift */,
 				545000000000000000000001 /* SetupWizardRecommendationAvailabilityTests.swift */,
+				545000000000000000000003 /* SetupWizardTrialSignalTests.swift */,
 				B2D4F6A8C0E2143F9B7D5C1A /* PromptActionTemperaturePersistenceTests.swift */,
 				FEEDFACE00000000000000B1 /* PromptProcessingModelResolutionTests.swift */,
 				2A7B3C4D5E6F708192A3B4C7 /* PromptActionsViewModelWizardTests.swift */,
@@ -5015,6 +5024,7 @@
 				B6C2E690A4C76857A9A8CD73 /* VoiceProfileTests.swift in Sources */,
 				F92ADEC58CD75E4A7F7104BE /* SpeakerWorkspaceTests.swift in Sources */,
 				F6B7AC0B593EA5D7A46CB096 /* SpeakerTranscriptCoordinatorTests.swift in Sources */,
+				D99900000000000000000002 /* DictationUndoServiceTests.swift in Sources */,
 				AA8390000000000000000004 /* UsageStatisticsServiceTests.swift in Sources */,
 				A91F00000000000000000005 /* RecentTranscriptionPaletteHandlerTests.swift in Sources */,
 				A91F00000000000000000006 /* PromptPaletteControllerTests.swift in Sources */,
@@ -5041,6 +5051,7 @@
 				F18A00000000000000000006 /* FillerWordsPlugin.swift in Sources */,
 				91B4D7E2C5A809F1632E4B7C /* PluginRegistryServiceTests.swift in Sources */,
 				545000000000000000000002 /* SetupWizardRecommendationAvailabilityTests.swift in Sources */,
+				545000000000000000000004 /* SetupWizardTrialSignalTests.swift in Sources */,
 				A1C3E59B7D1042F9A8C6E2B1 /* PromptActionTemperaturePersistenceTests.swift in Sources */,
 				FEEDFACE00000000000000A1 /* PromptProcessingModelResolutionTests.swift in Sources */,
 				1F7A2C3D4E5B60718293A4C7 /* PromptActionsViewModelWizardTests.swift in Sources */,
@@ -5203,6 +5214,7 @@
 				AA00000000000000000077 /* DictionaryEntry.swift in Sources */,
 				AA00000000000000000078 /* TermPack.swift in Sources */,
 				AA00000000000000000079 /* DictionaryService.swift in Sources */,
+				AA00000000000000000999 /* DictationUndoService.swift in Sources */,
 				A87000000000000000000001 /* DictionaryTrainingService.swift in Sources */,
 				AA00000000000000000080 /* Snippet.swift in Sources */,
 				AA00000000000000000081 /* SnippetService.swift in Sources */,
@@ -9397,7 +9409,7 @@
 			repositoryURL = "https://github.com/FluidInference/FluidAudio.git";
 			requirement = {
 				kind = exactVersion;
-				version = 0.17.1;
+				version = 0.17.5;
 			};
 		};
 		RR00000000000000000004 /* XCRemoteSwiftPackageReference "Sparkle" */ = {

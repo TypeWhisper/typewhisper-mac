@@ -491,8 +491,10 @@ final class OpenAIPluginTests: XCTestCase {
                 XCTFail("Expected HTTP \(statusCode) to fail")
             } catch let error as PluginTranscriptionError {
                 switch (statusCode, error) {
-                case (401, .invalidApiKey), (413, .fileTooLarge), (429, .rateLimited):
+                case (401, .invalidApiKey), (413, .fileTooLarge):
                     break
+                case (429, .apiError(let message)):
+                    XCTAssertEqual(message, "HTTP 429: request failed")
                 default:
                     XCTFail("Unexpected mapping for HTTP \(statusCode): \(error)")
                 }

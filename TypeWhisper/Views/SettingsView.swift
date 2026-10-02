@@ -6,6 +6,7 @@ enum SettingsTab: Hashable {
     case home, general, appearance, dictation, hotkeys, recorder
     case dictationRecovery, fileTranscription, history, statistics, dictionary, snippets, workflows, profiles, prompts, premium, integrations, advanced, license, about
     case plugin(pluginId: String, itemId: String)
+    case installedPlugin(pluginId: String)
 }
 
 private struct SettingsDestination: Identifiable, Hashable {
@@ -13,6 +14,10 @@ private struct SettingsDestination: Identifiable, Hashable {
     let title: String
     let systemImage: String
     let badge: Int?
+    var iconURL: URL?
+    var darkIconURL: URL?
+    var isDimmed = false
+    var hasUpdate = false
 
     var id: SettingsTab { tab }
 }
@@ -54,6 +59,7 @@ struct SettingsView: View {
         case "snippets": return .snippets
         case "workflows": return .workflows
         case "premium": return .premium
+        // "plugins" moves on to the first installed plugin once the plugins are loaded.
         case "plugins", "integrations-available", "integrations-local": return .integrations
         case "advanced": return .advanced
         case "license": return .license
@@ -105,7 +111,7 @@ struct SettingsView: View {
             ),
             SettingsDestination(
                 tab: .integrations,
-                title: String(localized: "Integrations"),
+                title: localizedAppText("Discover plugins", de: "Plugins entdecken"),
                 systemImage: "puzzlepiece.extension",
                 badge: registryService.availableUpdatesCount > 0 ? registryService.availableUpdatesCount : nil
             ),
@@ -125,7 +131,35 @@ struct SettingsView: View {
             }
         }
 
-        return builtInDestinations + pluginDestinations
+        let installedPluginDestinations = pluginManager.loadedPlugins
+            .sorted { lhs, rhs in
+                // Disabled plugins sink below the ones in use.
+                if lhs.isEnabled != rhs.isEnabled { return lhs.isEnabled }
+                return lhs.manifest.name.localizedCompare(rhs.manifest.name) == .orderedAscending
+            }
+            .map { plugin in
+                let registryPlugin = registryService.registry.first { $0.id == plugin.id }
+                return SettingsDestination(
+                    tab: .installedPlugin(pluginId: plugin.id),
+                    title: plugin.manifest.name,
+                    systemImage: registryPlugin?.iconSystemName
+                        ?? plugin.manifest.iconSystemName
+                        ?? "puzzlepiece.extension",
+                    badge: nil,
+                    iconURL: validatedHTTPSURL(registryPlugin?.iconURL)
+                        ?? validatedHTTPSURL(plugin.manifest.iconURL)
+                        ?? plugin.iconResourceURL,
+                    darkIconURL: validatedHTTPSURL(registryPlugin?.iconDarkURL)
+                        ?? validatedHTTPSURL(plugin.manifest.iconDarkURL),
+                    isDimmed: !plugin.isEnabled,
+                    hasUpdate: {
+                        if case .updateAvailable = registryService.installInfo(for: plugin.id) { return true }
+                        return false
+                    }()
+                )
+            }
+
+        return builtInDestinations + installedPluginDestinations + pluginDestinations
     }
 
     private var destinationSections: [SettingsDestinationSection] {
@@ -158,6 +192,7 @@ struct SettingsView: View {
         .onAppear {
             navigateToFileTranscriptionIfNeeded()
             syncIndicatorPreview()
+            selectScreenshotPluginPageIfNeeded()
         }
         // The detail view's own onDisappear is not reliable inside the split
         // view, so the selected tab drives the live indicator preview.
@@ -197,10 +232,33 @@ struct SettingsView: View {
                 selectedTab = Self.availableTab(request.tab)
             }
         }
+        .onChange(of: pluginManager.loadedPlugins.map(\.id)) { _, pluginIds in
+            // An uninstalled plugin takes its sidebar entry with it.
+            if case .installedPlugin(let pluginId) = selectedTab, !pluginIds.contains(pluginId) {
+                selectedTab = .integrations
+            }
+            selectScreenshotPluginPageIfNeeded()
+        }
     }
 
     static func availableTab(_ tab: SettingsTab) -> SettingsTab {
         tab
+    }
+
+    private func selectScreenshotPluginPageIfNeeded() {
+        guard AppConstants.isScreenshotAutomation,
+              AppConstants.screenshotState == "plugins",
+              selectedTab == .integrations,
+              let plugin = pluginManager.loadedPlugins
+                .filter({ $0.isEnabled && $0.supportsSettingsWindow })
+                .min(by: { $0.manifest.name.localizedCompare($1.manifest.name) == .orderedAscending }) else {
+            return
+        }
+        selectedTab = .installedPlugin(pluginId: plugin.id)
+        // Keep a text field of the plugin from showing a focus ring in the capture.
+        DispatchQueue.main.async {
+            NSApp.windows.forEach { $0.makeFirstResponder(nil) }
+        }
     }
 
     private func syncIndicatorPreview() {
@@ -268,6 +326,9 @@ struct SettingsView: View {
             LicenseSettingsView()
         case .about:
             AboutSettingsView()
+        case .installedPlugin(let pluginId):
+            PluginSettingsView(focusedPluginId: pluginId)
+                .id(pluginId)
         case .plugin(let pluginId, let itemId):
             if let view = pluginManager.settingsSidebarView(pluginId: pluginId, itemId: itemId) {
                 view
@@ -511,20 +572,28 @@ private struct SettingsSidebarList: View {
     }
 
     var body: some View {
-        List(selection: $selectedTab) {
-            ForEach(filteredSections) { section in
-                Section {
-                    ForEach(section.destinations) { destination in
-                        SettingsSidebarRow(
-                            destination: destination,
-                            isSelected: destination.tab == selectedTab
-                        )
-                        .tag(destination.tab)
+        ScrollViewReader { proxy in
+            List(selection: $selectedTab) {
+                ForEach(filteredSections) { section in
+                    Section {
+                        ForEach(section.destinations) { destination in
+                            SettingsSidebarRow(
+                                destination: destination,
+                                isSelected: destination.tab == selectedTab
+                            )
+                            .tag(destination.tab)
+                            .id(destination.tab)
+                        }
                     }
                 }
             }
+            .listStyle(.sidebar)
+            // A page opened from elsewhere (e.g. a freshly installed plugin) may sit
+            // below the visible rows.
+            .onChange(of: selectedTab) { _, tab in
+                proxy.scrollTo(tab)
+            }
         }
-        .listStyle(.sidebar)
         // Changing the section/row count via search filtering can leave stale,
         // blank space behind from SwiftUI's incremental List diffing. Keying the
         // List on the query forces a clean rebuild instead of a partial diff.
@@ -609,8 +678,10 @@ private func settingsDestinationSections(_ destinations: [SettingsDestination]) 
     ]
 
     let pluginDestinations = destinations.filter {
-        if case .plugin = $0.tab { return true }
-        return false
+        switch $0.tab {
+        case .plugin, .installedPlugin: return true
+        default: return false
+        }
     }
 
     let integrationDestinations = [settingsDestination(destinations, .integrations)] + pluginDestinations
@@ -706,15 +777,31 @@ private struct SettingsSidebarRow: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Label(destination.title, systemImage: destination.systemImage)
-                .symbolEffect(.bounce, value: bounceTrigger)
+            if destination.iconURL != nil {
+                Label {
+                    Text(destination.title)
+                } icon: {
+                    SettingsSidebarPluginIcon(destination: destination)
+                }
+            } else {
+                Label(destination.title, systemImage: destination.systemImage)
+                    .symbolEffect(.bounce, value: bounceTrigger)
+            }
 
             Spacer(minLength: 8)
+
+            if destination.hasUpdate {
+                Image(systemName: "arrow.down.circle.fill")
+                    .foregroundStyle(isSelected ? AnyShapeStyle(.primary) : AnyShapeStyle(.tint))
+                    .help(localizedAppText("Update available", de: "Update verfügbar", ja: "アップデートがあります"))
+                    .accessibilityLabel(localizedAppText("Update available", de: "Update verfügbar", ja: "アップデートがあります"))
+            }
 
             if let badge = destination.badge {
                 SettingsSidebarBadge(title: destination.title, count: badge)
             }
         }
+        .opacity(destination.isDimmed && !isSelected ? 0.5 : 1)
         .contentShape(Rectangle())
         .onChange(of: isSelected) { _, selected in
             guard hasAppeared, selected, !reduceMotion else { return }
@@ -722,6 +809,50 @@ private struct SettingsSidebarRow: View {
         }
         .onAppear {
             DispatchQueue.main.async { hasAppeared = true }
+        }
+    }
+}
+
+/// The plugin's own logo, so installed plugins are recognizable in the sidebar.
+private struct SettingsSidebarPluginIcon: View {
+    let destination: SettingsDestination
+
+    @Environment(\.colorScheme) private var colorScheme
+    @State private var image: NSImage?
+
+    private static let cache = NSCache<NSURL, NSImage>()
+
+    private var resolvedURL: URL? {
+        colorScheme == .dark ? destination.darkIconURL ?? destination.iconURL : destination.iconURL
+    }
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 18, height: 18)
+            } else {
+                Image(systemName: destination.systemImage)
+            }
+        }
+        .task(id: resolvedURL) {
+            guard let resolvedURL else {
+                image = nil
+                return
+            }
+            if let cached = Self.cache.object(forKey: resolvedURL as NSURL) {
+                image = cached
+                return
+            }
+
+            var request = URLRequest(url: resolvedURL)
+            request.timeoutInterval = 15
+            let data = try? await URLSession.shared.data(for: request).0
+            guard !Task.isCancelled, let loaded = data.flatMap(NSImage.init(data:)) else { return }
+            Self.cache.setObject(loaded, forKey: resolvedURL as NSURL)
+            image = loaded
         }
     }
 }

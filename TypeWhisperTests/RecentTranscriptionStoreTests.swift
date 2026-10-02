@@ -3,6 +3,16 @@ import XCTest
 
 final class RecentTranscriptionStoreTests: XCTestCase {
     @MainActor
+    func testRawRestorePreservesBoundaryWhitespaceExactly() {
+        let store = RecentTranscriptionStore()
+        let id = UUID()
+        store.recordTranscription(id: id, finalText: "Processed.", appName: nil, appBundleIdentifier: nil)
+        let raw = " \nraw transcript\t "
+        store.updateFinalText(id: id, finalText: raw)
+        XCTAssertEqual(store.latestEntry(historyRecords: [])?.finalText, raw)
+    }
+
+    @MainActor
     func testMergedEntriesDedupesSessionAndHistoryAndSortsNewestFirst() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }

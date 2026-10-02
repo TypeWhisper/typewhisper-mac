@@ -1157,6 +1157,37 @@ final class FileTranscriptionViewModelTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: newerRecoveryURL.path))
     }
 
+    func testRecoveryDiscardAllDeletesEveryRecoveryFile() throws {
+        let defaults = try makeDefaults()
+        let directory = makeTemporaryDirectory()
+        let historyService = HistoryService(appSupportDirectory: makeTemporaryDirectory())
+        let store = DictationRecoveryAudioStore(directory: directory)
+        store.startNewRecording()
+        store.append([0.1])
+        let olderRecoveryURL = try XCTUnwrap(store.preserveActiveRecording())
+        store.startNewRecording()
+        store.append([0.2])
+        let newerRecoveryURL = try XCTUnwrap(store.preserveActiveRecording())
+        let audioRecordingService = AudioRecordingService(recoveryAudioStore: store)
+        let viewModel = DictationRecoveryViewModel(
+            audioRecordingService: audioRecordingService,
+            modelManager: ModelManagerService(),
+            historyService: historyService,
+            audioFileService: AudioFileService(),
+            defaults: defaults
+        )
+        XCTAssertEqual(viewModel.recoveries.count, 2)
+
+        viewModel.discardAllRecoveries()
+
+        XCTAssertTrue(viewModel.recoveries.isEmpty)
+        XCTAssertNil(viewModel.recoveryURL)
+        XCTAssertFalse(viewModel.hasRecovery)
+        XCTAssertTrue(audioRecordingService.recoveryRecordingURLs.isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: olderRecoveryURL.path))
+        XCTAssertFalse(FileManager.default.fileExists(atPath: newerRecoveryURL.path))
+    }
+
     func testRecoverySettingsTabRemainsAvailableWithoutRecoveryContent() {
         XCTAssertEqual(SettingsView.availableTab(.dictationRecovery), .dictationRecovery)
         XCTAssertEqual(SettingsView.availableTab(.fileTranscription), .fileTranscription)
