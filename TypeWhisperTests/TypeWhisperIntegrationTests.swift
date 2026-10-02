@@ -17157,6 +17157,57 @@ final class HotkeyServiceCompatibilityTests: XCTestCase {
     }
 
     @MainActor
+    func testSyntheticClipboardShortcutPassesWhileHotkeyOnSameKeyIsHeld() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        let hotkey = UnifiedHotkey(
+            keyCode: 0x09,
+            modifierFlags: NSEvent.ModifierFlags([.control, .option]).rawValue,
+            isFn: false
+        )
+        service.setHotkeyForTesting(hotkey, for: .pasteLastTranscription)
+        var pasteCount = 0
+        service.onPasteLastTranscription = { pasteCount += 1 }
+
+        let down = try makeKeyboardEvent(keyCode: 0x09, keyDown: true, flags: [.maskControl, .maskAlternate])
+        XCTAssertTrue(service.processEventForTesting(down, source: .monitor))
+        XCTAssertEqual(pasteCount, 1)
+
+        for keyDown in [true, false] {
+            let cgEvent = try XCTUnwrap(CGEvent(keyboardEventSource: nil, virtualKey: 0x09, keyDown: keyDown))
+            cgEvent.setIntegerValueField(
+                .eventSourceUserData,
+                value: TextInsertionService.simulatedClipboardShortcutEventMarker
+            )
+            cgEvent.flags = .maskCommand
+            let event = try XCTUnwrap(NSEvent(cgEvent: cgEvent))
+            XCTAssertFalse(service.processEventForTesting(event, source: .eventTap))
+        }
+
+        // The physical key is still held, so only its own release ends the press.
+        let up = try makeKeyboardEvent(keyCode: 0x09, keyDown: false, flags: [.maskControl, .maskAlternate])
+        XCTAssertTrue(service.processEventForTesting(up, source: .monitor))
+        XCTAssertFalse(service.processEventForTesting(up, source: .monitor))
+        XCTAssertEqual(pasteCount, 1)
+    }
+
+    @MainActor
+    func testUnmarkedCommandVIsSwallowedWhileHotkeyOnSameKeyIsHeld() throws {
+        let service = HotkeyService()
+        service.suspendMonitoring()
+        let hotkey = UnifiedHotkey(
+            keyCode: 0x09,
+            modifierFlags: NSEvent.ModifierFlags([.control, .option]).rawValue,
+            isFn: false
+        )
+        service.setHotkeyForTesting(hotkey, for: .pasteLastTranscription)
+        let down = try makeKeyboardEvent(keyCode: 0x09, keyDown: true, flags: [.maskControl, .maskAlternate])
+        XCTAssertTrue(service.processEventForTesting(down, source: .monitor))
+        let commandV = try makeKeyboardEvent(keyCode: 0x09, keyDown: true, flags: .maskCommand)
+        XCTAssertTrue(service.processEventForTesting(commandV, source: .eventTap))
+    }
+
+    @MainActor
     func testGlobalMonitorDoesNotSubmitOrLatchReturnWithoutSuppression() throws {
         let service = HotkeyService()
         service.suspendMonitoring()
