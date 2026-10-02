@@ -1088,6 +1088,38 @@
           }
         }
       }
+    },
+    "Loads on demand": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Wird bei Bedarf geladen"
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "按需加载"
+          }
+        }
+      }
+    },
+    "Auto-unload model is set to Immediate.": {
+      "localizations": {
+        "de": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "„Modell automatisch entladen“ steht auf „Sofort“."
+          }
+        },
+        "zh-Hans": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "“自动卸载模型”已设为“立即”。"
+          }
+        }
+      }
     }
   },
   "version": "1.0"

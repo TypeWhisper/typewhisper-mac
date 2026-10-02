@@ -631,6 +631,14 @@ final class Qwen3Plugin: NSObject, TranscriptionEnginePlugin, TranscriptionModel
         return hasDownloadedModel(modelDef)
     }
 
+    /// The downloaded model the host loads on demand, see `HostServices.modelIdLoadedOnDemand`.
+    fileprivate var modelIdLoadedOnDemand: String? {
+        guard let modelId = host?.modelIdLoadedOnDemand,
+              let modelDef = allModelDefinitions.first(where: { $0.id == modelId }),
+              hasDownloadedModel(modelDef) else { return nil }
+        return modelId
+    }
+
     private func hasDownloadedModel(_ modelDef: Qwen3ModelDef) -> Bool {
         guard let modelsDir = host?.pluginDataDirectory.appendingPathComponent("models") else { return false }
         return usableModelDirectory(for: modelDef, modelsDirectory: modelsDir) != nil
@@ -1252,6 +1260,7 @@ private struct Qwen3SettingsView: View {
     @State private var modelState: Qwen3ModelState = .notLoaded
     @State private var selectedModelId: String = ""
     @State private var isPolling = false
+    @State private var onDemandModelId: String?
     @State private var hfTokenInput = ""
     @State private var showHfToken = false
     @State private var isValidatingToken = false
@@ -1391,6 +1400,7 @@ private struct Qwen3SettingsView: View {
         .onAppear {
             modelState = plugin.modelState
             selectedModelId = plugin.selectedModelId ?? plugin.allModelDefinitions.first?.id ?? ""
+            onDemandModelId = plugin.modelIdLoadedOnDemand
             if let token = plugin._hfToken, !token.isEmpty {
                 hfTokenInput = token
             }
@@ -1405,6 +1415,7 @@ private struct Qwen3SettingsView: View {
             }
         }
         .onReceive(pollTimer) { _ in
+            onDemandModelId = plugin.modelIdLoadedOnDemand
             guard isPolling else {
                 modelState = plugin.modelState
                 selectedModelId = plugin.selectedModelId ?? selectedModelId
@@ -1497,6 +1508,8 @@ private struct Qwen3SettingsView: View {
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                 }
+            } else if modelDef.id == onDemandModelId {
+                PluginModelLoadsOnDemandStatus(bundle: bundle)
             } else {
                 Button(modelDef.id.hasPrefix("custom-") ? String(localized: "Load", bundle: bundle) : String(localized: "Download & Load", bundle: bundle)) {
                     selectedModelId = modelDef.id

@@ -261,16 +261,20 @@ struct LocalLLMSettingsView: View {
                 .controlSize(.small)
             } else if isDownloaded || hasCachedModelFiles {
                 HStack(spacing: 8) {
-                    Button(
-                        isDownloaded
-                            ? String(localized: "Load", bundle: bundle)
-                            : String(localized: "Download & Load", bundle: bundle)
-                    ) {
-                        startLoading(modelDef)
+                    if isDownloaded, modelDef.id == plugin.modelIdLoadedOnDemand {
+                        PluginModelLoadsOnDemandStatus(bundle: bundle)
+                    } else {
+                        Button(
+                            isDownloaded
+                                ? String(localized: "Load", bundle: bundle)
+                                : String(localized: "Download & Load", bundle: bundle)
+                        ) {
+                            startLoading(modelDef)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .controlSize(.small)
+                        .disabled(modelState == .downloading || modelState == .loading)
                     }
-                    .buttonStyle(.borderedProminent)
-                    .controlSize(.small)
-                    .disabled(modelState == .downloading || modelState == .loading)
 
                     Button(String(localized: "Remove", bundle: bundle), role: .destructive) {
                         removeDownloadedModel(modelDef)

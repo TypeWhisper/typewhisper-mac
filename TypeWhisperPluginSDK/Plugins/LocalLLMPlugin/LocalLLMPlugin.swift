@@ -386,6 +386,10 @@ final class LocalLLMPlugin: NSObject, ObservableObject, LLMProviderPlugin, LLMPr
         host?.shouldRestoreLoadedModelsPassively ?? true
     }
 
+    var modelIdLoadedOnDemand: String? {
+        host?.modelIdLoadedOnDemand
+    }
+
     var supportedModels: [PluginModelInfo] {
         guard let loadedModelId else { return [] }
         return Self.availableModels

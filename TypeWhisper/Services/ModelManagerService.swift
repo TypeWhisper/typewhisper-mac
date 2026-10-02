@@ -109,6 +109,10 @@ enum ModelAutoUnloadPolicy {
         effectiveSeconds(defaults: defaults) == 0
     }
 
+    static func unloadsModelsImmediatelyAfterUse(defaults: UserDefaults = .standard) -> Bool {
+        effectiveSeconds(defaults: defaults) == -1
+    }
+
     static func policyName(seconds: Int) -> String {
         switch seconds {
         case 0:

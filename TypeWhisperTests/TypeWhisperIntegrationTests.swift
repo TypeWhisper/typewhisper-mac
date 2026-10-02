@@ -14017,6 +14017,29 @@ final class TypeWhisperIntegrationTests: XCTestCase {
     }
 
     @MainActor
+    func testModelAutoUnloadPolicyReportsImmediateUnloadOnlyForImmediatePolicy() throws {
+        let suiteName = "ModelAutoUnloadPolicyTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer {
+            defaults.removePersistentDomain(forName: suiteName)
+        }
+        defaults.removeObject(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+
+        XCTAssertFalse(ModelAutoUnloadPolicy.unloadsModelsImmediatelyAfterUse(defaults: defaults))
+
+        defaults.set(-1, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+        XCTAssertTrue(ModelAutoUnloadPolicy.unloadsModelsImmediatelyAfterUse(defaults: defaults))
+
+        for otherPolicySeconds in [0, 120, 300, 600, 1800, 3600] {
+            defaults.set(otherPolicySeconds, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+            XCTAssertFalse(
+                ModelAutoUnloadPolicy.unloadsModelsImmediatelyAfterUse(defaults: defaults),
+                "Policy \(otherPolicySeconds) keeps a loaded model in memory"
+            )
+        }
+    }
+
+    @MainActor
     func testHostServicesSuppressesInheritedPassiveLoadedModelRestoreForLegacyPluginActivation() async throws {
         let originalAutoUnload = UserDefaults.standard.object(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
         let pluginId = "com.typewhisper.tests.legacy.\(UUID().uuidString)"

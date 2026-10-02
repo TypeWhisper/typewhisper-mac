@@ -206,6 +206,10 @@ final class CohereLocalPlugin: NSObject, TranscriptionEnginePlugin, Transcriptio
         state.withLock { $0.selectedModelId }
     }
 
+    var modelIdLoadedOnDemand: String? {
+        state.withLock { $0.host }?.modelIdLoadedOnDemand
+    }
+
     func selectModel(_ modelId: String) {
         guard let model = Self.model(for: modelId) else { return }
         let context = state.withLock {
@@ -854,6 +858,7 @@ private struct CohereLocalSettingsView: View {
     @State private var modelState: CohereLocalModelState = .notLoaded
     @State private var selectedModelId = CohereLocalPlugin.fastModel.id
     @State private var downloadedModelIds: Set<String> = []
+    @State private var onDemandModelId: String?
     @State private var showDeleteConfirmation = false
     @State private var modelIdPendingRemoval: String?
     @State private var huggingFaceTokenInput = ""
@@ -1024,7 +1029,11 @@ private struct CohereLocalSettingsView: View {
         // The plugin holds one model at a time; its state belongs to the selected model.
         switch model.id == selectedModelId ? modelState : .notLoaded {
         case .notLoaded:
-            loadButton(for: model)
+            if model.id == onDemandModelId, downloadedModelIds.contains(model.id) {
+                PluginModelLoadsOnDemandStatus(bundle: bundle)
+            } else {
+                loadButton(for: model)
+            }
 
         case .downloading(let progress):
             HStack(spacing: 8) {
@@ -1255,6 +1264,7 @@ private struct CohereLocalSettingsView: View {
         modelState = plugin.modelState
         selectedModelId = plugin.selectedModelId ?? CohereLocalPlugin.fastModel.id
         downloadedModelIds = Set(plugin.downloadedModels.map(\.id))
+        onDemandModelId = plugin.modelIdLoadedOnDemand
     }
 
     private func validateAndSaveHuggingFaceToken() {

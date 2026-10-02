@@ -27,7 +27,7 @@ private enum PassiveLoadedModelRestoreContext {
     }
 }
 
-final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, @unchecked Sendable {
+final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, HostModelAutoUnloadPolicyProviding, @unchecked Sendable {
     let pluginId: String
     let pluginDataDirectory: URL
     /// Whether this plugin backs the engine the user actually has selected,
@@ -139,6 +139,10 @@ final class HostServicesImpl: HostServices, HostModelLifecyclePolicyProviding, @
     var shouldRestoreLoadedModelsPassively: Bool {
         ModelAutoUnloadPolicy.shouldRestoreLoadedModelsPassively()
             && backsSelectedTranscriptionEngine
+    }
+
+    var unloadsModelsImmediatelyAfterUse: Bool {
+        ModelAutoUnloadPolicy.unloadsModelsImmediatelyAfterUse()
     }
 
     func performPluginActivation(

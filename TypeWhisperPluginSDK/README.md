@@ -374,6 +374,8 @@ func activate(host: HostServices) {
 
 Local model plugins that restore a previously loaded model during activation should first check `host.shouldRestoreLoadedModelsPassively`. Rebuilt plugins that already honor that policy can adopt `HostModelLifecyclePolicyAwarePlugin` so TypeWhisper does not apply the legacy external-plugin `loadedModel` masking shim during `activate(host:)`.
 
+When the user sets auto-unload to "Immediate", a model loaded from the plugin settings is unloaded again right away and loaded on demand for each use. `host.unloadsModelsImmediatelyAfterUse` reports that policy, and `host.modelIdLoadedOnDemand` returns the persisted `loadedModel` while it applies. Show `PluginModelLoadsOnDemandStatus` for that model instead of a Load button, and add its two strings to the plugin's string catalog.
+
 ---
 
 ## Event Bus

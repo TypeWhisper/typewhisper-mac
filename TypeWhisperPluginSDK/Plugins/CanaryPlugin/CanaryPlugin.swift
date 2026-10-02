@@ -636,6 +636,14 @@ final class CanaryPlugin: NSObject, TranscriptionEnginePlugin, TranscriptionMode
         try? await loadModel(modelDef, passively: passively, expectedGeneration: generation)
     }
 
+    /// The downloaded model the host loads on demand, see `HostServices.modelIdLoadedOnDemand`.
+    fileprivate var modelIdLoadedOnDemand: String? {
+        guard let modelId = host?.modelIdLoadedOnDemand,
+              let modelDef = allModelDefinitions.first(where: { $0.id == modelId }),
+              hasDownloadedModel(modelDef) else { return nil }
+        return modelId
+    }
+
     private func hasDownloadedModel(_ modelDef: CanaryModelDef) -> Bool {
         guard let modelsDir = host?.pluginDataDirectory.appendingPathComponent("models") else { return false }
         return usableModelDirectory(for: modelDef, modelsDirectory: modelsDir) != nil
@@ -771,6 +779,7 @@ private struct CanarySettingsView: View {
     @State private var modelState: CanaryModelState = .notLoaded
     @State private var selectedModelId: String = ""
     @State private var isPolling = false
+    @State private var onDemandModelId: String?
     @State private var hfTokenInput = ""
     @State private var showHfToken = false
     @State private var isValidatingToken = false
@@ -899,6 +908,7 @@ private struct CanarySettingsView: View {
         .onAppear {
             modelState = plugin.modelState
             selectedModelId = plugin.selectedModelId ?? plugin.allModelDefinitions.first?.id ?? ""
+            onDemandModelId = plugin.modelIdLoadedOnDemand
             if let token = plugin._hfToken, !token.isEmpty {
                 hfTokenInput = token
             }
@@ -912,6 +922,7 @@ private struct CanarySettingsView: View {
             }
         }
         .onReceive(pollTimer) { _ in
+            onDemandModelId = plugin.modelIdLoadedOnDemand
             guard isPolling else {
                 modelState = plugin.modelState
                 selectedModelId = plugin.selectedModelId ?? selectedModelId
@@ -962,6 +973,8 @@ private struct CanarySettingsView: View {
                     .buttonStyle(.bordered)
                     .controlSize(.small)
                 }
+            } else if modelDef.id == onDemandModelId {
+                PluginModelLoadsOnDemandStatus(bundle: bundle)
             } else {
                 Button(modelDef.id.hasPrefix("custom-") ? String(localized: "Load", bundle: bundle) : String(localized: "Download & Load", bundle: bundle)) {
                     selectedModelId = modelDef.id
