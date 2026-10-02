@@ -727,7 +727,7 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
         let preprocessorConfiguration = MLModelConfiguration()
         preprocessorConfiguration.computeUnits = .cpuOnly
         preprocessorConfiguration.allowLowPrecisionAccumulationOnGPU = true
-        let jointFile = version == .v3 ? ModelNames.ASR.jointV3File : ModelNames.ASR.jointFile
+        let jointFile = version.asrModelVersion.isV3Family ? ModelNames.ASR.jointV3File : ModelNames.ASR.jointFile
         return try AsrModels(
             encoder: MLModel(contentsOf: directory.appendingPathComponent(ModelNames.ASR.encoderFile), configuration: configuration),
             preprocessor: MLModel(contentsOf: directory.appendingPathComponent(ModelNames.ASR.preprocessorFile), configuration: preprocessorConfiguration),
@@ -740,14 +740,7 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
     }
 
     static func vocabularyAssetURL(for version: ParakeetVersion) -> URL {
-        let repo: String
-        switch version {
-        case .v2:
-            repo = "FluidInference/parakeet-tdt-0.6b-v2-coreml"
-        case .v3:
-            repo = "FluidInference/parakeet-tdt-0.6b-v3-coreml"
-        }
-        return URL(string: "https://huggingface.co/\(repo)/resolve/main/\(vocabularyAssetFileName)")!
+        URL(string: "https://huggingface.co/\(version.repository.remotePath)/resolve/main/\(vocabularyAssetFileName)")!
     }
 
     static func vocabularyAssetDirectory(for version: ParakeetVersion) -> URL {
@@ -1030,11 +1023,13 @@ final class ParakeetPlugin: NSObject, DictionaryTermHintSourceProgressTranscript
 enum ParakeetVersion: String, CaseIterable {
     case v2
     case v3
+    case ultra
 
     var asrModelVersion: AsrModelVersion {
         switch self {
         case .v2: return .v2
         case .v3: return .v3
+        case .ultra: return .ultra
         }
     }
 
@@ -1042,6 +1037,7 @@ enum ParakeetVersion: String, CaseIterable {
         switch self {
         case .v2: return .parakeetV2
         case .v3: return .parakeetV3
+        case .ultra: return .parakeetUltra
         }
     }
 
@@ -1049,7 +1045,7 @@ enum ParakeetVersion: String, CaseIterable {
     var requiredModelFiles: Set<String> {
         switch self {
         case .v2: return ModelNames.ASR.requiredModels
-        case .v3: return ModelNames.ASR.requiredModelsV3()
+        case .v3, .ultra: return ModelNames.ASR.requiredModelsV3()
         }
     }
 
@@ -1069,6 +1065,13 @@ enum ParakeetVersion: String, CaseIterable {
                 sizeDescription: "~600 MB",
                 ramRequirement: "8 GB+"
             )
+        case .ultra:
+            return ParakeetModelDef(
+                id: "parakeet-ultra",
+                displayName: "Parakeet Ultra",
+                sizeDescription: "~630 MB",
+                ramRequirement: "8 GB+"
+            )
         }
     }
 
@@ -1076,7 +1079,7 @@ enum ParakeetVersion: String, CaseIterable {
         switch self {
         case .v2:
             return ["en"]
-        case .v3:
+        case .v3, .ultra:
             return ["bg", "hr", "cs", "da", "nl", "en", "et", "fi", "fr", "de", "el", "hu", "it", "lv", "lt", "mt", "pl", "pt", "ro", "sk", "sl", "es", "sv", "ru", "uk"]
         }
     }
@@ -1091,6 +1094,8 @@ enum ParakeetVersion: String, CaseIterable {
             return String(localized: "NVIDIA Parakeet TDT V2 - extremely fast on Apple Silicon. English only, highest recall. No API key required.", bundle: bundle)
         case .v3:
             return String(localized: "NVIDIA Parakeet TDT - extremely fast on Apple Silicon. 25 European languages, no API key required.", bundle: bundle)
+        case .ultra:
+            return String(localized: "Moondream Parakeet Ultra - Parakeet TDT v3 trained further for higher accuracy. 25 European languages, no API key required.", bundle: bundle)
         }
     }
 

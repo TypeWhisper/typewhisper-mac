@@ -237,6 +237,77 @@ final class SonioxPluginTests: XCTestCase {
         XCTAssertNil(payload["context"])
     }
 
+    func testRealtimeConfigSendsCustomContextTextAlongsideDictionaryTerms() throws {
+        let payload = SonioxPlugin.makeRealtimeConfigPayload(
+            apiKey: "soniox-key",
+            language: "en",
+            translate: false,
+            prompt: "TypeWhisper",
+            contextText: "  Cardiology consultation notes.\n"
+        )
+
+        let context = try XCTUnwrap(payload["context"] as? [String: Any])
+        XCTAssertEqual(context["terms"] as? [String], ["TypeWhisper"])
+        XCTAssertEqual(context["text"] as? String, "Cardiology consultation notes.")
+    }
+
+    func testRealtimeConfigSendsCustomContextTextWithoutDictionaryTerms() throws {
+        let payload = SonioxPlugin.makeRealtimeConfigPayload(
+            apiKey: "soniox-key",
+            language: "en",
+            translate: false,
+            prompt: nil,
+            contextText: "Cardiology consultation notes."
+        )
+
+        let context = try XCTUnwrap(payload["context"] as? [String: Any])
+        XCTAssertNil(context["terms"])
+        XCTAssertEqual(context["text"] as? String, "Cardiology consultation notes.")
+    }
+
+    func testRealtimeConfigOmitsBlankCustomContextText() {
+        let payload = SonioxPlugin.makeRealtimeConfigPayload(
+            apiKey: "soniox-key",
+            language: "en",
+            translate: false,
+            prompt: nil,
+            contextText: " \n "
+        )
+
+        XCTAssertNil(payload["context"])
+    }
+
+    func testCreateTranscriptionRequestSendsCustomContextText() throws {
+        let request = try SonioxPlugin.makeCreateTranscriptionRequest(
+            fileId: "file_123",
+            language: "en",
+            translate: false,
+            apiKey: "soniox-key",
+            prompt: nil,
+            contextText: "Cardiology consultation notes."
+        )
+
+        let body = try Self.jsonBody(from: request)
+        let context = try XCTUnwrap(body["context"] as? [String: Any])
+        XCTAssertEqual(context["text"] as? String, "Cardiology consultation notes.")
+    }
+
+    func testTranscriptionContextPersistsAndShrinksDictionaryTermsBudget() throws {
+        let host = try PluginTestHostServices()
+        let plugin = SonioxPlugin()
+        plugin.activate(host: host)
+
+        XCTAssertEqual(plugin.transcriptionContext, "")
+        XCTAssertEqual(plugin.dictionaryTermsBudget, DictionaryTermsBudget(maxTotalChars: 10_000))
+
+        plugin.setTranscriptionContext(String(repeating: "a", count: 7_000))
+        XCTAssertEqual(plugin.dictionaryTermsBudget, DictionaryTermsBudget(maxTotalChars: 4_000))
+
+        let restartedPlugin = SonioxPlugin()
+        restartedPlugin.activate(host: host)
+        XCTAssertEqual(restartedPlugin.transcriptionContext.count, 7_000)
+    }
+
     func testRealtimeConfigAcceptsNonEnglishLanguageHints() {
         let payload = SonioxPlugin.makeRealtimeConfigPayload(
             apiKey: "soniox-key",
