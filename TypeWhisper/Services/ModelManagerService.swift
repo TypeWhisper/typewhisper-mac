@@ -1080,9 +1080,9 @@ final class ModelManagerService: ObservableObject {
 
     // MARK: - Dictation Prewarm
 
-    /// Starts restoring an auto-unloaded local model as soon as a dictation begins recording,
-    /// so the load overlaps with speaking instead of delaying the transcript after the stop.
-    /// The engine stays protected from auto-unload until `endDictationModelPrewarm()`.
+    /// Protects the dictation engine from auto-unload for the whole recording and starts
+    /// restoring an auto-unloaded local model right away, so the load overlaps with speaking
+    /// instead of delaying the transcript after the stop. Ends with `endDictationModelPrewarm()`.
     func beginDictationModelPrewarm(engineOverrideId: String? = nil, cloudModelOverride: String? = nil) {
         guard let providerId = engineOverrideId ?? selectedProviderId,
               let plugin = PluginManager.shared.transcriptionEngine(for: providerId),
@@ -1093,6 +1093,9 @@ final class ModelManagerService: ObservableObject {
         let key = ObjectIdentifier(nsPlugin)
         guard dictationPrewarm?.key != key else { return }
         endDictationModelPrewarm()
+
+        beginAutoUnloadProtectedUse(of: plugin)
+        dictationPrewarm = (key, plugin)
 
         // A model override goes through selectModel() at transcription time, and Apple
         // Speech prepares per language; both keep their existing on-demand path.
@@ -1106,8 +1109,6 @@ final class ModelManagerService: ObservableObject {
             return
         }
 
-        beginAutoUnloadProtectedUse(of: plugin)
-        dictationPrewarm = (key, plugin)
         _ = nsPlugin.perform(restoreSelector)
     }
 
@@ -1117,7 +1118,7 @@ final class ModelManagerService: ObservableObject {
         endAutoUnloadProtectedUse(of: prewarm.plugin)
     }
 
-    /// True while the restore started by the prewarm is still visibly running, so the
+    /// True while a restore for the protected engine is visibly running, so the
     /// transcription can wait for it instead of asking the plugin to restore a second time.
     private func isDictationPrewarmInFlight(for plugin: TranscriptionEnginePlugin) -> Bool {
         guard let nsPlugin = plugin as? NSObject,

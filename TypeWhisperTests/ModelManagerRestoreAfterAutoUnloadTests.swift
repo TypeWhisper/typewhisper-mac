@@ -220,6 +220,32 @@ final class ModelManagerRestoreAfterAutoUnloadTests: XCTestCase {
         XCTAssertEqual(unloadedPlugin.restoreCount, 0)
     }
 
+    func testDictationPrewarmProtectsLoadedEngineFromAutoUnloadUntilItEnds() throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let plugin = RestoreAfterUnloadMockPlugin(
+            configured: true,
+            restoreResult: .succeedAfter(.milliseconds(0)),
+            publishesActivitySynchronously: true
+        )
+        let modelManager = installPlugin(plugin, appSupportDirectory: appSupportDirectory)
+        let previousAutoUnload = UserDefaults.standard.object(forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+        defer {
+            modelManager.cancelAutoUnloadTimer()
+            UserDefaults.standard.set(previousAutoUnload, forKey: UserDefaultsKeys.modelAutoUnloadSeconds)
+        }
+        modelManager.autoUnloadSeconds = 60
+
+        modelManager.beginDictationModelPrewarm()
+        // Anything that reschedules during the recording must leave the engine alone.
+        modelManager.scheduleAutoUnloadIfNeeded()
+        XCTAssertTrue(modelManager.autoUnloadDiagnosticsSnapshot().entries.isEmpty)
+
+        modelManager.endDictationModelPrewarm()
+        XCTAssertEqual(modelManager.autoUnloadDiagnosticsSnapshot().entries.count, 1)
+    }
+
     // MARK: - Helpers
 
     private func setPersistedLoadedModel(_ modelId: String?) {
