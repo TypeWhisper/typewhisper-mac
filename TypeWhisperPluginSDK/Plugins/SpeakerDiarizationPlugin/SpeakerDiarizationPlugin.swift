@@ -12,9 +12,8 @@ final class SpeakerDiarizationPlugin: NSObject, SpeakerDiarizationProviderPlugin
     static let engineIdentifier = "fluidaudio-offline-diarizer"
     /// Euclidean cut distance between unit-normalized embeddings. On five AMI
     /// table-microphone meetings 0.6 (the pyannote default) and 0.7 score the
-    /// same; 0.775 merges two speakers of EN2002a into one. The iOS setting
-    /// of 0.7 with FluidAudio 0.15.5 was converted with `sqrt(2 - 2 * t)` and
-    /// would be 0.775 here.
+    /// same; 0.775 merges two speakers of EN2002a into one. iOS uses 0.7 as
+    /// well.
     static let clusteringThreshold = 0.7
     private static let logger = Logger(subsystem: "com.typewhisper.speaker-diarization", category: "Plugin")
 
