@@ -92,12 +92,23 @@ final class RecentTranscriptionPaletteHandler {
 
     private func insert(_ entry: RecentTranscriptionStore.Entry) async {
         do {
-            _ = try await textInsertionService.insertText(
+            let result = try await textInsertionService.insertText(
                 entry.finalText,
                 preserveClipboard: getPreserveClipboard?() ?? false,
-                autoEnter: false
+                autoEnter: false,
+                awaitPasteVerification: true
             )
-            onShowNotchFeedback?(String(localized: "Text inserted"), "checkmark.circle.fill", 2.5, false, nil)
+            if result.leftFocusedTextUnchanged {
+                onShowNotchFeedback?(
+                    String(localized: "Text may not have been inserted"),
+                    "exclamationmark.circle.fill",
+                    2.5,
+                    false,
+                    nil
+                )
+            } else {
+                onShowNotchFeedback?(String(localized: "Text inserted"), "checkmark.circle.fill", 2.5, false, nil)
+            }
         } catch {
             onShowNotchFeedback?(error.localizedDescription, "xmark.circle.fill", 2.5, true, "recentTranscriptions")
         }

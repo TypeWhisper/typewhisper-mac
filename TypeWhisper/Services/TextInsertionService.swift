@@ -276,6 +276,12 @@ final class TextInsertionService {
     enum InsertionResult: Equatable {
         case insertedViaAccessibility
         case pasted(verification: PasteVerification)
+
+        /// The focused field was readable and still unchanged after the paste. Unreadable fields
+        /// (common in Electron apps) do not count, so they never produce a false failure.
+        var leftFocusedTextUnchanged: Bool {
+            self == .pasted(verification: .unverified(.focusedTextUnchanged))
+        }
     }
 
     enum PasteVerification: Equatable {
