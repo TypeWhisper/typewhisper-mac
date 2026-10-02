@@ -23,6 +23,13 @@ struct TranscriptionSegment {
     }
 }
 
+/// One spoken word with its time, from engines that report word timing.
+struct TranscriptionWord: Equatable, Codable, Sendable {
+    let text: String
+    let start: TimeInterval
+    let end: TimeInterval
+}
+
 struct TranscriptionResult {
     let text: String
     let detectedLanguage: String?
@@ -30,6 +37,8 @@ struct TranscriptionResult {
     let processingTime: TimeInterval
     let engineUsed: String
     let segments: [TranscriptionSegment]
+    /// Empty when the engine reports no word timing.
+    var words: [TranscriptionWord] = []
 
     var realTimeFactor: Double {
         guard duration > 0 else { return 0 }

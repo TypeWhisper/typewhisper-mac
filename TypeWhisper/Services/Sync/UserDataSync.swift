@@ -185,6 +185,8 @@ enum UserDataSyncMutation: Equatable, Sendable {
     case upsertHistoryContent(UserDataSyncHistoryContentV1)
     case upsertHistoryInbox(UserDataSyncHistoryInboxV1)
     case upsertHistoryAudio(UserDataSyncHistoryAudioV1)
+    case upsertHistoryTranscript(UserDataSyncHistoryTranscriptV1)
+    case upsertHistorySpeakers(UserDataSyncHistorySpeakersV1)
     case deleteHistory(recordID: UUID)
 }
 

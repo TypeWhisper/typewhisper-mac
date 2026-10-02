@@ -1397,6 +1397,8 @@ final class DictionaryService: ObservableObject {
                  .upsertHistoryContent,
                  .upsertHistoryInbox,
                  .upsertHistoryAudio,
+                 .upsertHistoryTranscript,
+                 .upsertHistorySpeakers,
                  .deleteHistory:
                 continue
             }

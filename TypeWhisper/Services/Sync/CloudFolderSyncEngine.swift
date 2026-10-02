@@ -136,6 +136,15 @@ struct CloudFolderSyncDeviceRecord: Codable, Equatable, Sendable {
     let appVersion: String
     let updatedAt: Date
     let name: String?
+    /// What this device's version syncs beyond the base schema; nil from older versions.
+    let capabilities: [String]?
+
+    /// The device reads and writes the `transcript` and `speakers` history components.
+    static let speakerTranscriptCapability = "history.transcript.v1"
+
+    var syncsSpeakerTranscripts: Bool {
+        capabilities?.contains(Self.speakerTranscriptCapability) == true
+    }
 
     init(
         deviceId: String,
@@ -143,7 +152,8 @@ struct CloudFolderSyncDeviceRecord: Codable, Equatable, Sendable {
         platform: String,
         appVersion: String,
         updatedAt: Date,
-        name: String? = nil
+        name: String? = nil,
+        capabilities: [String]? = nil
     ) {
         self.deviceId = deviceId
         self.historyOriginDeviceID = historyOriginDeviceID
@@ -151,6 +161,7 @@ struct CloudFolderSyncDeviceRecord: Codable, Equatable, Sendable {
         self.appVersion = appVersion
         self.updatedAt = updatedAt
         self.name = name
+        self.capabilities = capabilities
     }
 }
 
@@ -176,6 +187,8 @@ struct CloudFolderSyncOperation: Codable, Equatable, Sendable {
     let historyContent: UserDataSyncHistoryContentV1?
     let historyInbox: UserDataSyncHistoryInboxV1?
     let historyAudio: UserDataSyncHistoryAudioV1?
+    var historyTranscript: UserDataSyncHistoryTranscriptV1? = nil
+    var historySpeakers: UserDataSyncHistorySpeakersV1? = nil
 
     static func upsertDictionary(
         _ entry: UserDataSyncDictionaryEntry,
@@ -237,9 +250,12 @@ struct CloudFolderSyncOperation: Codable, Equatable, Sendable {
         content: UserDataSyncHistoryContentV1? = nil,
         inbox: UserDataSyncHistoryInboxV1? = nil,
         audio: UserDataSyncHistoryAudioV1? = nil,
+        transcript: UserDataSyncHistoryTranscriptV1? = nil,
+        speakers: UserDataSyncHistorySpeakersV1? = nil,
         operationId: String = UUID().uuidString
     ) -> CloudFolderSyncOperation {
-        let updatedAt = content?.updatedAt ?? inbox?.updatedAt ?? audio?.updatedAt ?? .distantPast
+        let updatedAt = content?.updatedAt ?? inbox?.updatedAt ?? audio?.updatedAt
+            ?? transcript?.updatedAt ?? speakers?.updatedAt ?? .distantPast
         return CloudFolderSyncOperation(
             schemaVersion: 1,
             operationId: operationId,
@@ -256,7 +272,9 @@ struct CloudFolderSyncOperation: Codable, Equatable, Sendable {
             historyComponent: component,
             historyContent: content,
             historyInbox: inbox,
-            historyAudio: audio
+            historyAudio: audio,
+            historyTranscript: transcript,
+            historySpeakers: speakers
         )
     }
 
@@ -399,9 +417,18 @@ enum CloudFolderSyncEngine {
             )
             let preparedSnapshot = assetPreparation.snapshot
             let initialRecords = records(from: preparedSnapshot)
+            // Versions that do not know the speaker components report them as
+            // invalid files, so they are held back while such a device syncs here.
+            let withheldKeys = speakerComponentsCanBeWritten(
+                devices: (try? readDevices(from: devicesURL))?.devices ?? [],
+                ownDeviceId: stateSnapshot.deviceId,
+                now: now
+            ) ? Set<String>() : Set(initialRecords.filter {
+                $0.value.historyComponent == .transcript || $0.value.historyComponent == .speakers
+            }.keys)
 
             let localOperations = makeLocalOperations(
-                records: initialRecords,
+                records: initialRecords.filter { !withheldKeys.contains($0.key) },
                 deletedHistoryRecords: preparedSnapshot.deletedHistoryRecords,
                 state: stateSnapshot,
                 now: now
@@ -422,6 +449,7 @@ enum CloudFolderSyncEngine {
             )
             return (
                 initialRecords: initialRecords,
+                withheldKeys: withheldKeys,
                 localOperations: localOperations,
                 readResult: readResult,
                 deviceReadResult: deviceReadResult,
@@ -462,6 +490,11 @@ enum CloudFolderSyncEngine {
         }
         state.knownLocalItemIDs = Set(synchronizedRecords.keys)
         state.exportedItemVersions = synchronizedRecords.mapValues(\.version)
+        // Withheld components stay pending; only what another device sent counts as exported.
+        let receivedKeys = stateKeys(changedBy: mutations)
+        for key in fileResult.withheldKeys where !receivedKeys.contains(key) {
+            state.exportedItemVersions[key] = stateSnapshot.exportedItemVersions[key]
+        }
         for operation in fileResult.localOperations {
             let key = operationStateKey(operation)
             if operation.kind == .delete {
@@ -492,6 +525,22 @@ enum CloudFolderSyncEngine {
             packageFingerprint: fileResult.packageFingerprint,
             requiresFollowUpSync: !republishedItemIDs.isEmpty
         )
+    }
+
+    /// A device that has not synced for this long no longer holds speaker components back.
+    static let speakerCapabilityDeviceLifetime: TimeInterval = 30 * 24 * 60 * 60
+
+    /// True when every other device that synced recently understands the
+    /// `transcript` and `speakers` components.
+    static func speakerComponentsCanBeWritten(
+        devices: [CloudFolderSyncDeviceRecord],
+        ownDeviceId: String,
+        now: Date
+    ) -> Bool {
+        devices
+            .filter { $0.deviceId != ownDeviceId }
+            .filter { now.timeIntervalSince($0.updatedAt) < speakerCapabilityDeviceLifetime }
+            .allSatisfy(\.syncsSpeakerTranscripts)
     }
 
     static func records(from snapshot: UserDataSyncSnapshot) -> [String: CloudFolderSyncRecord] {
@@ -586,6 +635,44 @@ enum CloudFolderSyncEngine {
                     historyAudio: audio
                 )
             }
+            if let transcript = history.transcript, transcript.isValid {
+                let transcriptKey = UserDataSyncIdentity.historyStateKey(
+                    itemID: itemID,
+                    component: .transcript
+                )
+                records[transcriptKey] = CloudFolderSyncRecord(
+                    collection: .history,
+                    itemID: itemID,
+                    updatedAt: transcript.updatedAt,
+                    version: versionString(for: transcript.updatedAt),
+                    dictionary: nil,
+                    snippet: nil,
+                    historyComponent: .transcript,
+                    historyContent: nil,
+                    historyInbox: nil,
+                    historyAudio: nil,
+                    historyTranscript: transcript
+                )
+            }
+            if let speakers = history.speakers, speakers.isValid {
+                let speakersKey = UserDataSyncIdentity.historyStateKey(
+                    itemID: itemID,
+                    component: .speakers
+                )
+                records[speakersKey] = CloudFolderSyncRecord(
+                    collection: .history,
+                    itemID: itemID,
+                    updatedAt: speakers.updatedAt,
+                    version: versionString(for: speakers.updatedAt),
+                    dictionary: nil,
+                    snippet: nil,
+                    historyComponent: .speakers,
+                    historyContent: nil,
+                    historyInbox: nil,
+                    historyAudio: nil,
+                    historySpeakers: speakers
+                )
+            }
         }
         return records
     }
@@ -615,6 +702,8 @@ enum CloudFolderSyncEngine {
             case .upsertHistoryContent,
                  .upsertHistoryInbox,
                  .upsertHistoryAudio,
+                 .upsertHistoryTranscript,
+                 .upsertHistorySpeakers,
                  .deleteHistory:
                 break
             }
@@ -715,7 +804,9 @@ enum CloudFolderSyncEngine {
                     deviceId: state.deviceId,
                     content: record.historyContent,
                     inbox: record.historyInbox,
-                    audio: record.historyAudio
+                    audio: record.historyAudio,
+                    transcript: record.historyTranscript,
+                    speakers: record.historySpeakers
                 ))
             }
         }
@@ -824,6 +915,14 @@ enum CloudFolderSyncEngine {
                     if let audio = operation.historyAudio, audio.isValid {
                         mutations.append(.upsertHistoryAudio(audio))
                     }
+                case .transcript:
+                    if let transcript = operation.historyTranscript, transcript.isValid {
+                        mutations.append(.upsertHistoryTranscript(transcript))
+                    }
+                case .speakers:
+                    if let speakers = operation.historySpeakers, speakers.isValid {
+                        mutations.append(.upsertHistorySpeakers(speakers))
+                    }
                 }
             }
         }
@@ -859,6 +958,8 @@ enum CloudFolderSyncEngine {
                     content: record.content,
                     inbox: record.inbox,
                     audio: audio,
+                    transcript: record.transcript,
+                    speakers: record.speakers,
                     localAudioFileURL: record.localAudioFileURL,
                     audioEligible: record.audioEligible
                 )
@@ -871,6 +972,8 @@ enum CloudFolderSyncEngine {
                     content: record.content,
                     inbox: record.inbox,
                     audio: nil,
+                    transcript: record.transcript,
+                    speakers: record.speakers,
                     localAudioFileURL: record.localAudioFileURL,
                     audioEligible: record.audioEligible
                 )
@@ -900,26 +1003,33 @@ enum CloudFolderSyncEngine {
                   UserDataSyncIdentity.historyRecordID(from: operation.itemId) != nil else {
                 return false
             }
+            let recordID = UserDataSyncIdentity.historyRecordID(from: operation.itemId)
+            // Exactly the component's own payload may be set.
+            let payloadCount = [
+                operation.historyContent != nil,
+                operation.historyInbox != nil,
+                operation.historyAudio != nil,
+                operation.historyTranscript != nil,
+                operation.historySpeakers != nil,
+            ].filter { $0 }.count
             if operation.kind == .delete {
-                return operation.historyComponent == nil
-                    && operation.historyContent == nil
-                    && operation.historyInbox == nil
-                    && operation.historyAudio == nil
+                return operation.historyComponent == nil && payloadCount == 0
             }
+            guard payloadCount == 1 else { return false }
             switch operation.historyComponent {
             case .content:
-                return operation.historyContent?.recordID
-                    == UserDataSyncIdentity.historyRecordID(from: operation.itemId)
-                    && operation.historyInbox == nil && operation.historyAudio == nil
+                return operation.historyContent?.recordID == recordID
             case .inbox:
-                return operation.historyInbox?.recordID
-                    == UserDataSyncIdentity.historyRecordID(from: operation.itemId)
-                    && operation.historyContent == nil && operation.historyAudio == nil
+                return operation.historyInbox?.recordID == recordID
             case .audio:
-                return operation.historyAudio?.recordID
-                    == UserDataSyncIdentity.historyRecordID(from: operation.itemId)
+                return operation.historyAudio?.recordID == recordID
                     && operation.historyAudio?.isValid == true
-                    && operation.historyContent == nil && operation.historyInbox == nil
+            case .transcript:
+                return operation.historyTranscript?.recordID == recordID
+                    && operation.historyTranscript?.isValid == true
+            case .speakers:
+                return operation.historySpeakers?.recordID == recordID
+                    && operation.historySpeakers?.isValid == true
             case nil:
                 return false
             }
@@ -996,7 +1106,8 @@ enum CloudFolderSyncEngine {
             platform: "macOS",
             appVersion: AppConstants.currentReleaseFingerprint,
             updatedAt: now,
-            name: deviceName
+            name: deviceName,
+            capabilities: [CloudFolderSyncDeviceRecord.speakerTranscriptCapability]
         )
         try writeJSON(device, to: devicesURL.appendingPathComponent("\(deviceId).json"))
     }
@@ -1096,6 +1207,9 @@ enum CloudFolderSyncEngine {
                     diagnostics.append(.init(kind: .malformedOperation, fileName: file.lastPathComponent))
                 case .unreadable:
                     diagnostics.append(.init(kind: .unreadableFile, fileName: file.lastPathComponent))
+                case .unknownHistoryComponent:
+                    // Written by a newer client (speaker transcripts, for example); not a fault.
+                    break
                 }
             }
         }
@@ -1108,6 +1222,7 @@ enum CloudFolderSyncEngine {
         case unsupportedSchema
         case malformed
         case unreadable
+        case unknownHistoryComponent
     }
 
     /// Decodes an operation file once and reuses the result while the file is unchanged.
@@ -1129,12 +1244,18 @@ enum CloudFolderSyncEngine {
             cache?.storeOperation(operation, atPath: file.path, stamp: stamp, byteCount: data.count)
             return .operation(operation)
         }
-        // The schema envelope only distinguishes future schemas from malformed files.
-        guard let envelope = try? decoder.decode(CloudFolderSyncSchemaEnvelope.self, from: data),
-              envelope.schemaVersion != 1 else {
+        // The schema envelope only distinguishes future schemas and history
+        // components this version does not know from malformed files.
+        guard let envelope = try? decoder.decode(CloudFolderSyncSchemaEnvelope.self, from: data) else {
             return .malformed
         }
-        return .unsupportedSchema
+        guard envelope.schemaVersion == 1 else { return .unsupportedSchema }
+        if envelope.collection == UserDataSyncCollection.history.rawValue,
+           let component = envelope.historyComponent,
+           UserDataSyncHistoryComponent(rawValue: component) == nil {
+            return .unknownHistoryComponent
+        }
+        return .malformed
     }
 
     /// Lists the sync package without reading file contents. Manifest and device files are
@@ -1263,6 +1384,10 @@ enum CloudFolderSyncEngine {
                 historyRecordID = inbox.recordID
             case .upsertHistoryAudio(let audio):
                 historyRecordID = audio.recordID
+            case .upsertHistoryTranscript(let transcript):
+                historyRecordID = transcript.recordID
+            case .upsertHistorySpeakers(let speakers):
+                historyRecordID = speakers.recordID
             case .deleteHistory(let recordID):
                 historyRecordID = recordID
             }
@@ -1328,6 +1453,8 @@ enum CloudFolderSyncEngine {
 
 private struct CloudFolderSyncSchemaEnvelope: Decodable {
     let schemaVersion: Int
+    let collection: String?
+    let historyComponent: String?
 }
 
 /// Shared ISO 8601 formatters for sync payloads. Creating a formatter per date dominated
@@ -1476,6 +1603,8 @@ struct CloudFolderSyncRecord: Equatable, Sendable {
     let historyContent: UserDataSyncHistoryContentV1?
     let historyInbox: UserDataSyncHistoryInboxV1?
     let historyAudio: UserDataSyncHistoryAudioV1?
+    var historyTranscript: UserDataSyncHistoryTranscriptV1? = nil
+    var historySpeakers: UserDataSyncHistorySpeakersV1? = nil
 
     var stateKey: String {
         guard let historyComponent else { return itemID }

@@ -158,6 +158,11 @@
 			533C00000000000000000002 /* DictationRecoveryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 533C00000000000000000001 /* DictationRecoveryViewModel.swift */; };
 			533C00000000000000000004 /* DictationRecoveryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 533C00000000000000000003 /* DictationRecoveryView.swift */; };
 			6A9D1EE0C163693B1A798779 /* HistoryServiceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3F476E4F05313F6BF4E696A5 /* HistoryServiceTests.swift */; };
+			E04F3BC001E2391E6C2C130F /* SpeakerAlignmentTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 519F87550CCFA65F007A9B2B /* SpeakerAlignmentTests.swift */; };
+			343490F99337D2835B2C2CE0 /* SpeakerSyncHistoryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 97070DFC6B00826CBA67BE25 /* SpeakerSyncHistoryTests.swift */; };
+			B6C2E690A4C76857A9A8CD73 /* VoiceProfileTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6C143E8755CF578D1A031D6D /* VoiceProfileTests.swift */; };
+			F92ADEC58CD75E4A7F7104BE /* SpeakerWorkspaceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4DB6D5FB6E1D82AED2AEFA14 /* SpeakerWorkspaceTests.swift */; };
+			F6B7AC0B593EA5D7A46CB096 /* SpeakerTranscriptCoordinatorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 595AA87933B4B6985DA867A0 /* SpeakerTranscriptCoordinatorTests.swift */; };
 		AA8390000000000000000001 /* UsageStatisticsDay.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB8390000000000000000001 /* UsageStatisticsDay.swift */; };
 		AA8390000000000000000002 /* UsageStatisticsMetadata.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB8390000000000000000002 /* UsageStatisticsMetadata.swift */; };
 		3EB9E72F54D54A6288ACC2C1 /* UsageStatisticsKeys.swift in Sources */ = {isa = PBXBuildFile; fileRef = 91F0023647194EC3A838E6B1 /* UsageStatisticsKeys.swift */; };
@@ -192,6 +197,9 @@
 		AA00000000000000000001 /* TypeWhisperApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000001 /* TypeWhisperApp.swift */; };
 		AA00000000000000000002 /* ServiceContainer.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000002 /* ServiceContainer.swift */; };
 		AA00000000000000000005 /* TranscriptionResult.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000005 /* TranscriptionResult.swift */; };
+		822253A6675EDE763C21987D /* SpeakerTranscript.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C49EB68A11DC0D45E0EBF0F /* SpeakerTranscript.swift */; };
+		6BB1C85C28D6969E4183EB83 /* VoiceProfile.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8CA59FC6363A584E600C570D /* VoiceProfile.swift */; };
+		0898E366C7EA44D70414C480 /* SpeakerWorkspace.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9FDE617FFF7F3755C5FFA85A /* SpeakerWorkspace.swift */; };
 		AA00000000000000000009 /* ModelManagerService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000009 /* ModelManagerService.swift */; };
 		AA00000000000000000010 /* AudioFileService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000010 /* AudioFileService.swift */; };
 		AA00000000000000000012 /* FileTranscriptionViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000012 /* FileTranscriptionViewModel.swift */; };
@@ -218,6 +226,12 @@
 		AA00000000000000000046 /* AdvancedSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000046 /* AdvancedSettingsView.swift */; };
 		AA00000000000000000340 /* SpokenPunctuationSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000340 /* SpokenPunctuationSettingsSection.swift */; };
 		AA00000000000000000050 /* SubtitleExporter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000050 /* SubtitleExporter.swift */; };
+		5CE409C0AEA314FD01618C82 /* SpeakerAlignment.swift in Sources */ = {isa = PBXBuildFile; fileRef = 81A2B487A798EB62AA4116C7 /* SpeakerAlignment.swift */; };
+		92EAA19836C01760FDD524B9 /* SpeakerTranscriptCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = AA2CA9E7E9C79CF5DC92AB80 /* SpeakerTranscriptCoordinator.swift */; };
+		9BD021FDA7532FB8F4BED577 /* SpeakerChannelAttribution.swift in Sources */ = {isa = PBXBuildFile; fileRef = DD82E08C9E72006C3E69EB21 /* SpeakerChannelAttribution.swift */; };
+		8A5179466B2187F3914A66E3 /* SpeakerVoiceProfileService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 82EB79AA78EB8142724EBD7F /* SpeakerVoiceProfileService.swift */; };
+		CF7F5CBF7EF922A33274D889 /* VoiceProfileStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = DB7BA2F1E6B31930B232DF80 /* VoiceProfileStore.swift */; };
+		42969572CC898F814DC2CC92 /* SpeakerPlaybackController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22EA25CFE76E45EA9092FAAC /* SpeakerPlaybackController.swift */; };
 		AA00000000000000000051 /* GeneralSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000051 /* GeneralSettingsView.swift */; };
 		AA000000000000000A1236F2 /* AppearanceSettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB000000000000000A1236F2 /* AppearanceSettingsView.swift */; };
 		A40800000000000000000001 /* LanguageSelectionEditor.swift in Sources */ = {isa = PBXBuildFile; fileRef = B40800000000000000000001 /* LanguageSelectionEditor.swift */; };
@@ -227,8 +241,13 @@
 		AA00000000000000000062 /* TextDiffService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000062 /* TextDiffService.swift */; };
 		AA7080000000000000000001 /* TargetAppCorrectionLearningService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB7080000000000000000001 /* TargetAppCorrectionLearningService.swift */; };
 		AA00000000000000000063 /* HistoryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000063 /* HistoryViewModel.swift */; };
+		0477459F88CA41D4012CD400 /* SpeakerWorkspaceModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C4372F8CA247C5FF34F05CB /* SpeakerWorkspaceModel.swift */; };
 		AA00000000000000000064 /* HistoryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000064 /* HistoryView.swift */; };
 		F83600000000000000000001 /* HistoryRecordViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = F83600000000000000000011 /* HistoryRecordViews.swift */; };
+		97E6ED5123DAF6D67299A03C /* HistorySpeakerTranscriptView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0980A016D4AD07DA3B801261 /* HistorySpeakerTranscriptView.swift */; };
+		09720EF3F2B66441E50D5C57 /* SpeakerWorkspaceView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 705BCAD53351C34BD14BE861 /* SpeakerWorkspaceView.swift */; };
+		2B115FBD9FDCCE5988E3DEF0 /* SpeakerDetectionToggle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C3D542A77A5D6D078CD236E /* SpeakerDetectionToggle.swift */; };
+		0C5FF116A9AD4C4FDD734D6C /* SpeakerDetectionSettingsSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = B26BFEA6D6999A0B24C2B23B /* SpeakerDetectionSettingsSection.swift */; };
 		F83600000000000000000002 /* HistorySettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F83600000000000000000012 /* HistorySettingsView.swift */; };
 		AA00000000000000000065 /* Profile.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000065 /* Profile.swift */; };
 		AA00000000000000000066 /* ProfileService.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000066 /* ProfileService.swift */; };
@@ -342,6 +361,7 @@
 		AA00000000000000000166 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000158 /* manifest.json */; };
 		AA00000000000000000167 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000016 /* TypeWhisperPluginSDK */; };
 		AA00000000000000000168 /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000017 /* FluidAudio */; };
+		241E35E6CA665BE8524114EA /* FluidAudio in Frameworks */ = {isa = PBXBuildFile; productRef = 2F3849A7C7AD5A6CFF412ECC /* FluidAudio */; };
 		C0E300000000000000000001 /* CohereLocalPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0E300000000000000000011 /* CohereLocalPlugin.swift */; };
 		C0E300000000000000000002 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = C0E300000000000000000012 /* manifest.json */; };
 		C0E300000000000000000003 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = C0E300000000000000000013 /* Localizable.xcstrings */; };
@@ -350,8 +370,11 @@
 		C0E300000000000000000007 /* CohereGGUFAssets.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0E300000000000000000014 /* CohereGGUFAssets.swift */; };
 		C0E300000000000000000008 /* CrispAsrServer.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0E300000000000000000015 /* CrispAsrServer.swift */; };
 		AA00000000000000000169 /* SpeechAnalyzerPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000160 /* SpeechAnalyzerPlugin.swift */; };
+		A9B6B4796B47FB8225F6FD19 /* SpeakerDiarizationPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 431FB4FC55585FCB53C7019A /* SpeakerDiarizationPlugin.swift */; };
 		AA00000000000000000170 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000161 /* manifest.json */; };
+		951D9AC4D0B4FD5B7F475F5D /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = 9A970FB204A715DC5F34B224 /* manifest.json */; };
 		AA00000000000000000171 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = PP00000000000000000018 /* TypeWhisperPluginSDK */; };
+		238C602936EE8AC399A1E134 /* TypeWhisperPluginSDK in Frameworks */ = {isa = PBXBuildFile; productRef = FFCEBEA85FA80718E1DDD2F8 /* TypeWhisperPluginSDK */; };
 		AA00000000000000000172 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000162 /* Localizable.xcstrings */; };
 		AA00000000000000000173 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000163 /* Localizable.xcstrings */; };
 		AA00000000000000000174 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000164 /* Localizable.xcstrings */; };
@@ -385,6 +408,7 @@
 		E1A000000000000000000003 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = E1A000000000000000000024 /* Assets.xcassets */; };
 		E1A000000000000000000004 /* InfoPlist.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = E1A000000000000000000025 /* InfoPlist.xcstrings */; };
 		5E7A00000000000000000001 /* SpeechAnalyzerPlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = BB00000000000000000159 /* SpeechAnalyzerPlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
+		6CB202A0A4799036AF9067A7 /* SpeakerDiarizationPlugin.bundle in Embed Built-In Plugins */ = {isa = PBXBuildFile; fileRef = 8418AAA27B2D8C818BCF5019 /* SpeakerDiarizationPlugin.bundle */; settings = {ATTRIBUTES = (CodeSignOnCopy, RemoveHeadersOnCopy, ); }; };
 		AA00000000000000000199 /* VoxtralPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000191 /* VoxtralPlugin.swift */; };
 		AA00000000000000000200 /* manifest.json in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000192 /* manifest.json */; };
 		AA00000000000000000201 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = BB00000000000000000193 /* Localizable.xcstrings */; };
@@ -649,6 +673,13 @@
 			remoteGlobalIDString = DD00000000000000000012;
 			remoteInfo = SpeechAnalyzerPlugin;
 		};
+		BD8BF8C00922115276D97966 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EE00000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 2AA46E212BF789FBBD2FE020;
+			remoteInfo = SpeakerDiarizationPlugin;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -704,6 +735,7 @@
 			dstSubfolderSpec = 13;
 			files = (
 				5E7A00000000000000000001 /* SpeechAnalyzerPlugin.bundle in Embed Built-In Plugins */,
+				6CB202A0A4799036AF9067A7 /* SpeakerDiarizationPlugin.bundle in Embed Built-In Plugins */,
 			);
 			name = "Embed Built-In Plugins";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -762,6 +794,11 @@
 			5A6490000000000000000001 /* ModelManagerAppleSpeechModelSelectionTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ModelManagerAppleSpeechModelSelectionTests.swift; sourceTree = "<group>"; };
 			5A6500000000000000000001 /* ModelManagerLiveSessionModelOverrideTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = ModelManagerLiveSessionModelOverrideTests.swift; sourceTree = "<group>"; };
 			3F476E4F05313F6BF4E696A5 /* HistoryServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = HistoryServiceTests.swift; sourceTree = "<group>"; };
+			519F87550CCFA65F007A9B2B /* SpeakerAlignmentTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SpeakerAlignmentTests.swift; sourceTree = "<group>"; };
+			97070DFC6B00826CBA67BE25 /* SpeakerSyncHistoryTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SpeakerSyncHistoryTests.swift; sourceTree = "<group>"; };
+			6C143E8755CF578D1A031D6D /* VoiceProfileTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = VoiceProfileTests.swift; sourceTree = "<group>"; };
+			4DB6D5FB6E1D82AED2AEFA14 /* SpeakerWorkspaceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SpeakerWorkspaceTests.swift; sourceTree = "<group>"; };
+			595AA87933B4B6985DA867A0 /* SpeakerTranscriptCoordinatorTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = SpeakerTranscriptCoordinatorTests.swift; sourceTree = "<group>"; };
 		BB8390000000000000000004 /* UsageStatisticsServiceTests.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = UsageStatisticsServiceTests.swift; sourceTree = "<group>"; };
 		B91F00000000000000000001 /* SelectionPalettePanel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SelectionPalettePanel.swift; sourceTree = "<group>"; };
 		B91F00000000000000000002 /* RecentTranscriptionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RecentTranscriptionStore.swift; sourceTree = "<group>"; };
@@ -780,6 +817,9 @@
 		BB00000000000000000001 /* TypeWhisperApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TypeWhisperApp.swift; sourceTree = "<group>"; };
 		BB00000000000000000002 /* ServiceContainer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ServiceContainer.swift; sourceTree = "<group>"; };
 		BB00000000000000000005 /* TranscriptionResult.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TranscriptionResult.swift; sourceTree = "<group>"; };
+		7C49EB68A11DC0D45E0EBF0F /* SpeakerTranscript.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerTranscript.swift; sourceTree = "<group>"; };
+		8CA59FC6363A584E600C570D /* VoiceProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceProfile.swift; sourceTree = "<group>"; };
+		9FDE617FFF7F3755C5FFA85A /* SpeakerWorkspace.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerWorkspace.swift; sourceTree = "<group>"; };
 		BB00000000000000000330 /* DictationPunctuationProfile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationPunctuationProfile.swift; sourceTree = "<group>"; };
 		BB00000000000000000331 /* PunctuationRules.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PunctuationRules.swift; sourceTree = "<group>"; };
 		BB00000000000000000332 /* DictationRuntimeContext.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = DictationRuntimeContext.swift; sourceTree = "<group>"; };
@@ -837,6 +877,12 @@
 		BB00000000000000000046 /* AdvancedSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AdvancedSettingsView.swift; sourceTree = "<group>"; };
 		BB00000000000000000340 /* SpokenPunctuationSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpokenPunctuationSettingsSection.swift; sourceTree = "<group>"; };
 		BB00000000000000000050 /* SubtitleExporter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SubtitleExporter.swift; sourceTree = "<group>"; };
+		81A2B487A798EB62AA4116C7 /* SpeakerAlignment.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerAlignment.swift; sourceTree = "<group>"; };
+		AA2CA9E7E9C79CF5DC92AB80 /* SpeakerTranscriptCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerTranscriptCoordinator.swift; sourceTree = "<group>"; };
+		DD82E08C9E72006C3E69EB21 /* SpeakerChannelAttribution.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerChannelAttribution.swift; sourceTree = "<group>"; };
+		82EB79AA78EB8142724EBD7F /* SpeakerVoiceProfileService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerVoiceProfileService.swift; sourceTree = "<group>"; };
+		DB7BA2F1E6B31930B232DF80 /* VoiceProfileStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = VoiceProfileStore.swift; sourceTree = "<group>"; };
+		22EA25CFE76E45EA9092FAAC /* SpeakerPlaybackController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerPlaybackController.swift; sourceTree = "<group>"; };
 		BB00000000000000000051 /* GeneralSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GeneralSettingsView.swift; sourceTree = "<group>"; };
 		BB000000000000000A1236F2 /* AppearanceSettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppearanceSettingsView.swift; sourceTree = "<group>"; };
 		B40800000000000000000001 /* LanguageSelectionEditor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LanguageSelectionEditor.swift; sourceTree = "<group>"; };
@@ -850,8 +896,13 @@
 		BB00000000000000000062 /* TextDiffService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TextDiffService.swift; sourceTree = "<group>"; };
 		BB7080000000000000000001 /* TargetAppCorrectionLearningService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TargetAppCorrectionLearningService.swift; sourceTree = "<group>"; };
 		BB00000000000000000063 /* HistoryViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryViewModel.swift; sourceTree = "<group>"; };
+		9C4372F8CA247C5FF34F05CB /* SpeakerWorkspaceModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerWorkspaceModel.swift; sourceTree = "<group>"; };
 		BB00000000000000000064 /* HistoryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryView.swift; sourceTree = "<group>"; };
 		F83600000000000000000011 /* HistoryRecordViews.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryRecordViews.swift; sourceTree = "<group>"; };
+		0980A016D4AD07DA3B801261 /* HistorySpeakerTranscriptView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistorySpeakerTranscriptView.swift; sourceTree = "<group>"; };
+		705BCAD53351C34BD14BE861 /* SpeakerWorkspaceView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerWorkspaceView.swift; sourceTree = "<group>"; };
+		7C3D542A77A5D6D078CD236E /* SpeakerDetectionToggle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerDetectionToggle.swift; sourceTree = "<group>"; };
+		B26BFEA6D6999A0B24C2B23B /* SpeakerDetectionSettingsSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerDetectionSettingsSection.swift; sourceTree = "<group>"; };
 		F83600000000000000000012 /* HistorySettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistorySettingsView.swift; sourceTree = "<group>"; };
 		BB00000000000000000065 /* Profile.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Profile.swift; sourceTree = "<group>"; };
 		BB00000000000000000066 /* ProfileService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProfileService.swift; sourceTree = "<group>"; };
@@ -970,8 +1021,11 @@
 		C0E300000000000000000014 /* CohereGGUFAssets.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CohereGGUFAssets.swift; sourceTree = "<group>"; };
 		C0E300000000000000000015 /* CrispAsrServer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CrispAsrServer.swift; sourceTree = "<group>"; };
 		BB00000000000000000159 /* SpeechAnalyzerPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SpeechAnalyzerPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
+		8418AAA27B2D8C818BCF5019 /* SpeakerDiarizationPlugin.bundle */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SpeakerDiarizationPlugin.bundle; sourceTree = BUILT_PRODUCTS_DIR; };
 		BB00000000000000000160 /* SpeechAnalyzerPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechAnalyzerPlugin.swift; sourceTree = "<group>"; };
+		431FB4FC55585FCB53C7019A /* SpeakerDiarizationPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeakerDiarizationPlugin.swift; sourceTree = "<group>"; };
 		BB00000000000000000161 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
+		9A970FB204A715DC5F34B224 /* manifest.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = manifest.json; sourceTree = "<group>"; };
 		BB00000000000000000162 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		BB00000000000000000163 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
 		BB00000000000000000164 /* Localizable.xcstrings */ = {isa = PBXFileReference; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
@@ -1425,6 +1479,15 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		B9EFE327F2C43CC07B654D81 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				238C602936EE8AC399A1E134 /* TypeWhisperPluginSDK in Frameworks */,
+				241E35E6CA665BE8524114EA /* FluidAudio in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		FF00000000000000000075 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -1807,6 +1870,7 @@
 				CC00000000000000000022 /* ParakeetPlugin */,
 				C0E300000000000000000020 /* CohereLocalPlugin */,
 				CC00000000000000000023 /* SpeechAnalyzerPlugin */,
+				3DF4EBC2BA025A886E81C387 /* SpeakerDiarizationPlugin */,
 				CC00000000000000000024 /* OpenAICompatiblePlugin */,
 				CC00000000000000000027 /* VoxtralPlugin */,
 				CC00000000000000000028 /* DeepgramPlugin */,
@@ -1890,6 +1954,9 @@
 			children = (
 				CA1F00000000000000000001 /* CalendarMeetingAutomationModels.swift */,
 				BB00000000000000000005 /* TranscriptionResult.swift */,
+				7C49EB68A11DC0D45E0EBF0F /* SpeakerTranscript.swift */,
+				8CA59FC6363A584E600C570D /* VoiceProfile.swift */,
+				9FDE617FFF7F3755C5FFA85A /* SpeakerWorkspace.swift */,
 				BB00000000000000000330 /* DictationPunctuationProfile.swift */,
 				BB00000000000000000331 /* PunctuationRules.swift */,
 				BB00000000000000000332 /* DictationRuntimeContext.swift */,
@@ -1940,6 +2007,12 @@
 				CA1F00000000000000000008 /* CalendarMeetingAutomationController.swift */,
 				CA1F00000000000000000009 /* CalendarMeetingRecordingFilename.swift */,
 				BB00000000000000000050 /* SubtitleExporter.swift */,
+				81A2B487A798EB62AA4116C7 /* SpeakerAlignment.swift */,
+				AA2CA9E7E9C79CF5DC92AB80 /* SpeakerTranscriptCoordinator.swift */,
+				DD82E08C9E72006C3E69EB21 /* SpeakerChannelAttribution.swift */,
+				82EB79AA78EB8142724EBD7F /* SpeakerVoiceProfileService.swift */,
+				DB7BA2F1E6B31930B232DF80 /* VoiceProfileStore.swift */,
+				22EA25CFE76E45EA9092FAAC /* SpeakerPlaybackController.swift */,
 				BB00000000000000000148 /* HistoryExporter.swift */,
 				BB00000000000000000061 /* HistoryService.swift */,
 				BB8390000000000000000003 /* UsageStatisticsService.swift */,
@@ -2038,6 +2111,7 @@
 				BB00000000000000000033 /* DictationViewModel.swift */,
 				BB00000000000000000045 /* APIServerViewModel.swift */,
 				BB00000000000000000063 /* HistoryViewModel.swift */,
+				9C4372F8CA247C5FF34F05CB /* SpeakerWorkspaceModel.swift */,
 				BB00000000000000000067 /* ProfilesViewModel.swift */,
 				BB00000000000000000363 /* VisualShortcutKeyboardModel.swift */,
 				BB00000000000000000082 /* DictionaryViewModel.swift */,
@@ -2087,6 +2161,10 @@
 				B40800000000000000000001 /* LanguageSelectionEditor.swift */,
 				BB00000000000000000064 /* HistoryView.swift */,
 				F83600000000000000000011 /* HistoryRecordViews.swift */,
+				0980A016D4AD07DA3B801261 /* HistorySpeakerTranscriptView.swift */,
+				705BCAD53351C34BD14BE861 /* SpeakerWorkspaceView.swift */,
+				7C3D542A77A5D6D078CD236E /* SpeakerDetectionToggle.swift */,
+				B26BFEA6D6999A0B24C2B23B /* SpeakerDetectionSettingsSection.swift */,
 				F83600000000000000000012 /* HistorySettingsView.swift */,
 				BB00000000000000000068 /* ProfilesSettingsView.swift */,
 				BB00000000000000000075 /* TranslationHostWindow.swift */,
@@ -2338,6 +2416,16 @@
 			);
 			name = SpeechAnalyzerPlugin;
 			path = TypeWhisperPluginSDK/Plugins/SpeechAnalyzerPlugin;
+			sourceTree = "<group>";
+		};
+		3DF4EBC2BA025A886E81C387 /* SpeakerDiarizationPlugin */ = {
+			isa = PBXGroup;
+			children = (
+				431FB4FC55585FCB53C7019A /* SpeakerDiarizationPlugin.swift */,
+				9A970FB204A715DC5F34B224 /* manifest.json */,
+			);
+			name = SpeakerDiarizationPlugin;
+			path = TypeWhisperPluginSDK/Plugins/SpeakerDiarizationPlugin;
 			sourceTree = "<group>";
 		};
 		CC00000000000000000024 /* OpenAICompatiblePlugin */ = {
@@ -2848,6 +2936,7 @@
 				BB00000000000000000156 /* ParakeetPlugin.bundle */,
 				C0E300000000000000000010 /* CohereLocalPlugin.bundle */,
 				BB00000000000000000159 /* SpeechAnalyzerPlugin.bundle */,
+				8418AAA27B2D8C818BCF5019 /* SpeakerDiarizationPlugin.bundle */,
 				BB00000000000000000175 /* OpenAICompatiblePlugin.bundle */,
 				BB00000000000000000190 /* VoxtralPlugin.bundle */,
 				BB00000000000000000199 /* DeepgramPlugin.bundle */,
@@ -2955,6 +3044,11 @@
 				D47A00000000000000000006 /* UserDataExportAndEraseTests.swift */,
 				8E39448D561C47B16EEF4C6B /* HTTPRequestParserTests.swift */,
 				3F476E4F05313F6BF4E696A5 /* HistoryServiceTests.swift */,
+				519F87550CCFA65F007A9B2B /* SpeakerAlignmentTests.swift */,
+				97070DFC6B00826CBA67BE25 /* SpeakerSyncHistoryTests.swift */,
+				6C143E8755CF578D1A031D6D /* VoiceProfileTests.swift */,
+				4DB6D5FB6E1D82AED2AEFA14 /* SpeakerWorkspaceTests.swift */,
+				595AA87933B4B6985DA867A0 /* SpeakerTranscriptCoordinatorTests.swift */,
 				BB8390000000000000000004 /* UsageStatisticsServiceTests.swift */,
 				B91F00000000000000000005 /* RecentTranscriptionPaletteHandlerTests.swift */,
 				B91F00000000000000000006 /* PromptPaletteControllerTests.swift */,
@@ -3051,6 +3145,7 @@
 				GG00000000000000000009 /* PBXTargetDependency */,
 				E1A000000000000000000060 /* PBXTargetDependency */,
 				5E7A00000000000000000004 /* PBXTargetDependency */,
+				C2AF9B8B174BB5B9D6858EF4 /* PBXTargetDependency */,
 				1C1000000000000000000045 /* PBXTargetDependency */,
 			);
 			name = TypeWhisper;
@@ -3340,6 +3435,27 @@
 			);
 			productName = SpeechAnalyzerPlugin;
 			productReference = BB00000000000000000159 /* SpeechAnalyzerPlugin.bundle */;
+			productType = "com.apple.product-type.bundle";
+		};
+		2AA46E212BF789FBBD2FE020 /* SpeakerDiarizationPlugin */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E97CC164D9BC9FC9355A6035 /* Build configuration list for PBXNativeTarget "SpeakerDiarizationPlugin" */;
+			buildPhases = (
+				D3CCB15E0F5DAE2B84DF67A9 /* Sources */,
+				B9EFE327F2C43CC07B654D81 /* Frameworks */,
+				484012F5029919FB5AADAC6E /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = SpeakerDiarizationPlugin;
+			packageProductDependencies = (
+				FFCEBEA85FA80718E1DDD2F8 /* TypeWhisperPluginSDK */,
+				2F3849A7C7AD5A6CFF412ECC /* FluidAudio */,
+			);
+			productName = SpeakerDiarizationPlugin;
+			productReference = 8418AAA27B2D8C818BCF5019 /* SpeakerDiarizationPlugin.bundle */;
 			productType = "com.apple.product-type.bundle";
 		};
 		DD00000000000000000013 /* OpenAICompatiblePlugin */ = {
@@ -4259,6 +4375,7 @@
 				DD00000000000000000011 /* ParakeetPlugin */,
 				C0E300000000000000000030 /* CohereLocalPlugin */,
 				DD00000000000000000012 /* SpeechAnalyzerPlugin */,
+				2AA46E212BF789FBBD2FE020 /* SpeakerDiarizationPlugin */,
 				DD00000000000000000013 /* OpenAICompatiblePlugin */,
 				DD00000000000000000015 /* VoxtralPlugin */,
 				DD00000000000000000016 /* DeepgramPlugin */,
@@ -4444,6 +4561,14 @@
 			files = (
 				AA00000000000000000170 /* manifest.json in Resources */,
 				AA00000000000000000180 /* Localizable.xcstrings in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		484012F5029919FB5AADAC6E /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				951D9AC4D0B4FD5B7F475F5D /* manifest.json in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -4885,6 +5010,11 @@
 				D47A00000000000000000005 /* UserDataExportAndEraseTests.swift in Sources */,
 				F635B3F08018D57E0CB709BF /* HTTPRequestParserTests.swift in Sources */,
 				6A9D1EE0C163693B1A798779 /* HistoryServiceTests.swift in Sources */,
+				E04F3BC001E2391E6C2C130F /* SpeakerAlignmentTests.swift in Sources */,
+				343490F99337D2835B2C2CE0 /* SpeakerSyncHistoryTests.swift in Sources */,
+				B6C2E690A4C76857A9A8CD73 /* VoiceProfileTests.swift in Sources */,
+				F92ADEC58CD75E4A7F7104BE /* SpeakerWorkspaceTests.swift in Sources */,
+				F6B7AC0B593EA5D7A46CB096 /* SpeakerTranscriptCoordinatorTests.swift in Sources */,
 				AA8390000000000000000004 /* UsageStatisticsServiceTests.swift in Sources */,
 				A91F00000000000000000005 /* RecentTranscriptionPaletteHandlerTests.swift in Sources */,
 				A91F00000000000000000006 /* PromptPaletteControllerTests.swift in Sources */,
@@ -4975,6 +5105,9 @@
 				AA00000000000000000001 /* TypeWhisperApp.swift in Sources */,
 				AA00000000000000000002 /* ServiceContainer.swift in Sources */,
 				AA00000000000000000005 /* TranscriptionResult.swift in Sources */,
+				822253A6675EDE763C21987D /* SpeakerTranscript.swift in Sources */,
+				6BB1C85C28D6969E4183EB83 /* VoiceProfile.swift in Sources */,
+				0898E366C7EA44D70414C480 /* SpeakerWorkspace.swift in Sources */,
 				AA00000000000000000330 /* DictationPunctuationProfile.swift in Sources */,
 				AA00000000000000000331 /* PunctuationRules.swift in Sources */,
 				AA00000000000000000009 /* ModelManagerService.swift in Sources */,
@@ -5016,6 +5149,12 @@
 				AA00000000000000000046 /* AdvancedSettingsView.swift in Sources */,
 				AA00000000000000000340 /* SpokenPunctuationSettingsSection.swift in Sources */,
 				AA00000000000000000050 /* SubtitleExporter.swift in Sources */,
+				5CE409C0AEA314FD01618C82 /* SpeakerAlignment.swift in Sources */,
+				92EAA19836C01760FDD524B9 /* SpeakerTranscriptCoordinator.swift in Sources */,
+				9BD021FDA7532FB8F4BED577 /* SpeakerChannelAttribution.swift in Sources */,
+				8A5179466B2187F3914A66E3 /* SpeakerVoiceProfileService.swift in Sources */,
+				CF7F5CBF7EF922A33274D889 /* VoiceProfileStore.swift in Sources */,
+				42969572CC898F814DC2CC92 /* SpeakerPlaybackController.swift in Sources */,
 				AA00000000000000000153 /* HistoryExporter.swift in Sources */,
 				A91F00000000000000000002 /* RecentTranscriptionStore.swift in Sources */,
 				AA00000000000000000283 /* DictionaryExporter.swift in Sources */,
@@ -5039,8 +5178,13 @@
 				AA00000000000000000062 /* TextDiffService.swift in Sources */,
 				AA7080000000000000000001 /* TargetAppCorrectionLearningService.swift in Sources */,
 				AA00000000000000000063 /* HistoryViewModel.swift in Sources */,
+				0477459F88CA41D4012CD400 /* SpeakerWorkspaceModel.swift in Sources */,
 				AA00000000000000000064 /* HistoryView.swift in Sources */,
 				F83600000000000000000001 /* HistoryRecordViews.swift in Sources */,
+				97E6ED5123DAF6D67299A03C /* HistorySpeakerTranscriptView.swift in Sources */,
+				09720EF3F2B66441E50D5C57 /* SpeakerWorkspaceView.swift in Sources */,
+				2B115FBD9FDCCE5988E3DEF0 /* SpeakerDetectionToggle.swift in Sources */,
+				0C5FF116A9AD4C4FDD734D6C /* SpeakerDetectionSettingsSection.swift in Sources */,
 				F83600000000000000000002 /* HistorySettingsView.swift in Sources */,
 				AA00000000000000000065 /* Profile.swift in Sources */,
 				AA00000000000000000356 /* Workflow.swift in Sources */,
@@ -5280,6 +5424,14 @@
 			buildActionMask = 2147483647;
 			files = (
 				AA00000000000000000169 /* SpeechAnalyzerPlugin.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D3CCB15E0F5DAE2B84DF67A9 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A9B6B4796B47FB8225F6FD19 /* SpeakerDiarizationPlugin.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -5660,6 +5812,11 @@
 			target = DD00000000000000000012 /* SpeechAnalyzerPlugin */;
 			targetProxy = 5E7A00000000000000000003 /* PBXContainerItemProxy */;
 		};
+		C2AF9B8B174BB5B9D6858EF4 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 2AA46E212BF789FBBD2FE020 /* SpeakerDiarizationPlugin */;
+			targetProxy = BD8BF8C00922115276D97966 /* PBXContainerItemProxy */;
+		};
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
@@ -5676,7 +5833,7 @@
 				ICLOUD_CONTAINER_ID = iCloud.com.typewhisper.sync.dev;
 				INFOPLIST_FILE = TypeWhisperICloudBridge/Info.plist;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.7.0;
+				MARKETING_VERSION = 1.8.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.mac.dev.icloudbridge;
 				PRODUCT_NAME = TypeWhisperICloudBridge;
 				SKIP_INSTALL = YES;
@@ -5699,7 +5856,7 @@
 				ICLOUD_CONTAINER_ID = iCloud.com.typewhisper.sync;
 				INFOPLIST_FILE = TypeWhisperICloudBridge/Info.plist;
 				MACOSX_DEPLOYMENT_TARGET = 14.0;
-				MARKETING_VERSION = 1.7.0;
+				MARKETING_VERSION = 1.8.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.typewhisper-mac;
 				PRODUCT_NAME = TypeWhisperICloudBridge;
 				PROVISIONING_PROFILE_SPECIFIER = "$(TYPEWHISPER_ICLOUD_HELPER_PROFILE_SPECIFIER)";
@@ -5905,7 +6062,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.7.0;
+				MARKETING_VERSION = 1.8.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.mac.dev;
 				PRODUCT_NAME = TypeWhisper;
 				SWIFT_OBJC_BRIDGING_HEADER = TypeWhisper/TypeWhisper-Bridging-Header.h;
@@ -5938,7 +6095,7 @@
 					"$(inherited)",
 					"@executable_path/../Frameworks",
 				);
-				MARKETING_VERSION = 1.7.0;
+				MARKETING_VERSION = 1.8.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.mac;
 				PRODUCT_NAME = TypeWhisper;
 				SWIFT_OBJC_BRIDGING_HEADER = TypeWhisper/TypeWhisper-Bridging-Header.h;
@@ -5956,7 +6113,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEAD_CODE_STRIPPING = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
-				MARKETING_VERSION = 1.7.0;
+				MARKETING_VERSION = 1.8.0;
 				PRODUCT_NAME = "typewhisper-cli";
 				SKIP_INSTALL = YES;
 				SWIFT_VERSION = 6.0;
@@ -5969,7 +6126,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				DEAD_CODE_STRIPPING = YES;
 				ENABLE_HARDENED_RUNTIME = YES;
-				MARKETING_VERSION = 1.7.0;
+				MARKETING_VERSION = 1.8.0;
 				PRODUCT_NAME = "typewhisper-cli";
 				SKIP_INSTALL = YES;
 				SWIFT_VERSION = 6.0;
@@ -6555,6 +6712,29 @@
 			};
 			name = Debug;
 		};
+		6AC0324CBB99344C0597FF70 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Speaker Detection";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = SpeakerDiarizationPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.speaker-diarization";
+				PRODUCT_NAME = SpeakerDiarizationPlugin;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Debug;
+		};
 		XX00000000000000000050 /* Release */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -6571,6 +6751,29 @@
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.speechanalyzer;
 				PRODUCT_NAME = SpeechAnalyzerPlugin;
+				SKIP_INSTALL = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_VERSION = 6.0;
+				WRAPPER_EXTENSION = bundle;
+			};
+			name = Release;
+		};
+		54053C5B194B3750D36103F4 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEAD_CODE_STRIPPING = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = "Speaker Detection";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSPrincipalClass = SpeakerDiarizationPlugin;
+				INSTALL_PATH = "$(LOCAL_LIBRARY_DIR)/Bundles";
+				MACOSX_DEPLOYMENT_TARGET = 14.0;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = "com.typewhisper.speaker-diarization";
+				PRODUCT_NAME = SpeakerDiarizationPlugin;
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = NO;
 				SWIFT_VERSION = 6.0;
@@ -6642,7 +6845,7 @@
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
-				MARKETING_VERSION = 1.7.0;
+				MARKETING_VERSION = 1.8.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.mac.dev.transcribe-action;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -6669,7 +6872,7 @@
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
-				MARKETING_VERSION = 1.7.0;
+				MARKETING_VERSION = 1.8.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.mac.transcribe-action;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -6697,7 +6900,7 @@
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
-				MARKETING_VERSION = 1.7.0;
+				MARKETING_VERSION = 1.8.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.mac.dev.widgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -6725,7 +6928,7 @@
 					"@executable_path/../Frameworks",
 					"@executable_path/../../../../Frameworks",
 				);
-				MARKETING_VERSION = 1.7.0;
+				MARKETING_VERSION = 1.8.0;
 				PRODUCT_BUNDLE_IDENTIFIER = com.typewhisper.mac.widgets;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
@@ -8793,6 +8996,15 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		E97CC164D9BC9FC9355A6035 /* Build configuration list for PBXNativeTarget "SpeakerDiarizationPlugin" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6AC0324CBB99344C0597FF70 /* Debug */,
+				54053C5B194B3750D36103F4 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		FF00000000000000000077 /* Build configuration list for PBXNativeTarget "OpenAICompatiblePlugin" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
@@ -9335,6 +9547,11 @@
 			package = RR00000000000000000002 /* XCRemoteSwiftPackageReference "FluidAudio" */;
 			productName = FluidAudio;
 		};
+		2F3849A7C7AD5A6CFF412ECC /* FluidAudio */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = RR00000000000000000002 /* XCRemoteSwiftPackageReference "FluidAudio" */;
+			productName = FluidAudio;
+		};
 		C0E300000000000000000060 /* TypeWhisperPluginSDK */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = TypeWhisperPluginSDK;
@@ -9345,6 +9562,10 @@
 			productName = HuggingFace;
 		};
 		PP00000000000000000018 /* TypeWhisperPluginSDK */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = TypeWhisperPluginSDK;
+		};
+		FFCEBEA85FA80718E1DDD2F8 /* TypeWhisperPluginSDK */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = TypeWhisperPluginSDK;
 		};

@@ -91,6 +91,10 @@ private final class InMemoryUserDataSyncStore: UserDataSyncStore, @unchecked Sen
                 upsertHistory(inbox: inbox)
             case .upsertHistoryAudio(let audio):
                 upsertHistory(audio: audio)
+            case .upsertHistoryTranscript(let transcript):
+                upsertHistory(recordID: transcript.recordID, updatedAt: transcript.updatedAt, transcript: transcript)
+            case .upsertHistorySpeakers(let speakers):
+                upsertHistory(recordID: speakers.recordID, updatedAt: speakers.updatedAt, speakers: speakers)
             case .deleteHistory(let recordID):
                 historyRecords.removeAll { $0.content.recordID == recordID }
             }
@@ -107,6 +111,8 @@ private final class InMemoryUserDataSyncStore: UserDataSyncStore, @unchecked Sen
                     updatedAt: content.createdAt
                 ),
                 audio: existing?.audio,
+                transcript: existing?.transcript,
+                speakers: existing?.speakers,
                 localAudioFileURL: existing?.localAudioFileURL,
                 audioEligible: existing?.audioEligible ?? false
             )
@@ -123,6 +129,8 @@ private final class InMemoryUserDataSyncStore: UserDataSyncStore, @unchecked Sen
                 ),
                 inbox: inbox,
                 audio: existing?.audio,
+                transcript: existing?.transcript,
+                speakers: existing?.speakers,
                 localAudioFileURL: existing?.localAudioFileURL,
                 audioEligible: existing?.audioEligible ?? false
             )
@@ -142,8 +150,30 @@ private final class InMemoryUserDataSyncStore: UserDataSyncStore, @unchecked Sen
                     updatedAt: audio.createdAt
                 ),
                 audio: audio,
+                transcript: existing?.transcript,
+                speakers: existing?.speakers,
                 localAudioFileURL: existing?.localAudioFileURL,
                 audioEligible: false
+            )
+        )
+    }
+
+    private func upsertHistory(
+        recordID: UUID,
+        updatedAt: Date,
+        transcript: UserDataSyncHistoryTranscriptV1? = nil,
+        speakers: UserDataSyncHistorySpeakersV1? = nil
+    ) {
+        let existing = historyRecords.first { $0.content.recordID == recordID }
+        replaceHistory(
+            UserDataSyncHistoryRecord(
+                content: existing?.content ?? Self.placeholderContent(recordID: recordID, updatedAt: updatedAt),
+                inbox: existing?.inbox ?? Self.placeholderInbox(recordID: recordID, updatedAt: updatedAt),
+                audio: existing?.audio,
+                transcript: transcript ?? existing?.transcript,
+                speakers: speakers ?? existing?.speakers,
+                localAudioFileURL: existing?.localAudioFileURL,
+                audioEligible: existing?.audioEligible ?? false
             )
         )
     }
@@ -1843,6 +1873,38 @@ final class CloudFolderSyncTests: XCTestCase {
     }
 
     @MainActor
+    func testHistoryComponentFromANewerClientIsIgnoredWithoutDiagnostic() async throws {
+        let folder = try TestSupport.makeTemporaryDirectory(prefix: "CloudFolderSyncNewComponent")
+        defer { TestSupport.remove(folder) }
+
+        let remoteDirectory = CloudFolderSyncEngine.packageURL(for: folder)
+            .appendingPathComponent("ops/remote-device", isDirectory: true)
+        try FileManager.default.createDirectory(at: remoteDirectory, withIntermediateDirectories: true)
+        let recordID = UUID().uuidString
+        let operation = """
+        {"schemaVersion":1,"operationId":"op-1","deviceId":"remote-device","collection":"history",
+         "itemId":"history:\(recordID)","kind":"upsert","updatedAt":"2026-09-26T14:02:11Z",
+         "historyPayloadVersion":1,"historyGeneration":"g1","historyComponent":"summary",
+         "historySummary":{"recordID":"\(recordID)","text":"A summary"}}
+        """
+        try Data(operation.utf8).write(to: remoteDirectory.appendingPathComponent("summary.json"))
+
+        let store = InMemoryUserDataSyncStore()
+        var state = CloudFolderSyncState(deviceId: "mac-a")
+
+        let result = try await CloudFolderSyncEngine.sync(
+            folderURL: folder,
+            store: store,
+            state: &state,
+            entitlements: PaidEntitlements(canUseCloudFolderSync: true),
+            now: Self.date(20)
+        )
+
+        XCTAssertEqual(result.mutationsApplied, 0)
+        XCTAssertTrue(result.diagnostics.isEmpty)
+    }
+
+    @MainActor
     func testFutureSchemaIsDiagnosedBeforeFullOperationDecoding() async throws {
         let folder = try TestSupport.makeTemporaryDirectory(prefix: "CloudFolderSyncFutureSchema")
         defer { TestSupport.remove(folder) }
@@ -2053,6 +2115,328 @@ final class CloudFolderSyncTests: XCTestCase {
                     .path
             )
         )
+    }
+
+    @MainActor
+    func testSpeakerSyncGoldenFixturesDecodeAndRoundTrip() throws {
+        let recordID = UUID(uuidString: "7F0C2D6E-2B1A-4C59-9B55-0A6F3C1D2E4F")!
+        let revision = UUID(uuidString: "C1D9A3B2-5E6F-4A7B-8C9D-0E1F2A3B4C5D")!
+
+        let transcriptOperation: CloudFolderSyncOperation = try Self.decodeFixture("upsert-history-transcript-v1")
+        let transcript = try XCTUnwrap(transcriptOperation.historyTranscript)
+        XCTAssertEqual(transcriptOperation.historyComponent, .transcript)
+        XCTAssertEqual(transcriptOperation.updatedAt, transcript.updatedAt)
+        XCTAssertEqual(transcript.recordID, recordID)
+        XCTAssertEqual(transcript.revision, revision)
+        XCTAssertEqual(transcript.requestedSpeakerCount, 2)
+        XCTAssertEqual(transcript.source, .init(kind: "local", engine: "fluidaudio-offline-diarizer", modelVersion: nil))
+        XCTAssertEqual(transcript.segments.map(\.speakerID), ["S1", "S2", nil])
+        XCTAssertEqual(transcript.segments.map(\.speakerConfidence), [0.75, nil, nil])
+        XCTAssertEqual(transcript.segments.map(\.start), [0, 4.5, 10])
+        XCTAssertEqual(transcript.segments[0].text, "Let's start with the budget.")
+        XCTAssertTrue(transcript.isValid)
+        XCTAssertEqual(CloudFolderSyncEngine.winningOperations(from: [transcriptOperation]).count, 1)
+
+        let speakersOperation: CloudFolderSyncOperation = try Self.decodeFixture("upsert-history-speakers-v1")
+        let speakers = try XCTUnwrap(speakersOperation.historySpeakers)
+        XCTAssertEqual(speakersOperation.historyComponent, .speakers)
+        XCTAssertEqual(speakers.recordID, recordID)
+        XCTAssertEqual(speakers.transcriptRevision, revision)
+        XCTAssertEqual(speakers.names.map(\.displayName), ["Anna", "Marco"])
+        XCTAssertEqual(speakers.names.map(\.speakerID), ["S1", "S2"])
+        XCTAssertEqual(speakers.names[0].profileID, UUID(uuidString: "9A8B7C6D-5E4F-4A3B-9C2D-1E0F9A8B7C6D"))
+        XCTAssertNil(speakers.names[1].profileID)
+        XCTAssertTrue(speakers.isValid)
+        XCTAssertEqual(CloudFolderSyncEngine.winningOperations(from: [speakersOperation]).count, 1)
+
+        let device: CloudFolderSyncDeviceRecord = try Self.decodeFixture("device-capabilities-v1")
+        XCTAssertEqual(device.capabilities, ["history.transcript.v1"])
+        XCTAssertTrue(device.syncsSpeakerTranscripts)
+        let olderDevice: CloudFolderSyncDeviceRecord = try Self.decodeFixture("device-v1")
+        XCTAssertNil(olderDevice.capabilities)
+        XCTAssertFalse(olderDevice.syncsSpeakerTranscripts)
+
+        // What this app writes decodes to the same values again.
+        for operation in [transcriptOperation, speakersOperation] {
+            let data = try Self.entitlementEncoder.encode(operation)
+            XCTAssertEqual(try Self.fixtureDecoder.decode(CloudFolderSyncOperation.self, from: data), operation)
+        }
+        // The local model and the wire payload convert without loss.
+        XCTAssertEqual(
+            UserDataSyncHistoryTranscriptV1(
+                recordID: recordID,
+                updatedAt: transcript.updatedAt,
+                transcript: transcript.speakerTranscript
+            ),
+            transcript
+        )
+        XCTAssertEqual(
+            UserDataSyncHistorySpeakersV1(
+                recordID: recordID,
+                updatedAt: speakers.updatedAt,
+                transcriptRevision: revision,
+                table: speakers.nameTable(keepingSuggestionsFrom: nil)
+            ),
+            speakers
+        )
+    }
+
+    func testSpeakerPayloadsWithBadValuesAreNotApplied() throws {
+        let transcriptOperation: CloudFolderSyncOperation = try Self.decodeFixture("upsert-history-transcript-v1")
+        let speakersOperation: CloudFolderSyncOperation = try Self.decodeFixture("upsert-history-speakers-v1")
+        let recordID = try XCTUnwrap(transcriptOperation.historyTranscript?.recordID)
+        let revision = try XCTUnwrap(transcriptOperation.historyTranscript?.revision)
+
+        func speakers(_ names: [UserDataSyncHistorySpeakersV1.Name]) throws -> UserDataSyncHistorySpeakersV1 {
+            let json = try JSONSerialization.data(withJSONObject: [
+                "recordID": recordID.uuidString,
+                "updatedAt": "2026-09-26T14:10:40.000Z",
+                "transcriptRevision": revision.uuidString,
+                "names": names.map { ["speakerID": $0.speakerID, "displayName": $0.displayName] },
+            ])
+            return try Self.fixtureDecoder.decode(UserDataSyncHistorySpeakersV1.self, from: json)
+        }
+        XCTAssertFalse(try speakers([.init(speakerID: "X1", displayName: "Anna", profileID: nil)]).isValid)
+        XCTAssertFalse(try speakers([.init(speakerID: "S1", displayName: "  ", profileID: nil)]).isValid)
+        XCTAssertFalse(try speakers([.init(speakerID: "S1", displayName: String(repeating: "a", count: 101), profileID: nil)]).isValid)
+        XCTAssertFalse(try speakers([
+            .init(speakerID: "S1", displayName: "Anna", profileID: nil),
+            .init(speakerID: "S1", displayName: "Ben", profileID: nil),
+        ]).isValid)
+        XCTAssertTrue(try speakers([]).isValid)
+
+        // Two payloads in one operation, or a payload for another record, are rejected.
+        var mixed = transcriptOperation
+        mixed.historySpeakers = speakersOperation.historySpeakers
+        XCTAssertTrue(CloudFolderSyncEngine.winningOperations(from: [mixed]).isEmpty)
+
+        let otherItem = try Self.fixtureDecoder.decode(
+            CloudFolderSyncOperation.self,
+            from: Data(String(
+                decoding: try Self.entitlementEncoder.encode(speakersOperation),
+                as: UTF8.self
+            ).replacingOccurrences(
+                of: "history:7f0c2d6e-2b1a-4c59-9b55-0a6f3c1d2e4f",
+                with: "history:00000000-0000-4000-8000-000000000001"
+            ).utf8)
+        )
+        XCTAssertTrue(CloudFolderSyncEngine.winningOperations(from: [otherItem]).isEmpty)
+    }
+
+    @MainActor
+    func testSpeakerTranscriptAndNamesSyncAsIndependentComponents() async throws {
+        let folder = try TestSupport.makeTemporaryDirectory(prefix: "CloudFolderSyncSpeakers")
+        defer { TestSupport.remove(folder) }
+
+        let recordID = UUID(uuidString: "83600000-0000-4000-8000-0000000000A1")!
+        let transcript = UserDataSyncHistoryTranscriptV1(
+            recordID: recordID,
+            updatedAt: Self.date(10),
+            transcript: SpeakerTranscript(source: .localDiarizer, segments: [
+                SpeakerTranscriptSegment(text: "Good morning.", start: 0, end: 1, speakerID: "S1"),
+                SpeakerTranscriptSegment(text: "Morning.", start: 1, end: 2, speakerID: "S2"),
+            ])
+        )
+        var table = SpeakerNameTable(transcriptRevision: transcript.revision)
+        table.setName("Anna", for: "S1")
+        table.setName("Guess", for: "S2", profileID: UUID(), isSuggestion: true)
+        let base = Self.historyRecord(
+            recordID: recordID,
+            finalText: "Good morning. Morning.",
+            contentUpdatedAt: Self.date(10),
+            inboxState: "none",
+            inboxUpdatedAt: Self.date(10)
+        )
+        let phone = InMemoryUserDataSyncStore(historyRecords: [UserDataSyncHistoryRecord(
+            content: base.content,
+            inbox: base.inbox,
+            audio: nil,
+            transcript: transcript,
+            speakers: UserDataSyncHistorySpeakersV1(
+                recordID: recordID,
+                updatedAt: Self.date(11),
+                transcriptRevision: transcript.revision,
+                table: table
+            ),
+            localAudioFileURL: nil,
+            audioEligible: false
+        )])
+        let mac = InMemoryUserDataSyncStore()
+        var phoneState = CloudFolderSyncState(deviceId: "ios-phone")
+        var macState = CloudFolderSyncState(deviceId: "mac-main")
+        func sync(_ store: InMemoryUserDataSyncStore, _ state: inout CloudFolderSyncState, at seconds: TimeInterval) async throws -> CloudFolderSyncResult {
+            try await CloudFolderSyncEngine.sync(
+                folderURL: folder,
+                store: store,
+                state: &state,
+                entitlements: PaidEntitlements(canUseCloudFolderSync: true),
+                now: Self.date(seconds)
+            )
+        }
+
+        let exported = try await sync(phone, &phoneState, at: 20)
+        let imported = try await sync(mac, &macState, at: 30)
+
+        XCTAssertEqual(exported.operationsWritten, 4)
+        XCTAssertEqual(imported.mutationsApplied, 4)
+        XCTAssertEqual(mac.historyRecords.first?.transcript, transcript)
+        // The suggestion stays on the phone; only the confirmed name arrives.
+        XCTAssertEqual(mac.historyRecords.first?.speakers?.names.map(\.displayName), ["Anna"])
+        XCTAssertEqual(
+            mac.appliedMutations.suffix(2).map { mutation -> String in
+                switch mutation {
+                case .upsertHistoryTranscript: "transcript"
+                case .upsertHistorySpeakers: "speakers"
+                default: "other"
+                }
+            },
+            ["transcript", "speakers"]
+        )
+        let idle = try await sync(phone, &phoneState, at: 35)
+        XCTAssertEqual(idle.operationsWritten, 0)
+
+        // Renaming on the Mac uploads the names only; the transcript is not written again.
+        let received = try XCTUnwrap(mac.historyRecords.first)
+        var renamed = SpeakerNameTable(transcriptRevision: transcript.revision)
+        renamed.setName("Anna Schmidt", for: "S1")
+        renamed.setName("Marco", for: "S2")
+        mac.historyRecords = [UserDataSyncHistoryRecord(
+            content: received.content,
+            inbox: received.inbox,
+            audio: nil,
+            transcript: received.transcript,
+            speakers: UserDataSyncHistorySpeakersV1(
+                recordID: recordID,
+                updatedAt: Self.date(40),
+                transcriptRevision: transcript.revision,
+                table: renamed
+            ),
+            localAudioFileURL: nil,
+            audioEligible: false
+        )]
+        let renameExport = try await sync(mac, &macState, at: 50)
+        let renameImport = try await sync(phone, &phoneState, at: 60)
+
+        XCTAssertEqual(renameExport.operationsWritten, 1)
+        XCTAssertEqual(renameImport.mutationsApplied, 1)
+        XCTAssertEqual(phone.historyRecords.first?.speakers?.names.map(\.displayName), ["Anna Schmidt", "Marco"])
+        XCTAssertEqual(phone.historyRecords.first?.transcript, transcript)
+
+        // An older rename from another device loses against the newer one.
+        let staleDirectory = CloudFolderSyncEngine.packageURL(for: folder)
+            .appendingPathComponent("ops/old-device", isDirectory: true)
+        try FileManager.default.createDirectory(at: staleDirectory, withIntermediateDirectories: true)
+        var stale = SpeakerNameTable(transcriptRevision: transcript.revision)
+        stale.setName("Stale", for: "S1")
+        let staleOperation = CloudFolderSyncOperation.upsertHistory(
+            itemID: UserDataSyncIdentity.historyItemID(recordID: recordID),
+            component: .speakers,
+            generation: phoneState.historyGeneration,
+            deviceId: "old-device",
+            speakers: UserDataSyncHistorySpeakersV1(
+                recordID: recordID,
+                updatedAt: Self.date(39),
+                transcriptRevision: transcript.revision,
+                table: stale
+            )
+        )
+        try Self.entitlementEncoder.encode(staleOperation)
+            .write(to: staleDirectory.appendingPathComponent("stale.json"))
+        let staleImport = try await sync(phone, &phoneState, at: 70)
+        XCTAssertEqual(staleImport.mutationsApplied, 0)
+        XCTAssertEqual(phone.historyRecords.first?.speakers?.names.map(\.displayName), ["Anna Schmidt", "Marco"])
+
+        // Deleting the record removes it with all of its components.
+        mac.historyRecords = []
+        mac.deletedHistoryRecords = [UserDataSyncHistoryDeletion(recordID: recordID, deletedAt: Self.date(80))]
+        _ = try await sync(mac, &macState, at: 90)
+        _ = try await sync(phone, &phoneState, at: 100)
+        XCTAssertTrue(phone.historyRecords.isEmpty)
+    }
+
+    @MainActor
+    func testSpeakerComponentsWaitUntilEveryRecentDeviceUnderstandsThem() async throws {
+        let folder = try TestSupport.makeTemporaryDirectory(prefix: "CloudFolderSyncSpeakerGate")
+        defer { TestSupport.remove(folder) }
+
+        let recordID = UUID(uuidString: "83600000-0000-4000-8000-0000000000A2")!
+        let transcript = UserDataSyncHistoryTranscriptV1(
+            recordID: recordID,
+            updatedAt: Self.date(10),
+            transcript: SpeakerTranscript(source: .localDiarizer, segments: [
+                SpeakerTranscriptSegment(text: "Good morning.", start: 0, end: 1, speakerID: "S1"),
+            ])
+        )
+        var table = SpeakerNameTable(transcriptRevision: transcript.revision)
+        table.setName("Anna", for: "S1")
+        let base = Self.historyRecord(
+            recordID: recordID,
+            finalText: "Good morning.",
+            contentUpdatedAt: Self.date(10),
+            inboxState: "none",
+            inboxUpdatedAt: Self.date(10)
+        )
+        let mac = InMemoryUserDataSyncStore(historyRecords: [UserDataSyncHistoryRecord(
+            content: base.content,
+            inbox: base.inbox,
+            audio: nil,
+            transcript: transcript,
+            speakers: UserDataSyncHistorySpeakersV1(
+                recordID: recordID,
+                updatedAt: Self.date(11),
+                transcriptRevision: transcript.revision,
+                table: table
+            ),
+            localAudioFileURL: nil,
+            audioEligible: false
+        )])
+        var macState = CloudFolderSyncState(deviceId: "mac-main")
+        let devicesURL = CloudFolderSyncEngine.packageURL(for: folder)
+            .appendingPathComponent("devices", isDirectory: true)
+        try FileManager.default.createDirectory(at: devicesURL, withIntermediateDirectories: true)
+        func writePhone(capabilities: [String]?, updatedAt: Date) throws {
+            try Self.entitlementEncoder.encode(CloudFolderSyncDeviceRecord(
+                deviceId: "ios-phone",
+                platform: "iOS",
+                appVersion: "1.1.0",
+                updatedAt: updatedAt,
+                capabilities: capabilities
+            )).write(to: devicesURL.appendingPathComponent("ios-phone.json"))
+        }
+        func syncMac(at seconds: TimeInterval) async throws -> CloudFolderSyncResult {
+            try await CloudFolderSyncEngine.sync(
+                folderURL: folder,
+                store: mac,
+                state: &macState,
+                entitlements: PaidEntitlements(canUseCloudFolderSync: true),
+                now: Self.date(seconds)
+            )
+        }
+
+        // A phone without the capability synced recently: only content and inbox are written.
+        try writePhone(capabilities: nil, updatedAt: Self.date(15))
+        let withheld = try await syncMac(at: 20)
+        XCTAssertEqual(withheld.operationsWritten, 2)
+        let again = try await syncMac(at: 30)
+        XCTAssertEqual(again.operationsWritten, 0)
+
+        // After the phone's update the pending components are uploaded.
+        try writePhone(capabilities: [CloudFolderSyncDeviceRecord.speakerTranscriptCapability], updatedAt: Self.date(35))
+        let released = try await syncMac(at: 40)
+        XCTAssertEqual(released.operationsWritten, 2)
+
+        XCTAssertTrue(CloudFolderSyncEngine.speakerComponentsCanBeWritten(devices: [], ownDeviceId: "mac-main", now: Self.date(0)))
+        let stalePhone = CloudFolderSyncDeviceRecord(deviceId: "old", platform: "iOS", appVersion: "1.0", updatedAt: Self.date(0))
+        XCTAssertFalse(CloudFolderSyncEngine.speakerComponentsCanBeWritten(
+            devices: [stalePhone],
+            ownDeviceId: "mac-main",
+            now: Self.date(29 * 24 * 60 * 60)
+        ))
+        XCTAssertTrue(CloudFolderSyncEngine.speakerComponentsCanBeWritten(
+            devices: [stalePhone],
+            ownDeviceId: "mac-main",
+            now: Self.date(31 * 24 * 60 * 60)
+        ))
     }
 
     @MainActor

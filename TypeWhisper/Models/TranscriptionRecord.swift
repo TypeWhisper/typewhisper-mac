@@ -36,6 +36,14 @@ enum RecordingProcessingState: String, Codable, Sendable {
     case failed
 }
 
+/// Progress of a record's speaker transcript. Records without speaker
+/// detection keep this nil.
+enum SpeakerTranscriptState: String, Codable, Sendable {
+    case pending
+    case ready
+    case failed
+}
+
 enum CaptureInboxState: String, Codable, Sendable {
     case none
     case open
@@ -81,6 +89,20 @@ final class TranscriptionRecord {
     var remoteAudioSHA256: String?
     var remoteAudioCreatedAt: Date?
     var remoteAudioDurationSeconds: Double?
+    var speakerTranscriptStateRaw: String?
+    var speakerTranscriptData: Data?
+    var speakerNamesData: Data?
+    /// Transcription timing kept for speaker detection: `[TimedTextEntry]` as JSON.
+    var timedTextData: Data?
+    var timedTextGranularityRaw: String?
+    /// Word timing of the transcription, when the engine reported it: `[TranscriptionWord]` as JSON.
+    var speakerWordsData: Data?
+    /// When the microphone carried the user's own speech: `[[start, end]]` as JSON.
+    var speakerOwnSpeechData: Data?
+    /// When the speaker transcript and the speaker names last changed, for
+    /// syncing them as separate components. Epoch 0 means never.
+    var speakerTranscriptUpdatedAt: Date = Date(timeIntervalSince1970: 0)
+    var speakerNamesUpdatedAt: Date = Date(timeIntervalSince1970: 0)
 
     var preview: String { String(finalText.prefix(100)) }
     var source: RecordingSource {
@@ -111,6 +133,57 @@ final class TranscriptionRecord {
                 try? JSONEncoder().encode($0)
             }
         }
+    }
+
+    var speakerTranscriptState: SpeakerTranscriptState? {
+        get { speakerTranscriptStateRaw.flatMap(SpeakerTranscriptState.init(rawValue:)) }
+        set { speakerTranscriptStateRaw = newValue?.rawValue }
+    }
+    /// Audio stays until speaker detection has finished, even when retention would delete it.
+    var holdsAudioForSpeakerTranscript: Bool {
+        speakerTranscriptState == .pending || speakerTranscriptState == .failed
+    }
+    var speakerTranscript: SpeakerTranscript? {
+        get { speakerTranscriptData.flatMap { try? JSONDecoder().decode(SpeakerTranscript.self, from: $0) } }
+        set { speakerTranscriptData = newValue.flatMap { try? JSONEncoder().encode($0) } }
+    }
+    /// Names for the current speaker transcript; names given for an older
+    /// detection run are ignored.
+    var speakerNames: SpeakerNameTable? {
+        get {
+            guard let data = speakerNamesData,
+                  let names = try? JSONDecoder().decode(SpeakerNameTable.self, from: data),
+                  let transcript = speakerTranscript,
+                  names.applies(to: transcript) else { return nil }
+            return names
+        }
+        set { speakerNamesData = newValue.flatMap { try? JSONEncoder().encode($0) } }
+    }
+    var timedText: [TimedTextEntry] {
+        get { timedTextData.flatMap { try? JSONDecoder().decode([TimedTextEntry].self, from: $0) } ?? [] }
+        set { timedTextData = newValue.isEmpty ? nil : try? JSONEncoder().encode(newValue) }
+    }
+    var speakerWords: [TranscriptionWord] {
+        get { speakerWordsData.flatMap { try? JSONDecoder().decode([TranscriptionWord].self, from: $0) } ?? [] }
+        set { speakerWordsData = newValue.isEmpty ? nil : try? JSONEncoder().encode(newValue) }
+    }
+    var speakerOwnSpeech: [ClosedRange<TimeInterval>] {
+        get {
+            let pairs = speakerOwnSpeechData.flatMap { try? JSONDecoder().decode([[Double]].self, from: $0) } ?? []
+            return pairs.compactMap { $0.count == 2 && $0[0] <= $0[1] ? $0[0]...$0[1] : nil }
+        }
+        set {
+            speakerOwnSpeechData = newValue.isEmpty
+                ? nil
+                : try? JSONEncoder().encode(newValue.map { [$0.lowerBound, $0.upperBound] })
+        }
+    }
+    var timedTextGranularity: TimedTextGranularity {
+        get {
+            guard timedTextData != nil else { return .none }
+            return timedTextGranularityRaw.flatMap(TimedTextGranularity.init(rawValue:)) ?? .none
+        }
+        set { timedTextGranularityRaw = newValue == .none ? nil : newValue.rawValue }
     }
 
     var wasPostProcessed: Bool {

@@ -95,6 +95,8 @@ final class ServiceContainer: ObservableObject {
     let licenseService: LicenseService
     let premiumAccountService: PremiumAccountService
     let supporterDiscordService: SupporterDiscordService
+    let speakerTranscriptCoordinator: SpeakerTranscriptCoordinator
+    let speakerVoiceProfileService: SpeakerVoiceProfileService
     let calendarMeetingCountdownModel: CalendarMeetingCountdownModel
     let calendarMeetingAutomationController: CalendarMeetingAutomationController
 
@@ -274,6 +276,42 @@ final class ServiceContainer: ObservableObject {
             audioFileService: audioFileService,
             audioDeviceService: audioDeviceService
         )
+        let speakerCoordinator = SpeakerTranscriptCoordinator(
+            historyService: historyService,
+            providerSource: { PluginManager.shared?.speakerDiarizationProviders.first },
+            premiumAccess: { [licenseService, premiumAccountService] in
+                SpeakerWorkspacePremiumAccess.isGranted(
+                    hasCommercialLicense: licenseService.hasCommercialLicense,
+                    hasPremiumEntitlement: premiumAccountService.hasPremiumEntitlement
+                )
+            }
+        )
+        speakerCoordinator.timingSource = { [audioFileService, modelManagerService] url, language in
+            let samples = try await audioFileService.loadAudioSamples(from: url)
+            return try await modelManagerService.transcribe(
+                audioSamples: samples,
+                languageSelection: language.map(LanguageSelection.exact) ?? .auto,
+                task: .transcribe,
+                onProgress: { _ in true },
+                onSourceProgress: { _ in true }
+            )
+        }
+        speakerVoiceProfileService = SpeakerVoiceProfileService(
+            store: VoiceProfileStore(),
+            historyService: historyService,
+            premiumAccess: { [speakerCoordinator] in speakerCoordinator.hasPremiumAccess }
+        )
+        speakerCoordinator.voices = speakerVoiceProfileService
+        speakerTranscriptCoordinator = speakerCoordinator
+        watchFolderService.speakerLabeler = { [speakerCoordinator] result, samples in
+            try await speakerCoordinator.labelingSpeakers(in: result, samples: samples)
+        }
+        fileTranscriptionViewModel.speakerRecordIntake = { [speakerCoordinator] in
+            await speakerCoordinator.addRecording($0)
+        }
+        audioRecorderViewModel.speakerRecordIntake = { [speakerCoordinator] in
+            await speakerCoordinator.addRecording($0)
+        }
         calendarMeetingCountdownModel = CalendarMeetingCountdownModel(
             hotkeyService: hotkeyService,
             onButtonAction: {
@@ -327,7 +365,8 @@ final class ServiceContainer: ObservableObject {
             dictionaryService: dictionaryService,
             dictationViewModel: dictationViewModel,
             audioRecorderViewModel: audioRecorderViewModel,
-            settingsBackupService: settingsBackupService
+            settingsBackupService: settingsBackupService,
+            speakerCoordinator: speakerTranscriptCoordinator
         )
         handlers.register(on: router)
         httpServer = HTTPServer(router: router)
@@ -410,6 +449,8 @@ final class ServiceContainer: ObservableObject {
         defer { signposter.endInterval("Launch.initialize", initializeState) }
 
         calendarMeetingAutomationController.initialize()
+        historyService.failInterruptedSpeakerTranscripts()
+        speakerVoiceProfileService.removeEmbeddingsOfDeletedRecordings()
 
         hotkeyService.setup()
         dictationViewModel.registerInitialTriggerHotkeys()

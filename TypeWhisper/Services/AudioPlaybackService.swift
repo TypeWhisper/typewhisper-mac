@@ -29,6 +29,16 @@ final class AudioPlaybackService: NSObject, ObservableObject, AVAudioPlayerDeleg
         }
     }
 
+    /// Starts playback at `time`, keeping an already loaded file.
+    func play(url: URL, from time: TimeInterval) {
+        if player?.url != url {
+            play(url: url)
+        } else if !isPlaying {
+            resume()
+        }
+        seek(to: min(max(time, 0), duration))
+    }
+
     func pause() {
         player?.pause()
         isPlaying = false
