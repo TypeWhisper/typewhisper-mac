@@ -667,6 +667,13 @@ jobs:
           sed -i.bak "s/^  sha256 \".*\"/  sha256 \"${SHA256}\"/" Casks/typewhisper.rb
           rm -f Casks/typewhisper.rb.bak
 
+          # A reformatted cask would leave both lines untouched and look like a no-op.
+          if ! grep -qF "  version \"${VERSION}\"" Casks/typewhisper.rb ||
+             ! grep -qF "  sha256 \"${SHA256}\"" Casks/typewhisper.rb; then
+            echo "Could not set the cask version or SHA-256 in Casks/typewhisper.rb." >&2
+            exit 1
+          fi
+
           if git diff --quiet -- Casks/typewhisper.rb; then
             echo "Cask already lists TypeWhisper ${VERSION}; nothing to update."
             exit 0

@@ -175,7 +175,7 @@ class WorkflowPolicyTests(unittest.TestCase):
                 self.assertIn("trap 'exit 130' INT", command)
                 self.assertIn("trap 'exit 143' TERM", command)
 
-    def run_homebrew_update(self, cask_version, validation_buckets, cask_sha="0" * 64):
+    def run_homebrew_update(self, cask_version, validation_buckets, cask_sha="0" * 64, cask_text=None):
         """Run the Homebrew step against a local tap and a mocked GitHub CLI."""
         script = next(step["run"] for step in self.workflow["jobs"]["update-homebrew"]["steps"]
                       if step["name"] == "Update Homebrew Cask")
@@ -189,7 +189,7 @@ class WorkflowPolicyTests(unittest.TestCase):
         seed = root / "seed"
         (seed / "Casks").mkdir(parents=True)
         (seed / "Casks/typewhisper.rb").write_text(
-            f'cask "typewhisper" do\n  version "{cask_version}"\n  sha256 "{cask_sha}"\nend\n')
+            cask_text or f'cask "typewhisper" do\n  version "{cask_version}"\n  sha256 "{cask_sha}"\nend\n')
         for command in (["init", "-q", "-b", "main"], ["add", "."], ["commit", "-q", "-m", "seed"]):
             subprocess.run([real_git, *command], cwd=seed, env=git_env, check=True)
         tap = root / "tap.git"
@@ -262,6 +262,17 @@ esac
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("nothing to update", result.stdout)
         self.assertEqual(branches, ["main"])
+        self.assertEqual(log, "")
+        self.assertFalse(merged)
+
+    def test_homebrew_update_fails_when_the_cask_lines_cannot_be_rewritten(self):
+        # Single quotes are valid Ruby but do not match the patterns the step rewrites.
+        reformatted = "cask 'typewhisper' do\n  version '1.0.0'\n  sha256 '" + "0" * 64 + "'\nend\n"
+        result, branches, main_cask, log, merged = self.run_homebrew_update("1.0.0", ["pass"], cask_text=reformatted)
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("Could not set the cask version or SHA-256", result.stderr)
+        self.assertEqual(branches, ["main"])
+        self.assertEqual(main_cask, reformatted)
         self.assertEqual(log, "")
         self.assertFalse(merged)
 
