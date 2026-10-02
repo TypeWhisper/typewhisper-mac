@@ -22,6 +22,11 @@ inputs. This change does not sandbox reviewed build scripts or dependencies.
 - Checkout credentials are not persisted. Jobs default to `contents: read`; only
   the release/appcast publisher has `contents: write`. Appcast Git authentication
   is provided through process-local configuration in the publication step.
+- The Homebrew tap is updated through a pull request, not a direct push. The
+  tap's `main` branch requires status checks, and the release job merges the pull
+  request only after those checks and the cask validation have passed.
+  `HOMEBREW_TAP_TOKEN` therefore needs write access to contents and pull requests
+  on `TypeWhisper/homebrew-tap`.
 
 When updating a tool, review its upstream release and dependencies first. Obtain
 wheel SHA-256 values from the version-specific PyPI JSON endpoints recorded in
