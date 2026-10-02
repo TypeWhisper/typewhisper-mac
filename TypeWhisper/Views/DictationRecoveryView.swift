@@ -4,6 +4,7 @@ import TypeWhisperPluginSDK
 struct DictationRecoveryView: View {
     @ObservedObject private var viewModel = DictationRecoveryViewModel.shared
     @Environment(\.openWindow) private var openWindow
+    @State private var showDiscardAllConfirmation = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -73,6 +74,32 @@ struct DictationRecoveryView: View {
                 Section(String(localized: "Recordings")) {
                     ForEach(viewModel.recoveries) { recovery in
                         recoveryRow(recovery)
+                    }
+
+                    if viewModel.recoveries.count > 1 {
+                        HStack {
+                            Spacer()
+
+                            Button(role: .destructive) {
+                                showDiscardAllConfirmation = true
+                            } label: {
+                                Label(localizedAppText("Discard All", de: "Alle verwerfen"), systemImage: "trash")
+                            }
+                            .disabled(viewModel.isProcessing)
+                            .confirmationDialog(
+                                localizedAppText("Discard All Recordings?", de: "Alle Aufnahmen verwerfen?"),
+                                isPresented: $showDiscardAllConfirmation
+                            ) {
+                                Button(localizedAppText("Discard All", de: "Alle verwerfen"), role: .destructive) {
+                                    viewModel.discardAllRecoveries()
+                                }
+                            } message: {
+                                Text(localizedAppText(
+                                    "This will permanently delete all \(viewModel.recoveries.count) recovery recordings.",
+                                    de: "Dadurch werden alle \(viewModel.recoveries.count) Wiederherstellungsaufnahmen dauerhaft gelöscht."
+                                ))
+                            }
+                        }
                     }
                 }
             } else if viewModel.isRecoveryStorageDisabled {

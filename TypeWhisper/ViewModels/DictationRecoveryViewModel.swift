@@ -424,6 +424,12 @@ final class DictationRecoveryViewModel: ObservableObject {
         updateRecoveryURLs(audioRecordingService.recoveryRecordingURLs)
     }
 
+    func discardAllRecoveries() {
+        guard !isProcessing else { return }
+        audioRecordingService.discardAllRecoveryRecordings()
+        updateRecoveryURLs(audioRecordingService.recoveryRecordingURLs)
+    }
+
     func refreshRecoveries() {
         updateRecoveryURLs(audioRecordingService.refreshRecoveryRecordings())
     }
