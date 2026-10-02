@@ -3,7 +3,7 @@ import AppKit
 import TypeWhisperPluginSDK
 
 enum SettingsTab: Hashable {
-    case home, general, appearance, dictation, hotkeys, recorder
+    case home, general, appearance, dictation, hotkeys, recorder, speakers
     case dictationRecovery, fileTranscription, history, statistics, dictionary, snippets, workflows, profiles, prompts, premium, integrations, advanced, license, about
     case plugin(pluginId: String, itemId: String)
     case installedPlugin(pluginId: String)
@@ -52,6 +52,7 @@ struct SettingsView: View {
         case "recovery": return .dictationRecovery
         case "hotkeys": return .hotkeys
         case "file-transcription": return .fileTranscription
+        case "speakers": return .speakers
         case "recorder": return .recorder
         case "history": return .history
         case "statistics": return .statistics
@@ -88,6 +89,7 @@ struct SettingsView: View {
                 badge: nil
             ),
             SettingsDestination(tab: .fileTranscription, title: String(localized: "File Transcription"), systemImage: "doc.text", badge: nil),
+            SettingsDestination(tab: .speakers, title: String(localized: "speakers.page.title"), systemImage: "person.wave.2", badge: nil),
             SettingsDestination(tab: .history, title: String(localized: "History & Sync"), systemImage: "clock.arrow.circlepath", badge: nil),
             SettingsDestination(
                 tab: .statistics,
@@ -302,6 +304,8 @@ struct SettingsView: View {
             DictationRecoveryView()
         case .fileTranscription:
             FileTranscriptionView()
+        case .speakers:
+            SpeakersView()
         case .history:
             HistorySettingsView()
         case .statistics:
@@ -665,7 +669,8 @@ private func settingsDestinationSections(_ destinations: [SettingsDestination]) 
     coreDestinations.append(contentsOf: [
         settingsDestination(destinations, .hotkeys),
         settingsDestination(destinations, .fileTranscription),
-        settingsDestination(destinations, .recorder)
+        settingsDestination(destinations, .recorder),
+        settingsDestination(destinations, .speakers)
     ])
 
     let workspaceDestinations = [

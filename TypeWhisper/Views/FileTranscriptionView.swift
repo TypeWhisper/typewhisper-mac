@@ -411,13 +411,6 @@ struct FileTranscriptionView: View {
     @ViewBuilder
     private func fileActionButtons(_ item: FileTranscriptionViewModel.FileItem) -> some View {
         HStack(spacing: 4) {
-            if item.historyRecordID != nil {
-                Image(systemName: "person.2.fill")
-                    .foregroundStyle(.secondary)
-                    .help(String(localized: "speakers.savedToHistory"))
-                    .accessibilityLabel(String(localized: "speakers.savedToHistory"))
-            }
-
             Button {
                 viewModel.copyText(for: item)
             } label: {
@@ -455,12 +448,6 @@ struct FileTranscriptionView: View {
                 availableLanguages: fileTranscriptionLanguageOptions,
                 hintBehavior: LanguageSelectionHintBehavior(engine: viewModel.resolvedEngine)
             )
-
-            SpeakerDetectionToggle(
-                isOn: $viewModel.detectSpeakers,
-                isDisabled: viewModel.batchState == .processing
-            )
-            .controlSize(.small)
 
             HStack {
                 Button(String(localized: "Add Files...")) {

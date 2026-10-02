@@ -106,6 +106,8 @@ final class ServiceContainer: ObservableObject {
 
     // ViewModels
     let fileTranscriptionViewModel: FileTranscriptionViewModel
+    /// File transcription for the Speakers page: every file gets a speaker transcript.
+    let speakerTranscriptionViewModel: FileTranscriptionViewModel
     let dictationRecoveryViewModel: DictationRecoveryViewModel
     let settingsViewModel: SettingsViewModel
     let dictationViewModel: DictationViewModel
@@ -306,7 +308,13 @@ final class ServiceContainer: ObservableObject {
         watchFolderService.speakerLabeler = { [speakerCoordinator] result, samples in
             try await speakerCoordinator.labelingSpeakers(in: result, samples: samples)
         }
-        fileTranscriptionViewModel.speakerRecordIntake = { [speakerCoordinator] in
+        speakerTranscriptionViewModel = FileTranscriptionViewModel(
+            modelManager: modelManagerService,
+            audioFileService: audioFileService,
+            dictionaryService: dictionaryService,
+            detectsSpeakers: true
+        )
+        speakerTranscriptionViewModel.speakerRecordIntake = { [speakerCoordinator] in
             await speakerCoordinator.addRecording($0)
         }
         audioRecorderViewModel.speakerRecordIntake = { [speakerCoordinator] in
@@ -435,6 +443,7 @@ final class ServiceContainer: ObservableObject {
         modelManagerService.observePluginManager()
         promptProcessingService.observePluginManager()
         fileTranscriptionViewModel.observePluginManager()
+        speakerTranscriptionViewModel.observePluginManager()
         dictationRecoveryViewModel.observePluginManager()
         settingsViewModel.observePluginManager()
         audioRecorderViewModel.observePluginManager()

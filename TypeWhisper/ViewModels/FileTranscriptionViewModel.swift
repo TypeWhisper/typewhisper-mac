@@ -123,10 +123,9 @@ final class FileTranscriptionViewModel: ObservableObject {
     @Published var selectedModel: String? {
         didSet { defaults.set(selectedModel, forKey: UserDefaultsKeys.fileTranscriptionModel) }
     }
-    /// Saves each transcribed file to History and detects its speakers (Premium).
-    @Published var detectSpeakers: Bool {
-        didSet { defaults.set(detectSpeakers, forKey: UserDefaultsKeys.fileTranscriptionDetectSpeakers) }
-    }
+    /// Saves each transcribed file to History and detects its speakers
+    /// (Premium). True for the instance behind the Speakers page.
+    let detectsSpeakers: Bool
     var speakerRecordIntake: SpeakerRecordIntake?
 
     private let modelManager: ModelManagerService
@@ -154,6 +153,7 @@ final class FileTranscriptionViewModel: ObservableObject {
         audioFileService: AudioFileService,
         dictionaryService: DictionaryService,
         defaults: UserDefaults = .standard,
+        detectsSpeakers: Bool = false,
         audioSamplesLoader: AudioSamplesLoader? = nil,
         transcriptionRunner: TranscriptionRunner? = nil,
         engineReadinessChecker: EngineReadinessChecker? = nil,
@@ -164,7 +164,7 @@ final class FileTranscriptionViewModel: ObservableObject {
         self.audioFileService = audioFileService
         self.dictionaryService = dictionaryService
         self.defaults = defaults
-        self.detectSpeakers = defaults.bool(forKey: UserDefaultsKeys.fileTranscriptionDetectSpeakers)
+        self.detectsSpeakers = detectsSpeakers
         self.audioSamplesLoader = audioSamplesLoader ?? { [audioFileService] url, onProgress, isCancelled in
             try await audioFileService.loadAudioSamples(from: url) { progress in
                 guard !isCancelled() else { return false }
@@ -483,7 +483,7 @@ final class FileTranscriptionViewModel: ObservableObject {
 
             let corrected = result.applyingCorrections(using: dictionaryService)
             files[index].result = corrected
-            if detectSpeakers, let speakerRecordIntake {
+            if detectsSpeakers, let speakerRecordIntake {
                 let itemID = files[index].id
                 let recordID = await speakerRecordIntake(SpeakerRecordingInput(
                     result: corrected,

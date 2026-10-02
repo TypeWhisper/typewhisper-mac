@@ -565,6 +565,16 @@ final class HistoryService: ObservableObject {
         return true
     }
 
+    /// The newest records with speaker detection, whatever its state.
+    func speakerRecords(limit: Int) -> [TranscriptionRecord] {
+        var descriptor = FetchDescriptor<TranscriptionRecord>(
+            predicate: #Predicate { $0.speakerTranscriptStateRaw != nil },
+            sortBy: [SortDescriptor(\.timestamp, order: .reverse)]
+        )
+        descriptor.fetchLimit = limit
+        return (try? modelContext.fetch(descriptor)) ?? []
+    }
+
     /// Records that have speaker names, newest first.
     func recordsWithSpeakerNames() -> [TranscriptionRecord] {
         let descriptor = FetchDescriptor<TranscriptionRecord>(

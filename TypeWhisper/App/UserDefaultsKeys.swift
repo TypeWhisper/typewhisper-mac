@@ -161,7 +161,6 @@ enum UserDefaultsKeys {
     static let fileTranscriptionEngine = "fileTranscriptionEngine"
     static let fileTranscriptionModel = "fileTranscriptionModel"
     static let fileTranscriptionLanguage = "fileTranscriptionLanguage"
-    static let fileTranscriptionDetectSpeakers = "fileTranscriptionDetectSpeakers"
 
     // MARK: - Dictation Recovery
     static let dictationRecoveryEngine = "dictationRecoveryEngine"
