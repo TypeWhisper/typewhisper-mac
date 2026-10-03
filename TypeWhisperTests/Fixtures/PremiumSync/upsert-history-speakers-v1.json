@@ -1,0 +1,35 @@
+{
+  "collection" : "history",
+  "deviceId" : "fixture-mac",
+  "historyComponent" : "speakers",
+  "historyGeneration" : "history-v1",
+  "historyPayloadVersion" : 1,
+  "historySpeakers" : {
+    "cleared" : [
+      {
+        "speakerID" : "S3",
+        "updatedAt" : "2026-09-26T14:10:35.000Z"
+      }
+    ],
+    "names" : [
+      {
+        "displayName" : "Anna",
+        "profileID" : "9A8B7C6D-5E4F-4A3B-9C2D-1E0F9A8B7C6D",
+        "speakerID" : "S1",
+        "updatedAt" : "2026-09-26T14:10:30.000Z"
+      },
+      {
+        "displayName" : "Marco",
+        "speakerID" : "S2"
+      }
+    ],
+    "recordID" : "7F0C2D6E-2B1A-4C59-9B55-0A6F3C1D2E4F",
+    "transcriptRevision" : "C1D9A3B2-5E6F-4A7B-8C9D-0E1F2A3B4C5D",
+    "updatedAt" : "2026-09-26T14:10:40.000Z"
+  },
+  "itemId" : "history:7f0c2d6e-2b1a-4c59-9b55-0a6f3c1d2e4f",
+  "kind" : "upsert",
+  "operationId" : "fixture-history-speakers",
+  "schemaVersion" : 1,
+  "updatedAt" : "2026-09-26T14:10:40.000Z"
+}

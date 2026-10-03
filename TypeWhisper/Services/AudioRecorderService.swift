@@ -605,6 +605,9 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         let micDuckingMode: MicDuckingMode
         let transcriptionSamples: [Float]
         let usesFinalizationOverride: Bool
+        /// When the microphone carried the user's own speech; empty unless
+        /// microphone and system audio were both captured.
+        var ownSpeech: [ClosedRange<TimeInterval>] = []
     }
 
     @Published private(set) var isRecording = false
@@ -935,6 +938,15 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
         }
 
         let transcriptionSamples = includeTranscriptionSamples ? getCurrentBuffer() : []
+        let ownSpeech = includeTranscriptionSamples && stoppedMicEnabled && stoppedSystemAudioEnabled
+            ? transcriptionBufferLock.withLock { buffer in
+                SpeakerChannelAttribution.ownSpeechRanges(
+                    microphone: buffer.micSamples,
+                    system: buffer.systemSamples,
+                    sampleRate: Self.transcriptionSampleRate
+                )
+            }
+            : []
 
         micTempURL = nil
         systemTempURL = nil
@@ -963,7 +975,8 @@ final class AudioRecorderService: ObservableObject, @unchecked Sendable {
             trackMode: stoppedTrackMode,
             micDuckingMode: stoppedMicDuckingMode,
             transcriptionSamples: transcriptionSamples,
-            usesFinalizationOverride: usesFinalizationOverride
+            usesFinalizationOverride: usesFinalizationOverride,
+            ownSpeech: ownSpeech
         )
     }
 

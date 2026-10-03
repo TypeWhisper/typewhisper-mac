@@ -267,6 +267,11 @@ struct AudioRecorderView: View {
                         .foregroundStyle(.secondary)
                 }
 
+                SpeakerDetectionToggle(
+                    isOn: $viewModel.detectSpeakers,
+                    isDisabled: isEditingLocked || !viewModel.transcriptionEnabled
+                )
+
                 Toggle(String(localized: "recorder.showLiveTranscriptWhileRecording"), isOn: $viewModel.livePreviewEnabled)
                     .disabled(isEditingLocked || !viewModel.transcriptionEnabled)
 

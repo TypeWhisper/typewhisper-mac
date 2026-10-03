@@ -150,7 +150,8 @@ struct HistoryRecordDetailView: View {
                 Divider()
             }
 
-            if record.audioFileName != nil {
+            // A speaker transcript brings its own player in the workspace.
+            if record.audioFileName != nil, record.speakerTranscriptData == nil {
                 audioSurface
                 Divider()
             }
@@ -246,17 +247,75 @@ struct HistoryRecordDetailView: View {
     @ViewBuilder
     private var audioSurface: some View {
         if let url = viewModel.audioFileURL(for: record) {
-            HistoryAudioPlaybackStrip(
-                audioURL: url,
-                playbackService: viewModel.audioPlaybackService
-            )
+            HStack(spacing: 12) {
+                HistoryAudioPlaybackStrip(
+                    audioURL: url,
+                    playbackService: viewModel.audioPlaybackService
+                )
+                if record.speakerTranscriptState == nil {
+                    detectSpeakersButton
+                }
+            }
             .padding(.horizontal, 14)
             .padding(.vertical, 9)
             .background(.bar)
         }
     }
 
+    @State private var showsSpeakers = true
+
+    private var detectSpeakersButton: some View {
+        let coordinator = ServiceContainer.shared.speakerTranscriptCoordinator
+        let needsPremium = coordinator.startError(for: record) == .premiumRequired
+        return Button {
+            if needsPremium {
+                SettingsNavigationCoordinator.shared.navigate(to: .premium)
+            } else {
+                showsSpeakers = true
+                coordinator.start(recordID: record.id)
+            }
+        } label: {
+            Label(
+                String(localized: "speakers.toggle.title"),
+                systemImage: needsPremium ? "lock" : "person.2.wave.2"
+            )
+        }
+        .buttonStyle(.borderless)
+        .controlSize(.small)
+        .help(String(localized: needsPremium ? "speakers.premium.required" : "speakers.detect.help"))
+    }
+
+    @ViewBuilder
     private var contentSurface: some View {
+        if record.speakerTranscriptState != nil {
+            VStack(spacing: 0) {
+                Picker(String(localized: "speakers.view.title"), selection: $showsSpeakers) {
+                    Text(String(localized: "speakers.view.speakers")).tag(true)
+                    Text(String(localized: "speakers.view.text")).tag(false)
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+                .frame(maxWidth: 240)
+                .padding(.top, 12)
+                .padding(.bottom, 4)
+
+                if showsSpeakers {
+                    HistorySpeakerTranscriptView(
+                        record: record,
+                        audioURL: viewModel.audioFileURL(for: record),
+                        coordinator: ServiceContainer.shared.speakerTranscriptCoordinator,
+                        historyService: ServiceContainer.shared.historyService
+                    )
+                } else {
+                    textSurface
+                }
+            }
+        } else {
+            textSurface
+        }
+    }
+
+    private var textSurface: some View {
         VStack(spacing: 0) {
             if record.wasPostProcessed {
                 Picker(String(localized: "Text Version"), selection: $viewModel.detailViewMode) {

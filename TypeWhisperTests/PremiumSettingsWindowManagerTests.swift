@@ -23,6 +23,10 @@ final class PremiumSettingsWindowManagerTests: XCTestCase {
             cloudSync: {
                 calls[.cloudSync, default: 0] += 1
                 return self.definition(for: .cloudSync)
+            },
+            speakerWorkspace: {
+                calls[.speakerWorkspace, default: 0] += 1
+                return self.definition(for: .speakerWorkspace)
             }
         )
         let manager = PremiumSettingsWindowManager(
@@ -138,7 +142,8 @@ final class PremiumSettingsWindowManagerTests: XCTestCase {
             access: factory,
             calendarMeeting: factory,
             correctionLearning: factory,
-            cloudSync: factory
+            cloudSync: factory,
+            speakerWorkspace: factory
         )
     }
 
@@ -155,6 +160,8 @@ final class PremiumSettingsWindowManagerTests: XCTestCase {
             sizes = (CGSize(width: 580, height: 560), CGSize(width: 520, height: 460))
         case .cloudSync:
             sizes = (CGSize(width: 640, height: 600), CGSize(width: 560, height: 500))
+        case .speakerWorkspace:
+            sizes = (CGSize(width: 580, height: 520), CGSize(width: 520, height: 420))
         }
         return PremiumSettingsWindowDefinition(
             title: destination.rawValue,

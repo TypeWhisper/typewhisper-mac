@@ -1,0 +1,42 @@
+{
+  "collection" : "history",
+  "deviceId" : "fixture-iphone",
+  "historyComponent" : "transcript",
+  "historyGeneration" : "history-v1",
+  "historyPayloadVersion" : 1,
+  "historyTranscript" : {
+    "recordID" : "7F0C2D6E-2B1A-4C59-9B55-0A6F3C1D2E4F",
+    "requestedSpeakerCount" : 2,
+    "revision" : "C1D9A3B2-5E6F-4A7B-8C9D-0E1F2A3B4C5D",
+    "segments" : [
+      {
+        "end" : 4.25,
+        "speakerConfidence" : 0.75,
+        "speakerID" : "S1",
+        "start" : 0,
+        "text" : "Let's start with the budget."
+      },
+      {
+        "end" : 9.75,
+        "speakerID" : "S2",
+        "start" : 4.5,
+        "text" : "I have the numbers here."
+      },
+      {
+        "end" : 11.5,
+        "start" : 10,
+        "text" : "Mm-hmm."
+      }
+    ],
+    "source" : {
+      "engine" : "fluidaudio-offline-diarizer",
+      "kind" : "local"
+    },
+    "updatedAt" : "2026-09-26T14:02:11.000Z"
+  },
+  "itemId" : "history:7f0c2d6e-2b1a-4c59-9b55-0a6f3c1d2e4f",
+  "kind" : "upsert",
+  "operationId" : "fixture-history-transcript",
+  "schemaVersion" : 1,
+  "updatedAt" : "2026-09-26T14:02:11.000Z"
+}

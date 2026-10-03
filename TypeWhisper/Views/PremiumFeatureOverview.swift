@@ -43,6 +43,7 @@ enum PremiumFeatureID: String, CaseIterable, Identifiable, Sendable {
     case calendarMeeting
     case correctionLearning
     case cloudSync
+    case speakerWorkspace
 
     var id: String { rawValue }
 }
@@ -124,6 +125,11 @@ struct PremiumFeatureAccessSnapshot: Equatable, Sendable {
                     : .premiumAccount
             }
             return isSignedIn ? .available : .signIn
+        case .speakerWorkspace:
+            return SpeakerWorkspacePremiumAccess.isGranted(
+                hasCommercialLicense: hasCommercialLicense,
+                hasPremiumEntitlement: hasPremiumEntitlement
+            ) ? .available : .commercialOrPremiumAccount
         }
     }
 
@@ -138,6 +144,8 @@ struct PremiumFeatureAccessSnapshot: Equatable, Sendable {
             return .openSettings(.correctionLearning)
         case .cloudSync:
             return .openSettings(.cloudSync)
+        case .speakerWorkspace:
+            return .openSettings(.speakerWorkspace)
         }
     }
 }
@@ -281,6 +289,18 @@ struct PremiumLockedFeatureOverview: View {
                     statusTone: .secondary,
                     previewLines: [String(localized: "premium.hub.sync.preview")]
                 )
+            ),
+            AnyView(
+                PremiumFeatureCard(
+                    feature: .speakerWorkspace,
+                    icon: "person.2.wave.2",
+                    accent: .purple,
+                    title: String(localized: "premium.hub.speakers.title"),
+                    description: String(localized: "premium.hub.speakers.description"),
+                    status: String(localized: "premium.hub.status.premium"),
+                    statusTone: .secondary,
+                    previewLines: [String(localized: "premium.hub.speakers.preview")]
+                )
             )
         ]
     }
@@ -333,6 +353,8 @@ struct PremiumActiveFeatureOverview: View {
         self.windowPresenter = windowPresenter
     }
 
+    @ObservedObject private var speakerCoordinator = ServiceContainer.shared.speakerTranscriptCoordinator
+
     private var access: PremiumFeatureAccessSnapshot {
         PremiumFeatureAccessSnapshot(
             hasCommercialLicense: license.hasCommercialLicense,
@@ -376,6 +398,7 @@ struct PremiumActiveFeatureOverview: View {
             case .calendarMeeting: AnyView(calendarCard)
             case .correctionLearning: AnyView(learningCard)
             case .cloudSync: AnyView(syncCard)
+            case .speakerWorkspace: AnyView(speakerCard)
             }
         }
     }
@@ -423,6 +446,30 @@ struct PremiumActiveFeatureOverview: View {
             status: syncStatus,
             statusTone: syncStatusTone,
             previewLines: syncPreviewLines,
+            actionTitle: actionTitle(for: action),
+            action: { perform(action) }
+        )
+    }
+
+    private var speakerCard: some View {
+        let action = access.action(for: .speakerWorkspace)
+        let isAvailable = access.requirement(for: .speakerWorkspace) == .available
+        let modelsInstalled = speakerCoordinator.areModelsInstalled
+        return PremiumFeatureRow(
+            feature: .speakerWorkspace,
+            icon: "person.2.wave.2",
+            accent: .purple,
+            title: String(localized: "premium.hub.speakers.title"),
+            description: String(localized: "premium.hub.speakers.description"),
+            status: isAvailable
+                ? String(localized: modelsInstalled ? "premium.hub.status.on" : "premium.hub.speakers.modelMissing")
+                : requirementStatus(access.requirement(for: .speakerWorkspace)),
+            statusTone: isAvailable ? (modelsInstalled ? .success : .secondary) : .warning,
+            previewLines: [String.localizedStringWithFormat(
+                String(localized: "premium.hub.speakers.summaryFormat"),
+                Int64(ServiceContainer.shared.historyService.speakerRecords(limit: 999).count),
+                Int64(ServiceContainer.shared.speakerVoiceProfileService.store.profiles.count)
+            )],
             actionTitle: actionTitle(for: action),
             action: { perform(action) }
         )

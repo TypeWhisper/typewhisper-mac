@@ -1,3 +1,4 @@
+import AVFoundation
 import Foundation
 import TypeWhisperPluginSDK
 
@@ -208,6 +209,101 @@ extension ServiceContainer {
            let selectedRecord = historyService.allRecords().first(where: { $0.processingState == .ready }) {
             historyViewModel.requestRecordSelection([selectedRecord.id])
         }
+        if AppConstants.screenshotState == "history-speakers" {
+            seedScreenshotSpeakerRecord(languageCode: languageCode, timestamp: referenceDate)
+        }
+    }
+
+    /// A meeting recording with a speaker transcript, selected in History.
+    /// `--screenshot-speaker-audio <file>` uses that recording's audio
+    /// instead of a generated tone.
+    private func seedScreenshotSpeakerRecord(languageCode: String, timestamp: Date) {
+        let isGerman = languageCode == "de"
+        let lines: [(speaker: String, start: Double, end: Double, text: String)] = isGerman ? [
+            ("S1", 0.0, 7.4, "Guten Morgen zusammen. Ich schlage vor, wir beginnen mit dem Budget für das nächste Quartal."),
+            ("S1", 9.6, 13.8, "Danach gehen wir die offenen Punkte durch."),
+            ("S2", 14.2, 21.0, "Gerne. Die Kosten für die Server sind um zwölf Prozent gestiegen, dafür sparen wir bei den Lizenzen."),
+            ("S1", 21.4, 26.9, "Können wir die Einsparungen genauer beziffern, bevor wir etwas entscheiden?"),
+            ("S2", 27.3, 33.5, "Ja, das sind ungefähr viertausend Euro im Monat. Ich schicke die Aufstellung nach dem Termin."),
+            ("S3", 34.0, 40.8, "Eine Frage dazu: Sind die Kosten für den Umzug der Datenbank schon enthalten?"),
+            ("S2", 41.1, 44.6, "Noch nicht, die kommen im Mai dazu."),
+            ("S1", 45.2, 51.0, "Gut. Dann weiter mit dem Zeitplan für die neue Version. Wie weit ist die Entwicklung?"),
+            ("S3", 51.6, 60.3, "Wir liegen eine Woche hinter dem Plan, weil die Tests länger gedauert haben."),
+            ("S3", 62.4, 68.0, "Ende des Monats sollten wir aber fertig sein."),
+            ("S1", 68.5, 72.0, "Danke, dann halten wir das so fest."),
+        ] : [
+            ("S1", 0.0, 7.4, "Good morning, everyone. I suggest we start with the budget for next quarter."),
+            ("S1", 9.6, 13.8, "After that we go through the open items."),
+            ("S2", 14.2, 21.0, "Sure. Server costs went up by twelve percent, but we save on licenses."),
+            ("S1", 21.4, 26.9, "Can we put a number on those savings before we decide anything?"),
+            ("S2", 27.3, 33.5, "Yes, that is about four thousand euros a month. I will send the breakdown after the meeting."),
+            ("S3", 34.0, 40.8, "One question: does that already include the cost of moving the database?"),
+            ("S2", 41.1, 44.6, "Not yet, that comes on top in May."),
+            ("S1", 45.2, 51.0, "Good. Then on to the schedule for the new version. How far along is development?"),
+            ("S3", 51.6, 60.3, "We are a week behind plan because testing took longer."),
+            ("S3", 62.4, 68.0, "We should still be done by the end of the month."),
+            ("S1", 68.5, 72.0, "Thanks, then let us record it that way."),
+        ]
+        let duration = 72.0
+        let recordID = UUID()
+
+        var samples: [Float] = []
+        let arguments = ProcessInfo.processInfo.arguments
+        if let index = arguments.firstIndex(of: "--screenshot-speaker-audio"),
+           arguments.indices.contains(index + 1),
+           let file = try? AVAudioFile(forReading: URL(fileURLWithPath: arguments[index + 1])),
+           let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: AVAudioFrameCount(file.length)),
+           (try? file.read(into: buffer)) != nil,
+           file.processingFormat.sampleRate == SpeakerAudioWriter.sampleRate,
+           let channel = buffer.floatChannelData?[0] {
+            samples = Array(UnsafeBufferPointer(start: channel, count: Int(buffer.frameLength)))
+        }
+        if samples.isEmpty {
+            samples = (0..<Int(duration * SpeakerAudioWriter.sampleRate)).map {
+                Float(sin(Double($0) * 0.06)) * 0.05
+            }
+        }
+        guard (try? SpeakerAudioWriter.writeAAC(
+            samples: samples,
+            to: historyService.speakerAudioFileURL(forRecordID: recordID)
+        )) != nil else { return }
+
+        let transcript = SpeakerTranscript(
+            source: .localDiarizer,
+            segments: lines.map {
+                SpeakerTranscriptSegment(text: $0.text, start: $0.start, end: $0.end, speakerID: $0.speaker, speakerConfidence: 1)
+            }
+        )
+        var location = 0
+        let timedText = lines.map { line in
+            let length = (line.text as NSString).length
+            defer { location += length + 1 }
+            return TimedTextEntry(text: line.text, start: line.start, end: line.end, utf16Location: location, utf16Length: length)
+        }
+        guard historyService.addSpeakerRecord(
+            id: recordID,
+            timestamp: timestamp,
+            text: lines.map(\.text).joined(separator: " "),
+            title: isGerman ? "Budgetrunde.m4a" : "Budget meeting.m4a",
+            source: .recorder,
+            durationSeconds: duration,
+            language: languageCode,
+            engineUsed: "parakeet",
+            modelUsed: "Parakeet TDT 0.6B v3",
+            timedText: timedText,
+            granularity: .segment,
+            transcript: transcript
+        ) else { return }
+        historyService.setSpeakerName("Anna", for: "S1", inRecordID: recordID)
+        historyService.setSpeakerName("Marco", for: "S2", inRecordID: recordID)
+        // Anna has a voice profile; the third speaker is recognized as Lena and waits for confirmation.
+        let voices = speakerVoiceProfileService
+        if voices.store.profiles.isEmpty {
+            voices.store.enroll(name: "Lena", embedding: [0, 0, 1], seconds: 95)
+        }
+        voices.recordVoices(["S1": [1, 0, 0], "S2": [0, 1, 0], "S3": [0.05, 0, 1]], of: transcript, recordID: recordID)
+        voices.enroll("S1", inRecordID: recordID)
+        historyViewModel.requestRecordSelection([recordID])
     }
 
     private func seedScreenshotPluginRegistry() {

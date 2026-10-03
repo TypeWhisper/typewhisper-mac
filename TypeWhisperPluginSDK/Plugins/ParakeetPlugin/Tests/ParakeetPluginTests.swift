@@ -92,6 +92,55 @@ final class ParakeetPluginTests: XCTestCase {
         XCTAssertTrue(result.text.hasSuffix("cutting a release?"), result.text)
     }
 
+    /// Opt-in: any 16 kHz mono WAV in `TYPEWHISPER_PARAKEET_WORD_TIMING_WAV`
+    /// and an installed Parakeet v3 model.
+    func testInstalledV3ModelReportsWordTimingsToTheHostCollector() async throws {
+        guard let path = ProcessInfo.processInfo.environment["TYPEWHISPER_PARAKEET_WORD_TIMING_WAV"] else {
+            throw XCTSkip("Set TYPEWHISPER_PARAKEET_WORD_TIMING_WAV and install Parakeet v3 to run Core ML inference")
+        }
+        let url = URL(fileURLWithPath: path)
+        let file = try AVAudioFile(forReading: url)
+        XCTAssertEqual(file.processingFormat.sampleRate, 16_000)
+        let buffer = try XCTUnwrap(AVAudioPCMBuffer(
+            pcmFormat: file.processingFormat,
+            frameCapacity: AVAudioFrameCount(file.length)
+        ))
+        try file.read(into: buffer)
+        let channel = try XCTUnwrap(buffer.floatChannelData?[0])
+        let samples = Array(UnsafeBufferPointer(start: channel, count: Int(buffer.frameLength)))
+        let audio = AudioData(samples: samples, wavData: try Data(contentsOf: url), duration: Double(samples.count) / 16_000)
+
+        let host = try PluginTestHostServices(defaults: [
+            "loadedModel": "parakeet-tdt-0.6b-v3",
+            "vocabularyBoostingEnabled": false,
+        ])
+        let plugin = makePlugin()
+        plugin.activate(host: host)
+        defer { plugin.deactivate() }
+        await plugin.restoreLoadedModel(allowDownloads: false, passively: true)
+        guard plugin.isConfigured else {
+            XCTFail("Installed Parakeet v3 failed to load: \(plugin.modelState)")
+            return
+        }
+
+        let collector = PluginWordTimingCollector()
+        let result = try await PluginWordTimings.$collector.withValue(collector) {
+            try await plugin.transcribe(audio: audio, language: nil, translate: false, prompt: nil)
+        }
+        let words = collector.words
+
+        XCTAssertFalse(words.isEmpty)
+        XCTAssertEqual(words.map(\.text).joined(separator: " "), result.segments.map(\.text).joined(separator: " "))
+        XCTAssertTrue(zip(words, words.dropFirst()).allSatisfy { $0.start <= $1.start })
+        XCTAssertTrue(words.allSatisfy { $0.end >= $0.start && $0.end <= audio.duration + 0.5 })
+        print("Parakeet reported \(words.count) words in \(result.segments.count) segments")
+        if let dump = ProcessInfo.processInfo.environment["TYPEWHISPER_PARAKEET_WORD_TIMING_DUMP"] {
+            let lines = result.segments.map { "S\t\($0.start)\t\($0.end)\t\($0.text)" }
+                + words.map { "W\t\($0.start)\t\($0.end)\t\($0.text)" }
+            try lines.joined(separator: "\n").write(toFile: dump, atomically: true, encoding: .utf8)
+        }
+    }
+
     func testInstalledV3ModelPreservesTextWithUnrelatedDictionaryTerms() async throws {
         let audio = try regressionAudio()
         let host = try PluginTestHostServices(defaults: [

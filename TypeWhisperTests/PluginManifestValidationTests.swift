@@ -106,7 +106,7 @@ final class PluginManifestValidationTests: XCTestCase {
     func testSourceFootageProgressPluginsDeclareCapability() throws {
         let manifestExpectations = [
             ("TypeWhisperPluginSDK/Plugins/WhisperKitPlugin/manifest.json", "1.7.0"),
-            ("TypeWhisperPluginSDK/Plugins/ParakeetPlugin/manifest.json", "1.7.0"),
+            ("TypeWhisperPluginSDK/Plugins/ParakeetPlugin/manifest.json", "1.8.0"),
             ("TypeWhisperPluginSDK/Plugins/SonioxPlugin/manifest.json", "1.7.0"),
         ]
 
