@@ -302,6 +302,28 @@ private final class RecordingPremiumICloudBridge: PremiumICloudBridging, @unchec
 
     func removeDevice(_ deviceID: String) async throws {
         lock.withLock { storedRemovedDeviceIDs.append(deviceID) }
+        if let removalGate {
+            await removalGate.wait()
+        }
+    }
+
+    /// Holds removals until opened, to request a sync while one is running.
+    var removalGate: RemovalGate?
+}
+
+private actor RemovalGate {
+    private var isOpen = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async {
+        guard !isOpen else { return }
+        await withCheckedContinuation { waiters.append($0) }
+    }
+
+    func open() {
+        isOpen = true
+        waiters.forEach { $0.resume() }
+        waiters.removeAll()
     }
 }
 
@@ -1046,31 +1068,56 @@ final class CloudFolderSyncTests: XCTestCase {
     func testDeviceRemovalRemovesTheRecordsOfOneInstallationOnly() throws {
         let package = try TestSupport.makeTemporaryDirectory(prefix: "PremiumSyncDeviceRemoval")
         defer { TestSupport.remove(package) }
+        try Self.writeDeviceRecord("phone-new", origin: "phone-origin", in: package)
+        try Self.writeDeviceRecord("phone-old", origin: " phone-origin ", in: package)
+        try Self.writeDeviceRecord("ipad", origin: "ipad-origin", in: package)
+        try Self.writeDeviceRecord("mac", origin: nil, in: package)
+
+        try PremiumSyncDeviceRemoval.removeRecords(of: "phone-new", inPackages: [package])
+        XCTAssertEqual(try Self.deviceRecordNames(in: package), ["ipad.json", "mac.json"])
+
+        try PremiumSyncDeviceRemoval.removeRecords(of: "mac", inPackages: [package])
+        XCTAssertEqual(try Self.deviceRecordNames(in: package), ["ipad.json"])
+
+        XCTAssertThrowsError(try PremiumSyncDeviceRemoval.removeRecords(of: "../ipad", inPackages: [package]))
+        // An unreadable or missing record fails instead of reporting a removal.
+        XCTAssertThrowsError(try PremiumSyncDeviceRemoval.removeRecords(of: "unknown", inPackages: [package])) {
+            XCTAssertEqual($0 as? PremiumSyncDeviceRemoval.Failure, .recordUnreadable)
+        }
+        XCTAssertEqual(try Self.deviceRecordNames(in: package), ["ipad.json"])
+    }
+
+    func testDeviceRemovalUsesTheInstallationFromEitherSide() throws {
+        let mirror = try TestSupport.makeTemporaryDirectory(prefix: "PremiumSyncDeviceRemovalMirror")
+        let cloud = try TestSupport.makeTemporaryDirectory(prefix: "PremiumSyncDeviceRemovalCloud")
+        defer {
+            TestSupport.remove(mirror)
+            TestSupport.remove(cloud)
+        }
+        // The record is only in the mirror; iCloud has an older record of the same installation.
+        try Self.writeDeviceRecord("phone-new", origin: "phone-origin", in: mirror)
+        try Self.writeDeviceRecord("phone-old", origin: "phone-origin", in: cloud)
+        try Self.writeDeviceRecord("mac", origin: "mac-origin", in: cloud)
+
+        try PremiumSyncDeviceRemoval.removeRecords(of: "phone-new", inPackages: [mirror, cloud])
+
+        XCTAssertEqual(try Self.deviceRecordNames(in: mirror), [])
+        XCTAssertEqual(try Self.deviceRecordNames(in: cloud), ["mac.json"])
+    }
+
+    private static func writeDeviceRecord(_ deviceID: String, origin: String?, in package: URL) throws {
         let devices = package.appendingPathComponent("devices", isDirectory: true)
         try FileManager.default.createDirectory(at: devices, withIntermediateDirectories: true)
-        func write(_ deviceID: String, origin: String?) throws {
-            var record: [String: Any] = ["deviceId": deviceID, "platform": "iOS", "appVersion": "1.2"]
-            if let origin { record["historyOriginDeviceID"] = origin }
-            try JSONSerialization.data(withJSONObject: record)
-                .write(to: devices.appendingPathComponent("\(deviceID).json"))
-        }
-        try write("phone-new", origin: "phone-origin")
-        try write("phone-old", origin: " phone-origin ")
-        try write("ipad", origin: "ipad-origin")
-        try write("mac", origin: nil)
-        func remaining() throws -> Set<String> {
-            Set(try FileManager.default.contentsOfDirectory(atPath: devices.path))
-        }
+        var record: [String: Any] = ["deviceId": deviceID, "platform": "iOS", "appVersion": "1.2"]
+        if let origin { record["historyOriginDeviceID"] = origin }
+        try JSONSerialization.data(withJSONObject: record)
+            .write(to: devices.appendingPathComponent("\(deviceID).json"))
+    }
 
-        try PremiumSyncDeviceRemoval.removeRecords(of: "phone-new", inPackage: package)
-        XCTAssertEqual(try remaining(), ["ipad.json", "mac.json"])
-
-        try PremiumSyncDeviceRemoval.removeRecords(of: "mac", inPackage: package)
-        XCTAssertEqual(try remaining(), ["ipad.json"])
-
-        XCTAssertThrowsError(try PremiumSyncDeviceRemoval.removeRecords(of: "../ipad", inPackage: package))
-        XCTAssertNoThrow(try PremiumSyncDeviceRemoval.removeRecords(of: "unknown", inPackage: package))
-        XCTAssertEqual(try remaining(), ["ipad.json"])
+    private static func deviceRecordNames(in package: URL) throws -> Set<String> {
+        Set(try FileManager.default.contentsOfDirectory(
+            atPath: package.appendingPathComponent("devices", isDirectory: true).path
+        ))
     }
 
     @MainActor
@@ -1131,6 +1178,21 @@ final class CloudFolderSyncTests: XCTestCase {
         XCTAssertEqual(bridge.removedDeviceIDs, ["phone"])
         XCTAssertNil(controller.errorMessage)
         XCTAssertFalse(controller.isSyncing)
+
+        // A sync requested while a removal runs is not lost.
+        let gate = RemovalGate()
+        bridge.removalGate = gate
+        let synchronizationsBefore = bridge.synchronizeCount
+        let removal = Task { await controller.removeDevice(phone) }
+        while bridge.removedDeviceIDs.count < 2 { await Task.yield() }
+        await controller.syncNow()
+        XCTAssertEqual(bridge.synchronizeCount, synchronizationsBefore)
+        await gate.open()
+        await removal.value
+        for _ in 0..<200 where bridge.synchronizeCount == synchronizationsBefore {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertGreaterThan(bridge.synchronizeCount, synchronizationsBefore)
     }
 
     @MainActor

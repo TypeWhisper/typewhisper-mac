@@ -895,7 +895,7 @@ final class CloudFolderSyncController: ObservableObject {
         let removalMode = mode
         isSyncing = true
         errorMessage = nil
-        defer { isSyncing = false }
+        defer { finishSyncWork() }
         do {
             if removalMode == .automaticICloud {
                 try await automaticICloudBridge.removeDevice(device.deviceId)
@@ -906,7 +906,7 @@ final class CloudFolderSyncController: ObservableObject {
                 try await Task.detached(priority: .utility) {
                     try PremiumSyncDeviceRemoval.removeRecords(
                         of: deviceID,
-                        inPackage: CloudFolderSyncEngine.packageURL(for: folderURL)
+                        inPackages: [CloudFolderSyncEngine.packageURL(for: folderURL)]
                     )
                 }.value
             }
@@ -919,6 +919,24 @@ final class CloudFolderSyncController: ObservableObject {
             statusMessage = String(localized: "Device removed from the sync list. Synced data was kept.")
         } catch {
             errorMessage = error.localizedDescription
+        }
+    }
+
+    /// Ends a sync or a device removal and runs what was requested meanwhile:
+    /// local edits and folder changes only set a flag while one is running.
+    private func finishSyncWork() {
+        isSyncing = false
+        if needsResync {
+            needsResync = false
+            needsChangeCheck = false
+            Task { @MainActor [weak self] in
+                await self?.syncNow()
+            }
+        } else if needsChangeCheck {
+            needsChangeCheck = false
+            Task { @MainActor [weak self] in
+                await self?.syncIfNeeded()
+            }
         }
     }
 
@@ -949,19 +967,7 @@ final class CloudFolderSyncController: ObservableObject {
             if accessed {
                 folderURL.stopAccessingSecurityScopedResource()
             }
-            isSyncing = false
-            if needsResync {
-                needsResync = false
-                needsChangeCheck = false
-                Task { @MainActor [weak self] in
-                    await self?.syncNow()
-                }
-            } else if needsChangeCheck {
-                needsChangeCheck = false
-                Task { @MainActor [weak self] in
-                    await self?.syncIfNeeded()
-                }
-            }
+            finishSyncWork()
         }
 
         do {

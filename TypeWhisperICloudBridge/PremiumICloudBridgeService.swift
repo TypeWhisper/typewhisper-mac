@@ -39,15 +39,15 @@ final class PremiumICloudBridgeService: NSObject, PremiumICloudBridgeXPCProtocol
         reply(operationLock.withLock {
             do {
                 let roots = try bridgeRoots()
-                for root in [roots.local, roots.remote] {
-                    try PremiumSyncDeviceRemoval.removeRecords(
-                        of: deviceID,
-                        inPackage: root.appendingPathComponent(
+                try PremiumSyncDeviceRemoval.removeRecords(
+                    of: deviceID,
+                    inPackages: [roots.local, roots.remote].map {
+                        $0.appendingPathComponent(
                             PremiumICloudBridgeConstants.packageDirectoryName,
                             isDirectory: true
                         )
-                    )
-                }
+                    }
+                )
                 return nil
             } catch {
                 return error.localizedDescription

@@ -317,17 +317,26 @@ enum PremiumICloudBridgeFileMirror {
 /// Removes a device from the sync list: its record and the older records of
 /// the same installation, which share its history origin. Synced entries stay.
 enum PremiumSyncDeviceRemoval {
-    private struct Record: Decodable {
-        let deviceId: String
-        let historyOriginDeviceID: String?
+    struct Installation: Equatable {
+        let deviceID: String
+        let historyOrigin: String?
     }
 
     enum Failure: LocalizedError, Equatable {
         case invalidIdentifier
+        case recordUnreadable
 
         var errorDescription: String? {
-            "The synchronized device identifier is invalid."
+            switch self {
+            case .invalidIdentifier: "The synchronized device identifier is invalid."
+            case .recordUnreadable: "The device record could not be read. Try again after the next sync."
+            }
         }
+    }
+
+    private struct Record: Decodable {
+        let deviceId: String
+        let historyOriginDeviceID: String?
     }
 
     static func isSafeIdentifier(_ deviceID: String) -> Bool {
@@ -337,55 +346,110 @@ enum PremiumSyncDeviceRemoval {
             && !deviceID.contains("\\")
     }
 
-    /// - Parameter packageURL: The `typewhisper-sync` folder.
+    /// Removes the device from every package, for example the bridge's mirror
+    /// and the iCloud container. The installation is read once from the first
+    /// readable record, so a copy missing on one side still removes the other
+    /// side's older records of the same installation.
+    /// - Parameter packages: `typewhisper-sync` folders.
     static func removeRecords(
         of deviceID: String,
-        inPackage packageURL: URL,
+        inPackages packages: [URL],
         fileManager: FileManager = .default
     ) throws {
-        guard isSafeIdentifier(deviceID) else { throw Failure.invalidIdentifier }
-        let devicesURL = packageURL.appendingPathComponent("devices", isDirectory: true)
-        guard fileManager.fileExists(atPath: devicesURL.path) else { return }
-
-        var accessorError: (any Error)?
-        var coordinationError: NSError?
-        NSFileCoordinator(filePresenter: nil).coordinate(
-            writingItemAt: devicesURL,
-            options: .forMerging,
-            error: &coordinationError
-        ) { coordinatedDevicesURL in
-            do {
-                let targetURL = coordinatedDevicesURL.appendingPathComponent("\(deviceID).json")
-                guard let target = record(at: targetURL) else { return }
-                let targetOrigin = normalized(target.historyOriginDeviceID)
-                let files = (try? fileManager.contentsOfDirectory(
-                    at: coordinatedDevicesURL,
-                    includingPropertiesForKeys: nil,
-                    options: [.skipsHiddenFiles]
-                )) ?? []
-                for file in files where file.pathExtension == "json" {
-                    guard let candidate = record(at: file) else { continue }
-                    let matches = targetOrigin.map { normalized(candidate.historyOriginDeviceID) == $0 }
-                        ?? (candidate.deviceId == target.deviceId)
-                    if matches {
-                        try fileManager.removeItem(at: file)
-                    }
-                }
-            } catch {
-                accessorError = error
-            }
+        let installation = try installation(of: deviceID, inPackages: packages, fileManager: fileManager)
+        for package in packages {
+            try removeRecords(of: installation, inPackage: package, fileManager: fileManager)
         }
-        if let accessorError { throw accessorError }
-        if let coordinationError { throw coordinationError }
     }
 
-    private static func record(at file: URL) -> Record? {
-        guard let data = try? Data(contentsOf: file),
+    static func installation(
+        of deviceID: String,
+        inPackages packages: [URL],
+        fileManager: FileManager = .default
+    ) throws -> Installation {
+        guard isSafeIdentifier(deviceID) else { throw Failure.invalidIdentifier }
+        for package in packages {
+            let file = devicesURL(in: package).appendingPathComponent("\(deviceID).json")
+            guard fileManager.fileExists(atPath: file.path),
+                  let record = record(at: file, fileManager: fileManager) else {
+                continue
+            }
+            return Installation(deviceID: record.deviceId, historyOrigin: normalized(record.historyOriginDeviceID))
+        }
+        throw Failure.recordUnreadable
+    }
+
+    static func removeRecords(
+        of installation: Installation,
+        inPackage package: URL,
+        fileManager: FileManager = .default
+    ) throws {
+        let devicesURL = devicesURL(in: package)
+        guard let files = try? fileManager.contentsOfDirectory(
+            at: devicesURL,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        ) else {
+            return
+        }
+        let matching = files.filter { file in
+            guard file.pathExtension == "json" else { return false }
+            if file.deletingPathExtension().lastPathComponent == installation.deviceID { return true }
+            guard let origin = installation.historyOrigin,
+                  let candidate = record(at: file, fileManager: fileManager) else {
+                return false
+            }
+            return normalized(candidate.historyOriginDeviceID) == origin
+        }
+        for file in matching {
+            try delete(file, fileManager: fileManager)
+        }
+    }
+
+    private static func devicesURL(in package: URL) -> URL {
+        package.appendingPathComponent("devices", isDirectory: true)
+    }
+
+    /// A record in iCloud may not be downloaded yet; a coordinated read downloads it.
+    private static func record(at file: URL, fileManager: FileManager) -> Record? {
+        if fileManager.isUbiquitousItem(at: file) {
+            try? fileManager.startDownloadingUbiquitousItem(at: file)
+        }
+        var data: Data?
+        var coordinationError: NSError?
+        NSFileCoordinator(filePresenter: nil).coordinate(
+            readingItemAt: file,
+            options: [],
+            error: &coordinationError
+        ) { coordinatedFile in
+            data = try? Data(contentsOf: coordinatedFile)
+        }
+        guard coordinationError == nil,
+              let data,
               let record = try? JSONDecoder().decode(Record.self, from: data),
               file.deletingPathExtension().lastPathComponent == record.deviceId else {
             return nil
         }
         return record
+    }
+
+    private static func delete(_ file: URL, fileManager: FileManager) throws {
+        var removalError: (any Error)?
+        var coordinationError: NSError?
+        NSFileCoordinator(filePresenter: nil).coordinate(
+            writingItemAt: file,
+            options: .forDeleting,
+            error: &coordinationError
+        ) { coordinatedFile in
+            do {
+                try fileManager.removeItem(at: coordinatedFile)
+            } catch let error as CocoaError where error.code == .fileNoSuchFile {
+                // Already gone, which is the requested outcome.
+            } catch {
+                removalError = error
+            }
+        }
+        if let error = coordinationError ?? removalError { throw error }
     }
 
     private static func normalized(_ value: String?) -> String? {
