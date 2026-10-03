@@ -523,7 +523,7 @@ final class HistoryService: ObservableObject {
         // A new run replaces the names too, even when it carries none over.
         if record.speakerNamesData != nil || names != nil { record.speakerNamesUpdatedAt = now }
         record.speakerTranscript = transcript
-        record.speakerNames = names.flatMap { $0.applies(to: transcript) ? $0 : nil }
+        record.speakerNames = names.flatMap { $0.applies(to: transcript) ? $0.stamped(against: nil, at: now) : nil }
         record.speakerTranscriptState = .ready
         record.speakerTranscriptUpdatedAt = now
         save()
@@ -548,8 +548,14 @@ final class HistoryService: ObservableObject {
         let movedNames = names?.renamingSpeakers(newSpeakerIDs)
         let now = Date()
         if record.speakerTranscript != renumbered { record.speakerTranscriptUpdatedAt = now }
-        let newNames = movedNames.flatMap { $0.entries.isEmpty ? nil : $0 }
-        if record.speakerNames != newNames { record.speakerNamesUpdatedAt = now }
+        // Names moved to renumbered speakers are new names there; the old
+        // speakers' names are recorded as removed so other devices drop them.
+        let newNames = movedNames
+            .map { $0.stamped(against: record.speakerNames, at: now) }
+            .flatMap { $0.isEmpty ? nil : $0 }
+        if !(newNames?.hasSameNames(as: record.speakerNames) ?? (record.speakerNames == nil)) {
+            record.speakerNamesUpdatedAt = now
+        }
         record.speakerTranscript = renumbered
         record.speakerNames = newNames
         if updatesText {
@@ -589,15 +595,17 @@ final class HistoryService: ObservableObject {
     /// Renames the speakers linked to a voice profile in every recording.
     func renameSpeakers(linkedTo profileID: UUID, to name: String) {
         var changed = false
+        let now = Date()
         for record in recordsWithSpeakerNames() {
-            guard var names = record.speakerNames else { continue }
+            guard let original = record.speakerNames else { continue }
+            var names = original
             for entry in names.entries where entry.profileID == profileID && entry.displayName != name {
                 names.setName(name, for: entry.speakerID, profileID: profileID, isSuggestion: entry.isSuggestion == true)
                 changed = true
                 // A renamed suggestion is still only a suggestion and is not synced.
-                if entry.isSuggestion != true { record.speakerNamesUpdatedAt = Date() }
+                if entry.isSuggestion != true { record.speakerNamesUpdatedAt = now }
             }
-            record.speakerNames = names
+            record.speakerNames = names.stamped(against: original, at: now)
         }
         guard changed else { return }
         save()
@@ -613,13 +621,17 @@ final class HistoryService: ObservableObject {
     ) {
         guard let record = record(withID: id), let transcript = record.speakerTranscript else { return }
         var names = record.speakerNames ?? SpeakerNameTable(transcriptRevision: transcript.revision)
-        let confirmedBefore = names.entries.filter { $0.isSuggestion != true }
+        let confirmedBefore = names.confirmedEntries
         names.setName(name, for: speakerID, profileID: profileID, isSuggestion: isSuggestion)
+        let now = Date()
+        let stamped = names.stamped(against: record.speakerNames, at: now)
         // Suggestions from a voice profile stay on this device; only confirmed names sync.
-        if names.entries.filter({ $0.isSuggestion != true }) != confirmedBefore {
-            record.speakerNamesUpdatedAt = Date()
+        let confirmedAfter = stamped.confirmedEntries
+        if confirmedAfter.count != confirmedBefore.count
+            || !zip(confirmedAfter, confirmedBefore).allSatisfy({ $0.isSameName(as: $1) }) {
+            record.speakerNamesUpdatedAt = now
         }
-        record.speakerNames = names.entries.isEmpty ? nil : names
+        record.speakerNames = stamped.isEmpty ? nil : stamped
         save()
         refreshRecentRecords()
     }
@@ -1325,15 +1337,33 @@ final class HistoryService: ObservableObject {
                 guard historySyncPreferences?.isSuppressed(speakers.recordID) != true,
                       speakers.isValid else { continue }
                 let record = remoteRecord(for: speakers.recordID, timestamp: speakers.updatedAt)
-                guard speakers.updatedAt >= record.speakerNamesUpdatedAt else { continue }
                 // Read the stored table directly: the names may arrive before their transcript.
                 let local = record.speakerNamesData.flatMap {
                     try? JSONDecoder().decode(SpeakerNameTable.self, from: $0)
                 }
-                record.speakerNamesData = try? JSONEncoder().encode(
-                    speakers.nameTable(keepingSuggestionsFrom: local)
-                )
-                record.speakerNamesUpdatedAt = speakers.updatedAt
+                if var merged = local, merged.transcriptRevision == speakers.transcriptRevision {
+                    // Same transcript: merge name by name, so concurrent names
+                    // for different speakers on two devices both survive.
+                    let publishes = merged.merge(
+                        names: speakers.entries,
+                        cleared: speakers.cleared,
+                        remoteDate: speakers.updatedAt,
+                        localDate: record.speakerNamesUpdatedAt
+                    )
+                    record.speakerNamesData = try? JSONEncoder().encode(merged)
+                    let newest = max(record.speakerNamesUpdatedAt, speakers.updatedAt)
+                    // Holding a name the sender lacks: publish the merged table
+                    // with a newer date so the sender converges.
+                    record.speakerNamesUpdatedAt = publishes
+                        ? max(Date(), speakers.updatedAt.addingTimeInterval(0.001))
+                        : newest
+                } else {
+                    guard speakers.updatedAt >= record.speakerNamesUpdatedAt else { continue }
+                    record.speakerNamesData = try? JSONEncoder().encode(
+                        speakers.nameTable(keepingSuggestionsFrom: local)
+                    )
+                    record.speakerNamesUpdatedAt = speakers.updatedAt
+                }
             case .deleteHistory(let recordID):
                 if let record = record(withID: recordID) {
                     deleteAudioFile(for: record)

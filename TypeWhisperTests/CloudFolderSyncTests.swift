@@ -2523,6 +2523,11 @@ final class CloudFolderSyncTests: XCTestCase {
         XCTAssertEqual(speakers.names.map(\.speakerID), ["S1", "S2"])
         XCTAssertEqual(speakers.names[0].profileID, UUID(uuidString: "9A8B7C6D-5E4F-4A3B-9C2D-1E0F9A8B7C6D"))
         XCTAssertNil(speakers.names[1].profileID)
+        XCTAssertEqual(speakers.names[0].updatedAt, ISO8601DateFormatter().date(from: "2026-09-26T14:10:30Z"))
+        // A name without its own date takes the payload's date.
+        XCTAssertNil(speakers.names[1].updatedAt)
+        XCTAssertEqual(speakers.entries[1].updatedAt, speakers.updatedAt)
+        XCTAssertEqual(speakers.cleared, [.init(speakerID: "S3", updatedAt: ISO8601DateFormatter().date(from: "2026-09-26T14:10:35Z")!)])
         XCTAssertTrue(speakers.isValid)
         XCTAssertEqual(CloudFolderSyncEngine.winningOperations(from: [speakersOperation]).count, 1)
 
@@ -2547,15 +2552,16 @@ final class CloudFolderSyncTests: XCTestCase {
             ),
             transcript
         )
-        XCTAssertEqual(
-            UserDataSyncHistorySpeakersV1(
-                recordID: recordID,
-                updatedAt: speakers.updatedAt,
-                transcriptRevision: revision,
-                table: speakers.nameTable(keepingSuggestionsFrom: nil)
-            ),
-            speakers
+        // Converting back writes the payload's date into names that had none.
+        let converted = UserDataSyncHistorySpeakersV1(
+            recordID: recordID,
+            updatedAt: speakers.updatedAt,
+            transcriptRevision: revision,
+            table: speakers.nameTable(keepingSuggestionsFrom: nil)
         )
+        XCTAssertEqual(converted.entries, speakers.entries)
+        XCTAssertEqual(converted.cleared, speakers.cleared)
+        XCTAssertEqual(converted.updatedAt, speakers.updatedAt)
     }
 
     func testSpeakerPayloadsWithBadValuesAreNotApplied() throws {

@@ -5,11 +5,18 @@
   "historyGeneration" : "history-v1",
   "historyPayloadVersion" : 1,
   "historySpeakers" : {
+    "cleared" : [
+      {
+        "speakerID" : "S3",
+        "updatedAt" : "2026-09-26T14:10:35.000Z"
+      }
+    ],
     "names" : [
       {
         "displayName" : "Anna",
         "profileID" : "9A8B7C6D-5E4F-4A3B-9C2D-1E0F9A8B7C6D",
-        "speakerID" : "S1"
+        "speakerID" : "S1",
+        "updatedAt" : "2026-09-26T14:10:30.000Z"
       },
       {
         "displayName" : "Marco",

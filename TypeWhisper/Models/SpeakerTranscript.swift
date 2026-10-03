@@ -331,23 +331,83 @@ struct SpeakerNameTable: Codable, Equatable, Sendable {
         let profileID: UUID?
         /// True while a name recognized from a voice profile is not confirmed.
         let isSuggestion: Bool?
+        /// When the name was given. Devices merge names one by one, so two
+        /// devices naming different speakers both keep their names.
+        var updatedAt: Date?
 
-        init(speakerID: String, displayName: String, profileID: UUID? = nil, isSuggestion: Bool = false) {
+        init(
+            speakerID: String,
+            displayName: String,
+            profileID: UUID? = nil,
+            isSuggestion: Bool = false,
+            updatedAt: Date? = nil
+        ) {
             self.speakerID = speakerID
             self.displayName = displayName
             self.profileID = profileID
             self.isSuggestion = isSuggestion ? true : nil
+            self.updatedAt = updatedAt
         }
+
+        /// The same name, regardless of when it was given.
+        func isSameName(as other: Entry) -> Bool {
+            speakerID == other.speakerID
+                && displayName == other.displayName
+                && profileID == other.profileID
+                && isSuggestion == other.isSuggestion
+        }
+    }
+
+    /// A name removed on purpose, kept so an older name from another device
+    /// does not bring it back.
+    struct ClearedName: Codable, Equatable, Sendable {
+        let speakerID: String
+        let updatedAt: Date
     }
 
     static let maximumNameLength = 100
 
     let transcriptRevision: UUID
     private(set) var entries: [Entry]
+    private(set) var cleared: [ClearedName]
 
-    init(transcriptRevision: UUID, entries: [Entry] = []) {
+    init(transcriptRevision: UUID, entries: [Entry] = [], cleared: [ClearedName] = []) {
         self.transcriptRevision = transcriptRevision
         self.entries = entries
+        self.cleared = cleared
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case transcriptRevision, entries, cleared
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        transcriptRevision = try container.decode(UUID.self, forKey: .transcriptRevision)
+        entries = try container.decode([Entry].self, forKey: .entries)
+        cleared = try container.decodeIfPresent([ClearedName].self, forKey: .cleared) ?? []
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(transcriptRevision, forKey: .transcriptRevision)
+        try container.encode(entries, forKey: .entries)
+        if !cleared.isEmpty { try container.encode(cleared, forKey: .cleared) }
+    }
+
+    /// Confirmed names, the ones that sync; suggestions stay on this device.
+    var confirmedEntries: [Entry] { entries.filter { $0.isSuggestion != true } }
+
+    /// Nothing to keep: no names and no removals other devices must learn of.
+    var isEmpty: Bool { entries.isEmpty && cleared.isEmpty }
+
+    /// The same names and removals, regardless of when they were made.
+    func hasSameNames(as other: SpeakerNameTable?) -> Bool {
+        guard let other else { return isEmpty }
+        return transcriptRevision == other.transcriptRevision
+            && entries.count == other.entries.count
+            && zip(entries, other.entries).allSatisfy { $0.isSameName(as: $1) }
+            && Set(cleared.map(\.speakerID)) == Set(other.cleared.map(\.speakerID))
     }
 
     func displayName(for speakerID: String) -> String? {
@@ -373,6 +433,8 @@ struct SpeakerNameTable: Codable, Equatable, Sendable {
         entries.removeAll { $0.speakerID == speakerID }
         let trimmed = String(name.trimmingCharacters(in: .whitespacesAndNewlines).prefix(Self.maximumNameLength))
         guard !trimmed.isEmpty else { return }
+        // A suggestion is this device's guess and does not undo a removal.
+        if !isSuggestion { cleared.removeAll { $0.speakerID == speakerID } }
         entries.append(Entry(
             speakerID: speakerID,
             displayName: trimmed,
@@ -401,6 +463,79 @@ struct SpeakerNameTable: Codable, Equatable, Sendable {
     /// Names only count for the transcript revision they were given for.
     func applies(to transcript: SpeakerTranscript) -> Bool {
         transcriptRevision == transcript.revision
+    }
+
+    /// This table as stored after an edit on this device: confirmed names
+    /// that changed since `previous` are dated `date`, unchanged ones keep
+    /// their date, and confirmed names that disappeared are recorded as
+    /// removed. Suggestions are never dated or recorded as removed.
+    func stamped(against previous: SpeakerNameTable?, at date: Date) -> SpeakerNameTable {
+        let previous = previous?.transcriptRevision == transcriptRevision ? previous : nil
+        let previousConfirmed = previous?.confirmedEntries ?? []
+        var table = self
+        table.entries = entries.map { entry in
+            guard entry.isSuggestion != true else { return entry }
+            var stamped = entry
+            if let unchanged = previousConfirmed.first(where: { $0.isSameName(as: entry) }) {
+                stamped.updatedAt = unchanged.updatedAt ?? entry.updatedAt ?? date
+            } else {
+                stamped.updatedAt = date
+            }
+            return stamped
+        }
+        let named = Set(table.confirmedEntries.map(\.speakerID))
+        var removals = (previous?.cleared ?? []).filter { !named.contains($0.speakerID) }
+        for entry in previousConfirmed where !named.contains(entry.speakerID) {
+            removals.removeAll { $0.speakerID == entry.speakerID }
+            removals.append(ClearedName(speakerID: entry.speakerID, updatedAt: date))
+        }
+        for removal in cleared where !named.contains(removal.speakerID)
+            && !removals.contains(where: { $0.speakerID == removal.speakerID }) {
+            removals.append(removal)
+        }
+        table.cleared = removals.sorted { $0.speakerID < $1.speakerID }
+        return table
+    }
+
+    /// Merges names from another device for the same transcript revision, one
+    /// speaker at a time: the newer name or removal wins. `localDate` stands
+    /// in for local names stored without a date. Returns true when this table
+    /// now holds something the other device lacks, so it has to publish it.
+    mutating func merge(
+        names remoteNames: [Entry],
+        cleared remoteCleared: [ClearedName],
+        remoteDate: Date,
+        localDate: Date
+    ) -> Bool {
+        func localStamp(of speakerID: String) -> Date? {
+            let named = confirmedEntries.first { $0.speakerID == speakerID }.map { $0.updatedAt ?? localDate }
+            let removed = cleared.first { $0.speakerID == speakerID }?.updatedAt
+            return [named, removed].compactMap { $0 }.max()
+        }
+        for name in remoteNames {
+            let date = name.updatedAt ?? remoteDate
+            if let local = localStamp(of: name.speakerID), local > date { continue }
+            setName(name.displayName, for: name.speakerID, profileID: name.profileID)
+            if let index = entries.firstIndex(where: { $0.speakerID == name.speakerID }) {
+                entries[index].updatedAt = date
+            }
+        }
+        for removal in remoteCleared {
+            if let local = localStamp(of: removal.speakerID), local > removal.updatedAt { continue }
+            entries.removeAll { $0.speakerID == removal.speakerID && $0.isSuggestion != true }
+            cleared.removeAll { $0.speakerID == removal.speakerID }
+            cleared.append(removal)
+        }
+        cleared.sort { $0.speakerID < $1.speakerID }
+
+        let remoteNamed = Dictionary(remoteNames.map { ($0.speakerID, $0) }, uniquingKeysWith: { first, _ in first })
+        let remoteRemoved = Set(remoteCleared.map(\.speakerID))
+        let hasNamesTheRemoteLacks = confirmedEntries.contains { entry in
+            guard let remote = remoteNamed[entry.speakerID] else { return true }
+            return remote.displayName != entry.displayName || remote.profileID != entry.profileID
+        }
+        let hasRemovalsTheRemoteLacks = cleared.contains { !remoteRemoved.contains($0.speakerID) }
+        return hasNamesTheRemoteLacks || hasRemovalsTheRemoteLacks
     }
 }
 

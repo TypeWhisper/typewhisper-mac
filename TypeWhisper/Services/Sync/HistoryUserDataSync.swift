@@ -318,7 +318,9 @@ struct UserDataSyncHistoryTranscriptV1: Codable, Equatable, Sendable {
 }
 
 /// The names given to a record's speakers. Small, so renaming does not
-/// upload the transcript again.
+/// upload the transcript again. Each name and each removal carries its own
+/// date, so devices that name different speakers at the same time both keep
+/// their names.
 struct UserDataSyncHistorySpeakersV1: Codable, Equatable, Sendable {
     struct Name: Codable, Equatable, Sendable {
         let speakerID: String
@@ -326,6 +328,15 @@ struct UserDataSyncHistorySpeakersV1: Codable, Equatable, Sendable {
         /// Links the name to a voice profile on the device that wrote it;
         /// opaque elsewhere and without voice data.
         let profileID: UUID?
+        /// When the name was given; without it the payload's date counts.
+        let updatedAt: Date?
+
+        init(speakerID: String, displayName: String, profileID: UUID? = nil, updatedAt: Date? = nil) {
+            self.speakerID = speakerID
+            self.displayName = displayName
+            self.profileID = profileID
+            self.updatedAt = updatedAt
+        }
     }
 
     let recordID: UUID
@@ -333,6 +344,13 @@ struct UserDataSyncHistorySpeakersV1: Codable, Equatable, Sendable {
     /// Names apply only to the transcript with this revision.
     let transcriptRevision: UUID
     let names: [Name]
+    /// Names removed on purpose, so an older name from another device does
+    /// not come back.
+    let cleared: [SpeakerNameTable.ClearedName]
+
+    private enum CodingKeys: String, CodingKey {
+        case recordID, updatedAt, transcriptRevision, names, cleared
+    }
 
     /// The confirmed names of a table. Names only suggested by a voice
     /// profile are a guess of this device and are not written.
@@ -340,13 +358,35 @@ struct UserDataSyncHistorySpeakersV1: Codable, Equatable, Sendable {
         self.recordID = recordID
         self.updatedAt = updatedAt
         self.transcriptRevision = transcriptRevision
-        names = (table?.transcriptRevision == transcriptRevision ? table?.entries ?? [] : [])
-            .filter { $0.isSuggestion != true }
-            .map { Name(speakerID: $0.speakerID, displayName: $0.displayName, profileID: $0.profileID) }
+        let table = table?.transcriptRevision == transcriptRevision ? table : nil
+        names = (table?.confirmedEntries ?? []).map {
+            Name(speakerID: $0.speakerID, displayName: $0.displayName, profileID: $0.profileID, updatedAt: $0.updatedAt ?? updatedAt)
+        }
+        cleared = table?.cleared ?? []
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        recordID = try container.decode(UUID.self, forKey: .recordID)
+        updatedAt = try container.decode(Date.self, forKey: .updatedAt)
+        transcriptRevision = try container.decode(UUID.self, forKey: .transcriptRevision)
+        names = try container.decode([Name].self, forKey: .names)
+        cleared = try container.decodeIfPresent([SpeakerNameTable.ClearedName].self, forKey: .cleared) ?? []
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(recordID, forKey: .recordID)
+        try container.encode(updatedAt, forKey: .updatedAt)
+        try container.encode(transcriptRevision, forKey: .transcriptRevision)
+        try container.encode(names, forKey: .names)
+        if !cleared.isEmpty { try container.encode(cleared, forKey: .cleared) }
     }
 
     var isValid: Bool {
-        Set(names.map(\.speakerID)).count == names.count
+        let speakerIDs = names.map(\.speakerID) + cleared.map(\.speakerID)
+        return Set(speakerIDs).count == speakerIDs.count
+            && cleared.allSatisfy { SpeakerTranscript.isValidSpeakerID($0.speakerID) }
             && names.allSatisfy { name in
                 let trimmed = name.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
                 return SpeakerTranscript.isValidSpeakerID(name.speakerID)
@@ -355,13 +395,23 @@ struct UserDataSyncHistorySpeakersV1: Codable, Equatable, Sendable {
             }
     }
 
+    /// The names as table entries, each with its date.
+    var entries: [SpeakerNameTable.Entry] {
+        names.map {
+            SpeakerNameTable.Entry(
+                speakerID: $0.speakerID,
+                displayName: $0.displayName,
+                profileID: $0.profileID,
+                updatedAt: $0.updatedAt ?? updatedAt
+            )
+        }
+    }
+
     /// The name table these names make, keeping this device's pending
     /// suggestions for speakers the names do not cover.
     func nameTable(keepingSuggestionsFrom local: SpeakerNameTable?) -> SpeakerNameTable {
         var table = SpeakerNameTable(transcriptRevision: transcriptRevision)
-        for name in names {
-            table.setName(name.displayName, for: name.speakerID, profileID: name.profileID)
-        }
+        _ = table.merge(names: entries, cleared: cleared, remoteDate: updatedAt, localDate: updatedAt)
         if let local, local.transcriptRevision == transcriptRevision {
             for entry in local.entries
             where entry.isSuggestion == true && table.displayName(for: entry.speakerID) == nil {

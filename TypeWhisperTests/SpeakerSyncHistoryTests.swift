@@ -82,13 +82,15 @@ final class SpeakerSyncHistoryTests: XCTestCase {
         history.setSpeakerName("Anna", for: "S1", inRecordID: recordID)
         let names = try XCTUnwrap(exported?.speakers)
         XCTAssertEqual(names.transcriptRevision, transcript.revision)
-        XCTAssertEqual(names.names, [.init(speakerID: "S1", displayName: "Anna", profileID: nil)])
+        XCTAssertEqual(names.names, [.init(speakerID: "S1", displayName: "Anna", profileID: nil, updatedAt: record?.speakerNamesUpdatedAt)])
         XCTAssertEqual(names.updatedAt, record?.speakerNamesUpdatedAt)
         XCTAssertEqual(exported?.transcript?.updatedAt, stored.updatedAt, "renaming does not touch the transcript")
 
-        // Clearing the last name is exported as an empty list.
+        // Clearing the last name is exported as an empty list and a dated removal.
         history.setSpeakerName("", for: "S1", inRecordID: recordID)
         XCTAssertEqual(exported?.speakers?.names, [])
+        XCTAssertEqual(exported?.speakers?.cleared.map(\.speakerID), ["S1"])
+        XCTAssertEqual(exported?.speakers?.cleared.first?.updatedAt, record?.speakerNamesUpdatedAt)
     }
 
     func testCorrectionsBumpOnlyWhatChanged() throws {
@@ -139,7 +141,10 @@ final class SpeakerSyncHistoryTests: XCTestCase {
         XCTAssertEqual(record?.speakerTranscriptUpdatedAt, remoteDate)
         XCTAssertEqual(record?.speakerNamesUpdatedAt, remoteDate.addingTimeInterval(5))
         XCTAssertEqual(exported?.transcript, wireTranscript)
-        XCTAssertEqual(exported?.speakers, wireNames)
+        // Names without their own date take the payload's date.
+        XCTAssertEqual(exported?.speakers?.updatedAt, wireNames.updatedAt)
+        XCTAssertEqual(exported?.speakers?.names.map(\.displayName), ["Anna"])
+        XCTAssertEqual(exported?.speakers?.names.first?.updatedAt, wireNames.updatedAt)
 
         // The synced profile link belongs to the other device.
         let voices = SpeakerVoiceProfileService(
@@ -193,6 +198,85 @@ final class SpeakerSyncHistoryTests: XCTestCase {
         XCTAssertEqual(record?.speakerTranscript?.revision, rerun.revision)
         XCTAssertNil(record?.speakerNames)
         XCTAssertEqual(exported?.speakers?.names, [])
+    }
+
+    /// Another device with the same record, kept in its own folder.
+    private func makeOtherDevice() throws -> (HistoryService, URL, UserDefaults, String) {
+        let otherDirectory = try TestSupport.makeTemporaryDirectory()
+        let otherSuite = "SpeakerSyncHistoryTests-other-\(UUID().uuidString)"
+        let otherDefaults = try XCTUnwrap(UserDefaults(suiteName: otherSuite))
+        let preferences = HistorySyncPreferences(defaults: otherDefaults)
+        preferences.isEnabled = true
+        let other = HistoryService(appSupportDirectory: otherDirectory, historySyncPreferences: preferences)
+        return (other, otherDirectory, otherDefaults, otherSuite)
+    }
+
+    func testDevicesNamingDifferentSpeakersAtOnceBothKeepBothNames() throws {
+        try addPendingRecording()
+        history.storeSpeakerTranscript(transcript, forRecordID: recordID)
+        let wireTranscript = try XCTUnwrap(exported?.transcript)
+        let (other, otherDirectory, otherDefaults, otherSuite) = try makeOtherDevice()
+        defer {
+            otherDefaults.removePersistentDomain(forName: otherSuite)
+            TestSupport.remove(otherDirectory)
+        }
+        try other.applyUserDataSyncMutations([.upsertHistoryTranscript(wireTranscript)])
+
+        // This Mac names S1; the other device names S2 a minute later, before either syncs.
+        history.setSpeakerName("Anna", for: "S1", inRecordID: recordID)
+        var otherNames = SpeakerNameTable(transcriptRevision: transcript.revision)
+        otherNames.setName("Ben", for: "S2")
+        let later = try XCTUnwrap(record?.speakerNamesUpdatedAt).addingTimeInterval(60)
+        let fromOther = UserDataSyncHistorySpeakersV1(
+            recordID: recordID,
+            updatedAt: later,
+            transcriptRevision: transcript.revision,
+            table: otherNames
+        )
+        try other.applyUserDataSyncMutations([.upsertHistorySpeakers(fromOther)])
+
+        // The newer table from the other device does not drop Anna here, and
+        // this Mac publishes a newer table because the other device lacks her.
+        try history.applyUserDataSyncMutations([.upsertHistorySpeakers(fromOther)])
+        XCTAssertEqual(record?.speakerNames?.displayName(for: "S1"), "Anna")
+        XCTAssertEqual(record?.speakerNames?.displayName(for: "S2"), "Ben")
+        let republished = try XCTUnwrap(exported?.speakers)
+        XCTAssertGreaterThan(republished.updatedAt, later)
+        XCTAssertEqual(republished.names.map(\.displayName), ["Anna", "Ben"])
+
+        // The other device takes both names and has nothing new to publish.
+        try other.applyUserDataSyncMutations([.upsertHistorySpeakers(republished)])
+        let otherRecord = try XCTUnwrap(other.record(withID: recordID))
+        XCTAssertEqual(otherRecord.speakerNames?.displayName(for: "S1"), "Anna")
+        XCTAssertEqual(otherRecord.speakerNames?.displayName(for: "S2"), "Ben")
+        XCTAssertEqual(otherRecord.speakerNamesUpdatedAt, republished.updatedAt)
+    }
+
+    func testANewerRemovalWinsAndAnOlderOneDoesNot() throws {
+        try addPendingRecording()
+        history.storeSpeakerTranscript(transcript, forRecordID: recordID)
+        history.setSpeakerName("Anna", for: "S1", inRecordID: recordID)
+        let named = try XCTUnwrap(record?.speakerNamesUpdatedAt)
+
+        func removal(of speakerID: String, at date: Date) -> UserDataSyncMutation {
+            var table = SpeakerNameTable(transcriptRevision: transcript.revision)
+            table.setName("Gone", for: speakerID)
+            let stamped = SpeakerNameTable(transcriptRevision: transcript.revision)
+                .stamped(against: table.stamped(against: nil, at: date), at: date)
+            return .upsertHistorySpeakers(UserDataSyncHistorySpeakersV1(
+                recordID: recordID,
+                updatedAt: date,
+                transcriptRevision: transcript.revision,
+                table: stamped
+            ))
+        }
+
+        try history.applyUserDataSyncMutations([removal(of: "S1", at: named.addingTimeInterval(-60))])
+        XCTAssertEqual(record?.speakerNames?.displayName(for: "S1"), "Anna", "an older removal loses")
+
+        try history.applyUserDataSyncMutations([removal(of: "S1", at: named.addingTimeInterval(60))])
+        XCTAssertNil(record?.speakerNames?.displayName(for: "S1"), "a newer removal wins")
+        XCTAssertEqual(exported?.speakers?.cleared.map(\.speakerID), ["S1"])
     }
 
     func testNothingIsExportedWithHistorySyncOff() throws {
