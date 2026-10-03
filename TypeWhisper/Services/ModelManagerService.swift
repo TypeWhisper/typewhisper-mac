@@ -223,6 +223,9 @@ final class ModelManagerService: ObservableObject {
     }
 
     @Published private(set) var selectedProviderId: String?
+    /// True while the dictation engine is still loading its model during a recording or
+    /// its transcription, so the indicator can say why nothing happens yet.
+    @Published private(set) var isDictationModelLoading = false
 
     @Published var autoUnloadSeconds: Int {
         didSet {
@@ -240,9 +243,12 @@ final class ModelManagerService: ObservableObject {
     private var pluginConfiguredWaitAttempts = 300
     private var pluginRestoreBusyWaitAttempts = 5_700
     private var pluginConfiguredPollInterval: Duration = .milliseconds(100)
+    /// A warm model loads in well under a second; reporting that would only flash a label.
+    private var dictationModelLoadingRevealDelay: Duration = .milliseconds(750)
 
     private var passiveRestoreSelection: (providerId: String, instance: ObjectIdentifier)?
     private var dictationPrewarm: (key: ObjectIdentifier, plugin: any TranscriptionEnginePlugin)?
+    private var dictationModelLoadMonitor: Task<Void, Never>?
     private let providerKey = UserDefaultsKeys.selectedEngine
     private let modelKey = UserDefaultsKeys.selectedModelId
 
@@ -260,6 +266,10 @@ final class ModelManagerService: ObservableObject {
         pluginConfiguredWaitAttempts = max(0, initialAttempts)
         pluginRestoreBusyWaitAttempts = max(0, busyAttempts)
         pluginConfiguredPollInterval = pollInterval
+    }
+
+    func setDictationModelLoadingRevealDelayForTesting(_ delay: Duration) {
+        dictationModelLoadingRevealDelay = delay
     }
     #endif
 
@@ -1112,22 +1122,56 @@ final class ModelManagerService: ObservableObject {
         // A model override goes through selectModel() at transcription time, and Apple
         // Speech prepares per language; both keep their existing on-demand path.
         let restoreSelector = NSSelectorFromString("triggerRestoreModel")
-        guard cloudModelOverride == nil,
-              plugin.providerId != AppleSpeechModelSelection.providerId,
-              !plugin.isConfigured,
-              canPrepareForTranscription(plugin),
-              pluginSettingsActivity(plugin) == nil,
-              nsPlugin.responds(to: restoreSelector) else {
-            return
+        if cloudModelOverride == nil,
+           plugin.providerId != AppleSpeechModelSelection.providerId,
+           !plugin.isConfigured,
+           canPrepareForTranscription(plugin),
+           pluginSettingsActivity(plugin) == nil,
+           nsPlugin.responds(to: restoreSelector) {
+            _ = nsPlugin.perform(restoreSelector)
         }
 
-        _ = nsPlugin.perform(restoreSelector)
+        monitorDictationModelLoad(of: plugin, key: key)
     }
 
     func endDictationModelPrewarm() {
+        dictationModelLoadMonitor?.cancel()
+        dictationModelLoadMonitor = nil
+        isDictationModelLoading = false
         guard let prewarm = dictationPrewarm else { return }
         dictationPrewarm = nil
         endAutoUnloadProtectedUse(of: prewarm.plugin)
+    }
+
+    /// Follows the protected engine until its model is ready. A load can start with the
+    /// prewarm above or later with the transcription, and plugins only report it through
+    /// their settings activity, which has no change notification. Loads that finish within
+    /// the reveal delay are never reported.
+    private func monitorDictationModelLoad(of plugin: any TranscriptionEnginePlugin, key: ObjectIdentifier) {
+        guard !plugin.isConfigured else { return }
+        dictationModelLoadMonitor = Task { @MainActor [weak self] in
+            var loadingSince: ContinuousClock.Instant?
+            while !Task.isCancelled {
+                guard let self, self.dictationPrewarm?.key == key else { return }
+                if self.isDictationPrewarmInFlight(for: plugin) && !plugin.isConfigured {
+                    loadingSince = loadingSince ?? .now
+                } else {
+                    loadingSince = nil
+                }
+                let isLoading = loadingSince.map {
+                    ContinuousClock.now - $0 >= self.dictationModelLoadingRevealDelay
+                } ?? false
+                if self.isDictationModelLoading != isLoading {
+                    self.isDictationModelLoading = isLoading
+                }
+                if plugin.isConfigured { return }
+                do {
+                    try await Task.sleep(for: self.pluginConfiguredPollInterval)
+                } catch {
+                    return
+                }
+            }
+        }
     }
 
     /// True while a restore for the protected engine is visibly running, so the

@@ -340,6 +340,7 @@ final class DictationViewModel: ObservableObject {
     @Published var activeRuleReasonLabel: String?
     @Published var activeRuleExplanation: String?
     @Published var processingPhase: String?
+    @Published private(set) var isModelLoading = false
     @Published private(set) var isRecordingInputReady = false
     @Published var actionFeedbackMessage: String?
     @Published var actionFeedbackIcon: String?
@@ -1421,6 +1422,13 @@ final class DictationViewModel: ObservableObject {
             self?.refreshRecordingInputConfiguration()
         }
         .store(in: &cancellables)
+
+        modelManager.$isDictationModelLoading
+            .removeDuplicates()
+            .sink { [weak self] isLoading in
+                self?.isModelLoading = isLoading
+            }
+            .store(in: &cancellables)
 
         indicatorFeedbackLifetime.$remainingFraction
             .removeDuplicates()

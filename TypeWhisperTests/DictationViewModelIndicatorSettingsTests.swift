@@ -1075,7 +1075,10 @@ final class MenuBarIconStateTests: XCTestCase {
 }
 
 final class IndicatorPresentationStateTests: XCTestCase {
-    private func makeRecordingPresentation(isInputReady: Bool) -> IndicatorPresentationData {
+    private func makeRecordingPresentation(
+        isInputReady: Bool,
+        isModelLoading: Bool = false
+    ) -> IndicatorPresentationData {
         IndicatorPresentationData(
             source: .dictation,
             state: .recording,
@@ -1085,6 +1088,7 @@ final class IndicatorPresentationStateTests: XCTestCase {
             activeRuleName: nil,
             activeAppIcon: nil,
             isRecordingInputReady: isInputReady,
+            isModelLoading: isModelLoading,
             cancelWarningMessage: nil,
             processingPhase: nil,
             actionFeedbackMessage: nil,
@@ -1110,6 +1114,7 @@ final class IndicatorPresentationStateTests: XCTestCase {
             activeRuleName: nil,
             activeAppIcon: nil,
             isRecordingInputReady: false,
+            isModelLoading: false,
             cancelWarningMessage: nil,
             processingPhase: nil,
             actionFeedbackMessage: "Saved",
@@ -1276,6 +1281,17 @@ final class IndicatorPresentationStateTests: XCTestCase {
         XCTAssertEqual(preparing.recordingStatusLabel, String(localized: "Preparing microphone"))
         XCTAssertFalse(ready.isPreparingMicrophone)
         XCTAssertEqual(ready.recordingStatusLabel, String(localized: "Recording"))
+    }
+
+    func testModelLoadingLabelFollowsMicrophonePreparation() {
+        let preparing = makeRecordingPresentation(isInputReady: false, isModelLoading: true)
+        let loading = makeRecordingPresentation(isInputReady: true, isModelLoading: true)
+        let ready = makeRecordingPresentation(isInputReady: true)
+
+        XCTAssertEqual(preparing.recordingStatusLabel, String(localized: "Preparing microphone"))
+        XCTAssertEqual(loading.modelLoadingLabel, IndicatorPresentationData.loadingModelText)
+        XCTAssertEqual(loading.recordingStatusLabel, IndicatorPresentationData.loadingModelText)
+        XCTAssertNil(ready.modelLoadingLabel)
     }
 
     func testNeverVisibilityStillSuppressesMicrophonePreparation() {

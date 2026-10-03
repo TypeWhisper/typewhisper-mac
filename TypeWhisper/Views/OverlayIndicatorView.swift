@@ -259,7 +259,7 @@ struct OverlayIndicatorView: View {
         case .recording:
             return presentation.recordingStatusLabel
         case .processing:
-            return String(localized: "Processing transcription")
+            return presentation.modelLoadingLabel ?? String(localized: "Processing transcription")
         case .inserting:
             return String(localized: "Inserting text")
         case .error(let message):
@@ -378,6 +378,9 @@ struct OverlayIndicatorView: View {
                         sizing: sizing,
                         dotPulse: dotPulse
                     )
+                    if presentation.isModelLoading {
+                        IndicatorPreparingLabel(presentation: presentation, sizing: sizing)
+                    }
                 }
             }
 

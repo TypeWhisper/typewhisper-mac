@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import XCTest
 import TypeWhisperPluginSDK
@@ -175,6 +176,138 @@ final class ModelManagerRestoreAfterAutoUnloadTests: XCTestCase {
         XCTAssertEqual(plugin.restoreCount, 1, "transcribe must wait for the prewarm instead of restoring again")
     }
 
+    func testDictationPrewarmReportsModelLoadingUntilTheRestoreFinishes() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        setPersistedLoadedModel("tiny")
+        defer { setPersistedLoadedModel(nil) }
+
+        let plugin = RestoreAfterUnloadMockPlugin(
+            configured: false,
+            restoreResult: .succeedAfter(.milliseconds(300)),
+            publishesActivitySynchronously: true
+        )
+        let modelManager = installPlugin(plugin, appSupportDirectory: appSupportDirectory)
+        modelManager.setPluginRestoreWaitConfigurationForTesting(
+            initialAttempts: 2,
+            busyAttempts: 200,
+            pollInterval: .milliseconds(20)
+        )
+        modelManager.setDictationModelLoadingRevealDelayForTesting(.zero)
+        defer { modelManager.endDictationModelPrewarm() }
+
+        modelManager.beginDictationModelPrewarm()
+        try await waitUntil { modelManager.isDictationModelLoading }
+
+        try await waitUntil { plugin.isConfigured && !modelManager.isDictationModelLoading }
+    }
+
+    func testEndingDictationPrewarmClearsModelLoading() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        setPersistedLoadedModel("tiny")
+        defer { setPersistedLoadedModel(nil) }
+
+        let plugin = RestoreAfterUnloadMockPlugin(
+            configured: false,
+            restoreResult: .succeedAfter(.seconds(2)),
+            publishesActivitySynchronously: true
+        )
+        let modelManager = installPlugin(plugin, appSupportDirectory: appSupportDirectory)
+        modelManager.setPluginRestoreWaitConfigurationForTesting(
+            initialAttempts: 2,
+            busyAttempts: 200,
+            pollInterval: .milliseconds(20)
+        )
+        modelManager.setDictationModelLoadingRevealDelayForTesting(.zero)
+
+        modelManager.beginDictationModelPrewarm()
+        try await waitUntil { modelManager.isDictationModelLoading }
+
+        modelManager.endDictationModelPrewarm()
+        XCTAssertFalse(modelManager.isDictationModelLoading)
+        try await Task.sleep(for: .milliseconds(100))
+        XCTAssertFalse(modelManager.isDictationModelLoading, "a cancelled monitor must not report loading again")
+    }
+
+    func testDictationPrewarmDoesNotReportLoadFinishingWithinTheRevealDelay() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        setPersistedLoadedModel("tiny")
+        defer { setPersistedLoadedModel(nil) }
+
+        let plugin = RestoreAfterUnloadMockPlugin(
+            configured: false,
+            restoreResult: .succeedAfter(.milliseconds(200)),
+            publishesActivitySynchronously: true
+        )
+        let modelManager = installPlugin(plugin, appSupportDirectory: appSupportDirectory)
+        modelManager.setPluginRestoreWaitConfigurationForTesting(
+            initialAttempts: 2,
+            busyAttempts: 200,
+            pollInterval: .milliseconds(20)
+        )
+        modelManager.setDictationModelLoadingRevealDelayForTesting(.seconds(1))
+        defer { modelManager.endDictationModelPrewarm() }
+
+        var reportedLoading = false
+        let subscription = modelManager.$isDictationModelLoading.sink { isLoading in
+            if isLoading { reportedLoading = true }
+        }
+        defer { subscription.cancel() }
+
+        modelManager.beginDictationModelPrewarm()
+        try await waitUntil { plugin.isConfigured }
+        try await Task.sleep(for: .milliseconds(100))
+
+        XCTAssertFalse(reportedLoading, "a load that finishes within the reveal delay must not flash the label")
+    }
+
+    func testDictationPrewarmReportsSlowLoadAfterTheRevealDelay() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+        setPersistedLoadedModel("tiny")
+        defer { setPersistedLoadedModel(nil) }
+
+        let plugin = RestoreAfterUnloadMockPlugin(
+            configured: false,
+            restoreResult: .succeedAfter(.seconds(2)),
+            publishesActivitySynchronously: true
+        )
+        let modelManager = installPlugin(plugin, appSupportDirectory: appSupportDirectory)
+        modelManager.setPluginRestoreWaitConfigurationForTesting(
+            initialAttempts: 2,
+            busyAttempts: 200,
+            pollInterval: .milliseconds(20)
+        )
+        modelManager.setDictationModelLoadingRevealDelayForTesting(.milliseconds(400))
+        defer { modelManager.endDictationModelPrewarm() }
+
+        let started = ContinuousClock.now
+        modelManager.beginDictationModelPrewarm()
+        try await waitUntil { modelManager.isDictationModelLoading }
+
+        XCTAssertGreaterThanOrEqual(ContinuousClock.now - started, .milliseconds(400))
+    }
+
+    func testDictationPrewarmDoesNotReportLoadingForLoadedEngine() async throws {
+        let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
+        defer { TestSupport.remove(appSupportDirectory) }
+
+        let plugin = RestoreAfterUnloadMockPlugin(
+            configured: true,
+            restoreResult: .succeedAfter(.milliseconds(0)),
+            publishesActivitySynchronously: true
+        )
+        let modelManager = installPlugin(plugin, appSupportDirectory: appSupportDirectory)
+        defer { modelManager.endDictationModelPrewarm() }
+
+        modelManager.beginDictationModelPrewarm()
+        try await Task.sleep(for: .milliseconds(100))
+
+        XCTAssertFalse(modelManager.isDictationModelLoading)
+    }
+
     func testDictationPrewarmSkipsEngineWithoutPersistedModel() throws {
         let appSupportDirectory = try TestSupport.makeTemporaryDirectory()
         defer { TestSupport.remove(appSupportDirectory) }
@@ -247,6 +380,22 @@ final class ModelManagerRestoreAfterAutoUnloadTests: XCTestCase {
     }
 
     // MARK: - Helpers
+
+    private func waitUntil(
+        timeout: Duration = .seconds(3),
+        _ condition: () -> Bool,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) async throws {
+        let deadline = ContinuousClock.now + timeout
+        while !condition() {
+            guard ContinuousClock.now < deadline else {
+                XCTFail("condition not met within \(timeout)", file: file, line: line)
+                return
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        }
+    }
 
     private func setPersistedLoadedModel(_ modelId: String?) {
         UserDefaults.standard.set(

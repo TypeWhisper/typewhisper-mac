@@ -30,6 +30,8 @@ struct MinimalIndicatorView: View {
     private let sizing: IndicatorSizing = .minimal
     private let idleWidth: CGFloat = 42
     private let processingWidth: CGFloat = 76
+    private let statusLabelWidth: CGFloat = 220
+    private let modelLoadingLabelWidth: CGFloat = 150
     private let insertingWidth: CGFloat = 44
     private let messageWidth = IndicatorFeedbackPanelLayout.minimalFeedbackWidth
 
@@ -47,8 +49,16 @@ struct MinimalIndicatorView: View {
 
     private var recordingWidth: CGFloat {
         if presentation.isPreparingMicrophone {
-            return 220
+            return statusLabelWidth
         }
+        if presentation.isModelLoading {
+            // The recording content stays visible next to the label.
+            return max(statusLabelWidth, recordingContentWidth + modelLoadingLabelWidth)
+        }
+        return recordingContentWidth
+    }
+
+    private var recordingContentWidth: CGFloat {
         switch viewModel.notchIndicatorRightContent {
         case .none:
             return idleWidth
@@ -122,7 +132,7 @@ struct MinimalIndicatorView: View {
         case .recording:
             return recordingWidth
         case .processing:
-            return processingWidth
+            return presentation.isModelLoading ? statusLabelWidth : processingWidth
         case .inserting:
             return insertingWidth
         case .idle, .promptSelection, .promptProcessing:
@@ -180,7 +190,7 @@ struct MinimalIndicatorView: View {
         case .recording:
             return presentation.recordingStatusLabel
         case .processing:
-            return String(localized: "Processing transcription")
+            return presentation.modelLoadingLabel ?? String(localized: "Processing transcription")
         case .inserting:
             return String(localized: "Inserting text")
         case .error(let message):
@@ -257,7 +267,9 @@ struct MinimalIndicatorView: View {
     private var compactStatus: some View {
         switch presentation.state {
         case .recording:
-            HStack(spacing: presentation.isPreparingMicrophone || viewModel.notchIndicatorRightContent != .none ? 8 : 0) {
+            HStack(spacing: presentation.isPreparingMicrophone
+                || presentation.isModelLoading
+                || viewModel.notchIndicatorRightContent != .none ? 8 : 0) {
                 IndicatorLeftStatus(
                     presentation: presentation,
                     sizing: sizing,
@@ -265,9 +277,10 @@ struct MinimalIndicatorView: View {
                     hasActionFeedback: false
                 )
 
-                if presentation.isPreparingMicrophone {
+                if presentation.isPreparingMicrophone || presentation.isModelLoading {
                     IndicatorPreparingLabel(presentation: presentation, sizing: sizing)
-                } else if viewModel.notchIndicatorRightContent != .none {
+                }
+                if !presentation.isPreparingMicrophone && viewModel.notchIndicatorRightContent != .none {
                     IndicatorRecordingContent(
                         presentation: presentation,
                         content: viewModel.notchIndicatorRightContent,
@@ -284,6 +297,13 @@ struct MinimalIndicatorView: View {
                 ProgressView()
                     .controlSize(.mini)
                     .tint(.primary)
+                if let label = presentation.modelLoadingLabel {
+                    Text(label)
+                        .font(.system(size: sizing.profileFontSize, weight: .medium))
+                        .foregroundStyle(Color.primary.opacity(sizing.timerOpacity))
+                        .lineLimit(1)
+                        .fixedSize(horizontal: true, vertical: false)
+                }
             }
         case .inserting:
             IndicatorLeftStatus(

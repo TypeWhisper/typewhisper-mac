@@ -90,6 +90,14 @@ struct NotchIndicatorView: View {
         presentation.state == .processing && presentation.processingPhase != nil
     }
 
+    /// The model still loads while the recording runs and no transcript is visible yet.
+    private var hasModelLoadingStatus: Bool {
+        presentation.state == .recording
+            && !presentation.isPreparingMicrophone
+            && presentation.modelLoadingLabel != nil
+            && !transcriptBodyVisible
+    }
+
     private var showTranscriptPreview: Bool {
         viewModel.indicatorTranscriptPreviewEnabled && !suppressStreamingText
     }
@@ -107,7 +115,7 @@ struct NotchIndicatorView: View {
         if hasCancelWarning { return .feedback }
         if transcriptBodyVisible { return .transcript }
         if hasActionFeedback { return .feedback }
-        if hasProcessingPhase { return .processing }
+        if hasProcessingPhase || hasModelLoadingStatus { return .processing }
         return .closed
     }
 
@@ -144,6 +152,9 @@ struct NotchIndicatorView: View {
         }
         if hasCancelWarning {
             return feedbackBodyHeight
+        }
+        if hasModelLoadingStatus {
+            return processingBodyHeight
         }
         if hasTranscriptSection {
             return transcriptBodyHeight
@@ -276,7 +287,7 @@ struct NotchIndicatorView: View {
             if let warning = presentation.cancelWarningMessage {
                 return warning
             }
-            return String(localized: "Processing transcription")
+            return presentation.modelLoadingLabel ?? String(localized: "Processing transcription")
         case .inserting:
             if let feedback = presentation.actionFeedbackMessage {
                 return feedback
@@ -359,6 +370,8 @@ struct NotchIndicatorView: View {
                 iconColor: .yellow,
                 contentPadding: contentPadding
             )
+        } else if hasModelLoadingStatus {
+            statusLine(presentation.modelLoadingLabel ?? "")
         } else if hasTranscriptSection {
             IndicatorExpandableText(
                 text: presentation.partialText,
@@ -369,11 +382,7 @@ struct NotchIndicatorView: View {
             )
             .opacity(textExpanded ? 1 : 0.72)
         } else if hasProcessingPhase {
-            Text(presentation.processingPhase ?? "")
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(Color.primary.opacity(0.7))
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 6)
+            statusLine(presentation.processingPhase ?? "")
         } else if hasActionFeedback {
             IndicatorActionFeedback(
                 message: presentation.actionFeedbackMessage ?? "",
@@ -392,6 +401,14 @@ struct NotchIndicatorView: View {
         } else {
             Color.clear
         }
+    }
+
+    private func statusLine(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(Color.primary.opacity(0.7))
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 6)
     }
 
     @ViewBuilder

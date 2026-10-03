@@ -205,6 +205,7 @@ struct IndicatorPresentationData {
     let activeRuleName: String?
     let activeAppIcon: NSImage?
     let isRecordingInputReady: Bool
+    let isModelLoading: Bool
     let cancelWarningMessage: String?
     let processingPhase: String?
     let actionFeedbackMessage: String?
@@ -224,9 +225,19 @@ struct IndicatorPresentationData {
     }
 
     var recordingStatusLabel: String {
-        isPreparingMicrophone
-            ? String(localized: "Preparing microphone")
-            : String(localized: "Recording")
+        if isPreparingMicrophone {
+            return String(localized: "Preparing microphone")
+        }
+        return modelLoadingLabel ?? String(localized: "Recording")
+    }
+
+    /// Shown next to the live recording while the model loads in the background.
+    var modelLoadingLabel: String? {
+        isModelLoading ? Self.loadingModelText : nil
+    }
+
+    static var loadingModelText: String {
+        localizedAppText("Loading model…", de: "Modell wird geladen …")
     }
 
     @MainActor
@@ -252,6 +263,7 @@ struct IndicatorPresentationData {
                 activeRuleName: preview.activeRuleName,
                 activeAppIcon: preview.appIcon,
                 isRecordingInputReady: true,
+                isModelLoading: false,
                 cancelWarningMessage: nil,
                 processingPhase: nil,
                 actionFeedbackMessage: nil,
@@ -272,8 +284,15 @@ struct IndicatorPresentationData {
                 activeRuleName: dictation.activeRuleName,
                 activeAppIcon: dictation.activeAppIcon,
                 isRecordingInputReady: dictation.isRecordingInputReady,
+                isModelLoading: dictation.isModelLoading
+                    && (presentation.state == .recording || presentation.state == .processing),
                 cancelWarningMessage: dictation.cancelWarningMessage,
-                processingPhase: dictation.processingPhase,
+                // The transcription waits for the load, so say that instead of "Transcribing".
+                processingPhase: presentation.state == .processing
+                    && dictation.isModelLoading
+                    && dictation.processingPhase != nil
+                    ? Self.loadingModelText
+                    : dictation.processingPhase,
                 actionFeedbackMessage: dictation.actionFeedbackMessage,
                 actionFeedbackIcon: dictation.actionFeedbackIcon,
                 actionFeedbackIsError: dictation.actionFeedbackIsError,
@@ -295,6 +314,7 @@ struct IndicatorPresentationData {
                 activeRuleName: nil,
                 activeAppIcon: nil,
                 isRecordingInputReady: true,
+                isModelLoading: false,
                 cancelWarningMessage: nil,
                 processingPhase: nil,
                 actionFeedbackMessage: nil,
