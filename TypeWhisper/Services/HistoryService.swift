@@ -1355,7 +1355,7 @@ final class HistoryService: ObservableObject {
                     // Holding a name the sender lacks: publish the merged table
                     // with a newer date so the sender converges.
                     record.speakerNamesUpdatedAt = publishes
-                        ? max(Date(), speakers.updatedAt.addingTimeInterval(0.001))
+                        ? max(newest, Date(), speakers.updatedAt.addingTimeInterval(0.001))
                         : newest
                 } else {
                     guard speakers.updatedAt >= record.speakerNamesUpdatedAt else { continue }
