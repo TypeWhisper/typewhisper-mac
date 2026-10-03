@@ -161,6 +161,11 @@ enum AppleIntelligenceResponseSanitizer {
 
 @available(macOS 26, *)
 final class FoundationModelsProvider: LLMProvider, @unchecked Sendable {
+    private let prewarmLock = NSLock()
+    #if canImport(FoundationModels)
+    /// Kept alive so the prewarm is not dropped with its session.
+    private var prewarmedSession: LanguageModelSession?
+    #endif
 
     var isAvailable: Bool {
         #if canImport(FoundationModels)
@@ -188,6 +193,19 @@ final class FoundationModelsProvider: LLMProvider, @unchecked Sendable {
         )
         #else
         throw LLMError.notAvailable
+        #endif
+    }
+
+    /// The system unloads the on-device model seconds after a request, so every dictation
+    /// paid one to two seconds of model loading after the stop. A prewarmed session with
+    /// other instructions also readies the model for the request's own session.
+    func prewarm() {
+        #if canImport(FoundationModels)
+        let model = contentTransformationModel
+        guard model.availability == .available else { return }
+        let session = LanguageModelSession(model: model)
+        session.prewarm()
+        prewarmLock.withLock { prewarmedSession = session }
         #endif
     }
 

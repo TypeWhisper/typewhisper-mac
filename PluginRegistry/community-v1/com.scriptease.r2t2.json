@@ -4,7 +4,8 @@
   "author": "scriptease",
   "description": "On-device real-time streaming transcription with Confucius4-R2T2 (NetEase Youdao). Downloads the audio.cpp server and a model of your choice (Q4_K_M, Q8_0 or F16) and runs them locally on Metal, or connects to your own audio.cpp server. Append-only output, Chinese and English optimized.",
   "descriptions": {
-    "de": "Lokale Echtzeit-Streaming-Transkription mit Confucius4-R2T2 (NetEase Youdao). Lädt den audio.cpp-Server und ein Modell deiner Wahl (Q4_K_M, Q8_0 oder F16) herunter und führt sie lokal mit Metal aus, oder verbindet sich mit deinem eigenen audio.cpp-Server. Append-only-Ausgabe, optimiert für Chinesisch und Englisch."
+    "de": "Lokale Echtzeit-Streaming-Transkription mit Confucius4-R2T2 (NetEase Youdao). Lädt den audio.cpp-Server und ein Modell deiner Wahl (Q4_K_M, Q8_0 oder F16) herunter und führt sie lokal mit Metal aus, oder verbindet sich mit deinem eigenen audio.cpp-Server. Append-only-Ausgabe, optimiert für Chinesisch und Englisch.",
+    "ja": "Confucius4-R2T2（NetEase Youdao）によるリアルタイムの文字起こしです。audio.cppサーバーと選択したモデル（Q4_K_M、Q8_0、F16）をダウンロードしてMac上のMetalで実行するか、自分のaudio.cppサーバーに接続します。認識結果は末尾に追記され、中国語と英語に最適化されています。"
   },
   "source": "community",
   "category": "transcription",

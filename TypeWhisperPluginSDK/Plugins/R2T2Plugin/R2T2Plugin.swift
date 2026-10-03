@@ -107,6 +107,10 @@ enum R2T2Protocol {
 
     static let terminatingChunk = Data("0\r\n\r\n".utf8)
 
+    /// 300 ms of silence, then the terminating chunk. R2T2 drops a final word that ends exactly at
+    /// the end of the audio; the silence matches the tail padding TypeWhisper adds for batch engines.
+    static let endOfStream = chunkFrame(Data(count: sampleRate * 3 / 10 * 2)) + terminatingChunk
+
     static func makePCM16LEData(samples: [Float]) -> Data {
         var data = Data(capacity: samples.count * 2)
         for sample in samples {
@@ -490,12 +494,12 @@ private final class R2T2LiveConnection: @unchecked Sendable {
         try await send(R2T2Protocol.chunkFrame(pcm))
     }
 
-    /// Sends the terminating chunk and waits for the final transcript.
+    /// Ends the audio stream and waits for the final transcript.
     func finish() async throws -> String {
         if !sentTerminator {
             sentTerminator = true
             do {
-                try await send(R2T2Protocol.terminatingChunk)
+                try await send(R2T2Protocol.endOfStream)
             } catch {
                 Self.logger.warning("Failed to send terminating chunk: \(error.localizedDescription)")
             }

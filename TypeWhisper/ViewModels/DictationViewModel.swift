@@ -340,6 +340,7 @@ final class DictationViewModel: ObservableObject {
     @Published var activeRuleReasonLabel: String?
     @Published var activeRuleExplanation: String?
     @Published var processingPhase: String?
+    @Published private(set) var isModelLoading = false
     @Published private(set) var isRecordingInputReady = false
     @Published var actionFeedbackMessage: String?
     @Published var actionFeedbackIcon: String?
@@ -531,6 +532,7 @@ final class DictationViewModel: ObservableObject {
     private var dictationSessions: [UUID: DictationSessionSnapshot] = [:]
     private var dictationSessionOrder: [UUID] = []
     private let maxTrackedDictationSessions = 100
+    private var dictationLatencyTraces: [UUID: DictationLatencyTrace] = [:]
 
     var cancelWarningMessage: String? {
         switch (state, cancelWarningTarget) {
@@ -740,8 +742,8 @@ final class DictationViewModel: ObservableObject {
         streamingHandler.onStreamingStateChange = { [weak self] streaming in
             self?.isStreaming = streaming
         }
-        audioRecordingService.onFirstRecordingAudioBuffer = { [weak self] in
-            self?.handleFirstRecordingAudioBuffer()
+        audioRecordingService.onFirstRecordingAudioBuffer = { [weak self] uptimeNanoseconds in
+            self?.handleFirstRecordingAudioBuffer(at: uptimeNanoseconds)
         }
 
         promptPaletteHandler.onShowNotchFeedback = { [weak self] message, icon, duration, isError, category in
@@ -1050,6 +1052,10 @@ final class DictationViewModel: ObservableObject {
         return nil
     }
 
+    func apiDictationLatency(id: UUID) -> DictationLatencyTrace? {
+        dictationLatencyTraces[id]
+    }
+
     private func beginDictationSession(id: UUID) {
         activeDictationSessionID = id
         storeDictationSession(DictationSessionSnapshot(id: id, status: .recording, transcription: nil, error: nil))
@@ -1251,6 +1257,14 @@ final class DictationViewModel: ObservableObject {
 
     private func failDictationSession(id: UUID, error: String) {
         storeDictationSession(DictationSessionSnapshot(id: id, status: .failed, transcription: nil, error: error))
+        if dictationLatencyTraces[id]?.isComplete == false {
+            dictationLatencyTraces[id]?.failed = true
+            // Once text was inserted, `finishLatencyTraceAfterInsertion` completes the trace
+            // after the paste verification and clipboard restore resolved.
+            if dictationLatencyTraces[id]?.insertion == nil {
+                finishLatencyTrace(sessionID: id)
+            }
+        }
         if activeDictationSessionID == id {
             activeDictationSessionID = nil
         }
@@ -1298,8 +1312,13 @@ final class DictationViewModel: ObservableObject {
         emitRecordingStartCueIfReady()
     }
 
-    private func handleFirstRecordingAudioBuffer() {
+    private func handleFirstRecordingAudioBuffer(at uptimeNanoseconds: UInt64) {
         firstRecordingAudioBufferSeen = true
+        updateLatencyTrace(sessionID: activeDictationSessionID) { trace in
+            if trace.firstAudioBufferUptimeNanoseconds == nil {
+                trace.firstAudioBufferUptimeNanoseconds = uptimeNanoseconds
+            }
+        }
         emitRecordingStartCueIfReady()
     }
 
@@ -1408,6 +1427,49 @@ final class DictationViewModel: ObservableObject {
         while dictationSessionOrder.count > maxTrackedDictationSessions {
             let removedID = dictationSessionOrder.removeFirst()
             dictationSessions.removeValue(forKey: removedID)
+            dictationLatencyTraces.removeValue(forKey: removedID)
+        }
+    }
+
+    private func updateLatencyTrace(
+        sessionID: UUID?,
+        _ update: (inout DictationLatencyTrace) -> Void
+    ) {
+        guard let sessionID, var trace = dictationLatencyTraces[sessionID], !trace.isComplete else { return }
+        update(&trace)
+        dictationLatencyTraces[sessionID] = trace
+    }
+
+    private func finishLatencyTrace(sessionID: UUID) {
+        guard var trace = dictationLatencyTraces[sessionID], !trace.isComplete else { return }
+        trace.isComplete = true
+        dictationLatencyTraces[sessionID] = trace
+        logger.notice("Dictation latency: \(trace.logDescription, privacy: .public)")
+    }
+
+    /// Completes the latency trace once a paste's verification and clipboard restore, which
+    /// run after `insertText` returned, have resolved. Must run right after the insertion so
+    /// the pending restore still belongs to it.
+    private func finishLatencyTraceAfterInsertion(sessionID: UUID?) {
+        guard let sessionID, let trace = dictationLatencyTraces[sessionID] else { return }
+        guard trace.insertion == .paste,
+              let pending = textInsertionService.pendingClipboardRestoreTasks() else {
+            finishLatencyTrace(sessionID: sessionID)
+            return
+        }
+        Task { @MainActor [weak self] in
+            let verification = await pending.verification.value
+            self?.updateLatencyTrace(sessionID: sessionID) { trace in
+                if trace.pasteVerification == .notChecked {
+                    trace.recordPasteVerification(verification, at: DispatchTime.now().uptimeNanoseconds)
+                }
+            }
+            if await pending.restore.value.restored {
+                self?.updateLatencyTrace(sessionID: sessionID) { trace in
+                    trace.clipboardRestoredUptimeNanoseconds = DispatchTime.now().uptimeNanoseconds
+                }
+            }
+            self?.finishLatencyTrace(sessionID: sessionID)
         }
     }
 
@@ -1421,6 +1483,13 @@ final class DictationViewModel: ObservableObject {
             self?.refreshRecordingInputConfiguration()
         }
         .store(in: &cancellables)
+
+        modelManager.$isDictationModelLoading
+            .removeDuplicates()
+            .sink { [weak self] isLoading in
+                self?.isModelLoading = isLoading
+            }
+            .store(in: &cancellables)
 
         indicatorFeedbackLifetime.$remainingFraction
             .removeDuplicates()
@@ -1723,6 +1792,7 @@ final class DictationViewModel: ObservableObject {
 
         self.forcedWorkflowId = forcedWorkflowId
         beginDictationSession(id: sessionID)
+        dictationLatencyTraces[sessionID] = DictationLatencyTrace(requestUptimeNanoseconds: requestUptimeNanoseconds)
 
         guard canDictate else {
             let readinessError = modelManager.transcriptionReadinessError(providerId: modelManager.selectedProviderId)
@@ -1755,6 +1825,8 @@ final class DictationViewModel: ObservableObject {
         captureLiveFieldTargetAtRecordingRequestIfEligible()
 
         let resolvedInputSelection = audioDeviceService.resolvedRecordingInputSelection()
+        dictationLatencyTraces[sessionID]?.inputTransport = audioDeviceService
+            .recordingInputTransportName(for: resolvedInputSelection)
         let initialForcedWorkflow = forcedWorkflow(for: forcedWorkflowId)
         audioRecordingService.microphoneBoostEnabled = microphoneBoostEnabled(for: initialForcedWorkflow)
         let selectedInputUsesBluetooth = resolvedInputSelection.usesBluetoothTransport
@@ -2027,6 +2099,11 @@ final class DictationViewModel: ObservableObject {
             // The asynchronous Bluetooth start only returns after the current
             // engine generation has produced a confirmed ready stream.
             firstRecordingAudioBufferSeen = true
+            updateLatencyTrace(sessionID: sessionID) { trace in
+                if trace.firstAudioBufferUptimeNanoseconds == nil {
+                    trace.firstAudioBufferUptimeNanoseconds = audioStartCompletedTimestamp
+                }
+            }
         }
         updateRecordingStartCuePayload(activeApp: activeApp)
         let contextMs = (CFAbsoluteTimeGetCurrent() - contextStartTimestamp) * 1000
@@ -2046,6 +2123,12 @@ final class DictationViewModel: ObservableObject {
                 || externalStreamingDisplayCount > 0
         )
         refreshIncrementalWorkflowPostProcessing(forceRestart: true)
+        // Cold and warm starts are reported separately, so read readiness before the prewarm.
+        let engineReadyAtStart = modelManager.isTranscriptionEngineReady(engineOverrideId: effectiveEngineOverrideId)
+        let readinessEngine = effectiveEngineOverrideId ?? modelManager.selectedProviderId
+        updateLatencyTrace(sessionID: sessionID) {
+            $0.recordEngineReadiness(engineReadyAtStart, engine: readinessEngine)
+        }
         // A pending website workflow can still switch the engine; the URL resolution
         // prewarms once the workflow is settled.
         if !hiddenLiveSessionAwaitsWebsiteWorkflow {
@@ -2390,6 +2473,8 @@ final class DictationViewModel: ObservableObject {
             return
         }
         isStopInFlight = true
+        let stopUptimeNanoseconds = DispatchTime.now().uptimeNanoseconds
+        updateLatencyTrace(sessionID: activeDictationSessionID) { $0.stopUptimeNanoseconds = stopUptimeNanoseconds }
         let canKeepFinalLiveInsertionQuiet = streamingHandler.hasActiveLiveTranscriptionSession
             && !requiresVisiblePostProcessingPhase
         // Stopped before the browser URL resolved: the hidden live session never started.
@@ -2430,7 +2515,7 @@ final class DictationViewModel: ObservableObject {
             streamingHandler.stop()
             lastStreamingParams = nil
             stopRecordingTimer()
-            _ = await audioRecordingService.stopRecording(
+            let discardedSamples = await audioRecordingService.stopRecording(
                 policy: .immediate,
                 bluetoothBehavior: bluetoothStopBehavior
             )
@@ -2438,6 +2523,8 @@ final class DictationViewModel: ObservableObject {
             audioRecordingService.discardActiveRecoveryRecording()
             guard !Task.isCancelled else { return }
             if let sessionID {
+                let discardedDuration = Double(discardedSamples.count) / AudioRecordingService.targetSampleRate
+                updateLatencyTrace(sessionID: sessionID) { $0.recordingSeconds = discardedDuration }
                 failDictationSession(id: sessionID, error: discardMessage)
             }
             showNotchFeedback(
@@ -2498,6 +2585,7 @@ final class DictationViewModel: ObservableObject {
 
         let peakLevel = audioRecordingService.peakRawAudioLevel
         let rawDuration = Double(samples.count) / AudioRecordingService.targetSampleRate
+        updateLatencyTrace(sessionID: sessionID) { $0.recordingSeconds = rawDuration }
         if previewFollowedDictationEngine,
            !streamingPreviewWasHidden,
            !hasConfirmedTranscriptionResultText(liveSessionResult),
@@ -2653,6 +2741,12 @@ final class DictationViewModel: ObservableObject {
                 }
                 let result = transcription.result
                 let diagnostics = result.diagnosticSummary(audioDuration: audioDuration)
+                updateLatencyTrace(sessionID: sessionID) { trace in
+                    trace.finalTranscriptUptimeNanoseconds = DispatchTime.now().uptimeNanoseconds
+                    trace.recordFinalEngine(result.engineUsed)
+                    trace.model = transcription.modelId
+                    trace.usedLiveResult = usedLiveSessionResult
+                }
                 logger.info("Stop timing: final transcription ready elapsedMs=\(stopElapsedMs(), privacy: .public), usedLiveResult=\(usedLiveSessionResult, privacy: .public), engine=\(result.engineUsed, privacy: .public), model=\(transcription.modelId ?? "unknown", privacy: .public), usedRecoveryFallback=\(transcription.usedRecoveryFallback, privacy: .public), primaryPromptChars=\(termsPrompt?.count ?? 0, privacy: .public), \(diagnostics, privacy: .public)")
 
                 // Bail out if a new recording started while we were transcribing
@@ -2691,13 +2785,17 @@ final class DictationViewModel: ObservableObject {
                     logger.info("Detected terminal spoken Enter command")
                 }
 
+                // A workflow can skip its model for short dictations, so the trace reports
+                // whether the model ran rather than whether a handler exists.
+                let modelPostProcessingRan = OSAllocatedUnfairLock(initialState: false)
                 let llmHandler = buildLLMHandler(
                     translationTarget: translationTarget,
                     detectedLanguage: result.detectedLanguage,
                     configuredLanguage: language,
                     resolvedOutputFormat: resolvedOutputFormat,
                     incrementalPostProcessing: incrementalPostProcessing,
-                    stopTimingStart: stopStart
+                    stopTimingStart: stopStart,
+                    modelPostProcessingRan: modelPostProcessingRan
                 )
 
                 guard !Task.isCancelled else { return }
@@ -2759,6 +2857,10 @@ final class DictationViewModel: ObservableObject {
                         usedRawTranscriptionFallback: postProcessingFallback != nil
                     )
                 logger.info("Stop timing: post-processing done elapsedMs=\(stopElapsedMs(), privacy: .public)")
+                updateLatencyTrace(sessionID: sessionID) { trace in
+                    trace.postProcessingDoneUptimeNanoseconds = DispatchTime.now().uptimeNanoseconds
+                    trace.llmPostProcessing = modelPostProcessingRan.withLock { $0 }
+                }
                 let transcriptionID = sessionID ?? UUID()
                 let completionTimestamp = Date()
                 recentTranscriptionStore.recordTranscription(
@@ -2790,6 +2892,10 @@ final class DictationViewModel: ObservableObject {
                         activeApp: activeApp, language: language, originalText: result.text
                     )
                     pinnedInsertionTarget = nil
+                    updateLatencyTrace(sessionID: sessionID) { trace in
+                        trace.insertion = .actionPlugin
+                        trace.insertionUptimeNanoseconds = DispatchTime.now().uptimeNanoseconds
+                    }
                 } else {
                     let contextualInsertionEnabled = DictationInsertionTextFormatter.contextualInsertionEnabled()
                     let insertionContext: TextInsertionService.InsertionContext? = if contextualInsertionEnabled {
@@ -2833,6 +2939,12 @@ final class DictationViewModel: ObservableObject {
                         case .applied(let finalObservation):
                             shouldUseNormalInsertion = false
                             didInsertText = true
+                            updateLatencyTrace(sessionID: sessionID) { trace in
+                                let now = DispatchTime.now().uptimeNanoseconds
+                                trace.insertion = .liveField
+                                trace.insertionUptimeNanoseconds = now
+                                trace.verifiedInsertionUptimeNanoseconds = now
+                            }
                             targetAppCorrectionBaseline = shouldObservePostInsertionEdits
                                 ? finalObservation
                                 : nil
@@ -2884,6 +2996,16 @@ final class DictationViewModel: ObservableObject {
                             outputFormat: resolvedOutputFormat,
                             awaitPasteVerification: learningPreInsertionObservation != nil
                         )
+                        if let insertionResult {
+                            let timing = textInsertionService.lastInsertionTiming
+                                ?? TextInsertionService.InsertionTiming(
+                                    insertedUptimeNanoseconds: DispatchTime.now().uptimeNanoseconds,
+                                    verifiedUptimeNanoseconds: nil
+                                )
+                            updateLatencyTrace(sessionID: sessionID) { trace in
+                                trace.recordInsertion(insertionResult, timing: timing)
+                            }
+                        }
                         if case .pasted(.unverified(let reason))? = insertionResult {
                             logger.info(
                                 "Text insertion paste could not be verified; continuing with clipboard paste fallback. reason=\(reason.rawValue, privacy: .public), app=\(activeApp.bundleId ?? "nil", privacy: .public)"
@@ -2896,6 +3018,9 @@ final class DictationViewModel: ObservableObject {
                         didInsertText = true
                     }
                     self.pinnedInsertionTarget = nil
+                    if !didInsertText {
+                        updateLatencyTrace(sessionID: sessionID) { $0.insertion = .notInserted }
+                    }
 
                     if didInsertText {
                         lastSuccessfulDictationInsertion = DictationInsertionCompletion(
@@ -2938,6 +3063,8 @@ final class DictationViewModel: ObservableObject {
                         }
                     }
                 }
+
+                finishLatencyTraceAfterInsertion(sessionID: sessionID)
 
                 if let insertedTextForCorrectionTracking {
                     let contributionContext: CorrectionContributionContext? = improveTypeWhisperCaptureEnabled
@@ -3653,6 +3780,18 @@ final class DictationViewModel: ObservableObject {
         activeRuleReasonLabel = match?.kind.label
         activeRuleExplanation = match.map { workflowExplanation(for: $0, activeApp: activeApp) }
         applyEffectiveMicrophoneBoostToAudioService()
+        prewarmWorkflowLLMIfNeeded()
+    }
+
+    /// Loads the matched workflow's on-device LLM while recording, so post-processing does
+    /// not wait for the model after the stop.
+    private func prewarmWorkflowLLMIfNeeded() {
+        guard let workflow = matchedWorkflow,
+              !workflow.usesAppleTranslate,
+              workflowTextProcessingService.canProcess(workflow: workflow) else {
+            return
+        }
+        promptProcessingService.prewarmWorkflowLLMProvider(providerOverride: workflow.behavior.providerId)
     }
 
     private func forcedWorkflow(for id: UUID?) -> Workflow? {
@@ -4006,7 +4145,8 @@ final class DictationViewModel: ObservableObject {
         configuredLanguage: String?,
         resolvedOutputFormat: String?,
         incrementalPostProcessing: WorkflowIncrementalPostProcessingSession? = nil,
-        stopTimingStart: CFAbsoluteTime? = nil
+        stopTimingStart: CFAbsoluteTime? = nil,
+        modelPostProcessingRan: OSAllocatedUnfairLock<Bool>? = nil
     ) -> ((String) async throws -> String)? {
         if let workflowHandler = buildWorkflowTextProcessingHandler(
             translationTarget: translationTarget,
@@ -4014,7 +4154,8 @@ final class DictationViewModel: ObservableObject {
             configuredLanguage: configuredLanguage,
             resolvedOutputFormat: resolvedOutputFormat,
             incrementalPostProcessing: incrementalPostProcessing,
-            stopTimingStart: stopTimingStart
+            stopTimingStart: stopTimingStart,
+            modelPostProcessingRan: modelPostProcessingRan
         ) {
             return workflowHandler
         }
@@ -4039,6 +4180,7 @@ final class DictationViewModel: ObservableObject {
                         logger.error("Translation target language invalid: \(targetCode, privacy: .public)")
                         return text
                     }
+                    modelPostProcessingRan?.withLock { $0 = true }
                     if targetCode.caseInsensitiveCompare(targetNormalized) != .orderedSame {
                         logger.info("Translation target normalized \(targetCode, privacy: .public) -> \(targetNormalized, privacy: .public)")
                     }
@@ -4058,7 +4200,8 @@ final class DictationViewModel: ObservableObject {
         configuredLanguage: String?,
         resolvedOutputFormat: String?,
         incrementalPostProcessing: WorkflowIncrementalPostProcessingSession?,
-        stopTimingStart: CFAbsoluteTime?
+        stopTimingStart: CFAbsoluteTime?,
+        modelPostProcessingRan: OSAllocatedUnfairLock<Bool>?
     ) -> ((String) async throws -> String)? {
         guard let workflow = matchedWorkflow else { return nil }
 
@@ -4101,6 +4244,7 @@ final class DictationViewModel: ObservableObject {
                 logger.info("Skipping workflow AI processing for short dictation")
                 return text
             }
+            modelPostProcessingRan?.withLock { $0 = true }
 
             guard let segmentedRequest else {
                 incrementalPostProcessing?.cancel()

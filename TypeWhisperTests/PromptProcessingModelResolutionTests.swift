@@ -283,3 +283,56 @@ final class PromptProcessingModelResolutionTests: XCTestCase {
         }
     }
 }
+
+@MainActor
+final class PromptProcessingPrewarmTests: XCTestCase {
+    private final class PrewarmCountingProvider: LLMProvider, @unchecked Sendable {
+        var isAvailable = true
+        private(set) var prewarmCount = 0
+
+        func process(systemPrompt: String, userText: String) async throws -> String { userText }
+
+        func prewarm() {
+            prewarmCount += 1
+        }
+    }
+
+    private func makeService(fallbackProviderIds: [String]) throws -> (PromptProcessingService, PrewarmCountingProvider) {
+        let suiteName = "PromptProcessingPrewarmTests.\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        addTeardownBlock { defaults.removePersistentDomain(forName: suiteName) }
+        let items = fallbackProviderIds.map { LLMFallbackPriorityItem(providerId: $0) }
+        defaults.set(try JSONEncoder().encode(items), forKey: UserDefaultsKeys.llmFallbackPriorityList)
+        let service = PromptProcessingService(userDefaults: defaults)
+        let provider = PrewarmCountingProvider()
+        service.testingSetAppleIntelligenceProvider(provider)
+        return (service, provider)
+    }
+
+    func testWorkflowWithAppleIntelligencePrewarmsIt() throws {
+        let (service, provider) = try makeService(fallbackProviderIds: ["groq"])
+
+        service.prewarmWorkflowLLMProvider(providerOverride: PromptProcessingService.appleIntelligenceId)
+
+        XCTAssertEqual(provider.prewarmCount, 1)
+    }
+
+    func testFallbackListStartingWithAppleIntelligencePrewarmsIt() throws {
+        let (service, provider) = try makeService(fallbackProviderIds: [PromptProcessingService.appleIntelligenceId, "groq"])
+
+        service.prewarmWorkflowLLMProvider(providerOverride: nil)
+
+        XCTAssertEqual(provider.prewarmCount, 1)
+    }
+
+    func testOtherFirstProviderOrUnavailableModelSkipsPrewarm() throws {
+        let (service, provider) = try makeService(fallbackProviderIds: ["groq", PromptProcessingService.appleIntelligenceId])
+
+        service.prewarmWorkflowLLMProvider(providerOverride: nil)
+        service.prewarmWorkflowLLMProvider(providerOverride: "groq")
+        provider.isAvailable = false
+        service.prewarmWorkflowLLMProvider(providerOverride: PromptProcessingService.appleIntelligenceId)
+
+        XCTAssertEqual(provider.prewarmCount, 0)
+    }
+}

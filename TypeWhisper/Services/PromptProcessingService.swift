@@ -411,6 +411,23 @@ class PromptProcessingService: ObservableObject {
         return !setupStatus.requiresExternalCredentials
     }
 
+    /// Prewarms Apple Intelligence when a workflow request with `providerOverride` tries it
+    /// first, so its model loads while recording instead of after the stop.
+    func prewarmWorkflowLLMProvider(providerOverride: String?) {
+        guard let first = candidates(providerOverride: providerOverride, cloudModelOverride: nil, effortOverride: nil).first,
+              normalizeProviderId(first.providerId) == Self.appleIntelligenceId,
+              let provider = appleIntelligenceProvider, provider.isAvailable else {
+            return
+        }
+        provider.prewarm()
+    }
+
+#if DEBUG
+    func testingSetAppleIntelligenceProvider(_ provider: LLMProvider?) {
+        appleIntelligenceProvider = provider
+    }
+#endif
+
     /// Whether workflow requests with `providerOverride` can reach an on-device model.
     /// Without an override any entry of the LLM fallback list may handle the
     /// request, so one local entry is enough. Unresolvable providers count as remote.

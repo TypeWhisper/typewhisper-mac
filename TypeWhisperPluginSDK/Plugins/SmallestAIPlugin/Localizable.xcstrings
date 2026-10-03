@@ -3,6 +3,12 @@
   "strings": {
     "Auto (European)": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自動（ヨーロッパ言語）"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -19,6 +25,12 @@
     },
     "Auto (Multilingual)": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自動（多言語）"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -35,6 +47,12 @@
     },
     "Auto (Indic)": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自動（インド系言語）"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -51,6 +69,12 @@
     },
     "Auto (Asian)": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "自動（アジア言語）"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",

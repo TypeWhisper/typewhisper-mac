@@ -3,6 +3,12 @@
   "strings": {
     "Background opacity": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "背景の不透明度"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -19,6 +25,12 @@
     },
     "Height": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "高さ"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -35,6 +47,12 @@
     },
     "Lower values keep more of the app behind the transcript visible.": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "値を小さくすると、文字起こしの背後にあるアプリがより透けて見えます。"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -51,6 +69,12 @@
     },
     "Width": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "幅"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -67,6 +91,12 @@
     },
     "Window size": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ウィンドウサイズ"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",

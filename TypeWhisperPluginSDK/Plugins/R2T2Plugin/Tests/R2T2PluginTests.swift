@@ -86,6 +86,11 @@ final class R2T2PluginTests: XCTestCase {
         XCTAssertEqual(String(decoding: R2T2Protocol.terminatingChunk, as: UTF8.self), "0\r\n\r\n")
     }
 
+    func testEndOfStreamSendsTrailingSilenceBeforeTerminator() {
+        let silence = Data(count: 9_600)
+        XCTAssertEqual(R2T2Protocol.endOfStream, R2T2Protocol.chunkFrame(silence) + R2T2Protocol.terminatingChunk)
+    }
+
     func testParseSSEEvents() {
         XCTAssertEqual(R2T2Protocol.parseSSEData(#"{"type":"transcript.text.delta","delta":" hello"}"#), .delta(" hello"))
         XCTAssertEqual(R2T2Protocol.parseSSEData(#"{"type":"transcript.text.done","text":"Hello world.","timing":{"ttft_ms":12.5}}"#), .done("Hello world."))

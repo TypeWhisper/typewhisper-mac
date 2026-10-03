@@ -312,9 +312,11 @@ private final class RecordingPremiumICloudBridge: PremiumICloudBridging, @unchec
     private let lock = NSLock()
     private var storedSynchronizeCount = 0
     private var storedDeleteCount = 0
+    private var storedRemovedDeviceIDs: [String] = []
 
     var synchronizeCount: Int { lock.withLock { storedSynchronizeCount } }
     var deleteCount: Int { lock.withLock { storedDeleteCount } }
+    var removedDeviceIDs: [String] { lock.withLock { storedRemovedDeviceIDs } }
 
     init(localFolderURL: URL) {
         self.localFolderURL = localFolderURL
@@ -326,6 +328,32 @@ private final class RecordingPremiumICloudBridge: PremiumICloudBridging, @unchec
 
     func deleteRemotePackage() async throws {
         lock.withLock { storedDeleteCount += 1 }
+    }
+
+    func removeDevice(_ deviceID: String) async throws {
+        lock.withLock { storedRemovedDeviceIDs.append(deviceID) }
+        if let removalGate {
+            await removalGate.wait()
+        }
+    }
+
+    /// Holds removals until opened, to request a sync while one is running.
+    var removalGate: RemovalGate?
+}
+
+private actor RemovalGate {
+    private var isOpen = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func wait() async {
+        guard !isOpen else { return }
+        await withCheckedContinuation { waiters.append($0) }
+    }
+
+    func open() {
+        isOpen = true
+        waiters.forEach { $0.resume() }
+        waiters.removeAll()
     }
 }
 
@@ -1067,6 +1095,136 @@ final class CloudFolderSyncTests: XCTestCase {
         XCTAssertNil(controller.errorMessage)
     }
 
+    func testDeviceRemovalRemovesTheRecordsOfOneInstallationOnly() throws {
+        let package = try TestSupport.makeTemporaryDirectory(prefix: "PremiumSyncDeviceRemoval")
+        defer { TestSupport.remove(package) }
+        try Self.writeDeviceRecord("phone-new", origin: "phone-origin", in: package)
+        try Self.writeDeviceRecord("phone-old", origin: " phone-origin ", in: package)
+        try Self.writeDeviceRecord("ipad", origin: "ipad-origin", in: package)
+        try Self.writeDeviceRecord("mac", origin: nil, in: package)
+
+        try PremiumSyncDeviceRemoval.removeRecords(of: "phone-new", inPackages: [package])
+        XCTAssertEqual(try Self.deviceRecordNames(in: package), ["ipad.json", "mac.json"])
+
+        try PremiumSyncDeviceRemoval.removeRecords(of: "mac", inPackages: [package])
+        XCTAssertEqual(try Self.deviceRecordNames(in: package), ["ipad.json"])
+
+        XCTAssertThrowsError(try PremiumSyncDeviceRemoval.removeRecords(of: "../ipad", inPackages: [package]))
+        // An unreadable or missing record fails instead of reporting a removal.
+        XCTAssertThrowsError(try PremiumSyncDeviceRemoval.removeRecords(of: "unknown", inPackages: [package])) {
+            XCTAssertEqual($0 as? PremiumSyncDeviceRemoval.Failure, .recordUnreadable)
+        }
+        XCTAssertEqual(try Self.deviceRecordNames(in: package), ["ipad.json"])
+    }
+
+    func testDeviceRemovalUsesTheInstallationFromEitherSide() throws {
+        let mirror = try TestSupport.makeTemporaryDirectory(prefix: "PremiumSyncDeviceRemovalMirror")
+        let cloud = try TestSupport.makeTemporaryDirectory(prefix: "PremiumSyncDeviceRemovalCloud")
+        defer {
+            TestSupport.remove(mirror)
+            TestSupport.remove(cloud)
+        }
+        // The record is only in the mirror; iCloud has an older record of the same installation.
+        try Self.writeDeviceRecord("phone-new", origin: "phone-origin", in: mirror)
+        try Self.writeDeviceRecord("phone-old", origin: "phone-origin", in: cloud)
+        try Self.writeDeviceRecord("mac", origin: "mac-origin", in: cloud)
+
+        try PremiumSyncDeviceRemoval.removeRecords(of: "phone-new", inPackages: [mirror, cloud])
+
+        XCTAssertEqual(try Self.deviceRecordNames(in: mirror), [])
+        XCTAssertEqual(try Self.deviceRecordNames(in: cloud), ["mac.json"])
+    }
+
+    private static func writeDeviceRecord(_ deviceID: String, origin: String?, in package: URL) throws {
+        let devices = package.appendingPathComponent("devices", isDirectory: true)
+        try FileManager.default.createDirectory(at: devices, withIntermediateDirectories: true)
+        var record: [String: Any] = ["deviceId": deviceID, "platform": "iOS", "appVersion": "1.2"]
+        if let origin { record["historyOriginDeviceID"] = origin }
+        try JSONSerialization.data(withJSONObject: record)
+            .write(to: devices.appendingPathComponent("\(deviceID).json"))
+    }
+
+    private static func deviceRecordNames(in package: URL) throws -> Set<String> {
+        Set(try FileManager.default.contentsOfDirectory(
+            atPath: package.appendingPathComponent("devices", isDirectory: true).path
+        ))
+    }
+
+    @MainActor
+    func testAutomaticSyncRemovesOtherDevicesThroughTheBridge() async throws {
+        let suiteName = "PremiumSyncRemoveDevice-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        let folder = try TestSupport.makeTemporaryDirectory(prefix: "PremiumSyncRemoveDevice")
+        defer { TestSupport.remove(folder) }
+
+        let privateKey = P256.Signing.PrivateKey()
+        defaults.set(
+            try Self.entitlementEncoder.encode(Self.signedEntitlement(privateKey: privateKey)),
+            forKey: "premium.account.cachedEntitlement"
+        )
+        defaults.set(PremiumSyncMode.off.rawValue, forKey: "premiumSync.mode")
+        let account = PremiumAccountService(
+            defaults: defaults,
+            keychainService: suiteName,
+            entitlementPublicKeyBase64: privateKey.publicKey.rawRepresentation.base64EncodedString(),
+            isSignedInOverride: true,
+            automaticallyRefresh: false
+        )
+        let bridge = RecordingPremiumICloudBridge(localFolderURL: folder)
+        let controller = CloudFolderSyncController(
+            premiumAccountService: account,
+            syncStore: InMemoryUserDataSyncStore(),
+            defaults: defaults,
+            automaticICloudBridge: bridge,
+            automaticICloudAvailable: true
+        )
+        defer { controller.deactivate() }
+        await controller.setMode(.automaticICloud)
+
+        let phone = CloudFolderSyncDeviceRecord(
+            deviceId: "phone",
+            historyOriginDeviceID: "phone-origin",
+            platform: "iOS",
+            appVersion: "1.2",
+            updatedAt: Self.date(20),
+            name: "iPhone"
+        )
+        let devicesURL = CloudFolderSyncEngine.packageURL(for: folder)
+            .appendingPathComponent("devices", isDirectory: true)
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        try encoder.encode(phone).write(to: devicesURL.appendingPathComponent("phone.json"))
+        await controller.syncNow()
+
+        let mac = try XCTUnwrap(controller.devices.first { $0.platform == "macOS" })
+        XCTAssertTrue(controller.isCurrentDevice(mac))
+        XCTAssertFalse(controller.isCurrentDevice(phone))
+
+        await controller.removeDevice(mac)
+        XCTAssertEqual(bridge.removedDeviceIDs, [])
+
+        await controller.removeDevice(phone)
+        XCTAssertEqual(bridge.removedDeviceIDs, ["phone"])
+        XCTAssertNil(controller.errorMessage)
+        XCTAssertFalse(controller.isSyncing)
+
+        // A sync requested while a removal runs is not lost.
+        let gate = RemovalGate()
+        bridge.removalGate = gate
+        let synchronizationsBefore = bridge.synchronizeCount
+        let removal = Task { await controller.removeDevice(phone) }
+        while bridge.removedDeviceIDs.count < 2 { await Task.yield() }
+        await controller.syncNow()
+        XCTAssertEqual(bridge.synchronizeCount, synchronizationsBefore)
+        await gate.open()
+        await removal.value
+        for _ in 0..<200 where bridge.synchronizeCount == synchronizationsBefore {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertGreaterThan(bridge.synchronizeCount, synchronizationsBefore)
+    }
+
     @MainActor
     func testLaunchSyncsOnceAndIdlePollsOnlySyncAfterChanges() async throws {
         let suiteName = "PremiumSyncIdlePoll-\(UUID().uuidString)"
@@ -1522,6 +1680,225 @@ final class CloudFolderSyncTests: XCTestCase {
                 relativePath
             )
         }
+    }
+
+    func testICloudBridgeFirstSyncWithoutBaseOnlyMergesAndRecordsBase() throws {
+        let (localRoot, remoteRoot) = try Self.makeBridgeRoots()
+        defer {
+            TestSupport.remove(localRoot)
+            TestSupport.remove(remoteRoot)
+        }
+        try Self.writeBridgeFile("ops/mac/local.json", in: localRoot, seconds: 10)
+        try Self.writeBridgeFile("ops/ios/remote.json", in: remoteRoot, seconds: 10)
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: PremiumICloudBridgeFileMirror.mirrorStateURL(localRoot: localRoot).path
+        ))
+
+        try PremiumICloudBridgeFileMirror.synchronize(localRoot: localRoot, remoteRoot: remoteRoot)
+
+        for root in [localRoot, remoteRoot] {
+            XCTAssertTrue(Self.bridgeFileExists("ops/mac/local.json", in: root))
+            XCTAssertTrue(Self.bridgeFileExists("ops/ios/remote.json", in: root))
+        }
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: PremiumICloudBridgeFileMirror.mirrorStateURL(localRoot: localRoot).path
+        ))
+        // The hidden state file stays out of both packages.
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: remoteRoot.appendingPathComponent(PremiumICloudBridgeConstants.mirrorStateFileName).path
+        ))
+        XCTAssertFalse(Self.bridgeFileExists(PremiumICloudBridgeConstants.mirrorStateFileName, in: remoteRoot))
+    }
+
+    func testICloudBridgePropagatesRemoteDeletionToLocalMirror() throws {
+        let (localRoot, remoteRoot) = try Self.makeBridgeRoots()
+        defer {
+            TestSupport.remove(localRoot)
+            TestSupport.remove(remoteRoot)
+        }
+        try Self.writeBridgeFile("ops/ios/expired.json", in: remoteRoot, seconds: 10)
+        try Self.writeBridgeFile("devices/iphone.json", in: remoteRoot, seconds: 10)
+        try Self.writeBridgeFile("manifest.json", in: remoteRoot, seconds: 10)
+        try PremiumICloudBridgeFileMirror.synchronize(localRoot: localRoot, remoteRoot: remoteRoot)
+        XCTAssertTrue(Self.bridgeFileExists("ops/ios/expired.json", in: localRoot))
+
+        for path in ["ops/ios/expired.json", "devices/iphone.json"] {
+            try FileManager.default.removeItem(at: Self.bridgeFileURL(path, in: remoteRoot))
+        }
+        try PremiumICloudBridgeFileMirror.synchronize(localRoot: localRoot, remoteRoot: remoteRoot)
+
+        for root in [localRoot, remoteRoot] {
+            XCTAssertFalse(Self.bridgeFileExists("ops/ios/expired.json", in: root))
+            XCTAssertFalse(Self.bridgeFileExists("devices/iphone.json", in: root))
+            XCTAssertTrue(Self.bridgeFileExists("manifest.json", in: root))
+        }
+        try PremiumICloudBridgeFileMirror.synchronize(localRoot: localRoot, remoteRoot: remoteRoot)
+        XCTAssertFalse(Self.bridgeFileExists("devices/iphone.json", in: remoteRoot))
+    }
+
+    func testICloudBridgePropagatesLocalDeletionToICloud() throws {
+        let (localRoot, remoteRoot) = try Self.makeBridgeRoots()
+        defer {
+            TestSupport.remove(localRoot)
+            TestSupport.remove(remoteRoot)
+        }
+        try Self.writeBridgeFile("devices/iphone.json", in: localRoot, seconds: 10)
+        try Self.writeBridgeFile("ops/mac/expired.json", in: localRoot, seconds: 10)
+        try Self.writeBridgeFile("manifest.json", in: localRoot, seconds: 10)
+        try PremiumICloudBridgeFileMirror.synchronize(localRoot: localRoot, remoteRoot: remoteRoot)
+        XCTAssertTrue(Self.bridgeFileExists("devices/iphone.json", in: remoteRoot))
+
+        for path in ["devices/iphone.json", "ops/mac/expired.json"] {
+            try FileManager.default.removeItem(at: Self.bridgeFileURL(path, in: localRoot))
+        }
+        try PremiumICloudBridgeFileMirror.synchronize(localRoot: localRoot, remoteRoot: remoteRoot)
+
+        for root in [localRoot, remoteRoot] {
+            XCTAssertFalse(Self.bridgeFileExists("devices/iphone.json", in: root))
+            XCTAssertFalse(Self.bridgeFileExists("ops/mac/expired.json", in: root))
+            XCTAssertTrue(Self.bridgeFileExists("manifest.json", in: root))
+        }
+    }
+
+    func testICloudBridgeRestoresFilesRewrittenAfterTheirDeletionOnTheOtherSide() throws {
+        let (localRoot, remoteRoot) = try Self.makeBridgeRoots()
+        defer {
+            TestSupport.remove(localRoot)
+            TestSupport.remove(remoteRoot)
+        }
+        try Self.writeBridgeFile("manifest.json", in: localRoot, seconds: 10)
+        try Self.writeBridgeFile("devices/iphone.json", in: localRoot, seconds: 10)
+        try PremiumICloudBridgeFileMirror.synchronize(localRoot: localRoot, remoteRoot: remoteRoot)
+
+        // Deleted remotely, rewritten locally.
+        try FileManager.default.removeItem(at: Self.bridgeFileURL("manifest.json", in: remoteRoot))
+        try Self.writeBridgeFile("manifest.json", in: localRoot, contents: "local-v2", seconds: 20)
+        // Deleted locally, rewritten remotely.
+        try FileManager.default.removeItem(at: Self.bridgeFileURL("devices/iphone.json", in: localRoot))
+        try Self.writeBridgeFile("devices/iphone.json", in: remoteRoot, contents: "remote-v2", seconds: 20)
+
+        try PremiumICloudBridgeFileMirror.synchronize(localRoot: localRoot, remoteRoot: remoteRoot)
+
+        for root in [localRoot, remoteRoot] {
+            XCTAssertEqual(
+                try Data(contentsOf: Self.bridgeFileURL("manifest.json", in: root)),
+                Data("local-v2".utf8)
+            )
+            XCTAssertEqual(
+                try Data(contentsOf: Self.bridgeFileURL("devices/iphone.json", in: root)),
+                Data("remote-v2".utf8)
+            )
+        }
+    }
+
+    func testICloudBridgeDeletedRemotePackageRemovesOnlyMirroredLocalFiles() throws {
+        let (localRoot, remoteRoot) = try Self.makeBridgeRoots()
+        defer {
+            TestSupport.remove(localRoot)
+            TestSupport.remove(remoteRoot)
+        }
+        try Self.writeBridgeFile("manifest.json", in: remoteRoot, seconds: 10)
+        try Self.writeBridgeFile("ops/ios/operation.json", in: remoteRoot, seconds: 10)
+        try PremiumICloudBridgeFileMirror.synchronize(localRoot: localRoot, remoteRoot: remoteRoot)
+        XCTAssertTrue(Self.bridgeFileExists("ops/ios/operation.json", in: localRoot))
+
+        try FileManager.default.removeItem(
+            at: remoteRoot.appendingPathComponent("typewhisper-sync", isDirectory: true)
+        )
+        try Self.writeBridgeFile("ops/mac/new.json", in: localRoot, seconds: 20)
+        try PremiumICloudBridgeFileMirror.synchronize(localRoot: localRoot, remoteRoot: remoteRoot)
+
+        for root in [localRoot, remoteRoot] {
+            XCTAssertFalse(Self.bridgeFileExists("manifest.json", in: root))
+            XCTAssertFalse(Self.bridgeFileExists("ops/ios/operation.json", in: root))
+            XCTAssertTrue(Self.bridgeFileExists("ops/mac/new.json", in: root))
+        }
+        // The emptied ops/ios directory is not recreated as an empty skeleton in iCloud.
+        XCTAssertFalse(Self.bridgeFileExists("ops/ios", in: remoteRoot))
+    }
+
+    func testICloudBridgeResetLocalMirrorDoesNotEmptyICloud() throws {
+        let (localRoot, remoteRoot) = try Self.makeBridgeRoots()
+        defer {
+            TestSupport.remove(localRoot)
+            TestSupport.remove(remoteRoot)
+        }
+        try Self.writeBridgeFile("manifest.json", in: remoteRoot, seconds: 10)
+        try Self.writeBridgeFile("ops/ios/operation.json", in: remoteRoot, seconds: 10)
+        try PremiumICloudBridgeFileMirror.synchronize(localRoot: localRoot, remoteRoot: remoteRoot)
+
+        // Erasing all data removes the local package; other devices' data must survive.
+        try FileManager.default.removeItem(
+            at: localRoot.appendingPathComponent("typewhisper-sync", isDirectory: true)
+        )
+        try PremiumICloudBridgeFileMirror.synchronize(localRoot: localRoot, remoteRoot: remoteRoot)
+
+        for root in [localRoot, remoteRoot] {
+            XCTAssertTrue(Self.bridgeFileExists("manifest.json", in: root))
+            XCTAssertTrue(Self.bridgeFileExists("ops/ios/operation.json", in: root))
+        }
+    }
+
+    func testICloudBridgeCopiesNewFilesOnBothSidesAfterBaseIsRecorded() throws {
+        let (localRoot, remoteRoot) = try Self.makeBridgeRoots()
+        defer {
+            TestSupport.remove(localRoot)
+            TestSupport.remove(remoteRoot)
+        }
+        try Self.writeBridgeFile("manifest.json", in: localRoot, seconds: 10)
+        try PremiumICloudBridgeFileMirror.synchronize(localRoot: localRoot, remoteRoot: remoteRoot)
+
+        try Self.writeBridgeFile("ops/mac/new.json", in: localRoot, seconds: 20)
+        try Self.writeBridgeFile("ops/ios/new.json", in: remoteRoot, seconds: 20)
+        try PremiumICloudBridgeFileMirror.synchronize(localRoot: localRoot, remoteRoot: remoteRoot)
+
+        for root in [localRoot, remoteRoot] {
+            XCTAssertTrue(Self.bridgeFileExists("manifest.json", in: root))
+            XCTAssertTrue(Self.bridgeFileExists("ops/mac/new.json", in: root))
+            XCTAssertTrue(Self.bridgeFileExists("ops/ios/new.json", in: root))
+        }
+    }
+
+    func testICloudBridgeDeletesNothingWhenICloudCannotBeListed() throws {
+        let (localRoot, remoteRoot) = try Self.makeBridgeRoots()
+        let unreadable = Self.bridgeFileURL("devices", in: remoteRoot)
+        defer {
+            try? FileManager.default.setAttributes(
+                [.posixPermissions: NSNumber(value: 0o755)],
+                ofItemAtPath: unreadable.path
+            )
+            TestSupport.remove(localRoot)
+            TestSupport.remove(remoteRoot)
+        }
+        try Self.writeBridgeFile("ops/ios/operation.json", in: remoteRoot, seconds: 10)
+        try Self.writeBridgeFile("devices/iphone.json", in: remoteRoot, seconds: 10)
+        try PremiumICloudBridgeFileMirror.synchronize(localRoot: localRoot, remoteRoot: remoteRoot)
+
+        try FileManager.default.removeItem(at: Self.bridgeFileURL("ops/ios/operation.json", in: remoteRoot))
+        try FileManager.default.setAttributes(
+            [.posixPermissions: NSNumber(value: 0)],
+            ofItemAtPath: unreadable.path
+        )
+        XCTAssertThrowsError(
+            try PremiumICloudBridgeFileMirror.synchronize(localRoot: localRoot, remoteRoot: remoteRoot)
+        )
+        XCTAssertTrue(Self.bridgeFileExists("ops/ios/operation.json", in: localRoot))
+    }
+
+    func testICloudBridgeDeletingPackagesClearsMirrorState() throws {
+        let (localRoot, remoteRoot) = try Self.makeBridgeRoots()
+        defer {
+            TestSupport.remove(localRoot)
+            TestSupport.remove(remoteRoot)
+        }
+        try Self.writeBridgeFile("manifest.json", in: localRoot, seconds: 10)
+        try PremiumICloudBridgeFileMirror.synchronize(localRoot: localRoot, remoteRoot: remoteRoot)
+        let stateURL = PremiumICloudBridgeFileMirror.mirrorStateURL(localRoot: localRoot)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: stateURL.path))
+
+        try PremiumICloudBridgeFileMirror.deletePackages(localRoot: localRoot, remoteRoot: remoteRoot)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: stateURL.path))
     }
 
     func testICloudBridgeUsesConfiguredContainerIdentifier() {
@@ -4006,6 +4383,40 @@ final class CloudFolderSyncTests: XCTestCase {
 
     private static func date(_ seconds: TimeInterval) -> Date {
         Date(timeIntervalSince1970: 1_700_000_000 + seconds)
+    }
+
+    private static func makeBridgeRoots() throws -> (local: URL, remote: URL) {
+        (
+            try TestSupport.makeTemporaryDirectory(prefix: "ICloudBridgeLocal"),
+            try TestSupport.makeTemporaryDirectory(prefix: "ICloudBridgeRemote")
+        )
+    }
+
+    private static func bridgeFileURL(_ path: String, in root: URL) -> URL {
+        root.appendingPathComponent("typewhisper-sync", isDirectory: true)
+            .appendingPathComponent(path)
+    }
+
+    private static func bridgeFileExists(_ path: String, in root: URL) -> Bool {
+        FileManager.default.fileExists(atPath: bridgeFileURL(path, in: root).path)
+    }
+
+    private static func writeBridgeFile(
+        _ path: String,
+        in root: URL,
+        contents: String? = nil,
+        seconds: TimeInterval
+    ) throws {
+        let file = bridgeFileURL(path, in: root)
+        try FileManager.default.createDirectory(
+            at: file.deletingLastPathComponent(),
+            withIntermediateDirectories: true
+        )
+        try Data((contents ?? path).utf8).write(to: file)
+        try FileManager.default.setAttributes(
+            [.modificationDate: date(seconds)],
+            ofItemAtPath: file.path
+        )
     }
 
     private static func signedEntitlement(

@@ -353,7 +353,8 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
     private(set) var testingLastBluetoothStopBehavior: BluetoothStopBehavior?
 #endif
     var engineTeardownOverride: ((AVAudioEngine) -> Void)?
-    var onFirstRecordingAudioBuffer: (() -> Void)?
+    /// Called on the main queue with the uptime at which the first audio buffer arrived.
+    var onFirstRecordingAudioBuffer: ((UInt64) -> Void)?
 
     /// CoreAudio device ID to use for recording. nil = system default input.
     var selectedDeviceID: AudioDeviceID? {
@@ -2204,8 +2205,9 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
         logger.info(
             "Bluetooth recording input ready: generation=\(promotion.generation, privacy: .public), bufferedSamples=\(promotion.samples.count, privacy: .public), readinessMs=\(String(format: "%.1f", promotion.readinessDuration * 1000), privacy: .public)"
         )
+        let readyUptimeNanoseconds = DispatchTime.now().uptimeNanoseconds
         DispatchQueue.main.async { [weak self] in
-            self?.onFirstRecordingAudioBuffer?()
+            self?.onFirstRecordingAudioBuffer?(readyUptimeNanoseconds)
         }
     }
 
@@ -2571,8 +2573,9 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
 
         publishAudioLevel(normalizedLevel, rms: rms, force: didReceiveFirstBuffer)
         if didReceiveFirstBuffer {
+            let firstBufferUptimeNanoseconds = DispatchTime.now().uptimeNanoseconds
             DispatchQueue.main.async { [weak self] in
-                self?.onFirstRecordingAudioBuffer?()
+                self?.onFirstRecordingAudioBuffer?(firstBufferUptimeNanoseconds)
             }
         }
     }
@@ -2658,7 +2661,7 @@ final class AudioRecordingService: ObservableObject, @unchecked Sendable {
 
 #if DEBUG
     func testingNotifyFirstRecordingAudioBuffer() {
-        onFirstRecordingAudioBuffer?()
+        onFirstRecordingAudioBuffer?(DispatchTime.now().uptimeNanoseconds)
     }
 #endif
 

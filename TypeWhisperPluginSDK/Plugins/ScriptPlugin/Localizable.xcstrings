@@ -3,6 +3,12 @@
   "strings": {
     "No rules configured.": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ルールが設定されていません。"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",

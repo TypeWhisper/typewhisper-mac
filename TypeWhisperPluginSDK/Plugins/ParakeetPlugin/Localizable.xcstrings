@@ -3,6 +3,12 @@
   "strings": {
     "Load": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "読み込む"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",

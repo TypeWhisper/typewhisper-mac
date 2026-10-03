@@ -51,6 +51,7 @@ struct UserDataLocations: Sendable {
                 PremiumICloudBridgeConstants.packageDirectoryName,
                 isDirectory: true
             ))
+            auxiliaryItems.append(PremiumICloudBridgeFileMirror.mirrorStateURL(localRoot: mirrorRoot))
         }
         auxiliaryItems += temporaryItems(withPrefix: temporaryItemPrefix, fileManager: fileManager)
 

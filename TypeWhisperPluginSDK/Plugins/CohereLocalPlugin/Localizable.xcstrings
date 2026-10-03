@@ -3,6 +3,12 @@
   "strings": {
     "14 languages with explicit selection: English, French, German, Spanish, Italian, Portuguese, Dutch, Polish, Greek, Arabic, Japanese, Chinese, Vietnamese, and Korean.": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "対応する14言語から明示的に選択してください：英語、フランス語、ドイツ語、スペイン語、イタリア語、ポルトガル語、オランダ語、ポーランド語、ギリシャ語、アラビア語、日本語、中国語、ベトナム語、韓国語。"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -19,6 +25,12 @@
     },
     "A private on-device GGUF and Metal provider for Cohere Transcribe 03-2026. Audio stays on this Mac.": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "GGUFとMetalを使用してCohere Transcribe 03-2026をローカルで実行します。音声はこのMac内に留まります。"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -35,6 +47,12 @@
     },
     "Cancel": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "キャンセル"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -51,6 +69,12 @@
     },
     "Capabilities and limits": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "機能と制限"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -67,6 +91,12 @@
     },
     "Cohere model license": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cohereモデルのライセンス"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -99,6 +129,12 @@
     },
     "CrispASR license and notices": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CrispASRのライセンスと通知事項"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -115,6 +151,12 @@
     },
     "Done": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "完了"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -131,6 +173,12 @@
     },
     "Download & Load": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ダウンロードして読み込む"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -147,6 +195,12 @@
     },
     "Downloaded": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ダウンロード済み"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -163,6 +217,12 @@
     },
     "Downloading": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ダウンロード中"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -179,6 +239,12 @@
     },
     "Downloading Cohere model": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cohereモデルをダウンロード中"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -195,6 +261,12 @@
     },
     "Error": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "エラー"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -211,6 +283,12 @@
     },
     "Hugging Face Token": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Hugging Faceトークン"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -227,6 +305,12 @@
     },
     "Invalid Hugging Face Token": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無効なHugging Faceトークン"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -243,6 +327,12 @@
     },
     "Load": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "読み込む"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -259,6 +349,12 @@
     },
     "LOCAL · BATCH": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ローカル · バッチ処理"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -275,6 +371,12 @@
     },
     "No automatic language detection, streaming, timestamps, diarization, translation, or dictionary boosting.": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "言語の自動検出、ストリーミング、タイムスタンプ、話者分離、翻訳、辞書による認識精度の向上には対応していません。"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -291,6 +393,12 @@
     },
     "Model weights are downloaded from a pinned Apache-2.0 GGUF revision. CrispASR and the VAD model are MIT-licensed.": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "モデルの重みは、Apache-2.0ライセンスのGGUFの固定リビジョンからダウンロードされます。CrispASRとVADモデルはMITライセンスです。"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -307,6 +415,12 @@
     },
     "Not Downloaded": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "未ダウンロード"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -323,6 +437,12 @@
     },
     "Optional. Increases download rate limits and may speed up the model download. The token is stored securely in Keychain.": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "任意。ダウンロードのレート制限が緩和され、モデルのダウンロードが速くなる場合があります。トークンはキーチェーンに安全に保存されます。"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -339,6 +459,12 @@
     },
     "Preparing": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "準備中"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -355,6 +481,12 @@
     },
     "Starting CrispASR with Metal and warming up the model. Dictation is ready when this finishes.": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MetalでCrispASRを起動し、モデルの初期準備を行っています。完了すると音声入力を使用できます。"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -371,6 +503,12 @@
     },
     "Ready": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "準備完了"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -387,6 +525,12 @@
     },
     "Running Cohere locally with Metal…": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MetalでCohereをローカル実行中…"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -403,6 +547,12 @@
     },
     "Remove": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "削除"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -419,6 +569,12 @@
     },
     "Remove downloaded model?": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ダウンロード済みのモデルを削除しますか？"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -435,6 +591,12 @@
     },
     "Remove Model": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "モデルを削除"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -451,6 +613,12 @@
     },
     "Save": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -467,6 +635,12 @@
     },
     "The model stays resident while loaded. Metal is warmed up before the provider becomes ready, keeping the first transcription responsive.": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "モデルは読み込まれている間、メモリに常駐します。プロバイダーが使用可能になる前にMetalの初期準備を行うため、初回の文字起こしも速やかに開始できます。"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -483,6 +657,12 @@
     },
     "Unload": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "アンロード"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -499,6 +679,12 @@
     },
     "Valid Hugging Face Token": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有効なHugging Faceトークン"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -515,6 +701,12 @@
     },
     "Validating token…": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "トークンを検証中…"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -531,6 +723,12 @@
     },
     "VAD model license": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "VADモデルのライセンス"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -547,6 +745,12 @@
     },
     "Voice activity detection runs before every transcription to suppress silence and low-noise hallucinations.": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "毎回の文字起こし前に音声区間を検出し、無音や小さなノイズによる誤認識を抑えます。"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -627,6 +831,12 @@
     },
     "8 GB+ Mac": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "メモリ8 GB以上のMac"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -643,6 +853,12 @@
     },
     "16 GB+ recommended": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "メモリ16 GB以上を推奨"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -659,6 +875,12 @@
     },
     "Best tested balance of size, speed, and accuracy": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "検証した中で容量・速度・精度のバランスが最良"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -675,6 +897,12 @@
     },
     "Choose Compact Q4_K for the smallest download, Fast Q5_0 for the recommended default, Q6_K for higher numeric precision, or experimental Q8_0 for maximum numeric precision. Only the selected model is loaded.": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ダウンロード容量が最小のCompact Q4_K、標準で推奨するFast Q5_0、数値精度が高いQ6_K、数値精度が最高の実験的なQ8_0から選択できます。選択したモデルだけを読み込みます。"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -691,6 +919,12 @@
     },
     "Cohere asset verification failed for:": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cohereのファイル検証に失敗しました："
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -707,6 +941,12 @@
     },
     "Cohere Transcribe does not support translation.": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cohere Transcribeは翻訳に対応していません。"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -723,6 +963,12 @@
     },
     "Cohere Transcribe requires an explicitly selected supported language. Automatic language detection is not available. Supported languages:": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cohere Transcribeでは対応言語を明示的に選択する必要があります。言語の自動検出は利用できません。対応言語："
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -755,6 +1001,12 @@
     },
     "CrispASR did not become ready within five minutes.": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CrispASRが5分以内に使用可能になりませんでした。"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -771,6 +1023,12 @@
     },
     "CrispASR exited while starting.": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CrispASRが起動中に終了しました。"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -787,6 +1045,12 @@
     },
     "Fast (Q5_0 · Recommended)": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Fast (Q5_0 · 推奨)"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -803,6 +1067,12 @@
     },
     "Higher precision (Q6_K · Metal)": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "高精度 (Q6_K · Metal)"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -819,6 +1089,12 @@
     },
     "Intermediate quantization between recommended Q5_0 and Q8_0": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "推奨のQ5_0とQ8_0の中間の量子化"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -835,6 +1111,12 @@
     },
     "Largest quantization; no overall accuracy gain measured yet": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "容量が最大の量子化モデル。全体的な認識精度の向上は未確認"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -851,6 +1133,12 @@
     },
     "Maximum precision (Q8_0 · Experimental)": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最高精度 (Q8_0 · 実験的)"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -867,6 +1155,12 @@
     },
     "Model": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "モデル"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -883,6 +1177,12 @@
     },
     "Smallest download and memory footprint": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ダウンロード容量・メモリ使用量が最小"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -899,6 +1199,12 @@
     },
     "The Cohere model download completed without all required model files.": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cohereモデルのダウンロードは完了しましたが、必要なモデルファイルが揃っていません。"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -915,6 +1221,12 @@
     },
     "The Cohere Transcribe model is not downloaded.": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cohere Transcribeモデルがダウンロードされていません。"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -931,6 +1243,12 @@
     },
     "The Cohere Transcribe model is not loaded. Open the plugin settings and load it first.": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Cohere Transcribeモデルが読み込まれていません。プラグイン設定を開き、先に読み込んでください。"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -947,6 +1265,12 @@
     },
     "The CrispASR runtime could not be extracted.": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CrispASRランタイムを展開できませんでした。"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -963,6 +1287,12 @@
     },
     "The CrispASR runtime download failed.": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "CrispASRランタイムのダウンロードに失敗しました。"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -979,6 +1309,12 @@
     },
     "The local CrispASR server URL is invalid.": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ローカルのCrispASRサーバーURLが無効です。"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -995,6 +1331,12 @@
     },
     "The pinned Cohere model repository identifier is invalid.": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "固定されたCohereモデルのリポジトリ識別子が無効です。"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -1011,6 +1353,12 @@
     },
     "The verified CrispASR runtime archive is incomplete.": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "検証済みのCrispASRランタイムアーカイブに不足があります。"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -1027,6 +1375,12 @@
     },
     "This removes %@. Shared runtime files remain while another variant is installed.": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@を削除します。別のバリアントがインストールされている間は、共有ランタイムファイルを保持します。"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -1043,6 +1397,12 @@
     },
     "TypeWhisper could not reserve a local port for Cohere Transcribe.": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "TypeWhisperがCohere Transcribe用のローカルポートを確保できませんでした。"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -1059,6 +1419,12 @@
     },
     "Starting and warming up Cohere with Metal": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "MetalでCohereを起動して初期準備中"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -1075,6 +1441,12 @@
     },
     "Working…": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "処理中…"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -1091,6 +1463,12 @@
     },
     "Loads on demand": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "必要時に読み込み"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -1107,6 +1485,12 @@
     },
     "Auto-unload model is set to Immediate.": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "「モデルを自動でアンロード」が「すぐに」に設定されています。"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",

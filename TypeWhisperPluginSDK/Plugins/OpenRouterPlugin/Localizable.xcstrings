@@ -3,6 +3,12 @@
   "strings": {
     "Temperature Mode": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "温度モード"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -19,6 +25,12 @@
     },
     "Custom": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "カスタム"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -35,6 +47,12 @@
     },
     "Provider Default": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "プロバイダーのデフォルト"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -51,6 +69,12 @@
     },
     "Temperature": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "温度"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",

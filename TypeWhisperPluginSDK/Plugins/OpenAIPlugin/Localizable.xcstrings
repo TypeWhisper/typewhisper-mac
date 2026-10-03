@@ -3,6 +3,12 @@
   "strings": {
     "Voice instructions": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "読み上げ方の指示"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -19,6 +25,12 @@
     },
     "Temperature Mode": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "温度モード"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -35,6 +47,12 @@
     },
     "ChatGPT login uses the supported ChatGPT/Codex model list. Use API Key mode for the full OpenAI API catalog.": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ChatGPTログインでは、対応するChatGPT/Codexモデルの一覧を使用します。OpenAI APIの全モデルを使用するには、APIキーモードを選んでください。"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -51,6 +69,12 @@
     },
     "Could not refresh models. Keeping the current list.": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "モデルを更新できませんでした。現在の一覧を保持します。"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -67,6 +91,12 @@
     },
     "Custom": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "カスタム"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -83,6 +113,12 @@
     },
     "Custom temperature is ignored for the selected GPT-5 reasoning configuration.": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "選択したGPT-5の推論設定では、カスタム温度は無視されます。"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -99,6 +135,12 @@
     },
     "Provider Default": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "プロバイダーのデフォルト"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -115,6 +157,12 @@
     },
     "Refreshing": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更新中"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -131,6 +179,12 @@
     },
     "Refreshing OpenAI models...": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "OpenAIモデルを更新中..."
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -147,6 +201,12 @@
     },
     "Temperature": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "温度"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -163,6 +223,12 @@
     },
     "Text-to-Speech Voice": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "読み上げ音声"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -179,6 +245,12 @@
     },
     "Updated ChatGPT/Codex model list.": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ChatGPT/Codexモデルの一覧を更新しました。"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -195,6 +267,12 @@
     },
     "Use your existing ChatGPT Plus/Pro or Codex login for prompt processing. Transcription and text-to-speech still require an API key.": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "既存のChatGPT Plus/ProまたはCodexのログインでプロンプト処理を利用できます。文字起こしと読み上げには引き続きAPIキーが必要です。"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",

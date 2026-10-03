@@ -3,6 +3,12 @@
   "strings": {
     "Temperature Mode": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "温度モード"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -19,6 +25,12 @@
     },
     "Creative": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "創造性重視"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -35,6 +47,12 @@
     },
     "Custom": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "カスタム"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -51,6 +69,12 @@
     },
     "Generation": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "生成"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -67,6 +91,12 @@
     },
     "Load": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "読み込む"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -83,6 +113,12 @@
     },
     "Precise": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "正確さ重視"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -99,6 +135,12 @@
     },
     "Provider Default": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "プロバイダーのデフォルト"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -115,6 +157,12 @@
     },
     "Temperature": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "温度"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",

@@ -3,6 +3,12 @@
   "strings": {
     "API Key": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "APIキー"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -19,6 +25,12 @@
     },
     "Applies to workflow (LLM) processing only.": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ワークフロー（LLM）処理にのみ適用されます。"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -35,6 +47,12 @@
     },
     "Cloud API integration for Mistral LLMs and Voxtral STT.": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Mistral LLMとVoxtral STTのクラウドAPI連携。"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -51,6 +69,12 @@
     },
     "Custom": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "カスタム"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -67,6 +91,12 @@
     },
     "Default": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "デフォルト"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -83,6 +113,12 @@
     },
     "Invalid API Key": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "無効なAPIキー"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -99,6 +135,12 @@
     },
     "LLM Model": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "LLMモデル"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -131,6 +173,12 @@
     },
     "Provider Default": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "プロバイダーのデフォルト"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -147,6 +195,12 @@
     },
     "Remove": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "削除"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -163,6 +217,12 @@
     },
     "Save": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -179,6 +239,12 @@
     },
     "Temperature": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "温度"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -195,6 +261,12 @@
     },
     "Temperature Mode": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "温度モード"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -211,6 +283,12 @@
     },
     "Transcription Model": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文字起こしモデル"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -227,6 +305,12 @@
     },
     "Valid API Key": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "有効なAPIキー"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -243,6 +327,12 @@
     },
     "Validating...": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "検証中..."
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -259,6 +349,12 @@
     },
     "e.g. LFztgP5WA...": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "例：LFztgP5WA..."
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",

@@ -796,6 +796,12 @@
     },
     "No folder selected": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "フォルダ未選択"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",

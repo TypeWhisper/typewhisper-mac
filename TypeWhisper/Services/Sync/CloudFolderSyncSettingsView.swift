@@ -873,6 +873,73 @@ final class CloudFolderSyncController: ObservableObject {
         }
     }
 
+    /// True for this Mac's record, including an older record of the same
+    /// installation that still carries its history origin.
+    func isCurrentDevice(_ device: CloudFolderSyncDeviceRecord) -> Bool {
+        let state = mode == .automaticICloud ? automaticState : customState
+        if device.deviceId == state.deviceId { return true }
+        guard let origin = device.historyOriginDeviceID?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !origin.isEmpty else {
+            return false
+        }
+        return origin == historySyncPreferences?.deviceID
+    }
+
+    /// Removes another device from the sync list. Its synced entries stay, and
+    /// it appears again when it syncs.
+    func removeDevice(_ device: CloudFolderSyncDeviceRecord) async {
+        guard mode != .off, !isSyncing, !isCurrentDevice(device),
+              let folderURL = activeFolderURL() else {
+            return
+        }
+        let removalMode = mode
+        isSyncing = true
+        errorMessage = nil
+        defer { finishSyncWork() }
+        do {
+            if removalMode == .automaticICloud {
+                try await automaticICloudBridge.removeDevice(device.deviceId)
+            } else {
+                let accessed = folderURL.startAccessingSecurityScopedResource()
+                defer { if accessed { folderURL.stopAccessingSecurityScopedResource() } }
+                let deviceID = device.deviceId
+                try await Task.detached(priority: .utility) {
+                    try PremiumSyncDeviceRemoval.removeRecords(
+                        of: deviceID,
+                        inPackages: [CloudFolderSyncEngine.packageURL(for: folderURL)]
+                    )
+                }.value
+            }
+            let remaining = await Task.detached(priority: .utility) {
+                CloudFolderSyncEngine.devices(folderURL: folderURL)
+            }.value
+            guard mode == removalMode else { return }
+            devices = remaining ?? devices.filter { $0.deviceId != device.deviceId }
+            deviceCount = devices.count
+            statusMessage = String(localized: "Device removed from the sync list. Synced data was kept.")
+        } catch {
+            errorMessage = error.localizedDescription
+        }
+    }
+
+    /// Ends a sync or a device removal and runs what was requested meanwhile:
+    /// local edits and folder changes only set a flag while one is running.
+    private func finishSyncWork() {
+        isSyncing = false
+        if needsResync {
+            needsResync = false
+            needsChangeCheck = false
+            Task { @MainActor [weak self] in
+                await self?.syncNow()
+            }
+        } else if needsChangeCheck {
+            needsChangeCheck = false
+            Task { @MainActor [weak self] in
+                await self?.syncIfNeeded()
+            }
+        }
+    }
+
     func syncNow() async {
         if AppConstants.isScreenshotAutomation {
             isSyncing = false
@@ -900,19 +967,7 @@ final class CloudFolderSyncController: ObservableObject {
             if accessed {
                 folderURL.stopAccessingSecurityScopedResource()
             }
-            isSyncing = false
-            if needsResync {
-                needsResync = false
-                needsChangeCheck = false
-                Task { @MainActor [weak self] in
-                    await self?.syncNow()
-                }
-            } else if needsChangeCheck {
-                needsChangeCheck = false
-                Task { @MainActor [weak self] in
-                    await self?.syncIfNeeded()
-                }
-            }
+            finishSyncWork()
         }
 
         do {
@@ -1364,6 +1419,7 @@ final class CloudFolderSyncController: ObservableObject {
 struct CloudFolderSyncSettingsView: View {
     @ObservedObject var controller: CloudFolderSyncController
     @State private var confirmingSyncFolderDeletion = false
+    @State private var showingSyncDevices = false
     @State private var confirmingHistorySync = false
 
     private var modePicker: some View {
@@ -1445,7 +1501,21 @@ struct CloudFolderSyncSettingsView: View {
                     statusRow(title: String(localized: "premium.window.sync.folder"), value: controller.selectedFolderDisplayName, systemImage: "folder")
                     statusRow(title: String(localized: "premium.window.sync.lastSync"), value: lastSyncText, systemImage: "clock")
                     statusRow(title: String(localized: "premium.window.sync.pending"), value: "\(controller.pendingChanges)", systemImage: "arrow.triangle.2.circlepath")
-                    statusRow(title: String(localized: "premium.window.sync.devices"), value: "\(controller.deviceCount)", systemImage: "laptopcomputer.and.iphone")
+                    Button {
+                        showingSyncDevices = true
+                    } label: {
+                        HStack(spacing: 0) {
+                            statusRow(title: String(localized: "premium.window.sync.devices"), value: "\(controller.deviceCount)", systemImage: "laptopcomputer.and.iphone")
+                            Image(systemName: "chevron.right")
+                                .font(.caption.weight(.semibold))
+                                .foregroundStyle(.tertiary)
+                                .padding(.leading, 6)
+                            Spacer(minLength: 0)
+                        }
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityIdentifier("premium.sync.devices")
                 }
             }
 
@@ -1455,13 +1525,17 @@ struct CloudFolderSyncSettingsView: View {
                         .font(.headline)
 
                     HStack(spacing: 8) {
-                        Button {
-                            controller.chooseFolder()
-                        } label: {
-                            Label(String(localized: "premium.window.sync.chooseFolder"), systemImage: "folder.badge.plus")
+                        // Choosing a folder switches to Cloud Folder; in the other modes the
+                        // folder actions would change the mode behind the user's back.
+                        if controller.mode == .cloudFolder {
+                            Button {
+                                controller.chooseFolder()
+                            } label: {
+                                Label(String(localized: "premium.window.sync.chooseFolder"), systemImage: "folder.badge.plus")
+                            }
+                            .disabled(!controller.canUseSync || controller.isSyncing)
+                            .accessibilityIdentifier("premium.sync.chooseFolder")
                         }
-                        .disabled(!controller.canUseSync || controller.isSyncing)
-                        .accessibilityIdentifier("premium.sync.chooseFolder")
 
                         Button {
                             Task { await controller.syncNow() }
@@ -1475,13 +1549,15 @@ struct CloudFolderSyncSettingsView: View {
                         .disabled(!controller.canUseSync || !controller.isConfigured || controller.isSyncing)
                         .accessibilityIdentifier("premium.sync.syncNow")
 
-                        Button {
-                            controller.clearFolder()
-                        } label: {
-                            Label(String(localized: "premium.window.sync.clear"), systemImage: "xmark.circle")
+                        if controller.mode == .cloudFolder {
+                            Button {
+                                controller.clearFolder()
+                            } label: {
+                                Label(String(localized: "premium.window.sync.clear"), systemImage: "xmark.circle")
+                            }
+                            .disabled(controller.selectedFolderURL == nil || controller.isSyncing)
+                            .accessibilityIdentifier("premium.sync.clearFolder")
                         }
-                        .disabled(controller.selectedFolderURL == nil || controller.isSyncing)
-                        .accessibilityIdentifier("premium.sync.clearFolder")
                     }
                 }
             }
@@ -1519,6 +1595,9 @@ struct CloudFolderSyncSettingsView: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
+        .sheet(isPresented: $showingSyncDevices) {
+            PremiumSyncDevicesView(controller: controller)
+        }
         .confirmationDialog(
             String(localized: "premium.window.sync.deleteConfirmationTitle"),
             isPresented: $confirmingSyncFolderDeletion
@@ -1577,5 +1656,169 @@ struct CloudFolderSyncSettingsView: View {
             return .blue
         }
         return controller.mode == .off ? .secondary : .green
+    }
+}
+
+/// The devices that sync through the private folder, as on iOS: a list, and
+/// for each device its details and a way to remove it from the list.
+private struct PremiumSyncDevicesView: View {
+    @ObservedObject var controller: CloudFolderSyncController
+    @Environment(\.dismiss) private var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List {
+                if controller.devices.isEmpty {
+                    ContentUnavailableView(
+                        String(localized: "No Synced Devices"),
+                        systemImage: "laptopcomputer.and.iphone",
+                        description: Text(String(localized: "Devices appear here after their first successful sync."))
+                    )
+                } else {
+                    Section {
+                        ForEach(controller.devices, id: \.deviceId) { device in
+                            NavigationLink {
+                                PremiumSyncDeviceDetailView(controller: controller, device: device)
+                            } label: {
+                                PremiumSyncDeviceRow(device: device, isCurrent: controller.isCurrentDevice(device))
+                            }
+                        }
+                    } footer: {
+                        Text(String(localized: "Removing a device only removes it from this list. Synced entries stay available, and the device appears again if it syncs later."))
+                    }
+                }
+            }
+            .navigationTitle(String(localized: "premium.window.sync.devices"))
+            .toolbar {
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(String(localized: "Done")) { dismiss() }
+                }
+            }
+        }
+        .frame(minWidth: 460, minHeight: 360)
+        .accessibilityIdentifier("premium.sync.devices.sheet")
+    }
+}
+
+private struct PremiumSyncDeviceRow: View {
+    let device: CloudFolderSyncDeviceRecord
+    let isCurrent: Bool
+
+    var body: some View {
+        HStack(spacing: 12) {
+            Image(systemName: device.platformSymbol)
+                .font(.title3)
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 28)
+
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 6) {
+                    Text(device.displayName)
+                    if isCurrent {
+                        Text(String(localized: "This Device"))
+                            .font(.caption2.weight(.semibold))
+                            .foregroundStyle(Color.accentColor)
+                    }
+                }
+                Text(device.updatedAt, format: .relative(presentation: .named))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .accessibilityElement(children: .combine)
+    }
+}
+
+private struct PremiumSyncDeviceDetailView: View {
+    @ObservedObject var controller: CloudFolderSyncController
+    let device: CloudFolderSyncDeviceRecord
+    @Environment(\.dismiss) private var dismiss
+    @State private var confirmingRemoval = false
+
+    var body: some View {
+        Form {
+            Section {
+                LabeledContent(String(localized: "Platform"), value: device.platformDisplayName)
+                LabeledContent(String(localized: "App Version"), value: device.appVersion)
+                LabeledContent(
+                    String(localized: "premium.window.sync.lastSync"),
+                    value: device.updatedAt.formatted(date: .abbreviated, time: .shortened)
+                )
+                LabeledContent(String(localized: "Device ID"), value: device.shortIdentifier)
+            }
+
+            if controller.isCurrentDevice(device) {
+                Section {
+                    Label(String(localized: "This is the current device."), systemImage: "checkmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                Section {
+                    Button(String(localized: "Remove Device"), role: .destructive) {
+                        confirmingRemoval = true
+                    }
+                    // With sync off the list still shows the last known devices, but
+                    // there is no folder to remove them from.
+                    .disabled(controller.isSyncing || controller.mode == .off)
+                } footer: {
+                    Text(String(localized: "This keeps all synchronized entries. If the device syncs again, it will reappear in the list."))
+                }
+            }
+
+            if let errorMessage = controller.errorMessage {
+                Text(errorMessage)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
+        }
+        .formStyle(.grouped)
+        .navigationTitle(device.displayName)
+        .confirmationDialog(
+            String(localized: "Remove this device from the sync list?"),
+            isPresented: $confirmingRemoval,
+            titleVisibility: .visible
+        ) {
+            Button(String(localized: "Remove Device"), role: .destructive) {
+                Task {
+                    await controller.removeDevice(device)
+                    if controller.errorMessage == nil {
+                        dismiss()
+                    }
+                }
+            }
+            Button(String(localized: "Cancel"), role: .cancel) {}
+        } message: {
+            Text(String(localized: "Synchronized entries remain in your private sync folder. The device will reappear if it syncs again."))
+        }
+        .accessibilityIdentifier("premium.sync.device.detail")
+    }
+}
+
+private extension CloudFolderSyncDeviceRecord {
+    var displayName: String {
+        if let name = name?.trimmingCharacters(in: .whitespacesAndNewlines), !name.isEmpty {
+            return name
+        }
+        return platformDisplayName
+    }
+
+    var platformDisplayName: String {
+        switch platform.lowercased() {
+        case "ios", "ipados": String(localized: "iPhone or iPad")
+        case "macos": "Mac"
+        default: platform
+        }
+    }
+
+    var platformSymbol: String {
+        switch platform.lowercased() {
+        case "ios", "ipados": "iphone"
+        case "macos": "macbook"
+        default: "laptopcomputer.and.iphone"
+        }
+    }
+
+    var shortIdentifier: String {
+        String(deviceId.prefix(8)).uppercased()
     }
 }

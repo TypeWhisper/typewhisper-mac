@@ -1,0 +1,97 @@
+import XCTest
+@testable import TypeWhisper
+
+final class DictationLatencyTraceTests: XCTestCase {
+    private func trace() -> DictationLatencyTrace {
+        var trace = DictationLatencyTrace(requestUptimeNanoseconds: 1_000_000_000)
+        trace.firstAudioBufferUptimeNanoseconds = 1_080_000_000
+        trace.stopUptimeNanoseconds = 5_000_000_000
+        trace.finalTranscriptUptimeNanoseconds = 5_400_000_000
+        trace.postProcessingDoneUptimeNanoseconds = 5_412_500_000
+        return trace
+    }
+
+    private func timing(inserted: UInt64, verified: UInt64? = nil) -> TextInsertionService.InsertionTiming {
+        TextInsertionService.InsertionTiming(insertedUptimeNanoseconds: inserted, verifiedUptimeNanoseconds: verified)
+    }
+
+    func testPhasesAreMeasuredFromTheirStartEvents() {
+        let trace = trace()
+
+        XCTAssertEqual(trace.requestToFirstAudioBufferMs, 80)
+        XCTAssertEqual(trace.stopToFinalTranscriptMs, 400)
+        XCTAssertEqual(trace.postProcessingMs, 12.5)
+        XCTAssertNil(trace.stopToInsertionMs)
+        XCTAssertNil(trace.stopToVerifiedInsertionMs)
+    }
+
+    func testAccessibilityInsertionCountsAsVerifiedWhenItReturns() {
+        var trace = trace()
+        trace.recordInsertion(.insertedViaAccessibility, timing: timing(inserted: 5_450_000_000, verified: 5_450_000_000))
+
+        XCTAssertEqual(trace.insertion, .accessibility)
+        XCTAssertEqual(trace.stopToInsertionMs, 450)
+        XCTAssertEqual(trace.stopToVerifiedInsertionMs, 450)
+        XCTAssertNil(trace.pasteVerification)
+    }
+
+    func testUnawaitedPasteStaysUnverifiedUntilItsVerificationResolves() {
+        var trace = trace()
+        trace.recordInsertion(.pasted(verification: .notAwaited), timing: timing(inserted: 5_420_000_000))
+
+        XCTAssertEqual(trace.insertion, .paste)
+        XCTAssertEqual(trace.pasteVerification, .notChecked)
+        XCTAssertEqual(trace.stopToInsertionMs, 420)
+        XCTAssertNil(trace.stopToVerifiedInsertionMs)
+
+        trace.recordPasteVerification(.verified, at: 5_520_000_000)
+        XCTAssertEqual(trace.pasteVerification, .verified)
+        XCTAssertEqual(trace.stopToVerifiedInsertionMs, 520)
+    }
+
+    func testAwaitedPasteKeepsPostAndVerificationTimesApart() {
+        var trace = trace()
+        trace.recordInsertion(.pasted(verification: .verified), timing: timing(inserted: 5_420_000_000, verified: 5_510_000_000))
+
+        XCTAssertEqual(trace.pasteVerification, .verified)
+        XCTAssertEqual(trace.stopToInsertionMs, 420)
+        XCTAssertEqual(trace.stopToVerifiedInsertionMs, 510)
+    }
+
+    func testFailedPasteVerificationKeepsItsReasonAndNoVerifiedTime() {
+        var trace = trace()
+        trace.recordInsertion(
+            .pasted(verification: .unverified(.focusedTextUnchanged)),
+            timing: timing(inserted: 5_900_000_000)
+        )
+
+        XCTAssertEqual(trace.pasteVerification, .unverified("focused-text-unchanged"))
+        XCTAssertEqual(trace.pasteVerification?.name, "unverified")
+        XCTAssertEqual(trace.stopToInsertionMs, 900)
+        XCTAssertNil(trace.stopToVerifiedInsertionMs)
+        XCTAssertTrue(trace.logDescription.contains("pasteVerification=unverified"))
+        XCTAssertTrue(trace.logDescription.contains("stopToVerifiedInsertionMs=nil"))
+    }
+
+    func testReadinessOnlyDescribesTheEngineItWasSampledFor() {
+        var sameEngine = trace()
+        sameEngine.recordEngineReadiness(false, engine: "parakeet")
+        sameEngine.recordFinalEngine("parakeet")
+        XCTAssertEqual(sameEngine.engineReadyAtStart, false)
+
+        var switchedEngine = trace()
+        switchedEngine.recordEngineReadiness(true, engine: "groq")
+        switchedEngine.recordFinalEngine("parakeet")
+        XCTAssertEqual(switchedEngine.engine, "parakeet")
+        XCTAssertNil(switchedEngine.engineReadyAtStart)
+    }
+
+    func testMissingOrReversedTimestampsYieldNoDuration() {
+        var trace = DictationLatencyTrace(requestUptimeNanoseconds: 2_000_000_000)
+        trace.firstAudioBufferUptimeNanoseconds = 1_000_000_000
+
+        XCTAssertNil(trace.requestToFirstAudioBufferMs)
+        XCTAssertNil(trace.stopToFinalTranscriptMs)
+        XCTAssertNil(trace.postProcessingMs)
+    }
+}

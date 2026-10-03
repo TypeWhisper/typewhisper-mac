@@ -223,6 +223,12 @@
     },
     "Custom": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "カスタム"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -239,6 +245,12 @@
     },
     "LLM Model": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "LLMモデル"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -255,6 +267,12 @@
     },
     "Provider Default": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "プロバイダーのデフォルト"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -271,6 +289,12 @@
     },
     "Refresh": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "更新"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -287,6 +311,12 @@
     },
     "Temperature": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "温度"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -303,6 +333,12 @@
     },
     "Temperature Mode": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "温度モード"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -319,6 +355,12 @@
     },
     "Transcription Model": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "文字起こしモデル"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -335,6 +377,12 @@
     },
     "Using default models. Press Refresh to fetch all available models.": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "デフォルトのモデルを使用しています。「更新」を押すと、利用可能なすべてのモデルを取得します。"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",

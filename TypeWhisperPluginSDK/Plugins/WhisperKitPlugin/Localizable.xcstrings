@@ -3,6 +3,12 @@
   "strings": {
     "Cancel": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "キャンセル"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -19,6 +25,12 @@
     },
     "Still optimizing for Neural Engine...": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "引き続きNeural Engine向けに最適化中..."
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",

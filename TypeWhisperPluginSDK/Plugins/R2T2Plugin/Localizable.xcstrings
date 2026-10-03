@@ -3,6 +3,12 @@
   "strings": {
     "audiocpp_server with a confucius4_r2t2 model in streaming mode.": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "confucius4_r2t2モデルをストリーミングモードで実行するaudiocpp_server。"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -19,6 +25,12 @@
     },
     "Audio is streamed as 16 kHz PCM only to the audio.cpp server configured here.": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "音声は16 kHz PCM形式で、ここで設定したaudio.cppサーバーにのみストリーミング送信されます。"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -35,6 +47,12 @@
     },
     "Connected": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "接続済み"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -51,6 +69,12 @@
     },
     "Model ID": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "モデルID"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -67,6 +91,12 @@
     },
     "Save": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "保存"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -83,6 +113,12 @@
     },
     "Server URL": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "サーバーURL"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -99,6 +135,12 @@
     },
     "Test Connection": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "接続をテスト"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -115,6 +157,12 @@
     },
     "The \"id\" of the model entry in the server config.": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "サーバー設定内のモデル項目の「id」。"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -131,6 +179,12 @@
     },
     "%@ (recommended)": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "%@ (推奨)"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -147,6 +201,12 @@
     },
     "audiocpp_server %@ is running on 127.0.0.1:%@.": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "audiocpp_server %@は127.0.0.1:%@で実行中です。"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -163,6 +223,12 @@
     },
     "audiocpp_server %@ starts with the first dictation and restarts if it stops.": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "audiocpp_server %@は最初の音声入力時に起動し、停止した場合は再起動します。"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -179,6 +245,12 @@
     },
     "Built-in": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "内蔵"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -195,6 +267,12 @@
     },
     "Cancel": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "キャンセル"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -211,6 +289,12 @@
     },
     "Delete": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "削除"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -227,6 +311,12 @@
     },
     "Delete the downloaded model?": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ダウンロード済みのモデルを削除しますか？"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -243,6 +333,12 @@
     },
     "Download": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "ダウンロード"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -259,6 +355,12 @@
     },
     "Full precision, largest": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "フル精度、容量最大"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -275,6 +377,12 @@
     },
     "Model": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "モデル"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -291,6 +399,12 @@
     },
     "Model license": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "モデルのライセンス"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -307,6 +421,12 @@
     },
     "Near full quality, by davidxifeng": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "フル精度に近い品質、davidxifeng作成"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -323,6 +443,12 @@
     },
     "Own server": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "独自のサーバー"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -339,6 +465,12 @@
     },
     "Server": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "サーバー"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -355,6 +487,12 @@
     },
     "Show in Finder": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Finderで表示"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -371,6 +509,12 @@
     },
     "Smallest and fastest, community quant by Nairod785": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "最小・最速、Nairod785によるコミュニティ量子化モデル"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -387,6 +531,12 @@
     },
     "The model weights are licensed by NetEase Youdao under the Confucius4-R2T2 Model Use License, which is downloaded with each model (LICENSE, LICENSE_zh, NOTICE). By downloading you accept it. The server is audio.cpp, Apache-2.0.": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "モデルの重みは、NetEase YoudaoによるConfucius4-R2T2 Model Use Licenseに基づいて提供されます。このライセンスは各モデルとともにダウンロードされます（LICENSE、LICENSE_zh、NOTICE）。ダウンロードするとライセンスに同意したことになります。サーバーはaudio.cppで、Apache-2.0ライセンスです。"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -403,6 +553,12 @@
     },
     "audiocpp_server %@ is not installed yet.": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "audiocpp_server %@はまだインストールされていません。"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",

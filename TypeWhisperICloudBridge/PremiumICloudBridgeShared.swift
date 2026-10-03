@@ -8,6 +8,8 @@ enum PremiumICloudBridgeConstants {
         "TypeWhisperICloudBridgeServiceIdentifier"
     static let containerIdentifierInfoKey = "TypeWhisperICloudContainer"
     static let packageDirectoryName = "typewhisper-sync"
+    /// Hidden, so the mirror never copies it into the package.
+    static let mirrorStateFileName = ".typewhisper-sync-mirror-state.json"
 
     static func serviceBundleIdentifier(
         infoDictionary: [String: Any]? = Bundle.main.infoDictionary
@@ -98,6 +100,7 @@ enum PremiumICloudBridgeConstants {
 protocol PremiumICloudBridgeXPCProtocol: NSObjectProtocol {
     func synchronize(reply: @escaping (String?) -> Void)
     func deleteRemotePackage(reply: @escaping (String?) -> Void)
+    func removeDevice(_ deviceID: String, reply: @escaping (String?) -> Void)
 }
 
 enum PremiumICloudBridgeError: LocalizedError, Equatable, Sendable {
@@ -148,6 +151,22 @@ enum PremiumICloudBridgeFileMirror {
             PremiumICloudBridgeConstants.packageDirectoryName,
             isDirectory: true
         )
+        let stateURL = mirrorStateURL(localRoot: localRoot)
+
+        // Both sides are listed before anything is deleted, so a listing failure aborts the
+        // pass without touching either side.
+        if let base = readMirrorState(at: stateURL, fileManager: fileManager) {
+            let remoteFiles = try listFiles(in: remotePackage, fileManager: fileManager)
+            let localFiles = try listFiles(in: localPackage, fileManager: fileManager)
+            try propagateDeletions(
+                base: base,
+                localFiles: localFiles,
+                remoteFiles: remoteFiles,
+                localPackage: localPackage,
+                remotePackage: remotePackage,
+                fileManager: fileManager
+            )
+        }
 
         if fileManager.fileExists(atPath: localPackage.path) {
             try mergeDirectory(
@@ -165,6 +184,18 @@ enum PremiumICloudBridgeFileMirror {
                 fileManager: fileManager
             )
         }
+
+        let remoteFiles = try listFiles(in: remotePackage, fileManager: fileManager)
+        let localFiles = try listFiles(in: localPackage, fileManager: fileManager)
+        var base = MirrorState(files: [:])
+        for (path, local) in localFiles {
+            guard let remote = remoteFiles[path] else { continue }
+            base.files[path] = MirrorState.Entry(
+                local: local.modificationDate,
+                remote: remote.modificationDate
+            )
+        }
+        try writeMirrorState(base, to: stateURL)
     }
 
     static func deletePackages(
@@ -181,6 +212,196 @@ enum PremiumICloudBridgeFileMirror {
                 try fileManager.removeItem(at: package)
             }
         }
+        let stateURL = mirrorStateURL(localRoot: localRoot)
+        if fileManager.fileExists(atPath: stateURL.path) {
+            try fileManager.removeItem(at: stateURL)
+        }
+    }
+
+    static func mirrorStateURL(localRoot: URL) -> URL {
+        localRoot.appendingPathComponent(
+            PremiumICloudBridgeConstants.mirrorStateFileName,
+            isDirectory: false
+        )
+    }
+
+    /// Package-relative paths that were present on both sides after the last complete pass,
+    /// with the modification date each side had then. A path from this base that is missing
+    /// on one side was deleted there since.
+    private struct MirrorState: Codable {
+        struct Entry: Codable {
+            var local: Date?
+            var remote: Date?
+        }
+
+        var version = 1
+        var files: [String: Entry]
+    }
+
+    private struct ListedFile {
+        let modificationDate: Date?
+    }
+
+    private static func propagateDeletions(
+        base: MirrorState,
+        localFiles: [String: ListedFile],
+        remoteFiles: [String: ListedFile],
+        localPackage: URL,
+        remotePackage: URL,
+        fileManager: FileManager
+    ) throws {
+        // An empty local mirror means it was reset, for example by erasing all data, not
+        // that every file was deleted on purpose. It must never empty the iCloud package.
+        let propagatesLocalDeletions = !localFiles.isEmpty
+        for (path, entry) in base.files.sorted(by: { $0.key < $1.key }) {
+            switch (localFiles[path], remoteFiles[path]) {
+            case let (local?, nil):
+                // Manifest and device files are rewritten in place; a version written after
+                // the base wins over the deletion and is copied back by the merge.
+                guard !isModified(local, since: entry.local) else { continue }
+                let file = localPackage.appendingPathComponent(path, isDirectory: false)
+                try removeItem(at: file, coordinated: false, fileManager: fileManager)
+                try removeEmptyDirectories(
+                    from: file.deletingLastPathComponent(),
+                    through: localPackage,
+                    coordinated: false,
+                    fileManager: fileManager
+                )
+            case let (nil, remote?) where propagatesLocalDeletions:
+                guard !isModified(remote, since: entry.remote) else { continue }
+                let file = remotePackage.appendingPathComponent(path, isDirectory: false)
+                try removeItem(at: file, coordinated: true, fileManager: fileManager)
+                try removeEmptyDirectories(
+                    from: file.deletingLastPathComponent(),
+                    through: remotePackage,
+                    coordinated: true,
+                    fileManager: fileManager
+                )
+            default:
+                continue
+            }
+        }
+    }
+
+    /// Compares against the date recorded for the same side instead of the time of the last
+    /// pass, so clock differences between devices cannot hide a rewrite.
+    private static func isModified(_ file: ListedFile, since recordedDate: Date?) -> Bool {
+        guard let date = file.modificationDate, let recordedDate else { return true }
+        return abs(date.timeIntervalSince(recordedDate)) >= modificationDateTolerance
+    }
+
+    /// Lists the files of a package by package-relative path. Dataless iCloud placeholders
+    /// are listed under their real names, so they count as present.
+    private static func listFiles(
+        in package: URL,
+        fileManager: FileManager
+    ) throws -> [String: ListedFile] {
+        var files: [String: ListedFile] = [:]
+        guard fileManager.fileExists(atPath: package.path) else { return files }
+        try listFiles(in: package, prefix: "", into: &files, fileManager: fileManager)
+        return files
+    }
+
+    private static func listFiles(
+        in directory: URL,
+        prefix: String,
+        into files: inout [String: ListedFile],
+        fileManager: FileManager
+    ) throws {
+        let keys: [URLResourceKey] = [
+            .isDirectoryKey,
+            .isSymbolicLinkKey,
+            .contentModificationDateKey,
+        ]
+        let children = try fileManager.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: keys,
+            options: [.skipsHiddenFiles]
+        )
+        for child in children {
+            let values = try child.resourceValues(forKeys: Set(keys))
+            guard values.isSymbolicLink != true else { continue }
+            let path = prefix + child.lastPathComponent
+            if values.isDirectory == true {
+                try listFiles(in: child, prefix: path + "/", into: &files, fileManager: fileManager)
+            } else {
+                files[path] = ListedFile(modificationDate: values.contentModificationDate)
+            }
+        }
+    }
+
+    private static func removeItem(
+        at url: URL,
+        coordinated: Bool,
+        fileManager: FileManager
+    ) throws {
+        func remove(_ url: URL) throws {
+            do {
+                try fileManager.removeItem(at: url)
+            } catch let error as CocoaError where error.code == .fileNoSuchFile {
+                // Already gone, which is the requested outcome.
+            }
+        }
+        guard coordinated else {
+            try remove(url)
+            return
+        }
+        var coordinationError: NSError?
+        var removalError: Error?
+        NSFileCoordinator(filePresenter: nil).coordinate(
+            writingItemAt: url,
+            options: .forDeleting,
+            error: &coordinationError
+        ) { coordinatedURL in
+            do {
+                try remove(coordinatedURL)
+            } catch {
+                removalError = error
+            }
+        }
+        if let error = coordinationError ?? removalError {
+            throw error
+        }
+    }
+
+    /// Removes directories a deletion left empty, up to the package itself, so the merge
+    /// does not recreate them on the other side.
+    private static func removeEmptyDirectories(
+        from directory: URL,
+        through package: URL,
+        coordinated: Bool,
+        fileManager: FileManager
+    ) throws {
+        let packagePath = package.standardizedFileURL.path
+        var current = directory.standardizedFileURL
+        while current.path.hasPrefix(packagePath) {
+            guard let contents = try? fileManager.contentsOfDirectory(atPath: current.path),
+                  contents.isEmpty else {
+                return
+            }
+            try removeItem(at: current, coordinated: coordinated, fileManager: fileManager)
+            guard current.path != packagePath else { return }
+            current = current.deletingLastPathComponent()
+        }
+    }
+
+    private static func readMirrorState(
+        at url: URL,
+        fileManager: FileManager
+    ) -> MirrorState? {
+        guard fileManager.fileExists(atPath: url.path),
+              let data = try? Data(contentsOf: url),
+              let state = try? JSONDecoder().decode(MirrorState.self, from: data),
+              state.version == 1 else {
+            return nil
+        }
+        return state
+    }
+
+    private static func writeMirrorState(_ state: MirrorState, to url: URL) throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        try encoder.encode(state).write(to: url, options: .atomic)
     }
 
     private static func mergeDirectory(
@@ -310,5 +531,153 @@ enum PremiumICloudBridgeFileMirror {
                 ofItemAtPath: destination.path
             )
         }
+    }
+}
+
+/// Removes a device from the sync list: its record and the older records of
+/// the same installation, which share its history origin. Synced entries stay.
+enum PremiumSyncDeviceRemoval {
+    struct Installation: Equatable {
+        let deviceID: String
+        let historyOrigin: String?
+    }
+
+    enum Failure: LocalizedError, Equatable {
+        case invalidIdentifier
+        case recordUnreadable
+
+        var errorDescription: String? {
+            switch self {
+            case .invalidIdentifier: "The synchronized device identifier is invalid."
+            case .recordUnreadable: "The device record could not be read. Try again after the next sync."
+            }
+        }
+    }
+
+    private struct Record: Decodable {
+        let deviceId: String
+        let historyOriginDeviceID: String?
+    }
+
+    static func isSafeIdentifier(_ deviceID: String) -> Bool {
+        !deviceID.isEmpty
+            && deviceID == URL(fileURLWithPath: deviceID).lastPathComponent
+            && !deviceID.contains("/")
+            && !deviceID.contains("\\")
+    }
+
+    /// Removes the device from every package, for example the bridge's mirror
+    /// and the iCloud container. The installation is read once from the first
+    /// readable record, so a copy missing on one side still removes the other
+    /// side's older records of the same installation.
+    /// - Parameter packages: `typewhisper-sync` folders.
+    static func removeRecords(
+        of deviceID: String,
+        inPackages packages: [URL],
+        fileManager: FileManager = .default
+    ) throws {
+        let installation = try installation(of: deviceID, inPackages: packages, fileManager: fileManager)
+        for package in packages {
+            try removeRecords(of: installation, inPackage: package, fileManager: fileManager)
+        }
+    }
+
+    static func installation(
+        of deviceID: String,
+        inPackages packages: [URL],
+        fileManager: FileManager = .default
+    ) throws -> Installation {
+        guard isSafeIdentifier(deviceID) else { throw Failure.invalidIdentifier }
+        for package in packages {
+            let file = devicesURL(in: package).appendingPathComponent("\(deviceID).json")
+            guard fileManager.fileExists(atPath: file.path),
+                  let record = record(at: file, fileManager: fileManager) else {
+                continue
+            }
+            return Installation(deviceID: record.deviceId, historyOrigin: normalized(record.historyOriginDeviceID))
+        }
+        throw Failure.recordUnreadable
+    }
+
+    static func removeRecords(
+        of installation: Installation,
+        inPackage package: URL,
+        fileManager: FileManager = .default
+    ) throws {
+        let devicesURL = devicesURL(in: package)
+        // A package without devices has nothing to remove; an unreadable
+        // folder must fail, or a record would stay and be reported removed.
+        guard fileManager.fileExists(atPath: devicesURL.path) else { return }
+        let files = try fileManager.contentsOfDirectory(
+            at: devicesURL,
+            includingPropertiesForKeys: nil,
+            options: [.skipsHiddenFiles]
+        )
+        let matching = files.filter { file in
+            guard file.pathExtension == "json" else { return false }
+            if file.deletingPathExtension().lastPathComponent == installation.deviceID { return true }
+            guard let origin = installation.historyOrigin,
+                  let candidate = record(at: file, fileManager: fileManager) else {
+                return false
+            }
+            return normalized(candidate.historyOriginDeviceID) == origin
+        }
+        for file in matching {
+            try delete(file, fileManager: fileManager)
+        }
+    }
+
+    private static func devicesURL(in package: URL) -> URL {
+        package.appendingPathComponent("devices", isDirectory: true)
+    }
+
+    /// A record in iCloud may not be downloaded yet; a coordinated read downloads it.
+    private static func record(at file: URL, fileManager: FileManager) -> Record? {
+        if fileManager.isUbiquitousItem(at: file) {
+            try? fileManager.startDownloadingUbiquitousItem(at: file)
+        }
+        var data: Data?
+        var coordinationError: NSError?
+        NSFileCoordinator(filePresenter: nil).coordinate(
+            readingItemAt: file,
+            options: [],
+            error: &coordinationError
+        ) { coordinatedFile in
+            data = try? Data(contentsOf: coordinatedFile)
+        }
+        guard coordinationError == nil,
+              let data,
+              let record = try? JSONDecoder().decode(Record.self, from: data),
+              file.deletingPathExtension().lastPathComponent == record.deviceId else {
+            return nil
+        }
+        return record
+    }
+
+    private static func delete(_ file: URL, fileManager: FileManager) throws {
+        var removalError: (any Error)?
+        var coordinationError: NSError?
+        NSFileCoordinator(filePresenter: nil).coordinate(
+            writingItemAt: file,
+            options: .forDeleting,
+            error: &coordinationError
+        ) { coordinatedFile in
+            do {
+                try fileManager.removeItem(at: coordinatedFile)
+            } catch let error as CocoaError where error.code == .fileNoSuchFile {
+                // Already gone, which is the requested outcome.
+            } catch {
+                removalError = error
+            }
+        }
+        if let error = coordinationError ?? removalError { throw error }
+    }
+
+    private static func normalized(_ value: String?) -> String? {
+        guard let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !trimmed.isEmpty else {
+            return nil
+        }
+        return trimmed
     }
 }

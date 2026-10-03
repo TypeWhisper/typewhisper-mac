@@ -4284,6 +4284,36 @@ final class TypeWhisperIntegrationTests: XCTestCase {
         XCTAssertEqual(insertion?.id.uuidString, startID)
         XCTAssertEqual(insertion?.providerId, workflowPlugin.providerId)
         XCTAssertEqual(insertion?.modelId, "beta")
+
+        var latency: [String: Any]?
+        for _ in 0..<60 {
+            let response = try Self.jsonObject(
+                await router.route(HTTPRequest(
+                    method: "GET",
+                    path: "/v1/dictation/transcription",
+                    queryParams: ["id": startID],
+                    headers: [:],
+                    body: Data()
+                ))
+            )
+            latency = response["latency"] as? [String: Any]
+            if latency?["complete"] as? Bool == true { break }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        let completedLatency = try XCTUnwrap(latency)
+        XCTAssertEqual(completedLatency["complete"] as? Bool, true)
+        XCTAssertEqual(completedLatency["failed"] as? Bool, false)
+        XCTAssertEqual(completedLatency["engine"] as? String, workflowPlugin.providerId)
+        XCTAssertEqual(completedLatency["model"] as? String, "beta")
+        XCTAssertEqual(completedLatency["insertion"] as? String, "paste")
+        XCTAssertEqual(completedLatency["llm_post_processing"] as? Bool, false)
+        XCTAssertEqual(completedLatency["recording_seconds"] as? Double, 1)
+        XCTAssertNotNil(completedLatency["paste_verification"] as? String)
+        let stopToTranscript = try XCTUnwrap(completedLatency["stop_to_final_transcript_ms"] as? Double)
+        let stopToInsertion = try XCTUnwrap(completedLatency["stop_to_insertion_ms"] as? Double)
+        XCTAssertGreaterThanOrEqual(stopToInsertion, stopToTranscript)
+        // Latency measurements never carry transcript content.
+        XCTAssertFalse(completedLatency.values.contains { $0 as? String == "transcribed" })
     }
 
     func testDictationEndpointsSpeakCompletedTranscriptionOnly() async throws {
@@ -5563,6 +5593,82 @@ final class TypeWhisperIntegrationTests: XCTestCase {
 
         let restoreVerification = await service.waitForPendingClipboardRestore()
         XCTAssertEqual(restoreVerification, .unverified(.focusedTextStateUnavailable))
+        XCTAssertEqual(pasteboard.string(forType: .string), "Existing")
+    }
+
+    @MainActor
+    func testAwaitedPasteTimingExcludesVerificationWaitAndAutoEnterDelay() async throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        let element = AXUIElementCreateSystemWide()
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.focusedTextElementOverride = { element }
+        service.captureActiveAppOverride = { ("Notes", "com.apple.Notes", nil) }
+        service.verifiedRestoreGraceDelay = .milliseconds(1)
+        service.autoEnterDelay = .milliseconds(150)
+        service.returnSimulatorOverride = {}
+
+        var pasteCount = 0
+        service.pasteSimulatorOverride = { pasteCount += 1 }
+        service.focusedTextStateOverride = { _ in
+            pasteCount == 0
+                ? (value: "", selectedText: nil, selectedRange: NSRange(location: 0, length: 0))
+                : (value: "Hello", selectedText: nil, selectedRange: NSRange(location: 5, length: 0))
+        }
+
+        let result = try await service.insertText("Hello", preserveClipboard: true, autoEnter: true)
+        let returnedUptime = DispatchTime.now().uptimeNanoseconds
+
+        XCTAssertEqual(result, .pasted(verification: .verified))
+        let timing = try XCTUnwrap(service.lastInsertionTiming)
+        let verifiedUptime = try XCTUnwrap(timing.verifiedUptimeNanoseconds)
+        XCTAssertLessThanOrEqual(timing.insertedUptimeNanoseconds, verifiedUptime)
+        // The Auto Enter delay runs after verification and counts toward neither time.
+        XCTAssertGreaterThanOrEqual(returnedUptime - verifiedUptime, 150_000_000)
+    }
+
+    @MainActor
+    func testClipboardRestoreReportsSkippedRestoreWhenClipboardChanged() async throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.focusedTextElementOverride = { nil }
+        service.defaultPasteFallbackRestoreDelay = .milliseconds(30)
+        service.pasteSimulatorOverride = {}
+
+        pasteboard.clearContents()
+        pasteboard.setString("Existing", forType: .string)
+
+        _ = try await service.insertText("Hello", preserveClipboard: true)
+        let pending = try XCTUnwrap(service.pendingClipboardRestoreTasks())
+        pasteboard.clearContents()
+        pasteboard.setString("Copied meanwhile", forType: .string)
+
+        let outcome = await pending.restore.value
+        XCTAssertFalse(outcome.restored)
+        XCTAssertEqual(pasteboard.string(forType: .string), "Copied meanwhile")
+    }
+
+    @MainActor
+    func testClipboardRestoreReportsRestoredSnapshot() async throws {
+        let service = TextInsertionService()
+        let pasteboard = NSPasteboard.withUniqueName()
+        service.accessibilityGrantedOverride = true
+        service.pasteboardProvider = { pasteboard }
+        service.focusedTextElementOverride = { nil }
+        service.defaultPasteFallbackRestoreDelay = .milliseconds(30)
+        service.pasteSimulatorOverride = {}
+
+        pasteboard.clearContents()
+        pasteboard.setString("Existing", forType: .string)
+
+        _ = try await service.insertText("Hello", preserveClipboard: true)
+        let pending = try XCTUnwrap(service.pendingClipboardRestoreTasks())
+
+        let outcome = await pending.restore.value
+        XCTAssertTrue(outcome.restored)
         XCTAssertEqual(pasteboard.string(forType: .string), "Existing")
     }
 
@@ -14346,6 +14452,23 @@ final class TypeWhisperIntegrationTests: XCTestCase {
             AppConstants.appSupportDirectory.standardizedFileURL.path
                 .hasPrefix(FileManager.default.temporaryDirectory.standardizedFileURL.path)
         )
+    }
+
+    func testTestBundleRestoresTheDevAppEngineSelectionAfterEachTest() throws {
+        XCTAssertTrue(Bundle(for: TestHostDefaultsGuard.self).principalClass == TestHostDefaultsGuard.self)
+
+        let suiteName = "TestHostDefaultsGuardTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+        defaults.set("parakeet", forKey: UserDefaultsKeys.selectedEngine)
+        let defaultsGuard = TestHostDefaultsGuard(defaults: defaults)
+
+        defaults.set("mock-restore-after-unload", forKey: UserDefaultsKeys.selectedEngine)
+        defaults.set("tiny", forKey: UserDefaultsKeys.selectedModelId)
+        defaultsGuard.testCaseDidFinish(self)
+
+        XCTAssertEqual(defaults.string(forKey: UserDefaultsKeys.selectedEngine), "parakeet")
+        XCTAssertNil(defaults.object(forKey: UserDefaultsKeys.selectedModelId))
     }
 
     func testScreenshotAppSupportOverrideMustStayInsideTemporaryDirectory() {

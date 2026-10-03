@@ -3,6 +3,12 @@
   "strings": {
     "Temperature Mode": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "温度モード"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -19,6 +25,12 @@
     },
     "Add Profile": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "プロファイルを追加"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -35,6 +47,12 @@
     },
     "Custom": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "カスタム"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -51,6 +69,12 @@
     },
     "Delete": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "削除"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -67,6 +91,12 @@
     },
     "Profile Name": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "プロファイル名"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -83,6 +113,12 @@
     },
     "Profile name": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "プロファイル名"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -99,6 +135,12 @@
     },
     "Profiles": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "プロファイル"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -115,6 +157,12 @@
     },
     "Select a profile": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "プロファイルを選択"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -131,6 +179,12 @@
     },
     "Temperature": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "温度"
+          }
+        },
         "de": {
           "stringUnit": {
             "state": "translated",
@@ -1253,6 +1307,12 @@
     },
     "Server Kind": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "サーバーの種類"
+          }
+        },
         "en": {
           "stringUnit": {
             "state": "translated",
@@ -1269,6 +1329,12 @@
     },
     "Generic": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "汎用"
+          }
+        },
         "en": {
           "stringUnit": {
             "state": "translated",
@@ -1301,6 +1367,12 @@
     },
     "Choose Ollama to discover installed models through the server's native /api/tags endpoint. Generic servers only use the OpenAI-compatible /v1/models endpoint.": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ollamaを選ぶと、サーバー固有の/api/tagsエンドポイントからインストール済みのモデルを取得します。汎用サーバーでは、OpenAI互換の/v1/modelsエンドポイントのみを使用します。"
+          }
+        },
         "en": {
           "stringUnit": {
             "state": "translated",
@@ -1317,6 +1389,12 @@
     },
     "The server URL is invalid.": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "サーバーURLが無効です。"
+          }
+        },
         "en": {
           "stringUnit": {
             "state": "translated",
@@ -1333,6 +1411,12 @@
     },
     "Could not reach the Ollama server. Check that it is running and the URL is correct.": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "Ollamaサーバーに接続できませんでした。サーバーが起動していることと、URLが正しいことを確認してください。"
+          }
+        },
         "en": {
           "stringUnit": {
             "state": "translated",
@@ -1349,6 +1433,12 @@
     },
     "The server rejected the request (unauthorized). Check the API key.": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "サーバーがリクエストを拒否しました（認証エラー）。APIキーを確認してください。"
+          }
+        },
         "en": {
           "stringUnit": {
             "state": "translated",
@@ -1365,6 +1455,12 @@
     },
     "The server returned an unexpected error.": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "サーバーが予期しないエラーを返しました。"
+          }
+        },
         "en": {
           "stringUnit": {
             "state": "translated",
@@ -1381,6 +1477,12 @@
     },
     "The server reported no installed models. Pull a model with `ollama pull <model>` first.": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "サーバーにインストール済みのモデルがありません。先に`ollama pull <model>`でモデルを取得してください。"
+          }
+        },
         "en": {
           "stringUnit": {
             "state": "translated",
@@ -1397,6 +1499,12 @@
     },
     "The server response was not a valid Ollama /api/tags payload.": {
       "localizations": {
+        "ja": {
+          "stringUnit": {
+            "state": "translated",
+            "value": "サーバーの応答がOllamaの/api/tagsの有効な形式ではありませんでした。"
+          }
+        },
         "en": {
           "stringUnit": {
             "state": "translated",
